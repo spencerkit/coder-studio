@@ -1,0 +1,429 @@
+export type Locale = "en" | "zh";
+
+type TranslationParams = Record<string, string | number>;
+type TranslationValue = string | ((params: TranslationParams) => string);
+
+const STORAGE_KEY = "coder-studio.locale";
+
+const messages = {
+  en: {
+    appTagline: "Commercial-grade agent operations desk",
+    languageLabel: "Language",
+    workspaceLabel: "Workspace",
+    noWorkspace: "No workspace",
+    activeCount: ({ count }) => `Active ${count}`,
+    waitingCount: ({ count }) => `Waiting ${count}`,
+    queuedCount: ({ count }) => `Queued ${count}`,
+    newTab: "+ New Tab",
+    settings: "Settings",
+    workspaceBrief: "Workspace Brief",
+    workspaceDescription: "Coordinate AI coding sessions, monitor repo health, and keep terminal control in one operational surface.",
+    status: "Status",
+    ready: "Ready",
+    idle: "Idle",
+    branch: "Branch",
+    changes: "Changes",
+    agent: "Agent",
+    remoteGit: "Remote Git",
+    localFolder: "Local Folder",
+    noCommits: "No commits",
+    missionControl: "Mission Control",
+    sessionOperations: "Session Operations",
+    newSession: "New Session",
+    complete: "Complete",
+    stop: "Stop",
+    pool: "Pool",
+    currentTask: "Current Task",
+    awaitingInstruction: "Awaiting instruction",
+    mode: "Mode",
+    branchMode: "Branch",
+    gitTreeMode: "Git Tree",
+    autoSuspend: "Auto suspend",
+    idleAfter: "Idle after",
+    minutesShort: "min",
+    maxActive: "Max active",
+    sessionsWord: "sessions",
+    memoryPressure: "Memory pressure",
+    sessionDeck: "Session Deck",
+    parallelWorkstreams: "Parallel Workstreams",
+    tasksCount: ({ count }) => `${count} tasks`,
+    completePercent: ({ percent }) => `${percent}% complete`,
+    archive: "Archive",
+    taskQueue: "Task Queue",
+    dispatchBoard: "Dispatch Board",
+    autoFeed: "Auto-feed",
+    queuePlaceholder: "Add a task to the queue...",
+    add: "Add",
+    runNext: "Run Next",
+    liveTask: "Live task",
+    noTaskInProgress: "No task in progress",
+    queueEmpty: "Queue is empty.",
+    running: "Running",
+    background: "Background",
+    waiting: "Waiting",
+    suspended: "Suspended",
+    queued: "Queued",
+    done: "Done",
+    agentConfiguration: "Agent Configuration",
+    executionProfile: "Execution Profile",
+    provider: "Provider",
+    launchCommand: "Launch command",
+    launchCommandPlaceholder: "e.g. claude",
+    worktrees: "Worktrees",
+    noWorktrees: "No worktrees",
+    archiveLog: "Archive Log",
+    noArchiveYet: "No archive yet.",
+    activityFeed: "Activity Feed",
+    recentEvents: "Recent Events",
+    repositoryNavigator: "Repository Navigator",
+    projectStructure: "Project Structure",
+    files: "Files",
+    selectProjectToLoadFiles: "Select a project to load files.",
+    noChangesDetected: "No changes detected.",
+    liveSession: "Live Session",
+    liveSessionDescription: "Queue a task or send the next instruction to the agent.",
+    inputConsole: "Input Console",
+    inputConsoleHint: "Agent output is read-only here. Send instructions and special keys from the input bar below.",
+    terminalMode: "Terminal",
+    inputMode: "Input",
+    viewingArchivedSession: "Viewing archived session (read-only)",
+    exitArchiveHint: "Exit archive view to resume live operations.",
+    exit: "Exit",
+    agentOutput: "Agent Output",
+    interactiveCommandStream: "Interactive command stream",
+    executing: "Executing",
+    listening: "Listening",
+    archiveViewReadonly: "Archive view (read-only)",
+    agentInputPlaceholder: "Type your next instruction...",
+    send: "Send",
+    globalSettings: "Global Settings",
+    settingsDescription: "Configure agent defaults and suspend policy for every workspace from one place.",
+    appliesToAllWorkspaces: "Applies to all workspaces",
+    changesAffectNextLaunch: "Agent changes affect the next launch. Suspend policy updates immediately.",
+    agentDefaults: "Agent Defaults",
+    agentDefaultsHint: "Choose the provider and launch command used when a workspace starts or an agent restarts.",
+    suspendStrategy: "Suspend Strategy",
+    suspendStrategyHint: "Keep active capacity predictable by automatically yielding idle sessions when the pool is busy.",
+    applySettings: "Apply Settings",
+    save: "Save",
+    unsavedChanges: "Unsaved changes",
+    saved: "Saved",
+    editorReady: "Editable editor",
+    editorHint: "VS Code-style editing surface with direct file save.",
+    repositoryInspector: "Repository Inspector",
+    selectFileFromNavigator: "Select a file from the navigator",
+    preview: "Preview",
+    diff: "Diff",
+    filesStat: ({ count, additions, deletions }) => `Files ${count} · +${additions} / -${deletions}`,
+    noPreviewAvailable: "No preview available.",
+    noDiffAvailable: "No diff available.",
+    shellDock: "Shell Dock",
+    projectTerminal: "Project Terminal",
+    new: "New",
+    noTerminalYet: "No terminal yet.",
+    close: "Close",
+    statusTab: "Status",
+    treeTab: "Tree",
+    loadingWorktreeDetails: "Loading worktree details...",
+    path: "Path",
+    clean: "Clean",
+    launchWorkspace: "Launch Workspace",
+    launchWorkspaceTitle: "Stand up an agent-ready coding environment",
+    launchWorkspaceDescription: "Connect a repository, bring your preferred CLI agent online, and start parallel coding sessions with live Git visibility.",
+    sessionsCard: "Sessions",
+    parallelAgentTracks: "Parallel agent tracks",
+    gitCard: "Git",
+    liveDiffAndWorktree: "Live diff + worktree context",
+    terminalCard: "Terminal",
+    embeddedShellControl: "Embedded shell control",
+    remoteGitHint: "Clone to a managed workspace and begin immediately.",
+    localFolderHint: "Attach an existing project folder as your live workspace.",
+    nativeTarget: "Native",
+    nativeTargetHint: "Use the host shell runtime.",
+    wslHint: "Route Git and agent commands through WSL.",
+    optionalDistroPlaceholder: "Optional distro name (e.g. Ubuntu-22.04)",
+    pasteGitUrl: "Paste a Git URL",
+    selectFolder: "Select Folder",
+    selected: "Selected",
+    notSelected: "Not selected",
+    cancel: "Cancel",
+    startWorkspace: "Start Workspace",
+    initializeWorkspace: "Initialize Workspace",
+    selectFolderDialog: "Select Folder",
+    noFolderSelected: "No folder selected",
+    dialogFailed: "Dialog failed",
+    selectProjectFirst: "Select a project first",
+    agentStartFailed: "Agent start failed",
+    agentSendFailed: "Agent send failed",
+    agentKeySendFailed: "Agent key send failed",
+    taskCompleteMessage: ({ text }) => `Task complete: ${text}`,
+    taskCompletedToast: ({ title }) => `${title} completed`,
+    taskStopped: "Task stopped",
+    workingOn: ({ text }) => `Working on: ${text}`,
+    draftSessionTitle: "New Session",
+    draftSessionPrompt: "Start here",
+    draftSessionWorkspace: ({ path }) => `Workspace: ${path}`,
+    previewUnavailable: "Preview unavailable.",
+    agentExited: "Agent exited",
+    escKey: "Esc",
+    tabKey: "Tab",
+    enterKey: "Enter",
+    arrowUp: "Up",
+    arrowDown: "Down",
+    arrowLeft: "Left",
+    arrowRight: "Right",
+    poolSummary: ({ active, max, queued }) => `Active ${active} / ${max} • Queued ${queued}`
+  },
+  zh: {
+    appTagline: "商业级智能体协同工作台",
+    languageLabel: "语言",
+    workspaceLabel: "工作区",
+    noWorkspace: "未选择工作区",
+    activeCount: ({ count }) => `活跃 ${count}`,
+    waitingCount: ({ count }) => `等待 ${count}`,
+    queuedCount: ({ count }) => `排队 ${count}`,
+    newTab: "+ 新建标签",
+    settings: "设置",
+    workspaceBrief: "工作区概览",
+    workspaceDescription: "把 AI 编码会话、仓库健康度和终端控制收拢到同一个作业界面里。",
+    status: "状态",
+    ready: "就绪",
+    idle: "空闲",
+    branch: "分支",
+    changes: "变更",
+    agent: "智能体",
+    remoteGit: "远程仓库",
+    localFolder: "本地目录",
+    noCommits: "暂无提交",
+    missionControl: "任务控制台",
+    sessionOperations: "会话操作",
+    newSession: "新建会话",
+    complete: "完成",
+    stop: "停止",
+    pool: "资源池",
+    currentTask: "当前任务",
+    awaitingInstruction: "等待指令",
+    mode: "模式",
+    branchMode: "分支",
+    gitTreeMode: "工作树",
+    autoSuspend: "自动挂起",
+    idleAfter: "空闲后",
+    minutesShort: "分钟",
+    maxActive: "最大活跃数",
+    sessionsWord: "个会话",
+    memoryPressure: "内存压力",
+    sessionDeck: "会话面板",
+    parallelWorkstreams: "并行工作流",
+    tasksCount: ({ count }) => `${count} 个任务`,
+    completePercent: ({ percent }) => `完成 ${percent}%`,
+    archive: "归档",
+    taskQueue: "任务队列",
+    dispatchBoard: "派发面板",
+    autoFeed: "自动投喂",
+    queuePlaceholder: "向队列添加任务...",
+    add: "添加",
+    runNext: "运行下一项",
+    liveTask: "实时任务",
+    noTaskInProgress: "当前没有进行中的任务",
+    queueEmpty: "队列为空。",
+    running: "执行中",
+    background: "后台",
+    waiting: "等待",
+    suspended: "挂起",
+    queued: "排队中",
+    done: "已完成",
+    agentConfiguration: "智能体配置",
+    executionProfile: "执行配置",
+    provider: "提供方",
+    launchCommand: "启动命令",
+    launchCommandPlaceholder: "例如 claude",
+    worktrees: "工作树",
+    noWorktrees: "暂无工作树",
+    archiveLog: "归档记录",
+    noArchiveYet: "暂无归档。",
+    activityFeed: "活动流",
+    recentEvents: "最近事件",
+    repositoryNavigator: "仓库导航",
+    projectStructure: "项目结构",
+    files: "文件",
+    selectProjectToLoadFiles: "先选择项目再加载文件。",
+    noChangesDetected: "未检测到变更。",
+    liveSession: "实时会话",
+    liveSessionDescription: "可以先排任务，或直接给智能体发送下一条指令。",
+    inputConsole: "输入控制台",
+    inputConsoleHint: "这里的智能体输出为只读，所有指令和特殊按键都从下方输入栏发送。",
+    terminalMode: "终端",
+    inputMode: "输入框",
+    viewingArchivedSession: "正在查看归档会话（只读）",
+    exitArchiveHint: "退出归档视图后即可恢复实时操作。",
+    exit: "退出",
+    agentOutput: "智能体输出",
+    interactiveCommandStream: "交互命令流",
+    executing: "执行中",
+    listening: "监听中",
+    archiveViewReadonly: "归档视图（只读）",
+    agentInputPlaceholder: "输入下一条指令...",
+    send: "发送",
+    globalSettings: "全局设置",
+    settingsDescription: "在一个面板里统一配置所有工作区的智能体默认值和挂起策略。",
+    appliesToAllWorkspaces: "作用于全部工作区",
+    changesAffectNextLaunch: "智能体配置在下次启动时生效，挂起策略会立即同步。",
+    agentDefaults: "智能体默认值",
+    agentDefaultsHint: "设置工作区启动或智能体重启时使用的提供方和启动命令。",
+    suspendStrategy: "挂起策略",
+    suspendStrategyHint: "在会话池繁忙时自动让空闲会话让出容量，保证活跃并发可控。",
+    applySettings: "应用设置",
+    save: "保存",
+    unsavedChanges: "未保存修改",
+    saved: "已保存",
+    editorReady: "可编辑编辑器",
+    editorHint: "基于 VS Code 风格的编辑界面，可直接保存文件。",
+    repositoryInspector: "仓库检查器",
+    selectFileFromNavigator: "从导航中选择一个文件",
+    preview: "预览",
+    diff: "差异",
+    filesStat: ({ count, additions, deletions }) => `文件 ${count} · +${additions} / -${deletions}`,
+    noPreviewAvailable: "暂无可预览内容。",
+    noDiffAvailable: "暂无差异。",
+    shellDock: "终端停靠区",
+    projectTerminal: "项目终端",
+    new: "新建",
+    noTerminalYet: "还没有终端。",
+    close: "关闭",
+    statusTab: "状态",
+    treeTab: "目录",
+    loadingWorktreeDetails: "正在加载工作树详情...",
+    path: "路径",
+    clean: "干净",
+    launchWorkspace: "启动工作区",
+    launchWorkspaceTitle: "搭建可供智能体接管的编码环境",
+    launchWorkspaceDescription: "连接仓库、启动你偏好的 CLI 智能体，并在可见 Git 状态下开启并行编码会话。",
+    sessionsCard: "会话",
+    parallelAgentTracks: "并行智能体轨道",
+    gitCard: "Git",
+    liveDiffAndWorktree: "实时差异与工作树上下文",
+    terminalCard: "终端",
+    embeddedShellControl: "内嵌 Shell 控制",
+    remoteGitHint: "克隆到托管工作区并立即开始。",
+    localFolderHint: "把现有项目目录接入为实时工作区。",
+    nativeTarget: "系统",
+    nativeTargetHint: "使用宿主机 Shell 运行时。",
+    wslHint: "通过 WSL 执行 Git 和智能体命令。",
+    optionalDistroPlaceholder: "可选发行版名称（如 Ubuntu-22.04）",
+    pasteGitUrl: "粘贴 Git 地址",
+    selectFolder: "选择文件夹",
+    selected: "已选择",
+    notSelected: "未选择",
+    cancel: "取消",
+    startWorkspace: "开始工作区",
+    initializeWorkspace: "初始化工作区",
+    selectFolderDialog: "选择文件夹",
+    noFolderSelected: "未选择文件夹",
+    dialogFailed: "对话框打开失败",
+    selectProjectFirst: "请先选择项目",
+    agentStartFailed: "智能体启动失败",
+    agentSendFailed: "发送给智能体失败",
+    agentKeySendFailed: "按键发送失败",
+    taskCompleteMessage: ({ text }) => `任务完成：${text}`,
+    taskCompletedToast: ({ title }) => `${title} 已完成`,
+    taskStopped: "任务已停止",
+    workingOn: ({ text }) => `正在处理：${text}`,
+    draftSessionTitle: "新会话",
+    draftSessionPrompt: "请开始",
+    draftSessionWorkspace: ({ path }) => `当前工作区：${path}`,
+    previewUnavailable: "无法预览。",
+    agentExited: "智能体已退出",
+    escKey: "退出",
+    tabKey: "制表",
+    enterKey: "回车",
+    arrowUp: "上",
+    arrowDown: "下",
+    arrowLeft: "左",
+    arrowRight: "右",
+    poolSummary: ({ active, max, queued }) => `活跃 ${active} / ${max} • 排队 ${queued}`
+  }
+} as const satisfies Record<Locale, Record<string, TranslationValue>>;
+
+export type TranslationKey = keyof typeof messages.en;
+export type Translator = (key: TranslationKey, params?: TranslationParams) => string;
+
+const readStoredLocale = (): Locale | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    return saved === "en" || saved === "zh" ? saved : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getPreferredLocale = (): Locale => {
+  const stored = readStoredLocale();
+  if (stored) return stored;
+  if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh")) {
+    return "zh";
+  }
+  return "en";
+};
+
+export const persistLocale = (locale: Locale) => {
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, locale);
+    } catch {
+      // Ignore storage failures and keep the in-memory locale.
+    }
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }
+};
+
+export const createTranslator = (locale: Locale): Translator => {
+  return (key, params = {}) => {
+    const value = messages[locale][key] ?? messages.en[key];
+    return typeof value === "function" ? value(params) : value;
+  };
+};
+
+const padIndex = (value: number | string) => {
+  if (typeof value === "string") return value;
+  return String(value).padStart(2, "0");
+};
+
+export const formatSessionTitle = (value: number | string, locale: Locale) =>
+  locale === "zh" ? `会话 ${padIndex(value)}` : `Session ${padIndex(value)}`;
+
+export const formatWorkspaceTitle = (value: number | string, locale: Locale) =>
+  locale === "zh" ? `工作区 ${padIndex(value)}` : `Workspace ${padIndex(value)}`;
+
+export const formatTerminalTitle = (value: number | string, locale: Locale) =>
+  locale === "zh" ? `终端 ${value}` : `Terminal ${value}`;
+
+export const formatSessionReadyMessage = (value: number | string, locale: Locale) =>
+  locale === "zh" ? `${formatSessionTitle(value, locale)} 已就绪。` : `${formatSessionTitle(value, locale)} is ready.`;
+
+const extractGeneratedValue = (value: string, patterns: RegExp[]) => {
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return null;
+};
+
+export const localizeSessionTitle = (value: string, locale: Locale) => {
+  const index = extractGeneratedValue(value, [/^Session (\d+)$/, /^会话 (\d+)$/]);
+  return index ? formatSessionTitle(index, locale) : value;
+};
+
+export const localizeWorkspaceTitle = (value: string, locale: Locale) => {
+  const index = extractGeneratedValue(value, [/^Workspace (\d+)$/, /^工作区 (\d+)$/]);
+  return index ? formatWorkspaceTitle(index, locale) : value;
+};
+
+export const localizeTerminalTitle = (value: string, locale: Locale) => {
+  const index = extractGeneratedValue(value, [/^Terminal (\d+)$/, /^终端 (\d+)$/]);
+  return index ? formatTerminalTitle(index, locale) : value;
+};

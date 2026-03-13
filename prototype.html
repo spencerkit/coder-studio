@@ -1,0 +1,2991 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Workbench Prototype</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --bg-2: #0f141c;
+      --panel: #111827;
+      --panel-2: #0f1a24;
+      --card: #151c27;
+      --border: #243246;
+      --text: #e6edf5;
+      --muted: #a9b6c6;
+      --accent: #4da3ff;
+      --accent-2: #ffb36b;
+      --danger: #ff6b6b;
+      --success: #58d68d;
+
+      --left-w: 280px;
+      --right-w: 360px;
+      --right-top-h: 52%;
+      --header-h: 56px;
+      --gap: 8px;
+      --radius: 12px;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 10% 10%, #172033 0%, transparent 55%),
+                  radial-gradient(1200px 800px at 90% 20%, #1b2436 0%, transparent 60%),
+                  var(--bg);
+      overflow: hidden;
+    }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: var(--header-h) 1fr;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #0f141d, #0b0e14);
+    }
+
+    .logo {
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      margin-right: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo .dot {
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(77, 163, 255, 0.8);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .tab {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .tab:hover {
+      color: var(--text);
+      border-color: rgba(77, 163, 255, 0.35);
+    }
+
+    .tab.active {
+      color: var(--text);
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(77, 163, 255, 0.35);
+    }
+
+    .tab .close {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .tab.add {
+      background: transparent;
+      border-style: dashed;
+      color: var(--accent);
+    }
+
+    .tab .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+    }
+
+    .tab.ready .dot {
+      background: var(--success);
+      box-shadow: 0 0 10px rgba(88, 214, 141, 0.6);
+    }
+
+    .tab.init .dot {
+      background: var(--accent-2);
+      box-shadow: 0 0 10px rgba(255, 179, 107, 0.6);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      background: var(--panel);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: var(--left-w) 6px 1fr 6px var(--right-w);
+      height: 100%;
+    }
+
+    .panel {
+      padding: var(--gap);
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      height: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .section h3 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .section-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .session-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .session-mode {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .session-mode .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn.mode.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(77, 163, 255, 0.18);
+    }
+
+    .session-policy {
+      display: grid;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .policy-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .policy-row input {
+      width: 70px;
+      padding: 4px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0c111a;
+      color: var(--text);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .timeline-item .time {
+      min-width: 52px;
+      color: var(--accent-2);
+    }
+
+    .archive-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .archive-item {
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .worktree-panel {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .worktree-panel h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .worktree-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .worktree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid transparent;
+    }
+
+    .worktree-item.active {
+      border-color: rgba(77, 163, 255, 0.4);
+      color: var(--text);
+    }
+
+    .key-val {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      font-size: 13px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(88, 214, 141, 0.15);
+      color: var(--success);
+    }
+
+    .status.idle {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .list .item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .list .item:hover {
+      border-color: rgba(77, 163, 255, 0.2);
+    }
+
+    .list .item.active {
+      border-color: rgba(77, 163, 255, 0.4);
+    }
+
+    .list .item .badge {
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .list .item .badge.waiting {
+      color: var(--accent);
+      border-color: rgba(77, 163, 255, 0.4);
+    }
+
+    .list .item .badge.background {
+      color: #ffd29a;
+      border-color: rgba(255, 210, 154, 0.4);
+    }
+
+    .list .item .badge.suspended {
+      color: #b7c3d6;
+      border-color: rgba(183, 195, 214, 0.4);
+    }
+
+    .list .item .badge.queued {
+      color: #9ad0ff;
+      border-color: rgba(77, 163, 255, 0.4);
+    }
+
+    .session-badge {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      box-shadow: 0 0 10px rgba(255, 179, 107, 0.7);
+      display: inline-block;
+      margin-left: 6px;
+    }
+
+    .tree {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .tree-empty {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px dashed var(--border);
+    }
+
+    .tree-list.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .tree-list .tree-line {
+      padding: 2px 6px;
+      border-radius: 6px;
+      display: block;
+    }
+
+    .tree-list .tree-line.file {
+      cursor: pointer;
+    }
+
+    .tree-list .tree-line:hover {
+      background: rgba(77, 163, 255, 0.08);
+    }
+
+    .tree-list .tree-line.changed {
+      color: #ffd29a;
+    }
+
+    .tree-list .tree-line.active {
+      background: rgba(77, 163, 255, 0.18);
+      color: var(--text);
+    }
+
+    .tree-list .tree-line .status {
+      font-size: 11px;
+      margin-left: 6px;
+      color: var(--accent-2);
+    }
+
+    .indent-0 { padding-left: 4px; }
+    .indent-1 { padding-left: 16px; }
+    .indent-2 { padding-left: 28px; }
+    .indent-3 { padding-left: 40px; }
+    .indent-4 { padding-left: 52px; }
+    .indent-5 { padding-left: 64px; }
+
+    .agent {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .agent-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+
+    .archive-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+      background: rgba(255, 179, 107, 0.12);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .archive-banner .hint {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .agent-status .label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .agent-status .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .agent-status .pill.running {
+      color: var(--accent);
+      border-color: rgba(77, 163, 255, 0.5);
+      background: rgba(77, 163, 255, 0.15);
+    }
+
+    .agent-progress {
+      flex: 1;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .agent-progress .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(77, 163, 255, 0.2), rgba(77, 163, 255, 0.8));
+      transition: width 0.2s ease;
+    }
+
+    .agent-status .eta {
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .agent-stream {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--panel-2);
+      overflow: auto;
+    }
+
+    .agent-msg {
+      margin: 0 0 12px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .agent-msg.system {
+      border-left: 3px solid var(--accent);
+    }
+
+    .agent-msg.user {
+      border-left: 3px solid var(--accent-2);
+    }
+
+    .agent-input {
+      display: flex;
+      gap: 8px;
+    }
+
+    .agent-input input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0c111a;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .agent-input input:focus {
+      outline: none;
+      border-color: rgba(77, 163, 255, 0.6);
+      box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.15);
+    }
+
+    .agent-input button {
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid var(--accent);
+      background: rgba(77, 163, 255, 0.15);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .right {
+      display: grid;
+      grid-template-rows: var(--right-top-h) 6px 1fr;
+      height: 100%;
+    }
+
+    .file-preview {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--panel-2);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .file-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .file-tabs .t-tab {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .file-tabs .t-tab.active {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .file-preview pre {
+      margin: 0;
+      flex: 1;
+      overflow: auto;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: #d6e1f2;
+      background: #0b111a;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .diff {
+      margin: 0;
+      flex: 1;
+      overflow: auto;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: #c8d5e6;
+      background: #0d1117;
+      border-radius: 8px;
+      padding: 10px;
+      white-space: pre;
+    }
+
+    .diff .add {
+      color: #7ee787;
+    }
+
+    .diff .del {
+      color: #ffa198;
+    }
+
+    .diff-toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .diff-stats {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .diff-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .diff-chip {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .diff-chip.active {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .terminal {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--panel-2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .terminal-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .terminal-tabs .t-tab {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .terminal-tabs .t-tab.active {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .terminal-tabs .t-tab .close {
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn:hover {
+      border-color: rgba(77, 163, 255, 0.5);
+    }
+
+    .btn.primary {
+      border-color: var(--accent);
+      background: rgba(77, 163, 255, 0.2);
+    }
+
+    .btn.tiny {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 8px;
+    }
+
+    .btn.icon {
+      padding: 2px 6px;
+      font-size: 11px;
+      border-radius: 6px;
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn.ghost {
+      background: transparent;
+    }
+
+    .queue-controls {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .queue-controls input {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0c111a;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+      font-size: 12px;
+    }
+
+    .queue-item.done {
+      opacity: 0.6;
+      text-decoration: line-through;
+    }
+
+    .queue-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .queue-badge {
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .queue-badge.running {
+      color: var(--accent);
+      border-color: rgba(77, 163, 255, 0.4);
+    }
+
+    .queue-badge.done {
+      color: var(--success);
+      border-color: rgba(88, 214, 141, 0.4);
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .toggle input {
+      display: none;
+    }
+
+    .toggle-track {
+      width: 36px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .toggle input:checked + .toggle-track {
+      background: rgba(77, 163, 255, 0.25);
+      border-color: rgba(77, 163, 255, 0.6);
+    }
+
+    .toggle input:checked + .toggle-track .toggle-thumb {
+      transform: translateX(18px);
+      background: var(--accent);
+    }
+
+    .terminal-output {
+      flex: 1;
+      background: #0b0f16;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: #c8d5e6;
+      overflow: auto;
+      white-space: pre;
+    }
+
+    .v-resizer, .h-resizer {
+      background: linear-gradient(180deg, rgba(36, 50, 70, 0.1), rgba(36, 50, 70, 0.4));
+      cursor: col-resize;
+      position: relative;
+    }
+
+    .h-resizer {
+      cursor: row-resize;
+    }
+
+    .v-resizer::after, .h-resizer::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      background: rgba(77, 163, 255, 0.12);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .v-resizer:hover::after, .h-resizer:hover::after,
+    .v-resizer.dragging::after, .h-resizer.dragging::after {
+      opacity: 1;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 8, 12, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      backdrop-filter: blur(4px);
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .modal {
+      width: 520px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .modal h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+    }
+
+    .modal p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .choice-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .choice {
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      cursor: pointer;
+    }
+
+    .choice.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(77, 163, 255, 0.4);
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0c111a;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 14px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .toast-container {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 60;
+    }
+
+    .toast {
+      min-width: 260px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(17, 24, 39, 0.95);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      color: var(--text);
+      animation: toast-in 0.2s ease;
+    }
+
+    .toast.clickable {
+      cursor: pointer;
+    }
+
+    .toast.clickable:hover {
+      border-color: rgba(77, 163, 255, 0.6);
+    }
+
+    .toast .title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .toast.done {
+      border-color: rgba(88, 214, 141, 0.5);
+    }
+
+    @keyframes toast-in {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 8, 12, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 70;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal-card {
+      width: 640px;
+      max-height: 70vh;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal-card h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .modal-card .modal-body {
+      flex: 1;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      color: #c8d5e6;
+      white-space: pre;
+    }
+
+    @media (max-width: 1200px) {
+      :root {
+        --left-w: 220px;
+        --right-w: 320px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .v-resizer {
+        display: none;
+      }
+
+      .right {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">
+        <span class="dot"></span>
+        Agent Workbench
+      </div>
+      <div class="tabs" id="tabs"></div>
+      <div class="tab add" id="addTab">+ New Tab</div>
+      <div class="header-actions">
+        <div class="pill" id="activeProject">No workspace</div>
+        <div class="pill">Settings</div>
+        <div class="pill">Help</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="section">
+            <h3>Project</h3>
+            <div class="key-val">
+              <div>Workspace</div><div id="projectPath">—</div>
+              <div>Status</div><div class="status" id="projectStatus">Idle</div>
+              <div>Agent</div><div id="projectAgent">—</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Git</h3>
+            <div class="key-val">
+              <div>Branch</div><div id="gitBranch">—</div>
+              <div>Changes</div><div id="gitChanges">—</div>
+              <div>Last Commit</div><div id="gitCommit">—</div>
+            </div>
+            <div class="worktree-panel" id="worktreePanel">
+              <h4>Worktrees</h4>
+              <div class="worktree-list" id="worktreeList"></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <h3>Sessions</h3>
+              <div class="section-actions">
+                <button class="btn tiny" id="startAgent">New Session</button>
+                <button class="btn tiny ghost" id="endAgent">End Task</button>
+              </div>
+            </div>
+            <div class="list" id="sessionsList"></div>
+            <div class="session-mode">
+              <div class="label">Idle Policy</div>
+              <label class="toggle">
+                <input type="checkbox" id="autoSuspendToggle" checked />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                <span>Auto-suspend idle</span>
+              </label>
+            </div>
+            <div class="session-policy">
+              <div class="policy-row">
+                <span>Idle after</span>
+                <div>
+                  <input id="idleMinutes" type="number" min="1" value="10" />
+                  <span>min</span>
+                </div>
+              </div>
+              <div class="policy-row">
+                <span>Max active</span>
+                <div>
+                  <input id="maxActiveSessions" type="number" min="1" value="3" />
+                  <span>sessions</span>
+                </div>
+              </div>
+              <div class="policy-row">
+                <span>Pool status</span>
+                <div id="poolStatus">Active 0 / 0 • Queued 0</div>
+              </div>
+              <div class="policy-row">
+                <span>Memory pressure</span>
+                <label class="toggle">
+                  <input type="checkbox" id="pressureToggle" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  <span>Prefer suspend</span>
+                </label>
+              </div>
+            </div>
+            <div class="session-mode">
+              <div class="label">Mode</div>
+              <div class="mode-toggle" id="sessionModeToggle">
+                <button class="btn tiny mode" data-mode="branch">Branch</button>
+                <button class="btn tiny mode" data-mode="tree">Git Tree</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Session Timeline</h3>
+            <div class="timeline" id="sessionTimeline"></div>
+          </div>
+
+          <div class="section">
+            <h3>Archive Log</h3>
+            <div class="archive-log" id="archiveLog"></div>
+          </div>
+
+          <div class="section">
+            <div class="section-head">
+              <h3>Task Queue</h3>
+              <label class="toggle">
+                <input type="checkbox" id="autoFeedToggle" checked />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                <span>Auto-feed</span>
+              </label>
+            </div>
+            <div class="queue-controls">
+              <input id="queueInput" placeholder="Add a task to the queue..." />
+              <button class="btn tiny" id="queueAdd">Add</button>
+              <button class="btn tiny ghost" id="queueRun">Run Next</button>
+            </div>
+            <div class="queue-list" id="queueList"></div>
+            <div class="hint">When a session ends, the next queued task auto-runs.</div>
+          </div>
+
+          <div class="section" style="flex:1; overflow:auto;">
+            <h3>Dir Tree (Full)</h3>
+            <div class="tree-empty" id="dirTreeEmpty" hidden>Select a project to load the directory tree.</div>
+            <div class="tree tree-list" id="dirTree">
+              <div class="tree-line indent-0" data-type="dir">.git/</div>
+              <div class="tree-line indent-0" data-type="dir">src/</div>
+              <div class="tree-line indent-1" data-type="dir">app/</div>
+              <div class="tree-line indent-2 file" data-file="src/app/main.tsx">main.tsx</div>
+              <div class="tree-line indent-2 file changed active" data-file="src/app/layout.tsx">layout.tsx <span class="status">M</span></div>
+              <div class="tree-line indent-2 file" data-file="src/app/styles.css">styles.css</div>
+              <div class="tree-line indent-1" data-type="dir">components/</div>
+              <div class="tree-line indent-2 file changed" data-file="src/components/AgentPanel.tsx">AgentPanel.tsx <span class="status">M</span></div>
+              <div class="tree-line indent-2 file" data-file="src/components/ProjectTree.tsx">ProjectTree.tsx</div>
+              <div class="tree-line indent-2 file" data-file="src/components/TerminalDock.tsx">TerminalDock.tsx</div>
+              <div class="tree-line indent-1" data-type="dir">services/</div>
+              <div class="tree-line indent-2 file changed" data-file="src/services/git.ts">git.ts <span class="status">M</span></div>
+              <div class="tree-line indent-2 file" data-file="src/services/agent.ts">agent.ts</div>
+              <div class="tree-line indent-1" data-type="dir">assets/</div>
+              <div class="tree-line indent-2 file" data-file="src/assets/logo.svg">logo.svg</div>
+              <div class="tree-line indent-2" data-type="dir">icons/</div>
+              <div class="tree-line indent-3 file" data-file="src/assets/icons/tab-add.svg">tab-add.svg</div>
+              <div class="tree-line indent-3 file" data-file="src/assets/icons/resize-handle.svg">resize-handle.svg</div>
+              <div class="tree-line indent-2" data-type="dir">previews/</div>
+              <div class="tree-line indent-3 file" data-file="src/assets/previews/empty.png">empty.png</div>
+              <div class="tree-line indent-3 file" data-file="src/assets/previews/loading.png">loading.png</div>
+              <div class="tree-line indent-0" data-type="dir">docs/</div>
+              <div class="tree-line indent-1 file changed" data-file="docs/prd.md">prd.md <span class="status">A</span></div>
+              <div class="tree-line indent-1 file" data-file="docs/roadmap.md">roadmap.md</div>
+              <div class="tree-line indent-1 file" data-file="docs/visual-spec.md">visual-spec.md</div>
+              <div class="tree-line indent-0" data-type="dir">scripts/</div>
+              <div class="tree-line indent-1 file" data-file="scripts/build.ts">build.ts</div>
+              <div class="tree-line indent-1 file" data-file="scripts/release.ts">release.ts</div>
+              <div class="tree-line indent-0" data-type="dir">tests/</div>
+              <div class="tree-line indent-1 file changed" data-file="tests/layout.test.ts">layout.test.ts <span class="status">A</span></div>
+              <div class="tree-line indent-1 file" data-file="tests/git.test.ts">git.test.ts</div>
+              <div class="tree-line indent-1 file" data-file="tests/agent.test.ts">agent.test.ts</div>
+              <div class="tree-line indent-0 file" data-file="README.md">README.md</div>
+              <div class="tree-line indent-0 file" data-file="package.json">package.json</div>
+              <div class="tree-line indent-0 file" data-file="tsconfig.json">tsconfig.json</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Session Changes</h3>
+            <div class="tree-empty" id="changesTreeEmpty" hidden>No changes detected.</div>
+            <div class="tree tree-list" id="changesTree"></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="v-resizer" data-resize="left"></div>
+
+      <section class="panel">
+        <div class="panel-inner agent">
+          <div class="agent-status">
+            <div class="label">Agent</div>
+            <div class="pill" id="sessionLabel">Session #1</div>
+            <div class="pill" id="agentStatusPill">Idle</div>
+            <div class="agent-progress"><div class="bar" id="agentProgressBar"></div></div>
+            <div class="eta" id="agentEta">ETA --</div>
+          </div>
+          <div class="archive-banner" id="archiveBanner" hidden>
+            <div>
+              Viewing archived session (read-only)
+              <div class="hint">Actions are disabled until you exit archive view.</div>
+            </div>
+            <button class="btn tiny" id="exitArchive">Exit</button>
+          </div>
+          <div class="agent-stream" id="agentStream"></div>
+          <div class="agent-input">
+            <input id="agentInput" placeholder="Type your next instruction..." />
+            <button id="agentSend">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="v-resizer" data-resize="right"></div>
+
+      <section class="panel right">
+        <div class="file-preview">
+          <div class="key-val">
+            <div>File</div><div id="filePath">src/app/layout.tsx</div>
+          </div>
+          <div class="file-tabs" id="fileTabs">
+            <div class="t-tab active" data-view="preview">Preview</div>
+            <div class="t-tab" data-view="diff">Diff</div>
+          </div>
+          <div class="diff-toolbar" id="diffToolbar" hidden>
+            <div class="diff-stats" id="diffStats"></div>
+            <div class="diff-files" id="diffFiles"></div>
+          </div>
+          <pre id="fileContent">export function Layout() {
+  return (
+    &lt;WorkspaceGrid&gt;
+      &lt;LeftPane /&gt;
+      &lt;AgentPane /&gt;
+      &lt;RightPane /&gt;
+    &lt;/WorkspaceGrid&gt;
+  );
+}
+
+// TODO: add resizable split and persist sizes.</pre>
+          <pre id="fileDiff" class="diff" hidden></pre>
+        </div>
+        <div class="h-resizer" data-resize="right-top"></div>
+        <div class="terminal">
+          <div class="terminal-tabs" id="terminalTabs"></div>
+          <div class="terminal-output" id="terminalOutput"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="modal-overlay" id="worktreeOverlay">
+      <div class="modal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 id="worktreeTitle">Worktree Details</h3>
+          <button class="btn tiny" id="closeWorktree">Close</button>
+        </div>
+        <div class="file-tabs" id="worktreeTabs">
+          <div class="t-tab active" data-view="status">Status</div>
+          <div class="t-tab" data-view="diff">Diff</div>
+          <div class="t-tab" data-view="tree">Tree</div>
+        </div>
+        <div class="modal-body" id="worktreeBody"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="modal">
+        <h2>Initialize Workspace</h2>
+        <p>Select a project source to start coding.</p>
+        <div class="choice-grid">
+          <div class="choice active" data-choice="remote">
+            <strong>Remote Git</strong>
+            <div class="hint">Clone into temp workspace</div>
+          </div>
+          <div class="choice" data-choice="local">
+            <strong>Local Folder</strong>
+            <div class="hint">Use current directory as workspace</div>
+          </div>
+        </div>
+        <input id="input" placeholder="Paste git URL or local path" />
+        <div class="modal-actions">
+          <button class="btn" id="cancel">Cancel</button>
+          <button class="btn primary" id="start">Start Workspace</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+
+    const resizers = document.querySelectorAll('.v-resizer, .h-resizer');
+    resizers.forEach((resizer) => {
+      resizer.addEventListener('pointerdown', (event) => {
+        resizer.classList.add('dragging');
+        resizer.setPointerCapture(event.pointerId);
+        const type = resizer.dataset.resize;
+
+        const onMove = (e) => {
+          if (type === 'left') {
+            const next = Math.max(200, Math.min(420, e.clientX - 12));
+            root.style.setProperty('--left-w', next + 'px');
+          } else if (type === 'right') {
+            const total = window.innerWidth;
+            const next = Math.max(280, Math.min(520, total - e.clientX - 12));
+            root.style.setProperty('--right-w', next + 'px');
+          } else if (type === 'right-top') {
+            const panel = document.querySelector('.right');
+            const rect = panel.getBoundingClientRect();
+            const height = Math.max(160, Math.min(rect.height - 120, e.clientY - rect.top));
+            const pct = Math.round((height / rect.height) * 100);
+            root.style.setProperty('--right-top-h', pct + '%');
+          }
+        };
+
+        const onUp = (e) => {
+          resizer.classList.remove('dragging');
+          resizer.releasePointerCapture(e.pointerId);
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        };
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    });
+
+    const overlay = document.getElementById('overlay');
+    const input = document.getElementById('input');
+    const choices = document.querySelectorAll('.choice');
+    const tabsEl = document.getElementById('tabs');
+    const addTabBtn = document.getElementById('addTab');
+    const activeProjectPill = document.getElementById('activeProject');
+
+    const projectPathEl = document.getElementById('projectPath');
+    const projectStatusEl = document.getElementById('projectStatus');
+    const projectAgentEl = document.getElementById('projectAgent');
+    const gitBranchEl = document.getElementById('gitBranch');
+    const gitChangesEl = document.getElementById('gitChanges');
+    const gitCommitEl = document.getElementById('gitCommit');
+    const worktreePanelEl = document.getElementById('worktreePanel');
+    const worktreeListEl = document.getElementById('worktreeList');
+
+    const sessionsListEl = document.getElementById('sessionsList');
+    const startAgentBtn = document.getElementById('startAgent');
+    const endAgentBtn = document.getElementById('endAgent');
+    const sessionModeToggleEl = document.getElementById('sessionModeToggle');
+    const autoSuspendToggleEl = document.getElementById('autoSuspendToggle');
+    const idleMinutesEl = document.getElementById('idleMinutes');
+    const maxActiveSessionsEl = document.getElementById('maxActiveSessions');
+    const pressureToggleEl = document.getElementById('pressureToggle');
+    const poolStatusEl = document.getElementById('poolStatus');
+    const sessionTimelineEl = document.getElementById('sessionTimeline');
+    const archiveLogEl = document.getElementById('archiveLog');
+
+    const autoFeedToggleEl = document.getElementById('autoFeedToggle');
+    const queueInputEl = document.getElementById('queueInput');
+    const queueAddBtn = document.getElementById('queueAdd');
+    const queueRunBtn = document.getElementById('queueRun');
+    const queueListEl = document.getElementById('queueList');
+
+    const dirTreeEl = document.getElementById('dirTree');
+    const dirTreeEmptyEl = document.getElementById('dirTreeEmpty');
+    const changesTreeEl = document.getElementById('changesTree');
+    const changesTreeEmptyEl = document.getElementById('changesTreeEmpty');
+
+    const agentStreamEl = document.getElementById('agentStream');
+    const agentInputEl = document.getElementById('agentInput');
+    const agentSendBtn = document.getElementById('agentSend');
+    const archiveBanner = document.getElementById('archiveBanner');
+    const exitArchiveBtn = document.getElementById('exitArchive');
+    const sessionLabelEl = document.getElementById('sessionLabel');
+    const agentStatusPillEl = document.getElementById('agentStatusPill');
+    const agentProgressBarEl = document.getElementById('agentProgressBar');
+    const agentEtaEl = document.getElementById('agentEta');
+
+    const filePathEl = document.getElementById('filePath');
+    const fileContentEl = document.getElementById('fileContent');
+    const fileDiffEl = document.getElementById('fileDiff');
+    const fileTabsEl = document.getElementById('fileTabs');
+    const diffToolbarEl = document.getElementById('diffToolbar');
+    const diffStatsEl = document.getElementById('diffStats');
+    const diffFilesEl = document.getElementById('diffFiles');
+    const terminalTabsEl = document.getElementById('terminalTabs');
+    const terminalOutputEl = document.getElementById('terminalOutput');
+    const toastContainerEl = document.getElementById('toastContainer');
+    const worktreeOverlayEl = document.getElementById('worktreeOverlay');
+    const worktreeTitleEl = document.getElementById('worktreeTitle');
+    const worktreeBodyEl = document.getElementById('worktreeBody');
+    const worktreeTabsEl = document.getElementById('worktreeTabs');
+    const closeWorktreeBtn = document.getElementById('closeWorktree');
+    let selected = 'remote';
+
+    const fileContents = {
+      'src/app/layout.tsx': `export function Layout() {
+  return (
+    <WorkspaceGrid>
+      <LeftPane />
+      <AgentPane />
+      <RightPane />
+    </WorkspaceGrid>
+  );
+}
+
+// TODO: add resizable split and persist sizes.`,
+      'src/components/AgentPanel.tsx': `export function AgentPanel() {
+  return (
+    <section className="agent-panel">
+      <Stream />
+      <Input />
+    </section>
+  );
+}`,
+      'src/services/git.ts': `export async function getStatus(repoPath: string) {
+  return {
+    branch: 'feat/agent-board',
+    changes: 7
+  };
+}`,
+      'docs/prd.md': `# Agent Workbench PRD
+
+- Goals: unify agent, git, and terminal workflows
+- MVP: multi-tab, agent sessions, resizable panels`,
+      'tests/layout.test.ts': `describe('Layout', () => {
+  it('renders three columns', () => {
+    // ...
+  });
+});`
+    };
+
+    const progressTimers = new Map();
+
+    const state = {
+      tabs: [
+        {
+          id: 'tab-1',
+          name: 'Core Workbench',
+          project: {
+            path: '/tmp/workspace/app',
+            status: 'Ready',
+            agent: 'Claude Code'
+          },
+          gitBase: {
+            branch: 'feat/agent-board',
+            changes: 7,
+            lastCommit: '2h ago'
+          },
+          autoSuspendIdle: true,
+          idlePolicy: { enabled: true, idleMinutes: 10, maxActive: 3, pressure: true },
+          archiveLog: [],
+          archivedView: null,
+          worktreeView: null,
+          sessions: [
+            {
+              id: 12,
+              status: 'running',
+              mode: 'branch',
+              git: { branch: 'feat/agent-board', changes: 7, lastCommit: '2h ago' },
+              autoFeed: true,
+              unread: false,
+              previewMode: 'preview',
+              queue: [
+                { id: 1, text: 'Refactor layout engine', status: 'queued' },
+                { id: 2, text: 'Add file preview', status: 'queued' },
+                { id: 3, text: 'Update README', status: 'done' }
+              ],
+              agentStatus: 'Idle',
+              agentProgress: 0,
+              agentEta: '--',
+              currentTask: null,
+              lastActiveAt: Date.now(),
+              changes: [
+                { path: 'src/app/layout.tsx', status: 'M' },
+                { path: 'src/components/AgentPanel.tsx', status: 'M' },
+                { path: 'src/services/git.ts', status: 'M' },
+                { path: 'docs/prd.md', status: 'A' },
+                { path: 'tests/layout.test.ts', status: 'A' }
+              ],
+              diffs: {
+                'src/app/layout.tsx': `@@ -1,6 +1,9 @@\n export function Layout() {\n   return (\n+    <WorkspaceGrid resizable>\n       <LeftPane />\n       <AgentPane />\n       <RightPane />\n     </WorkspaceGrid>\n   );\n }\n+\n+// Added resizable split support`,
+                'src/components/AgentPanel.tsx': `@@ -1,6 +1,8 @@\n export function AgentPanel() {\n   return (\n     <section className="agent-panel">\n       <Stream />\n       <Input />\n     </section>\n   );\n }\n+\n+// TODO: add session badges`,
+                'docs/prd.md': `@@ -1,3 +1,6 @@\n # Agent Workbench PRD\n+\n+- Added session worktree mode\n+- Added queue auto-feed`,
+                'tests/layout.test.ts': `@@ -1,5 +1,7 @@\n describe('Layout', () => {\n   it('renders three columns', () => {\n+    // TODO: assert resizable grid\n   });\n });`
+              },
+              worktrees: [],
+              events: [
+                { time: '09:10', text: 'Session started' },
+                { time: '09:12', text: 'Queued 3 tasks' }
+              ],
+              agentMessages: [
+                { role: 'system', text: 'System: Project loaded at /tmp/workspace/app. Agent ready.' },
+                { role: 'user', text: 'User: Start with scanning the repo and summarize current architecture.' },
+                { role: 'agent', text: 'Agent: I will inspect the file tree, identify key modules, and propose a refactor plan for the workspace, including git integration and terminal docking.' },
+                { role: 'agent', text: 'Agent: Next, I will open `src/app/layout.tsx` and map the layout grid. After that, I will update `ProjectTree.tsx` to include session badges.' }
+              ]
+            },
+            {
+              id: 11,
+              status: 'waiting',
+              mode: 'tree',
+              git: { branch: 'session/11-tree', changes: 2, lastCommit: '30m ago' },
+              autoFeed: true,
+              unread: true,
+              previewMode: 'diff',
+              queue: [
+                { id: 1, text: 'Run lint check', status: 'done' }
+              ],
+              agentStatus: 'Idle',
+              agentProgress: 0,
+              agentEta: '--',
+              currentTask: null,
+              lastActiveAt: Date.now(),
+              changes: [
+                { path: 'src/services/agent.ts', status: 'M' },
+                { path: 'docs/roadmap.md', status: 'M' }
+              ],
+              diffs: {
+                'src/services/agent.ts': `@@ -1,4 +1,7 @@\n export async function runAgent() {\n   // ...\n }\n+\n+// tree session isolation enabled`,
+                'docs/roadmap.md': `@@ -1,3 +1,5 @@\n # Roadmap\n+- Worktree mode improvements\n+- Session switching UX`
+              },
+              worktrees: [
+                {
+                  name: 'main',
+                  path: '/tmp/workspace/app',
+                  branch: 'feat/agent-board',
+                  details: {
+                    status: 'Clean working tree on feat/agent-board',
+                    diff: 'No diff for main worktree.',
+                    tree: 'src/\n  app/\n  components/\n  services/\nREADME.md'
+                  }
+                },
+                {
+                  name: 'session-11',
+                  path: '/tmp/workspace/app/.wt/session-11',
+                  branch: 'session/11-tree',
+                  details: {
+                    status: '2 files changed\n  modified: src/services/agent.ts\n  modified: docs/roadmap.md',
+                    diff: 'diff --git a/src/services/agent.ts b/src/services/agent.ts\n+// tree session isolation enabled',
+                    tree: 'src/\n  services/\n    agent.ts\n docs/\n  roadmap.md'
+                  }
+                }
+              ],
+              events: [
+                { time: '08:30', text: 'Session started (git tree)' },
+                { time: '08:55', text: 'Lint completed' }
+              ],
+              agentMessages: [
+                { role: 'system', text: 'System: Session #11 initialized on git tree.' },
+                { role: 'agent', text: 'Agent: Lint complete. Waiting for next instruction.' }
+              ]
+            },
+            {
+              id: 10,
+              status: 'waiting',
+              mode: 'branch',
+              git: { branch: 'feat/agent-board', changes: 7, lastCommit: '2h ago' },
+              autoFeed: true,
+              unread: false,
+              previewMode: 'preview',
+              queue: [],
+              agentStatus: 'Idle',
+              agentProgress: 0,
+              agentEta: '--',
+              currentTask: null,
+              lastActiveAt: Date.now(),
+              changes: [],
+              diffs: {},
+              worktrees: [],
+              events: [
+                { time: '08:05', text: 'Session archived' }
+              ],
+              agentMessages: [
+                { role: 'system', text: 'System: Session #10 archived.' }
+              ]
+            }
+          ],
+          activeFile: 'src/app/layout.tsx',
+          overlayDismissed: false,
+          terminals: [
+            {
+              id: 1,
+              name: 'Terminal 1',
+              output: `$ pwd\n/tmp/workspace/app\n$ git status\nOn branch feat/agent-board\nChanges not staged for commit:\n  modified: src/app/layout.tsx\n  modified: src/components/AgentPanel.tsx\n\n$`
+            },
+            {
+              id: 2,
+              name: 'Terminal 2',
+              output: `$ npm run dev\nStarting...\n`
+            }
+          ],
+          activeTerminalId: 1,
+          activeSessionId: 12
+        },
+        {
+          id: 'tab-2',
+          name: 'Scratchpad',
+          project: null,
+          gitBase: null,
+          autoSuspendIdle: true,
+          idlePolicy: { enabled: true, idleMinutes: 10, maxActive: 3, pressure: true },
+          archiveLog: [],
+          archivedView: null,
+          worktreeView: null,
+          sessions: [
+            {
+              id: 1,
+              status: 'waiting',
+              mode: 'branch',
+              git: { branch: 'main', changes: 0, lastCommit: '—' },
+              autoFeed: true,
+              unread: false,
+              previewMode: 'preview',
+              queue: [],
+              agentStatus: 'Idle',
+              agentProgress: 0,
+              agentEta: '--',
+              currentTask: null,
+              lastActiveAt: Date.now(),
+              changes: [],
+              diffs: {},
+              worktrees: [],
+              agentMessages: [
+                { role: 'system', text: 'System: Initialize workspace to begin.' }
+              ]
+            }
+          ],
+          activeFile: null,
+          overlayDismissed: false,
+          terminals: [
+            { id: 1, name: 'Terminal 1', output: '$' }
+          ],
+          activeTerminalId: 1,
+          activeSessionId: 1
+        }
+      ],
+      activeTabId: 'tab-1',
+      nextTabId: 3
+    };
+
+    const getActiveTab = () => state.tabs.find((tab) => tab.id === state.activeTabId);
+    const getActiveSession = () => {
+      const tab = getActiveTab();
+      return tab.sessions.find((session) => session.id === tab.activeSessionId) || tab.sessions[0];
+    };
+    const findTabBySession = (session) => state.tabs.find((tab) => tab.sessions.includes(session));
+    const activeSessionCount = (tab) =>
+      tab.sessions.filter((session) => !['suspended', 'queued'].includes(session.status)).length;
+
+    const isArchiveView = () => !!getActiveTab().archivedView;
+
+    const getViewContext = () => {
+      const tab = getActiveTab();
+      if (tab.archivedView) {
+        return {
+          session: tab.archivedView.snapshot,
+          archived: true,
+          gitInfo: tab.archivedView.gitInfo
+        };
+      }
+      const session = getActiveSession();
+      const gitInfo = session.mode === 'tree' ? session.git : tab.gitBase;
+      return { session, archived: false, gitInfo };
+    };
+
+    const blockIfArchive = () => {
+      if (!isArchiveView()) return false;
+      showToast('Read-only view', 'Exit archive view to make changes', '');
+      return true;
+    };
+
+    const addAgentMsg = (sessionOverride, role, text) => {
+      const session = sessionOverride || getActiveSession();
+      session.agentMessages.push({ role, text });
+      renderAgent();
+    };
+
+    const nowStamp = () =>
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const touchSession = (session) => {
+      session.lastActiveAt = Date.now();
+    };
+
+    const logEvent = (session, text) => {
+      session.events = session.events || [];
+      session.events.unshift({ time: nowStamp(), text });
+      touchSession(session);
+    };
+
+    const enforceIdlePolicy = (tab) => {
+      if (!tab.autoSuspendIdle) return;
+      const policy = tab.idlePolicy || { maxActive: 3, pressure: true };
+      const shouldSuspend = policy.pressure || activeSessionCount(tab) > policy.maxActive;
+      if (!shouldSuspend) return;
+      tab.sessions.forEach((session) => {
+        if (session.id !== tab.activeSessionId && session.status === 'waiting') {
+          session.status = 'suspended';
+          logEvent(session, 'Session suspended by idle policy');
+        }
+      });
+    };
+
+    const promoteQueued = (tab) => {
+      const policy = tab.idlePolicy || { maxActive: 3 };
+      if (activeSessionCount(tab) >= policy.maxActive) return;
+      const queued = tab.sessions.find((session) => session.status === 'queued');
+      if (!queued) return;
+      queued.status = 'waiting';
+      logEvent(queued, 'Queued session activated');
+    };
+
+    const applyIdleTimers = () => {
+      state.tabs.forEach((tab) => {
+        if (!tab.autoSuspendIdle || tab.idlePolicy?.enabled === false) return;
+        const policy = tab.idlePolicy || { idleMinutes: 10 };
+        const threshold = (policy.idleMinutes || 10) * 60 * 1000;
+        tab.sessions.forEach((session) => {
+          if (session.id === tab.activeSessionId) return;
+          if (!['waiting', 'background'].includes(session.status)) return;
+          const last = session.lastActiveAt || Date.now();
+          if (Date.now() - last > threshold) {
+            session.status = 'suspended';
+            logEvent(session, 'Idle timeout suspended');
+          }
+        });
+        promoteQueued(tab);
+      });
+      renderAll();
+    };
+
+    const createIdleSession = (tab, id) => ({
+      id,
+      status: 'waiting',
+      mode: 'branch',
+      git: { branch: tab.gitBase?.branch || 'main', changes: 0, lastCommit: '—' },
+      autoFeed: true,
+      unread: false,
+      previewMode: 'preview',
+      queue: [],
+      agentStatus: 'Idle',
+      agentProgress: 0,
+      agentEta: '--',
+      currentTask: null,
+      lastActiveAt: Date.now(),
+      changes: [],
+      diffs: {},
+      worktrees: [],
+      events: [
+        { time: nowStamp(), text: 'Session initialized' }
+      ],
+      agentMessages: [
+        { role: 'system', text: 'System: Session initialized.' }
+      ]
+    });
+
+    const renderTabs = () => {
+      tabsEl.innerHTML = '';
+      const allowClose = state.tabs.length > 1;
+      state.tabs.forEach((tab) => {
+        const el = document.createElement('div');
+        const status = tab.project ? 'ready' : 'init';
+        el.className = `tab ${status} ${tab.id === state.activeTabId ? 'active' : ''}`;
+        el.dataset.id = tab.id;
+        const close = allowClose ? '<span class="close">x</span>' : '';
+        el.innerHTML = `<span class="dot"></span>${tab.name} ${close}`;
+        tabsEl.appendChild(el);
+      });
+    };
+
+    const renderProject = () => {
+      const tab = getActiveTab();
+      if (!tab || !tab.project) {
+        projectPathEl.textContent = '—';
+        projectAgentEl.textContent = '—';
+        projectStatusEl.textContent = 'Idle';
+        projectStatusEl.className = 'status idle';
+        gitBranchEl.textContent = '—';
+        gitChangesEl.textContent = '—';
+        gitCommitEl.textContent = '—';
+        activeProjectPill.textContent = 'No workspace';
+        return;
+      }
+
+      const session = getActiveSession();
+      const gitInfo = session.mode === 'tree' ? session.git : tab.gitBase;
+
+      projectPathEl.textContent = tab.project.path;
+      projectAgentEl.textContent = tab.project.agent;
+      projectStatusEl.textContent = tab.project.status;
+      projectStatusEl.className = 'status';
+      const changeCount = session.changes ? session.changes.length : gitInfo?.changes;
+      gitBranchEl.textContent = gitInfo?.branch || '—';
+      gitChangesEl.textContent = typeof changeCount === 'number' ? `${changeCount} files` : '—';
+      gitCommitEl.textContent = gitInfo?.lastCommit || '—';
+      activeProjectPill.textContent = tab.name;
+    };
+
+    const renderSessions = () => {
+      const tab = getActiveTab();
+      sessionsListEl.innerHTML = '';
+      if (!tab.sessions.length) {
+        const empty = document.createElement('div');
+        empty.className = 'item';
+        empty.textContent = 'No active sessions';
+        sessionsListEl.appendChild(empty);
+        return;
+      }
+      tab.sessions.forEach((session) => {
+        const item = document.createElement('div');
+        item.className = `item ${session.id === tab.activeSessionId ? 'active' : ''}`;
+        item.dataset.id = session.id;
+        const statusLabel = session.status === 'running'
+          ? 'running'
+          : session.status === 'background'
+            ? 'background'
+            : session.status === 'suspended'
+              ? 'suspended'
+              : session.status === 'queued'
+                ? 'queued'
+                : 'waiting';
+        const modeLabel = session.mode === 'tree' ? 'git tree' : 'branch';
+        const badgeClass = session.status === 'waiting'
+          ? 'badge waiting'
+          : session.status === 'background'
+            ? 'badge background'
+            : session.status === 'suspended'
+              ? 'badge suspended'
+              : session.status === 'queued'
+                ? 'badge queued'
+                : 'badge';
+        const unread = session.unread ? '<span class="session-badge"></span>' : '';
+        item.innerHTML = `
+          <div>Agent Session #${session.id}${unread}</div>
+          <div class="session-actions">
+            <span class="${badgeClass}">${statusLabel} · ${modeLabel}</span>
+            <button class="btn icon" data-action="archive" data-id="${session.id}">ARCH</button>
+          </div>
+        `;
+        sessionsListEl.appendChild(item);
+      });
+    };
+
+    const renderQueue = () => {
+      const { session } = getViewContext();
+      queueListEl.innerHTML = '';
+      if (!session.queue || !session.queue.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tree-empty';
+        empty.textContent = 'Queue is empty.';
+        queueListEl.appendChild(empty);
+        return;
+      }
+
+      session.queue.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = `queue-item ${item.status === 'done' ? 'done' : ''}`;
+        const badgeClass = item.status === 'running' ? 'queue-badge running' : item.status === 'done' ? 'queue-badge done' : 'queue-badge';
+        el.innerHTML = `
+          <div>${item.text}</div>
+          <div class="queue-meta">
+            <span class="${badgeClass}">${item.status}</span>
+            <button class="btn icon" data-action="run" data-id="${item.id}">▶</button>
+            <button class="btn icon" data-action="up" data-id="${item.id}">↑</button>
+            <button class="btn icon" data-action="down" data-id="${item.id}">↓</button>
+            <button class="btn icon" data-action="del" data-id="${item.id}">✕</button>
+          </div>
+        `;
+        queueListEl.appendChild(el);
+      });
+    };
+
+    const renderAgent = () => {
+      const { session } = getViewContext();
+      agentStreamEl.innerHTML = '';
+      session.agentMessages.forEach((msg) => {
+        const el = document.createElement('div');
+        const roleClass = msg.role === 'system' ? 'system' : msg.role === 'user' ? 'user' : '';
+        el.className = `agent-msg ${roleClass}`;
+        el.textContent = msg.text;
+        agentStreamEl.appendChild(el);
+      });
+      agentStreamEl.scrollTop = agentStreamEl.scrollHeight;
+    };
+
+    const renderAgentStatus = () => {
+      const { session, archived } = getViewContext();
+      const running = !archived && session.agentStatus === 'Running';
+      sessionLabelEl.textContent = `Session #${session.id}`;
+      agentStatusPillEl.textContent = archived ? 'Archived' : running ? 'Running' : 'Idle';
+      agentStatusPillEl.classList.toggle('running', running);
+      agentProgressBarEl.style.width = `${archived ? 0 : session.agentProgress || 0}%`;
+      agentEtaEl.textContent = running && session.agentEta ? `ETA ${session.agentEta}` : 'ETA --';
+    };
+
+    const renderWorktrees = () => {
+      const tab = getActiveTab();
+      const { session } = getViewContext();
+      if (!tab.project || !session || session.mode !== 'tree') {
+        worktreePanelEl.style.display = 'none';
+        worktreeListEl.innerHTML = '';
+        return;
+      }
+      worktreePanelEl.style.display = 'block';
+      worktreeListEl.innerHTML = '';
+      if (!session.worktrees || !session.worktrees.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tree-empty';
+        empty.textContent = 'No worktrees available.';
+        worktreeListEl.appendChild(empty);
+        return;
+      }
+      session.worktrees.forEach((wt, idx) => {
+        const el = document.createElement('div');
+        const active = wt.branch === session.git?.branch;
+        el.className = `worktree-item ${active ? 'active' : ''}`;
+        el.dataset.index = idx;
+        el.innerHTML = `<div>${wt.name}</div><div>${wt.branch}</div>`;
+        worktreeListEl.appendChild(el);
+      });
+    };
+
+    const renderWorktreeModal = () => {
+      const tab = getActiveTab();
+      if (!tab.worktreeView) {
+        worktreeOverlayEl.classList.remove('show');
+        return;
+      }
+      worktreeOverlayEl.classList.add('show');
+      const { worktree, view } = tab.worktreeView;
+      worktreeTitleEl.textContent = `${worktree.name} • ${worktree.branch}`;
+      worktreeTabsEl.querySelectorAll('.t-tab').forEach((el) => {
+        el.classList.toggle('active', el.dataset.view === view);
+      });
+      const details = worktree.details || {};
+      if (view === 'diff') worktreeBodyEl.textContent = details.diff || 'No diff available.';
+      if (view === 'tree') worktreeBodyEl.textContent = details.tree || 'No tree available.';
+      if (view === 'status') worktreeBodyEl.textContent = details.status || 'No status available.';
+    };
+
+    const renderTimeline = () => {
+      const { session } = getViewContext();
+      sessionTimelineEl.innerHTML = '';
+      const events = session?.events || [];
+      if (!events.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tree-empty';
+        empty.textContent = 'No events yet.';
+        sessionTimelineEl.appendChild(empty);
+        return;
+      }
+      events.forEach((evt) => {
+        const el = document.createElement('div');
+        el.className = 'timeline-item';
+        el.innerHTML = `<div class="time">${evt.time}</div><div>${evt.text}</div>`;
+        sessionTimelineEl.appendChild(el);
+      });
+    };
+
+    const renderArchiveLog = () => {
+      const tab = getActiveTab();
+      archiveLogEl.innerHTML = '';
+      if (!tab.archiveLog || tab.archiveLog.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'tree-empty';
+        empty.textContent = 'No archived sessions.';
+        archiveLogEl.appendChild(empty);
+        return;
+      }
+      tab.archiveLog.forEach((entry) => {
+        const el = document.createElement('div');
+        el.className = 'archive-item';
+        el.innerHTML = `
+          <div>Session #${entry.id} • ${entry.mode}</div>
+          <div>
+            <button class="btn tiny" data-action="view-archive" data-id="${entry.id}">View</button>
+            <span>${entry.time}</span>
+          </div>
+        `;
+        archiveLogEl.appendChild(el);
+      });
+    };
+
+    const buildChangesLines = (changes) => {
+      const lines = [];
+      const dirs = new Set();
+      const sorted = [...changes].sort((a, b) => a.path.localeCompare(b.path));
+      sorted.forEach((item) => {
+        const parts = item.path.split('/');
+        for (let i = 0; i < parts.length - 1; i += 1) {
+          const dirPath = parts.slice(0, i + 1).join('/');
+          if (!dirs.has(dirPath)) {
+            dirs.add(dirPath);
+            lines.push({ type: 'dir', name: parts[i], depth: i, key: dirPath });
+          }
+        }
+        lines.push({
+          type: 'file',
+          name: parts[parts.length - 1],
+          depth: parts.length - 1,
+          path: item.path,
+          status: item.status
+        });
+      });
+      return lines;
+    };
+
+    const getDiffStats = (diffText) => {
+      let add = 0;
+      let del = 0;
+      diffText.split('\n').forEach((line) => {
+        if (line.startsWith('+++') || line.startsWith('---')) return;
+        if (line.startsWith('+')) add += 1;
+        if (line.startsWith('-')) del += 1;
+      });
+      return { add, del };
+    };
+
+    const renderChanges = () => {
+      const tab = getActiveTab();
+      const { session } = getViewContext();
+      changesTreeEl.innerHTML = '';
+      if (!tab.project || !session || !session.changes || session.changes.length === 0) {
+        changesTreeEmptyEl.hidden = false;
+        changesTreeEl.style.display = 'none';
+        return;
+      }
+      changesTreeEmptyEl.hidden = true;
+      changesTreeEl.style.display = 'block';
+      const lines = buildChangesLines(session.changes);
+      lines.forEach((line) => {
+        const el = document.createElement('div');
+        el.className = `tree-line indent-${line.depth} ${line.type === 'file' ? 'file' : ''} ${line.status ? 'changed' : ''}`;
+        if (line.type === 'file') {
+          el.dataset.file = line.path;
+          el.innerHTML = `${line.name} <span class="status">${line.status}</span>`;
+        } else {
+          el.textContent = `${line.name}/`;
+        }
+        changesTreeEl.appendChild(el);
+      });
+    };
+
+    const renderTerminals = () => {
+      const tab = getActiveTab();
+      terminalTabsEl.innerHTML = '';
+      tab.terminals.forEach((term) => {
+        const el = document.createElement('div');
+        el.className = `t-tab ${term.id === tab.activeTerminalId ? 'active' : ''}`;
+        el.dataset.id = term.id;
+        el.innerHTML = `${term.name} <span class="close">x</span>`;
+        terminalTabsEl.appendChild(el);
+      });
+      const add = document.createElement('div');
+      add.className = 't-tab';
+      add.dataset.action = 'add';
+      add.textContent = '+';
+      terminalTabsEl.appendChild(add);
+
+      const activeTerm = tab.terminals.find((t) => t.id === tab.activeTerminalId) || tab.terminals[0];
+      if (activeTerm) {
+        terminalOutputEl.textContent = activeTerm.output;
+      } else {
+        terminalOutputEl.textContent = '$';
+      }
+    };
+
+    const renderTrees = () => {
+      const tab = getActiveTab();
+      const enabled = !!tab.project;
+      dirTreeEl.classList.toggle('disabled', !enabled);
+      changesTreeEl.classList.toggle('disabled', !enabled);
+      dirTreeEmptyEl.hidden = enabled;
+      dirTreeEl.style.display = enabled ? 'block' : 'none';
+      if (!enabled) {
+        changesTreeEmptyEl.textContent = 'Select a project to load changes.';
+        changesTreeEmptyEl.hidden = false;
+        changesTreeEl.style.display = 'none';
+        return;
+      }
+      const session = getActiveSession();
+      const hasChanges = session.changes && session.changes.length > 0;
+      changesTreeEmptyEl.textContent = 'No changes detected.';
+      changesTreeEmptyEl.hidden = hasChanges;
+      changesTreeEl.style.display = hasChanges ? 'block' : 'none';
+    };
+
+    const renderFilePreview = () => {
+      const tab = getActiveTab();
+      if (!tab.project) {
+        filePathEl.textContent = '—';
+        fileContentEl.textContent = '// Select a file to preview';
+        fileContentEl.hidden = false;
+        fileDiffEl.hidden = true;
+        diffToolbarEl.hidden = true;
+        document.querySelectorAll('.tree-line[data-file]').forEach((line) => {
+          line.classList.remove('active');
+        });
+        return;
+      }
+      const { session } = getViewContext();
+      const path = tab.activeFile || 'src/app/layout.tsx';
+      filePathEl.textContent = path;
+      const mode = session.previewMode || 'preview';
+      fileTabsEl.querySelectorAll('.t-tab').forEach((el) => {
+        el.classList.toggle('active', el.dataset.view === mode);
+      });
+      if (mode === 'diff') {
+        fileContentEl.hidden = true;
+        fileDiffEl.hidden = false;
+        diffToolbarEl.hidden = false;
+        const diffText = session.diffs?.[path] || `// No diff available for ${path}`;
+        const formatted = diffText
+          .split('\n')
+          .map((line) => {
+            if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+            if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+            return line;
+          })
+          .join('\n');
+        fileDiffEl.innerHTML = formatted;
+        diffFilesEl.innerHTML = '';
+        const stats = { add: 0, del: 0 };
+        const files = session.changes || [];
+        files.forEach((change) => {
+          const diff = session.diffs?.[change.path] || '';
+          const fileStats = diff ? getDiffStats(diff) : { add: 0, del: 0 };
+          stats.add += fileStats.add;
+          stats.del += fileStats.del;
+          const chip = document.createElement('div');
+          chip.className = `diff-chip ${change.path === path ? 'active' : ''}`;
+          chip.dataset.file = change.path;
+          const name = change.path.split('/').pop();
+          chip.innerHTML = `${name} <span>+${fileStats.add} -${fileStats.del}</span>`;
+          diffFilesEl.appendChild(chip);
+        });
+        diffStatsEl.textContent = `Files ${files.length}  •  +${stats.add}  -${stats.del}`;
+      } else {
+        fileContentEl.hidden = false;
+        fileDiffEl.hidden = true;
+        diffToolbarEl.hidden = true;
+        fileContentEl.textContent = fileContents[path] || `// Preview unavailable for ${path}`;
+      }
+      document.querySelectorAll('.tree-line[data-file]').forEach((line) => {
+        line.classList.toggle('active', line.dataset.file === path);
+      });
+    };
+
+    const renderOverlay = () => {
+      const tab = getActiveTab();
+      const shouldShow = !tab.project && !tab.overlayDismissed;
+      overlay.classList.toggle('hidden', !shouldShow);
+    };
+
+    const showToast = (title, message, kind = '', tabId, sessionId) => {
+      const toast = document.createElement('div');
+      toast.className = `toast ${kind} ${tabId && sessionId ? 'clickable' : ''}`;
+      toast.innerHTML = `<div class="title">${title}</div><div>${message}</div>`;
+      if (tabId && sessionId) {
+        toast.dataset.tabId = tabId;
+        toast.dataset.sessionId = sessionId;
+        toast.addEventListener('click', () => {
+          const tab = state.tabs.find((t) => t.id === tabId);
+          if (!tab) return;
+          const session = tab.sessions.find((s) => s.id === sessionId);
+          if (!session) return;
+          state.activeTabId = tabId;
+          tab.activeSessionId = sessionId;
+          session.unread = false;
+          renderAll();
+          toast.remove();
+        });
+      }
+      toastContainerEl.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 3200);
+    };
+
+    const renderAll = () => {
+      renderTabs();
+      renderProject();
+      renderSessions();
+      renderQueue();
+      renderAgent();
+      renderAgentStatus();
+      renderWorktrees();
+      renderTimeline();
+      renderArchiveLog();
+      renderWorktreeModal();
+      renderChanges();
+      renderTrees();
+      renderFilePreview();
+      renderTerminals();
+      renderOverlay();
+      autoFeedToggleEl.checked = getActiveSession().autoFeed;
+      const policy = getActiveTab().idlePolicy || { enabled: true, idleMinutes: 10, maxActive: 3, pressure: true };
+      idleMinutesEl.value = policy.idleMinutes;
+      maxActiveSessionsEl.value = policy.maxActive;
+      pressureToggleEl.checked = policy.pressure;
+      const tab = getActiveTab();
+      const queuedCount = tab.sessions.filter((s) => s.status === 'queued').length;
+      poolStatusEl.textContent = `Active ${activeSessionCount(tab)} / ${policy.maxActive} • Queued ${queuedCount}`;
+      autoSuspendToggleEl.checked = getActiveTab().autoSuspendIdle;
+      document.querySelectorAll('.btn.mode').forEach((btn) => {
+        const active = btn.dataset.mode === getActiveSession().mode;
+        btn.classList.toggle('active', active);
+      });
+      const archived = isArchiveView();
+      archiveBanner.hidden = !archived;
+      agentInputEl.disabled = archived;
+      agentSendBtn.disabled = archived;
+      queueInputEl.disabled = archived;
+      queueAddBtn.disabled = archived;
+      queueRunBtn.disabled = archived;
+      startAgentBtn.disabled = archived;
+      endAgentBtn.disabled = archived;
+      autoFeedToggleEl.disabled = archived;
+      autoSuspendToggleEl.disabled = archived;
+      sessionModeToggleEl.classList.toggle('disabled', archived);
+    };
+
+    const startProgress = (session, durationMs) => {
+      const tab = findTabBySession(session);
+      const key = `${tab?.id || 'tab'}-${session.id}`;
+      if (progressTimers.has(key)) {
+        clearInterval(progressTimers.get(key));
+      }
+      session.agentStatus = 'Running';
+      session.agentProgress = 0;
+      session.agentEta = `${Math.ceil(durationMs / 1000)}s`;
+      renderAgentStatus();
+
+      const start = Date.now();
+      const timer = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const pct = Math.min(100, Math.round((elapsed / durationMs) * 100));
+        session.agentProgress = pct;
+        const remaining = Math.max(0, durationMs - elapsed);
+        session.agentEta = remaining > 0 ? `${Math.ceil(remaining / 1000)}s` : '0s';
+        renderAgentStatus();
+        if (pct >= 100) {
+          clearInterval(timer);
+          progressTimers.delete(key);
+          session.agentStatus = 'Idle';
+          session.agentProgress = 0;
+          session.agentEta = '--';
+          renderAgentStatus();
+        }
+      }, 200);
+      progressTimers.set(key, timer);
+    };
+
+    const runTask = (session, item) => {
+      if (!item) return;
+      item.status = 'running';
+      session.status = 'running';
+      session.currentTask = item.text;
+      const duration = 1800;
+      addAgentMsg(session, 'system', `System: Running task -> ${item.text}`);
+      logEvent(session, `Task started: ${item.text}`);
+      startProgress(session, duration);
+      renderQueue();
+      setTimeout(() => {
+        item.status = 'done';
+        session.status = 'waiting';
+        addAgentMsg(session, 'agent', `Agent: Completed task -> ${item.text}`);
+        logEvent(session, `Task completed: ${item.text}`);
+        renderQueue();
+        renderSessions();
+        const tab = findTabBySession(session);
+        const isActive = tab && tab.id === state.activeTabId && tab.activeSessionId === session.id;
+        let suspended = false;
+        if (!isActive) {
+          session.unread = true;
+          const policy = tab?.idlePolicy || { maxActive: 3, pressure: true };
+          const shouldSuspend =
+            tab?.autoSuspendIdle &&
+            (policy.pressure || activeSessionCount(tab) > policy.maxActive);
+          if (shouldSuspend) {
+            session.status = 'suspended';
+            suspended = true;
+            logEvent(session, 'Session suspended to save resources');
+          }
+          showToast(`Session #${session.id} finished`, 'Waiting for input', 'done', tab?.id, session.id);
+        }
+        if (session.autoFeed && !suspended) runNextTask(session);
+      }, duration);
+    };
+
+    const runNextTask = (session) => {
+      const next = session.queue.find((item) => item.status === 'queued');
+      if (!next) return;
+      runTask(session, next);
+    };
+
+    const startAgent = () => {
+      const tab = getActiveTab();
+      const activeSession = getActiveSession();
+      if (activeSession && activeSession.status === 'running') {
+        activeSession.status = 'background';
+        logEvent(activeSession, 'Session moved to background');
+      }
+      const maxId = tab.sessions.reduce((max, s) => Math.max(max, s.id), 0);
+      const id = maxId + 1 || 1;
+      const newSession = {
+        id,
+        status: 'running',
+        mode: 'branch',
+        git: { branch: tab.gitBase?.branch || 'main', changes: 0, lastCommit: 'just now' },
+        autoFeed: true,
+        unread: false,
+        previewMode: 'preview',
+        queue: [
+          { id: 1, text: 'Summarize repo structure', status: 'queued' }
+        ],
+        agentStatus: 'Idle',
+        agentProgress: 0,
+        agentEta: '--',
+        currentTask: null,
+        lastActiveAt: Date.now(),
+        changes: [],
+        diffs: {},
+        worktrees: [],
+        events: [
+          { time: nowStamp(), text: 'Session started' }
+        ],
+        agentMessages: [
+          { role: 'system', text: `System: Session #${id} started.` }
+        ]
+      };
+      const policy = tab.idlePolicy || { maxActive: 3 };
+      if (activeSessionCount(tab) >= policy.maxActive) {
+        newSession.status = 'queued';
+        logEvent(newSession, 'Queued due to process pool limit');
+      }
+      tab.sessions.unshift(newSession);
+      tab.activeSessionId = id;
+      addAgentMsg(newSession, 'system', `System: Agent session #${id} started.`);
+      if (newSession.status === 'running') {
+        startProgress(newSession, 1500);
+      }
+      renderSessions();
+      renderAll();
+    };
+
+    const archiveSession = (tab, sessionId) => {
+      const index = tab.sessions.findIndex((session) => session.id === sessionId);
+      if (index === -1) return;
+      const session = tab.sessions[index];
+      if (!tab.archiveLog) tab.archiveLog = [];
+      logEvent(session, 'Session archived');
+      const snapshot = JSON.parse(JSON.stringify(session));
+      const gitInfo = session.mode === 'tree' ? session.git : tab.gitBase;
+      tab.archiveLog.unshift({
+        id: sessionId,
+        mode: session.mode,
+        time: nowStamp(),
+        snapshot,
+        gitInfo
+      });
+      const key = `${tab.id}-${sessionId}`;
+      if (progressTimers.has(key)) {
+        clearInterval(progressTimers.get(key));
+        progressTimers.delete(key);
+      }
+      tab.sessions.splice(index, 1);
+      if (!tab.sessions.length) {
+        const id = 1;
+        tab.sessions.push(createIdleSession(tab, id));
+        tab.activeSessionId = id;
+      } else if (tab.activeSessionId === sessionId) {
+        tab.activeSessionId = tab.sessions[0].id;
+      }
+      promoteQueued(tab);
+      showToast(`Session #${sessionId} archived`, 'Removed from process', '');
+      renderAll();
+    };
+
+    const endAgent = () => {
+      const session = getActiveSession();
+      if (!session) return;
+      session.status = 'waiting';
+      addAgentMsg(session, 'system', `System: Session #${session.id} task finished. Waiting for input.`);
+      logEvent(session, 'Task finished; waiting for input');
+      session.agentStatus = 'Idle';
+      session.agentProgress = 0;
+      session.agentEta = '--';
+      renderAgentStatus();
+      renderSessions();
+      if (session.autoFeed) runNextTask(session);
+    };
+
+    const setActiveFile = (path) => {
+      const tab = getActiveTab();
+      if (!tab.project) return;
+      tab.activeFile = path;
+      renderFilePreview();
+    };
+
+    const createTab = () => {
+      const id = `tab-${state.nextTabId++}`;
+      state.tabs.push({
+        id,
+        name: `Tab-${state.nextTabId - 1}`,
+        project: null,
+        gitBase: null,
+        autoSuspendIdle: true,
+        idlePolicy: { enabled: true, idleMinutes: 10, maxActive: 3, pressure: true },
+        archiveLog: [],
+        archivedView: null,
+        worktreeView: null,
+        sessions: [
+          {
+            id: 1,
+            status: 'waiting',
+            mode: 'branch',
+            git: { branch: 'main', changes: 0, lastCommit: '—' },
+            autoFeed: true,
+            unread: false,
+            previewMode: 'preview',
+            queue: [],
+            agentStatus: 'Idle',
+            agentProgress: 0,
+            agentEta: '--',
+            currentTask: null,
+            lastActiveAt: Date.now(),
+            changes: [],
+            diffs: {},
+            worktrees: [],
+            events: [
+              { time: nowStamp(), text: 'Session initialized' }
+            ],
+            agentMessages: [
+              { role: 'system', text: 'System: Initialize workspace to begin.' }
+            ]
+          }
+        ],
+        activeFile: null,
+        overlayDismissed: false,
+        terminals: [{ id: 1, name: 'Terminal 1', output: '$' }],
+        activeTerminalId: 1,
+        activeSessionId: 1
+      });
+      state.activeTabId = id;
+      renderAll();
+    };
+
+    const closeTab = (id) => {
+      state.tabs = state.tabs.filter((tab) => tab.id !== id);
+      if (!state.tabs.length) {
+        createTab();
+        return;
+      }
+      if (state.activeTabId === id) {
+        state.activeTabId = state.tabs[0].id;
+      }
+      renderAll();
+    };
+
+    const activateTab = (id) => {
+      state.activeTabId = id;
+      renderAll();
+    };
+
+    const startWorkspace = () => {
+      const tab = getActiveTab();
+      const raw = input.value.trim();
+      let name = tab.name;
+      let path = raw || (selected === 'remote' ? '/tmp/workspace/new-project' : '/Users/you/projects/new-project');
+      if (selected === 'remote' && raw) {
+        const last = raw.split('/').pop() || 'repo';
+        name = last.replace('.git', '');
+        path = `/tmp/workspace/${name}`;
+      }
+      if (selected === 'local' && raw) {
+        name = raw.split('/').pop() || 'local-project';
+      }
+      tab.name = name;
+      tab.project = { path, status: 'Ready', agent: 'Claude Code' };
+      tab.gitBase = { branch: 'main', changes: 3, lastCommit: 'just now' };
+      tab.autoSuspendIdle = true;
+      tab.idlePolicy = { enabled: true, idleMinutes: 10, maxActive: 3, pressure: true };
+      tab.archiveLog = [];
+      tab.archivedView = null;
+      tab.worktreeView = null;
+      tab.overlayDismissed = false;
+      tab.sessions = [
+        {
+          id: 1,
+          status: 'running',
+          mode: 'branch',
+          git: { branch: 'main', changes: 3, lastCommit: 'just now' },
+          autoFeed: true,
+          queue: [
+            { id: 1, text: 'Summarize repo structure', status: 'queued' },
+            { id: 2, text: 'Create initial plan', status: 'queued' }
+          ],
+          agentStatus: 'Idle',
+          agentProgress: 0,
+          agentEta: '--',
+          currentTask: null,
+          lastActiveAt: Date.now(),
+          unread: false,
+          previewMode: 'preview',
+          changes: [
+            { path: 'src/app/layout.tsx', status: 'M' }
+          ],
+          diffs: {
+            'src/app/layout.tsx': `@@ -1,3 +1,4 @@\n export function Layout() {\n+  // initialized\n }`
+          },
+          worktrees: [],
+          events: [
+            { time: nowStamp(), text: 'Session started' }
+          ],
+          agentMessages: [
+            { role: 'system', text: `System: Project loaded at ${path}. Agent ready.` }
+          ]
+        }
+      ];
+      tab.activeSessionId = 1;
+      tab.activeFile = 'src/app/layout.tsx';
+      tab.terminals = [
+        {
+          id: 1,
+          name: 'Terminal 1',
+          output: `$ pwd\n${path}\n$`
+        }
+      ];
+      tab.activeTerminalId = 1;
+      renderAll();
+    };
+
+    choices.forEach((choice) => {
+      choice.addEventListener('click', () => {
+        choices.forEach((c) => c.classList.remove('active'));
+        choice.classList.add('active');
+        selected = choice.dataset.choice;
+        input.placeholder = selected === 'remote' ? 'Paste git URL' : 'Select local path';
+      });
+    });
+
+    document.getElementById('cancel').addEventListener('click', () => {
+      const tab = getActiveTab();
+      tab.overlayDismissed = true;
+      renderOverlay();
+    });
+
+    document.getElementById('start').addEventListener('click', () => {
+      startWorkspace();
+      overlay.classList.add('hidden');
+    });
+
+    addTabBtn.addEventListener('click', () => {
+      createTab();
+    });
+
+    tabsEl.addEventListener('click', (event) => {
+      const tabEl = event.target.closest('.tab');
+      if (!tabEl) return;
+      const id = tabEl.dataset.id;
+      if (!id) return;
+      if (event.target.classList.contains('close')) {
+        closeTab(id);
+      } else {
+        activateTab(id);
+      }
+    });
+
+    startAgentBtn.addEventListener('click', () => {
+      if (blockIfArchive()) return;
+      startAgent();
+    });
+    endAgentBtn.addEventListener('click', () => {
+      if (blockIfArchive()) return;
+      endAgent();
+    });
+
+    queueAddBtn.addEventListener('click', () => {
+      if (blockIfArchive()) return;
+      const session = getActiveSession();
+      const text = queueInputEl.value.trim();
+      if (!text) return;
+      const maxId = session.queue.reduce((max, item) => Math.max(max, item.id), 0);
+      session.queue.push({ id: maxId + 1, text, status: 'queued' });
+      queueInputEl.value = '';
+      renderQueue();
+    });
+
+    queueRunBtn.addEventListener('click', () => {
+      if (blockIfArchive()) return;
+      runNextTask(getActiveSession());
+    });
+
+    queueListEl.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-action]');
+      if (!btn) return;
+      if (blockIfArchive()) return;
+      const session = getActiveSession();
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+      const index = session.queue.findIndex((item) => item.id === id);
+      if (index === -1) return;
+      if (action === 'run') runTask(session, session.queue[index]);
+      if (action === 'del') session.queue.splice(index, 1);
+      if (action === 'up' && index > 0) {
+        [session.queue[index - 1], session.queue[index]] = [session.queue[index], session.queue[index - 1]];
+      }
+      if (action === 'down' && index < session.queue.length - 1) {
+        [session.queue[index + 1], session.queue[index]] = [session.queue[index], session.queue[index + 1]];
+      }
+      renderQueue();
+    });
+
+    terminalTabsEl.addEventListener('click', (event) => {
+      const tab = getActiveTab();
+      const add = event.target.closest('.t-tab[data-action="add"]');
+      if (add) {
+        const maxId = tab.terminals.reduce((max, term) => Math.max(max, term.id), 0);
+        const id = maxId + 1;
+        tab.terminals.push({ id, name: `Terminal ${id}`, output: '$' });
+        tab.activeTerminalId = id;
+        renderTerminals();
+        return;
+      }
+
+      const tabEl = event.target.closest('.t-tab');
+      if (!tabEl || tabEl.dataset.action === 'add') return;
+      const id = Number(tabEl.dataset.id);
+      if (event.target.classList.contains('close')) {
+        if (tab.terminals.length === 1) return;
+        tab.terminals = tab.terminals.filter((term) => term.id !== id);
+        if (tab.activeTerminalId === id) {
+          tab.activeTerminalId = tab.terminals[0].id;
+        }
+        renderTerminals();
+        return;
+      }
+      tab.activeTerminalId = id;
+      renderTerminals();
+    });
+
+    autoFeedToggleEl.addEventListener('change', () => {
+      if (blockIfArchive()) return;
+      const session = getActiveSession();
+      session.autoFeed = autoFeedToggleEl.checked;
+    });
+
+    autoSuspendToggleEl.addEventListener('change', () => {
+      if (blockIfArchive()) return;
+      const tab = getActiveTab();
+      tab.autoSuspendIdle = autoSuspendToggleEl.checked;
+      tab.idlePolicy.enabled = tab.autoSuspendIdle;
+      if (tab.autoSuspendIdle) enforceIdlePolicy(tab);
+      renderSessions();
+    });
+
+    idleMinutesEl.addEventListener('change', () => {
+      if (blockIfArchive()) return;
+      const tab = getActiveTab();
+      const value = Math.max(1, Number(idleMinutesEl.value || 1));
+      tab.idlePolicy.idleMinutes = value;
+      enforceIdlePolicy(tab);
+    });
+
+    maxActiveSessionsEl.addEventListener('change', () => {
+      if (blockIfArchive()) return;
+      const tab = getActiveTab();
+      const value = Math.max(1, Number(maxActiveSessionsEl.value || 1));
+      tab.idlePolicy.maxActive = value;
+      enforceIdlePolicy(tab);
+    });
+
+    pressureToggleEl.addEventListener('change', () => {
+      if (blockIfArchive()) return;
+      const tab = getActiveTab();
+      tab.idlePolicy.pressure = pressureToggleEl.checked;
+      enforceIdlePolicy(tab);
+    });
+
+    agentSendBtn.addEventListener('click', () => {
+      if (blockIfArchive()) return;
+      const text = agentInputEl.value.trim();
+      if (!text) return;
+      addAgentMsg(null, 'user', `User: ${text}`);
+      logEvent(getActiveSession(), 'User input sent');
+      agentInputEl.value = '';
+      setTimeout(() => {
+        addAgentMsg(null, 'agent', 'Agent: Acknowledged. Working on it now.');
+      }, 400);
+    });
+
+    document.addEventListener('click', (event) => {
+      const line = event.target.closest('.tree-line[data-file]');
+      if (!line) return;
+      setActiveFile(line.dataset.file);
+    });
+
+    sessionsListEl.addEventListener('click', (event) => {
+      const archiveBtn = event.target.closest('button[data-action="archive"]');
+      if (archiveBtn) {
+        if (blockIfArchive()) return;
+        const tab = getActiveTab();
+        const id = Number(archiveBtn.dataset.id);
+        archiveSession(tab, id);
+        return;
+      }
+      const item = event.target.closest('.item[data-id]');
+      if (!item) return;
+      const tab = getActiveTab();
+      const id = Number(item.dataset.id);
+      if (tab.archivedView) {
+        tab.archivedView = null;
+      }
+      tab.activeSessionId = id;
+      const session = tab.sessions.find((s) => s.id === id);
+      if (session) {
+        session.unread = false;
+        if (session.status === 'queued') {
+          const policy = tab.idlePolicy || { maxActive: 3 };
+          if (activeSessionCount(tab) >= policy.maxActive) {
+            const candidate = tab.sessions.find((s) => s.id !== id && s.status === 'waiting');
+            if (candidate) {
+              candidate.status = 'suspended';
+              logEvent(candidate, 'Suspended to free pool slot');
+            }
+          }
+          session.status = 'waiting';
+          logEvent(session, 'Queued session activated by user');
+        }
+        if (session.status === 'suspended') {
+          session.status = 'waiting';
+          logEvent(session, 'Session resumed');
+          showToast(`Session #${session.id} resumed`, 'Process restored', '');
+        }
+        touchSession(session);
+      }
+      renderAll();
+    });
+
+    sessionModeToggleEl.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-mode]');
+      if (!btn) return;
+      if (blockIfArchive()) return;
+      const session = getActiveSession();
+      session.mode = btn.dataset.mode;
+      if (session.mode === 'tree') {
+        session.git = {
+          branch: `session/${session.id}-tree`,
+          changes: session.changes.length,
+          lastCommit: 'just now'
+        };
+        if (!session.worktrees || session.worktrees.length === 0) {
+          session.worktrees = [
+            {
+              name: 'main',
+              path: '/tmp/workspace/app',
+              branch: getActiveTab().gitBase?.branch || 'main',
+              details: {
+                status: 'Clean working tree on main',
+                diff: 'No diff for main worktree.',
+                tree: 'src/\n  app/\n  components/\n  services/\nREADME.md'
+              }
+            },
+            {
+              name: `session-${session.id}`,
+              path: `/tmp/workspace/app/.wt/session-${session.id}`,
+              branch: `session/${session.id}-tree`,
+              details: {
+                status: `Worktree for session ${session.id}\nPending changes tracked.`,
+                diff: `diff --git a/src/app/layout.tsx b/src/app/layout.tsx\n+// session worktree placeholder`,
+                tree: 'src/\n  app/\n    layout.tsx'
+              }
+            }
+          ];
+        }
+      }
+      logEvent(session, `Mode switched to ${session.mode}`);
+      renderAll();
+    });
+
+    fileTabsEl.addEventListener('click', (event) => {
+      const tab = event.target.closest('.t-tab');
+      if (!tab) return;
+      const view = tab.dataset.view;
+      if (!view) return;
+      const session = getActiveSession();
+      session.previewMode = view;
+      renderFilePreview();
+    });
+
+    diffFilesEl.addEventListener('click', (event) => {
+      const chip = event.target.closest('.diff-chip');
+      if (!chip) return;
+      const path = chip.dataset.file;
+      if (!path) return;
+      const tab = getActiveTab();
+      tab.activeFile = path;
+      const session = getActiveSession();
+      session.previewMode = 'diff';
+      renderFilePreview();
+    });
+
+    worktreeListEl.addEventListener('click', (event) => {
+      const item = event.target.closest('.worktree-item');
+      if (!item) return;
+      const { session } = getViewContext();
+      const index = Number(item.dataset.index);
+      const worktree = session.worktrees?.[index];
+      if (!worktree) return;
+      const tab = getActiveTab();
+      tab.worktreeView = { worktree, view: 'status' };
+      renderWorktreeModal();
+    });
+
+    worktreeTabsEl.addEventListener('click', (event) => {
+      const tab = event.target.closest('.t-tab');
+      if (!tab) return;
+      const view = tab.dataset.view;
+      if (!view) return;
+      const current = getActiveTab().worktreeView;
+      if (!current) return;
+      current.view = view;
+      renderWorktreeModal();
+    });
+
+    closeWorktreeBtn.addEventListener('click', () => {
+      const tab = getActiveTab();
+      tab.worktreeView = null;
+      renderWorktreeModal();
+    });
+
+    archiveLogEl.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-action="view-archive"]');
+      if (!btn) return;
+      const tab = getActiveTab();
+      const id = Number(btn.dataset.id);
+      const entry = tab.archiveLog.find((log) => log.id === id);
+      if (!entry) return;
+      tab.archivedView = entry;
+      if (entry.snapshot?.changes?.length) {
+        tab.activeFile = entry.snapshot.changes[0].path;
+      }
+      renderAll();
+    });
+
+    exitArchiveBtn.addEventListener('click', () => {
+      const tab = getActiveTab();
+      tab.archivedView = null;
+      renderAll();
+    });
+
+    setInterval(applyIdleTimers, 5000);
+
+    renderAll();
+  </script>
+</body>
+</html>

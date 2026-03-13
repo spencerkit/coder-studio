@@ -1,0 +1,20 @@
+{
+  "productName": "Agent Workbench",
+  "version": "0.1.0",
+  "identifier": "com.agent.workbench",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://localhost:5174",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Agent Workbench",
+        "width": 1400,
+        "height": 900
+      }
+    ]
+  }
+}

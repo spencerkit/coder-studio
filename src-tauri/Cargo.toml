@@ -1,0 +1,18 @@
+[package]
+name = "agent-workbench"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.0.0", features = [] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "process"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+tauri-plugin-dialog = "2.0.0"
+portable-pty = "0.8"
