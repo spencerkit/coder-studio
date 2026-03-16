@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useRelaxState } from "@relax-state/react";
-import Editor from "@monaco-editor/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -11,7 +8,9 @@ import {
   ArchiveEntry,
   ExecTarget,
   FilePreview,
+  GitChange,
   Session,
+  SessionPaneNode,
   SessionMode,
   SessionStatus,
   Tab,
@@ -20,6 +19,7 @@ import {
   WorktreeInfo,
   createEmptyPreview,
   createId,
+  createPaneLeaf,
   createSession,
   createTab,
   persistWorkbenchState,
@@ -38,6 +38,36 @@ import {
   localizeWorkspaceTitle,
   persistLocale
 } from "./i18n";
+import {
+  AgentPlusIcon,
+  AgentSendIcon,
+  GitDiscardIcon,
+  GitStageIcon,
+  GitUnstageIcon,
+  HeaderAddIcon,
+  HeaderBackIcon,
+  HeaderCloseIcon,
+  HeaderSettingsIcon,
+  RailFilesIcon,
+  RailGitIcon,
+  RailSessionsIcon,
+  SettingsAppearanceIcon,
+  SettingsArchiveIcon,
+  SettingsConfigIcon,
+  SettingsEnvironmentIcon,
+  SettingsGeneralIcon,
+  SettingsGitIcon,
+  SettingsMcpIcon,
+  SettingsWorktreeIcon,
+  ThemeDarkIcon,
+  ThemeLightIcon,
+  WorkspaceBranchIcon,
+  WorkspaceChangesIcon,
+  WorkspaceCodeIcon,
+  WorkspaceFolderIcon,
+  WorkspaceTerminalIcon
+} from "./components/icons";
+import { invoke, listen } from "./lib/transport";
 
 type Toast = { id: string; text: string; sessionId: string };
 
@@ -58,6 +88,14 @@ type WorkspaceTree = {
   changes: TreeNode[];
 };
 
+type GitChangeEntry = GitChange;
+type GitChangeAction = "stage" | "unstage" | "discard";
+type GitFileDiffPayload = {
+  original_content: string;
+  modified_content: string;
+  diff: string;
+};
+
 type BackendQueueTask = {
   id: number;
   text: string;
@@ -71,6 +109,7 @@ type BackendSession = {
   auto_feed: boolean;
   queue: BackendQueueTask[];
   last_active_at: number;
+  claude_session_id?: string | null;
 };
 
 type BackendArchiveEntry = {
@@ -101,6 +140,7 @@ type SessionPatch = {
   mode?: SessionMode;
   auto_feed?: boolean;
   last_active_at?: number;
+  claude_session_id?: string;
 };
 
 type AgentEvent = {
@@ -145,13 +185,37 @@ type WorktreeModalState = {
   loading?: boolean;
 };
 
+type ClaudeSlashSkillEntry = {
+  id: string;
+  command: string;
+  description: string;
+  scope: "project" | "personal";
+  source_kind: "skill" | "command";
+  source_path: string;
+};
+
+type ClaudeSlashMenuItem = {
+  id: string;
+  command: string;
+  description: string;
+  section: "builtin" | "bundled" | "project" | "personal";
+  sourcePath?: string;
+  sourceKind?: "skill" | "command";
+};
+
 type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: Tab["idlePolicy"];
 };
 
+type AppTheme = "dark" | "light";
+type AppRoute = "workspace" | "settings";
+type SettingsPanel = "general" | "appearance";
+
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
+const APP_THEME_STORAGE_KEY = "coder-studio.app-theme";
+const SETTINGS_ROUTE_HASH = "#/settings";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
@@ -178,7 +242,7 @@ const readStoredAppSettings = (): AppSettings => {
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
     return {
-      agentProvider: parsed.agentProvider === "codex" ? "codex" : "claude",
+      agentProvider: "claude",
       agentCommand: typeof parsed.agentCommand === "string" && parsed.agentCommand.trim() ? parsed.agentCommand : fallback.agentCommand,
       idlePolicy: {
         enabled: parsed.idlePolicy?.enabled ?? fallback.idlePolicy.enabled,
@@ -192,15 +256,133 @@ const readStoredAppSettings = (): AppSettings => {
   }
 };
 
+const readStoredTheme = (): AppTheme => {
+  if (typeof window === "undefined") return "dark";
+  try {
+    const raw = window.localStorage.getItem(APP_THEME_STORAGE_KEY);
+    if (raw === "dark" || raw === "light") return raw;
+  } catch {
+    // Ignore storage failures and fall back to media preference.
+  }
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+};
+
+const readCurrentRoute = (): AppRoute => {
+  if (typeof window === "undefined") return "workspace";
+  return window.location.hash === SETTINGS_ROUTE_HASH ? "settings" : "workspace";
+};
+
 const isTauri = typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
-const stripAnsi = (value: string) => {
+
+const sanitizeAnsiStream = (value: string) => {
   if (!value) return value;
   return value
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/\x1b\][^\u0007]*(\u0007|\x1b\\)/g, "")
+    .replace(/\x1b\[(?![0-9;:]*m)[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b(?!\[)/g, "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .replace(/\r/g, "");
 };
+
+const sanitizeAnsiForTerminal = (value: string) => {
+  if (!value) return value;
+  return value
+    .replace(/\x1b\][^\u0007]*(\u0007|\x1b\\)/g, "")
+    .replace(/[\u0000\u000B\u000C\u000E-\u001A\u001C-\u001F\u007F]/g, "");
+};
+
+const stripAnsi = (value: string) => {
+  if (!value) return value;
+  return sanitizeAnsiStream(value).replace(/\x1b\[[0-9;:]*m/g, "");
+};
+
+type AgentStreamTerminalProps = {
+  stream: string;
+  theme: AppTheme;
+  fontSize: number;
+};
+
+const readAgentTerminalTheme = (source?: Element | null) => {
+  if (typeof window === "undefined") {
+    return { background: "black", foreground: "white" };
+  }
+  const styles = window.getComputedStyle((source as Element | null) ?? document.documentElement);
+  const rootStyles = window.getComputedStyle(document.documentElement);
+  const background = styles.getPropertyValue("--terminal-bg").trim() || rootStyles.getPropertyValue("--terminal-bg").trim() || "black";
+  const foreground = styles.getPropertyValue("--terminal-fg").trim() || rootStyles.getPropertyValue("--terminal-fg").trim() || "white";
+  return { background, foreground };
+};
+
+const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => {
+  if (next === previous) return;
+  if (next.startsWith(previous)) {
+    const delta = next.slice(previous.length);
+    if (delta) term.write(delta);
+    return;
+  }
+  term.reset();
+  if (next) term.write(next);
+};
+
+const AgentStreamTerminal = ({ stream, theme, fontSize }: AgentStreamTerminalProps) => {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const termRef = useRef<XTerminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const outputSnapshotRef = useRef("");
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    if (!termRef.current) {
+      const term = new XTerminal({
+        convertEol: true,
+        disableStdin: true,
+        cursorBlink: false,
+        fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
+        fontSize,
+        theme: readAgentTerminalTheme(mount.closest(".app"))
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(mount);
+      termRef.current = term;
+      fitRef.current = fitAddon;
+      outputSnapshotRef.current = "";
+    }
+
+    const term = termRef.current;
+    if (!term) return;
+    const normalized = sanitizeAnsiForTerminal(stream);
+    term.options = {
+      fontSize,
+      theme: readAgentTerminalTheme(mount.closest(".app"))
+    };
+    writeXtermSnapshot(term, outputSnapshotRef.current, normalized);
+    outputSnapshotRef.current = normalized;
+    requestAnimationFrame(() => fitRef.current?.fit());
+  }, [stream, fontSize, theme]);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    const fitAddon = fitRef.current;
+    if (!mount || !fitAddon) return;
+    const observer = new ResizeObserver(() => {
+      fitAddon.fit();
+    });
+    observer.observe(mount);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => {
+    termRef.current?.dispose();
+    termRef.current = null;
+    fitRef.current = null;
+    outputSnapshotRef.current = "";
+  }, []);
+
+  return <div ref={mountRef} className="agent-pane-xterm" />;
+};
+
 const showWslOption = (() => {
   if (typeof navigator === "undefined") return false;
   const platform = (navigator.platform || "").toLowerCase();
@@ -253,6 +435,23 @@ const computeDiffStats = (diff: string) => {
     if (line.startsWith("-")) deletions += 1;
   });
   return { files, additions, deletions, diffFiles };
+};
+
+const normalizeComparablePath = (value: string) => value.replace(/\\/g, "/");
+const sanitizeGitRelativePath = (value: string) => normalizeComparablePath(value).replace(/^[:/\\]+/, "");
+
+const matchesGitPreviewPath = (previewPath: string, changePath: string) => {
+  const normalizedPreview = normalizeComparablePath(previewPath);
+  const normalizedChange = normalizeComparablePath(changePath);
+  return normalizedPreview === normalizedChange || normalizedPreview.endsWith(`/${normalizedChange}`);
+};
+
+const fileParentLabel = (value?: string) => {
+  if (!value) return "";
+  const normalized = value.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  parts.pop();
+  return parts.join("/");
 };
 
 const inferEditorLanguage = (path: string) => {
@@ -313,8 +512,6 @@ const sessionStatusLabel = (status: SessionStatus, t: Translator) => {
   }
 };
 
-const modeLabel = (mode: SessionMode, t: Translator) => (mode === "branch" ? t("branchMode") : t("gitTreeMode"));
-
 const queueTaskStatusLabel = (status: BackendQueueTask["status"], t: Translator) => {
   switch (status) {
     case "running":
@@ -324,12 +521,6 @@ const queueTaskStatusLabel = (status: BackendQueueTask["status"], t: Translator)
     default:
       return t("queued");
   }
-};
-
-const poolSummary = (tab: Tab, t: Translator) => {
-  const active = tab.sessions.filter((s) => !["queued", "suspended"].includes(s.status)).length;
-  const queued = tab.sessions.filter((s) => s.status === "queued").length;
-  return t("poolSummary", { active, max: tab.idlePolicy.maxActive, queued });
 };
 
 const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
@@ -361,7 +552,8 @@ const createSessionFromBackend = (source: BackendSession, locale: Locale, existi
   ],
   stream: existing?.stream ?? "",
   unread: existing?.unread ?? 0,
-  lastActiveAt: source.last_active_at
+  lastActiveAt: source.last_active_at,
+  claudeSessionId: source.claude_session_id ?? existing?.claudeSessionId
 });
 
 const isDraftSession = (session: Session | undefined | null) => Boolean(session?.isDraft);
@@ -383,6 +575,86 @@ const displayPathName = (value?: string) => {
   return parts[parts.length - 1] ?? normalized;
 };
 
+const sortTreeNodes = (nodes: TreeNode[], locale: Locale): TreeNode[] => {
+  const collator = new Intl.Collator(locale === "zh" ? "zh-CN" : "en", {
+    numeric: true,
+    sensitivity: "base"
+  });
+
+  return [...nodes]
+    .sort((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind === "dir" ? -1 : 1;
+      }
+      return collator.compare(left.name, right.name);
+    })
+    .map((node) => ({
+      ...node,
+      children: node.children?.length ? sortTreeNodes(node.children, locale) : node.children
+    }));
+};
+
+const collectPaneLeaves = (node: SessionPaneNode): Array<{ id: string; sessionId: string }> => {
+  if (node.type === "leaf") {
+    return [{ id: node.id, sessionId: node.sessionId }];
+  }
+  return [...collectPaneLeaves(node.first), ...collectPaneLeaves(node.second)];
+};
+
+const findPaneSessionId = (node: SessionPaneNode, paneId: string): string | null => {
+  if (node.type === "leaf") {
+    return node.id === paneId ? node.sessionId : null;
+  }
+  return findPaneSessionId(node.first, paneId) ?? findPaneSessionId(node.second, paneId);
+};
+
+const replacePaneNode = (
+  node: SessionPaneNode,
+  paneId: string,
+  updater: (leaf: Extract<SessionPaneNode, { type: "leaf" }>) => SessionPaneNode
+): SessionPaneNode => {
+  if (node.type === "leaf") {
+    return node.id === paneId ? updater(node) : node;
+  }
+  return {
+    ...node,
+    first: replacePaneNode(node.first, paneId, updater),
+    second: replacePaneNode(node.second, paneId, updater)
+  };
+};
+
+const removePaneNode = (node: SessionPaneNode, paneId: string): SessionPaneNode | null => {
+  if (node.type === "leaf") {
+    return node.id === paneId ? null : node;
+  }
+
+  const nextFirst = removePaneNode(node.first, paneId);
+  const nextSecond = removePaneNode(node.second, paneId);
+
+  if (!nextFirst && !nextSecond) return null;
+  if (!nextFirst) return nextSecond;
+  if (!nextSecond) return nextFirst;
+
+  return {
+    ...node,
+    first: nextFirst,
+    second: nextSecond
+  };
+};
+
+const remapPaneSession = (node: SessionPaneNode, fromSessionId: string, toSessionId: string): SessionPaneNode => {
+  if (node.type === "leaf") {
+    return node.sessionId === fromSessionId
+      ? { ...node, sessionId: toSessionId }
+      : node;
+  }
+  return {
+    ...node,
+    first: remapPaneSession(node.first, fromSessionId, toSessionId),
+    second: remapPaneSession(node.second, fromSessionId, toSessionId)
+  };
+};
+
 const activeTaskForSession = (session: Session) => session.queue.find((task) => task.status === "running");
 
 const isForegroundActiveStatus = (status: SessionStatus) => status === "running" || status === "waiting";
@@ -399,6 +671,34 @@ const resolveVisibleStatus = (tab: Tab, session: Session, nextStatus: SessionSta
     return tab.activeSessionId === session.id ? nextStatus : "background";
   }
   return nextStatus;
+};
+
+const sessionTone = (status: SessionStatus) => {
+  if (status === "running" || status === "waiting" || status === "background") return "active";
+  if (status === "idle") return "idle";
+  if (status === "queued") return "queued";
+  return "suspended";
+};
+
+const formatRelativeSessionTime = (value: number, locale: Locale) => {
+  const diffMs = value - Date.now();
+  const absMs = Math.abs(diffMs);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const rtf = new Intl.RelativeTimeFormat(locale === "zh" ? "zh-CN" : "en", { numeric: "auto" });
+
+  if (absMs < hour) {
+    return rtf.format(Math.round(diffMs / minute), "minute");
+  }
+  if (absMs < day) {
+    return rtf.format(Math.round(diffMs / hour), "hour");
+  }
+  if (absMs < week) {
+    return rtf.format(Math.round(diffMs / day), "day");
+  }
+  return rtf.format(Math.round(diffMs / week), "week");
 };
 
 const sessionCompletionRatio = (session: Session) => {
@@ -421,37 +721,113 @@ const AGENT_SPECIAL_KEY_MAP = Object.fromEntries(
   AGENT_SPECIAL_KEYS.map((item) => [item.key, item.sequence])
 ) as Record<string, string>;
 
+const BUILTIN_SLASH_COMMANDS: Array<{ command: string; description: { en: string; zh: string } }> = [
+  { command: "/help", description: { en: "Show help and available commands.", zh: "显示帮助和当前可用命令。" } },
+  { command: "/compact", description: { en: "Compact the current conversation with optional focus instructions.", zh: "压缩当前会话上下文，并可附带聚焦说明。" } },
+  { command: "/clear", description: { en: "Clear conversation history and free up context.", zh: "清空当前会话历史并释放上下文。" } },
+  { command: "/config", description: { en: "Open Claude Code settings and preferences.", zh: "打开 Claude Code 设置与偏好。" } },
+  { command: "/diff", description: { en: "Open the interactive diff viewer for current changes.", zh: "打开当前改动的交互式差异视图。" } },
+  { command: "/init", description: { en: "Initialize the project with a CLAUDE.md guide.", zh: "为当前项目初始化 CLAUDE.md 指南。" } },
+  { command: "/mcp", description: { en: "Manage MCP server connections and authentication.", zh: "管理 MCP 服务连接与认证。" } },
+  { command: "/memory", description: { en: "Edit and manage CLAUDE.md memory files.", zh: "编辑和管理 CLAUDE.md 记忆文件。" } },
+  { command: "/permissions", description: { en: "View or update Claude tool permissions.", zh: "查看或更新 Claude 的工具权限。" } },
+  { command: "/plan", description: { en: "Enter plan mode directly from the prompt.", zh: "直接进入计划模式。" } },
+  { command: "/resume", description: { en: "Resume a conversation by ID or name.", zh: "按 ID 或名称恢复历史会话。" } },
+  { command: "/status", description: { en: "Open the status view for model, account, and connectivity.", zh: "打开状态视图，查看模型、账号和连接信息。" } }
+];
+
+const BUNDLED_CLAUDE_SKILLS: Array<{ command: string; description: { en: string; zh: string } }> = [
+  { command: "/batch", description: { en: "Plan and execute large codebase changes in parallel worktrees.", zh: "并行规划并执行大规模代码库改造。" } },
+  { command: "/claude-api", description: { en: "Load Claude API and SDK reference material for the current project.", zh: "加载当前项目相关的 Claude API 与 SDK 参考资料。" } },
+  { command: "/debug", description: { en: "Inspect the current Claude Code session and debug issues.", zh: "检查当前 Claude Code 会话并诊断问题。" } },
+  { command: "/loop", description: { en: "Repeat a prompt on an interval while the session stays open.", zh: "在会话保持打开时按固定间隔重复执行提示词。" } },
+  { command: "/simplify", description: { en: "Review recent changes for quality and simplification opportunities.", zh: "检查最近改动并寻找质量与简化机会。" } }
+];
+
+const replaceLeadingSlashToken = (input: string, command: string) => {
+  const trimmed = input.replace(/^\s+/, "");
+  const remainder = trimmed.replace(/^\/\S+\s*/, "");
+  return remainder ? `${command} ${remainder}` : `${command} `;
+};
+
 export default function App() {
   const [state, setState] = useRelaxState(workbenchState);
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
+  const [theme, setTheme] = useState<AppTheme>(() => readStoredTheme());
   const [appSettings, setAppSettings] = useState<AppSettings>(() => readStoredAppSettings());
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => readStoredAppSettings());
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [route, setRoute] = useState<AppRoute>(() => readCurrentRoute());
+  const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
   const [queueInput, setQueueInput] = useState("");
-  const [agentInput, setAgentInput] = useState("");
+  const [paneInputs, setPaneInputs] = useState<Record<string, string>>({});
+  const [commitMessage, setCommitMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [worktreeModal, setWorktreeModal] = useState<WorktreeModalState | null>(null);
   const [worktreeView, setWorktreeView] = useState<"status" | "diff" | "tree">("status");
   const [previewMode, setPreviewMode] = useState<"preview" | "diff">("preview");
-  const [repoTreeMode, setRepoTreeMode] = useState<"files" | "changes">("files");
+  const [leftRailView, setLeftRailView] = useState<"sessions" | "files" | "git">("sessions");
+  const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
+  const [selectedGitChangeKey, setSelectedGitChangeKey] = useState<string>("");
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashMenuPaneId, setSlashMenuPaneId] = useState<string | null>(null);
+  const [slashMenuLoading, setSlashMenuLoading] = useState(false);
+  const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const stateRef = useRef(state);
+  const appRef = useRef<HTMLDivElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const terminalMountRef = useRef<HTMLDivElement | null>(null);
   const xtermRef = useRef<XTerminal | null>(null);
   const xtermFitRef = useRef<FitAddon | null>(null);
-  const terminalOutputRef = useRef<{ id?: string; length: number }>({ length: 0 });
-  const agentTerminalRef = useRef<HTMLDivElement | null>(null);
-  const agentXtermRef = useRef<XTerminal | null>(null);
-  const agentFitRef = useRef<FitAddon | null>(null);
-  const agentOutputRef = useRef<{ id?: string; length: number }>({ length: 0 });
-  const agentInputRef = useRef<HTMLInputElement | null>(null);
+  const terminalOutputRef = useRef<{ id?: string; snapshot: string }>({ snapshot: "" });
+  const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
+  const paneInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const agentSpecialKeys = useMemo(
-    () => AGENT_SPECIAL_KEYS.map((item) => ({ ...item, label: t(item.labelKey) })),
-    [t]
-  );
+  const editorMetrics = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
+    }
+    const source = appRef.current ?? document.documentElement;
+    const styles = window.getComputedStyle(source);
+    return {
+      fontSize: Number.parseInt(styles.getPropertyValue("--editor-font-size"), 10) || 13,
+      paddingY: Number.parseInt(styles.getPropertyValue("--editor-padding-y"), 10) || 12,
+      terminalFontSize: Number.parseInt(styles.getPropertyValue("--terminal-font-size"), 10) || 12
+    };
+  }, [theme]);
+
+  const readTerminalTheme = () => {
+    if (typeof window === "undefined") {
+      return { background: "black", foreground: "white" };
+    }
+    const source = appRef.current ?? document.documentElement;
+    const styles = window.getComputedStyle(source);
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    const background = styles.getPropertyValue("--terminal-bg").trim();
+    const foreground = styles.getPropertyValue("--terminal-fg").trim();
+    return {
+      background: background || rootStyles.getPropertyValue("--terminal-bg").trim() || "black",
+      foreground: foreground || rootStyles.getPropertyValue("--terminal-fg").trim() || "white"
+    };
+  };
+
+  const syncTerminalSize = (term: XTerminal, terminalId = activeTerminal?.id) => {
+    if (!isTauri || !activeTab.id || !terminalId) return;
+    const numericId = Number(terminalId.replace("term-", ""));
+    if (!Number.isFinite(numericId)) return;
+    const last = terminalSizeRef.current;
+    if (last.id === terminalId && last.cols === term.cols && last.rows === term.rows) return;
+    terminalSizeRef.current = { id: terminalId, cols: term.cols, rows: term.rows };
+    void invoke("terminal_resize", {
+      tabId: activeTab.id,
+      terminalId: numericId,
+      cols: term.cols,
+      rows: term.rows
+    });
+  };
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
     const next = updater(stateRef.current);
@@ -466,6 +842,25 @@ export default function App() {
     } catch {
       // Ignore storage failures and keep settings in memory.
     }
+  };
+
+  const navigateToRoute = (nextRoute: AppRoute) => {
+    if (typeof window === "undefined") {
+      setRoute(nextRoute);
+      return;
+    }
+    const nextHash = nextRoute === "settings" ? SETTINGS_ROUTE_HASH : "";
+    if (window.location.hash !== nextHash) {
+      if (nextHash) {
+        window.location.hash = nextHash;
+      } else {
+        const nextUrl = `${window.location.pathname}${window.location.search}`;
+        window.history.pushState(null, "", nextUrl);
+        setRoute("workspace");
+      }
+      return;
+    }
+    setRoute(nextRoute);
   };
 
   const syncGlobalSettings = (next: AppSettings) => {
@@ -492,12 +887,64 @@ export default function App() {
   }, [state]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleHashChange = () => {
+      setRoute(readCurrentRoute());
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (route === "settings") {
+      setActiveSettingsPanel("general");
+    }
+  }, [route]);
+
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!slashMenuRef.current?.contains(event.target as Node)) {
+        setSlashMenuOpen(false);
+        setSlashMenuPaneId(null);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSlashMenuOpen(false);
+        setSlashMenuPaneId(null);
+      }
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [slashMenuOpen]);
+
+  useEffect(() => {
     persistWorkbenchState(state);
   }, [state]);
 
   useEffect(() => {
     persistLocale(locale);
   }, [locale]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
+      } catch {
+        // Ignore storage failures and keep in-memory theme state.
+      }
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = theme;
+    }
+  }, [theme]);
 
   useEffect(() => {
     persistAppSettings(appSettings);
@@ -521,6 +968,7 @@ export default function App() {
     const unlisten = listen<AgentEvent>("agent://event", (event) => {
       const { tab_id, session_id, kind, data } = event.payload;
       const cleaned = stripAnsi(data);
+      const styledChunk = sanitizeAnsiForTerminal(data);
       const isStream = kind === "stdout" || kind === "stderr";
       const isSystem = kind === "system";
       const isExit = kind === "exit";
@@ -533,7 +981,7 @@ export default function App() {
             sessions: tab.sessions.map((session) => {
               if (session.id !== session_id) return session;
               const nextStatus = isStream
-                ? resolveVisibleStatus(tab, session, "running")
+                ? session.status
                 : isExit
                   ? "idle"
                   : session.status;
@@ -542,8 +990,8 @@ export default function App() {
                 : isSystem
                   ? `\n[${cleaned}]\n`
                   : kind === "stderr"
-                    ? `\n[stderr] ${data}`
-                    : data;
+                    ? (styledChunk ? `\n[stderr] ${styledChunk}` : "")
+                    : styledChunk;
               const MAX_AGENT_CHARS = 200000;
               const nextStream = `${session.stream}${streamChunk}`.slice(-MAX_AGENT_CHARS);
               const message = isExit
@@ -563,6 +1011,9 @@ export default function App() {
           };
         })
       }));
+      if (kind === "exit") {
+        void settleSessionAfterExit(tab_id, session_id);
+      }
     });
     return () => {
       void unlisten.then((fn) => fn());
@@ -572,7 +1023,7 @@ export default function App() {
   useEffect(() => {
     if (!isTauri) return;
     const unlisten = listen<AgentLifecycleEvent>("agent://lifecycle", (event) => {
-      const { tab_id, session_id, kind } = event.payload;
+      const { tab_id, session_id, kind, data } = event.payload;
       let nextStatus: SessionStatus | null = null;
       if (kind === "turn_waiting" || kind === "approval_required") {
         nextStatus = "waiting";
@@ -600,6 +1051,43 @@ export default function App() {
             };
           })
         }));
+      }
+
+      const claudeSessionId = (() => {
+        try {
+          const payload = JSON.parse(data) as { session_id?: string };
+          return typeof payload.session_id === "string" && payload.session_id.trim()
+            ? payload.session_id.trim()
+            : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      if (claudeSessionId) {
+        let changed = false;
+        updateState((current) => ({
+          ...current,
+          tabs: current.tabs.map((tab) => {
+            if (tab.id !== tab_id) return tab;
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) => {
+                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
+                  return session;
+                }
+                changed = true;
+                return {
+                  ...session,
+                  claudeSessionId
+                };
+              })
+            };
+          })
+        }));
+        if (changed) {
+          void syncSessionPatch(tab_id, session_id, { claude_session_id: claudeSessionId });
+        }
       }
 
       if (kind === "turn_completed") {
@@ -647,6 +1135,15 @@ export default function App() {
     () => activeTab.sessions.find((s) => s.id === activeTab.activeSessionId) ?? activeTab.sessions[0],
     [activeTab]
   );
+  const activePaneSessionId = useMemo(
+    () => findPaneSessionId(activeTab.paneLayout, activeTab.activePaneId) ?? activeTab.activeSessionId,
+    [activeTab]
+  );
+  const activePaneSession = useMemo(
+    () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
+    [activePaneSessionId, activeSession, activeTab.sessions]
+  );
+  const paneLeaves = useMemo(() => collectPaneLeaves(activeTab.paneLayout), [activeTab.paneLayout]);
 
   const displayWorkspaceTitle = (value: string) => localizeWorkspaceTitle(value, locale);
   const displaySessionTitle = (value: string) => localizeSessionTitle(value, locale);
@@ -659,6 +1156,7 @@ export default function App() {
   const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
   const isArchiveView = Boolean(archivedEntry);
   const queueSession = isArchiveView ? sessionForView : activeSession;
+  const queuePlainStream = stripAnsi(queueSession.stream);
 
   const addToast = (toast: Toast) => {
     setToasts((prev) => [...prev, toast]);
@@ -680,6 +1178,21 @@ export default function App() {
       });
       return false;
     }
+  };
+
+  const loadSlashSkills = async (cwd?: string) => {
+    if (!isTauri) {
+      setSlashSkillItems([]);
+      return;
+    }
+    setSlashMenuLoading(true);
+    const items = await safeInvoke<ClaudeSlashSkillEntry[]>(
+      "claude_slash_skills",
+      { cwd: cwd ?? activeTab.project?.path ?? "" },
+      []
+    );
+    setSlashSkillItems(items);
+    setSlashMenuLoading(false);
   };
 
   const updateTab = (tabId: string, updater: (tab: Tab) => Tab) => {
@@ -748,13 +1261,18 @@ export default function App() {
         ],
         stream: draftSession.stream,
         unread: 0,
-        lastActiveAt: Date.now()
+        lastActiveAt: Date.now(),
+        claudeSessionId: baseSession.claudeSessionId
       };
       const remainingSessions = tab.sessions.filter((session) => session.id !== sessionId);
       tabSnapshot = {
         ...tab,
         sessions: [preparedSession, ...remainingSessions],
         activeSessionId: preparedSession.id,
+        paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+          ...leaf,
+          sessionId: preparedSession.id
+        })),
         viewingArchiveId: undefined
       };
       sessionSnapshot = preparedSession;
@@ -808,8 +1326,9 @@ export default function App() {
     const target = tab?.project?.target;
     if (!tab || !path || !target) return;
 
-    const [git, worktrees, tree] = await Promise.all([
+    const [git, gitChanges, worktrees, tree] = await Promise.all([
       safeInvoke<GitStatus>("git_status", { path, target }, { branch: tab.git.branch || "main", changes: tab.git.changes ?? 0, last_commit: tab.git.lastCommit || "—" }),
+      safeInvoke<GitChangeEntry[]>("git_changes", { path, target }, tab.gitChanges ?? []),
       safeInvoke<WorktreeInfo[]>("worktree_list", { path, target }, tab.worktrees),
       safeInvoke<WorkspaceTree>("workspace_tree", { path, target, depth: 4 }, {
         root: { name: ".", path, kind: "dir", children: [] },
@@ -824,6 +1343,7 @@ export default function App() {
         changes: git.changes ?? currentTab.git.changes ?? 0,
         lastCommit: git.last_commit || currentTab.git.lastCommit || "—"
       },
+      gitChanges,
       worktrees,
       fileTree: tree.root.children ?? [],
       changesTree: tree.changes ?? []
@@ -846,20 +1366,6 @@ export default function App() {
       )
     }));
     void syncSessionPatch(tabId, sessionId, { last_active_at: lastActiveAt });
-  };
-
-  const openOverlayForTab = (tabId: string) => {
-    updateState((current) => ({
-      ...current,
-      activeTabId: tabId,
-      overlay: {
-        visible: true,
-        tabId,
-        mode: "remote",
-        input: "",
-        target: { type: "native" }
-      }
-    }));
   };
 
   const onAddTab = () => {
@@ -890,18 +1396,171 @@ export default function App() {
     });
   };
 
-  const onSelectTab = (tabId: string) => {
-    const tab = state.tabs.find((t) => t.id === tabId);
-    if (!tab) return;
-    updateState((current) => ({
-      ...current,
-      activeTabId: tabId,
-      overlay: {
-        ...current.overlay,
-        visible: tab.status === "init",
-        tabId
+  const onRemoveTab = (tabId: string) => {
+    updateState((current) => {
+      const index = current.tabs.findIndex((tab) => tab.id === tabId);
+      if (index === -1) return current;
+
+      if (current.tabs.length === 1) {
+        const createdTab = createTab(1, locale);
+        const replacementTab: Tab = {
+          ...createdTab,
+          agent: {
+            ...createdTab.agent,
+            provider: appSettings.agentProvider,
+            command: appSettings.agentCommand
+          },
+          idlePolicy: { ...appSettings.idlePolicy }
+        };
+        return {
+          ...current,
+          tabs: [replacementTab],
+          activeTabId: replacementTab.id,
+          overlay: {
+            visible: true,
+            tabId: replacementTab.id,
+            mode: "remote",
+            input: "",
+            target: { type: "native" }
+          }
+        };
       }
-    }));
+
+      const nextTabs = current.tabs.filter((tab) => tab.id !== tabId);
+      const fallbackTab = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0];
+      const nextActiveTabId = current.activeTabId === tabId ? fallbackTab.id : current.activeTabId;
+      const nextActiveTab = nextTabs.find((tab) => tab.id === nextActiveTabId) ?? fallbackTab;
+
+      return {
+        ...current,
+        tabs: nextTabs,
+        activeTabId: nextActiveTabId,
+        overlay: {
+          ...current.overlay,
+          visible: nextActiveTab.status === "init",
+          tabId: nextActiveTab.id
+        }
+      };
+    });
+  };
+
+  const onSwitchWorkspace = (tabId: string) => {
+    updateState((current) => {
+      const targetTab = current.tabs.find((tab) => tab.id === tabId);
+      if (!targetTab) return current;
+      const previousActiveTabId = current.activeTabId;
+      return {
+        ...current,
+        activeTabId: tabId,
+        overlay: {
+          ...current.overlay,
+          visible: targetTab.status === "init",
+          tabId
+        },
+        tabs: current.tabs.map((tab) => {
+          if (tab.id === tabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId
+                  ? { ...session, unread: 0, status: restoreVisibleStatus(session), lastActiveAt: Date.now() }
+                  : session
+              )
+            };
+          }
+          if (tab.id === previousActiveTabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId ? { ...session, status: toBackgroundStatus(session.status) } : session
+              )
+            };
+          }
+          return tab;
+        })
+      };
+    });
+  };
+
+  const onSwitchWorkspaceSession = (tabId: string, sessionId: string) => {
+    const currentState = stateRef.current;
+    const targetTabSnapshot = currentState.tabs.find((tab) => tab.id === tabId);
+    const previousTabSnapshot = currentState.tabs.find((tab) => tab.id === currentState.activeTabId);
+    const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
+    const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
+    const nextActiveAt = Date.now();
+    updateState((current) => {
+      const targetTab = current.tabs.find((tab) => tab.id === tabId);
+      if (!targetTab) return current;
+      const previousActiveTabId = current.activeTabId;
+
+      return {
+        ...current,
+        activeTabId: tabId,
+        overlay: {
+          ...current.overlay,
+          visible: targetTab.status === "init",
+          tabId
+        },
+        tabs: current.tabs.map((tab) => {
+          if (tab.id === tabId) {
+            return {
+              ...tab,
+              activeSessionId: sessionId,
+              paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+                ...leaf,
+                sessionId
+              })),
+              viewingArchiveId: undefined,
+              sessions: tab.sessions.map((session) => {
+                if (session.id === sessionId) {
+                  return {
+                    ...session,
+                    unread: 0,
+                    status: restoreVisibleStatus(session),
+                    lastActiveAt: nextActiveAt
+                  };
+                }
+                if (session.id === tab.activeSessionId) {
+                  return { ...session, status: toBackgroundStatus(session.status) };
+                }
+                return session;
+              })
+            };
+          }
+
+          if (tab.id === previousActiveTabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId
+                  ? { ...session, status: toBackgroundStatus(session.status) }
+                  : session
+              )
+            };
+          }
+
+          return tab;
+        })
+      };
+    });
+
+    const backendSessionId = parseNumericId(sessionId);
+    if (isTauri && backendSessionId !== null) {
+      void safeInvoke("switch_session", { tabId, sessionId: backendSessionId }, null);
+    }
+
+    if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
+      void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
+    }
+
+    if (nextSession) {
+      const nextStatus = restoreVisibleStatus(nextSession);
+      void syncSessionPatch(tabId, sessionId, {
+        status: nextStatus,
+        last_active_at: nextActiveAt
+      });
+    }
   };
 
   const onOverlaySelectMode = (mode: "remote" | "local") => {
@@ -956,6 +1615,7 @@ export default function App() {
 
     updateTab(overlay.tabId, (tab) => ({
       ...tab,
+      title: displayPathName(info.project_path) || tab.title,
       status: "ready",
       project: {
         kind: overlay.mode,
@@ -969,6 +1629,7 @@ export default function App() {
         output: terminalInfo.output ?? ""
       }],
       activeTerminalId: `term-${terminalInfo.id}`,
+      gitChanges: [],
       fileTree: [],
       changesTree: [],
       filePreview: createEmptyPreview()
@@ -995,15 +1656,16 @@ export default function App() {
   };
 
   const agentStartMaybe = async (tab: Tab, session: Session) => {
-    if (!tab.project?.path) return;
+    if (!tab.project?.path) return false;
     const command = buildAgentCommand(tab);
     const cwd = tab.project.path;
     const target = tab.project.target;
-    await invokeAgent("agent_start", {
+    return invokeAgent("agent_start", {
       tabId: tab.id,
       sessionId: session.id,
       provider: tab.agent.provider,
       command,
+      claudeSessionId: session.claudeSessionId,
       cwd,
       target
     }, session.id, t("agentStartFailed"));
@@ -1035,7 +1697,8 @@ export default function App() {
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    await agentStartMaybe(tab, session);
+    const started = await agentStartMaybe(tab, session);
+    if (!started) return;
     await invokeAgent("agent_send", {
       tabId: tab.id,
       sessionId: session.id,
@@ -1059,6 +1722,10 @@ export default function App() {
         ...tab,
         sessions: [newSession, ...updatedSessions],
         activeSessionId: newSession.id,
+        paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+          ...leaf,
+          sessionId: newSession.id
+        })),
         viewingArchiveId: undefined
       };
     });
@@ -1077,6 +1744,10 @@ export default function App() {
     updateTab(activeTab.id, (tab) => ({
       ...tab,
       activeSessionId: sessionId,
+      paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+        ...leaf,
+        sessionId
+      })),
       sessions: tab.sessions
         .filter((s) => !(previousActiveId !== sessionId && s.id === previousActiveId && isDraftSession(s)))
         .map((s) => {
@@ -1113,17 +1784,18 @@ export default function App() {
     }
   };
 
-  const onArchiveSession = async (sessionId: string) => {
-    const session = activeTab.sessions.find((item) => item.id === sessionId);
-    if (!session) return;
-    const wasActiveSession = activeTab.activeSessionId === sessionId;
+  const archiveSessionForTab = async (tabId: string, sessionId: string) => {
+    const currentTab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = currentTab?.sessions.find((item) => item.id === sessionId);
+    if (!currentTab || !session) return;
+    const wasActiveSession = currentTab.activeSessionId === sessionId;
     if (isDraftSession(session)) {
-      const nextSession = activeTab.sessions.find((item) => item.id !== sessionId);
+      const nextSession = currentTab.sessions.find((item) => item.id !== sessionId);
       const nextActiveAt = Date.now();
-      updateTab(activeTab.id, (tab) => {
+      updateTab(tabId, (tab) => {
         let remaining = tab.sessions.filter((item) => item.id !== sessionId);
         if (remaining.length === 0) {
-          remaining = [createSession(1, "branch", locale)];
+          remaining = [createDraftSessionForTab(tab, "branch")];
         }
         const nextActiveId = remaining[0]?.id ?? sessionId;
         return {
@@ -1133,13 +1805,14 @@ export default function App() {
               ? { ...item, status: restoreVisibleStatus(item), unread: 0, lastActiveAt: Date.now() }
               : item
           ),
+          paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActiveId),
           activeSessionId: nextActiveId,
           viewingArchiveId: undefined
         };
       });
       if (nextSession) {
         const nextStatus = restoreVisibleStatus(nextSession);
-        void syncSessionPatch(activeTab.id, nextSession.id, {
+        void syncSessionPatch(tabId, nextSession.id, {
           status: nextStatus,
           last_active_at: nextActiveAt
         });
@@ -1148,21 +1821,13 @@ export default function App() {
     }
     const backendSessionId = parseNumericId(sessionId);
     const archived = isTauri && backendSessionId !== null
-      ? await safeInvoke<BackendArchiveEntry | null>("archive_session", { tabId: activeTab.id, sessionId: backendSessionId }, null)
+      ? await safeInvoke<BackendArchiveEntry | null>("archive_session", { tabId, sessionId: backendSessionId }, null)
       : null;
-
-    let bootstrapSession: Session | null = null;
-    if (activeTab.sessions.length === 1) {
-      const created = isTauri
-        ? await safeInvoke<BackendSession | null>("create_session", { tabId: activeTab.id, mode: "branch" }, null)
-        : null;
-      bootstrapSession = created ? createSessionFromBackend(created, locale) : createSession(1, "branch", locale);
-    }
 
     const nextActiveAt = Date.now();
     let nextActiveSessionId: string | null = null;
     let nextActiveStatus: SessionStatus | null = null;
-    updateTab(activeTab.id, (tab) => {
+    updateTab(tabId, (tab) => {
       const index = tab.sessions.findIndex((s) => s.id === sessionId);
       if (index === -1) return tab;
       const entry: ArchiveEntry = {
@@ -1172,9 +1837,15 @@ export default function App() {
         mode: archived?.mode ?? session.mode,
         snapshot: session
       };
-      let remaining = tab.sessions.filter((s) => s.id !== sessionId);
-      if (remaining.length === 0) {
-        remaining = [bootstrapSession ?? createSession(1, "branch", locale)];
+      const existingSessions = tab.sessions
+        .filter((s) => s.id !== sessionId)
+        .map((item) => ({ ...item, status: toBackgroundStatus(item.status) }));
+      let remaining = existingSessions;
+      if (wasActiveSession) {
+        const draftSession = createDraftSessionForTab(tab, "branch");
+        remaining = [draftSession, ...existingSessions];
+      } else if (remaining.length === 0) {
+        remaining = [createDraftSessionForTab(tab, "branch")];
       }
       const nextActive = remaining[0]?.id ?? sessionId;
       nextActiveSessionId = nextActive;
@@ -1189,6 +1860,7 @@ export default function App() {
               : item
         ),
         archive: [entry, ...tab.archive],
+        paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActive),
         activeSessionId: nextActive,
         viewingArchiveId: undefined
       };
@@ -1197,15 +1869,19 @@ export default function App() {
     if (wasActiveSession && nextActiveSessionId) {
       const backendSessionId = parseNumericId(nextActiveSessionId);
       if (isTauri && backendSessionId !== null) {
-        void safeInvoke("switch_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
+        void safeInvoke("switch_session", { tabId, sessionId: backendSessionId }, null);
       }
       if (nextActiveStatus) {
-        void syncSessionPatch(activeTab.id, nextActiveSessionId, {
+        void syncSessionPatch(tabId, nextActiveSessionId, {
           status: nextActiveStatus,
           last_active_at: nextActiveAt
         });
       }
     }
+  };
+
+  const onArchiveSession = async (sessionId: string) => {
+    await archiveSessionForTab(activeTab.id, sessionId);
   };
 
   const onSelectArchive = (entryId: string) => {
@@ -1219,58 +1895,43 @@ export default function App() {
     updateTab(activeTab.id, (tab) => ({ ...tab, viewingArchiveId: undefined }));
   };
 
-  const onUpdateSessionMode = (mode: SessionMode) => {
-    updateTab(activeTab.id, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) => (s.id === tab.activeSessionId ? { ...s, mode } : s))
-    }));
-    void syncSessionPatch(activeTab.id, activeTab.activeSessionId, { mode });
-  };
-
   const onOpenSettings = () => {
     setSettingsDraft(cloneAppSettings(appSettings));
-    setSettingsOpen(true);
+    navigateToRoute("settings");
   };
 
   const onCloseSettings = () => {
-    setSettingsOpen(false);
     setSettingsDraft(cloneAppSettings(appSettings));
+    navigateToRoute("workspace");
   };
 
-  const onUpdateSettings = (patch: Partial<AppSettings>) => {
-    setSettingsDraft((current) => ({
-      ...current,
-      ...patch,
-      idlePolicy: patch.idlePolicy ? { ...patch.idlePolicy } : current.idlePolicy
-    }));
-  };
-
-  const onUpdateSettingsIdlePolicy = (patch: Partial<Tab["idlePolicy"]>) => {
-    setSettingsDraft((current) => ({
-      ...current,
-      idlePolicy: {
-        ...current.idlePolicy,
-        ...patch
-      }
-    }));
-  };
-
-  const onApplySettings = () => {
-    const nextSettings: AppSettings = {
-      agentProvider: settingsDraft.agentProvider,
-      agentCommand: settingsDraft.agentCommand.trim() || appSettings.agentCommand,
-      idlePolicy: {
-        enabled: settingsDraft.idlePolicy.enabled,
-        idleMinutes: Math.max(1, Number(settingsDraft.idlePolicy.idleMinutes) || 1),
-        maxActive: Math.max(1, Number(settingsDraft.idlePolicy.maxActive) || 1),
-        pressure: settingsDraft.idlePolicy.pressure
-      }
-    };
+  const commitSettings = (nextSettings: AppSettings) => {
     setAppSettings(nextSettings);
     persistAppSettings(nextSettings);
     syncGlobalSettings(nextSettings);
     setSettingsDraft(cloneAppSettings(nextSettings));
-    setSettingsOpen(false);
+  };
+
+  const onUpdateSettings = (patch: Partial<AppSettings>) => {
+    const nextSettings: AppSettings = {
+      ...settingsDraft,
+      ...patch,
+      idlePolicy: patch.idlePolicy ? { ...patch.idlePolicy } : settingsDraft.idlePolicy
+    };
+    commitSettings(nextSettings);
+  };
+
+  const onUpdateSettingsIdlePolicy = (patch: Partial<Tab["idlePolicy"]>) => {
+    const nextSettings: AppSettings = {
+      ...settingsDraft,
+      idlePolicy: {
+        enabled: patch.enabled ?? settingsDraft.idlePolicy.enabled,
+        idleMinutes: Math.max(1, Number(patch.idleMinutes ?? settingsDraft.idlePolicy.idleMinutes) || 1),
+        maxActive: Math.max(1, Number(patch.maxActive ?? settingsDraft.idlePolicy.maxActive) || 1),
+        pressure: patch.pressure ?? settingsDraft.idlePolicy.pressure
+      }
+    };
+    commitSettings(nextSettings);
   };
 
   const onToggleAutoFeed = () => {
@@ -1373,6 +2034,29 @@ export default function App() {
     }
   };
 
+  const settleSessionAfterExit = async (tabId: string, sessionId: string) => {
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!tab || !session) return;
+
+    if (activeTaskForSession(session)) {
+      await completeRunningTask(tabId, sessionId, t("agentExited"));
+      return;
+    }
+
+    if (session.status !== "idle") {
+      updateTab(tabId, (currentTab) => ({
+        ...currentTab,
+        sessions: currentTab.sessions.map((currentSession) =>
+          currentSession.id === sessionId
+            ? { ...currentSession, status: "idle", lastActiveAt: Date.now() }
+            : currentSession
+        )
+      }));
+      void syncSessionPatch(tabId, sessionId, { status: "idle", last_active_at: Date.now() });
+    }
+  };
+
   const onSessionEnd = async () => {
     if (isDraftSession(activeSession)) {
       await onArchiveSession(activeSession.id);
@@ -1428,7 +2112,8 @@ export default function App() {
     touchSession(tabId, sessionId);
 
     if (isTauri && tabSnapshot && sessionSnapshot) {
-      await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      if (!started) return;
       await agentSend(tabSnapshot, sessionSnapshot, taskText);
       return;
     }
@@ -1456,10 +2141,92 @@ export default function App() {
         path: preview.path || node.path,
         content: preview.content || t("previewUnavailable"),
         mode: "preview",
-        dirty: false
+        originalContent: "",
+        modifiedContent: "",
+        dirty: false,
+        source: "tree",
+        statusLabel: node.status,
+        parentPath: fileParentLabel(preview.path || node.path),
+        section: undefined,
+        diff: undefined
       }
     }));
+    setSelectedGitChangeKey("");
     setPreviewMode("preview");
+  };
+
+  const onGitChangeSelect = async (change: GitChangeEntry) => {
+    const relativePath = sanitizeGitRelativePath(change.path);
+    const path = resolvePath(activeTab.project?.path, relativePath);
+    let payload = await safeInvoke<GitFileDiffPayload>("git_file_diff_payload", {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" },
+      filePath: relativePath,
+      section: change.section
+    }, {
+      original_content: "",
+      modified_content: "",
+      diff: ""
+    });
+
+    if (!payload.original_content && !payload.modified_content && !payload.diff) {
+      const fallbackDiff = await safeInvoke<string>("git_diff_file", {
+        path: activeTab.project?.path ?? "",
+        target: activeTab.project?.target ?? { type: "native" },
+        filePath: relativePath,
+        staged: change.section === "staged"
+      }, "");
+
+      const fallbackPreview = await safeInvoke<FilePreview | null>("file_preview", { path }, null);
+      payload = {
+        original_content: "",
+        modified_content: fallbackPreview?.content ?? "",
+        diff: fallbackDiff
+      };
+    }
+
+    const stats = computeDiffStats(payload.diff);
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      filePreview: {
+        ...tab.filePreview,
+        path,
+        content: payload.modified_content,
+        mode: "diff",
+        diff: payload.diff,
+        originalContent: payload.original_content,
+        modifiedContent: payload.modified_content,
+        diffStats: { files: stats.files, additions: stats.additions, deletions: stats.deletions },
+        diffFiles: [change.path],
+        dirty: false,
+        source: "git",
+        statusLabel: change.status,
+        parentPath: change.parent,
+        section: change.section
+      }
+    }));
+    setPreviewMode("diff");
+
+    setSelectedGitChangeKey(`${change.section}:${change.path}:${change.code}`);
+  };
+
+  const onGitChangeAction = async (change: GitChangeEntry, action: GitChangeAction) => {
+    const relativePath = sanitizeGitRelativePath(change.path);
+    const basePayload = {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" },
+      filePath: relativePath
+    };
+
+    if (action === "stage") {
+      await invokeGitAction("git_stage_file", basePayload);
+      return;
+    }
+    if (action === "unstage") {
+      await invokeGitAction("git_unstage_file", basePayload);
+      return;
+    }
+    await invokeGitAction("git_discard_file", { ...basePayload, section: change.section });
   };
 
   const onPreviewEdit = (content: string) => {
@@ -1487,6 +2254,8 @@ export default function App() {
         ...tab.filePreview,
         mode: "diff",
         diff,
+        originalContent: "",
+        modifiedContent: "",
         diffStats: { files: stats.files, additions: stats.additions, deletions: stats.deletions },
         diffFiles: stats.diffFiles,
         dirty: tab.filePreview.dirty
@@ -1496,7 +2265,7 @@ export default function App() {
 
   const onSavePreview = async () => {
     const preview = activeTab.filePreview;
-    if (!preview.path || preview.mode !== "preview" || !preview.dirty) return;
+    if (!preview.path || !preview.dirty) return;
     const saved = await safeInvoke<FilePreview | null>("file_save", {
       path: preview.path,
       content: preview.content
@@ -1516,10 +2285,85 @@ export default function App() {
     addToast({ id: createId("toast"), text: `${t("saved")}: ${saved.path}`, sessionId: activeSession.id });
   };
 
-  const onRepoTreeModeChange = async (mode: "files" | "changes") => {
-    setRepoTreeMode(mode);
-    if (mode === "changes") {
+  const invokeGitAction = async (command: string, payload: Record<string, unknown>) => {
+    if (!activeTab.project?.path) {
+      addToast({ id: createId("toast"), text: t("selectProjectFirst"), sessionId: activeSession.id });
+      return false;
+    }
+    if (!isTauri) return false;
+    try {
+      await invoke(command, payload);
       await refreshWorkspaceArtifacts(activeTab.id);
+      const refreshedTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
+      const selectedChange = refreshedTab?.gitChanges.find((change) => `${change.section}:${change.path}:${change.code}` === selectedGitChangeKey)
+        ?? refreshedTab?.gitChanges.find((change) => {
+          const currentPreviewPath = refreshedTab?.filePreview.path || activeTab.filePreview.path;
+          return matchesGitPreviewPath(currentPreviewPath, change.path);
+        });
+      if (selectedChange) {
+        await onGitChangeSelect(selectedChange);
+      } else if (previewMode === "diff") {
+        await onPreviewMode("diff");
+      } else if (selectedGitChangeKey) {
+        setSelectedGitChangeKey("");
+        updateTab(activeTab.id, (tab) => ({
+          ...tab,
+          filePreview: createEmptyPreview()
+        }));
+      }
+      return true;
+    } catch (error) {
+      addToast({
+        id: createId("toast"),
+        text: `${t("gitActionFailed")}: ${String(error)}`,
+        sessionId: activeSession.id
+      });
+      return false;
+    }
+  };
+
+  const onGitStageAll = async () => {
+    await invokeGitAction("git_stage_all", {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" }
+    });
+  };
+
+  const onGitUnstageAll = async () => {
+    await invokeGitAction("git_unstage_all", {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" }
+    });
+  };
+
+  const onGitDiscardAll = async () => {
+    const ok = await invokeGitAction("git_discard_all", {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" }
+    });
+    if (ok) {
+      updateTab(activeTab.id, (tab) => ({
+        ...tab,
+        filePreview: createEmptyPreview()
+      }));
+      setPreviewMode("preview");
+    }
+  };
+
+  const onGitCommit = async () => {
+    if (!commitMessage.trim()) return;
+    const ok = await invokeGitAction("git_commit", {
+      path: activeTab.project?.path ?? "",
+      target: activeTab.project?.target ?? { type: "native" },
+      message: commitMessage.trim()
+    });
+    if (ok) {
+      setCommitMessage("");
+      addToast({
+        id: createId("toast"),
+        text: t("gitCommitSucceeded"),
+        sessionId: activeSession.id
+      });
     }
   };
 
@@ -1549,6 +2393,26 @@ export default function App() {
 
   const onTerminalSelect = (terminalId: string) => {
     updateTab(activeTab.id, (tab) => ({ ...tab, activeTerminalId: terminalId }));
+  };
+
+  const onCloseTerminal = async (terminalId: string) => {
+    const numericId = Number(terminalId.replace("term-", ""));
+    if (isTauri && Number.isFinite(numericId)) {
+      await safeInvoke("terminal_close", { tabId: activeTab.id, terminalId: numericId }, null);
+    }
+
+    updateTab(activeTab.id, (tab) => {
+      const remaining = tab.terminals.filter((terminal) => terminal.id !== terminalId);
+      const nextActiveId = tab.activeTerminalId === terminalId
+        ? (remaining[0]?.id ?? "")
+        : tab.activeTerminalId;
+
+      return {
+        ...tab,
+        terminals: remaining,
+        activeTerminalId: nextActiveId
+      };
+    });
   };
 
   const onOpenWorktree = async (tree: WorktreeInfo) => {
@@ -1610,25 +2474,29 @@ export default function App() {
     });
   };
 
-  const onResizeStart = (type: "left" | "right" | "right-top") => (event: React.PointerEvent) => {
+  const onResizeStart = (type: "left" | "right" | "right-split") => (event: React.PointerEvent) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startY = event.clientY;
-    const { leftWidth, rightWidth, rightTopHeight } = stateRef.current.layout;
+    const { leftWidth, rightWidth, rightSplit } = stateRef.current.layout;
+    const splitContainerWidth = type === "right-split"
+      ? event.currentTarget instanceof HTMLElement
+        ? event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1
+        : 1
+      : 1;
 
     const onMove = (e: PointerEvent) => {
       if (type === "left") {
-        const next = Math.max(220, Math.min(420, leftWidth + (e.clientX - startX)));
+        const next = Math.max(0, leftWidth + (e.clientX - startX));
         updateState((current) => ({ ...current, layout: { ...current.layout, leftWidth: next } }));
       }
       if (type === "right") {
-        const next = Math.max(280, Math.min(520, rightWidth - (e.clientX - startX)));
+        const next = Math.max(0, rightWidth - (e.clientX - startX));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightWidth: next } }));
       }
-      if (type === "right-top") {
-        const delta = e.clientY - startY;
-        const next = Math.max(30, Math.min(70, rightTopHeight + delta * 0.1));
-        updateState((current) => ({ ...current, layout: { ...current.layout, rightTopHeight: next } }));
+      if (type === "right-split") {
+        const delta = e.clientX - startX;
+        const next = Math.max(0, Math.min(100, rightSplit + (delta / splitContainerWidth) * 100));
+        updateState((current) => ({ ...current, layout: { ...current.layout, rightSplit: next } }));
       }
     };
 
@@ -1636,7 +2504,6 @@ export default function App() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       requestAnimationFrame(() => {
-        agentFitRef.current?.fit();
         xtermFitRef.current?.fit();
       });
     };
@@ -1645,101 +2512,139 @@ export default function App() {
     window.addEventListener("pointerup", onUp);
   };
 
-  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
-
-  useEffect(() => {
-    if (!agentTerminalRef.current) return;
-    if (!agentXtermRef.current) {
-      const term = new XTerminal({
-        convertEol: true,
-        disableStdin: true,
-        fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
-        fontSize: 12,
-        theme: {
-          background: "#0f1a24",
-          foreground: "#e6edf5"
-        }
-      });
-      const fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      agentXtermRef.current = term;
-      agentFitRef.current = fitAddon;
-      term.open(agentTerminalRef.current);
-      fitAddon.fit();
-      if (isTauri && activeTab.id && activeSession?.id) {
-        void invoke("agent_resize", {
-          tabId: activeTab.id,
-          sessionId: activeSession.id,
-          cols: term.cols,
-          rows: term.rows
-        });
+  const toggleRightPane = (pane: "code" | "terminal") => {
+    updateState((current) => ({
+      ...current,
+      layout: {
+        ...current.layout,
+        showCodePanel: pane === "code" ? !current.layout.showCodePanel : current.layout.showCodePanel,
+        showTerminalPanel: pane === "terminal" ? !current.layout.showTerminalPanel : current.layout.showTerminalPanel
       }
-    }
-  }, []);
-
-  useEffect(() => {
-    const container = agentTerminalRef.current;
-    const fit = agentFitRef.current;
-    if (!container || !fit) return;
-    const observer = new ResizeObserver(() => {
-      fit.fit();
-      const term = agentXtermRef.current;
-      if (term && isTauri && activeTab.id && activeSession?.id) {
-        void invoke("agent_resize", {
-          tabId: activeTab.id,
-          sessionId: activeSession.id,
-          cols: term.cols,
-          rows: term.rows
-        });
-      }
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const term = agentXtermRef.current;
-    if (!term) return;
-    const session = sessionForView;
-    if (!session) {
-      term.reset();
-      agentOutputRef.current = { id: undefined, length: 0 };
-      return;
-    }
-    const output = session.stream ?? "";
-    if (agentOutputRef.current.id !== session.id) {
-      term.reset();
-      agentOutputRef.current = { id: session.id, length: 0 };
-    }
-    const prev = agentOutputRef.current.length;
-    if (output.length >= prev) {
-      const delta = output.slice(prev);
-      if (delta) term.write(delta);
-      agentOutputRef.current.length = output.length;
-    } else {
-      term.reset();
-      term.write(output);
-      agentOutputRef.current.length = output.length;
-    }
+    }));
     requestAnimationFrame(() => {
-      agentFitRef.current?.fit();
-      if (isTauri && activeTab.id && activeSession?.id) {
-        void invoke("agent_resize", {
-          tabId: activeTab.id,
-          sessionId: activeSession.id,
-          cols: term.cols,
-          rows: term.rows
-        });
-      }
+      xtermFitRef.current?.fit();
     });
-  }, [sessionForView?.id, sessionForView?.stream]);
+  };
 
+  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
+  const showCodePanel = state.layout.showCodePanel;
+  const showTerminalPanel = state.layout.showTerminalPanel;
+  const isRightPanelVisible = showCodePanel || showTerminalPanel;
 
-  const onSendAgent = async () => {
-    const content = agentInput.trim();
+  const setPaneInputValue = (paneId: string, value: string) => {
+    setPaneInputs((current) => ({ ...current, [paneId]: value }));
+  };
+
+  const focusPaneInput = (paneId: string) => {
+    requestAnimationFrame(() => {
+      const input = paneInputRefs.current[paneId];
+      input?.focus();
+      const length = input?.value.length ?? 0;
+      input?.setSelectionRange(length, length);
+    });
+  };
+
+  const setActivePane = (paneId: string, sessionId: string) => {
+    const nextActiveAt = Date.now();
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      activePaneId: paneId,
+      activeSessionId: sessionId,
+      sessions: tab.sessions.map((session) => {
+        if (session.id === sessionId) {
+          return {
+            ...session,
+            unread: 0,
+            status: restoreVisibleStatus(session),
+            lastActiveAt: nextActiveAt
+          };
+        }
+        if (session.id === tab.activeSessionId) {
+          return { ...session, status: toBackgroundStatus(session.status) };
+        }
+        return session;
+      })
+    }));
+  };
+
+  const splitPane = async (paneId: string, axis: "horizontal" | "vertical") => {
+    let newSessionId = "";
+    let newPaneId = "";
+    updateTab(activeTab.id, (tab) => {
+      const newSession = createDraftSessionForTab(tab, "branch");
+      const nextLeaf = createPaneLeaf(newSession.id);
+      newSessionId = newSession.id;
+      newPaneId = nextLeaf.id;
+      return {
+        ...tab,
+        sessions: [newSession, ...tab.sessions.filter((session) => session.id !== newSession.id)],
+        activePaneId: nextLeaf.id,
+        activeSessionId: newSession.id,
+        paneLayout: replacePaneNode(tab.paneLayout, paneId, (leaf) => ({
+          type: "split",
+          id: createId("split"),
+          axis,
+          ratio: 0.5,
+          first: leaf,
+          second: nextLeaf
+        }))
+      };
+    });
+    focusPaneInput(newPaneId || newSessionId);
+  };
+
+  const closePane = (paneId: string) => {
+    if (paneLeaves.length <= 1) return;
+    updateTab(activeTab.id, (tab) => {
+      const nextLayout = removePaneNode(tab.paneLayout, paneId) ?? tab.paneLayout;
+      const nextLeaves = collectPaneLeaves(nextLayout);
+      const nextPane = nextLeaves.find((leaf) => leaf.id !== paneId) ?? nextLeaves[0];
+      if (!nextPane) return tab;
+      return {
+        ...tab,
+        paneLayout: nextLayout,
+        activePaneId: nextPane.id,
+        activeSessionId: nextPane.sessionId
+      };
+    });
+  };
+
+  useEffect(() => {
+    const shellTerm = xtermRef.current;
+    if (shellTerm) {
+      shellTerm.options.theme = readTerminalTheme();
+      shellTerm.options.fontSize = editorMetrics.terminalFontSize;
+      if (shellTerm.rows > 0) {
+        shellTerm.refresh(0, shellTerm.rows - 1);
+      }
+    }
+  }, [editorMetrics.terminalFontSize, theme]);
+
+  const onToggleSlashMenu = async (paneId: string) => {
+    const nextOpen = !(slashMenuOpen && slashMenuPaneId === paneId);
+    setSlashMenuPaneId(nextOpen ? paneId : null);
+    setSlashMenuOpen(nextOpen);
+    if (nextOpen) {
+      await loadSlashSkills(activeTab.project?.path);
+    }
+  };
+
+  const onSelectSlashMenuItem = (paneId: string, item: ClaudeSlashMenuItem) => {
+    setPaneInputs((current) => ({
+      ...current,
+      [paneId]: replaceLeadingSlashToken(current[paneId] ?? "", item.command)
+    }));
+    setSlashMenuOpen(false);
+    setSlashMenuPaneId(null);
+    focusPaneInput(paneId);
+  };
+
+  const onSendAgent = async (paneId: string) => {
+    const paneSessionId = findPaneSessionId(activeTab.paneLayout, paneId) ?? activePaneSession.id;
+    const content = (paneInputs[paneId] ?? "").trim();
     if (!content || isArchiveView) return;
     const activeTabSnapshot = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeTabId);
-    const activeSessionSnapshot = activeTabSnapshot?.sessions.find((s) => s.id === activeTabSnapshot?.activeSessionId);
+    const activeSessionSnapshot = activeTabSnapshot?.sessions.find((s) => s.id === paneSessionId);
     if (!activeTabSnapshot || !activeSessionSnapshot) return;
     const wasDraft = isDraftSession(activeSessionSnapshot);
     const materialized = wasDraft
@@ -1752,7 +2657,7 @@ export default function App() {
       updateTab(tabSnapshot.id, (tab) => ({
         ...tab,
         sessions: tab.sessions.map((s) =>
-          s.id === tab.activeSessionId
+          s.id === sessionSnapshot.id
             ? {
                 ...s,
                 status: resolveVisibleStatus(tab, s, "waiting"),
@@ -1766,12 +2671,13 @@ export default function App() {
         )
       }));
     }
-    setAgentInput("");
-    agentInputRef.current?.focus();
+    setPaneInputValue(paneId, "");
+    focusPaneInput(paneId);
     touchSession(tabSnapshot.id, sessionSnapshot.id);
 
     if (isTauri) {
-      await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      if (!started) return;
       await agentSend(tabSnapshot, sessionSnapshot, content);
       return;
     }
@@ -1786,23 +2692,29 @@ export default function App() {
     }));
   };
 
-  const onSendSpecialAgentKey = async (sequence: string) => {
+  const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
     if (isArchiveView) return;
     const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const sessionSnapshot = tabSnapshot?.sessions.find((session) => session.id === tabSnapshot?.activeSessionId);
+    const paneSessionId = findPaneSessionId(activeTab.paneLayout, paneId) ?? activePaneSession.id;
+    const sessionSnapshot = tabSnapshot?.sessions.find((session) => session.id === paneSessionId);
     if (!tabSnapshot || !sessionSnapshot) return;
     if (isDraftSession(sessionSnapshot)) return;
     await sendRawAgentInput(tabSnapshot, sessionSnapshot, sequence);
-    agentInputRef.current?.focus();
+    focusPaneInput(paneId);
   };
 
-  const onAgentInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const onAgentInputKeyDown = (paneId: string) => (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const currentInput = paneInputs[paneId] ?? "";
+    if (event.key === "Enter" && event.shiftKey) {
+      return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
-      if (agentInput.trim()) {
-        void onSendAgent();
+      if (currentInput.trim()) {
+        void onSendAgent(paneId);
       } else {
-        void onSendSpecialAgentKey("\r");
+        void onSendSpecialAgentKey(paneId, "\r");
       }
       return;
     }
@@ -1810,165 +2722,154 @@ export default function App() {
     const sequence = AGENT_SPECIAL_KEY_MAP[event.key];
     if (!sequence) return;
 
-    if (agentInput.trim()) return;
+    if (currentInput.trim()) return;
 
     event.preventDefault();
-    void onSendSpecialAgentKey(sequence);
+    void onSendSpecialAgentKey(paneId, sequence);
   };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        if (previewMode !== "preview" || !activeTab.filePreview.path) return;
+        if (!activeTab.filePreview.path) return;
         event.preventDefault();
         void onSavePreview();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [previewMode, activeTab.filePreview.path, activeTab.filePreview.dirty, activeTab.filePreview.content, activeSession.id]);
+  }, [activeTab.filePreview.path, activeTab.filePreview.dirty, activeTab.filePreview.content, activeSession.id]);
 
   useEffect(() => {
     if (!isArchiveView) {
-      agentInputRef.current?.focus();
+      focusPaneInput(activeTab.activePaneId);
     }
-  }, [activeSession.id, isArchiveView]);
+  }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
 
   useEffect(() => {
-    if (!terminalContainerRef.current) return;
-    if (!xtermRef.current) {
+    setCommitMessage("");
+    setSelectedGitChangeKey("");
+    setSlashMenuOpen(false);
+    setSlashMenuPaneId(null);
+  }, [activeTab.id]);
+
+  useEffect(() => {
+    if (!activeTab.project?.path) return;
+    if (leftRailView === "files" || leftRailView === "git") {
+      void refreshWorkspaceArtifacts(activeTab.id);
+    }
+  }, [leftRailView, activeTab.id, activeTab.project?.path]);
+
+  useEffect(() => {
+    if (!activeTab.project?.path) return;
+    const timer = window.setInterval(() => {
+      void refreshWorkspaceArtifacts(activeTab.id);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeTab.id, activeTab.project?.path]);
+
+  useEffect(() => {
+    const container = terminalContainerRef.current;
+    if (!container || !showTerminalPanel || !isRightPanelVisible) return;
+
+    if (!xtermRef.current || terminalMountRef.current !== container) {
+      xtermRef.current?.dispose();
       const term = new XTerminal({
         convertEol: true,
         fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
-        fontSize: 12,
-        theme: {
-          background: "#0b0f16",
-          foreground: "#c8d5e6"
-        }
+        fontSize: editorMetrics.terminalFontSize,
+        theme: readTerminalTheme()
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       xtermRef.current = term;
       xtermFitRef.current = fitAddon;
-      term.open(terminalContainerRef.current);
-      fitAddon.fit();
-      if (isTauri && activeTab.id && activeTerminal) {
-        const numericId = Number(activeTerminal.id.replace("term-", ""));
-        if (!Number.isNaN(numericId)) {
-          void invoke("terminal_resize", {
-            tabId: activeTab.id,
-            terminalId: numericId,
-            cols: term.cols,
-            rows: term.rows
-          });
-        }
+      terminalMountRef.current = container;
+      term.open(container);
+      terminalOutputRef.current = { id: activeTerminal?.id, snapshot: "" };
+      if (activeTerminal?.output) {
+        term.write(activeTerminal.output);
+        terminalOutputRef.current.snapshot = activeTerminal.output;
       }
+      fitAddon.fit();
+      syncTerminalSize(term, activeTerminal?.id);
+      return;
     }
-  }, []);
+
+    xtermRef.current.options = {
+      fontSize: editorMetrics.terminalFontSize,
+      theme: readTerminalTheme()
+    };
+    requestAnimationFrame(() => {
+      xtermFitRef.current?.fit();
+      const term = xtermRef.current;
+      if (term) syncTerminalSize(term, activeTerminal?.id);
+    });
+  }, [showTerminalPanel, isRightPanelVisible, activeTab.id, activeTerminal?.id, editorMetrics.terminalFontSize, theme]);
 
   useEffect(() => {
     const container = terminalContainerRef.current;
     const fit = xtermFitRef.current;
-    if (!container || !fit) return;
+    if (!container || !fit || !showTerminalPanel || !isRightPanelVisible) return;
     const observer = new ResizeObserver(() => {
       fit.fit();
       const term = xtermRef.current;
-      if (term && isTauri && activeTab.id && activeTerminal) {
-        const numericId = Number(activeTerminal.id.replace("term-", ""));
-        if (!Number.isNaN(numericId)) {
-          void invoke("terminal_resize", {
-            tabId: activeTab.id,
-            terminalId: numericId,
-            cols: term.cols,
-            rows: term.rows
-          });
-        }
-      }
+      if (term) syncTerminalSize(term, activeTerminal?.id);
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [showTerminalPanel, isRightPanelVisible, activeTab.id, activeTerminal?.id]);
 
   useEffect(() => {
     const onResize = () => {
-      agentFitRef.current?.fit();
+      if (!showTerminalPanel || !isRightPanelVisible) return;
       xtermFitRef.current?.fit();
-      const agentTerm = agentXtermRef.current;
-      if (agentTerm && isTauri && activeTab.id && activeSession?.id) {
-        void invoke("agent_resize", {
-          tabId: activeTab.id,
-          sessionId: activeSession.id,
-          cols: agentTerm.cols,
-          rows: agentTerm.rows
-        });
-      }
       const term = xtermRef.current;
-      if (term && isTauri && activeTab.id && activeTerminal) {
-        const numericId = Number(activeTerminal.id.replace("term-", ""));
-        if (!Number.isNaN(numericId)) {
-          void invoke("terminal_resize", {
-            tabId: activeTab.id,
-            terminalId: numericId,
-            cols: term.cols,
-            rows: term.rows
-          });
-        }
-      }
+      if (term) syncTerminalSize(term, activeTerminal?.id);
     };
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
     };
-  }, []);
+  }, [activeTab.id, activeTerminal?.id, isRightPanelVisible, showTerminalPanel]);
 
   useEffect(() => {
     const term = xtermRef.current;
     if (!term) return;
     if (!activeTerminal) {
       term.reset();
-      terminalOutputRef.current = { id: undefined, length: 0 };
+      terminalOutputRef.current = { id: undefined, snapshot: "" };
+      terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
       return;
     }
     const output = activeTerminal.output ?? "";
     if (terminalOutputRef.current.id !== activeTerminal.id) {
       term.reset();
-      terminalOutputRef.current = { id: activeTerminal.id, length: 0 };
+      terminalOutputRef.current = { id: activeTerminal.id, snapshot: "" };
+      terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
     }
-    const prev = terminalOutputRef.current.length;
-    if (output.length >= prev) {
-      const delta = output.slice(prev);
-      if (delta) term.write(delta);
-      terminalOutputRef.current.length = output.length;
-    } else {
-      term.reset();
-      term.write(output);
-      terminalOutputRef.current.length = output.length;
-    }
-    requestAnimationFrame(() => {
-      xtermFitRef.current?.fit();
-      if (isTauri && activeTab.id && activeTerminal) {
-        const numericId = Number(activeTerminal.id.replace("term-", ""));
-        if (!Number.isNaN(numericId)) {
-          void invoke("terminal_resize", {
-            tabId: activeTab.id,
-            terminalId: numericId,
-            cols: term.cols,
-            rows: term.rows
-          });
-        }
-      }
-    });
-  }, [activeTerminal?.id, activeTerminal?.output]);
+    writeXtermSnapshot(term, terminalOutputRef.current.snapshot, output);
+    terminalOutputRef.current.snapshot = output;
+  }, [activeTab.id, activeTerminal?.id, activeTerminal?.output]);
+
+  useEffect(() => () => {
+    xtermRef.current?.dispose();
+    xtermRef.current = null;
+    xtermFitRef.current = null;
+    terminalMountRef.current = null;
+    terminalOutputRef.current = { id: undefined, snapshot: "" };
+    terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
+  }, []);
 
   useEffect(() => {
     if (xtermRef.current && activeTerminal) {
       xtermRef.current.focus();
     }
-  }, [activeTerminal?.id]);
+  }, [activeTerminal?.id, showTerminalPanel, isRightPanelVisible]);
 
   useEffect(() => {
     const term = xtermRef.current;
-    if (!term || !activeTerminal) return;
+    if (!term || !activeTerminal || !showTerminalPanel || !isRightPanelVisible) return;
     const disposable = term.onData((data) => {
       if (!isTauri) return;
       const numericId = Number(activeTerminal.id.replace("term-", ""));
@@ -1982,22 +2883,152 @@ export default function App() {
     return () => {
       disposable.dispose();
     };
-  }, [activeTerminal?.id, activeTab.id]);
+  }, [activeTerminal?.id, activeTab.id, showTerminalPanel, isRightPanelVisible]);
   const layoutStyle = {
     ["--left-w" as string]: `${state.layout.leftWidth}px`,
     ["--right-w" as string]: `${state.layout.rightWidth}px`,
-    ["--right-top-h" as string]: `${state.layout.rightTopHeight}%`
+    ["--right-split" as string]: `${state.layout.rightSplit}%`
   };
 
-  const fileTabs = flattenTree(activeTab.fileTree).slice(0, 4);
-  const activeTask = activeTaskForSession(sessionForView);
-  const completionRatio = sessionCompletionRatio(sessionForView);
-  const sessionCounts = {
-    active: activeTab.sessions.filter((session) => ["running", "waiting", "background"].includes(session.status)).length,
-    waiting: activeTab.sessions.filter((session) => session.status === "waiting").length,
-    queued: activeTab.sessions.filter((session) => session.status === "queued").length
+  const workspaceTabs = [...state.tabs]
+    .sort((left, right) => {
+      if (sessionSort === "name") {
+        return (displayPathName(left.project?.path) || displayWorkspaceTitle(left.title))
+          .localeCompare(displayPathName(right.project?.path) || displayWorkspaceTitle(right.title), locale === "zh" ? "zh-CN" : "en");
+      }
+      const leftTime = Math.max(...left.sessions.map((session) => session.lastActiveAt));
+      const rightTime = Math.max(...right.sessions.map((session) => session.lastActiveAt));
+      return rightTime - leftTime;
+    })
+    .map((tab) => {
+      const sessions = [...tab.sessions].sort((left, right) => {
+        if (sessionSort === "name") {
+          return displaySessionTitle(left.title).localeCompare(displaySessionTitle(right.title), locale === "zh" ? "zh-CN" : "en");
+        }
+        return right.lastActiveAt - left.lastActiveAt;
+      });
+      const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
+      const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
+      return {
+        id: tab.id,
+        label: displayPathName(tab.project?.path) || displayWorkspaceTitle(tab.title),
+        active: tab.id === state.activeTabId,
+        hasRunning,
+        unread,
+        sessions
+      };
+    });
+  const gitChangeGroups = [
+    {
+      key: "changes" as const,
+      label: t("changes"),
+      items: activeTab.gitChanges.filter((change) => change.section === "changes")
+    },
+    {
+      key: "staged" as const,
+      label: t("stagedChanges"),
+      items: activeTab.gitChanges.filter((change) => change.section === "staged")
+    },
+    {
+      key: "untracked" as const,
+      label: t("untrackedFiles"),
+      items: activeTab.gitChanges.filter((change) => change.section === "untracked")
+    }
+  ].filter((group) => group.items.length > 0);
+  const selectedGitChange = activeTab.gitChanges.find((change) => `${change.section}:${change.path}:${change.code}` === selectedGitChangeKey)
+    ?? activeTab.gitChanges.find((change) => matchesGitPreviewPath(activeTab.filePreview.path, change.path));
+  const previewGitChange = activeTab.gitChanges.find((change) => matchesGitPreviewPath(activeTab.filePreview.path, change.path));
+  const gitSummary = {
+    changes: gitChangeGroups.find((group) => group.key === "changes")?.items.length ?? 0,
+    staged: gitChangeGroups.find((group) => group.key === "staged")?.items.length ?? 0,
+    untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
   };
-  const repoTreeNodes = repoTreeMode === "files" ? activeTab.fileTree : activeTab.changesTree;
+  const previewFileName = displayPathName(activeTab.filePreview.path);
+  const previewParentPath = activeTab.filePreview.parentPath || fileParentLabel(activeTab.filePreview.path);
+  const workspaceFolderName = displayPathName(activeTab.project?.path) || t("noWorkspace");
+  const currentFileChangeCount = activeTab.git.changes;
+  const hasStructuredDiffContent = Boolean(
+    (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
+    || (activeTab.filePreview.modifiedContent && activeTab.filePreview.modifiedContent.length > 0)
+  );
+  const fileProgressPercent = hasPreviewFile
+    ? activeTab.filePreview.mode === "diff"
+      ? Math.min(100, Math.max(24, currentFileChangeCount * 12))
+      : activeTab.filePreview.dirty
+        ? 94
+        : 40
+    : 8;
+  const fileProgressTone = hasPreviewFile
+    ? (activeTab.filePreview.mode === "diff" || activeTab.filePreview.dirty ? "warning" : "steady")
+    : "idle";
+  const hasTerminalOutput = Boolean(activeTerminal?.output?.trim());
+  const terminalProgressPercent = activeTerminal
+    ? (hasTerminalOutput ? 88 : 52)
+    : 8;
+  const terminalProgressTone = activeTerminal
+    ? (hasTerminalOutput ? "live" : "steady")
+    : "idle";
+  const rightPanelModeClass = showCodePanel && showTerminalPanel ? "dual-pane" : "single-pane";
+  const isSettingsRoute = route === "settings";
+  const slashMenuItems: ClaudeSlashMenuItem[] = [
+    ...BUILTIN_SLASH_COMMANDS.map((item) => ({
+      id: `builtin:${item.command}`,
+      command: item.command,
+      description: item.description[locale],
+      section: "builtin" as const
+    })),
+    ...BUNDLED_CLAUDE_SKILLS.map((item) => ({
+      id: `bundled:${item.command}`,
+      command: item.command,
+      description: item.description[locale],
+      section: "bundled" as const
+    })),
+    ...slashSkillItems.map((item) => ({
+      id: item.id,
+      command: item.command,
+      description: item.description,
+      section: item.scope === "personal" ? "personal" : "project",
+      sourcePath: item.source_path,
+      sourceKind: item.source_kind
+    }))
+  ];
+  const slashMenuSections = [
+    {
+      id: "builtin" as const,
+      label: t("slashBuiltins"),
+      items: slashMenuItems.filter((item) => item.section === "builtin")
+    },
+    {
+      id: "bundled" as const,
+      label: t("slashBundledSkills"),
+      items: slashMenuItems.filter((item) => item.section === "bundled")
+    },
+    {
+      id: "project" as const,
+      label: t("slashProjectSkills"),
+      items: slashMenuItems.filter((item) => item.section === "project")
+    },
+    {
+      id: "personal" as const,
+      label: t("slashPersonalSkills"),
+      items: slashMenuItems.filter((item) => item.section === "personal")
+    }
+  ].filter((section) => section.items.length > 0);
+  const settingsNavItems = [
+    { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon />, enabled: true },
+    { id: "configuration" as const, label: t("settingsConfiguration"), icon: <SettingsConfigIcon />, enabled: false },
+    { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon />, enabled: true },
+    { id: "mcp" as const, label: t("settingsMcpServers"), icon: <SettingsMcpIcon />, enabled: false },
+    { id: "git" as const, label: t("gitNav"), icon: <SettingsGitIcon />, enabled: false },
+    { id: "environment" as const, label: t("settingsEnvironment"), icon: <SettingsEnvironmentIcon />, enabled: false },
+    { id: "worktrees" as const, label: t("settingsWorktrees"), icon: <SettingsWorktreeIcon />, enabled: false },
+    { id: "archives" as const, label: t("settingsArchives"), icon: <SettingsArchiveIcon />, enabled: false }
+  ];
+  const railItems = [
+    { id: "sessions" as const, label: t("sessionsNav"), count: activeTab.sessions.length, icon: <RailSessionsIcon /> },
+    { id: "files" as const, label: t("files"), count: flattenTree(activeTab.fileTree).filter((node) => node.kind === "file").length, icon: <RailFilesIcon /> },
+    { id: "git" as const, label: t("gitNav"), count: activeTab.git.changes, icon: <RailGitIcon /> }
+  ];
 
   const onFolderPick = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.currentTarget.files;
@@ -2017,12 +3048,7 @@ export default function App() {
   const openFolderDialog = async () => {
     if (isTauri) {
       try {
-        const selected = await openDialog({
-          directory: true,
-          multiple: false,
-          title: t("selectFolderDialog")
-        });
-        const value = Array.isArray(selected) ? selected[0] : selected;
+        const value = await invoke<string | null>("dialog_pick_folder", {});
         if (typeof value === "string" && value.trim()) {
           updateState((current) => ({
             ...current,
@@ -2039,461 +3065,931 @@ export default function App() {
     folderInputRef.current?.click();
   };
 
-  return (
-    <div className="app" style={layoutStyle}>
-      <div className="backdrop-orb orb-a" />
-      <div className="backdrop-orb orb-b" />
-      <header className="topbar">
-        <div className="brand-group">
-          <div className="logo" data-testid="app-logo">
-            <span className="dot" />
-            <div className="logo-copy">
-              <strong>Coder Studio</strong>
-              <span>{t("appTagline")}</span>
+  const renderAgentPane = (node: SessionPaneNode) => {
+    if (node.type === "split") {
+      return (
+        <div key={node.id} className={`agent-split-pane ${node.axis}`}>
+          <div className="agent-split-child">{renderAgentPane(node.first)}</div>
+          <div className={`agent-split-divider ${node.axis}`} />
+          <div className="agent-split-child">{renderAgentPane(node.second)}</div>
+        </div>
+      );
+    }
+
+    const session = activeTab.sessions.find((item) => item.id === node.sessionId) ?? activePaneSession;
+    const isPaneActive = activeTab.activePaneId === node.id;
+    const progress = (() => {
+      const ratio = sessionCompletionRatio(session);
+      if (ratio > 0) return Math.max(14, ratio);
+      if (session.status === "running" || session.status === "background") return 34;
+      if (session.status === "waiting") return 22;
+      return 6;
+    })();
+    const tone = session.status === "running" || session.status === "background"
+      ? "live"
+      : session.status === "waiting"
+        ? "queued"
+        : "idle";
+    const plainStream = stripAnsi(session.stream);
+
+    return (
+      <section
+        key={node.id}
+        className={`agent-pane-card ${isPaneActive ? "active" : ""}`}
+        onMouseDown={() => setActivePane(node.id, session.id)}
+      >
+        <div className={`surface-progress ${tone}`} aria-hidden="true">
+          <span className="surface-progress-bar" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="agent-pane-header">
+          <div className="agent-pane-header-copy">
+            <span className={`session-top-dot ${sessionTone(session.status)} ${sessionTone(session.status) === "active" ? "pulse" : ""}`} />
+            <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
+            <span className="agent-pane-status">{sessionStatusLabel(session.status, t)}</span>
+          </div>
+          <div className="agent-pane-actions">
+            <button type="button" className="pane-action" onClick={() => void splitPane(node.id, "horizontal")} title={locale === "zh" ? "横向拆分" : "Split rows"}>▤</button>
+            <button type="button" className="pane-action" onClick={() => void splitPane(node.id, "vertical")} title={locale === "zh" ? "纵向拆分" : "Split columns"}>▥</button>
+            <button type="button" className="pane-action close" onClick={() => closePane(node.id)} title={t("close")} disabled={paneLeaves.length <= 1}>
+              <HeaderCloseIcon />
+            </button>
+          </div>
+        </div>
+        <div className="agent-pane-body" data-testid={`agent-pane-${node.id}`}>
+          {plainStream.trim() ? (
+            <AgentStreamTerminal stream={session.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
+          ) : (
+            <div className="terminal-empty">{isDraftSession(session) ? t("draftSessionPrompt") : t("noTaskInProgress")}</div>
+          )}
+        </div>
+        <div className="agent-pane-input">
+          <div className="agent-compose" ref={isPaneActive ? slashMenuRef : undefined}>
+            <button
+              type="button"
+              className={`agent-plus-button ${slashMenuOpen && slashMenuPaneId === node.id ? "active" : ""}`}
+              onClick={() => void onToggleSlashMenu(node.id)}
+              aria-label={t("slashMenu")}
+              title={t("slashMenu")}
+            >
+              <AgentPlusIcon />
+            </button>
+            {slashMenuOpen && slashMenuPaneId === node.id && (
+              <div className="agent-slash-menu" data-testid="agent-slash-menu">
+                <div className="agent-slash-menu-head">
+                  <span>{t("slashMenu")}</span>
+                  {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
+                </div>
+                <div className="agent-slash-menu-body">
+                  {slashMenuSections.map((section) => (
+                    <div key={section.id} className="agent-slash-group">
+                      <div className="agent-slash-group-title">{section.label}</div>
+                      <div className="agent-slash-group-items">
+                        {section.items.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="agent-slash-item"
+                            onClick={() => onSelectSlashMenuItem(node.id, item)}
+                          >
+                            <span className="agent-slash-item-copy">
+                              <span className="agent-slash-item-command">{item.command}</span>
+                              <span className="agent-slash-item-description">{item.description}</span>
+                            </span>
+                            {item.sourceKind && (
+                              <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {!slashMenuLoading && slashMenuSections.length === 0 && (
+                    <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <textarea
+              ref={(element) => {
+                paneInputRefs.current[node.id] = element;
+              }}
+              className="agent-compose-field"
+              value={paneInputs[node.id] ?? ""}
+              onChange={(event) => setPaneInputValue(node.id, event.target.value)}
+              placeholder={t("agentInputPlaceholder")}
+              disabled={isArchiveView}
+              data-testid={`agent-input-${node.id}`}
+              onKeyDown={onAgentInputKeyDown(node.id)}
+              rows={3}
+            />
+            <div className="agent-input-actions compact">
+              <button
+                className="agent-send-button"
+                onClick={() => void onSendAgent(node.id)}
+                disabled={isArchiveView}
+                data-testid={`agent-send-${node.id}`}
+                title={t("send")}
+                aria-label={t("send")}
+              >
+                <AgentSendIcon />
+              </button>
             </div>
           </div>
-          <div className="workspace-banner" data-testid="workspace-pill">
-            <span className="banner-label">{t("workspaceLabel")}</span>
-            <span className="banner-value">{displayPathName(activeTab.project?.path) || t("noWorkspace")}</span>
-          </div>
         </div>
-        <div className="tabs shell-tabs">
-          {state.tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`tab ${tab.id === state.activeTabId ? "active" : ""} ${tab.status}`}
-              onClick={() => onSelectTab(tab.id)}
-            >
-              <span className="dot" />
-              <span>{displayWorkspaceTitle(tab.title)}</span>
-            </button>
-          ))}
+      </section>
+    );
+  };
+
+  return (
+    <div ref={appRef} className="app" style={layoutStyle} data-theme={theme}>
+      <header className={`topbar ${isSettingsRoute ? "topbar-settings" : ""}`}>
+        <div className="topbar-tabs-wrap">
+          {isSettingsRoute ? (
+            <div className="settings-topbar" data-testid="settings-topbar">
+              <div className="settings-topbar-copy">
+                <div className="section-kicker">{t("globalSettings")}</div>
+                <div className="settings-topbar-title">{t("settings")}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="topbar-session-strip topbar-workspace-strip" data-testid="workspace-topbar">
+              {workspaceTabs.map((item) => (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`session-top-tab workspace-top-tab ${item.active ? "active" : ""} ${item.hasRunning ? "running-glow" : ""}`}
+                  onClick={() => onSwitchWorkspace(item.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSwitchWorkspace(item.id);
+                    }
+                  }}
+                  title={item.label}
+                >
+                  <span className={`session-top-dot ${item.hasRunning ? "active pulse" : "idle"}`} />
+                  <span className="session-top-label">{item.label}</span>
+                  {!item.active && item.unread > 0 && (
+                    <span className="session-top-unread" title={`${item.unread}`} aria-label={`${item.unread}`}>
+                      {item.unread > 9 ? "9+" : item.unread}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="session-top-close"
+                    title={t("close")}
+                    aria-label={t("close")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemoveTab(item.id);
+                    }}
+                  >
+                    <HeaderCloseIcon />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="session-top-add"
+                onClick={onAddTab}
+                title={locale === "zh" ? "新建工作区" : "Add workspace"}
+                aria-label={locale === "zh" ? "新建工作区" : "Add workspace"}
+              >
+                <HeaderAddIcon />
+              </button>
+            </div>
+          )}
         </div>
         <div className="topbar-actions">
-          <div className="metric-chip">{t("activeCount", { count: sessionCounts.active })}</div>
-          <div className="metric-chip">{t("waitingCount", { count: sessionCounts.waiting })}</div>
-          <div className="metric-chip">{t("queuedCount", { count: sessionCounts.queued })}</div>
-          <div className="locale-toggle" aria-label={t("languageLabel")}>
-            <button
-              type="button"
-              className={`btn tiny ghost mode ${locale === "en" ? "active" : ""}`}
-              onClick={() => setLocale("en")}
-              data-testid="locale-en"
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              className={`btn tiny ghost mode ${locale === "zh" ? "active" : ""}`}
-              onClick={() => setLocale("zh")}
-              data-testid="locale-zh"
-            >
-              中文
-            </button>
-          </div>
-          <button className="btn tiny ghost" type="button" onClick={onOpenSettings} data-testid="settings-open">
-            {t("settings")}
-          </button>
-          <button className="tab add" onClick={onAddTab} data-testid="tab-add">{t("newTab")}</button>
+          {!isSettingsRoute && (
+            <>
+              <button
+                type="button"
+                className="topbar-tool"
+                onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+                title={theme === "dark" ? t("themeLight") : t("themeDark")}
+                aria-label={t("theme")}
+              >
+                {theme === "dark" ? <ThemeDarkIcon /> : <ThemeLightIcon />}
+              </button>
+              <button
+                type="button"
+                className="topbar-tool locale"
+                onClick={() => setLocale((current) => current === "zh" ? "en" : "zh")}
+                data-testid="locale-toggle-compact"
+                title={t("languageLabel")}
+                aria-label={t("languageLabel")}
+              >
+                {locale === "zh" ? "中" : "EN"}
+              </button>
+              <button className="topbar-tool" type="button" onClick={onOpenSettings} data-testid="settings-open" title={t("settings")} aria-label={t("settings")}>
+                <HeaderSettingsIcon />
+              </button>
+            </>
+          )}
         </div>
       </header>
 
-      <main className="workspace-layout">
-        <section className="panel left-panel">
-          <div className="panel-inner sidebar-panel">
-            <div className="section workspace-brief">
-              <div className="section-kicker">{t("workspaceBrief")}</div>
-              <div className="brief-grid">
-                <div className="brief-card">
-                  <span>{t("branch")}</span>
-                  <strong>{activeTab.git.branch}</strong>
-                </div>
-                <div className="brief-card">
-                  <span>{t("changes")}</span>
-                  <strong>{activeTab.git.changes}</strong>
-                </div>
-                <div className="brief-card">
-                  <span>{t("path")}</span>
-                  <strong>{displayPathName(activeTab.project?.path) || t("noWorkspace")}</strong>
-                </div>
-              </div>
-            </div>
+      {isSettingsRoute ? (
+        <main className="settings-route" data-testid="settings-page">
+          <section className="settings-layout">
+            <aside className="settings-sidebar-v2">
+              <button className="settings-back-link" type="button" onClick={onCloseSettings}>
+                <HeaderBackIcon />
+                <span>{t("backToApp")}</span>
+              </button>
 
-            <div className="section mission-control">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("missionControl")}</div>
-                  <h3>{t("sessionOperations")}</h3>
-                </div>
-                <div className="section-actions">
-                  <button className="btn tiny" onClick={onNewSession} disabled={isArchiveView} data-testid="session-new">{t("newSession")}</button>
-                  <button className="btn tiny ghost" onClick={onSessionEnd} disabled={isArchiveView}>{t("complete")}</button>
-                  <button className="btn tiny ghost danger" onClick={onStopAgent} disabled={isArchiveView}>{t("stop")}</button>
-                </div>
-              </div>
-              <div className="stats-strip">
-                <div className="stat-tile">
-                  <span>{t("pool")}</span>
-                  <strong>{poolSummary(activeTab, t)}</strong>
-                </div>
-                <div className="stat-tile">
-                  <span>{t("currentTask")}</span>
-                  <strong>{activeTask?.text ?? t("awaitingInstruction")}</strong>
-                </div>
-              </div>
-              <div className="session-mode">
-                <div className="label">{t("mode")}</div>
-                <div className="mode-toggle">
-                  <button className={`btn tiny mode ${queueSession.mode === "branch" ? "active" : ""}`} onClick={() => onUpdateSessionMode("branch")} disabled={isArchiveView}>
-                    {t("branchMode")}
-                  </button>
-                  <button className={`btn tiny mode ${queueSession.mode === "git_tree" ? "active" : ""}`} onClick={() => onUpdateSessionMode("git_tree")} disabled={isArchiveView}>
-                    {t("gitTreeMode")}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="section session-list-card">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("sessionDeck")}</div>
-                  <h3>{t("parallelWorkstreams")}</h3>
-                </div>
-              </div>
-              <div className="list session-list">
-                {activeTab.sessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`session-item session-card ${session.id === activeTab.activeSessionId ? "active" : ""}`}
-                  >
-                    <button className="session-main" onClick={() => onSwitchSession(session.id)}>
-                      <div className="session-title-row">
-                        <div className="session-title">{displaySessionTitle(session.title)}</div>
-                        <span className={`badge ${session.status}`}>{sessionStatusLabel(session.status, t)}</span>
-                      </div>
-                      <div className="session-meta">
-                        <span>{modeLabel(session.mode, t)}</span>
-                        <span>{t("tasksCount", { count: session.queue.length })}</span>
-                        <span>{t("completePercent", { percent: sessionCompletionRatio(session) })}</span>
-                      </div>
-                    </button>
-                    <div className="session-actions">
-                      {session.unread > 0 && <span className="unread">{session.unread}</span>}
-                      <button className="btn tiny ghost" onClick={() => void onArchiveSession(session.id)}>{t("archive")}</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="section queue-card">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("taskQueue")}</div>
-                  <h3>{t("dispatchBoard")}</h3>
-                </div>
-                <label className="toggle">
-                  <input type="checkbox" checked={queueSession.autoFeed} onChange={onToggleAutoFeed} disabled={isArchiveView} />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span>{t("autoFeed")}</span>
-                </label>
-              </div>
-              <div className="queue-controls">
-                <input value={queueInput} onChange={(e) => setQueueInput(e.target.value)} placeholder={t("queuePlaceholder")} disabled={isArchiveView} data-testid="queue-input" />
-                <button className="btn tiny" onClick={() => void onQueueAdd()} disabled={isArchiveView} data-testid="queue-add">{t("add")}</button>
-                <button className="btn tiny ghost" onClick={onQueueRun} disabled={isArchiveView || Boolean(activeTaskForSession(activeSession))} data-testid="queue-run">{t("runNext")}</button>
-              </div>
-              <div className="current-task-banner">
-                <span>{t("liveTask")}</span>
-                <strong>{activeTask?.text ?? t("noTaskInProgress")}</strong>
-              </div>
-              <div className="queue-list">
-                {queueSession.queue.length === 0 && <div className="empty">{t("queueEmpty")}</div>}
-                {queueSession.queue.map((task) => (
-                  <div key={task.id} className={`queue-item ${task.status}`}>
-                    <div>
-                      <span>{task.text}</span>
-                      <small>{queueTaskStatusLabel(task.status, t)}</small>
-                    </div>
-                    {task.status === "running" && <span className="pulse-dot" />}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="section ecosystem-card">
-              <div className="mini-section">
-                <div className="section-kicker">{t("worktrees")}</div>
-                <div className="worktree-list">
-                  {activeTab.worktrees.length === 0 && <div className="empty">{t("noWorktrees")}</div>}
-                  {activeTab.worktrees.map((tree) => (
+              <nav className="settings-nav-list" aria-label={t("settings")}>
+                {settingsNavItems.map((item) => {
+                  const isActive = item.id === activeSettingsPanel;
+                  return (
                     <button
-                      key={tree.path}
-                      className="worktree-item"
-                      onClick={() => void onOpenWorktree(tree)}
+                      key={item.id}
+                      type="button"
+                      className={`settings-nav-item ${isActive ? "active" : ""} ${item.enabled ? "" : "disabled"}`}
+                      onClick={() => {
+                        if (!item.enabled) return;
+                        if (item.id === "general" || item.id === "appearance") {
+                          setActiveSettingsPanel(item.id);
+                        }
+                      }}
+                      disabled={!item.enabled}
                     >
-                      <div>{tree.name}</div>
-                      <div className="muted">{tree.branch}</div>
-                      <div className="muted">{tree.status}</div>
+                      <span className="settings-nav-icon">{item.icon}</span>
+                      <span>{item.label}</span>
                     </button>
-                  ))}
+                  );
+                })}
+              </nav>
+            </aside>
+
+            <section className="settings-content-v2">
+              <div className="settings-scroll-panel">
+                {activeSettingsPanel === "general" ? (
+                  <>
+                    <div className="settings-section-heading">
+                      <h2>{t("settingsGeneral")}</h2>
+                    </div>
+
+                    <div className="settings-group-card">
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("launchCommand")}</strong>
+                          <span>{t("launchCommandHint")}</span>
+                        </div>
+                        <div className="settings-row-control">
+                          <input
+                            className="settings-inline-input"
+                            value={settingsDraft.agentCommand}
+                            onChange={(e) => onUpdateSettings({ agentCommand: e.target.value })}
+                            placeholder={t("launchCommandPlaceholder")}
+                            data-testid="settings-agent-command"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("autoSuspend")}</strong>
+                          <span>{t("autoSuspendHint")}</span>
+                        </div>
+                        <div className="settings-row-control">
+                          <label className="toggle">
+                            <input
+                              type="checkbox"
+                              checked={settingsDraft.idlePolicy.enabled}
+                              onChange={() => onUpdateSettingsIdlePolicy({ enabled: !settingsDraft.idlePolicy.enabled })}
+                            />
+                            <span className="toggle-track"><span className="toggle-thumb" /></span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("idleAfter")}</strong>
+                          <span>{t("idleAfterHint")}</span>
+                        </div>
+                        <div className="settings-row-control settings-number-control">
+                          <input
+                            className="settings-inline-number"
+                            type="number"
+                            min={1}
+                            value={settingsDraft.idlePolicy.idleMinutes}
+                            onChange={(e) => onUpdateSettingsIdlePolicy({ idleMinutes: Number(e.target.value) })}
+                            data-testid="settings-idle-minutes"
+                          />
+                          <span>{t("minutesShort")}</span>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("maxActive")}</strong>
+                          <span>{t("maxActiveHint")}</span>
+                        </div>
+                        <div className="settings-row-control settings-number-control">
+                          <input
+                            className="settings-inline-number"
+                            type="number"
+                            min={1}
+                            value={settingsDraft.idlePolicy.maxActive}
+                            onChange={(e) => onUpdateSettingsIdlePolicy({ maxActive: Number(e.target.value) })}
+                            data-testid="settings-max-active"
+                          />
+                          <span>{t("sessionsWord")}</span>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("memoryPressure")}</strong>
+                          <span>{t("memoryPressureHint")}</span>
+                        </div>
+                        <div className="settings-row-control">
+                          <label className="toggle">
+                            <input
+                              type="checkbox"
+                              checked={settingsDraft.idlePolicy.pressure}
+                              onChange={() => onUpdateSettingsIdlePolicy({ pressure: !settingsDraft.idlePolicy.pressure })}
+                            />
+                            <span className="toggle-track"><span className="toggle-thumb" /></span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="settings-section-heading">
+                      <h2>{t("settingsAppearance")}</h2>
+                    </div>
+
+                    <div className="settings-group-card">
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("theme")}</strong>
+                          <span>{t("themeHint")}</span>
+                        </div>
+                        <div className="settings-row-control">
+                          <div className="settings-pill-select">
+                            <button
+                              type="button"
+                              className={`settings-pill-option ${theme === "light" ? "active" : ""}`}
+                              onClick={() => setTheme("light")}
+                            >
+                              {t("themeLight")}
+                            </button>
+                            <button
+                              type="button"
+                              className={`settings-pill-option ${theme === "dark" ? "active" : ""}`}
+                              onClick={() => setTheme("dark")}
+                            >
+                              {t("themeDark")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div className="settings-row-copy">
+                          <strong>{t("languageLabel")}</strong>
+                          <span>{t("languageHint")}</span>
+                        </div>
+                        <div className="settings-row-control">
+                          <div className="settings-pill-select">
+                            <button
+                              type="button"
+                              className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
+                              onClick={() => setLocale("zh")}
+                            >
+                              中文
+                            </button>
+                            <button
+                              type="button"
+                              className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
+                              onClick={() => setLocale("en")}
+                            >
+                              English
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="settings-footer-bar">
+                <div className="settings-page-status">
+                  {t("settingsAutoSave")}
                 </div>
               </div>
-              <div className="mini-section">
-                <div className="section-kicker">{t("archiveLog")}</div>
-                <div className="archive-log">
-                  {activeTab.archive.length === 0 && <div className="empty">{t("noArchiveYet")}</div>}
-                  {activeTab.archive.map((entry) => (
-                    <button key={entry.id} className="archive-item" onClick={() => onSelectArchive(entry.id)}>
-                      <div>{entry.time}</div>
-                      <div>{displaySessionTitle(entry.snapshot.title)}</div>
-                      <div className="muted">{modeLabel(entry.mode, t)}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            </section>
+          </section>
+        </main>
+      ) : (
+      <main className="workspace-shell">
+        <div className="workspace-main-header workspace-shell-header">
+          <div className="workspace-main-header-copy">
+            <div className="workspace-main-meta">
+              <span className="workspace-main-chip">
+                <WorkspaceFolderIcon />
+                <span>{workspaceFolderName}</span>
+              </span>
+              <span className="workspace-main-chip">
+                <WorkspaceBranchIcon />
+                <span>{activeTab.git.branch || "—"}</span>
+              </span>
+              <span className="workspace-main-chip">
+                <WorkspaceChangesIcon />
+                <span>{t("changesCount", { count: currentFileChangeCount })}</span>
+              </span>
+            </div>
+          </div>
+          <div className="workspace-main-actions">
+            <button
+              type="button"
+              className={`workspace-panel-toggle ${showCodePanel ? "active" : ""}`}
+              onClick={() => toggleRightPane("code")}
+              title={t("codePanel")}
+              aria-pressed={showCodePanel}
+            >
+              <WorkspaceCodeIcon />
+              <span>{t("codePanel")}</span>
+            </button>
+            <button
+              type="button"
+              className={`workspace-panel-toggle ${showTerminalPanel ? "active" : ""}`}
+              onClick={() => toggleRightPane("terminal")}
+              title={t("terminalPanel")}
+              aria-pressed={showTerminalPanel}
+            >
+              <WorkspaceTerminalIcon />
+              <span>{t("terminalPanel")}</span>
+            </button>
+          </div>
+        </div>
+      <div className="workspace-layout">
+        <section className="panel left-panel">
+          <div className="panel-inner sidebar-workbench">
+            <div className="sidebar-rail">
+              {railItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`rail-tab ${leftRailView === item.id ? "active" : ""}`}
+                  onClick={() => setLeftRailView(item.id)}
+                  title={item.label}
+                >
+                  <span className="rail-icon">{item.icon}</span>
+                </button>
+              ))}
             </div>
 
-            <div className="section grow repo-card">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("repositoryNavigator")}</div>
-                  <h3>{t("projectStructure")}</h3>
+            <div className="sidebar-panel">
+              {leftRailView === "sessions" && (
+                <div className="section grow queue-card compact">
+                  <div className="session-stack-list">
+                    {activeTab.sessions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`session-stack-item ${item.id === activeTab.activeSessionId ? "active" : ""}`}
+                        onClick={() => onSwitchSession(item.id)}
+                      >
+                        <span className={`session-top-dot ${sessionTone(item.status)} ${sessionTone(item.status) === "active" ? "pulse" : ""}`} />
+                        <span className="session-stack-copy">
+                          <span className="session-stack-title">{displaySessionTitle(item.title)}</span>
+                          <span className="session-stack-meta">{sessionStatusLabel(item.status, t)}</span>
+                        </span>
+                        {item.unread > 0 && <span className="session-top-unread">{item.unread > 9 ? "9+" : item.unread}</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="section-head">
+                    <div>
+                      <div className="section-kicker">{t("sessionsNav")}</div>
+                      <h3>{displaySessionTitle(activeSession.title)}</h3>
+                    </div>
+                    <div className="section-actions">
+                      <button className="btn tiny" type="button" onClick={() => void onNewSession()}>{t("newSession")}</button>
+                      <label className="toggle">
+                        <input type="checkbox" checked={queueSession.autoFeed} onChange={onToggleAutoFeed} disabled={isArchiveView} />
+                        <span className="toggle-track"><span className="toggle-thumb" /></span>
+                        <span>{t("autoFeed")}</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="queue-controls inline">
+                    <input value={queueInput} onChange={(e) => setQueueInput(e.target.value)} placeholder={t("queuePlaceholder")} disabled={isArchiveView} data-testid="queue-input" />
+                    <div className="section-actions">
+                      <button className="btn tiny" onClick={() => void onQueueAdd()} disabled={isArchiveView} data-testid="queue-add">{t("add")}</button>
+                      <button className="btn tiny ghost" onClick={onQueueRun} disabled={isArchiveView || Boolean(activeTaskForSession(activeSession))} data-testid="queue-run">{t("runNext")}</button>
+                    </div>
+                  </div>
+                  <div className="queue-list">
+                    {queueSession.queue.length === 0 && <div className="empty">{t("queueEmpty")}</div>}
+                    {queueSession.queue.map((task) => (
+                      <div key={task.id} className={`queue-item ${task.status}`}>
+                        <div>
+                          <span>{task.text}</span>
+                          <small>{queueTaskStatusLabel(task.status, t)}</small>
+                        </div>
+                        {task.status === "running" && <span className="pulse-dot" />}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="mode-toggle">
-                  <button className={`btn tiny mode ${repoTreeMode === "files" ? "active" : ""}`} onClick={() => void onRepoTreeModeChange("files")}>{t("files")}</button>
-                  <button className={`btn tiny mode ${repoTreeMode === "changes" ? "active" : ""}`} onClick={() => void onRepoTreeModeChange("changes")}>{t("changes")}</button>
+              )}
+
+              {leftRailView === "files" && (
+                <div className="section grow repo-card blueprint-card">
+                  {activeTab.fileTree.length === 0 && <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>}
+                  <TreeView
+                    nodes={activeTab.fileTree}
+                    onSelect={onFileSelect}
+                    collapsedPaths={repoCollapsedPaths}
+                    locale={locale}
+                    onToggleCollapse={(path) => {
+                      setRepoCollapsedPaths((current) => {
+                        const next = new Set(current);
+                        if (next.has(path)) {
+                          next.delete(path);
+                        } else {
+                          next.add(path);
+                        }
+                        return next;
+                      });
+                    }}
+                  />
                 </div>
-              </div>
-              {repoTreeNodes.length === 0 && <div className="tree-empty">{repoTreeMode === "files" ? t("selectProjectToLoadFiles") : t("noChangesDetected")}</div>}
-              <TreeView
-                nodes={repoTreeNodes}
-                onSelect={onFileSelect}
-                collapsedPaths={repoCollapsedPaths}
-                onToggleCollapse={(path) => {
-                  setRepoCollapsedPaths((current) => {
-                    const next = new Set(current);
-                    if (next.has(path)) {
-                      next.delete(path);
-                    } else {
-                      next.add(path);
-                    }
-                    return next;
-                  });
-                }}
-              />
+              )}
+
+              {leftRailView === "git" && (
+                <>
+                  <div className="section workspace-brief compact git-overview">
+                    <div className="section-kicker">Git</div>
+                    <div className="brief-grid">
+                      <div className="brief-card">
+                        <span>{t("branch")}</span>
+                        <strong>{activeTab.git.branch}</strong>
+                      </div>
+                      <div className="brief-card">
+                        <span>{t("changes")}</span>
+                        <strong>{activeTab.git.changes}</strong>
+                      </div>
+                      <div className="brief-card full">
+                        <span>{t("status")}</span>
+                        <strong>{activeTab.git.changes > 0 ? t("modified") : t("clean")}</strong>
+                      </div>
+                    </div>
+                    <div className="git-summary-strip">
+                      <span>{t("changesCount", { count: gitSummary.changes })}</span>
+                      <span>{t("stagedCount", { count: gitSummary.staged })}</span>
+                      <span>{t("untrackedCount", { count: gitSummary.untracked })}</span>
+                    </div>
+                    <div className="section-actions">
+                      <button className="btn tiny" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)}>{t("refresh")}</button>
+                    </div>
+                  </div>
+
+                  <div className="section grow repo-card blueprint-card">
+                    <div className="section-head">
+                      <div>
+                        <div className="section-kicker">{t("changes")}</div>
+                        <h3>{t("sourceControl")}</h3>
+                      </div>
+                    </div>
+                    {gitChangeGroups.length === 0 && <div className="tree-empty">{t("noChangesDetected")}</div>}
+                    <div className="source-control-list">
+                      {gitChangeGroups.map((group) => (
+                        <div key={group.key} className="source-group">
+                          <div className="source-group-head">
+                            <span>{group.label}</span>
+                            <span>{group.items.length}</span>
+                          </div>
+                          <div className="source-group-items">
+                            {group.items.map((change) => {
+                              const changeKey = `${change.section}:${change.path}:${change.code}`;
+                              const rowActions = change.section === "staged"
+                                ? [{ id: "unstage" as const, title: t("unstageFile"), icon: <GitUnstageIcon /> }]
+                                : [
+                                  { id: "stage" as const, title: t("stageFile"), icon: <GitStageIcon /> },
+                                  { id: "discard" as const, title: t("discardFile"), icon: <GitDiscardIcon /> }
+                                ];
+                              return (
+                                <div
+                                  key={changeKey}
+                                  role="button"
+                                  tabIndex={0}
+                                  className={`source-change-row ${selectedGitChangeKey === changeKey ? "active" : ""}`}
+                                  onClick={() => void onGitChangeSelect(change)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      void onGitChangeSelect(change);
+                                    }
+                                  }}
+                                >
+                                  <span className={`source-status-badge ${change.section}`}>{change.code}</span>
+                                  <span className="source-change-copy">
+                                    <span className="source-change-name">{change.name}</span>
+                                    <span className="source-change-parent">{change.parent || "."}</span>
+                                  </span>
+                                  <span className="source-change-tail">
+                                    <span className="source-change-label">{change.status}</span>
+                                    <span className="source-change-actions">
+                                      {rowActions.map((action) => (
+                                        <button
+                                          key={action.id}
+                                          type="button"
+                                          className="source-action-btn"
+                                          title={action.title}
+                                          aria-label={action.title}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            void onGitChangeAction(change, action.id);
+                                          }}
+                                        >
+                                          {action.icon}
+                                        </button>
+                                      ))}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="section git-actions-card compact">
+                    <div className="section-head">
+                      <div>
+                        <div className="section-kicker">{t("commitMessage")}</div>
+                        <h3>{t("commit")}</h3>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <input
+                        value={commitMessage}
+                        onChange={(e) => setCommitMessage(e.target.value)}
+                        placeholder={t("commitPlaceholder")}
+                        data-testid="git-commit-message"
+                      />
+                    </div>
+                    <div className="git-actions-grid">
+                      <button className="btn tiny" type="button" onClick={() => void onGitStageAll()}>
+                        {t("stageAll")}
+                      </button>
+                      <button className="btn tiny ghost" type="button" onClick={() => void onGitUnstageAll()}>
+                        {t("unstageAll")}
+                      </button>
+                      <button className="btn tiny ghost danger" type="button" onClick={() => void onGitDiscardAll()}>
+                        {t("discardAll")}
+                      </button>
+                      <button className="btn tiny primary" type="button" onClick={() => void onGitCommit()} disabled={!commitMessage.trim()}>
+                        {t("commit")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="section ecosystem-card compact">
+                    <div className="mini-section">
+                      <div className="section-kicker">{t("worktrees")}</div>
+                      <div className="worktree-list">
+                        {activeTab.worktrees.length === 0 && <div className="empty">{t("noWorktrees")}</div>}
+                        {activeTab.worktrees.map((tree) => (
+                          <button
+                            key={tree.path}
+                            className="worktree-item"
+                            onClick={() => void onOpenWorktree(tree)}
+                          >
+                            <div>{tree.name}</div>
+                            <div className="muted">{tree.branch}</div>
+                            <div className="muted">{tree.status || t("clean")}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </section>
 
         <div className="v-resizer" data-resize="left" onPointerDown={onResizeStart("left")} />
 
-        <section className="panel center-panel">
-          <div className="panel-inner studio-panel">
-            <div className="studio-header">
-              <div className="studio-copy">
-                <div className="section-kicker">{t("liveSession")}</div>
-                <h1>{displaySessionTitle(sessionForView.title)}</h1>
-                <p>{activeTask?.text ?? t("liveSessionDescription")}</p>
-              </div>
-              <div className="studio-side">
-                <div className={`status-pill ${sessionForView.status}`}>{sessionStatusLabel(sessionForView.status, t)}</div>
-                <div className="status-pill neutral">{modeLabel(sessionForView.mode, t)}</div>
-                <div className="status-pill neutral">{t("completePercent", { percent: completionRatio })}</div>
-              </div>
-            </div>
-
-            <div className="studio-toolbar">
-              <div className="interaction-note">
-                <div className="section-kicker">{t("inputConsole")}</div>
-                <div className="hint">{t("inputConsoleHint")}</div>
-              </div>
-              <div className="agent-progress wide">
-                <div className="bar" style={{ width: `${completionRatio}%` }} />
-              </div>
-            </div>
-
-            {isArchiveView && (
-              <div className="archive-banner">
-                <div>
-                  {t("viewingArchivedSession")}
-                  <div className="hint">{t("exitArchiveHint")}</div>
-                </div>
-                <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
-              </div>
-            )}
-
-            <div className="stage-card">
-              <div className="stage-header">
-                <div>
-                  <div className="section-kicker">{t("agentOutput")}</div>
-                  <h3>{activeTask?.text ?? t("interactiveCommandStream")}</h3>
-                </div>
-                <div className="stage-meta">
-                  <span>{activeTask ? t("executing") : t("listening")}</span>
-                  <span>{activeTab.agent.provider}</span>
-                </div>
-              </div>
-              <div
-                className="agent-terminal"
-                ref={agentTerminalRef}
-                onClick={() => agentInputRef.current?.focus()}
-                data-testid="agent-terminal"
-              >
+        <section className="workspace-main">
+          <div className={`workspace-main-body ${isRightPanelVisible ? "has-right-panel" : "right-panel-hidden"}`}>
+            <section className="panel center-panel workspace-center-panel">
+              <div className="panel-inner studio-panel compact">
                 {isArchiveView && (
-                  <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-                )}
-              </div>
-              <div className="agent-input">
-                <input
-                  ref={agentInputRef}
-                  value={agentInput}
-                  onChange={(e) => setAgentInput(e.target.value)}
-                  placeholder={t("agentInputPlaceholder")}
-                  disabled={isArchiveView}
-                  data-testid="agent-input"
-                  onKeyDown={onAgentInputKeyDown}
-                />
-                <div className="agent-input-actions">
-                  <div className="special-key-row">
-                    {agentSpecialKeys.map((item) => (
-                      <button
-                        key={item.key}
-                        className="btn tiny ghost special-key"
-                        onClick={() => void onSendSpecialAgentKey(item.sequence)}
-                        disabled={isArchiveView}
-                        type="button"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+                  <div className="archive-banner">
+                    <div>
+                      {t("viewingArchivedSession")}
+                      <div className="hint">{t("exitArchiveHint")}</div>
+                    </div>
+                    <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
                   </div>
-                  <button onClick={() => void onSendAgent()} disabled={isArchiveView} data-testid="agent-send">{t("send")}</button>
+                )}
+                <div className="agent-pane-workspace">
+                  {isArchiveView ? (
+                    <section className="agent-pane-card archive-only">
+                      <div className="agent-pane-header">
+                        <div className="agent-pane-header-copy">
+                          <span className={`session-top-dot ${sessionTone(queueSession.status)} ${sessionTone(queueSession.status) === "active" ? "pulse" : ""}`} />
+                          <span className="agent-pane-title">{displaySessionTitle(queueSession.title)}</span>
+                          <span className="agent-pane-status">{sessionStatusLabel(queueSession.status, t)}</span>
+                        </div>
+                      </div>
+                      <div className="agent-pane-body">
+                        {queuePlainStream.trim() ? (
+                          <AgentStreamTerminal stream={queueSession.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
+                        ) : (
+                          <div className="terminal-empty">{t("archiveViewReadonly")}</div>
+                        )}
+                      </div>
+                    </section>
+                  ) : (
+                    renderAgentPane(activeTab.paneLayout)
+                  )}
                 </div>
               </div>
-            </div>
+            </section>
+
+            {isRightPanelVisible && (
+              <>
+                <div className="v-resizer" data-resize="right" onPointerDown={onResizeStart("right")} />
+
+                <section className={`panel right workspace-right-panel ${rightPanelModeClass}`}>
+                  <div className={`panel-inner workspace-right-grid ${rightPanelModeClass}`}>
+                    {showCodePanel && (
+                      <div className="workspace-right-pane inspector-card file-preview">
+                        <div className={`surface-progress ${fileProgressTone}`} aria-hidden="true">
+                          <span className="surface-progress-bar" style={{ width: `${fileProgressPercent}%` }} />
+                        </div>
+                        {hasPreviewFile && (
+                          <div className="editor-context-bar">
+                            <div className="editor-context-copy">
+                              <span className="editor-context-name">{previewFileName}</span>
+                              <span className="editor-context-path">{previewParentPath || "."}</span>
+                            </div>
+                            <div className="editor-context-meta">
+                              {activeTab.filePreview.statusLabel && <span className="editor-meta-pill">{activeTab.filePreview.statusLabel}</span>}
+                              {activeTab.filePreview.mode === "diff" && <span className="editor-meta-pill">{t("diff")}</span>}
+                              {selectedGitChange && (
+                                <span className="editor-context-actions">
+                                  {(selectedGitChange.section === "staged"
+                                    ? [{ id: "unstage" as const, title: t("unstageFile"), icon: <GitUnstageIcon /> }]
+                                    : [
+                                      { id: "stage" as const, title: t("stageFile"), icon: <GitStageIcon /> },
+                                      { id: "discard" as const, title: t("discardFile"), icon: <GitDiscardIcon /> }
+                                    ]).map((action) => (
+                                    <button
+                                      key={action.id}
+                                      type="button"
+                                      className="editor-context-action"
+                                      title={action.title}
+                                      aria-label={action.title}
+                                      onClick={() => void onGitChangeAction(selectedGitChange, action.id)}
+                                    >
+                                      {action.icon}
+                                    </button>
+                                  ))}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {hasPreviewFile ? (
+                          activeTab.filePreview.mode === "diff" ? (
+                            activeTab.filePreview.source === "git" && Boolean(activeTab.filePreview.section) && hasStructuredDiffContent ? (
+                              <div className="editor-surface diff-editor-surface" data-testid="preview-diff-editor">
+                                <DiffEditor
+                                  key={`${activeTab.filePreview.path}:${activeTab.filePreview.section ?? "diff"}`}
+                                  height="100%"
+                                  original={activeTab.filePreview.originalContent ?? ""}
+                                  modified={activeTab.filePreview.modifiedContent ?? ""}
+                                  originalModelPath={`${activeTab.filePreview.path}.original`}
+                                  modifiedModelPath={activeTab.filePreview.path}
+                                  language={inferEditorLanguage(activeTab.filePreview.path)}
+                                  theme={theme === "light" ? "vs" : "vs-dark"}
+                                  options={{
+                                    automaticLayout: true,
+                                    readOnly: true,
+                                    renderSideBySide: true,
+                                    minimap: { enabled: false },
+                                    scrollBeyondLastLine: false,
+                                    wordWrap: "on",
+                                    fontFamily: "IBM Plex Mono, JetBrains Mono, monospace",
+                                    fontSize: editorMetrics.fontSize,
+                                    lineNumbersMinChars: 3,
+                                    renderWhitespace: "selection"
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <pre className="diff code-surface">{activeTab.filePreview.diff || t("noDiffAvailable")}</pre>
+                            )
+                          ) : (
+                            <div className="editor-surface" data-testid="preview-editor">
+                              <Editor
+                                key={activeTab.filePreview.path}
+                                height="100%"
+                                path={activeTab.filePreview.path}
+                                language={inferEditorLanguage(activeTab.filePreview.path)}
+                                value={activeTab.filePreview.content}
+                                onChange={(value) => onPreviewEdit(value ?? "")}
+                                theme={theme === "light" ? "vs" : "vs-dark"}
+                                options={{
+                                  automaticLayout: true,
+                                  fontFamily: "IBM Plex Mono, JetBrains Mono, monospace",
+                                  fontSize: editorMetrics.fontSize,
+                                  minimap: { enabled: false },
+                                  scrollBeyondLastLine: false,
+                                  wordWrap: "on",
+                                  padding: { top: editorMetrics.paddingY, bottom: editorMetrics.paddingY },
+                                  lineNumbersMinChars: 3,
+                                  renderWhitespace: "selection"
+                                }}
+                              />
+                            </div>
+                          )
+                        ) : (
+                          <div className="preview-empty">{t("selectFileFromNavigator")}</div>
+                        )}
+                      </div>
+                    )}
+
+                    {showCodePanel && showTerminalPanel && (
+                      <div
+                        className="v-resizer workspace-right-splitter"
+                        data-resize="right-split"
+                        onPointerDown={onResizeStart("right-split")}
+                      />
+                    )}
+
+                    {showTerminalPanel && (
+                      <div className="workspace-right-pane inspector-card terminal-card">
+                        <div className={`surface-progress ${terminalProgressTone}`} aria-hidden="true">
+                          <span className="surface-progress-bar" style={{ width: `${terminalProgressPercent}%` }} />
+                        </div>
+                        <div className="section-head">
+                          <div>
+                            <div className="section-kicker">{t("shellDock")}</div>
+                            <h3>{t("projectTerminal")}</h3>
+                          </div>
+                          <button className="btn tiny" onClick={() => void onAddTerminal()}>{t("new")}</button>
+                        </div>
+                        <div className="terminal-tabs">
+                          {activeTab.terminals.map((term) => (
+                            <div
+                              key={term.id}
+                              className={`t-tab ${term.id === activeTab.activeTerminalId ? "active" : ""}`}
+                              onClick={() => onTerminalSelect(term.id)}
+                            >
+                              <span className="t-tab-label">{displayTerminalTitle(term.title)}</span>
+                              <button
+                                type="button"
+                                className="t-tab-close"
+                                aria-label={t("close")}
+                                title={t("close")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void onCloseTerminal(term.id);
+                                }}
+                              >
+                                <HeaderCloseIcon />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div
+                          className="terminal-output"
+                          ref={terminalContainerRef}
+                          onClick={() => xtermRef.current?.focus()}
+                        >
+                          {!activeTerminal && (
+                            <div className="terminal-empty">{t("noTerminalYet")}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </>
+            )}
           </div>
         </section>
-
-        <div className="v-resizer" data-resize="right" onPointerDown={onResizeStart("right")} />
-
-        <section className="panel right">
-          <div className="panel-inner inspector-panel">
-            <div className="inspector-card file-preview">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("repositoryInspector")}</div>
-                  <h3>{hasPreviewFile ? activeTab.filePreview.path : t("selectFileFromNavigator")}</h3>
-                </div>
-                {previewMode === "preview" && hasPreviewFile && (
-                  <div className="section-actions">
-                    <span className={`pill ${activeTab.filePreview.dirty ? "warning" : ""}`}>
-                      {activeTab.filePreview.dirty ? t("unsavedChanges") : t("editorReady")}
-                    </span>
-                    <button
-                      className="btn tiny"
-                      type="button"
-                      onClick={() => void onSavePreview()}
-                      disabled={!activeTab.filePreview.dirty}
-                      data-testid="preview-save"
-                    >
-                      {t("save")}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="file-tabs">
-                <div className={`t-tab ${previewMode === "preview" ? "active" : ""}`} onClick={() => void onPreviewMode("preview")}>{t("preview")}</div>
-                <div className={`t-tab ${previewMode === "diff" ? "active" : ""}`} onClick={() => void onPreviewMode("diff")}>{t("diff")}</div>
-              </div>
-              {previewMode === "preview" && hasPreviewFile && (
-                <div className="editor-banner">
-                  <span>{t("editorHint")}</span>
-                </div>
-              )}
-              {previewMode === "diff" && hasPreviewFile && (
-                <div className="diff-toolbar">
-                  <div className="diff-stats">
-                    {t("filesStat", {
-                      count: activeTab.filePreview.diffStats?.files ?? 0,
-                      additions: activeTab.filePreview.diffStats?.additions ?? 0,
-                      deletions: activeTab.filePreview.diffStats?.deletions ?? 0
-                    })}
-                  </div>
-                  <div className="diff-files">
-                    {(activeTab.filePreview.diffFiles ?? fileTabs.map((file) => file.path)).slice(0, 5).map((file) => (
-                      <span key={file} className="chip">{file}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {previewMode === "preview" ? (
-                hasPreviewFile ? (
-                  <div className="editor-surface" data-testid="preview-editor">
-                    <Editor
-                      key={activeTab.filePreview.path}
-                      height="100%"
-                      path={activeTab.filePreview.path}
-                      language={inferEditorLanguage(activeTab.filePreview.path)}
-                      value={activeTab.filePreview.content}
-                      onChange={(value) => onPreviewEdit(value ?? "")}
-                      theme="vs-dark"
-                      options={{
-                        automaticLayout: true,
-                        fontFamily: "IBM Plex Mono, JetBrains Mono, monospace",
-                        fontSize: 13,
-                        minimap: { enabled: false },
-                        scrollBeyondLastLine: false,
-                        wordWrap: "on",
-                        padding: { top: 14, bottom: 14 },
-                        lineNumbersMinChars: 3,
-                        renderWhitespace: "selection"
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="preview-empty">{t("selectFileFromNavigator")}</div>
-                )
-              ) : (
-                hasPreviewFile
-                  ? <pre className="diff code-surface">{activeTab.filePreview.diff || t("noDiffAvailable")}</pre>
-                  : <div className="preview-empty">{t("selectFileFromNavigator")}</div>
-              )}
-            </div>
-            <div className="h-resizer" data-resize="right-top" onPointerDown={onResizeStart("right-top")} />
-            <div className="inspector-card terminal-card">
-              <div className="section-head">
-                <div>
-                  <div className="section-kicker">{t("shellDock")}</div>
-                  <h3>{t("projectTerminal")}</h3>
-                </div>
-                <button className="btn tiny" onClick={() => void onAddTerminal()}>{t("new")}</button>
-              </div>
-              <div className="terminal-tabs">
-                {activeTab.terminals.map((term) => (
-                  <div
-                    key={term.id}
-                    className={`t-tab ${term.id === activeTab.activeTerminalId ? "active" : ""}`}
-                    onClick={() => onTerminalSelect(term.id)}
-                  >
-                    {displayTerminalTitle(term.title)}
-                  </div>
-                ))}
-              </div>
-              <div
-                className="terminal-output"
-                ref={terminalContainerRef}
-                onClick={() => xtermRef.current?.focus()}
-              >
-                {!activeTerminal && (
-                  <div className="terminal-empty">{t("noTerminalYet")}</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
+      </div>
       </main>
+      )}
 
       <div className="toast-container">
         {toasts.map((toast) => (
@@ -2502,111 +3998,6 @@ export default function App() {
           </button>
         ))}
       </div>
-
-      {settingsOpen && (
-        <div className="modal-overlay">
-          <div className="modal-card settings-modal" data-testid="settings-modal">
-            <div className="modal-header">
-              <div>
-                <div className="section-kicker">{t("globalSettings")}</div>
-                <h3>{t("settings")}</h3>
-                <div className="hint">{t("settingsDescription")}</div>
-              </div>
-              <button className="btn tiny" type="button" onClick={onCloseSettings}>{t("close")}</button>
-            </div>
-            <div className="settings-summary">
-              <span className="pill">{t("appliesToAllWorkspaces")}</span>
-              <span className="pill">{t("changesAffectNextLaunch")}</span>
-            </div>
-            <div className="settings-grid">
-              <section className="settings-section">
-                <div className="section-kicker">{t("agentDefaults")}</div>
-                <h4>{t("agentConfiguration")}</h4>
-                <p className="hint">{t("agentDefaultsHint")}</p>
-                <div className="form-row">
-                  <label>{t("provider")}</label>
-                  <select
-                    value={settingsDraft.agentProvider}
-                    onChange={(e) => onUpdateSettings({ agentProvider: e.target.value as "claude" | "codex" })}
-                    data-testid="settings-agent-provider"
-                  >
-                    <option value="claude">Claude</option>
-                    <option value="codex">Codex</option>
-                  </select>
-                </div>
-                <div className="form-row">
-                  <label>{t("launchCommand")}</label>
-                  <input
-                    value={settingsDraft.agentCommand}
-                    onChange={(e) => onUpdateSettings({ agentCommand: e.target.value })}
-                    placeholder={t("launchCommandPlaceholder")}
-                    data-testid="settings-agent-command"
-                  />
-                </div>
-              </section>
-              <section className="settings-section">
-                <div className="section-kicker">{t("suspendStrategy")}</div>
-                <h4>{t("autoSuspend")}</h4>
-                <p className="hint">{t("suspendStrategyHint")}</p>
-                <div className="session-policy">
-                  <div className="policy-row">
-                    <span>{t("autoSuspend")}</span>
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={settingsDraft.idlePolicy.enabled}
-                        onChange={() => onUpdateSettingsIdlePolicy({ enabled: !settingsDraft.idlePolicy.enabled })}
-                      />
-                      <span className="toggle-track"><span className="toggle-thumb" /></span>
-                    </label>
-                  </div>
-                  <div className="policy-row">
-                    <span>{t("idleAfter")}</span>
-                    <div>
-                      <input
-                        type="number"
-                        min={1}
-                        value={settingsDraft.idlePolicy.idleMinutes}
-                        onChange={(e) => onUpdateSettingsIdlePolicy({ idleMinutes: Number(e.target.value) })}
-                        data-testid="settings-idle-minutes"
-                      />
-                      <span>{t("minutesShort")}</span>
-                    </div>
-                  </div>
-                  <div className="policy-row">
-                    <span>{t("maxActive")}</span>
-                    <div>
-                      <input
-                        type="number"
-                        min={1}
-                        value={settingsDraft.idlePolicy.maxActive}
-                        onChange={(e) => onUpdateSettingsIdlePolicy({ maxActive: Number(e.target.value) })}
-                        data-testid="settings-max-active"
-                      />
-                      <span>{t("sessionsWord")}</span>
-                    </div>
-                  </div>
-                  <div className="policy-row">
-                    <span>{t("memoryPressure")}</span>
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={settingsDraft.idlePolicy.pressure}
-                        onChange={() => onUpdateSettingsIdlePolicy({ pressure: !settingsDraft.idlePolicy.pressure })}
-                      />
-                      <span className="toggle-track"><span className="toggle-thumb" /></span>
-                    </label>
-                  </div>
-                </div>
-              </section>
-            </div>
-            <div className="modal-actions">
-              <button className="btn" type="button" onClick={onCloseSettings}>{t("cancel")}</button>
-              <button className="btn primary" type="button" onClick={onApplySettings} data-testid="settings-apply">{t("applySettings")}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {worktreeModal && (
         <div className="modal-overlay">
@@ -2643,6 +4034,7 @@ export default function App() {
                   nodes={worktreeModal.tree ?? []}
                   onSelect={onFileSelect}
                   collapsedPaths={worktreeCollapsedPaths}
+                  locale={locale}
                   onToggleCollapse={(path) => {
                     setWorktreeCollapsedPaths((current) => {
                       const next = new Set(current);
@@ -2763,11 +4155,6 @@ export default function App() {
         </div>
       )}
 
-      {!state.overlay.visible && activeTab.status === "init" && (
-        <button className="reopen-overlay" onClick={() => openOverlayForTab(activeTab.id)}>
-          {t("initializeWorkspace")}
-        </button>
-      )}
     </div>
   );
 }
@@ -2778,41 +4165,51 @@ type TreeProps = {
   onSelect?: (node: TreeNode) => void;
   collapsedPaths?: Set<string>;
   onToggleCollapse?: (path: string) => void;
+  locale?: Locale;
 };
 
-const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse }: TreeProps) => {
+const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse, locale = "en" }: TreeProps) => {
   if (!nodes?.length) return null;
+  const sortedNodes = sortTreeNodes(nodes, locale);
   return (
     <div className="tree tree-list">
-      {nodes.map((node) => (
-        <div key={node.path}>
-          <div
-            className={`tree-line indent-${depth} ${node.kind === "file" ? "file" : ""} ${node.status ? "changed" : ""}`}
-            onClick={() => {
-              if (node.kind === "dir") {
-                onToggleCollapse?.(node.path);
-                return;
-              }
-              onSelect?.(node);
-            }}
-          >
-            {node.kind === "dir" && (
-              <span className="tree-disclosure">{collapsedPaths?.has(node.path) ? "▸" : "▾"}</span>
-            )}
-            <span className="tree-label">{node.name}{node.kind === "dir" ? "/" : ""}</span>
-            {node.status && <span className="status">{node.status}</span>}
+      {sortedNodes.map((node) => {
+        const isDirectory = node.kind === "dir";
+        const isExpanded = isDirectory ? collapsedPaths?.has(node.path) ?? false : false;
+        return (
+          <div key={node.path} className="tree-node">
+            <div
+              className={`tree-line ${node.kind === "file" ? "file" : "dir"} ${node.status ? "changed" : ""}`}
+              style={{ paddingLeft: `${depth * 16 + 8}px` }}
+              onClick={() => {
+                if (isDirectory) {
+                  onToggleCollapse?.(node.path);
+                  return;
+                }
+                onSelect?.(node);
+              }}
+            >
+              {isDirectory && (
+                <span className="tree-disclosure">{isExpanded ? "▾" : "▸"}</span>
+              )}
+              <span className="tree-label">{node.name}{isDirectory ? "/" : ""}</span>
+              {node.status && <span className="status">{node.status}</span>}
+            </div>
+            {node.children?.length && isExpanded ? (
+              <div className="tree-children">
+                <TreeView
+                  nodes={node.children}
+                  depth={depth + 1}
+                  onSelect={onSelect}
+                  collapsedPaths={collapsedPaths}
+                  onToggleCollapse={onToggleCollapse}
+                  locale={locale}
+                />
+              </div>
+            ) : null}
           </div>
-          {node.children?.length && !collapsedPaths?.has(node.path) ? (
-            <TreeView
-              nodes={node.children}
-              depth={depth + 1}
-              onSelect={onSelect}
-              collapsedPaths={collapsedPaths}
-              onToggleCollapse={onToggleCollapse}
-            />
-          ) : null}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
