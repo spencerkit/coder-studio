@@ -1,0 +1,363 @@
+/* ==========================================================================
+   Coder Studio - Apple Minimalist Theme
+   ========================================================================== */
+
+:root {
+  /* Typography - Apple-inspired clean sans-serif */
+  --font-sans: "Geist", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Type Scale - Apple proportions */
+  --font-xs: 0.6875rem;    /* 11px */
+  --font-sm: 0.75rem;      /* 12px */
+  --font-md: 0.8125rem;    /* 13px */
+  --font-lg: 0.875rem;     /* 14px */
+  --font-xl: 1rem;         /* 16px */
+  --font-2xl: 1.25rem;     /* 20px */
+  --font-3xl: 1.5rem;      /* 24px */
+  --font-4xl: 2rem;        /* 32px */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Line Heights */
+  --line-tight: 1.2;
+  --line-normal: 1.5;
+  --line-relaxed: 1.7;
+
+  /* Spacing - Generous Apple whitespace */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 40px;
+  --space-10: 48px;
+
+  /* Radius - Friendly, Apple-style curves */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-full: 9999px;
+
+  /* Control Heights */
+  --control-h-xs: 24px;
+  --control-h-sm: 28px;
+  --control-h-md: 32px;
+  --control-h-lg: 40px;
+  --control-h-xl: 48px;
+
+  /* Layout */
+  --header-h: 48px;
+  --sidebar-w: 280px;
+  --inspector-w: 320px;
+
+  /* Editor/Terminal */
+  --editor-font-size: 13;
+  --terminal-font-size: 12;
+
+  /* Terminal Colors - Light */
+  --terminal-bg-light: #fcfcfc;
+  --terminal-fg-light: #1d1d1f;
+
+  /* Terminal Colors - Dark */
+  --terminal-bg-dark: #0d0d0d;
+  --terminal-fg-dark: #e8e8e8;
+}
+
+/* ==========================================================================
+   Base Reset & Setup
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-lg);
+  line-height: var(--line-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   Dark Theme (Default) - Apple Dark Mode
+   ========================================================================== */
+
+.app[data-theme="dark"] {
+  /* Backgrounds - Deep, rich blacks */
+  --bg: #000000;
+  --bg-elevated: #1d1d1f;
+  --bg-secondary: #242426;
+  --bg-tertiary: #2d2d30;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+
+  /* Surface - Layered depth with subtle elevation */
+  --surface: #1d1d1f;
+  --surface-elevated: #2c2c2e;
+  --surface-overlay: rgba(30, 30, 30, 0.95);
+  --surface-glass: rgba(0, 0, 0, 0.8);
+
+  /* Text - Apple hierarchy */
+  --text: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --text-inverse: #000000;
+
+  /* Borders - Very subtle */
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+
+  /* Accent - Apple Blue */
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.15);
+  --accent-hover: rgba(10, 132, 255, 0.25);
+
+  /* Secondary Accent */
+  --accent-2: #30d158;
+  --accent-2-soft: rgba(48, 209, 88, 0.15);
+
+  /* Semantic Colors */
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, 0.15);
+  --warning: #ffd60a;
+  --warning-soft: rgba(255, 214, 10, 0.15);
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.15);
+  --info: #64d2ff;
+  --info-soft: rgba(100, 210, 255, 0.15);
+
+  /* Interactive */
+  --interactive: var(--accent);
+  --interactive-hover: var(--accent-hover);
+
+  /* Shadows - Soft, diffuse, layered */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
+
+  /* Terminal */
+  --terminal-bg: var(--terminal-bg-dark);
+  --terminal-fg: var(--terminal-fg-dark);
+
+  /* ANSII Colors - Brighter, more vibrant */
+  --ansi-black: #8e8e93;
+  --ansi-red: #ff6961;
+  --ansi-green: #90ee90;
+  --ansi-yellow: #fdd835;
+  --ansi-blue: #64b5f6;
+  --ansi-magenta: #ce93d8;
+  --ansi-cyan: #80deea;
+  --ansi-white: #f5f5f5;
+
+  /* Scrollbar */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+
+  /* Focus */
+  --focus-ring: 0 0 0 3px rgba(10, 132, 255, 0.4);
+
+  background: var(--bg);
+}
+
+/* ==========================================================================
+   Light Theme - Apple Light Mode
+   ========================================================================== */
+
+.app[data-theme="light"] {
+  /* Backgrounds - Clean off-whites */
+  --bg: #ffffff;
+  --bg-elevated: #fbfbfd;
+  --bg-secondary: #f5f5f7;
+  --bg-tertiary: #e8e8ed;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.08);
+
+  /* Surface */
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-overlay: rgba(255, 255, 255, 0.95);
+  --surface-glass: rgba(255, 255, 255, 0.8);
+
+  /* Text */
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #a1a1a6;
+  --text-inverse: #ffffff;
+
+  /* Borders - Even more subtle */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.15);
+
+  /* Accent */
+  --accent: #007aff;
+  --accent-soft: rgba(0, 122, 255, 0.1);
+  --accent-hover: rgba(0, 122, 255, 0.2);
+
+  /* Secondary Accent */
+  --accent-2: #34c759;
+  --accent-2-soft: rgba(52, 199, 89, 0.1);
+
+  /* Semantic Colors */
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.1);
+  --warning: #ff9500;
+  --warning-soft: rgba(255, 149, 0, 0.1);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.1);
+  --info: #5ac8fa;
+  --info-soft: rgba(90, 200, 250, 0.1);
+
+  /* Interactive */
+  --interactive: var(--accent);
+  --interactive-hover: var(--accent-hover);
+
+  /* Shadows - Subtle, iOS-style */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
+
+  /* Terminal */
+  --terminal-bg: var(--terminal-bg-light);
+  --terminal-fg: var(--terminal-fg-light);
+
+  /* ANSII Colors */
+  --ansi-black: #6e6e73;
+  --ansi-red: #dc3545;
+  --ansi-green: #28a745;
+  --ansi-yellow: #ffc107;
+  --ansi-blue: #007bff;
+  --ansi-magenta: #9c27b0;
+  --ansi-cyan: #17a2b8;
+  --ansi-white: #f8f9fa;
+
+  /* Scrollbar */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+
+  /* Focus */
+  --focus-ring: 0 0 0 3px rgba(0, 122, 255, 0.3);
+
+  background: var(--bg);
+}
+
+/* ==========================================================================
+   Scrollbar Styling
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* ==========================================================================
+   Selection
+   ========================================================================== */
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Focus States
+   ========================================================================== */
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ==========================================================================
+   Transitions - Apple-like smooth motion
+   ========================================================================== */
+
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

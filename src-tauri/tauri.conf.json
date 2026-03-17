@@ -9,12 +9,6 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Agent Workbench",
-        "width": 1400,
-        "height": 900
-      }
-    ]
+    "windows": []
   }
 }
