@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { Terminal as XTerminal } from "@xterm/xterm";
@@ -296,13 +296,45 @@ const stripAnsi = (value: string) => {
   return sanitizeAnsiStream(value).replace(/\x1b\[[0-9;:]*m/g, "");
 };
 
+type XtermBaseMode = "interactive" | "readonly";
+
+type XtermBaseHandle = {
+  fit: () => void;
+  focus: () => void;
+  size: () => { cols: number; rows: number } | null;
+};
+
+type XtermBaseProps = {
+  output: string;
+  outputIdentity?: string;
+  theme: AppTheme;
+  fontSize: number;
+  mode?: XtermBaseMode;
+  className?: string;
+  sanitizeOutput?: (value: string) => string;
+  onData?: (value: string) => void;
+  onSize?: (size: { cols: number; rows: number }) => void;
+  autoFocus?: boolean;
+};
+
 type AgentStreamTerminalProps = {
+  streamId: string;
   stream: string;
   theme: AppTheme;
   fontSize: number;
 };
 
-const readAgentTerminalTheme = (source?: Element | null) => {
+type ShellTerminalProps = {
+  terminalId: string;
+  output: string;
+  theme: AppTheme;
+  fontSize: number;
+  autoFocus?: boolean;
+  onData?: (value: string) => void;
+  onSize?: (size: { cols: number; rows: number }) => void;
+};
+
+const readTerminalTheme = (source?: Element | null) => {
   if (typeof window === "undefined") {
     return { background: "black", foreground: "white" };
   }
@@ -324,11 +356,38 @@ const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => 
   if (next) term.write(next);
 };
 
-const AgentStreamTerminal = ({ stream, theme, fontSize }: AgentStreamTerminalProps) => {
+const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
+  output,
+  outputIdentity,
+  theme,
+  fontSize,
+  mode = "interactive",
+  className = "agent-pane-xterm",
+  sanitizeOutput,
+  onData,
+  onSize,
+  autoFocus = false
+}, ref) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const outputSnapshotRef = useRef("");
+  const identityRef = useRef<string | undefined>(undefined);
+  const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
+
+  const emitSize = useCallback(() => {
+    const term = termRef.current;
+    if (!term || !onSize) return;
+    const next = { cols: term.cols, rows: term.rows };
+    if (sizeRef.current?.cols === next.cols && sizeRef.current?.rows === next.rows) return;
+    sizeRef.current = next;
+    onSize(next);
+  }, [onSize]);
+
+  const fitAndReport = useCallback(() => {
+    fitRef.current?.fit();
+    emitSize();
+  }, [emitSize]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -336,11 +395,11 @@ const AgentStreamTerminal = ({ stream, theme, fontSize }: AgentStreamTerminalPro
     if (!termRef.current) {
       const term = new XTerminal({
         convertEol: true,
-        disableStdin: true,
-        cursorBlink: false,
+        disableStdin: mode === "readonly",
+        cursorBlink: mode === "interactive",
         fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
         fontSize,
-        theme: readAgentTerminalTheme(mount.closest(".app"))
+        theme: readTerminalTheme(mount.closest(".app"))
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -348,40 +407,142 @@ const AgentStreamTerminal = ({ stream, theme, fontSize }: AgentStreamTerminalPro
       termRef.current = term;
       fitRef.current = fitAddon;
       outputSnapshotRef.current = "";
+      identityRef.current = undefined;
+      sizeRef.current = null;
+      fitAndReport();
+      return;
     }
-
-    const term = termRef.current;
-    if (!term) return;
-    const normalized = sanitizeAnsiForTerminal(stream);
-    term.options = {
-      fontSize,
-      theme: readAgentTerminalTheme(mount.closest(".app"))
-    };
-    writeXtermSnapshot(term, outputSnapshotRef.current, normalized);
-    outputSnapshotRef.current = normalized;
-    requestAnimationFrame(() => fitRef.current?.fit());
-  }, [stream, fontSize, theme]);
+    fitAndReport();
+  }, [fitAndReport, fontSize, mode]);
 
   useEffect(() => {
     const mount = mountRef.current;
-    const fitAddon = fitRef.current;
-    if (!mount || !fitAddon) return;
+    const term = termRef.current;
+    if (!mount || !term) return;
+    term.options = {
+      disableStdin: mode === "readonly",
+      cursorBlink: mode === "interactive",
+      fontSize,
+      theme: readTerminalTheme(mount.closest(".app"))
+    };
+    requestAnimationFrame(() => fitAndReport());
+  }, [fitAndReport, fontSize, mode, theme]);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
     const observer = new ResizeObserver(() => {
-      fitAddon.fit();
+      fitAndReport();
     });
     observer.observe(mount);
     return () => observer.disconnect();
+  }, [fitAndReport]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    if (identityRef.current !== outputIdentity) {
+      term.reset();
+      outputSnapshotRef.current = "";
+      identityRef.current = outputIdentity;
+    }
+    const normalized = sanitizeOutput ? sanitizeOutput(output) : output;
+    writeXtermSnapshot(term, outputSnapshotRef.current, normalized);
+    outputSnapshotRef.current = normalized;
+  }, [output, outputIdentity, sanitizeOutput]);
+
+  useEffect(() => {
+    if (outputIdentity === undefined) return;
+    sizeRef.current = null;
+    emitSize();
+  }, [emitSize, outputIdentity]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || mode !== "interactive" || !onData) return;
+    const disposable = term.onData(onData);
+    return () => disposable.dispose();
+  }, [mode, onData]);
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    termRef.current?.focus();
+  }, [autoFocus, outputIdentity]);
+
+  useImperativeHandle(ref, () => ({
+    fit: fitAndReport,
+    focus: () => {
+      termRef.current?.focus();
+    },
+    size: () => {
+      const term = termRef.current;
+      if (!term) return null;
+      return { cols: term.cols, rows: term.rows };
+    }
+  }), [fitAndReport]);
+
+  useEffect(() => {
+    return () => {
+      termRef.current?.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+      outputSnapshotRef.current = "";
+      identityRef.current = undefined;
+      sizeRef.current = null;
+    };
   }, []);
 
-  useEffect(() => () => {
-    termRef.current?.dispose();
-    termRef.current = null;
-    fitRef.current = null;
-    outputSnapshotRef.current = "";
-  }, []);
+  return (
+    <div
+      ref={mountRef}
+      className={className}
+      onClick={() => {
+        if (mode === "interactive") {
+          termRef.current?.focus();
+        }
+      }}
+    />
+  );
+});
 
-  return <div ref={mountRef} className="agent-pane-xterm" />;
-};
+XtermBase.displayName = "XtermBase";
+
+const AgentStreamTerminal = ({ streamId, stream, theme, fontSize }: AgentStreamTerminalProps) => (
+  <XtermBase
+    outputIdentity={streamId}
+    output={stream}
+    theme={theme}
+    fontSize={fontSize}
+    mode="readonly"
+    sanitizeOutput={sanitizeAnsiForTerminal}
+    className="agent-pane-xterm"
+  />
+);
+
+const ShellTerminal = forwardRef<XtermBaseHandle, ShellTerminalProps>(({
+  terminalId,
+  output,
+  theme,
+  fontSize,
+  autoFocus = false,
+  onData,
+  onSize
+}, ref) => (
+  <XtermBase
+    ref={ref}
+    outputIdentity={terminalId}
+    output={output}
+    theme={theme}
+    fontSize={fontSize}
+    mode="interactive"
+    onData={onData}
+    onSize={onSize}
+    autoFocus={autoFocus}
+    className="agent-pane-xterm"
+  />
+));
+
+ShellTerminal.displayName = "ShellTerminal";
 
 const showWslOption = (() => {
   if (typeof navigator === "undefined") return false;
@@ -608,6 +769,13 @@ const findPaneSessionId = (node: SessionPaneNode, paneId: string): string | null
   return findPaneSessionId(node.first, paneId) ?? findPaneSessionId(node.second, paneId);
 };
 
+const findPaneIdBySessionId = (node: SessionPaneNode, sessionId: string): string | null => {
+  if (node.type === "leaf") {
+    return node.sessionId === sessionId ? node.id : null;
+  }
+  return findPaneIdBySessionId(node.first, sessionId) ?? findPaneIdBySessionId(node.second, sessionId);
+};
+
 const replacePaneNode = (
   node: SessionPaneNode,
   paneId: string,
@@ -652,6 +820,21 @@ const remapPaneSession = (node: SessionPaneNode, fromSessionId: string, toSessio
     ...node,
     first: remapPaneSession(node.first, fromSessionId, toSessionId),
     second: remapPaneSession(node.second, fromSessionId, toSessionId)
+  };
+};
+
+const updateSplitRatio = (node: SessionPaneNode, splitId: string, ratio: number): SessionPaneNode => {
+  if (node.type === "leaf") return node;
+  if (node.id === splitId) {
+    return {
+      ...node,
+      ratio
+    };
+  }
+  return {
+    ...node,
+    first: updateSplitRatio(node.first, splitId, ratio),
+    second: updateSplitRatio(node.second, splitId, ratio)
   };
 };
 
@@ -759,7 +942,7 @@ export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => readCurrentRoute());
   const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
   const [queueInput, setQueueInput] = useState("");
-  const [paneInputs, setPaneInputs] = useState<Record<string, string>>({});
+  const [agentInput, setAgentInput] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [worktreeModal, setWorktreeModal] = useState<WorktreeModalState | null>(null);
@@ -778,13 +961,9 @@ export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
-  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
-  const terminalMountRef = useRef<HTMLDivElement | null>(null);
-  const xtermRef = useRef<XTerminal | null>(null);
-  const xtermFitRef = useRef<FitAddon | null>(null);
-  const terminalOutputRef = useRef<{ id?: string; snapshot: string }>({ snapshot: "" });
+  const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
-  const paneInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const agentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const t = useMemo(() => createTranslator(locale), [locale]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
@@ -799,33 +978,19 @@ export default function App() {
     };
   }, [theme]);
 
-  const readTerminalTheme = () => {
-    if (typeof window === "undefined") {
-      return { background: "black", foreground: "white" };
-    }
-    const source = appRef.current ?? document.documentElement;
-    const styles = window.getComputedStyle(source);
-    const rootStyles = window.getComputedStyle(document.documentElement);
-    const background = styles.getPropertyValue("--terminal-bg").trim();
-    const foreground = styles.getPropertyValue("--terminal-fg").trim();
-    return {
-      background: background || rootStyles.getPropertyValue("--terminal-bg").trim() || "black",
-      foreground: foreground || rootStyles.getPropertyValue("--terminal-fg").trim() || "white"
-    };
-  };
-
-  const syncTerminalSize = (term: XTerminal, terminalId = activeTerminal?.id) => {
-    if (!isTauri || !activeTab.id || !terminalId) return;
-    const numericId = Number(terminalId.replace("term-", ""));
+  const syncTerminalSize = (cols: number, rows: number, terminalId?: string) => {
+    const resolvedTerminalId = terminalId ?? activeTerminal?.id;
+    if (!isTauri || !activeTab.id || !resolvedTerminalId) return;
+    const numericId = Number(resolvedTerminalId.replace("term-", ""));
     if (!Number.isFinite(numericId)) return;
     const last = terminalSizeRef.current;
-    if (last.id === terminalId && last.cols === term.cols && last.rows === term.rows) return;
-    terminalSizeRef.current = { id: terminalId, cols: term.cols, rows: term.rows };
+    if (last.id === resolvedTerminalId && last.cols === cols && last.rows === rows) return;
+    terminalSizeRef.current = { id: resolvedTerminalId, cols, rows };
     void invoke("terminal_resize", {
       tabId: activeTab.id,
       terminalId: numericId,
-      cols: term.cols,
-      rows: term.rows
+      cols,
+      rows
     });
   };
 
@@ -1143,7 +1308,10 @@ export default function App() {
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
   );
-  const paneLeaves = useMemo(() => collectPaneLeaves(activeTab.paneLayout), [activeTab.paneLayout]);
+  const activeTabSessionIdsKey = useMemo(
+    () => activeTab.sessions.map((session) => session.id).join("|"),
+    [activeTab.sessions]
+  );
 
   const displayWorkspaceTitle = (value: string) => localizeWorkspaceTitle(value, locale);
   const displaySessionTitle = (value: string) => localizeSessionTitle(value, locale);
@@ -1157,6 +1325,38 @@ export default function App() {
   const isArchiveView = Boolean(archivedEntry);
   const queueSession = isArchiveView ? sessionForView : activeSession;
   const queuePlainStream = stripAnsi(queueSession.stream);
+
+  useEffect(() => {
+    updateTab(activeTab.id, (tab) => {
+      const leaves = collectPaneLeaves(tab.paneLayout);
+      const covered = new Set(leaves.map((leaf) => leaf.sessionId));
+      const missingSessions = tab.sessions.filter((session) => !covered.has(session.id));
+      if (missingSessions.length === 0) return tab;
+
+      let nextLayout = tab.paneLayout;
+      missingSessions.forEach((session) => {
+        const nextLeaf = createPaneLeaf(session.id);
+        nextLayout = {
+          type: "split",
+          id: createId("split"),
+          axis: "vertical",
+          ratio: 0.5,
+          first: nextLayout,
+          second: nextLeaf
+        };
+      });
+
+      const nextActivePaneId = findPaneIdBySessionId(nextLayout, tab.activeSessionId)
+        ?? collectPaneLeaves(nextLayout)[0]?.id
+        ?? tab.activePaneId;
+
+      return {
+        ...tab,
+        paneLayout: nextLayout,
+        activePaneId: nextActivePaneId
+      };
+    });
+  }, [activeTab.id, activeTabSessionIdsKey]);
 
   const addToast = (toast: Toast) => {
     setToasts((prev) => [...prev, toast]);
@@ -1713,18 +1913,22 @@ export default function App() {
     const mode: SessionMode = "branch";
     updateTab(currentTab.id, (tab) => {
       const newSession = createDraftSessionForTab(tab, mode);
-      const updatedSessions: Session[] = tab.sessions
-        .filter((s) => !isDraftSession(s))
-        .map((s) =>
+      const nextLeaf = createPaneLeaf(newSession.id);
+      const updatedSessions: Session[] = tab.sessions.map((s) =>
         s.id === tab.activeSessionId ? { ...s, status: toBackgroundStatus(s.status) } : s
       );
       return {
         ...tab,
         sessions: [newSession, ...updatedSessions],
         activeSessionId: newSession.id,
+        activePaneId: nextLeaf.id,
         paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
-          ...leaf,
-          sessionId: newSession.id
+          type: "split",
+          id: createId("split"),
+          axis: "vertical",
+          ratio: 0.5,
+          first: leaf,
+          second: nextLeaf
         })),
         viewingArchiveId: undefined
       };
@@ -1741,13 +1945,12 @@ export default function App() {
     const previousActiveId = activeTab.activeSessionId;
     const previousSession = activeTab.sessions.find((session) => session.id === previousActiveId);
     const nextSession = activeTab.sessions.find((session) => session.id === sessionId);
+    const targetPaneId = findPaneIdBySessionId(activeTab.paneLayout, sessionId);
+    if (!targetPaneId || !nextSession) return;
     updateTab(activeTab.id, (tab) => ({
       ...tab,
       activeSessionId: sessionId,
-      paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
-        ...leaf,
-        sessionId
-      })),
+      activePaneId: targetPaneId,
       sessions: tab.sessions
         .filter((s) => !(previousActiveId !== sessionId && s.id === previousActiveId && isDraftSession(s)))
         .map((s) => {
@@ -1775,12 +1978,64 @@ export default function App() {
         void syncSessionPatch(activeTab.id, previousActiveId, { status: "background" });
       }
     }
-    if (nextSession) {
-      const nextStatus = restoreVisibleStatus(nextSession);
-      void syncSessionPatch(activeTab.id, sessionId, {
-        status: nextStatus,
-        last_active_at: nextActiveAt
-      });
+    const nextStatus = restoreVisibleStatus(nextSession);
+    void syncSessionPatch(activeTab.id, sessionId, {
+      status: nextStatus,
+      last_active_at: nextActiveAt
+    });
+  };
+
+  const onCloseAgentPane = async (paneId: string, sessionId: string) => {
+    const session = activeTab.sessions.find((item) => item.id === sessionId);
+    if (!session) return;
+    const nextActiveAt = Date.now();
+    let nextActiveSessionId: string | null = null;
+
+    updateTab(activeTab.id, (tab) => {
+      const sessionExists = tab.sessions.some((item) => item.id === sessionId);
+      if (!sessionExists) return tab;
+      const canRemovePane = collectPaneLeaves(tab.paneLayout).length > 1;
+      const remainingSessions = tab.sessions.filter((item) => item.id !== sessionId);
+      const hasRemaining = remainingSessions.length > 0;
+      const fallbackSession = hasRemaining ? null : createDraftSessionForTab(tab, "branch");
+      const sessions = hasRemaining ? remainingSessions : [fallbackSession!];
+      const nextSessionId = sessions[0]?.id ?? sessionId;
+
+      let nextLayout = canRemovePane ? (removePaneNode(tab.paneLayout, paneId) ?? tab.paneLayout) : tab.paneLayout;
+      nextLayout = remapPaneSession(nextLayout, sessionId, nextSessionId);
+      const leaves = collectPaneLeaves(nextLayout);
+      const nextPaneId = tab.activePaneId === paneId
+        ? (leaves[0]?.id ?? tab.activePaneId)
+        : tab.activePaneId;
+      const nextActiveId = findPaneSessionId(nextLayout, nextPaneId) ?? nextSessionId;
+      nextActiveSessionId = nextActiveId;
+
+      return {
+        ...tab,
+        sessions: sessions.map((item) =>
+          item.id === nextActiveId
+            ? { ...item, unread: 0, status: restoreVisibleStatus(item), lastActiveAt: nextActiveAt }
+            : item
+        ),
+        paneLayout: nextLayout,
+        activePaneId: nextPaneId,
+        activeSessionId: nextActiveId,
+        viewingArchiveId: undefined
+      };
+    });
+
+    if (nextActiveSessionId) {
+      const backendSessionId = parseNumericId(nextActiveSessionId);
+      if (isTauri && backendSessionId !== null) {
+        void safeInvoke("switch_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
+      }
+    }
+
+    if (!isDraftSession(session)) {
+      const backendSessionId = parseNumericId(session.id);
+      if (isTauri && backendSessionId !== null) {
+        void safeInvoke("archive_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
+      }
     }
   };
 
@@ -2477,10 +2732,11 @@ export default function App() {
   const onResizeStart = (type: "left" | "right" | "right-split") => (event: React.PointerEvent) => {
     event.preventDefault();
     const startX = event.clientX;
+    const startY = event.clientY;
     const { leftWidth, rightWidth, rightSplit } = stateRef.current.layout;
-    const splitContainerWidth = type === "right-split"
+    const splitContainerHeight = type === "right-split"
       ? event.currentTarget instanceof HTMLElement
-        ? event.currentTarget.parentElement?.getBoundingClientRect().width ?? 1
+        ? event.currentTarget.parentElement?.getBoundingClientRect().height ?? 1
         : 1
       : 1;
 
@@ -2494,8 +2750,8 @@ export default function App() {
         updateState((current) => ({ ...current, layout: { ...current.layout, rightWidth: next } }));
       }
       if (type === "right-split") {
-        const delta = e.clientX - startX;
-        const next = Math.max(0, Math.min(100, rightSplit + (delta / splitContainerWidth) * 100));
+        const delta = e.clientY - startY;
+        const next = Math.max(15, Math.min(85, rightSplit + (delta / splitContainerHeight) * 100));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightSplit: next } }));
       }
     };
@@ -2504,7 +2760,7 @@ export default function App() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       requestAnimationFrame(() => {
-        xtermFitRef.current?.fit();
+        shellTerminalRef.current?.fit();
       });
     };
 
@@ -2522,7 +2778,7 @@ export default function App() {
       }
     }));
     requestAnimationFrame(() => {
-      xtermFitRef.current?.fit();
+      shellTerminalRef.current?.fit();
     });
   };
 
@@ -2531,13 +2787,9 @@ export default function App() {
   const showTerminalPanel = state.layout.showTerminalPanel;
   const isRightPanelVisible = showCodePanel || showTerminalPanel;
 
-  const setPaneInputValue = (paneId: string, value: string) => {
-    setPaneInputs((current) => ({ ...current, [paneId]: value }));
-  };
-
-  const focusPaneInput = (paneId: string) => {
+  const focusAgentInput = () => {
     requestAnimationFrame(() => {
-      const input = paneInputRefs.current[paneId];
+      const input = agentInputRef.current;
       input?.focus();
       const length = input?.value.length ?? 0;
       input?.setSelectionRange(length, length);
@@ -2567,14 +2819,10 @@ export default function App() {
     }));
   };
 
-  const splitPane = async (paneId: string, axis: "horizontal" | "vertical") => {
-    let newSessionId = "";
-    let newPaneId = "";
+  const splitPane = (paneId: string, axis: "horizontal" | "vertical") => {
     updateTab(activeTab.id, (tab) => {
       const newSession = createDraftSessionForTab(tab, "branch");
       const nextLeaf = createPaneLeaf(newSession.id);
-      newSessionId = newSession.id;
-      newPaneId = nextLeaf.id;
       return {
         ...tab,
         sessions: [newSession, ...tab.sessions.filter((session) => session.id !== newSession.id)],
@@ -2590,35 +2838,45 @@ export default function App() {
         }))
       };
     });
-    focusPaneInput(newPaneId || newSessionId);
+    focusAgentInput();
   };
 
-  const closePane = (paneId: string) => {
-    if (paneLeaves.length <= 1) return;
-    updateTab(activeTab.id, (tab) => {
-      const nextLayout = removePaneNode(tab.paneLayout, paneId) ?? tab.paneLayout;
-      const nextLeaves = collectPaneLeaves(nextLayout);
-      const nextPane = nextLeaves.find((leaf) => leaf.id !== paneId) ?? nextLeaves[0];
-      if (!nextPane) return tab;
-      return {
+  const onPaneSplitResizeStart = (splitId: string, axis: "horizontal" | "vertical") => (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const initialRatio = activeTab.paneLayout;
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    const readCurrentRatio = (node: SessionPaneNode): number | null => {
+      if (node.type === "leaf") return null;
+      if (node.id === splitId) return node.ratio;
+      return readCurrentRatio(node.first) ?? readCurrentRatio(node.second);
+    };
+
+    const baseRatio = readCurrentRatio(initialRatio) ?? 0.5;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const delta = axis === "vertical"
+        ? (moveEvent.clientX - startX) / Math.max(rect.width, 1)
+        : (moveEvent.clientY - startY) / Math.max(rect.height, 1);
+      const nextRatio = Math.max(0.15, Math.min(0.85, baseRatio + delta));
+      updateTab(activeTab.id, (tab) => ({
         ...tab,
-        paneLayout: nextLayout,
-        activePaneId: nextPane.id,
-        activeSessionId: nextPane.sessionId
-      };
-    });
-  };
+        paneLayout: updateSplitRatio(tab.paneLayout, splitId, nextRatio)
+      }));
+    };
 
-  useEffect(() => {
-    const shellTerm = xtermRef.current;
-    if (shellTerm) {
-      shellTerm.options.theme = readTerminalTheme();
-      shellTerm.options.fontSize = editorMetrics.terminalFontSize;
-      if (shellTerm.rows > 0) {
-        shellTerm.refresh(0, shellTerm.rows - 1);
-      }
-    }
-  }, [editorMetrics.terminalFontSize, theme]);
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const onToggleSlashMenu = async (paneId: string) => {
     const nextOpen = !(slashMenuOpen && slashMenuPaneId === paneId);
@@ -2629,19 +2887,16 @@ export default function App() {
     }
   };
 
-  const onSelectSlashMenuItem = (paneId: string, item: ClaudeSlashMenuItem) => {
-    setPaneInputs((current) => ({
-      ...current,
-      [paneId]: replaceLeadingSlashToken(current[paneId] ?? "", item.command)
-    }));
+  const onSelectSlashMenuItem = (item: ClaudeSlashMenuItem) => {
+    setAgentInput((current) => replaceLeadingSlashToken(current, item.command));
     setSlashMenuOpen(false);
     setSlashMenuPaneId(null);
-    focusPaneInput(paneId);
+    focusAgentInput();
   };
 
   const onSendAgent = async (paneId: string) => {
     const paneSessionId = findPaneSessionId(activeTab.paneLayout, paneId) ?? activePaneSession.id;
-    const content = (paneInputs[paneId] ?? "").trim();
+    const content = agentInput.trim();
     if (!content || isArchiveView) return;
     const activeTabSnapshot = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeTabId);
     const activeSessionSnapshot = activeTabSnapshot?.sessions.find((s) => s.id === paneSessionId);
@@ -2671,8 +2926,8 @@ export default function App() {
         )
       }));
     }
-    setPaneInputValue(paneId, "");
-    focusPaneInput(paneId);
+    setAgentInput("");
+    focusAgentInput();
     touchSession(tabSnapshot.id, sessionSnapshot.id);
 
     if (isTauri) {
@@ -2700,11 +2955,12 @@ export default function App() {
     if (!tabSnapshot || !sessionSnapshot) return;
     if (isDraftSession(sessionSnapshot)) return;
     await sendRawAgentInput(tabSnapshot, sessionSnapshot, sequence);
-    focusPaneInput(paneId);
+    focusAgentInput();
   };
 
-  const onAgentInputKeyDown = (paneId: string) => (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const currentInput = paneInputs[paneId] ?? "";
+  const onAgentInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const currentInput = agentInput;
+    const activePaneId = activeTab.activePaneId;
     if (event.key === "Enter" && event.shiftKey) {
       return;
     }
@@ -2712,9 +2968,9 @@ export default function App() {
     if (event.key === "Enter") {
       event.preventDefault();
       if (currentInput.trim()) {
-        void onSendAgent(paneId);
+        void onSendAgent(activePaneId);
       } else {
-        void onSendSpecialAgentKey(paneId, "\r");
+        void onSendSpecialAgentKey(activePaneId, "\r");
       }
       return;
     }
@@ -2725,7 +2981,7 @@ export default function App() {
     if (currentInput.trim()) return;
 
     event.preventDefault();
-    void onSendSpecialAgentKey(paneId, sequence);
+    void onSendSpecialAgentKey(activePaneId, sequence);
   };
 
   useEffect(() => {
@@ -2734,15 +2990,30 @@ export default function App() {
         if (!activeTab.filePreview.path) return;
         event.preventDefault();
         void onSavePreview();
+        return;
       }
+
+      if (route !== "workspace" || isArchiveView) return;
+      const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
+      const isSplitShortcut = isMacPlatform
+        ? event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "d"
+        : event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "d";
+      if (!isSplitShortcut) return;
+      if (event.repeat) return;
+      event.preventDefault();
+      const splitAxis: "horizontal" | "vertical" = event.shiftKey ? "horizontal" : "vertical";
+      splitPane(activeTab.activePaneId, splitAxis);
+      focusAgentInput();
+      setSlashMenuOpen(false);
+      setSlashMenuPaneId(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTab.filePreview.path, activeTab.filePreview.dirty, activeTab.filePreview.content, activeSession.id]);
+  }, [activeTab.activePaneId, activeTab.filePreview.path, activeTab.filePreview.dirty, activeTab.filePreview.content, activeSession.id, isArchiveView, route]);
 
   useEffect(() => {
     if (!isArchiveView) {
-      focusPaneInput(activeTab.activePaneId);
+      focusAgentInput();
     }
   }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
 
@@ -2751,6 +3022,7 @@ export default function App() {
     setSelectedGitChangeKey("");
     setSlashMenuOpen(false);
     setSlashMenuPaneId(null);
+    setAgentInput("");
   }, [activeTab.id]);
 
   useEffect(() => {
@@ -2768,122 +3040,38 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [activeTab.id, activeTab.project?.path]);
 
+  const onShellTerminalSize = useCallback((size: { cols: number; rows: number }) => {
+    syncTerminalSize(size.cols, size.rows, activeTerminal?.id);
+  }, [activeTerminal?.id, activeTab.id]);
+
+  const onShellTerminalData = useCallback((data: string) => {
+    if (!isTauri || !activeTerminal) return;
+    const numericId = Number(activeTerminal.id.replace("term-", ""));
+    if (!Number.isFinite(numericId)) return;
+    void invoke("terminal_write", {
+      tabId: activeTab.id,
+      terminalId: numericId,
+      input: data
+    });
+  }, [activeTerminal?.id, activeTab.id]);
+
   useEffect(() => {
-    const container = terminalContainerRef.current;
-    if (!container || !showTerminalPanel || !isRightPanelVisible) return;
-
-    if (!xtermRef.current || terminalMountRef.current !== container) {
-      xtermRef.current?.dispose();
-      const term = new XTerminal({
-        convertEol: true,
-        fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
-        fontSize: editorMetrics.terminalFontSize,
-        theme: readTerminalTheme()
-      });
-      const fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      xtermRef.current = term;
-      xtermFitRef.current = fitAddon;
-      terminalMountRef.current = container;
-      term.open(container);
-      terminalOutputRef.current = { id: activeTerminal?.id, snapshot: "" };
-      if (activeTerminal?.output) {
-        term.write(activeTerminal.output);
-        terminalOutputRef.current.snapshot = activeTerminal.output;
-      }
-      fitAddon.fit();
-      syncTerminalSize(term, activeTerminal?.id);
-      return;
-    }
-
-    xtermRef.current.options = {
-      fontSize: editorMetrics.terminalFontSize,
-      theme: readTerminalTheme()
-    };
+    if (!showTerminalPanel || !isRightPanelVisible) return;
     requestAnimationFrame(() => {
-      xtermFitRef.current?.fit();
-      const term = xtermRef.current;
-      if (term) syncTerminalSize(term, activeTerminal?.id);
+      shellTerminalRef.current?.fit();
     });
-  }, [showTerminalPanel, isRightPanelVisible, activeTab.id, activeTerminal?.id, editorMetrics.terminalFontSize, theme]);
+  }, [showTerminalPanel, isRightPanelVisible, state.layout.rightWidth, state.layout.rightSplit]);
 
   useEffect(() => {
-    const container = terminalContainerRef.current;
-    const fit = xtermFitRef.current;
-    if (!container || !fit || !showTerminalPanel || !isRightPanelVisible) return;
-    const observer = new ResizeObserver(() => {
-      fit.fit();
-      const term = xtermRef.current;
-      if (term) syncTerminalSize(term, activeTerminal?.id);
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [showTerminalPanel, isRightPanelVisible, activeTab.id, activeTerminal?.id]);
-
-  useEffect(() => {
-    const onResize = () => {
-      if (!showTerminalPanel || !isRightPanelVisible) return;
-      xtermFitRef.current?.fit();
-      const term = xtermRef.current;
-      if (term) syncTerminalSize(term, activeTerminal?.id);
-    };
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-    };
-  }, [activeTab.id, activeTerminal?.id, isRightPanelVisible, showTerminalPanel]);
-
-  useEffect(() => {
-    const term = xtermRef.current;
-    if (!term) return;
-    if (!activeTerminal) {
-      term.reset();
-      terminalOutputRef.current = { id: undefined, snapshot: "" };
-      terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
-      return;
-    }
-    const output = activeTerminal.output ?? "";
-    if (terminalOutputRef.current.id !== activeTerminal.id) {
-      term.reset();
-      terminalOutputRef.current = { id: activeTerminal.id, snapshot: "" };
-      terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
-    }
-    writeXtermSnapshot(term, terminalOutputRef.current.snapshot, output);
-    terminalOutputRef.current.snapshot = output;
-  }, [activeTab.id, activeTerminal?.id, activeTerminal?.output]);
-
-  useEffect(() => () => {
-    xtermRef.current?.dispose();
-    xtermRef.current = null;
-    xtermFitRef.current = null;
-    terminalMountRef.current = null;
-    terminalOutputRef.current = { id: undefined, snapshot: "" };
-    terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
-  }, []);
-
-  useEffect(() => {
-    if (xtermRef.current && activeTerminal) {
-      xtermRef.current.focus();
+    if (activeTerminal && showTerminalPanel && isRightPanelVisible) {
+      shellTerminalRef.current?.focus();
     }
   }, [activeTerminal?.id, showTerminalPanel, isRightPanelVisible]);
 
   useEffect(() => {
-    const term = xtermRef.current;
-    if (!term || !activeTerminal || !showTerminalPanel || !isRightPanelVisible) return;
-    const disposable = term.onData((data) => {
-      if (!isTauri) return;
-      const numericId = Number(activeTerminal.id.replace("term-", ""));
-      if (!Number.isFinite(numericId)) return;
-      void invoke("terminal_write", {
-        tabId: activeTab.id,
-        terminalId: numericId,
-        input: data
-      });
-    });
-    return () => {
-      disposable.dispose();
-    };
-  }, [activeTerminal?.id, activeTab.id, showTerminalPanel, isRightPanelVisible]);
+    if (activeTerminal) return;
+    terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
+  }, [activeTerminal?.id]);
   const layoutStyle = {
     ["--left-w" as string]: `${state.layout.leftWidth}px`,
     ["--right-w" as string]: `${state.layout.rightWidth}px`,
@@ -3069,9 +3257,9 @@ export default function App() {
     if (node.type === "split") {
       return (
         <div key={node.id} className={`agent-split-pane ${node.axis}`}>
-          <div className="agent-split-child">{renderAgentPane(node.first)}</div>
-          <div className={`agent-split-divider ${node.axis}`} />
-          <div className="agent-split-child">{renderAgentPane(node.second)}</div>
+          <div className="agent-split-child" style={{ flex: `${node.ratio} 1 0%` }}>{renderAgentPane(node.first)}</div>
+          <div className={`agent-split-divider ${node.axis}`} onPointerDown={onPaneSplitResizeStart(node.id, node.axis)} />
+          <div className="agent-split-child" style={{ flex: `${1 - node.ratio} 1 0%` }}>{renderAgentPane(node.second)}</div>
         </div>
       );
     }
@@ -3108,93 +3296,17 @@ export default function App() {
             <span className="agent-pane-status">{sessionStatusLabel(session.status, t)}</span>
           </div>
           <div className="agent-pane-actions">
-            <button type="button" className="pane-action" onClick={() => void splitPane(node.id, "horizontal")} title={locale === "zh" ? "横向拆分" : "Split rows"}>▤</button>
-            <button type="button" className="pane-action" onClick={() => void splitPane(node.id, "vertical")} title={locale === "zh" ? "纵向拆分" : "Split columns"}>▥</button>
-            <button type="button" className="pane-action close" onClick={() => closePane(node.id)} title={t("close")} disabled={paneLeaves.length <= 1}>
+            <button type="button" className="pane-action close" onClick={() => void onCloseAgentPane(node.id, session.id)} title={t("close")}>
               <HeaderCloseIcon />
             </button>
           </div>
         </div>
         <div className="agent-pane-body" data-testid={`agent-pane-${node.id}`}>
           {plainStream.trim() ? (
-            <AgentStreamTerminal stream={session.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
+            <AgentStreamTerminal streamId={session.id} stream={session.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
           ) : (
             <div className="terminal-empty">{isDraftSession(session) ? t("draftSessionPrompt") : t("noTaskInProgress")}</div>
           )}
-        </div>
-        <div className="agent-pane-input">
-          <div className="agent-compose" ref={isPaneActive ? slashMenuRef : undefined}>
-            <button
-              type="button"
-              className={`agent-plus-button ${slashMenuOpen && slashMenuPaneId === node.id ? "active" : ""}`}
-              onClick={() => void onToggleSlashMenu(node.id)}
-              aria-label={t("slashMenu")}
-              title={t("slashMenu")}
-            >
-              <AgentPlusIcon />
-            </button>
-            {slashMenuOpen && slashMenuPaneId === node.id && (
-              <div className="agent-slash-menu" data-testid="agent-slash-menu">
-                <div className="agent-slash-menu-head">
-                  <span>{t("slashMenu")}</span>
-                  {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
-                </div>
-                <div className="agent-slash-menu-body">
-                  {slashMenuSections.map((section) => (
-                    <div key={section.id} className="agent-slash-group">
-                      <div className="agent-slash-group-title">{section.label}</div>
-                      <div className="agent-slash-group-items">
-                        {section.items.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className="agent-slash-item"
-                            onClick={() => onSelectSlashMenuItem(node.id, item)}
-                          >
-                            <span className="agent-slash-item-copy">
-                              <span className="agent-slash-item-command">{item.command}</span>
-                              <span className="agent-slash-item-description">{item.description}</span>
-                            </span>
-                            {item.sourceKind && (
-                              <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {!slashMenuLoading && slashMenuSections.length === 0 && (
-                    <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
-                  )}
-                </div>
-              </div>
-            )}
-            <textarea
-              ref={(element) => {
-                paneInputRefs.current[node.id] = element;
-              }}
-              className="agent-compose-field"
-              value={paneInputs[node.id] ?? ""}
-              onChange={(event) => setPaneInputValue(node.id, event.target.value)}
-              placeholder={t("agentInputPlaceholder")}
-              disabled={isArchiveView}
-              data-testid={`agent-input-${node.id}`}
-              onKeyDown={onAgentInputKeyDown(node.id)}
-              rows={3}
-            />
-            <div className="agent-input-actions compact">
-              <button
-                className="agent-send-button"
-                onClick={() => void onSendAgent(node.id)}
-                disabled={isArchiveView}
-                data-testid={`agent-send-${node.id}`}
-                title={t("send")}
-                aria-label={t("send")}
-              >
-                <AgentSendIcon />
-              </button>
-            </div>
-          </div>
         </div>
       </section>
     );
@@ -3553,11 +3665,9 @@ export default function App() {
                 <div className="section grow queue-card compact">
                   <div className="session-stack-list">
                     {activeTab.sessions.map((item) => (
-                      <button
+                      <div
                         key={item.id}
-                        type="button"
-                        className={`session-stack-item ${item.id === activeTab.activeSessionId ? "active" : ""}`}
-                        onClick={() => onSwitchSession(item.id)}
+                        className={`session-stack-item readonly ${item.id === activeTab.activeSessionId ? "active" : ""}`}
                       >
                         <span className={`session-top-dot ${sessionTone(item.status)} ${sessionTone(item.status) === "active" ? "pulse" : ""}`} />
                         <span className="session-stack-copy">
@@ -3565,7 +3675,7 @@ export default function App() {
                           <span className="session-stack-meta">{sessionStatusLabel(item.status, t)}</span>
                         </span>
                         {item.unread > 0 && <span className="session-top-unread">{item.unread > 9 ? "9+" : item.unread}</span>}
-                      </button>
+                      </div>
                     ))}
                   </div>
                   <div className="section-head">
@@ -3810,7 +3920,7 @@ export default function App() {
                       </div>
                       <div className="agent-pane-body">
                         {queuePlainStream.trim() ? (
-                          <AgentStreamTerminal stream={queueSession.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
+                          <AgentStreamTerminal streamId={queueSession.id} stream={queueSession.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
                         ) : (
                           <div className="terminal-empty">{t("archiveViewReadonly")}</div>
                         )}
@@ -3819,6 +3929,78 @@ export default function App() {
                   ) : (
                     renderAgentPane(activeTab.paneLayout)
                   )}
+                </div>
+                <div className="agent-pane-input shared">
+                  <div className="agent-compose" ref={slashMenuRef}>
+                    <button
+                      type="button"
+                      className={`agent-plus-button ${slashMenuOpen ? "active" : ""}`}
+                      onClick={() => void onToggleSlashMenu(activeTab.activePaneId)}
+                      aria-label={t("slashMenu")}
+                      title={t("slashMenu")}
+                    >
+                      <AgentPlusIcon />
+                    </button>
+                    {slashMenuOpen && slashMenuPaneId === activeTab.activePaneId && (
+                      <div className="agent-slash-menu" data-testid="agent-slash-menu">
+                        <div className="agent-slash-menu-head">
+                          <span>{t("slashMenu")}</span>
+                          {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
+                        </div>
+                        <div className="agent-slash-menu-body">
+                          {slashMenuSections.map((section) => (
+                            <div key={section.id} className="agent-slash-group">
+                              <div className="agent-slash-group-title">{section.label}</div>
+                              <div className="agent-slash-group-items">
+                                {section.items.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    className="agent-slash-item"
+                                    onClick={() => onSelectSlashMenuItem(item)}
+                                  >
+                                    <span className="agent-slash-item-copy">
+                                      <span className="agent-slash-item-command">{item.command}</span>
+                                      <span className="agent-slash-item-description">{item.description}</span>
+                                    </span>
+                                    {item.sourceKind && (
+                                      <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {!slashMenuLoading && slashMenuSections.length === 0 && (
+                            <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <textarea
+                      ref={agentInputRef}
+                      className="agent-compose-field"
+                      value={agentInput}
+                      onChange={(event) => setAgentInput(event.target.value)}
+                      placeholder={t("agentInputPlaceholder")}
+                      disabled={isArchiveView}
+                      data-testid="agent-input-shared"
+                      onKeyDown={onAgentInputKeyDown}
+                      rows={3}
+                    />
+                    <div className="agent-input-actions compact">
+                      <button
+                        className="agent-send-button"
+                        onClick={() => void onSendAgent(activeTab.activePaneId)}
+                        disabled={isArchiveView}
+                        data-testid="agent-send-shared"
+                        title={t("send")}
+                        aria-label={t("send")}
+                      >
+                        <AgentSendIcon />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -3830,7 +4012,10 @@ export default function App() {
                 <section className={`panel right workspace-right-panel ${rightPanelModeClass}`}>
                   <div className={`panel-inner workspace-right-grid ${rightPanelModeClass}`}>
                     {showCodePanel && (
-                      <div className="workspace-right-pane inspector-card file-preview">
+                      <div
+                        className="workspace-right-pane inspector-card file-preview"
+                        style={showTerminalPanel ? { flex: `0 0 ${state.layout.rightSplit}%` } : undefined}
+                      >
                         <div className={`surface-progress ${fileProgressTone}`} aria-hidden="true">
                           <span className="surface-progress-bar" style={{ width: `${fileProgressPercent}%` }} />
                         </div>
@@ -3929,14 +4114,17 @@ export default function App() {
 
                     {showCodePanel && showTerminalPanel && (
                       <div
-                        className="v-resizer workspace-right-splitter"
+                        className="h-resizer workspace-right-splitter"
                         data-resize="right-split"
                         onPointerDown={onResizeStart("right-split")}
                       />
                     )}
 
                     {showTerminalPanel && (
-                      <div className="workspace-right-pane inspector-card terminal-card">
+                      <div
+                        className="workspace-right-pane inspector-card terminal-card"
+                        style={showCodePanel ? { flex: "1 1 0%" } : undefined}
+                      >
                         <div className={`surface-progress ${terminalProgressTone}`} aria-hidden="true">
                           <span className="surface-progress-bar" style={{ width: `${terminalProgressPercent}%` }} />
                         </div>
@@ -3945,7 +4133,10 @@ export default function App() {
                             <div className="section-kicker">{t("shellDock")}</div>
                             <h3>{t("projectTerminal")}</h3>
                           </div>
-                          <button className="btn tiny" onClick={() => void onAddTerminal()}>{t("new")}</button>
+                          <div className="section-actions">
+                            <button className="btn tiny ghost" onClick={() => activeTerminal && void onCloseTerminal(activeTerminal.id)} disabled={!activeTerminal}>{t("close")}</button>
+                            <button className="btn tiny" onClick={() => void onAddTerminal()}>{t("new")}</button>
+                          </div>
                         </div>
                         <div className="terminal-tabs">
                           {activeTab.terminals.map((term) => (
@@ -3970,12 +4161,19 @@ export default function App() {
                             </div>
                           ))}
                         </div>
-                        <div
-                          className="terminal-output"
-                          ref={terminalContainerRef}
-                          onClick={() => xtermRef.current?.focus()}
-                        >
-                          {!activeTerminal && (
+                        <div className="terminal-output">
+                          {activeTerminal ? (
+                            <ShellTerminal
+                              ref={shellTerminalRef}
+                              terminalId={activeTerminal.id}
+                              output={activeTerminal.output ?? ""}
+                              theme={theme}
+                              fontSize={editorMetrics.terminalFontSize}
+                              onData={onShellTerminalData}
+                              onSize={onShellTerminalSize}
+                              autoFocus={showTerminalPanel && isRightPanelVisible}
+                            />
+                          ) : (
                             <div className="terminal-empty">{t("noTerminalYet")}</div>
                           )}
                         </div>
