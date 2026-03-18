@@ -53,6 +53,7 @@ import {
   HeaderBackIcon,
   HeaderCloseIcon,
   HeaderSettingsIcon,
+  RefreshIcon,
   SettingsAppearanceIcon,
   SettingsArchiveIcon,
   SettingsConfigIcon,
@@ -2564,6 +2565,18 @@ export default function App() {
   const onFileSelect = async (node: TreeNode) => {
     if (node.kind !== "file") return;
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const segments = node.path.split(/[\\/]+/).filter(Boolean);
+    if (segments.length > 1) {
+      setRepoCollapsedPaths((current) => {
+        const next = new Set(current);
+        let prefix = "";
+        for (const segment of segments.slice(0, -1)) {
+          prefix = prefix ? `${prefix}/${segment}` : segment;
+          next.add(prefix);
+        }
+        return next;
+      });
+    }
     const path = resolvePath(currentTab.project?.path, node.path);
     const preview = await safeInvoke<FilePreview>("file_preview", { path }, {
       path: node.path,
@@ -2591,10 +2604,40 @@ export default function App() {
     setPreviewMode("preview");
   };
 
+  const openPreviewPath = async (path: string, options?: { clearGitSelection?: boolean; statusLabel?: string; parentPath?: string }) => {
+    const preview = await safeInvoke<FilePreview>("file_preview", { path }, {
+      path,
+      content: t("previewUnavailable"),
+      mode: "preview"
+    });
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      filePreview: {
+        ...tab.filePreview,
+        path: preview.path || path,
+        content: preview.content || t("previewUnavailable"),
+        mode: "preview",
+        originalContent: "",
+        modifiedContent: "",
+        dirty: false,
+        source: "tree",
+        statusLabel: options?.statusLabel ?? tab.filePreview.statusLabel,
+        parentPath: options?.parentPath ?? fileParentLabel(preview.path || path),
+        section: undefined,
+        diff: undefined
+      }
+    }));
+    if (options?.clearGitSelection ?? false) {
+      setSelectedGitChangeKey("");
+    }
+    setPreviewMode("preview");
+  };
+
   const onFileSearchSelect = async (node: TreeNode) => {
     setFileSearchQuery("");
     setFileSearchOpen(false);
     setFileSearchActiveIndex(0);
+    setCodeSidebarView("files");
     await onFileSelect(node);
     requestAnimationFrame(() => {
       fileSearchInputRef.current?.blur();
@@ -3008,6 +3051,20 @@ export default function App() {
   const showCodePanel = state.layout.showCodePanel;
   const showTerminalPanel = state.layout.showTerminalPanel;
   const showAgentPanel = !isCodeExpanded;
+
+  const toggleCodeExpanded = async () => {
+    if (isCodeExpanded) {
+      if (codeSidebarView === "git" && activeTab.filePreview.mode === "diff" && activeTab.filePreview.path) {
+        await openPreviewPath(activeTab.filePreview.path, {
+          clearGitSelection: false,
+          statusLabel: activeTab.filePreview.statusLabel,
+          parentPath: activeTab.filePreview.parentPath
+        });
+      }
+      setCodeSidebarView("files");
+    }
+    setIsCodeExpanded((value) => !value);
+  };
 
   const focusAgentInput = () => {
     requestAnimationFrame(() => {
@@ -3539,6 +3596,9 @@ export default function App() {
     }
   ].filter((group) => group.items.length > 0);
   const previewGitChange = activeTab.gitChanges.find((change) => matchesGitPreviewPath(activeTab.filePreview.path, change.path));
+  const activeGitChangeKey = previewGitChange
+    ? `${previewGitChange.section}:${previewGitChange.path}:${previewGitChange.code}`
+    : selectedGitChangeKey;
   const gitSummary = {
     changes: gitChangeGroups.find((group) => group.key === "changes")?.items.length ?? 0,
     staged: gitChangeGroups.find((group) => group.key === "staged")?.items.length ?? 0,
@@ -3546,6 +3606,19 @@ export default function App() {
   };
   const previewFileName = displayPathName(activeTab.filePreview.path);
   const workspaceFolderName = displayPathName(activeTab.project?.path) || t("noWorkspace");
+  const previewPathLabel = activeTab.filePreview.path
+    ? (() => {
+      const workspaceRoot = activeTab.project?.path;
+      if (!workspaceRoot) return activeTab.filePreview.path;
+      const normalizedRoot = normalizeComparablePath(workspaceRoot);
+      const normalizedPreview = normalizeComparablePath(activeTab.filePreview.path);
+      if (normalizedPreview.startsWith(normalizedRoot)) {
+        const relative = activeTab.filePreview.path.slice(workspaceRoot.length).replace(/^[/\\]+/, "");
+        return relative || previewFileName;
+      }
+      return activeTab.filePreview.path;
+    })()
+    : "";
   const searchableFiles = flattenTree(activeTab.fileTree)
     .filter((node) => node.kind === "file")
     .map((node) => ({
@@ -3877,16 +3950,6 @@ export default function App() {
                 <SearchIcon />
                 <span>{locale === "zh" ? "操作" : "Actions"}</span>
               </button>
-              <button
-                type="button"
-                className={`topbar-tool topbar-tool-wide ${isFocusMode ? "active" : ""}`}
-                onClick={() => setIsFocusMode((value) => !value)}
-                title={locale === "zh" ? "专注模式（F）" : "Focus mode (F)"}
-                aria-label={locale === "zh" ? "专注模式" : "Focus mode"}
-              >
-                {isFocusMode ? <MinimizeIcon /> : <MaximizeIcon />}
-                <span>{locale === "zh" ? "专注" : "Focus"}</span>
-              </button>
               <button className="topbar-tool" type="button" onClick={onOpenSettings} data-testid="settings-open" title={t("settings")} aria-label={t("settings")}>
                 <HeaderSettingsIcon />
               </button>
@@ -4133,7 +4196,7 @@ export default function App() {
               <span>{t("terminalPanel")}</span>
             </button>
             <span className="workspace-shortcut-hint">
-              {locale === "zh" ? "⌘/Ctrl+K 快速操作 · F 专注" : "⌘/Ctrl+K actions · F focus"}
+              {locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
             </span>
           </div>
         </div>
@@ -4294,6 +4357,11 @@ export default function App() {
                           <WorkspaceChangesIcon />
                           <span>Git Diff</span>
                         </button>
+                        {previewPathLabel && (
+                          <span className="workspace-code-current-path" title={previewPathLabel}>
+                            {previewPathLabel}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <div className="workspace-code-title-block">
@@ -4332,7 +4400,7 @@ export default function App() {
                     <button
                       type="button"
                       className="workspace-icon-button"
-                      onClick={() => setIsCodeExpanded((value) => !value)}
+                      onClick={() => { void toggleCodeExpanded(); }}
                       aria-label={isCodeExpanded ? (locale === "zh" ? "退出展开" : "Exit expand") : (locale === "zh" ? "展开代码区" : "Expand code area")}
                       title={isCodeExpanded ? (locale === "zh" ? "退出展开" : "Exit expand") : (locale === "zh" ? "展开代码区" : "Expand code area")}
                     >
@@ -4416,44 +4484,70 @@ export default function App() {
 
                   {isCodeExpanded && (
                     <aside className="workspace-code-sidebar">
-                      <div className="workspace-code-sidebar-head">
-                        <div className="workspace-code-sidebar-copy">
-                          <span className="section-kicker">{codeSidebarView === "files" ? t("repositoryNavigator") : t("sourceControl")}</span>
-                          <strong>{workspaceFolderName}</strong>
-                        </div>
-                        <button className="btn tiny ghost" type="button" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)}>
-                          {t("refresh")}
-                        </button>
-                      </div>
-
                       {codeSidebarView === "files" ? (
-                        activeTab.fileTree.length === 0 ? (
-                          <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>
-                        ) : (
-                          <TreeView
-                            nodes={activeTab.fileTree}
-                            onSelect={onFileSelect}
-                            collapsedPaths={repoCollapsedPaths}
-                            locale={locale}
-                            onToggleCollapse={(path) => {
-                              setRepoCollapsedPaths((current) => {
-                                const next = new Set(current);
-                                if (next.has(path)) {
-                                  next.delete(path);
-                                } else {
-                                  next.add(path);
-                                }
-                                return next;
-                              });
-                            }}
-                          />
-                        )
+                        <>
+                          <div className="workspace-code-sidebar-head">
+                            <span className="section-kicker">{t("repositoryNavigator")}</span>
+                            <button className="workspace-icon-button bare" type="button" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)} title={t("refresh")} aria-label={t("refresh")}>
+                              <RefreshIcon />
+                            </button>
+                          </div>
+                          {activeTab.fileTree.length === 0 ? (
+                            <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>
+                          ) : (
+                            <TreeView
+                              nodes={activeTab.fileTree}
+                              onSelect={onFileSelect}
+                              collapsedPaths={repoCollapsedPaths}
+                              locale={locale}
+                              selectedPath={activeTab.filePreview.path}
+                              rootPath={activeTab.project?.path}
+                              onToggleCollapse={(path) => {
+                                setRepoCollapsedPaths((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(path)) {
+                                    next.delete(path);
+                                  } else {
+                                    next.add(path);
+                                  }
+                                  return next;
+                                });
+                              }}
+                            />
+                          )}
+                        </>
                       ) : (
                         <div className="workspace-git-sidebar">
-                          <div className="git-summary-strip">
-                            <span>{t("changesCount", { count: gitSummary.changes })}</span>
-                            <span>{t("stagedCount", { count: gitSummary.staged })}</span>
-                            <span>{t("untrackedCount", { count: gitSummary.untracked })}</span>
+                          <div className="workspace-code-sidebar-head git-sidebar-head">
+                            <span className="section-kicker">{t("sourceControl")}</span>
+                            <div className="git-toolbar-actions">
+                              <button className="workspace-icon-button bare" type="button" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)} title={t("refresh")} aria-label={t("refresh")}>
+                                <RefreshIcon />
+                              </button>
+                              <button className="workspace-icon-button bare" type="button" onClick={() => void onGitStageAll()} title={t("stageAll")} aria-label={t("stageAll")}>
+                                <GitStageIcon />
+                              </button>
+                              <button className="workspace-icon-button bare" type="button" onClick={() => void onGitUnstageAll()} title={t("unstageAll")} aria-label={t("unstageAll")}>
+                                <GitUnstageIcon />
+                              </button>
+                              <button className="workspace-icon-button bare" type="button" onClick={() => void onGitDiscardAll()} title={t("discardAll")} aria-label={t("discardAll")}>
+                                <GitDiscardIcon />
+                              </button>
+                              <button className="workspace-icon-button bare" type="button" onClick={() => void onGitCommit()} disabled={!commitMessage.trim()} title={t("commit")} aria-label={t("commit")}>
+                                <AgentSendIcon />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="workspace-git-compose">
+                            <div className="form-row">
+                              <input
+                                value={commitMessage}
+                                onChange={(e) => setCommitMessage(e.target.value)}
+                                placeholder={t("commitPlaceholder")}
+                                data-testid="git-commit-message"
+                                className="workspace-git-commit-input"
+                              />
+                            </div>
                           </div>
                           <div className="source-control-list">
                             {gitChangeGroups.length === 0 && <div className="tree-empty">{t("noChangesDetected")}</div>}
@@ -4477,7 +4571,8 @@ export default function App() {
                                         key={changeKey}
                                         role="button"
                                         tabIndex={0}
-                                        className={`source-change-row ${selectedGitChangeKey === changeKey ? "active" : ""}`}
+                                        className={`source-change-row ${activeGitChangeKey === changeKey ? "active" : ""}`}
+                                        data-section={change.section}
                                         onClick={() => void onGitChangeSelect(change)}
                                         onKeyDown={(event) => {
                                           if (event.key === "Enter" || event.key === " ") {
@@ -4486,13 +4581,15 @@ export default function App() {
                                           }
                                         }}
                                       >
-                                        <span className={`source-status-badge ${change.section}`}>{change.code}</span>
+                                        <span className="source-change-file-icon" aria-hidden="true">
+                                          {getFileIcon(change.name, false, false)}
+                                        </span>
                                         <span className="source-change-copy">
                                           <span className="source-change-name">{change.name}</span>
                                           <span className="source-change-parent">{change.parent || "."}</span>
                                         </span>
                                         <span className="source-change-tail">
-                                          <span className="source-change-label">{change.status}</span>
+                                          <span className={`source-status-badge ${change.section}`} title={change.status}>{change.code}</span>
                                           <span className="source-change-actions">
                                             {rowActions.map((action) => (
                                               <button
@@ -4517,22 +4614,6 @@ export default function App() {
                                 </div>
                               </div>
                             ))}
-                          </div>
-                          <div className="section git-actions-card compact">
-                            <div className="form-row">
-                              <input
-                                value={commitMessage}
-                                onChange={(e) => setCommitMessage(e.target.value)}
-                                placeholder={t("commitPlaceholder")}
-                                data-testid="git-commit-message"
-                              />
-                            </div>
-                            <div className="git-actions-grid">
-                              <button className="btn tiny" type="button" onClick={() => void onGitStageAll()}>{t("stageAll")}</button>
-                              <button className="btn tiny ghost" type="button" onClick={() => void onGitUnstageAll()}>{t("unstageAll")}</button>
-                              <button className="btn tiny ghost danger" type="button" onClick={() => void onGitDiscardAll()}>{t("discardAll")}</button>
-                              <button className="btn tiny primary" type="button" onClick={() => void onGitCommit()} disabled={!commitMessage.trim()}>{t("commit")}</button>
-                            </div>
                           </div>
                         </div>
                       )}
@@ -4915,9 +4996,11 @@ type TreeProps = {
   collapsedPaths?: Set<string>;
   onToggleCollapse?: (path: string) => void;
   locale?: Locale;
+  selectedPath?: string;
+  rootPath?: string;
 };
 
-const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse, locale = "en" }: TreeProps) => {
+const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse, locale = "en", selectedPath, rootPath }: TreeProps) => {
   if (!nodes?.length) return null;
   const sortedNodes = sortTreeNodes(nodes, locale);
   return (
@@ -4925,10 +5008,11 @@ const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse
       {sortedNodes.map((node) => {
         const isDirectory = node.kind === "dir";
         const isExpanded = isDirectory ? collapsedPaths?.has(node.path) ?? false : false;
+        const isSelected = !isDirectory && Boolean(selectedPath) && normalizeComparablePath(rootPath ? resolvePath(rootPath, node.path) : node.path) === normalizeComparablePath(selectedPath);
         return (
           <div key={node.path} className="tree-node">
             <div
-              className={`tree-line ${node.kind === "file" ? "file" : "dir"} ${node.status ? "changed" : ""}`}
+              className={`tree-line ${node.kind === "file" ? "file" : "dir"} ${node.status ? "changed" : ""} ${isSelected ? "selected" : ""}`}
               style={{ paddingLeft: `${depth * 16 + 8}px` }}
               onClick={() => {
                 if (isDirectory) {
@@ -4944,7 +5028,7 @@ const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse
               <span className="tree-icon">
                 {getFileIcon(node.name, isDirectory, isExpanded)}
               </span>
-              <span className="tree-label">{node.name}{isDirectory ? "/" : ""}</span>
+              <span className="tree-label">{node.name}</span>
               {node.status && <span className="status">{node.status}</span>}
             </div>
             {node.children?.length && isExpanded ? (
@@ -4956,6 +5040,8 @@ const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse
                   collapsedPaths={collapsedPaths}
                   onToggleCollapse={onToggleCollapse}
                   locale={locale}
+                  selectedPath={selectedPath}
+                  rootPath={rootPath}
                 />
               </div>
             ) : null}

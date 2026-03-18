@@ -6276,6 +6276,9 @@ pre.diff,
 
 .workspace-code-modes {
   flex: 1 1 180px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .workspace-code-actions {
@@ -6296,6 +6299,17 @@ pre.diff,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.workspace-code-current-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+  padding-left: 6px;
 }
 
 .workspace-search-shell {
@@ -6469,7 +6483,13 @@ pre.diff,
   border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
 }
 
-.workspace-code-sidebar-head,
+.workspace-code-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .workspace-code-sidebar-copy {
   display: flex;
   flex-direction: column;
@@ -6480,6 +6500,112 @@ pre.diff,
 .web-folder-picker-list {
   min-height: 0;
   overflow: auto;
+}
+
+.workspace-git-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.workspace-git-sidebar .source-control-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.workspace-git-sidebar .source-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workspace-git-sidebar .source-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 0 4px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg) 6%);
+}
+
+.workspace-git-sidebar .source-group-head > span:last-child {
+  color: var(--text-tertiary);
+}
+
+.git-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.git-toolbar-actions .workspace-icon-button,
+.workspace-icon-button.bare {
+  width: 26px;
+  height: 26px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.git-toolbar-actions .workspace-icon-button:hover:not(:disabled),
+.workspace-icon-button.bare:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-elevated) 72%, var(--accent) 28%);
+}
+
+.workspace-git-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 0;
+  border: none;
+  background: transparent;
+}
+
+.workspace-git-compose .form-row {
+  margin: 0;
+}
+
+.workspace-git-commit-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
+  color: var(--text);
+  font: inherit;
+  line-height: 34px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out-quart),
+    background var(--duration-fast) var(--ease-out-quart),
+    box-shadow var(--duration-fast) var(--ease-out-quart);
+}
+
+.workspace-git-commit-input::placeholder {
+  color: var(--text-muted);
+}
+
+.workspace-git-commit-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line) 48%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.workspace-code-sidebar .tree {
+  min-height: 0;
+  overflow: auto;
+}
+
+.workspace-code-sidebar .tree-line.selected {
+  background: color-mix(in srgb, var(--surface-elevated) 74%, var(--accent) 26%) !important;
+  color: var(--text) !important;
 }
 
 .workspace-code-editor {
@@ -6548,6 +6674,109 @@ pre.diff,
 .workspace-code-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider:hover,
 .workspace-code-editor .monaco-scrollable-element .scrollbar.horizontal > .slider:hover {
   background: color-mix(in srgb, var(--scrollbar-thumb-hover) 80%, var(--accent) 20%) !important;
+}
+
+.workspace-git-sidebar .source-group-items {
+  gap: 0;
+}
+
+.workspace-git-sidebar .source-change-row {
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 4px 5px 2px;
+  border-radius: 0;
+  border-left: 2px solid transparent !important;
+  background: transparent !important;
+}
+
+.workspace-git-sidebar .source-change-row:hover {
+  border-left-color: color-mix(in srgb, var(--accent-2) 40%, transparent) !important;
+  background: color-mix(in srgb, var(--surface-elevated) 64%, transparent) !important;
+}
+
+.workspace-git-sidebar .source-change-row.active {
+  border-left-color: color-mix(in srgb, var(--accent) 72%, transparent) !important;
+  background: color-mix(in srgb, var(--surface-elevated) 78%, var(--accent) 22%) !important;
+}
+
+.workspace-git-sidebar .source-change-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: var(--text-secondary);
+}
+
+.workspace-git-sidebar .source-change-file-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.workspace-git-sidebar .source-change-copy {
+  gap: 1px;
+}
+
+.workspace-git-sidebar .source-change-name {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.workspace-git-sidebar .source-change-parent {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.workspace-git-sidebar .source-change-tail {
+  margin-left: auto;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.workspace-git-sidebar .source-status-badge {
+  min-width: 16px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  background: transparent;
+  border-radius: 0;
+}
+
+.workspace-git-sidebar .source-status-badge.staged {
+  color: var(--success);
+}
+
+.workspace-git-sidebar .source-status-badge.changes {
+  color: var(--warning);
+}
+
+.workspace-git-sidebar .source-status-badge.untracked {
+  color: var(--accent);
+}
+
+.workspace-git-sidebar .source-change-actions {
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workspace-git-sidebar .source-change-row:hover .source-change-actions,
+.workspace-git-sidebar .source-change-row.active .source-change-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace-git-sidebar .source-action-btn {
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+}
+
+.workspace-git-sidebar .source-action-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-elevated) 72%, var(--accent) 28%);
 }
 
 .code-search-result,
