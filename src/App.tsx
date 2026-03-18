@@ -4269,7 +4269,10 @@ export default function App() {
           )}
 
           {showCodePanel && (
-            <section className="panel workspace-code-shell" style={{ flex: `0 0 ${state.layout.rightWidth}px` }}>
+            <section
+              className="panel workspace-code-shell"
+              style={isCodeExpanded ? { flex: "1 1 100%" } : { flex: `0 0 ${state.layout.rightWidth}px` }}
+            >
               <div className="panel-inner workspace-code-panel">
                 <div className="workspace-code-header">
                   <div className="workspace-code-modes">

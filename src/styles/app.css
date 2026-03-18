@@ -6217,6 +6217,11 @@ pre.diff,
   flex: 1 1 auto !important;
 }
 
+.workspace-stack.code-expanded .workspace-code-shell {
+  flex: 1 1 100% !important;
+  width: 100%;
+}
+
 .workspace-stack.focus-mode .workspace-code-shell,
 .workspace-stack.focus-mode .workspace-terminal-shell,
 .workspace-stack.focus-mode .v-resizer,
