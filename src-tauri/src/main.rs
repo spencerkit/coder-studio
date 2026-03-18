@@ -3,17 +3,18 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::Stdio,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
 };
 
 use axum::{
     extract::{
+        OriginalUri,
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path as AxumPath, State as AxumState,
     },
     http::StatusCode,
-    response::{IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -21,10 +22,13 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::broadcast;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -224,6 +228,40 @@ pub struct ClaudeSlashSkillEntry {
     pub scope: String,
     pub source_kind: String,
     pub source_path: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct FilesystemRoot {
+    pub id: String,
+    pub label: String,
+    pub path: String,
+    pub description: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct FilesystemEntry {
+    pub name: String,
+    pub path: String,
+    pub kind: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct FilesystemListResponse {
+    pub current_path: String,
+    pub home_path: String,
+    pub parent_path: Option<String>,
+    pub roots: Vec<FilesystemRoot>,
+    pub entries: Vec<FilesystemEntry>,
+    pub requested_path: Option<String>,
+    pub fallback_reason: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct CommandAvailability {
+    pub command: String,
+    pub available: bool,
+    pub resolved_path: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -738,6 +776,24 @@ struct FileSaveRequest {
 }
 
 #[derive(Deserialize)]
+struct FilesystemRootsRequest {
+    target: ExecTarget,
+}
+
+#[derive(Deserialize)]
+struct FilesystemListRequest {
+    target: ExecTarget,
+    path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CommandAvailabilityRequest {
+    command: String,
+    target: ExecTarget,
+    cwd: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct EmptyRequest {}
 
 #[derive(Deserialize)]
@@ -978,6 +1034,19 @@ fn dispatch_rpc(app: &tauri::AppHandle, command: &str, payload: Value) -> Result
             let req: FileSaveRequest = parse_payload(payload)?;
             serde_json::to_value(file_save(req.path, req.content)?).map_err(|e| e.to_string())
         }
+        "filesystem_roots" => {
+            let req: FilesystemRootsRequest = parse_payload(payload)?;
+            serde_json::to_value(filesystem_roots(req.target)?).map_err(|e| e.to_string())
+        }
+        "filesystem_list" => {
+            let req: FilesystemListRequest = parse_payload(payload)?;
+            serde_json::to_value(filesystem_list(req.target, req.path)?).map_err(|e| e.to_string())
+        }
+        "command_exists" => {
+            let req: CommandAvailabilityRequest = parse_payload(payload)?;
+            serde_json::to_value(command_exists(req.command, req.target, req.cwd)?)
+                .map_err(|e| e.to_string())
+        }
         "dialog_pick_folder" => {
             let _req: EmptyRequest = parse_payload(payload)?;
             serde_json::to_value(dialog_pick_folder(app.clone())?).map_err(|e| e.to_string())
@@ -1110,12 +1179,76 @@ async fn dev_entry_handler(
             .and_then(|value| value.clone())
             .unwrap_or_default()
     };
-    let target = format!(
-        "{}?coder_studio_backend={}",
-        DEV_FRONTEND_URL,
-        urlencoding::encode(&endpoint)
+    Html(format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Workbench</title>
+    <script>
+      window.__CODER_STUDIO_BACKEND__ = {backend};
+    </script>
+    <script type="module">
+      import RefreshRuntime from "{frontend}/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {{}};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="{frontend}/@vite/client"></script>
+    <script type="module" src="{frontend}/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>"#,
+        backend = serde_json::to_string(&endpoint).unwrap_or_else(|_| "\"\"".to_string()),
+        frontend = DEV_FRONTEND_URL,
+    ))
+}
+
+async fn dev_asset_redirect_handler(uri: OriginalUri) -> impl IntoResponse {
+    let forwarded = format!("{DEV_FRONTEND_URL}{}", uri.0);
+    Redirect::temporary(&forwarded)
+}
+
+fn inject_backend_global(html: &str, endpoint: &str) -> String {
+    let script = format!(
+        r#"<script>window.__CODER_STUDIO_BACKEND__ = {};</script>"#,
+        serde_json::to_string(endpoint).unwrap_or_else(|_| "\"\"".to_string())
     );
-    Redirect::temporary(&target)
+    if html.contains("window.__CODER_STUDIO_BACKEND__") {
+        html.to_string()
+    } else if let Some(index) = html.rfind("</body>") {
+        let mut output = String::with_capacity(html.len() + script.len() + 2);
+        output.push_str(&html[..index]);
+        output.push_str(&script);
+        output.push('\n');
+        output.push_str(&html[index..]);
+        output
+    } else {
+        format!("{html}\n{script}")
+    }
+}
+
+async fn index_handler(
+    AxumState(state): AxumState<HttpServerState>,
+) -> impl IntoResponse {
+    let endpoint = {
+        let app_state: State<AppState> = state.app.state();
+        app_state
+            .http_endpoint
+            .lock()
+            .ok()
+            .and_then(|value| value.clone())
+            .unwrap_or_default()
+    };
+    let index_file = frontend_dist_dir().join("index.html");
+    let html = std::fs::read_to_string(index_file).unwrap_or_else(|_| {
+        r#"<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Agent Workbench</title></head><body><div id="root"></div></body></html>"#.to_string()
+    });
+    Html(inject_backend_global(&html, &endpoint))
 }
 
 fn frontend_dist_dir() -> PathBuf {
@@ -1124,22 +1257,28 @@ fn frontend_dist_dir() -> PathBuf {
 
 fn build_transport_router(app: &tauri::AppHandle) -> Router {
     let shared = HttpServerState { app: app.clone() };
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
     let api_router = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
-        .route("/api/rpc/:command", post(rpc_handler));
+        .route("/api/rpc/:command", post(rpc_handler))
+        .layer(cors);
 
     if cfg!(debug_assertions) {
         api_router
             .route("/", get(dev_entry_handler))
             .route("/__dev", get(dev_entry_handler))
+            .fallback(get(dev_asset_redirect_handler))
             .with_state(shared)
     } else {
         let dist_dir = frontend_dist_dir();
-        let index_file = dist_dir.join("index.html");
         api_router
+            .route("/", get(index_handler))
             .fallback_service(
-                ServeDir::new(dist_dir).not_found_service(ServeFile::new(index_file))
+                ServeDir::new(dist_dir)
             )
             .with_state(shared)
     }
@@ -1164,21 +1303,6 @@ fn start_transport_server(app: &tauri::AppHandle) -> Result<String, String> {
         let _ = axum::serve(listener, router).await;
     });
     Ok(endpoint)
-}
-
-fn create_main_window(app: &tauri::AppHandle, endpoint: &str) -> Result<(), String> {
-    let target = if cfg!(debug_assertions) {
-        format!("{endpoint}/__dev")
-    } else {
-        endpoint.to_string()
-    };
-    let url = url::Url::parse(&target).map_err(|e| e.to_string())?;
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-        .title("Agent Workbench")
-        .inner_size(1400.0, 900.0)
-        .build()
-        .map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 fn agent_key(tab_id: &str, session_id: &str) -> String {
@@ -2090,7 +2214,7 @@ fn shell_escape_windows(value: &str) -> String {
 
 fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = if let ExecTarget::Wsl { distro } = target {
-        let mut c = std::process::Command::new("wsl.exe");
+        let mut c = Command::new("wsl.exe");
         if let Some(d) = distro {
             c.args(["-d", d]);
         }
@@ -2131,6 +2255,218 @@ fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<String, Stri
             .trim_end_matches(['\r', '\n'])
             .to_string())
     }
+}
+
+fn run_command_output(mut cmd: Command) -> Result<String, String> {
+    let out = cmd
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches(['\r', '\n'])
+            .to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr)
+            .trim_end_matches(['\r', '\n'])
+            .to_string())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_native_shell_command(cwd: &str, script: &str) -> Result<String, String> {
+    let (shell, flag) = resolve_unix_agent_shell();
+    let mut cmd = Command::new(shell);
+    cmd.arg(flag).arg(script);
+    if !cwd.is_empty() {
+        cmd.current_dir(cwd);
+    }
+    run_command_output(cmd)
+}
+
+fn run_wsl_shell_command(target: &ExecTarget, cwd: &str, script: &str) -> Result<String, String> {
+    let mut cmd = Command::new("wsl.exe");
+    if let ExecTarget::Wsl { distro } = target {
+        if let Some(d) = distro {
+            cmd.args(["-d", d]);
+        }
+    }
+    let shell_cmd = if cwd.is_empty() {
+        script.to_string()
+    } else {
+        format!("cd {} && {}", shell_escape(cwd), script)
+    };
+    cmd.args(["--", "/bin/sh", "-lc", &shell_cmd]);
+    run_command_output(cmd)
+}
+
+fn parse_command_binary(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut token = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+
+    for ch in trimmed.chars() {
+        if escaped {
+            token.push(ch);
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if !in_single => {
+                escaped = true;
+            }
+            '\'' if !in_double => {
+                in_single = !in_single;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+            }
+            ch if ch.is_whitespace() && !in_single && !in_double => {
+                if !token.is_empty() {
+                    break;
+                }
+            }
+            _ => token.push(ch),
+        }
+    }
+
+    let normalized = token.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_string())
+    }
+}
+
+fn command_uses_explicit_path(command: &str) -> bool {
+    command.contains(std::path::MAIN_SEPARATOR)
+        || command.contains('/')
+        || command.contains('\\')
+        || command.starts_with('.')
+}
+
+#[cfg(target_os = "windows")]
+fn probe_native_command(command_name: &str, cwd: Option<&str>) -> Result<String, String> {
+    if command_uses_explicit_path(command_name) {
+        let candidate = PathBuf::from(command_name);
+        let resolved = if candidate.is_absolute() {
+            candidate
+        } else if let Some(base) = cwd.filter(|value| !value.is_empty()) {
+            PathBuf::from(base).join(candidate)
+        } else {
+            std::env::current_dir()
+                .map_err(|e| e.to_string())?
+                .join(candidate)
+        };
+        if resolved.exists() {
+            return Ok(resolved.to_string_lossy().to_string());
+        }
+        return Err(format!("`{command_name}` was not found"));
+    }
+
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", "where", command_name]);
+    if let Some(base) = cwd.filter(|value| !value.is_empty()) {
+        cmd.current_dir(base);
+    }
+    let output = run_command_output(cmd)?;
+    output
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| line.trim().to_string())
+        .ok_or_else(|| format!("`{command_name}` was not found in PATH"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn probe_native_command(command_name: &str, cwd: Option<&str>) -> Result<String, String> {
+    if command_uses_explicit_path(command_name) {
+        let candidate = PathBuf::from(command_name);
+        let resolved = if candidate.is_absolute() {
+            candidate
+        } else if let Some(base) = cwd.filter(|value| !value.is_empty()) {
+            PathBuf::from(base).join(candidate)
+        } else {
+            std::env::current_dir()
+                .map_err(|e| e.to_string())?
+                .join(candidate)
+        };
+        if resolved.exists() {
+            return Ok(resolved.to_string_lossy().to_string());
+        }
+        return Err(format!("`{command_name}` was not found"));
+    }
+
+    run_native_shell_command(
+        cwd.unwrap_or_default(),
+        &format!("command -v {}", shell_escape(command_name)),
+    )
+}
+
+fn probe_wsl_command(command_name: &str, target: &ExecTarget, cwd: Option<&str>) -> Result<String, String> {
+    if command_uses_explicit_path(command_name) {
+        let script = format!(
+            "base_dir={cwd}; candidate={candidate}; if [ -e \"$candidate\" ]; then printf '%s' \"$candidate\"; elif [ -n \"$base_dir\" ] && [ -e \"$base_dir/$candidate\" ]; then printf '%s' \"$base_dir/$candidate\"; else exit 1; fi",
+            candidate = shell_escape(command_name),
+            cwd = shell_escape(cwd.unwrap_or_default())
+        );
+        return run_wsl_shell_command(target, "", &script);
+    }
+
+    run_wsl_shell_command(
+        target,
+        cwd.unwrap_or_default(),
+        &format!("command -v {}", shell_escape(command_name)),
+    )
+}
+
+#[tauri::command]
+fn command_exists(
+    command: String,
+    target: ExecTarget,
+    cwd: Option<String>,
+) -> Result<CommandAvailability, String> {
+    let trimmed = command.trim().to_string();
+    let Some(binary) = parse_command_binary(&trimmed) else {
+        return Ok(CommandAvailability {
+            command: trimmed,
+            available: false,
+            resolved_path: None,
+            error: Some("empty_command".to_string()),
+        });
+    };
+
+    let cwd_ref = cwd.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let result = match &target {
+        ExecTarget::Native => probe_native_command(&binary, cwd_ref),
+        ExecTarget::Wsl { .. } => probe_wsl_command(&binary, &target, cwd_ref),
+    };
+
+    Ok(match result {
+        Ok(resolved_path) => CommandAvailability {
+            command: trimmed,
+            available: true,
+            resolved_path: Some(resolved_path),
+            error: None,
+        },
+        Err(error) => CommandAvailability {
+            command: trimmed,
+            available: false,
+            resolved_path: None,
+            error: Some(if error.trim().is_empty() {
+                format!("`{binary}` was not found")
+            } else {
+                error
+            }),
+        },
+    })
 }
 
 fn build_agent_shell_command(cwd: &str, command: &str, windows: bool) -> String {
@@ -3069,6 +3405,239 @@ fn file_save(path: String, content: String) -> Result<FilePreview, String> {
     Ok(FilePreview { path, content })
 }
 
+#[cfg(target_os = "windows")]
+fn windows_drive_roots() -> Vec<FilesystemRoot> {
+    let mut roots = Vec::new();
+    for letter in 'C'..='Z' {
+        let path = format!("{letter}:\\");
+        if Path::new(&path).exists() {
+            roots.push(FilesystemRoot {
+                id: format!("drive-{letter}"),
+                label: format!("{letter}:"),
+                path,
+                description: "Windows drive".to_string(),
+            });
+        }
+    }
+    roots
+}
+
+fn filesystem_home_for_target(target: &ExecTarget) -> Result<String, String> {
+    match target {
+        ExecTarget::Native => user_home_dir()
+            .map(|path| path.to_string_lossy().to_string())
+            .ok_or("home_directory_not_found".to_string()),
+        ExecTarget::Wsl { .. } => {
+            let home = run_cmd(target, "", &["printenv", "HOME"])?;
+            let trimmed = home.trim();
+            if trimmed.is_empty() {
+                Err("wsl_home_directory_not_found".to_string())
+            } else {
+                Ok(trimmed.to_string())
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn filesystem_roots(target: ExecTarget) -> Result<Vec<FilesystemRoot>, String> {
+    match target {
+        ExecTarget::Native => {
+            let home = filesystem_home_for_target(&ExecTarget::Native)?;
+            let mut roots = vec![FilesystemRoot {
+                id: "home".to_string(),
+                label: "Home".to_string(),
+                path: home.clone(),
+                description: "User home directory".to_string(),
+            }];
+            #[cfg(target_os = "windows")]
+            {
+                roots.extend(windows_drive_roots());
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                roots.push(FilesystemRoot {
+                    id: "root".to_string(),
+                    label: "/".to_string(),
+                    path: "/".to_string(),
+                    description: "System root".to_string(),
+                });
+            }
+            Ok(roots)
+        }
+        ExecTarget::Wsl { distro } => {
+            let exec_target = ExecTarget::Wsl { distro };
+            let home = filesystem_home_for_target(&exec_target)?;
+            Ok(vec![
+                FilesystemRoot {
+                    id: "wsl-home".to_string(),
+                    label: "Home".to_string(),
+                    path: home,
+                    description: "WSL home directory".to_string(),
+                },
+                FilesystemRoot {
+                    id: "wsl-root".to_string(),
+                    label: "/".to_string(),
+                    path: "/".to_string(),
+                    description: "WSL filesystem root".to_string(),
+                },
+                FilesystemRoot {
+                    id: "wsl-mnt".to_string(),
+                    label: "/mnt".to_string(),
+                    path: "/mnt".to_string(),
+                    description: "Mounted host drives".to_string(),
+                },
+            ])
+        }
+    }
+}
+
+fn native_parent_path(path: &str) -> Option<String> {
+    let candidate = PathBuf::from(path);
+    let parent = candidate.parent()?.to_path_buf();
+    let rendered = parent.to_string_lossy().to_string();
+    if rendered.is_empty() || rendered == path {
+        None
+    } else {
+        Some(rendered)
+    }
+}
+
+fn wsl_parent_path(path: &str, target: &ExecTarget) -> Option<String> {
+    if path.trim().is_empty() || path == "/" {
+        return None;
+    }
+    run_cmd(target, "", &["dirname", path])
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && value != path)
+}
+
+fn list_native_directories(path: &str) -> Result<Vec<FilesystemEntry>, String> {
+    let mut entries = std::fs::read_dir(path)
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let metadata = entry.metadata().ok()?;
+            if !metadata.is_dir() {
+                return None;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            Some(FilesystemEntry {
+                name,
+                path: entry.path().to_string_lossy().to_string(),
+                kind: "dir".to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Ok(entries)
+}
+
+fn list_wsl_directories(path: &str, target: &ExecTarget) -> Result<Vec<FilesystemEntry>, String> {
+    let output = run_cmd(
+        target,
+        "",
+        &[
+            "find",
+            path,
+            "-mindepth",
+            "1",
+            "-maxdepth",
+            "1",
+            "-type",
+            "d",
+            "-printf",
+            "%f\t%p\n",
+        ],
+    )?;
+    let mut entries = output
+        .lines()
+        .filter_map(|line| {
+            let (name, full_path) = line.split_once('\t')?;
+            Some(FilesystemEntry {
+                name: name.to_string(),
+                path: full_path.to_string(),
+                kind: "dir".to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Ok(entries)
+}
+
+fn list_directories_for_target(target: &ExecTarget, path: &str) -> Result<Vec<FilesystemEntry>, String> {
+    match target {
+        ExecTarget::Native => list_native_directories(path),
+        ExecTarget::Wsl { .. } => list_wsl_directories(path, target),
+    }
+}
+
+#[tauri::command]
+fn filesystem_list(
+    target: ExecTarget,
+    path: Option<String>,
+) -> Result<FilesystemListResponse, String> {
+    let roots = filesystem_roots(target.clone())?;
+    let home_path = filesystem_home_for_target(&target)?;
+    let requested_path = path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| resolve_target_path(value, &target))
+        .transpose()?;
+
+    let mut candidate_paths = Vec::new();
+    if let Some(requested) = requested_path.clone() {
+        candidate_paths.push(requested);
+    }
+    candidate_paths.push(home_path.clone());
+    for root in &roots {
+        if !candidate_paths.iter().any(|existing| existing == &root.path) {
+            candidate_paths.push(root.path.clone());
+        }
+    }
+
+    let mut first_error: Option<String> = None;
+    let mut resolved_listing: Option<(String, Vec<FilesystemEntry>)> = None;
+
+    for candidate in candidate_paths {
+        match list_directories_for_target(&target, &candidate) {
+            Ok(entries) => {
+                resolved_listing = Some((candidate, entries));
+                break;
+            }
+            Err(error) => {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+    }
+
+    let (current_path, entries) = resolved_listing.ok_or_else(|| {
+        first_error.unwrap_or_else(|| "unable_to_read_server_directories".to_string())
+    })?;
+    let parent_path = match target {
+        ExecTarget::Native => native_parent_path(&current_path),
+        ExecTarget::Wsl { .. } => wsl_parent_path(&current_path, &target),
+    };
+    let fallback_reason = requested_path
+        .as_ref()
+        .filter(|requested| *requested != &current_path)
+        .map(|_| "requested_path_unavailable".to_string());
+
+    Ok(FilesystemListResponse {
+        current_path,
+        home_path,
+        parent_path,
+        roots,
+        entries,
+        requested_path,
+        fallback_reason,
+    })
+}
+
 #[tauri::command]
 fn dialog_pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     Ok(app
@@ -3481,6 +4050,9 @@ fn main() {
             workspace_tree,
             file_preview,
             file_save,
+            filesystem_roots,
+            filesystem_list,
+            command_exists,
             dialog_pick_folder,
             claude_slash_skills,
             terminal_create,
@@ -3506,7 +4078,12 @@ fn main() {
                 .lock()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
             *guard = Some(conn);
-            create_main_window(app.handle(), &transport_endpoint).map_err(std::io::Error::other)?;
+            let browser_url = if cfg!(debug_assertions) {
+                format!("{transport_endpoint}/__dev")
+            } else {
+                transport_endpoint.clone()
+            };
+            println!("Coder Studio headless server running at {browser_url}");
             Ok(())
         })
         .run(tauri::generate_context!())

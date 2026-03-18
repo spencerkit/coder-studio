@@ -18,6 +18,5 @@ tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "process"] 
 rusqlite = { version = "0.31", features = ["bundled"] }
 tauri-plugin-dialog = "2.0.0"
 portable-pty = "0.8"
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 url = "2"
-urlencoding = "2.1"

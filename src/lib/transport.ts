@@ -1,6 +1,12 @@
 type EventHandler<T> = (event: { payload: T }) => void;
 type Unlisten = () => void;
 
+declare global {
+  interface Window {
+    __CODER_STUDIO_BACKEND__?: string;
+  }
+}
+
 type WsEnvelope = {
   event: string;
   payload: unknown;
@@ -11,16 +17,31 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let activeSocketUrl = "";
 
-const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
+const normalizeBaseUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = typeof window !== "undefined"
+      ? new URL(trimmed, window.location.origin)
+      : new URL(trimmed);
+    return parsed.origin.replace(/\/+$/, "");
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+};
+
+const readInjectedBackendBase = () => {
+  if (typeof window === "undefined") return "";
+  return normalizeBaseUrl(window.__CODER_STUDIO_BACKEND__ ?? "");
+};
 
 const collectBackendBaseCandidates = () => {
   if (typeof window === "undefined") return [""];
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("coder_studio_backend");
-  const candidates = [fromQuery, window.location.origin]
-    .filter((value): value is string => Boolean(value && value.trim()))
-    .map((value) => normalizeBaseUrl(value));
-  return [...new Set(candidates)];
+  const explicit = readInjectedBackendBase();
+  if (explicit) {
+    return [explicit];
+  }
+  return [normalizeBaseUrl(window.location.origin)];
 };
 
 const backendBaseUrl = () => {
@@ -28,7 +49,8 @@ const backendBaseUrl = () => {
 };
 
 const websocketUrl = () => {
-  const base = new URL(backendBaseUrl());
+  const baseValue = backendBaseUrl();
+  const base = new URL(baseValue || (typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1"));
   base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
   base.pathname = "/ws";
   base.search = "";
@@ -52,7 +74,13 @@ const scheduleReconnect = () => {
 
 const connectSocket = () => {
   if (typeof window === "undefined") return;
-  const nextUrl = websocketUrl();
+  let nextUrl = "";
+  try {
+    nextUrl = websocketUrl();
+  } catch {
+    scheduleReconnect();
+    return;
+  }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) && activeSocketUrl === nextUrl) {
     return;
   }
@@ -96,7 +124,8 @@ export const invoke = async <T = unknown>(command: string, payload: Record<strin
 
   for (const base of candidates) {
     try {
-      const response = await fetch(`${base}/api/rpc/${command}`, {
+      const endpoint = new URL(`/api/rpc/${command}`, `${base}/`).toString();
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json"

@@ -188,6 +188,20 @@ export type WorkbenchState = {
 };
 
 const WORKBENCH_STORAGE_KEY = "coder-studio.workbench";
+const clampLayoutLeftWidth = (value: number | undefined) => {
+  if (!Number.isFinite(value)) return 320;
+  return Math.min(720, Math.max(280, Number(value)));
+};
+
+const clampLayoutRightWidth = (value: number | undefined) => {
+  if (!Number.isFinite(value)) return 320;
+  return Math.min(480, Math.max(240, Number(value)));
+};
+
+const clampLayoutRightSplit = (value: number | undefined) => {
+  if (!Number.isFinite(value)) return 64;
+  return Math.min(76, Math.max(46, Number(value)));
+};
 
 const nowLabel = () => {
   const date = new Date();
@@ -272,11 +286,11 @@ const createDefaultWorkbenchState = (): WorkbenchState => {
     tabs: [initialTab],
     activeTabId: initialTab.id,
     layout: {
-      leftWidth: 280,
-      rightWidth: 360,
-      rightSplit: 56,
-      showCodePanel: true,
-      showTerminalPanel: true
+      leftWidth: 320,
+      rightWidth: 320,
+      rightSplit: 64,
+      showCodePanel: false,
+      showTerminalPanel: false
     },
     overlay: {
       visible: true,
@@ -372,16 +386,17 @@ const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefin
     || Boolean(tab.sessions?.[0]?.stream)
     || (tab.archive?.length ?? 0) > 0
   );
+  const legacyLayout = input.layout as (LayoutState & { rightTopHeight?: number; rightCollapsed?: boolean }) | undefined;
 
   return {
     tabs,
     activeTabId,
     layout: {
-      leftWidth: input.layout?.leftWidth ?? fallback.layout.leftWidth,
-      rightWidth: input.layout?.rightWidth ?? fallback.layout.rightWidth,
-      rightSplit: input.layout?.rightSplit ?? input.layout?.rightTopHeight ?? fallback.layout.rightSplit,
-      showCodePanel: input.layout?.showCodePanel ?? !(input.layout?.rightCollapsed ?? false),
-      showTerminalPanel: input.layout?.showTerminalPanel ?? true
+      leftWidth: clampLayoutLeftWidth(legacyLayout?.leftWidth ?? fallback.layout.leftWidth),
+      rightWidth: clampLayoutRightWidth(legacyLayout?.rightWidth ?? fallback.layout.rightWidth),
+      rightSplit: clampLayoutRightSplit(legacyLayout?.rightSplit ?? legacyLayout?.rightTopHeight ?? fallback.layout.rightSplit),
+      showCodePanel: legacyLayout?.showCodePanel ?? (typeof legacyLayout?.rightCollapsed === "boolean" ? !legacyLayout.rightCollapsed : fallback.layout.showCodePanel),
+      showTerminalPanel: legacyLayout?.showTerminalPanel ?? fallback.layout.showTerminalPanel
     },
     overlay: {
       visible: hasHistory ? false : input.overlay?.visible ?? fallback.overlay.visible,

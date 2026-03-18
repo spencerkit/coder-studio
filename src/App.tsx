@@ -43,6 +43,8 @@ import {
   AgentSplitVerticalIcon,
   AgentPlusIcon,
   AgentSendIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   GitDiscardIcon,
   GitStageIcon,
   GitUnstageIcon,
@@ -50,9 +52,6 @@ import {
   HeaderBackIcon,
   HeaderCloseIcon,
   HeaderSettingsIcon,
-  RailFilesIcon,
-  RailGitIcon,
-  RailSessionsIcon,
   SettingsAppearanceIcon,
   SettingsArchiveIcon,
   SettingsConfigIcon,
@@ -68,7 +67,8 @@ import {
   WorkspaceChangesIcon,
   WorkspaceCodeIcon,
   WorkspaceFolderIcon,
-  WorkspaceTerminalIcon
+  WorkspaceTerminalIcon,
+  getFileIcon
 } from "./components/icons";
 import { invoke, listen } from "./lib/transport";
 
@@ -177,6 +177,36 @@ type WorktreeDetail = {
   changes: TreeNode[];
 };
 
+type FilesystemRoot = {
+  id: string;
+  label: string;
+  path: string;
+  description: string;
+};
+
+type FilesystemEntry = {
+  name: string;
+  path: string;
+  kind: "dir" | "file";
+};
+
+type FilesystemListResponse = {
+  current_path: string;
+  home_path: string;
+  parent_path?: string | null;
+  roots: FilesystemRoot[];
+  entries: FilesystemEntry[];
+  requested_path?: string | null;
+  fallback_reason?: string | null;
+};
+
+type CommandAvailability = {
+  command: string;
+  available: boolean;
+  resolved_path?: string | null;
+  error?: string | null;
+};
+
 type WorktreeModalState = {
   name: string;
   path: string;
@@ -271,8 +301,6 @@ const readCurrentRoute = (): AppRoute => {
   if (typeof window === "undefined") return "workspace";
   return window.location.hash === SETTINGS_ROUTE_HASH ? "settings" : "workspace";
 };
-
-const isTauri = typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 
 const sanitizeAnsiStream = (value: string) => {
   if (!value) return value;
@@ -588,22 +616,7 @@ const ShellTerminal = forwardRef<XtermBaseHandle, ShellTerminalProps>(({
 
 ShellTerminal.displayName = "ShellTerminal";
 
-const showWslOption = (() => {
-  if (typeof navigator === "undefined") return false;
-  const platform = (navigator.platform || "").toLowerCase();
-  const ua = (navigator.userAgent || "").toLowerCase();
-  const isMac = platform.includes("mac");
-  const isWindows = platform.includes("win");
-  const isLinux = platform.includes("linux");
-  const isWsl = isLinux && (ua.includes("microsoft") || ua.includes("wsl"));
-  if (isMac || isWsl || isLinux) return false;
-  return isWindows;
-})();
-
 const safeInvoke = async <T,>(command: string, payload: Record<string, unknown>, fallback: T): Promise<T> => {
-  if (!isTauri) {
-    return fallback;
-  }
   try {
     return await invoke<T>(command, payload);
   } catch {
@@ -649,6 +662,35 @@ const matchesGitPreviewPath = (previewPath: string, changePath: string) => {
   const normalizedPreview = normalizeComparablePath(previewPath);
   const normalizedChange = normalizeComparablePath(changePath);
   return normalizedPreview === normalizedChange || normalizedPreview.endsWith(`/${normalizedChange}`);
+};
+
+const looksLikeWindowsPath = (value: string) => /^[a-zA-Z]:[\\/]/.test(value);
+
+const formatExecTargetLabel = (target: ExecTarget, t: Translator) =>
+  target.type === "wsl"
+    ? target.distro?.trim()
+      ? `WSL (${target.distro.trim()})`
+      : "WSL"
+    : t("nativeTarget");
+
+const fuzzyFileScore = (query: string, target: string) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedTarget = target.toLowerCase();
+  if (!normalizedQuery) return 0;
+  if (normalizedTarget === normalizedQuery) return 1000;
+  if (normalizedTarget.includes(normalizedQuery)) {
+    return 700 - Math.max(0, normalizedTarget.indexOf(normalizedQuery));
+  }
+
+  let score = 0;
+  let cursor = 0;
+  for (const char of normalizedQuery) {
+    const index = normalizedTarget.indexOf(char, cursor);
+    if (index === -1) return -1;
+    score += index === cursor ? 10 : Math.max(2, 8 - (index - cursor));
+    cursor = index + 1;
+  }
+  return score;
 };
 
 const fileParentLabel = (value?: string) => {
@@ -698,17 +740,6 @@ const flattenTree = (nodes: TreeNode[] = []): TreeNode[] => {
   return items;
 };
 
-const queueTaskStatusLabel = (status: BackendQueueTask["status"], t: Translator) => {
-  switch (status) {
-    case "running":
-      return t("running");
-    case "done":
-      return t("done");
-    default:
-      return t("queued");
-  }
-};
-
 const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
 
 const parseNumericId = (value: string) => {
@@ -743,6 +774,13 @@ const createSessionFromBackend = (source: BackendSession, locale: Locale, existi
 });
 
 const isDraftSession = (session: Session | undefined | null) => Boolean(session?.isDraft);
+const isHiddenDraftPlaceholder = (session: Session | undefined | null) => Boolean(
+  session
+  && session.isDraft
+  && !session.stream.trim()
+  && session.queue.length === 0
+  && session.messages.every((message) => message.role === "system")
+);
 
 const sessionTitleFromInput = (value: string) => {
   const firstLine = value
@@ -863,15 +901,13 @@ const updateSplitRatio = (node: SessionPaneNode, splitId: string, ratio: number)
   };
 };
 
-const activeTaskForSession = (session: Session) => session.queue.find((task) => task.status === "running");
-
 const isForegroundActiveStatus = (status: SessionStatus) => status === "running" || status === "waiting";
 
 const toBackgroundStatus = (status: SessionStatus): SessionStatus => (isForegroundActiveStatus(status) ? "background" : status);
 
 const restoreVisibleStatus = (session: Session): SessionStatus => {
   if (session.status !== "background") return session.status;
-  return activeTaskForSession(session) ? "running" : "waiting";
+  return "waiting";
 };
 
 const resolveVisibleStatus = (tab: Tab, session: Session, nextStatus: SessionStatus): SessionStatus => {
@@ -972,14 +1008,43 @@ export default function App() {
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => readStoredAppSettings());
   const [route, setRoute] = useState<AppRoute>(() => readCurrentRoute());
   const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
-  const [queueInput, setQueueInput] = useState("");
   const [agentInput, setAgentInput] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [worktreeModal, setWorktreeModal] = useState<WorktreeModalState | null>(null);
   const [worktreeView, setWorktreeView] = useState<"status" | "diff" | "tree">("status");
   const [previewMode, setPreviewMode] = useState<"preview" | "diff">("preview");
-  const [leftRailView, setLeftRailView] = useState<"sessions" | "files" | "git">("sessions");
+  const [codeSidebarView, setCodeSidebarView] = useState<"files" | "git">("files");
+  const [fileSearchQuery, setFileSearchQuery] = useState("");
+  const [isCodeExpanded, setIsCodeExpanded] = useState(false);
+  const [overlayCanUseWsl, setOverlayCanUseWsl] = useState(false);
+  const [folderBrowser, setFolderBrowser] = useState<{
+    loading: boolean;
+    currentPath: string;
+    homePath: string;
+    parentPath?: string;
+    roots: FilesystemRoot[];
+    entries: FilesystemEntry[];
+    error?: string;
+    notice?: string;
+  }>({
+    loading: false,
+    currentPath: "",
+    homePath: "",
+    roots: [],
+    entries: []
+  });
+  const [agentCommandStatus, setAgentCommandStatus] = useState<{
+    loading: boolean;
+    available: boolean | null;
+    runtimeLabel: string;
+    resolvedPath?: string;
+    error?: string;
+  }>({
+    loading: false,
+    available: null,
+    runtimeLabel: ""
+  });
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
@@ -994,7 +1059,6 @@ export default function App() {
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -1016,7 +1080,7 @@ export default function App() {
 
   const syncTerminalSize = (cols: number, rows: number, terminalId?: string) => {
     const resolvedTerminalId = terminalId ?? activeTerminal?.id;
-    if (!isTauri || !activeTab.id || !resolvedTerminalId) return;
+    if (!activeTab.id || !resolvedTerminalId) return;
     const numericId = Number(resolvedTerminalId.replace("term-", ""));
     if (!Number.isFinite(numericId)) return;
     const last = terminalSizeRef.current;
@@ -1175,16 +1239,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!showWslOption && stateRef.current.overlay.target.type === "wsl") {
+    if (!overlayCanUseWsl && stateRef.current.overlay.target.type === "wsl") {
       updateState((current) => ({
         ...current,
         overlay: { ...current.overlay, target: { type: "native" } }
       }));
     }
-  }, []);
+  }, [overlayCanUseWsl]);
 
   useEffect(() => {
-    if (!isTauri) return;
     const unlisten = listen<AgentEvent>("agent://event", (event) => {
       const { tab_id, session_id, kind, data } = event.payload;
       const cleaned = stripAnsi(data);
@@ -1241,7 +1304,6 @@ export default function App() {
   }, [t]);
 
   useEffect(() => {
-    if (!isTauri) return;
     const unlisten = listen<AgentLifecycleEvent>("agent://lifecycle", (event) => {
       const { tab_id, session_id, kind, data } = event.payload;
       let nextStatus: SessionStatus | null = null;
@@ -1311,7 +1373,7 @@ export default function App() {
       }
 
       if (kind === "turn_completed") {
-        void completeRunningTask(tab_id, session_id);
+        void markSessionIdle(tab_id, session_id);
       }
     });
     return () => {
@@ -1320,7 +1382,6 @@ export default function App() {
   }, [t]);
 
   useEffect(() => {
-    if (!isTauri) return;
     const unlisten = listen<TerminalEvent>("terminal://event", (event) => {
       const { tab_id, terminal_id, data } = event.payload;
       if (!data) return;
@@ -1355,6 +1416,21 @@ export default function App() {
     () => activeTab.sessions.find((s) => s.id === activeTab.activeSessionId) ?? activeTab.sessions[0],
     [activeTab]
   );
+  const commandCheckTarget = useMemo<ExecTarget>(
+    () => activeTab.project?.target ?? { type: "native" },
+    [
+      activeTab.project?.target?.type,
+      activeTab.project?.target?.type === "wsl" ? activeTab.project?.target.distro : ""
+    ]
+  );
+  const commandCheckRuntimeLabel = useMemo(
+    () => formatExecTargetLabel(commandCheckTarget, t),
+    [
+      commandCheckTarget.type,
+      commandCheckTarget.type === "wsl" ? commandCheckTarget.distro : "",
+      t
+    ]
+  );
   const activePaneSessionId = useMemo(
     () => findPaneSessionId(activeTab.paneLayout, activeTab.activePaneId) ?? activeTab.activeSessionId,
     [activeTab]
@@ -1363,10 +1439,70 @@ export default function App() {
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
   );
+  const showEmptyAgentState = useMemo(
+    () => activeTab.sessions.length === 1 && isHiddenDraftPlaceholder(activePaneSession),
+    [activePaneSession, activeTab.sessions.length]
+  );
   const activeTabSessionIdsKey = useMemo(
     () => activeTab.sessions.map((session) => session.id).join("|"),
     [activeTab.sessions]
   );
+
+  useEffect(() => {
+    const command = settingsDraft.agentCommand.trim();
+    if (!command) {
+      setAgentCommandStatus({
+        loading: false,
+        available: null,
+        runtimeLabel: commandCheckRuntimeLabel
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setAgentCommandStatus((current) => ({
+        ...current,
+        loading: true,
+        runtimeLabel: commandCheckRuntimeLabel,
+        error: undefined
+      }));
+      try {
+        const result = await invoke<CommandAvailability>("command_exists", {
+          command,
+          target: commandCheckTarget,
+          cwd: activeTab.project?.path
+        });
+        if (cancelled) return;
+        setAgentCommandStatus({
+          loading: false,
+          available: result.available,
+          runtimeLabel: commandCheckRuntimeLabel,
+          resolvedPath: result.resolved_path ?? undefined,
+          error: result.error ?? undefined
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setAgentCommandStatus({
+          loading: false,
+          available: false,
+          runtimeLabel: commandCheckRuntimeLabel,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    settingsDraft.agentCommand,
+    commandCheckRuntimeLabel,
+    commandCheckTarget.type,
+    commandCheckTarget.type === "wsl" ? commandCheckTarget.distro : "",
+    activeTab.project?.path
+  ]);
 
   const displayWorkspaceTitle = (value: string) => localizeWorkspaceTitle(value, locale);
   const displaySessionTitle = (value: string) => localizeSessionTitle(value, locale);
@@ -1378,8 +1514,8 @@ export default function App() {
     : undefined;
   const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
   const isArchiveView = Boolean(archivedEntry);
-  const queueSession = isArchiveView ? sessionForView : activeSession;
-  const queuePlainStream = stripAnsi(queueSession.stream);
+  const viewedSession = isArchiveView ? sessionForView : activeSession;
+  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
 
   useEffect(() => {
     updateTab(activeTab.id, (tab) => {
@@ -1421,7 +1557,6 @@ export default function App() {
   };
 
   const invokeAgent = async (command: string, payload: Record<string, unknown>, sessionId: string, label: string) => {
-    if (!isTauri) return true;
     try {
       await invoke(command, payload);
       return true;
@@ -1436,10 +1571,6 @@ export default function App() {
   };
 
   const loadSlashSkills = async (cwd?: string) => {
-    if (!isTauri) {
-      setSlashSkillItems([]);
-      return;
-    }
     setSlashMenuLoading(true);
     const items = await safeInvoke<ClaudeSlashSkillEntry[]>(
       "claude_slash_skills",
@@ -1488,11 +1619,9 @@ export default function App() {
     }
 
     let nextSession: Session | null = null;
-    if (isTauri) {
-      const created = await safeInvoke<BackendSession | null>("create_session", { tabId, mode: currentSession.mode }, null);
-      if (created) {
-        nextSession = createSessionFromBackend(created, locale);
-      }
+    const created = await safeInvoke<BackendSession | null>("create_session", { tabId, mode: currentSession.mode }, null);
+    if (created) {
+      nextSession = createSessionFromBackend(created, locale);
     }
 
     const title = sessionTitleFromInput(firstInput);
@@ -1539,7 +1668,6 @@ export default function App() {
   };
 
   const refreshTabFromBackend = async (tabId: string) => {
-    if (!isTauri) return;
     const snapshot = await safeInvoke<TabSnapshot | null>("tab_snapshot", { tabId }, null);
     if (!snapshot) return;
     updateTab(tabId, (tab) => {
@@ -1547,6 +1675,27 @@ export default function App() {
         const existing = tab.sessions.find((item) => parseNumericId(item.id) === session.id);
         return createSessionFromBackend(session, locale, existing);
       });
+      const nextActiveSessionId = String(snapshot.active_session_id);
+      const validSessionIds = new Set(nextSessions.map((session) => session.id));
+      const currentLeafIds = collectPaneLeaves(tab.paneLayout).map((leaf) => leaf.sessionId);
+      const hasValidPaneSession = currentLeafIds.some((sessionId) => validSessionIds.has(sessionId));
+      const remapPaneLayout = (node: SessionPaneNode): SessionPaneNode => {
+        if (node.type === "leaf") {
+          return {
+            ...node,
+            sessionId: validSessionIds.has(node.sessionId) ? node.sessionId : nextActiveSessionId
+          };
+        }
+        return {
+          ...node,
+          first: remapPaneLayout(node.first),
+          second: remapPaneLayout(node.second)
+        };
+      };
+      const nextPaneLayout = hasValidPaneSession
+        ? remapPaneLayout(tab.paneLayout)
+        : createPaneLeaf(nextActiveSessionId);
+      const nextLeafIds = collectPaneLeaves(nextPaneLayout);
       const nextTerminals = snapshot.terminals.map((terminal, index) => {
         const termId = `term-${terminal.id}`;
         const existing = tab.terminals.find((item) => item.id === termId);
@@ -1566,7 +1715,9 @@ export default function App() {
           pressure: snapshot.idle_policy.pressure
         },
         sessions: nextSessions,
-        activeSessionId: String(snapshot.active_session_id),
+        activeSessionId: nextActiveSessionId,
+        paneLayout: nextPaneLayout,
+        activePaneId: nextLeafIds.some((leaf) => leaf.id === tab.activePaneId) ? tab.activePaneId : (nextLeafIds[0]?.id ?? tab.activePaneId),
         terminals: nextTerminals.length ? nextTerminals : tab.terminals,
         activeTerminalId: nextTerminals.find((terminal) => terminal.id === tab.activeTerminalId)?.id
           ?? nextTerminals[0]?.id
@@ -1579,7 +1730,7 @@ export default function App() {
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const path = tab?.project?.path;
     const target = tab?.project?.target;
-    if (!tab || !path || !target) return;
+    if (!tab || !path || !target) return null;
 
     const [git, gitChanges, worktrees, tree] = await Promise.all([
       safeInvoke<GitStatus>("git_status", { path, target }, { branch: tab.git.branch || "main", changes: tab.git.changes ?? 0, last_commit: tab.git.lastCommit || "—" }),
@@ -1603,10 +1754,10 @@ export default function App() {
       fileTree: tree.root.children ?? [],
       changesTree: tree.changes ?? []
     }));
+    return tree;
   };
 
   const syncSessionPatch = async (tabId: string, sessionId: string, patch: SessionPatch) => {
-    if (!isTauri) return;
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;
     await safeInvoke("session_update", { tabId, sessionId: backendSessionId, patch }, null);
@@ -1810,7 +1961,7 @@ export default function App() {
     });
 
     const backendSessionId = parseNumericId(sessionId);
-    if (isTauri && backendSessionId !== null) {
+    if (backendSessionId !== null) {
       void safeInvoke("switch_session", { tabId, sessionId: backendSessionId }, null);
     }
 
@@ -1847,6 +1998,84 @@ export default function App() {
       overlay: { ...current.overlay, target }
     }));
   };
+
+  const browseOverlayDirectory = useCallback(async (target: ExecTarget, path?: string, selectCurrent = false) => {
+    setFolderBrowser((current) => ({
+      ...current,
+      loading: true,
+      error: undefined,
+      notice: undefined
+    }));
+
+    try {
+      const listing = await invoke<FilesystemListResponse>("filesystem_list", { target, path });
+      const recoveredPath = Boolean(path && listing.fallback_reason);
+      if (target.type === "native") {
+        setOverlayCanUseWsl(listing.roots.some((root) => looksLikeWindowsPath(root.path)));
+      }
+
+      setFolderBrowser({
+        loading: false,
+        currentPath: listing.current_path,
+        homePath: listing.home_path,
+        parentPath: listing.parent_path ?? undefined,
+        roots: listing.roots,
+        entries: listing.entries,
+        notice: recoveredPath ? t("folderBrowserRecovered") : undefined
+      });
+
+      if (selectCurrent || recoveredPath) {
+        updateState((current) => ({
+          ...current,
+          overlay: {
+            ...current.overlay,
+            input: listing.current_path
+          }
+        }));
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setFolderBrowser((current) => ({
+        ...current,
+        loading: false,
+        currentPath: "",
+        parentPath: undefined,
+        entries: [],
+        error: locale === "zh"
+          ? `无法读取服务器目录${reason ? `：${reason}` : ""}`
+          : `Unable to read server directories${reason ? `: ${reason}` : ""}`
+      }));
+    }
+  }, [locale, t]);
+
+  const onBrowseOverlayDirectory = (path?: string, selectCurrent = false) => {
+    void browseOverlayDirectory(stateRef.current.overlay.target, path, selectCurrent);
+  };
+
+  const onSelectOverlayDirectory = (path: string) => {
+    updateState((current) => ({
+      ...current,
+      overlay: {
+        ...current.overlay,
+        input: path
+      }
+    }));
+  };
+
+  useEffect(() => {
+    if (!state.overlay.visible || state.overlay.mode !== "local") return;
+    void browseOverlayDirectory(
+      state.overlay.target,
+      state.overlay.input || undefined,
+      !state.overlay.input
+    );
+  }, [
+    state.overlay.visible,
+    state.overlay.mode,
+    state.overlay.target.type,
+    state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
+    browseOverlayDirectory
+  ]);
 
   const onOverlayCancel = () => {
     updateState((current) => ({
@@ -1905,10 +2134,8 @@ export default function App() {
     }));
 
     await refreshTabFromBackend(overlay.tabId);
-    await refreshWorkspaceArtifacts(overlay.tabId);
-
-    const refreshedTab = stateRef.current.tabs.find((tab) => tab.id === overlay.tabId);
-    const firstFile = flattenTree(refreshedTab?.fileTree ?? [])[0];
+    const workspaceTree = await refreshWorkspaceArtifacts(overlay.tabId);
+    const firstFile = flattenTree(workspaceTree?.root.children ?? []).find((node) => node.kind === "file");
     if (firstFile) {
       await onFileSelect(firstFile);
     }
@@ -1924,6 +2151,19 @@ export default function App() {
     const command = buildAgentCommand(tab);
     const cwd = tab.project.path;
     const target = tab.project.target;
+    const availability = await safeInvoke<CommandAvailability | null>(
+      "command_exists",
+      { command, target, cwd },
+      null
+    );
+    if (availability && !availability.available) {
+      addToast({
+        id: createId("toast"),
+        text: `${t("agentStartFailed")}: ${availability.error ?? t("launchCommandMissing", { runtime: formatExecTargetLabel(target, t) })}`,
+        sessionId: session.id
+      });
+      return false;
+    }
     return invokeAgent("agent_start", {
       tabId: tab.id,
       sessionId: session.id,
@@ -2034,7 +2274,7 @@ export default function App() {
       viewingArchiveId: undefined
     }));
     const backendSessionId = parseNumericId(sessionId);
-    if (isTauri && backendSessionId !== null) {
+    if (backendSessionId !== null) {
       void safeInvoke("switch_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
     }
     if (previousActiveId !== sessionId) {
@@ -2090,14 +2330,14 @@ export default function App() {
 
     if (nextActiveSessionId) {
       const backendSessionId = parseNumericId(nextActiveSessionId);
-      if (isTauri && backendSessionId !== null) {
+      if (backendSessionId !== null) {
         void safeInvoke("switch_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
       }
     }
 
     if (!isDraftSession(session)) {
       const backendSessionId = parseNumericId(session.id);
-      if (isTauri && backendSessionId !== null) {
+      if (backendSessionId !== null) {
         void safeInvoke("archive_session", { tabId: activeTab.id, sessionId: backendSessionId }, null);
       }
     }
@@ -2139,7 +2379,7 @@ export default function App() {
       return;
     }
     const backendSessionId = parseNumericId(sessionId);
-    const archived = isTauri && backendSessionId !== null
+    const archived = backendSessionId !== null
       ? await safeInvoke<BackendArchiveEntry | null>("archive_session", { tabId, sessionId: backendSessionId }, null)
       : null;
 
@@ -2187,7 +2427,7 @@ export default function App() {
 
     if (wasActiveSession && nextActiveSessionId) {
       const backendSessionId = parseNumericId(nextActiveSessionId);
-      if (isTauri && backendSessionId !== null) {
+      if (backendSessionId !== null) {
         void safeInvoke("switch_session", { tabId, sessionId: backendSessionId }, null);
       }
       if (nextActiveStatus) {
@@ -2253,76 +2493,28 @@ export default function App() {
     commitSettings(nextSettings);
   };
 
-  const onToggleAutoFeed = () => {
-    updateTab(activeTab.id, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) => (s.id === tab.activeSessionId ? { ...s, autoFeed: !s.autoFeed } : s))
-    }));
-    void syncSessionPatch(activeTab.id, activeTab.activeSessionId, { auto_feed: !activeSession.autoFeed });
-  };
-
-  const onQueueAdd = async () => {
-    const text = queueInput.trim();
-    if (!text) return;
-    let nextTaskId: string | null = null;
-    const backendSessionId = parseNumericId(activeTab.activeSessionId);
-    if (isTauri && backendSessionId !== null) {
-      const createdTask = await safeInvoke<BackendQueueTask | null>(
-        "queue_add",
-        { tabId: activeTab.id, sessionId: backendSessionId, text },
-        null
-      );
-      if (createdTask) {
-        nextTaskId = String(createdTask.id);
-      }
-    }
-    updateTab(activeTab.id, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) =>
-        s.id === tab.activeSessionId
-          ? { ...s, queue: [...s.queue, { id: nextTaskId ?? createId("task"), text, status: "queued" }] }
-          : s
-      )
-    }));
-    setQueueInput("");
-  };
-
-  const completeRunningTask = async (tabId: string, sessionId: string, reason?: string) => {
+  const markSessionIdle = async (tabId: string, sessionId: string, note?: string) => {
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const session = tab?.sessions.find((item) => item.id === sessionId);
     if (!tab || !session) return;
-
-    const runningTask = activeTaskForSession(session);
-    if (isTauri && runningTask) {
-      const backendSessionId = parseNumericId(sessionId);
-      const backendTaskId = parseNumericId(runningTask.id);
-      if (backendSessionId !== null && backendTaskId !== null) {
-        await safeInvoke("queue_complete", { tabId, sessionId: backendSessionId, taskId: backendTaskId }, null);
-      }
-    }
 
     updateTab(tabId, (currentTab) => ({
       ...currentTab,
       sessions: currentTab.sessions.map((currentSession) => {
         if (currentSession.id !== sessionId) return currentSession;
-        const queue: Session["queue"] = currentSession.queue.map((task) =>
-          task.status === "running" ? { ...task, status: "done" } : task
-        );
-        const completedTask = currentSession.queue.find((task) => task.status === "running");
         const nextUnread = currentSession.id === currentTab.activeSessionId ? 0 : currentSession.unread + 1;
         return {
           ...currentSession,
           status: "idle",
-          queue,
           unread: nextUnread,
           lastActiveAt: Date.now(),
-          messages: completedTask
+          messages: note
             ? [
                 ...currentSession.messages,
                 {
                   id: createId("msg"),
-                  role: "agent",
-                  content: reason ?? t("taskCompleteMessage", { text: completedTask.text }),
+                  role: "system",
+                  content: note,
                   time: nowLabel()
                 }
               ]
@@ -2337,19 +2529,12 @@ export default function App() {
     const updatedSession = updatedTab?.sessions.find((item) => item.id === sessionId);
     if (!updatedTab || !updatedSession) return;
 
-    if (updatedTab.activeSessionId !== sessionId && runningTask) {
+    if (updatedTab.activeSessionId !== sessionId && session.status !== "idle") {
       addToast({
         id: createId("toast"),
-        text: t("taskCompletedToast", { title: displaySessionTitle(updatedSession.title) }),
+        text: note ?? t("taskCompletedToast", { title: displaySessionTitle(updatedSession.title) }),
         sessionId
       });
-    }
-
-    const nextTask = updatedSession.queue.find((task) => task.status === "queued");
-    if (updatedSession.autoFeed && nextTask) {
-      setTimeout(() => {
-        void runTask(tabId, sessionId, nextTask.id);
-      }, 320);
     }
   };
 
@@ -2358,102 +2543,21 @@ export default function App() {
     const session = tab?.sessions.find((item) => item.id === sessionId);
     if (!tab || !session) return;
 
-    if (activeTaskForSession(session)) {
-      await completeRunningTask(tabId, sessionId, t("agentExited"));
-      return;
-    }
-
     if (session.status !== "idle") {
-      updateTab(tabId, (currentTab) => ({
-        ...currentTab,
-        sessions: currentTab.sessions.map((currentSession) =>
-          currentSession.id === sessionId
-            ? { ...currentSession, status: "idle", lastActiveAt: Date.now() }
-            : currentSession
-        )
-      }));
-      void syncSessionPatch(tabId, sessionId, { status: "idle", last_active_at: Date.now() });
+      await markSessionIdle(tabId, sessionId, t("agentExited"));
     }
-  };
-
-  const onSessionEnd = async () => {
-    if (isDraftSession(activeSession)) {
-      await onArchiveSession(activeSession.id);
-      return;
-    }
-    await completeRunningTask(activeTab.id, activeTab.activeSessionId);
-  };
-
-  const onStopAgent = async () => {
-    if (isDraftSession(activeSession)) return;
-    if (isTauri) {
-      await safeInvoke("agent_stop", { tabId: activeTab.id, sessionId: activeTab.activeSessionId }, null);
-    }
-    await completeRunningTask(activeTab.id, activeTab.activeSessionId, t("taskStopped"));
-  };
-
-  const runTask = async (tabId: string, sessionId: string, taskId: string) => {
-    const tabSnapshot = stateRef.current.tabs.find((t) => t.id === tabId);
-    const sessionSnapshot = tabSnapshot?.sessions.find((s) => s.id === sessionId);
-    if (!tabSnapshot || !sessionSnapshot) return;
-    if (activeTaskForSession(sessionSnapshot)) return;
-    const taskText = sessionSnapshot?.queue.find((task) => task.id === taskId)?.text ?? "task";
-
-    if (isTauri) {
-      const backendSessionId = parseNumericId(sessionId);
-      const backendTaskId = parseNumericId(taskId);
-      if (backendSessionId !== null && backendTaskId !== null) {
-        await safeInvoke("queue_run", { tabId, sessionId: backendSessionId, taskId: backendTaskId }, null);
-      }
-    }
-
-    updateTab(tabId, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) => {
-        if (s.id !== sessionId) return s;
-        const queue: Session["queue"] = s.queue.map((task) => (task.id === taskId ? { ...task, status: "running" } : task));
-        return {
-          ...s,
-          status: resolveVisibleStatus(tab, s, "waiting"),
-          queue,
-          messages: [
-            ...s.messages,
-            {
-              id: createId("msg"),
-              role: "agent",
-              content: t("workingOn", { text: queue.find((q) => q.id === taskId)?.text ?? "task" }),
-              time: nowLabel()
-            }
-          ]
-        };
-      })
-    }));
-    touchSession(tabId, sessionId);
-
-    if (isTauri && tabSnapshot && sessionSnapshot) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
-      if (!started) return;
-      await agentSend(tabSnapshot, sessionSnapshot, taskText);
-      return;
-    }
-  };
-
-  const onQueueRun = () => {
-    if (activeTaskForSession(activeSession)) return;
-    const nextTask = activeSession.queue.find((task) => task.status === "queued");
-    if (!nextTask) return;
-    void runTask(activeTab.id, activeSession.id, nextTask.id);
   };
 
   const onFileSelect = async (node: TreeNode) => {
     if (node.kind !== "file") return;
-    const path = resolvePath(activeTab.project?.path, node.path);
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const path = resolvePath(currentTab.project?.path, node.path);
     const preview = await safeInvoke<FilePreview>("file_preview", { path }, {
       path: node.path,
       content: t("previewUnavailable"),
       mode: "preview"
     });
-    updateTab(activeTab.id, (tab) => ({
+    updateTab(currentTab.id, (tab) => ({
       ...tab,
       filePreview: {
         ...tab.filePreview,
@@ -2475,11 +2579,12 @@ export default function App() {
   };
 
   const onGitChangeSelect = async (change: GitChangeEntry) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
     const relativePath = sanitizeGitRelativePath(change.path);
-    const path = resolvePath(activeTab.project?.path, relativePath);
+    const path = resolvePath(currentTab.project?.path, relativePath);
     let payload = await safeInvoke<GitFileDiffPayload>("git_file_diff_payload", {
-      path: activeTab.project?.path ?? "",
-      target: activeTab.project?.target ?? { type: "native" },
+      path: currentTab.project?.path ?? "",
+      target: currentTab.project?.target ?? { type: "native" },
       filePath: relativePath,
       section: change.section
     }, {
@@ -2490,8 +2595,8 @@ export default function App() {
 
     if (!payload.original_content && !payload.modified_content && !payload.diff) {
       const fallbackDiff = await safeInvoke<string>("git_diff_file", {
-        path: activeTab.project?.path ?? "",
-        target: activeTab.project?.target ?? { type: "native" },
+        path: currentTab.project?.path ?? "",
+        target: currentTab.project?.target ?? { type: "native" },
         filePath: relativePath,
         staged: change.section === "staged"
       }, "");
@@ -2609,7 +2714,6 @@ export default function App() {
       addToast({ id: createId("toast"), text: t("selectProjectFirst"), sessionId: activeSession.id });
       return false;
     }
-    if (!isTauri) return false;
     try {
       await invoke(command, payload);
       await refreshWorkspaceArtifacts(activeTab.id);
@@ -2716,7 +2820,7 @@ export default function App() {
 
   const onCloseTerminal = async (terminalId: string) => {
     const numericId = Number(terminalId.replace("term-", ""));
-    if (isTauri && Number.isFinite(numericId)) {
+    if (Number.isFinite(numericId)) {
       await safeInvoke("terminal_close", { tabId: activeTab.id, terminalId: numericId }, null);
     }
 
@@ -2746,20 +2850,6 @@ export default function App() {
       changes: tree.changes,
       loading: true
     });
-
-    if (!isTauri) {
-      setWorktreeModal({
-        name: tree.name,
-        path: tree.path,
-        branch: tree.branch,
-        status: tree.status,
-        diff: tree.diff ?? "",
-        tree: tree.tree ?? activeTab.fileTree,
-        changes: tree.changes ?? activeTab.changesTree,
-        loading: false
-      });
-      return;
-    }
 
     const detail = await safeInvoke<WorktreeDetail | null>(
       "worktree_inspect",
@@ -2793,11 +2883,11 @@ export default function App() {
     });
   };
 
-  const onResizeStart = (type: "left" | "right" | "right-split") => (event: React.PointerEvent) => {
+  const onResizeStart = (type: "left" | "right-split") => (event: React.PointerEvent) => {
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
-    const { leftWidth, rightWidth, rightSplit } = stateRef.current.layout;
+    const { rightWidth, rightSplit } = stateRef.current.layout;
     const splitContainerHeight = type === "right-split"
       ? event.currentTarget instanceof HTMLElement
         ? event.currentTarget.parentElement?.getBoundingClientRect().height ?? 1
@@ -2806,16 +2896,15 @@ export default function App() {
 
     const onMove = (e: PointerEvent) => {
       if (type === "left") {
-        const next = Math.max(0, leftWidth + (e.clientX - startX));
-        updateState((current) => ({ ...current, layout: { ...current.layout, leftWidth: next } }));
-      }
-      if (type === "right") {
-        const next = Math.max(0, rightWidth - (e.clientX - startX));
+        const viewportWidth = window.innerWidth || 1440;
+        const minWidth = 240;
+        const maxWidth = Math.max(minWidth, Math.min(480, Math.round(viewportWidth * 0.4)));
+        const next = Math.max(minWidth, Math.min(maxWidth, rightWidth - (e.clientX - startX)));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightWidth: next } }));
       }
       if (type === "right-split") {
         const delta = e.clientY - startY;
-        const next = Math.max(15, Math.min(85, rightSplit + (delta / splitContainerHeight) * 100));
+        const next = Math.max(46, Math.min(76, rightSplit + (delta / splitContainerHeight) * 100));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightSplit: next } }));
       }
     };
@@ -2841,6 +2930,9 @@ export default function App() {
         showTerminalPanel: pane === "terminal" ? !current.layout.showTerminalPanel : current.layout.showTerminalPanel
       }
     }));
+    if (pane === "code") {
+      setIsCodeExpanded(false);
+    }
     requestAnimationFrame(() => {
       shellTerminalRef.current?.fit();
     });
@@ -2849,7 +2941,7 @@ export default function App() {
   const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
   const showCodePanel = state.layout.showCodePanel;
   const showTerminalPanel = state.layout.showTerminalPanel;
-  const isRightPanelVisible = showCodePanel || showTerminalPanel;
+  const showAgentPanel = !isCodeExpanded;
 
   const focusAgentInput = () => {
     requestAnimationFrame(() => {
@@ -3005,21 +3097,9 @@ export default function App() {
     focusAgentInput();
     touchSession(tabSnapshot.id, sessionSnapshot.id);
 
-    if (isTauri) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
-      if (!started) return;
-      await agentSend(tabSnapshot, sessionSnapshot, content);
-      return;
-    }
-
-    updateTab(tabSnapshot.id, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) =>
-        s.id === sessionSnapshot.id
-          ? { ...s, stream: `${s.stream}\n> ${content}\n` }
-          : s
-      )
-    }));
+    const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+    if (!started) return;
+    await agentSend(tabSnapshot, sessionSnapshot, content);
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
@@ -3177,10 +3257,8 @@ export default function App() {
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
-    if (leftRailView === "files" || leftRailView === "git") {
-      void refreshWorkspaceArtifacts(activeTab.id);
-    }
-  }, [leftRailView, activeTab.id, activeTab.project?.path]);
+    void refreshWorkspaceArtifacts(activeTab.id);
+  }, [codeSidebarView, activeTab.id, activeTab.project?.path]);
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
@@ -3195,7 +3273,7 @@ export default function App() {
   }, [activeTerminal?.id, activeTab.id]);
 
   const onShellTerminalData = useCallback((data: string) => {
-    if (!isTauri || !activeTerminal) return;
+    if (!activeTerminal) return;
     const numericId = Number(activeTerminal.id.replace("term-", ""));
     if (!Number.isFinite(numericId)) return;
     void invoke("terminal_write", {
@@ -3206,17 +3284,17 @@ export default function App() {
   }, [activeTerminal?.id, activeTab.id]);
 
   useEffect(() => {
-    if (!showTerminalPanel || !isRightPanelVisible) return;
+    if (!showTerminalPanel || isCodeExpanded) return;
     requestAnimationFrame(() => {
       shellTerminalRef.current?.fit();
     });
-  }, [showTerminalPanel, isRightPanelVisible, state.layout.rightWidth, state.layout.rightSplit]);
+  }, [showTerminalPanel, isCodeExpanded, state.layout.rightSplit]);
 
   useEffect(() => {
-    if (activeTerminal && showTerminalPanel && isRightPanelVisible) {
+    if (activeTerminal && showTerminalPanel && !isCodeExpanded) {
       shellTerminalRef.current?.focus();
     }
-  }, [activeTerminal?.id, showTerminalPanel, isRightPanelVisible]);
+  }, [activeTerminal?.id, showTerminalPanel, isCodeExpanded]);
 
   useEffect(() => {
     if (activeTerminal) return;
@@ -3348,13 +3426,6 @@ export default function App() {
         }
       }
     },
-    {
-      id: "toggle-language",
-      label: locale === "zh" ? "切换语言（中/EN）" : "Toggle Language (EN/中)",
-      description: locale === "zh" ? "在中文和英文界面间切换" : "Switch between Chinese and English UI",
-      keywords: "language locale i18n",
-      run: () => setLocale((current) => current === "zh" ? "en" : "zh")
-    },
     ...workspaceTabs.map((tab) => ({
       id: `workspace:${tab.id}`,
       label: `${locale === "zh" ? "切换到" : "Switch To"} ${tab.label}`,
@@ -3397,8 +3468,6 @@ export default function App() {
       items: activeTab.gitChanges.filter((change) => change.section === "untracked")
     }
   ].filter((group) => group.items.length > 0);
-  const selectedGitChange = activeTab.gitChanges.find((change) => `${change.section}:${change.path}:${change.code}` === selectedGitChangeKey)
-    ?? activeTab.gitChanges.find((change) => matchesGitPreviewPath(activeTab.filePreview.path, change.path));
   const previewGitChange = activeTab.gitChanges.find((change) => matchesGitPreviewPath(activeTab.filePreview.path, change.path));
   const gitSummary = {
     changes: gitChangeGroups.find((group) => group.key === "changes")?.items.length ?? 0,
@@ -3406,23 +3475,29 @@ export default function App() {
     untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
   };
   const previewFileName = displayPathName(activeTab.filePreview.path);
-  const previewParentPath = activeTab.filePreview.parentPath || fileParentLabel(activeTab.filePreview.path);
   const workspaceFolderName = displayPathName(activeTab.project?.path) || t("noWorkspace");
+  const searchableFiles = flattenTree(activeTab.fileTree)
+    .filter((node) => node.kind === "file")
+    .map((node) => ({
+      ...node,
+      absolutePath: resolvePath(activeTab.project?.path, node.path)
+    }));
+  const normalizedFileSearchQuery = fileSearchQuery.trim().toLowerCase();
+  const fileSearchResults = normalizedFileSearchQuery
+    ? searchableFiles
+      .map((node) => ({
+        node,
+        score: fuzzyFileScore(normalizedFileSearchQuery, `${node.name} ${node.path}`)
+      }))
+      .filter((item) => item.score >= 0)
+      .sort((left, right) => right.score - left.score || left.node.path.localeCompare(right.node.path))
+      .slice(0, 24)
+    : [];
   const currentFileChangeCount = activeTab.git.changes;
   const hasStructuredDiffContent = Boolean(
     (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
     || (activeTab.filePreview.modifiedContent && activeTab.filePreview.modifiedContent.length > 0)
   );
-  const fileProgressPercent = hasPreviewFile
-    ? activeTab.filePreview.mode === "diff"
-      ? Math.min(100, Math.max(24, currentFileChangeCount * 12))
-      : activeTab.filePreview.dirty
-        ? 94
-        : 40
-    : 8;
-  const fileProgressTone = hasPreviewFile
-    ? (activeTab.filePreview.mode === "diff" || activeTab.filePreview.dirty ? "warning" : "steady")
-    : "idle";
   const hasTerminalOutput = Boolean(activeTerminal?.output?.trim());
   const terminalProgressPercent = activeTerminal
     ? (hasTerminalOutput ? 88 : 52)
@@ -3430,7 +3505,6 @@ export default function App() {
   const terminalProgressTone = activeTerminal
     ? (hasTerminalOutput ? "live" : "steady")
     : "idle";
-  const rightPanelModeClass = showCodePanel && showTerminalPanel ? "dual-pane" : "single-pane";
   const isSettingsRoute = route === "settings";
   const slashMenuItems: ClaudeSlashMenuItem[] = [
     ...BUILTIN_SLASH_COMMANDS.map((item) => ({
@@ -3486,47 +3560,28 @@ export default function App() {
     { id: "worktrees" as const, label: t("settingsWorktrees"), icon: <SettingsWorktreeIcon />, enabled: false },
     { id: "archives" as const, label: t("settingsArchives"), icon: <SettingsArchiveIcon />, enabled: false }
   ];
-  const railItems = [
-    { id: "sessions" as const, label: t("sessionsNav"), count: activeTab.sessions.length, icon: <RailSessionsIcon /> },
-    { id: "files" as const, label: t("files"), count: flattenTree(activeTab.fileTree).filter((node) => node.kind === "file").length, icon: <RailFilesIcon /> },
-    { id: "git" as const, label: t("gitNav"), count: activeTab.git.changes, icon: <RailGitIcon /> }
-  ];
-
-  const onFolderPick = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.currentTarget.files;
-    if (!files || files.length === 0) return;
-    const first = files[0] as File & { path?: string; webkitRelativePath?: string };
-    let pickedPath = first.path;
-    if (!pickedPath && first.webkitRelativePath) {
-      const root = first.webkitRelativePath.split("/")[0];
-      pickedPath = root;
-    }
-    updateState((current) => ({
-      ...current,
-      overlay: { ...current.overlay, input: pickedPath || current.overlay.input }
-    }));
-  };
-
-  const openFolderDialog = async () => {
-    if (isTauri) {
-      try {
-        const value = await invoke<string | null>("dialog_pick_folder", {});
-        if (typeof value === "string" && value.trim()) {
-          updateState((current) => ({
-            ...current,
-            overlay: { ...current.overlay, input: value }
-          }));
-        } else {
-          addToast({ id: createId("toast"), text: t("noFolderSelected"), sessionId: activeSession.id });
-        }
-      } catch (error) {
-        addToast({ id: createId("toast"), text: t("dialogFailed"), sessionId: activeSession.id });
-      }
-      return;
-    }
-    folderInputRef.current?.click();
-  };
-
+  const trimmedLaunchCommand = settingsDraft.agentCommand.trim();
+  const launchCommandStateClass = agentCommandStatus.loading
+    ? "checking"
+    : !trimmedLaunchCommand
+      ? "idle"
+      : agentCommandStatus.available
+        ? "available"
+        : "missing";
+  const launchCommandStatusText = agentCommandStatus.loading
+    ? t("launchCommandChecking")
+    : !trimmedLaunchCommand
+      ? t("launchCommandEmpty")
+      : agentCommandStatus.available
+        ? t("launchCommandAvailable", { runtime: agentCommandStatus.runtimeLabel || commandCheckRuntimeLabel })
+        : t("launchCommandMissing", { runtime: agentCommandStatus.runtimeLabel || commandCheckRuntimeLabel });
+  const launchCommandDetailText = !trimmedLaunchCommand
+    ? ""
+    : agentCommandStatus.available
+      ? (agentCommandStatus.resolvedPath
+        ? t("launchCommandResolvedPath", { path: agentCommandStatus.resolvedPath })
+        : "")
+      : (agentCommandStatus.error ?? "");
   const renderAgentPane = (node: SessionPaneNode) => {
     if (node.type === "split") {
       return (
@@ -3577,7 +3632,7 @@ export default function App() {
               title={t("splitVertical")}
               aria-label={t("splitVertical")}
             >
-              <AgentSplitVerticalIcon />
+              <AgentSplitHorizontalIcon />
             </button>
             <button
               type="button"
@@ -3586,7 +3641,7 @@ export default function App() {
               title={t("splitHorizontal")}
               aria-label={t("splitHorizontal")}
             >
-              <AgentSplitHorizontalIcon />
+              <AgentSplitVerticalIcon />
             </button>
             <button type="button" className="pane-action close" onClick={() => void onCloseAgentPane(node.id, session.id)} title={t("close")}>
               <HeaderCloseIcon />
@@ -3694,16 +3749,6 @@ export default function App() {
                 {isFocusMode ? <MinimizeIcon /> : <MaximizeIcon />}
                 <span>{locale === "zh" ? "专注" : "Focus"}</span>
               </button>
-              <button
-                type="button"
-                className="topbar-tool locale"
-                onClick={() => setLocale((current) => current === "zh" ? "en" : "zh")}
-                data-testid="locale-toggle-compact"
-                title={t("languageLabel")}
-                aria-label={t("languageLabel")}
-              >
-                {locale === "zh" ? "中" : "EN"}
-              </button>
               <button className="topbar-tool" type="button" onClick={onOpenSettings} data-testid="settings-open" title={t("settings")} aria-label={t("settings")}>
                 <HeaderSettingsIcon />
               </button>
@@ -3760,13 +3805,25 @@ export default function App() {
                           <span>{t("launchCommandHint")}</span>
                         </div>
                         <div className="settings-row-control">
-                          <input
-                            className="settings-inline-input"
-                            value={settingsDraft.agentCommand}
-                            onChange={(e) => onUpdateSettings({ agentCommand: e.target.value })}
-                            placeholder={t("launchCommandPlaceholder")}
-                            data-testid="settings-agent-command"
-                          />
+                          <div className="settings-command-field">
+                            <input
+                              className="settings-inline-input"
+                              value={settingsDraft.agentCommand}
+                              onChange={(e) => onUpdateSettings({ agentCommand: e.target.value })}
+                              placeholder={t("launchCommandPlaceholder")}
+                              data-testid="settings-agent-command"
+                            />
+                            <div
+                              className={`settings-inline-status ${launchCommandStateClass}`}
+                              data-testid="settings-agent-command-status"
+                            >
+                              <span className="settings-inline-status-dot" aria-hidden="true" />
+                              <div className="settings-inline-status-copy">
+                                <span>{launchCommandStatusText}</span>
+                                {launchCommandDetailText && <small>{launchCommandDetailText}</small>}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -3942,546 +3999,482 @@ export default function App() {
             </span>
           </div>
         </div>
-      <div className={`workspace-layout ${isFocusMode ? "focus-mode" : ""}`}>
-        <section className="panel left-panel">
-          <div className="panel-inner sidebar-workbench">
-            <div className="sidebar-rail">
-              {railItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`rail-tab ${leftRailView === item.id ? "active" : ""}`}
-                  onClick={() => setLeftRailView(item.id)}
-                  title={item.label}
-                >
-                  <span className="rail-icon">{item.icon}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="sidebar-panel">
-              {leftRailView === "sessions" && (
-                <div className="section grow queue-card compact">
-                  <div className="session-stack-list">
-                    {activeTab.sessions.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`session-stack-item readonly ${item.id === activeTab.activeSessionId ? "active" : ""}`}
-                      >
-                        <span className={`session-top-dot ${sessionTone(item.status)} ${sessionTone(item.status) === "active" ? "pulse" : ""}`} />
-                        <span className="session-stack-copy">
-                          <span className="session-stack-title">{displaySessionTitle(item.title)}</span>
-                        </span>
-                        {item.unread > 0 && <span className="session-top-unread">{item.unread > 9 ? "9+" : item.unread}</span>}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="section-head">
-                    <div>
-                      <div className="section-kicker">{t("sessionsNav")}</div>
-                      <h3>{displaySessionTitle(activeSession.title)}</h3>
-                    </div>
-                    <div className="section-actions">
-                      <button className="btn tiny" type="button" onClick={() => void onNewSession()}>{t("newSession")}</button>
-                      <label className="toggle">
-                        <input type="checkbox" checked={queueSession.autoFeed} onChange={onToggleAutoFeed} disabled={isArchiveView} />
-                        <span className="toggle-track"><span className="toggle-thumb" /></span>
-                        <span>{t("autoFeed")}</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="queue-controls inline">
-                    <input value={queueInput} onChange={(e) => setQueueInput(e.target.value)} placeholder={t("queuePlaceholder")} disabled={isArchiveView} data-testid="queue-input" />
-                    <div className="section-actions">
-                      <button className="btn tiny" onClick={() => void onQueueAdd()} disabled={isArchiveView} data-testid="queue-add">{t("add")}</button>
-                      <button className="btn tiny ghost" onClick={onQueueRun} disabled={isArchiveView || Boolean(activeTaskForSession(activeSession))} data-testid="queue-run">{t("runNext")}</button>
-                    </div>
-                  </div>
-                  <div className="queue-list">
-                    {queueSession.queue.length === 0 && <div className="empty">{t("queueEmpty")}</div>}
-                    {queueSession.queue.map((task) => (
-                      <div key={task.id} className={`queue-item ${task.status}`}>
-                        <div>
-                          <span>{task.text}</span>
-                          <small>{queueTaskStatusLabel(task.status, t)}</small>
-                        </div>
-                        {task.status === "running" && <span className="pulse-dot" />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {leftRailView === "files" && (
-                <div className="section grow repo-card blueprint-card">
-                  {activeTab.fileTree.length === 0 && <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>}
-                  <TreeView
-                    nodes={activeTab.fileTree}
-                    onSelect={onFileSelect}
-                    collapsedPaths={repoCollapsedPaths}
-                    locale={locale}
-                    onToggleCollapse={(path) => {
-                      setRepoCollapsedPaths((current) => {
-                        const next = new Set(current);
-                        if (next.has(path)) {
-                          next.delete(path);
-                        } else {
-                          next.add(path);
-                        }
-                        return next;
-                      });
-                    }}
-                  />
-                </div>
-              )}
-
-              {leftRailView === "git" && (
-                <>
-                  <div className="section workspace-brief compact git-overview">
-                    <div className="section-kicker">Git</div>
-                    <div className="brief-grid">
-                      <div className="brief-card">
-                        <span>{t("branch")}</span>
-                        <strong>{activeTab.git.branch}</strong>
-                      </div>
-                      <div className="brief-card">
-                        <span>{t("changes")}</span>
-                        <strong>{activeTab.git.changes}</strong>
-                      </div>
-                      <div className="brief-card full">
-                        <span>{t("status")}</span>
-                        <strong>{activeTab.git.changes > 0 ? t("modified") : t("clean")}</strong>
-                      </div>
-                    </div>
-                    <div className="git-summary-strip">
-                      <span>{t("changesCount", { count: gitSummary.changes })}</span>
-                      <span>{t("stagedCount", { count: gitSummary.staged })}</span>
-                      <span>{t("untrackedCount", { count: gitSummary.untracked })}</span>
-                    </div>
-                    <div className="section-actions">
-                      <button className="btn tiny" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)}>{t("refresh")}</button>
-                    </div>
-                  </div>
-
-                  <div className="section grow repo-card blueprint-card">
-                    <div className="section-head">
+      <div className={`workspace-stack ${isFocusMode ? "focus-mode" : ""} ${isCodeExpanded ? "code-expanded" : ""}`}>
+        <div
+          className="workspace-top-shell"
+          style={!isCodeExpanded && showTerminalPanel ? { flex: `0 0 ${state.layout.rightSplit}%` } : undefined}
+        >
+          {showAgentPanel && (
+            <>
+              <section
+                className="panel center-panel workspace-agent-shell"
+                style={{ flex: "1 1 0%" }}
+              >
+                <div className="panel-inner studio-panel compact">
+                  {isArchiveView && (
+                    <div className="archive-banner">
                       <div>
-                        <div className="section-kicker">{t("changes")}</div>
-                        <h3>{t("sourceControl")}</h3>
+                        {t("viewingArchivedSession")}
+                        <div className="hint">{t("exitArchiveHint")}</div>
                       </div>
+                      <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
                     </div>
-                    {gitChangeGroups.length === 0 && <div className="tree-empty">{t("noChangesDetected")}</div>}
-                    <div className="source-control-list">
-                      {gitChangeGroups.map((group) => (
-                        <div key={group.key} className="source-group">
-                          <div className="source-group-head">
-                            <span>{group.label}</span>
-                            <span>{group.items.length}</span>
-                          </div>
-                          <div className="source-group-items">
-                            {group.items.map((change) => {
-                              const changeKey = `${change.section}:${change.path}:${change.code}`;
-                              const rowActions = change.section === "staged"
-                                ? [{ id: "unstage" as const, title: t("unstageFile"), icon: <GitUnstageIcon /> }]
-                                : [
-                                  { id: "stage" as const, title: t("stageFile"), icon: <GitStageIcon /> },
-                                  { id: "discard" as const, title: t("discardFile"), icon: <GitDiscardIcon /> }
-                                ];
-                              return (
-                                <div
-                                  key={changeKey}
-                                  role="button"
-                                  tabIndex={0}
-                                  className={`source-change-row ${selectedGitChangeKey === changeKey ? "active" : ""}`}
-                                  onClick={() => void onGitChangeSelect(change)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter" || event.key === " ") {
-                                      event.preventDefault();
-                                      void onGitChangeSelect(change);
-                                    }
-                                  }}
-                                >
-                                  <span className={`source-status-badge ${change.section}`}>{change.code}</span>
-                                  <span className="source-change-copy">
-                                    <span className="source-change-name">{change.name}</span>
-                                    <span className="source-change-parent">{change.parent || "."}</span>
-                                  </span>
-                                  <span className="source-change-tail">
-                                    <span className="source-change-label">{change.status}</span>
-                                    <span className="source-change-actions">
-                                      {rowActions.map((action) => (
-                                        <button
-                                          key={action.id}
-                                          type="button"
-                                          className="source-action-btn"
-                                          title={action.title}
-                                          aria-label={action.title}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            void onGitChangeAction(change, action.id);
-                                          }}
-                                        >
-                                          {action.icon}
-                                        </button>
-                                      ))}
-                                    </span>
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="section git-actions-card compact">
-                    <div className="section-head">
-                      <div>
-                        <div className="section-kicker">{t("commitMessage")}</div>
-                        <h3>{t("commit")}</h3>
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <input
-                        value={commitMessage}
-                        onChange={(e) => setCommitMessage(e.target.value)}
-                        placeholder={t("commitPlaceholder")}
-                        data-testid="git-commit-message"
-                      />
-                    </div>
-                    <div className="git-actions-grid">
-                      <button className="btn tiny" type="button" onClick={() => void onGitStageAll()}>
-                        {t("stageAll")}
-                      </button>
-                      <button className="btn tiny ghost" type="button" onClick={() => void onGitUnstageAll()}>
-                        {t("unstageAll")}
-                      </button>
-                      <button className="btn tiny ghost danger" type="button" onClick={() => void onGitDiscardAll()}>
-                        {t("discardAll")}
-                      </button>
-                      <button className="btn tiny primary" type="button" onClick={() => void onGitCommit()} disabled={!commitMessage.trim()}>
-                        {t("commit")}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="section ecosystem-card compact">
-                    <div className="mini-section">
-                      <div className="section-kicker">{t("worktrees")}</div>
-                      <div className="worktree-list">
-                        {activeTab.worktrees.length === 0 && <div className="empty">{t("noWorktrees")}</div>}
-                        {activeTab.worktrees.map((tree) => (
-                          <button
-                            key={tree.path}
-                            className="worktree-item"
-                            onClick={() => void onOpenWorktree(tree)}
-                          >
-                            <div>{tree.name}</div>
-                            <div className="muted">{tree.branch}</div>
-                            <div className="muted">{tree.status || t("clean")}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <div className="v-resizer" data-resize="left" onPointerDown={onResizeStart("left")} />
-
-        <section className="workspace-main">
-          <div className={`workspace-main-body ${isRightPanelVisible ? "has-right-panel" : "right-panel-hidden"}`}>
-            <section className="panel center-panel workspace-center-panel">
-              <div className="panel-inner studio-panel compact">
-                {isArchiveView && (
-                  <div className="archive-banner">
-                    <div>
-                      {t("viewingArchivedSession")}
-                      <div className="hint">{t("exitArchiveHint")}</div>
-                    </div>
-                    <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
-                  </div>
-                )}
-                <div className="agent-pane-workspace">
-                  {isArchiveView ? (
-                    <section className="agent-pane-card archive-only">
-                      <div className="agent-pane-header">
-                        <div className="agent-pane-header-copy">
-                          <span className={`session-top-dot ${sessionTone(queueSession.status)} ${sessionTone(queueSession.status) === "active" ? "pulse" : ""}`} />
-                          <span className="agent-pane-title">{displaySessionTitle(queueSession.title)}</span>
-                        </div>
-                      </div>
-                      <div className="agent-pane-body">
-                        {queuePlainStream.trim() ? (
-                          <AgentStreamTerminal streamId={queueSession.id} stream={queueSession.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
-                        ) : (
-                          <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-                        )}
-                      </div>
-                    </section>
-                  ) : (
-                    renderAgentPane(activeTab.paneLayout)
                   )}
-                </div>
-                <div className="agent-pane-input shared">
-                  <div className="agent-compose" ref={slashMenuRef}>
-                    <button
-                      type="button"
-                      className={`agent-plus-button ${slashMenuOpen ? "active" : ""}`}
-                      onClick={() => void onToggleSlashMenu(activeTab.activePaneId)}
-                      aria-label={t("slashMenu")}
-                      title={t("slashMenu")}
-                    >
-                      <AgentPlusIcon />
-                    </button>
-                    {slashMenuOpen && slashMenuPaneId === activeTab.activePaneId && (
-                      <div className="agent-slash-menu" data-testid="agent-slash-menu">
-                        <div className="agent-slash-menu-head">
-                          <span>{t("slashMenu")}</span>
-                          {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
+                  <div className="agent-pane-workspace">
+                    {isArchiveView ? (
+                      <section className="agent-pane-card archive-only">
+                        <div className="agent-pane-header">
+                          <div className="agent-pane-header-copy">
+                            <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />
+                            <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
+                          </div>
                         </div>
-                        <div className="agent-slash-menu-body">
-                          {slashMenuSections.map((section) => (
-                            <div key={section.id} className="agent-slash-group">
-                              <div className="agent-slash-group-title">{section.label}</div>
-                              <div className="agent-slash-group-items">
-                                {section.items.map((item) => (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    className="agent-slash-item"
-                                    onClick={() => onSelectSlashMenuItem(item)}
-                                  >
-                                    <span className="agent-slash-item-copy">
-                                      <span className="agent-slash-item-command">{item.command}</span>
-                                      <span className="agent-slash-item-description">{item.description}</span>
-                                    </span>
-                                    {item.sourceKind && (
-                                      <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                          {!slashMenuLoading && slashMenuSections.length === 0 && (
-                            <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
+                        <div className="agent-pane-body">
+                          {viewedSessionPlainStream.trim() ? (
+                            <AgentStreamTerminal streamId={viewedSession.id} stream={viewedSession.stream} toneKey="active" theme={theme} fontSize={editorMetrics.terminalFontSize} />
+                          ) : (
+                            <div className="terminal-empty">{t("archiveViewReadonly")}</div>
                           )}
                         </div>
-                      </div>
+                      </section>
+                    ) : showEmptyAgentState ? (
+                      <section className="agent-pane-card agent-pane-empty-state active">
+                        <div className="empty-state">
+                          <div className="empty-state-title">{locale === "zh" ? "会话已关闭" : "Session closed"}</div>
+                          <div className="empty-state-description">
+                            {locale === "zh" ? "输入新内容即可立即开始新的 agent 会话。" : "Type a prompt below to start a new agent session immediately."}
+                          </div>
+                        </div>
+                      </section>
+                    ) : (
+                      renderAgentPane(activeTab.paneLayout)
                     )}
-                    <textarea
-                      ref={agentInputRef}
-                      className="agent-compose-field"
-                      value={agentInput}
-                      onChange={(event) => setAgentInput(event.target.value)}
-                      placeholder={t("agentInputPlaceholder")}
-                      disabled={isArchiveView}
-                      data-testid="agent-input-shared"
-                      onKeyDown={onAgentInputKeyDown}
-                      rows={3}
-                    />
-                    <div className="agent-input-actions compact">
+                  </div>
+
+                  <div className="agent-pane-input shared">
+                    <div className="agent-compose" ref={slashMenuRef}>
                       <button
-                        className="agent-send-button"
-                        onClick={() => void onSendAgent(activeTab.activePaneId)}
-                        disabled={isArchiveView}
-                        data-testid="agent-send-shared"
-                        title={t("send")}
-                        aria-label={t("send")}
+                        type="button"
+                        className={`agent-plus-button ${slashMenuOpen ? "active" : ""}`}
+                        onClick={() => void onToggleSlashMenu(activeTab.activePaneId)}
+                        aria-label={t("slashMenu")}
+                        title={t("slashMenu")}
                       >
-                        <AgentSendIcon />
+                        <AgentPlusIcon />
                       </button>
+                      {slashMenuOpen && slashMenuPaneId === activeTab.activePaneId && (
+                        <div className="agent-slash-menu" data-testid="agent-slash-menu">
+                          <div className="agent-slash-menu-head">
+                            <span>{t("slashMenu")}</span>
+                            {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
+                          </div>
+                          <div className="agent-slash-menu-body">
+                            {slashMenuSections.map((section) => (
+                              <div key={section.id} className="agent-slash-group">
+                                <div className="agent-slash-group-title">{section.label}</div>
+                                <div className="agent-slash-group-items">
+                                  {section.items.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      className="agent-slash-item"
+                                      onClick={() => onSelectSlashMenuItem(item)}
+                                    >
+                                      <span className="agent-slash-item-copy">
+                                        <span className="agent-slash-item-command">{item.command}</span>
+                                        <span className="agent-slash-item-description">{item.description}</span>
+                                      </span>
+                                      {item.sourceKind && (
+                                        <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            {!slashMenuLoading && slashMenuSections.length === 0 && (
+                              <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <textarea
+                        ref={agentInputRef}
+                        className="agent-compose-field"
+                        value={agentInput}
+                        onChange={(event) => setAgentInput(event.target.value)}
+                        placeholder={t("agentInputPlaceholder")}
+                        disabled={isArchiveView}
+                        data-testid="agent-input-shared"
+                        onKeyDown={onAgentInputKeyDown}
+                        rows={3}
+                      />
+                      <div className="agent-input-actions compact">
+                        <button
+                          className="agent-send-button"
+                          onClick={() => void onSendAgent(activeTab.activePaneId)}
+                          disabled={isArchiveView}
+                          data-testid="agent-send-shared"
+                          title={t("send")}
+                          aria-label={t("send")}
+                        >
+                          <AgentSendIcon />
+                        </button>
+                      </div>
                     </div>
                   </div>
+                </div>
+              </section>
+
+              {showCodePanel && <div className="v-resizer" data-resize="left" onPointerDown={onResizeStart("left")} />}
+            </>
+          )}
+
+          {showCodePanel && (
+            <section className="panel workspace-code-shell" style={{ flex: `0 0 ${state.layout.rightWidth}px` }}>
+              <div className="panel-inner workspace-code-panel">
+                <div className="workspace-code-header">
+                  <div className="workspace-code-modes">
+                    {isCodeExpanded ? (
+                      <>
+                        <button
+                          type="button"
+                          className={`workspace-panel-toggle ${codeSidebarView === "files" ? "active" : ""}`}
+                          onClick={() => setCodeSidebarView("files")}
+                        >
+                          <WorkspaceFolderIcon />
+                          <span>{t("files")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`workspace-panel-toggle ${codeSidebarView === "git" ? "active" : ""}`}
+                          onClick={() => setCodeSidebarView("git")}
+                        >
+                          <WorkspaceChangesIcon />
+                          <span>Git Diff</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="workspace-code-title-block">
+                        <span className="section-kicker">{t("codePanel")}</span>
+                        <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="workspace-code-actions">
+                    <div className="workspace-search-field">
+                      <SearchIcon />
+                      <input
+                        value={fileSearchQuery}
+                        onChange={(event) => setFileSearchQuery(event.target.value)}
+                        placeholder={locale === "zh" ? "搜索文件并跳转…" : "Search files and jump..."}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="workspace-icon-button"
+                      onClick={() => setIsCodeExpanded((value) => !value)}
+                      aria-label={isCodeExpanded ? (locale === "zh" ? "退出展开" : "Exit expand") : (locale === "zh" ? "展开代码区" : "Expand code area")}
+                      title={isCodeExpanded ? (locale === "zh" ? "退出展开" : "Exit expand") : (locale === "zh" ? "展开代码区" : "Expand code area")}
+                    >
+                      {isCodeExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`workspace-code-body ${isCodeExpanded ? "expanded" : "collapsed"}`}>
+                  {!isCodeExpanded && normalizedFileSearchQuery && (
+                    <div className="workspace-inline-search-results">
+                      {fileSearchResults.length === 0 && (
+                        <div className="tree-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
+                      )}
+                      {fileSearchResults.map(({ node }) => (
+                        <button
+                          key={node.absolutePath}
+                          type="button"
+                          className={`code-search-result ${activeTab.filePreview.path === node.absolutePath ? "active" : ""}`}
+                          onClick={() => void onFileSelect(node)}
+                        >
+                          <span className="code-search-result-name">{node.name}</span>
+                          <span className="code-search-result-path">{fileParentLabel(node.path) || "."}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="workspace-code-editor">
+                    {hasPreviewFile ? (
+                      activeTab.filePreview.mode === "diff" ? (
+                        activeTab.filePreview.source === "git" && Boolean(activeTab.filePreview.section) && hasStructuredDiffContent ? (
+                          <div className="editor-surface diff-editor-surface" data-testid="preview-diff-editor">
+                            <DiffEditor
+                              key={`${activeTab.filePreview.path}:${activeTab.filePreview.section ?? "diff"}`}
+                              height="100%"
+                              original={activeTab.filePreview.originalContent ?? ""}
+                              modified={activeTab.filePreview.modifiedContent ?? ""}
+                              originalModelPath={`${activeTab.filePreview.path}.original`}
+                              modifiedModelPath={activeTab.filePreview.path}
+                              language={inferEditorLanguage(activeTab.filePreview.path)}
+                              theme="vs-dark"
+                              options={{
+                                automaticLayout: true,
+                                readOnly: true,
+                                renderSideBySide: true,
+                                minimap: { enabled: false },
+                                scrollBeyondLastLine: false,
+                                wordWrap: "on",
+                                fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
+                                fontSize: editorMetrics.fontSize,
+                                lineNumbersMinChars: 3,
+                                renderWhitespace: "selection"
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <pre className="diff code-surface">{activeTab.filePreview.diff || t("noDiffAvailable")}</pre>
+                        )
+                      ) : (
+                        <div className="editor-surface" data-testid="preview-editor">
+                          <Editor
+                            key={activeTab.filePreview.path}
+                            height="100%"
+                            path={activeTab.filePreview.path}
+                            language={inferEditorLanguage(activeTab.filePreview.path)}
+                            value={activeTab.filePreview.content}
+                            onChange={(value) => onPreviewEdit(value ?? "")}
+                            theme="vs-dark"
+                            options={{
+                              automaticLayout: true,
+                              fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
+                              fontSize: editorMetrics.fontSize,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              wordWrap: "on",
+                              padding: { top: editorMetrics.paddingY, bottom: editorMetrics.paddingY },
+                              lineNumbersMinChars: 3,
+                              renderWhitespace: "selection"
+                            }}
+                          />
+                        </div>
+                      )
+                    ) : (
+                      <div className="preview-empty">{t("selectFileFromNavigator")}</div>
+                    )}
+                  </div>
+
+                  {isCodeExpanded && (
+                    <aside className="workspace-code-sidebar">
+                      <div className="workspace-code-sidebar-head">
+                        <div className="workspace-code-sidebar-copy">
+                          <span className="section-kicker">{codeSidebarView === "files" ? t("repositoryNavigator") : t("sourceControl")}</span>
+                          <strong>{workspaceFolderName}</strong>
+                        </div>
+                        <button className="btn tiny ghost" type="button" onClick={() => void refreshWorkspaceArtifacts(activeTab.id)}>
+                          {t("refresh")}
+                        </button>
+                      </div>
+
+                      {normalizedFileSearchQuery ? (
+                        <div className="code-search-results">
+                          {fileSearchResults.length === 0 && (
+                            <div className="tree-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
+                          )}
+                          {fileSearchResults.map(({ node }) => (
+                            <button
+                              key={node.absolutePath}
+                              type="button"
+                              className={`code-search-result ${activeTab.filePreview.path === node.absolutePath ? "active" : ""}`}
+                              onClick={() => void onFileSelect(node)}
+                            >
+                              <span className="code-search-result-name">{node.name}</span>
+                              <span className="code-search-result-path">{fileParentLabel(node.path) || "."}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : codeSidebarView === "files" ? (
+                        activeTab.fileTree.length === 0 ? (
+                          <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>
+                        ) : (
+                          <TreeView
+                            nodes={activeTab.fileTree}
+                            onSelect={onFileSelect}
+                            collapsedPaths={repoCollapsedPaths}
+                            locale={locale}
+                            onToggleCollapse={(path) => {
+                              setRepoCollapsedPaths((current) => {
+                                const next = new Set(current);
+                                if (next.has(path)) {
+                                  next.delete(path);
+                                } else {
+                                  next.add(path);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                        )
+                      ) : (
+                        <div className="workspace-git-sidebar">
+                          <div className="git-summary-strip">
+                            <span>{t("changesCount", { count: gitSummary.changes })}</span>
+                            <span>{t("stagedCount", { count: gitSummary.staged })}</span>
+                            <span>{t("untrackedCount", { count: gitSummary.untracked })}</span>
+                          </div>
+                          <div className="source-control-list">
+                            {gitChangeGroups.length === 0 && <div className="tree-empty">{t("noChangesDetected")}</div>}
+                            {gitChangeGroups.map((group) => (
+                              <div key={group.key} className="source-group">
+                                <div className="source-group-head">
+                                  <span>{group.label}</span>
+                                  <span>{group.items.length}</span>
+                                </div>
+                                <div className="source-group-items">
+                                  {group.items.map((change) => {
+                                    const changeKey = `${change.section}:${change.path}:${change.code}`;
+                                    const rowActions = change.section === "staged"
+                                      ? [{ id: "unstage" as const, title: t("unstageFile"), icon: <GitUnstageIcon /> }]
+                                      : [
+                                        { id: "stage" as const, title: t("stageFile"), icon: <GitStageIcon /> },
+                                        { id: "discard" as const, title: t("discardFile"), icon: <GitDiscardIcon /> }
+                                      ];
+                                    return (
+                                      <div
+                                        key={changeKey}
+                                        role="button"
+                                        tabIndex={0}
+                                        className={`source-change-row ${selectedGitChangeKey === changeKey ? "active" : ""}`}
+                                        onClick={() => void onGitChangeSelect(change)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter" || event.key === " ") {
+                                            event.preventDefault();
+                                            void onGitChangeSelect(change);
+                                          }
+                                        }}
+                                      >
+                                        <span className={`source-status-badge ${change.section}`}>{change.code}</span>
+                                        <span className="source-change-copy">
+                                          <span className="source-change-name">{change.name}</span>
+                                          <span className="source-change-parent">{change.parent || "."}</span>
+                                        </span>
+                                        <span className="source-change-tail">
+                                          <span className="source-change-label">{change.status}</span>
+                                          <span className="source-change-actions">
+                                            {rowActions.map((action) => (
+                                              <button
+                                                key={action.id}
+                                                type="button"
+                                                className="source-action-btn"
+                                                title={action.title}
+                                                aria-label={action.title}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  void onGitChangeAction(change, action.id);
+                                                }}
+                                              >
+                                                {action.icon}
+                                              </button>
+                                            ))}
+                                          </span>
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="section git-actions-card compact">
+                            <div className="form-row">
+                              <input
+                                value={commitMessage}
+                                onChange={(e) => setCommitMessage(e.target.value)}
+                                placeholder={t("commitPlaceholder")}
+                                data-testid="git-commit-message"
+                              />
+                            </div>
+                            <div className="git-actions-grid">
+                              <button className="btn tiny" type="button" onClick={() => void onGitStageAll()}>{t("stageAll")}</button>
+                              <button className="btn tiny ghost" type="button" onClick={() => void onGitUnstageAll()}>{t("unstageAll")}</button>
+                              <button className="btn tiny ghost danger" type="button" onClick={() => void onGitDiscardAll()}>{t("discardAll")}</button>
+                              <button className="btn tiny primary" type="button" onClick={() => void onGitCommit()} disabled={!commitMessage.trim()}>{t("commit")}</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </aside>
+                  )}
                 </div>
               </div>
             </section>
+          )}
+        </div>
 
-            {isRightPanelVisible && (
-              <>
-                <div className="v-resizer" data-resize="right" onPointerDown={onResizeStart("right")} />
-
-                <section className={`panel right workspace-right-panel ${rightPanelModeClass}`}>
-                  <div className={`panel-inner workspace-right-grid ${rightPanelModeClass}`}>
-                    {showCodePanel && (
-                      <div
-                        className="workspace-right-pane inspector-card file-preview"
-                        style={showTerminalPanel ? { flex: `0 0 ${state.layout.rightSplit}%` } : undefined}
-                      >
-                        <div className={`surface-progress ${fileProgressTone}`} aria-hidden="true">
-                          <span className="surface-progress-bar" style={{ width: `${fileProgressPercent}%` }} />
-                        </div>
-                        {hasPreviewFile && (
-                          <div className="editor-context-bar">
-                            <div className="editor-context-copy">
-                              <span className="editor-context-name">{previewFileName}</span>
-                              <span className="editor-context-path">{previewParentPath || "."}</span>
-                            </div>
-                            <div className="editor-context-meta">
-                              {activeTab.filePreview.statusLabel && <span className="editor-meta-pill">{activeTab.filePreview.statusLabel}</span>}
-                              {activeTab.filePreview.mode === "diff" && <span className="editor-meta-pill">{t("diff")}</span>}
-                              {selectedGitChange && (
-                                <span className="editor-context-actions">
-                                  {(selectedGitChange.section === "staged"
-                                    ? [{ id: "unstage" as const, title: t("unstageFile"), icon: <GitUnstageIcon /> }]
-                                    : [
-                                      { id: "stage" as const, title: t("stageFile"), icon: <GitStageIcon /> },
-                                      { id: "discard" as const, title: t("discardFile"), icon: <GitDiscardIcon /> }
-                                    ]).map((action) => (
-                                    <button
-                                      key={action.id}
-                                      type="button"
-                                      className="editor-context-action"
-                                      title={action.title}
-                                      aria-label={action.title}
-                                      onClick={() => void onGitChangeAction(selectedGitChange, action.id)}
-                                    >
-                                      {action.icon}
-                                    </button>
-                                  ))}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {hasPreviewFile ? (
-                          activeTab.filePreview.mode === "diff" ? (
-                            activeTab.filePreview.source === "git" && Boolean(activeTab.filePreview.section) && hasStructuredDiffContent ? (
-                              <div className="editor-surface diff-editor-surface" data-testid="preview-diff-editor">
-                                <DiffEditor
-                                  key={`${activeTab.filePreview.path}:${activeTab.filePreview.section ?? "diff"}`}
-                                  height="100%"
-                                  original={activeTab.filePreview.originalContent ?? ""}
-                                  modified={activeTab.filePreview.modifiedContent ?? ""}
-                                  originalModelPath={`${activeTab.filePreview.path}.original`}
-                                  modifiedModelPath={activeTab.filePreview.path}
-                                  language={inferEditorLanguage(activeTab.filePreview.path)}
-                                  theme="vs-dark"
-                                  options={{
-                                    automaticLayout: true,
-                                    readOnly: true,
-                                    renderSideBySide: true,
-                                    minimap: { enabled: false },
-                                    scrollBeyondLastLine: false,
-                                    wordWrap: "on",
-                                    fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
-                                    fontSize: editorMetrics.fontSize,
-                                    lineNumbersMinChars: 3,
-                                    renderWhitespace: "selection"
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <pre className="diff code-surface">{activeTab.filePreview.diff || t("noDiffAvailable")}</pre>
-                            )
-                          ) : (
-                            <div className="editor-surface" data-testid="preview-editor">
-                              <Editor
-                                key={activeTab.filePreview.path}
-                                height="100%"
-                                path={activeTab.filePreview.path}
-                                language={inferEditorLanguage(activeTab.filePreview.path)}
-                                value={activeTab.filePreview.content}
-                                onChange={(value) => onPreviewEdit(value ?? "")}
-                                theme="vs-dark"
-                                options={{
-                                  automaticLayout: true,
-                                  fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
-                                  fontSize: editorMetrics.fontSize,
-                                  minimap: { enabled: false },
-                                  scrollBeyondLastLine: false,
-                                  wordWrap: "on",
-                                  padding: { top: editorMetrics.paddingY, bottom: editorMetrics.paddingY },
-                                  lineNumbersMinChars: 3,
-                                  renderWhitespace: "selection"
-                                }}
-                              />
-                            </div>
-                          )
-                        ) : (
-                          <div className="preview-empty">{t("selectFileFromNavigator")}</div>
-                        )}
-                      </div>
-                    )}
-
-                    {showCodePanel && showTerminalPanel && (
-                      <div
-                        className="h-resizer workspace-right-splitter"
-                        data-resize="right-split"
-                        onPointerDown={onResizeStart("right-split")}
-                      />
-                    )}
-
-                    {showTerminalPanel && (
-                      <div
-                        className="workspace-right-pane inspector-card terminal-card"
-                        style={showCodePanel ? { flex: "1 1 0%" } : undefined}
-                      >
-                        <div className={`surface-progress ${terminalProgressTone}`} aria-hidden="true">
-                          <span className="surface-progress-bar" style={{ width: `${terminalProgressPercent}%` }} />
-                        </div>
-                        <div className="section-head">
-                          <div>
-                            <div className="section-kicker">{t("shellDock")}</div>
-                            <h3>{t("projectTerminal")}</h3>
-                          </div>
-                          <div className="section-actions">
-                            <button className="btn tiny ghost" onClick={() => activeTerminal && void onCloseTerminal(activeTerminal.id)} disabled={!activeTerminal}>{t("close")}</button>
-                            <button className="btn tiny" onClick={() => void onAddTerminal()}>{t("new")}</button>
-                          </div>
-                        </div>
-                        <div className="terminal-tabs">
-                          {activeTab.terminals.map((term) => (
-                            <div
-                              key={term.id}
-                              className={`t-tab ${term.id === activeTab.activeTerminalId ? "active" : ""}`}
-                              onClick={() => onTerminalSelect(term.id)}
-                            >
-                              <span className="t-tab-label">{displayTerminalTitle(term.title)}</span>
-                              <button
-                                type="button"
-                                className="t-tab-close"
-                                aria-label={t("close")}
-                                title={t("close")}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void onCloseTerminal(term.id);
-                                }}
-                              >
-                                <HeaderCloseIcon />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="terminal-output">
-                          {activeTerminal ? (
-                            <ShellTerminal
-                              ref={shellTerminalRef}
-                              terminalId={activeTerminal.id}
-                              output={activeTerminal.output ?? ""}
-                              theme={theme}
-                              fontSize={editorMetrics.terminalFontSize}
-                              onData={onShellTerminalData}
-                              onSize={onShellTerminalSize}
-                              autoFocus={showTerminalPanel && isRightPanelVisible}
-                            />
-                          ) : (
-                            <div className="terminal-empty">{t("noTerminalYet")}</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+        {!isCodeExpanded && showTerminalPanel && (
+          <>
+            <div
+              className="h-resizer workspace-bottom-splitter"
+              data-resize="right-split"
+              onPointerDown={onResizeStart("right-split")}
+            />
+            <section className="panel workspace-terminal-shell">
+              <div className="panel-inner terminal-card workspace-terminal-panel">
+                <div className={`surface-progress ${terminalProgressTone}`} aria-hidden="true">
+                  <span className="surface-progress-bar" style={{ width: `${terminalProgressPercent}%` }} />
+                </div>
+                <div className="terminal-toolbar">
+                  <div className="terminal-toolbar-title">{t("terminalPanel")}</div>
+                  <div className="terminal-toolbar-actions">
+                    <select
+                      className="terminal-select"
+                      value={activeTerminal?.id ?? ""}
+                      onChange={(event) => onTerminalSelect(event.target.value)}
+                    >
+                      {activeTab.terminals.map((term) => (
+                        <option key={term.id} value={term.id}>
+                          {displayTerminalTitle(term.title)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="workspace-icon-button"
+                      onClick={() => activeTerminal && void onCloseTerminal(activeTerminal.id)}
+                      disabled={!activeTerminal}
+                      title={t("close")}
+                      aria-label={t("close")}
+                    >
+                      <HeaderCloseIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-icon-button"
+                      onClick={() => void onAddTerminal()}
+                      title={t("new")}
+                      aria-label={t("new")}
+                    >
+                      <HeaderAddIcon />
+                    </button>
                   </div>
-                </section>
-              </>
-            )}
-          </div>
-        </section>
+                </div>
+                <div className="terminal-output">
+                  {activeTerminal ? (
+                    <ShellTerminal
+                      ref={shellTerminalRef}
+                      terminalId={activeTerminal.id}
+                      output={activeTerminal.output ?? ""}
+                      theme={theme}
+                      fontSize={editorMetrics.terminalFontSize}
+                      onData={onShellTerminalData}
+                      onSize={onShellTerminalSize}
+                      autoFocus={showTerminalPanel && !isCodeExpanded}
+                    />
+                  ) : (
+                    <div className="terminal-empty">{t("noTerminalYet")}</div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
       </div>
       </main>
       )}
@@ -4628,43 +4621,11 @@ export default function App() {
       {state.overlay.visible && (
         <div className="overlay" data-testid="overlay">
           <div className="modal onboarding-modal">
-            <div className="onboarding-copy">
+            <div className="onboarding-form">
+              <div className="onboarding-header">
               <div className="section-kicker">{t("launchWorkspace")}</div>
               <h2>{t("launchWorkspaceTitle")}</h2>
               <p>{t("launchWorkspaceDescription")}</p>
-              <div className="onboarding-points">
-                <div className="brief-card">
-                  <span>{t("sessionsCard")}</span>
-                  <strong>{t("parallelAgentTracks")}</strong>
-                </div>
-                <div className="brief-card">
-                  <span>{t("gitCard")}</span>
-                  <strong>{t("liveDiffAndWorktree")}</strong>
-                </div>
-                <div className="brief-card">
-                  <span>{t("terminalCard")}</span>
-                  <strong>{t("embeddedShellControl")}</strong>
-                </div>
-              </div>
-            </div>
-            <div className="onboarding-form">
-              <div className="locale-toggle onboarding-language" aria-label={t("languageLabel")}>
-                <button
-                  type="button"
-                  className={`btn tiny ghost mode ${locale === "en" ? "active" : ""}`}
-                  onClick={() => setLocale("en")}
-                  data-testid="overlay-locale-en"
-                >
-                  EN
-                </button>
-                <button
-                  type="button"
-                  className={`btn tiny ghost mode ${locale === "zh" ? "active" : ""}`}
-                  onClick={() => setLocale("zh")}
-                  data-testid="overlay-locale-zh"
-                >
-                  中文
-                </button>
               </div>
               <div className="choice-grid">
                 <div className={`choice ${state.overlay.mode === "remote" ? "active" : ""}`} onClick={() => onOverlaySelectMode("remote")} data-testid="choice-remote">
@@ -4676,7 +4637,7 @@ export default function App() {
                   <div className="hint">{t("localFolderHint")}</div>
                 </div>
               </div>
-            {showWslOption && (
+            {overlayCanUseWsl && (
               <div className="choice-grid small">
                 <div className={`choice ${state.overlay.target.type === "native" ? "active" : ""}`} onClick={() => onOverlayUpdateTarget({ type: "native" })}>
                   <strong>{t("nativeTarget")}</strong>
@@ -4688,7 +4649,7 @@ export default function App() {
                 </div>
               </div>
             )}
-            {showWslOption && state.overlay.target.type === "wsl" && (
+            {overlayCanUseWsl && state.overlay.target.type === "wsl" && (
               <input
                 value={state.overlay.target.distro ?? ""}
                 onChange={(e) => onOverlayUpdateTarget({ type: "wsl", distro: e.target.value })}
@@ -4703,19 +4664,59 @@ export default function App() {
                 data-testid="git-input"
               />
             ) : (
-              <div className="local-picker">
-                <button className="btn primary" onClick={openFolderDialog} data-testid="folder-select">{t("selectFolder")}</button>
-                <div className="hint" data-testid="folder-selected">{t("selected")}: {state.overlay.input || t("notSelected")}</div>
-                {!isTauri && (
-                  <input
-                    ref={folderInputRef}
-                    type="file"
-                    onChange={onFolderPick}
-                    style={{ display: "none" }}
-                    data-testid="folder-input"
-                    {...({ webkitdirectory: "true" } as Record<string, string>)}
-                  />
-                )}
+              <div className="local-picker web-folder-picker" data-testid="folder-select">
+                <div className="web-folder-picker-toolbar">
+                  <div className="web-folder-picker-paths">
+                    <div className="hint">{locale === "zh" ? "浏览位置" : "Browsing"}</div>
+                    <strong>{folderBrowser.currentPath || state.overlay.input || (locale === "zh" ? "正在加载…" : "Loading...")}</strong>
+                    <div className="hint" data-testid="folder-selected">{t("selected")}: {state.overlay.input || t("notSelected")}</div>
+                  </div>
+                  <div className="web-folder-picker-actions">
+                    <button className="btn tiny ghost" type="button" onClick={() => onBrowseOverlayDirectory(folderBrowser.homePath || undefined, true)} disabled={folderBrowser.loading}>
+                      {locale === "zh" ? "Home" : "Home"}
+                    </button>
+                    <button className="btn tiny ghost" type="button" onClick={() => onBrowseOverlayDirectory(folderBrowser.parentPath)} disabled={folderBrowser.loading || !folderBrowser.parentPath}>
+                      {locale === "zh" ? "上一级" : "Up"}
+                    </button>
+                    <button className="btn tiny primary" type="button" onClick={() => onSelectOverlayDirectory(folderBrowser.currentPath)} disabled={!folderBrowser.currentPath}>
+                      {locale === "zh" ? "选择当前目录" : "Use Current Folder"}
+                    </button>
+                  </div>
+                </div>
+                {folderBrowser.notice && <div className="folder-browser-notice">{folderBrowser.notice}</div>}
+
+                <div className="web-folder-picker-roots">
+                  {folderBrowser.roots.map((root) => (
+                    <button
+                      key={root.id}
+                      type="button"
+                      className={`folder-root-chip ${state.overlay.input === root.path || folderBrowser.currentPath === root.path ? "active" : ""}`}
+                      onClick={() => onBrowseOverlayDirectory(root.path, true)}
+                    >
+                      <span>{root.label}</span>
+                      <small>{root.description}</small>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="web-folder-picker-list">
+                  {folderBrowser.loading && <div className="tree-empty">{locale === "zh" ? "正在读取服务端目录…" : "Loading server directories..."}</div>}
+                  {!folderBrowser.loading && folderBrowser.error && <div className="tree-empty">{folderBrowser.error}</div>}
+                  {!folderBrowser.loading && !folderBrowser.error && folderBrowser.entries.length === 0 && (
+                    <div className="tree-empty">{locale === "zh" ? "当前目录下没有可进入的子目录" : "No subdirectories in this location"}</div>
+                  )}
+                  {!folderBrowser.loading && !folderBrowser.error && folderBrowser.entries.map((entry) => (
+                    <div key={entry.path} className={`folder-browser-row ${state.overlay.input === entry.path ? "selected" : ""}`}>
+                      <button type="button" className="folder-browser-open" onClick={() => onBrowseOverlayDirectory(entry.path)}>
+                        <WorkspaceFolderIcon />
+                        <span>{entry.name}</span>
+                      </button>
+                      <button type="button" className="btn tiny ghost" onClick={() => onSelectOverlayDirectory(entry.path)}>
+                        {locale === "zh" ? "选择" : "Select"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             <div className="modal-actions">
@@ -4761,9 +4762,12 @@ const TreeView = ({ nodes, depth = 0, onSelect, collapsedPaths, onToggleCollapse
                 onSelect?.(node);
               }}
             >
-              {isDirectory && (
-                <span className="tree-disclosure">{isExpanded ? "▾" : "▸"}</span>
-              )}
+              <span className="tree-disclosure">
+                {isDirectory ? (isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />) : null}
+              </span>
+              <span className="tree-icon">
+                {getFileIcon(node.name, isDirectory, isExpanded)}
+              </span>
               <span className="tree-label">{node.name}{isDirectory ? "/" : ""}</span>
               {node.status && <span className="status">{node.status}</span>}
             </div>
