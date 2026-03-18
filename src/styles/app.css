@@ -6135,6 +6135,68 @@ pre.diff,
   cursor: not-allowed;
 }
 
+.agent-draft-launcher {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.agent-draft-launcher-card {
+  width: min(100%, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-elevated) 92%, var(--agent-pane-bg) 8%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent),
+    0 10px 24px rgba(4, 14, 18, 0.12);
+}
+
+.agent-draft-launcher-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-draft-launcher-title {
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.agent-draft-launcher-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.agent-draft-launcher-form {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.agent-draft-launcher-field {
+  min-width: 0;
+  font-size: 13px;
+}
+
+.agent-draft-launcher-form .agent-compose {
+  min-height: 46px;
+}
+
+.agent-draft-launcher-form .agent-send-button {
+  flex-shrink: 0;
+}
+
 .agent-plus-button {
   width: 28px;
   height: 28px;

@@ -3846,9 +3846,6 @@ fn agent_start(
                     if text.is_empty() {
                         continue;
                     }
-                    if text.trim().is_empty() {
-                        continue;
-                    }
                     emit_agent(&app_handle, &tab_id_out, &session_out, "stdout", &text);
                 }
                 Err(_) => break,

@@ -313,17 +313,14 @@ const sanitizeAnsiStream = (value: string) => {
     .replace(/\r/g, "");
 };
 
-const sanitizeAnsiForTerminal = (value: string) => {
-  if (!value) return value;
-  return value
-    .replace(/\x1b\][^\u0007]*(\u0007|\x1b\\)/g, "")
-    .replace(/[\u0000\u000B\u000C\u000E-\u001A\u001C-\u001F\u007F]/g, "");
-};
-
 const stripAnsi = (value: string) => {
   if (!value) return value;
   return sanitizeAnsiStream(value).replace(/\x1b\[[0-9;:]*m/g, "");
 };
+
+const AGENT_STREAM_BUFFER_LIMIT = 1_000_000;
+const TERMINAL_STREAM_BUFFER_LIMIT = 1_000_000;
+const AGENT_TITLE_TRACK_LIMIT = 240;
 
 type XtermBaseMode = "interactive" | "readonly";
 
@@ -353,6 +350,10 @@ type AgentStreamTerminalProps = {
   toneKey: string;
   theme: AppTheme;
   fontSize: number;
+  mode?: XtermBaseMode;
+  autoFocus?: boolean;
+  onData?: (value: string) => void;
+  onSize?: (size: { cols: number; rows: number }) => void;
 };
 
 type ShellTerminalProps = {
@@ -405,10 +406,30 @@ const readTerminalTheme = (source?: Element | null) => {
   };
 };
 
+// PTY/TUI streams are append-only, but we may trim old bytes from the head to
+// bound memory. When that happens we should keep appending live delta instead
+// of resetting and replaying a truncated snapshot, which corrupts TUI layout.
+const resolveXtermAppendDelta = (previous: string, next: string) => {
+  if (next === previous) return "";
+  if (next.startsWith(previous)) {
+    return next.slice(previous.length);
+  }
+
+  const probeLength = Math.min(256, next.length);
+  if (probeLength === 0) return null;
+  const probe = next.slice(0, probeLength);
+  const overlapStart = previous.lastIndexOf(probe);
+  if (overlapStart === -1) return null;
+
+  const overlap = previous.slice(overlapStart);
+  if (!next.startsWith(overlap)) return null;
+  return next.slice(overlap.length);
+};
+
 const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => {
   if (next === previous) return;
-  if (next.startsWith(previous)) {
-    const delta = next.slice(previous.length);
+  const delta = resolveXtermAppendDelta(previous, next);
+  if (delta !== null) {
     if (delta) term.write(delta);
     return;
   }
@@ -579,18 +600,33 @@ const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
 
 XtermBase.displayName = "XtermBase";
 
-const AgentStreamTerminal = ({ streamId, stream, toneKey, theme, fontSize }: AgentStreamTerminalProps) => (
+const AgentStreamTerminal = forwardRef<XtermBaseHandle, AgentStreamTerminalProps>(({
+  streamId,
+  stream,
+  toneKey,
+  theme,
+  fontSize,
+  mode = "readonly",
+  autoFocus = false,
+  onData,
+  onSize
+}, ref) => (
   <XtermBase
+    ref={ref}
     outputIdentity={streamId}
     themeIdentity={toneKey}
     output={stream}
     theme={theme}
     fontSize={fontSize}
-    mode="readonly"
-    sanitizeOutput={sanitizeAnsiForTerminal}
+    mode={mode}
+    onData={onData}
+    onSize={onSize}
+    autoFocus={autoFocus}
     className="agent-pane-xterm"
   />
-);
+));
+
+AgentStreamTerminal.displayName = "AgentStreamTerminal";
 
 const ShellTerminal = forwardRef<XtermBaseHandle, ShellTerminalProps>(({
   terminalId,
@@ -788,9 +824,15 @@ const sessionTitleFromInput = (value: string) => {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean) ?? value.trim();
+  if (!firstLine) return "";
   if (firstLine.length <= 48) return firstLine;
   return `${firstLine.slice(0, 45)}...`;
 };
+
+const stripTerminalInputEscapes = (value: string) => value
+  .replace(/\x1b\][^\u0007]*(\u0007|\x1b\\)/g, "")
+  .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
+  .replace(/\x1b./g, "");
 
 const displayPathName = (value?: string) => {
   if (!value) return "";
@@ -1013,7 +1055,6 @@ export default function App() {
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => readStoredAppSettings());
   const [route, setRoute] = useState<AppRoute>(() => readCurrentRoute());
   const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
-  const [agentInput, setAgentInput] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [worktreeModal, setWorktreeModal] = useState<WorktreeModalState | null>(null);
@@ -1064,6 +1105,7 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
+  const [draftPromptInputs, setDraftPromptInputs] = useState<Record<string, string>>({});
   const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
@@ -1078,14 +1120,29 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
+  const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
+  const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
+  const agentRuntimeSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
+  const agentResizeStateRef = useRef(new Map<string, {
+    inflight: boolean;
+    pending?: { cols: number; rows: number };
+  }>());
+  const agentTitleTrackerRef = useRef(new Map<string, {
+    draftSessionId?: string;
+    buffer: string;
+    locked: boolean;
+  }>());
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
-  const agentInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const runningAgentKeysRef = useRef(new Set<string>());
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
     lastEventAt: number;
     sawOutput: boolean;
+    sawReady: boolean;
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
@@ -1127,6 +1184,64 @@ export default function App() {
 
   const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
 
+  const fitAgentTerminals = () => {
+    requestAnimationFrame(() => {
+      agentTerminalRefs.current.forEach((handle) => handle?.fit());
+    });
+  };
+
+  const flushAgentRuntimeSize = (tabId: string, sessionId: string) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    const current = agentResizeStateRef.current.get(key);
+    if (!current || current.inflight || !current.pending) return;
+    const nextSize = current.pending;
+    current.pending = undefined;
+    const last = agentRuntimeSizeRef.current.get(key);
+    if (last?.cols === nextSize.cols && last?.rows === nextSize.rows) {
+      if (!current.pending) return;
+    }
+    current.inflight = true;
+    void invoke("agent_resize", {
+      tabId,
+      sessionId,
+      cols: nextSize.cols,
+      rows: nextSize.rows
+    }).then(() => {
+      agentRuntimeSizeRef.current.set(key, nextSize);
+    }).catch(() => {
+      agentRuntimeSizeRef.current.delete(key);
+    }).finally(() => {
+      const latest = agentResizeStateRef.current.get(key);
+      if (!latest) return;
+      latest.inflight = false;
+      if (latest.pending) {
+        flushAgentRuntimeSize(tabId, sessionId);
+        return;
+      }
+      if (!runningAgentKeysRef.current.has(key)) {
+        agentResizeStateRef.current.delete(key);
+      }
+    });
+  };
+
+  const syncAgentRuntimeSize = (tabId: string, sessionId: string, size: { cols: number; rows: number }) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    const last = agentRuntimeSizeRef.current.get(key);
+    const current = agentResizeStateRef.current.get(key) ?? { inflight: false };
+    if (last?.cols === size.cols && last?.rows === size.rows && !current.pending) return;
+    if (current.pending?.cols === size.cols && current.pending?.rows === size.rows) return;
+    current.pending = size;
+    agentResizeStateRef.current.set(key, current);
+    flushAgentRuntimeSize(tabId, sessionId);
+  };
+
+  const syncAgentPaneSize = (paneId: string, tabId: string, sessionId: string) => {
+    const size = agentPaneSizeRef.current.get(paneId)
+      ?? agentTerminalRefs.current.get(paneId)?.size();
+    if (!size) return;
+    syncAgentRuntimeSize(tabId, sessionId, size);
+  };
+
   const armAgentStartupGate = (tabId: string, sessionId: string) => {
     const token = ++agentStartupTokenRef.current;
     const now = Date.now();
@@ -1135,6 +1250,7 @@ export default function App() {
       startedAt: now,
       lastEventAt: now,
       sawOutput: false,
+      sawReady: false,
       exited: false
     });
     return token;
@@ -1146,6 +1262,114 @@ export default function App() {
     if (!current) return;
     if (token !== undefined && current.token !== token) return;
     agentStartupStateRef.current.delete(key);
+  };
+
+  const setAgentTerminalRef = (paneId: string, handle: XtermBaseHandle | null) => {
+    if (handle) {
+      agentTerminalRefs.current.set(paneId, handle);
+    } else {
+      agentTerminalRefs.current.delete(paneId);
+      agentTerminalQueueRef.current.delete(paneId);
+      agentPaneSizeRef.current.delete(paneId);
+      agentTitleTrackerRef.current.delete(paneId);
+    }
+  };
+
+  const setDraftPromptInputRef = (paneId: string, element: HTMLInputElement | null) => {
+    if (element) {
+      draftPromptInputRefs.current.set(paneId, element);
+      return;
+    }
+    draftPromptInputRefs.current.delete(paneId);
+  };
+
+  const focusAgentTerminal = (paneId = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId)?.activePaneId) => {
+    if (!paneId) return;
+    requestAnimationFrame(() => {
+      const draftInput = draftPromptInputRefs.current.get(paneId);
+      if (draftInput) {
+        draftInput.focus();
+        const length = draftInput.value.length;
+        draftInput.setSelectionRange(length, length);
+        return;
+      }
+      agentTerminalRefs.current.get(paneId)?.focus();
+    });
+  };
+
+  const trackAgentInitialTitleInput = (paneId: string, session: Session, data: string) => {
+    const existing = agentTitleTrackerRef.current.get(paneId);
+    const tracker = existing ?? {
+      draftSessionId: session.isDraft ? session.id : undefined,
+      buffer: "",
+      locked: false
+    };
+    if (session.isDraft && existing?.draftSessionId !== session.id) {
+      tracker.draftSessionId = session.id;
+      tracker.buffer = "";
+      tracker.locked = false;
+    }
+    if (tracker.locked) {
+      agentTitleTrackerRef.current.set(paneId, tracker);
+      return null;
+    }
+
+    const normalized = stripTerminalInputEscapes(data);
+    let buffer = tracker.buffer;
+    let committed: string | null = null;
+    for (const char of normalized) {
+      if (char === "\r" || char === "\n") {
+        if (!committed && buffer.trim()) {
+          committed = buffer;
+        }
+        buffer = "";
+        continue;
+      }
+      if (char === "\u007f" || char === "\b") {
+        buffer = buffer.slice(0, -1);
+        continue;
+      }
+      if (char === "\t") {
+        buffer += " ";
+        continue;
+      }
+      if (char < " ") continue;
+      buffer += char;
+      if (buffer.length > AGENT_TITLE_TRACK_LIMIT) {
+        buffer = buffer.slice(-AGENT_TITLE_TRACK_LIMIT);
+      }
+    }
+
+    tracker.buffer = buffer;
+    agentTitleTrackerRef.current.set(paneId, tracker);
+    return committed;
+  };
+
+  const commitAgentSessionTitle = (paneId: string, tabId: string, sessionId: string, rawInput: string) => {
+    const title = sessionTitleFromInput(rawInput);
+    if (!title) return;
+    let applied = false;
+    updateTab(tabId, (tab) => ({
+      ...tab,
+      sessions: tab.sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+        const numericId = parseNumericId(session.id);
+        const genericTitle = numericId === null ? null : formatSessionTitle(numericId, locale);
+        const canReplace = session.isDraft
+          || session.title === t("draftSessionTitle")
+          || (genericTitle !== null && session.title === genericTitle);
+        if (!canReplace) return session;
+        applied = true;
+        return { ...session, title };
+      })
+    }));
+    if (!applied) return;
+    const tracker = agentTitleTrackerRef.current.get(paneId);
+    if (tracker) {
+      tracker.locked = true;
+      tracker.buffer = "";
+      agentTitleTrackerRef.current.set(paneId, tracker);
+    }
   };
 
   const noteAgentStartupEvent = (tabId: string, sessionId: string, kind: AgentEvent["kind"], data: string) => {
@@ -1166,6 +1390,21 @@ export default function App() {
     current.lastEventAt = Date.now();
   };
 
+  const noteAgentStartupLifecycle = (tabId: string, sessionId: string, kind: AgentLifecycleEvent["kind"]) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    const current = agentStartupStateRef.current.get(key);
+    if (!current) return;
+    if (kind === "session_started") {
+      current.sawReady = true;
+      current.lastEventAt = Date.now();
+      return;
+    }
+    if (kind === "session_ended") {
+      current.exited = true;
+      current.lastEventAt = Date.now();
+    }
+  };
+
   const waitForAgentStartupDrain = async (tabId: string, sessionId: string, token: number) => {
     const key = agentRuntimeKey(tabId, sessionId);
     while (true) {
@@ -1173,6 +1412,10 @@ export default function App() {
       if (!current || current.token !== token) return;
       const now = Date.now();
       if (current.exited) {
+        clearAgentStartupGate(tabId, sessionId, token);
+        return;
+      }
+      if (current.sawReady && now - current.lastEventAt >= 120) {
         clearAgentStartupGate(tabId, sessionId, token);
         return;
       }
@@ -1349,7 +1592,6 @@ export default function App() {
       const { tab_id, session_id, kind, data } = event.payload;
       noteAgentStartupEvent(tab_id, session_id, kind, data);
       const cleaned = stripAnsi(data);
-      const styledChunk = sanitizeAnsiForTerminal(data);
       const isStream = kind === "stdout" || kind === "stderr";
       const isSystem = kind === "system";
       const isExit = kind === "exit";
@@ -1369,12 +1611,9 @@ export default function App() {
               const streamChunk = isExit
                 ? "\n[agent exited]\n"
                 : isSystem
-                  ? `\n[${cleaned}]\n`
-                  : kind === "stderr"
-                    ? (styledChunk ? `\n[stderr] ${styledChunk}` : "")
-                    : styledChunk;
-              const MAX_AGENT_CHARS = 200000;
-              const nextStream = `${session.stream}${streamChunk}`.slice(-MAX_AGENT_CHARS);
+                  ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
+                  : data;
+              const nextStream = `${session.stream}${streamChunk}`.slice(-AGENT_STREAM_BUFFER_LIMIT);
               const message = isExit
                 ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
                 : isSystem
@@ -1393,6 +1632,10 @@ export default function App() {
         })
       }));
       if (kind === "exit") {
+        const runtimeKey = agentRuntimeKey(tab_id, session_id);
+        runningAgentKeysRef.current.delete(runtimeKey);
+        agentRuntimeSizeRef.current.delete(runtimeKey);
+        agentResizeStateRef.current.delete(runtimeKey);
         clearAgentStartupGate(tab_id, session_id);
         void settleSessionAfterExit(tab_id, session_id);
       }
@@ -1405,6 +1648,7 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen<AgentLifecycleEvent>("agent://lifecycle", (event) => {
       const { tab_id, session_id, kind, data } = event.payload;
+      noteAgentStartupLifecycle(tab_id, session_id, kind);
       let nextStatus: SessionStatus | null = null;
       if (kind === "turn_waiting" || kind === "approval_required") {
         nextStatus = "waiting";
@@ -1412,6 +1656,13 @@ export default function App() {
         nextStatus = "running";
       } else if (kind === "turn_completed" || kind === "session_ended") {
         nextStatus = "idle";
+      }
+
+      if (kind === "session_ended") {
+        const runtimeKey = agentRuntimeKey(tab_id, session_id);
+        runningAgentKeysRef.current.delete(runtimeKey);
+        agentRuntimeSizeRef.current.delete(runtimeKey);
+        agentResizeStateRef.current.delete(runtimeKey);
       }
 
       if (nextStatus) {
@@ -1485,7 +1736,6 @@ export default function App() {
       const { tab_id, terminal_id, data } = event.payload;
       if (!data) return;
       const termId = `term-${terminal_id}`;
-      const MAX_TERM_CHARS = 200000;
       updateState((current) => ({
         ...current,
         tabs: current.tabs.map((tab) => {
@@ -1494,7 +1744,7 @@ export default function App() {
             ...tab,
             terminals: tab.terminals.map((term) => {
               if (term.id !== termId) return term;
-              const nextOutput = `${term.output}${data}`.slice(-MAX_TERM_CHARS);
+              const nextOutput = `${term.output}${data}`.slice(-TERMINAL_STREAM_BUFFER_LIMIT);
               return { ...term, output: nextOutput };
             })
           };
@@ -1537,10 +1787,6 @@ export default function App() {
   const activePaneSession = useMemo(
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
-  );
-  const showEmptyAgentState = useMemo(
-    () => activeTab.sessions.length === 1 && isHiddenDraftPlaceholder(activePaneSession),
-    [activePaneSession, activeTab.sessions.length]
   );
   const activeTabSessionIdsKey = useMemo(
     () => activeTab.sessions.map((session) => session.id).join("|"),
@@ -1722,13 +1968,13 @@ export default function App() {
       nextSession = createSessionFromBackend(created, locale);
     }
 
-    const title = sessionTitleFromInput(firstInput);
     let tabSnapshot: Tab | null = null;
     let sessionSnapshot: Session | null = null;
     updateTab(tabId, (tab) => {
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
       const baseSession = nextSession ?? createSession(tab.sessions.length + 1, draftSession.mode, locale);
+      const title = sessionTitleFromInput(firstInput) || draftSession.title || formatSessionTitle(baseSession.id, locale);
       const preparedSession: Session = {
         ...baseSession,
         title,
@@ -2273,6 +2519,10 @@ export default function App() {
       clearAgentStartupGate(tab.id, session.id, startupToken);
       return false;
     }
+    const runtimeKey = agentRuntimeKey(tab.id, session.id);
+    agentRuntimeSizeRef.current.delete(runtimeKey);
+    agentResizeStateRef.current.delete(runtimeKey);
+    runningAgentKeysRef.current.add(runtimeKey);
     if (!result.started) {
       clearAgentStartupGate(tab.id, session.id, startupToken);
     }
@@ -2301,6 +2551,24 @@ export default function App() {
     return sent !== null;
   };
 
+  const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
+    const lastActiveAt = Date.now();
+    updateTab(tab.id, (current) => ({
+      ...current,
+      sessions: current.sessions.map((item) =>
+        item.id === session.id ? { ...item, lastActiveAt } : item
+      )
+    }));
+    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
+    const sent = await invokeAgent("agent_send", {
+      tabId: tab.id,
+      sessionId: session.id,
+      input,
+      appendNewline: false
+    }, session.id, t("agentKeySendFailed"));
+    return sent !== null;
+  };
+
   const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
@@ -2315,12 +2583,7 @@ export default function App() {
     if (started.started && started.startupToken !== null) {
       await waitForAgentStartupDrain(tab.id, session.id, started.startupToken);
     }
-    await invokeAgent("agent_send", {
-      tabId: tab.id,
-      sessionId: session.id,
-      input,
-      appendNewline: false
-    }, session.id, t("agentKeySendFailed"));
+    await sendAgentRawChunk(tab, session, input);
   };
 
   const onNewSession = async () => {
@@ -3101,16 +3364,32 @@ export default function App() {
         ? event.currentTarget.parentElement?.getBoundingClientRect().height ?? 1
         : 1
       : 1;
+    let frameId = 0;
+    let pendingWidth = rightWidth;
+    let pendingSplit = rightSplit;
+
+    const flushLayout = () => {
+      frameId = 0;
+      updateState((current) => ({
+        ...current,
+        layout: {
+          ...current.layout,
+          rightWidth: type === "left" ? pendingWidth : current.layout.rightWidth,
+          rightSplit: type === "right-split" ? pendingSplit : current.layout.rightSplit
+        }
+      }));
+    };
 
     const onMove = (e: PointerEvent) => {
       if (type === "left") {
-        const next = Math.max(0, Math.round(rightWidth - (e.clientX - startX)));
-        updateState((current) => ({ ...current, layout: { ...current.layout, rightWidth: next } }));
+        pendingWidth = Math.max(0, Math.round(rightWidth - (e.clientX - startX)));
       }
       if (type === "right-split") {
         const delta = e.clientY - startY;
-        const next = Math.max(0, Math.min(100, rightSplit + (delta / splitContainerHeight) * 100));
-        updateState((current) => ({ ...current, layout: { ...current.layout, rightSplit: next } }));
+        pendingSplit = Math.max(0, Math.min(100, rightSplit + (delta / splitContainerHeight) * 100));
+      }
+      if (!frameId) {
+        frameId = window.requestAnimationFrame(flushLayout);
       }
     };
 
@@ -3119,8 +3398,13 @@ export default function App() {
       document.body.classList.remove("is-resizing-columns", "is-resizing-rows");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+        flushLayout();
+      }
       requestAnimationFrame(() => {
         shellTerminalRef.current?.fit();
+        fitAgentTerminals();
       });
     };
 
@@ -3164,15 +3448,6 @@ export default function App() {
     setIsCodeExpanded((value) => !value);
   };
 
-  const focusAgentInput = () => {
-    requestAnimationFrame(() => {
-      const input = agentInputRef.current;
-      input?.focus();
-      const length = input?.value.length ?? 0;
-      input?.setSelectionRange(length, length);
-    });
-  };
-
   const setActivePane = (paneId: string, sessionId: string) => {
     const nextActiveAt = Date.now();
     updateTab(activeTab.id, (tab) => ({
@@ -3197,6 +3472,7 @@ export default function App() {
   };
 
   const splitPane = (paneId: string, axis: "horizontal" | "vertical") => {
+    let nextPaneId: string | null = null;
     updateTab(activeTab.id, (tab) => {
       const targetPaneId = findPaneSessionId(tab.paneLayout, paneId)
         ? paneId
@@ -3205,6 +3481,7 @@ export default function App() {
       if (!targetPaneId) return tab;
       const newSession = createDraftSessionForTab(tab, "branch");
       const nextLeaf = createPaneLeaf(newSession.id);
+      nextPaneId = nextLeaf.id;
       return {
         ...tab,
         sessions: [newSession, ...tab.sessions.filter((session) => session.id !== newSession.id)],
@@ -3220,7 +3497,9 @@ export default function App() {
         }))
       };
     });
-    focusAgentInput();
+    if (nextPaneId) {
+      focusAgentTerminal(nextPaneId);
+    }
   };
 
   const onPaneSplitResizeStart = (splitId: string, axis: "horizontal" | "vertical") => (event: React.PointerEvent<HTMLDivElement>) => {
@@ -3241,16 +3520,25 @@ export default function App() {
     };
 
     const baseRatio = readCurrentRatio(initialRatio) ?? 0.5;
+    let frameId = 0;
+    let pendingRatio = baseRatio;
+
+    const flushRatio = () => {
+      frameId = 0;
+      updateTab(activeTab.id, (tab) => ({
+        ...tab,
+        paneLayout: updateSplitRatio(tab.paneLayout, splitId, pendingRatio)
+      }));
+    };
 
     const onMove = (moveEvent: PointerEvent) => {
       const delta = axis === "vertical"
         ? (moveEvent.clientX - startX) / Math.max(rect.width, 1)
         : (moveEvent.clientY - startY) / Math.max(rect.height, 1);
-      const nextRatio = Math.max(0, Math.min(1, baseRatio + delta));
-      updateTab(activeTab.id, (tab) => ({
-        ...tab,
-        paneLayout: updateSplitRatio(tab.paneLayout, splitId, nextRatio)
-      }));
+      pendingRatio = Math.max(0, Math.min(1, baseRatio + delta));
+      if (!frameId) {
+        frameId = window.requestAnimationFrame(flushRatio);
+      }
     };
 
     const onUp = () => {
@@ -3258,6 +3546,11 @@ export default function App() {
       document.body.classList.remove("is-resizing-columns", "is-resizing-rows");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+        flushRatio();
+      }
+      fitAgentTerminals();
     };
 
     window.addEventListener("pointermove", onMove);
@@ -3274,10 +3567,10 @@ export default function App() {
   };
 
   const onSelectSlashMenuItem = (item: ClaudeSlashMenuItem) => {
-    setAgentInput((current) => replaceLeadingSlashToken(current, item.command));
     setSlashMenuOpen(false);
     setSlashMenuPaneId(null);
-    focusAgentInput();
+    void onAgentTerminalData(activeTab.activePaneId, `${item.command} `);
+    focusAgentTerminal(activeTab.activePaneId);
   };
 
   const onRunCommandPaletteAction = (action: CommandPaletteAction | undefined) => {
@@ -3286,90 +3579,81 @@ export default function App() {
     action.run();
   };
 
-  const onSendAgent = async (paneId: string) => {
-    const paneSessionId = findPaneSessionId(activeTab.paneLayout, paneId) ?? activePaneSession.id;
-    const content = agentInput.trim();
-    if (!content || isArchiveView) return;
-    const activeTabSnapshot = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeTabId);
-    const activeSessionSnapshot = activeTabSnapshot?.sessions.find((s) => s.id === paneSessionId);
-    if (!activeTabSnapshot || !activeSessionSnapshot) return;
-    const wasDraft = isDraftSession(activeSessionSnapshot);
-    const materialized = wasDraft
-      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, content)
+  const ensureAgentPaneSessionReady = async (paneId: string) => {
+    if (isArchiveView) return null;
+    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    if (!activeTabSnapshot) return null;
+    const paneSessionId = findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId;
+    const activeSessionSnapshot = activeTabSnapshot.sessions.find((session) => session.id === paneSessionId);
+    if (!activeSessionSnapshot) return null;
+
+    const materialized = isDraftSession(activeSessionSnapshot)
+      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
       : { tab: activeTabSnapshot, session: activeSessionSnapshot };
     const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
     const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
-    if (!tabSnapshot || !sessionSnapshot) return;
+    if (!tabSnapshot || !sessionSnapshot) return null;
 
-    const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
-    if (!started) return;
-
-    if (started.started && started.startupToken !== null) {
-      await waitForAgentStartupDrain(tabSnapshot.id, sessionSnapshot.id, started.startupToken);
+    const runtimeKey = agentRuntimeKey(tabSnapshot.id, sessionSnapshot.id);
+    if (!runningAgentKeysRef.current.has(runtimeKey)) {
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      if (!started) return null;
+      if (started.started) {
+        syncAgentPaneSize(paneId, tabSnapshot.id, sessionSnapshot.id);
+      }
+      if (started.started && started.startupToken !== null) {
+        await waitForAgentStartupDrain(tabSnapshot.id, sessionSnapshot.id, started.startupToken);
+      }
     }
 
-    const sentAt = Date.now();
-    updateTab(tabSnapshot.id, (tab) => ({
-      ...tab,
-      sessions: tab.sessions.map((s) =>
-        s.id === sessionSnapshot.id
-          ? {
-              ...s,
-              status: resolveVisibleStatus(tab, s, "waiting"),
-              lastActiveAt: sentAt,
-              messages: [
-                ...s.messages,
-                { id: createId("msg"), role: "user", content, time: nowLabel() }
-              ]
-            }
-          : s
-      )
-    }));
-
-    setAgentInput("");
-    focusAgentInput();
+    syncAgentPaneSize(paneId, tabSnapshot.id, sessionSnapshot.id);
     touchSession(tabSnapshot.id, sessionSnapshot.id);
-    const sent = await agentSend(tabSnapshot, sessionSnapshot, content);
-    if (!sent) {
-      setAgentInput(content);
-    }
+    return { tab: tabSnapshot, session: sessionSnapshot };
+  };
+
+  const onAgentTerminalData = async (paneId: string, data: string) => {
+    if (isArchiveView || !data) return;
+    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    const paneSessionId = activeTabSnapshot
+      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
+      : null;
+    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
+      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
+      : null;
+    const pendingTitle = currentSessionSnapshot
+      ? trackAgentInitialTitleInput(paneId, currentSessionSnapshot, data)
+      : null;
+    const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
+    const nextQueue = currentQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const ready = await ensureAgentPaneSessionReady(paneId);
+        if (!ready) return;
+        if (pendingTitle) {
+          commitAgentSessionTitle(paneId, ready.tab.id, ready.session.id, pendingTitle);
+        }
+        await sendAgentRawChunk(ready.tab, ready.session, data);
+      });
+    agentTerminalQueueRef.current.set(paneId, nextQueue);
+    await nextQueue;
+  };
+
+  const onSubmitDraftPrompt = async (paneId: string) => {
+    const content = (draftPromptInputs[paneId] ?? "").trim();
+    if (!content) return;
+    setDraftPromptInputs((current) => ({
+      ...current,
+      [paneId]: ""
+    }));
+    await onAgentTerminalData(paneId, content);
+    await onAgentTerminalData(paneId, "\r");
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
-    if (isArchiveView) return;
-    const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const paneSessionId = findPaneSessionId(activeTab.paneLayout, paneId) ?? activePaneSession.id;
-    const sessionSnapshot = tabSnapshot?.sessions.find((session) => session.id === paneSessionId);
-    if (!tabSnapshot || !sessionSnapshot) return;
-    if (isDraftSession(sessionSnapshot)) return;
-    await sendRawAgentInput(tabSnapshot, sessionSnapshot, sequence);
-    focusAgentInput();
-  };
-
-  const onAgentInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const currentInput = agentInput;
-    const activePaneId = activeTab.activePaneId;
-    if (event.key === "Enter" && event.shiftKey) {
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (currentInput.trim()) {
-        void onSendAgent(activePaneId);
-      } else {
-        void onSendSpecialAgentKey(activePaneId, "\r");
-      }
-      return;
-    }
-
-    const sequence = AGENT_SPECIAL_KEY_MAP[event.key];
-    if (!sequence) return;
-
-    if (currentInput.trim()) return;
-
-    event.preventDefault();
-    void onSendSpecialAgentKey(activePaneId, sequence);
+    const ready = await ensureAgentPaneSessionReady(paneId);
+    if (!ready) return;
+    await sendAgentRawChunk(ready.tab, ready.session, sequence);
+    focusAgentTerminal(paneId);
   };
 
   useEffect(() => {
@@ -3437,14 +3721,6 @@ export default function App() {
         return;
       }
 
-      if (hasModifier && key === "enter" && !isArchiveView) {
-        event.preventDefault();
-        if (agentInput.trim()) {
-          void onSendAgent(activeTab.activePaneId);
-        }
-        return;
-      }
-
       if (isArchiveView) return;
       const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
       const isSplitShortcut = isMacPlatform
@@ -3455,7 +3731,6 @@ export default function App() {
       event.preventDefault();
       const splitAxis: "horizontal" | "vertical" = event.shiftKey ? "horizontal" : "vertical";
       splitPane(activeTab.activePaneId, splitAxis);
-      focusAgentInput();
       setSlashMenuOpen(false);
       setSlashMenuPaneId(null);
     };
@@ -3467,7 +3742,6 @@ export default function App() {
     activeTab.filePreview.dirty,
     activeTab.filePreview.content,
     activeSession.id,
-    agentInput,
     commandPaletteOpen,
     isArchiveView,
     isFocusMode,
@@ -3476,7 +3750,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isArchiveView) {
-      focusAgentInput();
+      focusAgentTerminal();
     }
   }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
 
@@ -3485,7 +3759,6 @@ export default function App() {
     setSelectedGitChangeKey("");
     setSlashMenuOpen(false);
     setSlashMenuPaneId(null);
-    setAgentInput("");
   }, [activeTab.id]);
 
   useEffect(() => {
@@ -3515,6 +3788,17 @@ export default function App() {
       input: data
     });
   }, [activeTerminal?.id, activeTab.id]);
+
+  const onAgentTerminalSize = useCallback((
+    paneId: string,
+    tabId: string,
+    sessionId: string,
+    size: { cols: number; rows: number }
+  ) => {
+    agentPaneSizeRef.current.set(paneId, size);
+    if (!runningAgentKeysRef.current.has(agentRuntimeKey(tabId, sessionId))) return;
+    syncAgentRuntimeSize(tabId, sessionId, size);
+  }, []);
 
   useEffect(() => {
     if (!showTerminalPanel || isCodeExpanded) return;
@@ -3604,11 +3888,10 @@ export default function App() {
     },
     {
       id: "focus-input",
-      label: locale === "zh" ? "聚焦输入框" : "Focus Prompt Input",
-      description: locale === "zh" ? "将光标移动到指令输入框" : "Move cursor to the shared prompt input",
-      shortcut: "⌘/Ctrl Enter",
-      keywords: "prompt input focus compose",
-      run: focusAgentInput
+      label: locale === "zh" ? "聚焦当前 Agent" : "Focus Current Agent",
+      description: locale === "zh" ? "将光标移动到当前 agent 终端" : "Move cursor to the active agent terminal",
+      keywords: "agent terminal focus",
+      run: () => focusAgentTerminal()
     },
     {
       id: "split-pane-vertical",
@@ -3919,7 +4202,7 @@ export default function App() {
         ? "queued"
         : "idle";
     const statusTone = sessionTone(session.status);
-    const plainStream = stripAnsi(session.stream);
+    const showDraftPromptInput = isHiddenDraftPlaceholder(session);
 
     return (
       <section
@@ -3960,16 +4243,67 @@ export default function App() {
           </div>
         </div>
         <div className="agent-pane-body" data-testid={`agent-pane-${node.id}`}>
-          {plainStream.trim() ? (
+          {showDraftPromptInput ? (
+            <div className="agent-draft-launcher">
+              <div className="agent-draft-launcher-card">
+                <div className="agent-draft-launcher-copy">
+                  <div className="agent-draft-launcher-title">{t("draftSessionPrompt")}</div>
+                  <div className="agent-draft-launcher-hint">{t("draftTaskPlaceholder")}</div>
+                </div>
+                <form
+                  className="agent-pane-input agent-draft-launcher-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void onSubmitDraftPrompt(node.id);
+                  }}
+                >
+                  <div className="agent-compose">
+                    <input
+                      ref={(element) => setDraftPromptInputRef(node.id, element)}
+                      className="agent-compose-field agent-draft-launcher-field"
+                      value={draftPromptInputs[node.id] ?? ""}
+                      onChange={(event) => setDraftPromptInputs((current) => ({
+                        ...current,
+                        [node.id]: event.target.value
+                      }))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && (event.nativeEvent as KeyboardEvent).isComposing) {
+                          event.preventDefault();
+                        }
+                      }}
+                      placeholder={t("draftTaskPlaceholder")}
+                      aria-label={t("draftTaskPlaceholder")}
+                      data-testid={`agent-draft-input-${node.id}`}
+                      autoFocus={isPaneActive}
+                    />
+                    <button
+                      type="submit"
+                      className="agent-send-button"
+                      disabled={!draftPromptInputs[node.id]?.trim()}
+                      title={t("send")}
+                      aria-label={t("send")}
+                    >
+                      <AgentSendIcon />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : (
             <AgentStreamTerminal
+              ref={(handle) => setAgentTerminalRef(node.id, handle)}
               streamId={session.id}
               stream={session.stream}
               toneKey={isPaneActive ? "active" : "inactive"}
               theme={theme}
               fontSize={editorMetrics.terminalFontSize}
+              mode="interactive"
+              autoFocus={isPaneActive}
+              onData={(data) => {
+                void onAgentTerminalData(node.id, data);
+              }}
+              onSize={(size) => onAgentTerminalSize(node.id, activeTab.id, session.id, size)}
             />
-          ) : (
-            <div className="terminal-empty">{isDraftSession(session) ? t("draftSessionPrompt") : t("noTaskInProgress")}</div>
           )}
         </div>
       </section>
@@ -4322,91 +4656,9 @@ export default function App() {
                           )}
                         </div>
                       </section>
-                    ) : showEmptyAgentState ? (
-                      <section className="agent-pane-card agent-pane-empty-state active">
-                        <div className="empty-state">
-                          <div className="empty-state-title">{locale === "zh" ? "会话已关闭" : "Session closed"}</div>
-                          <div className="empty-state-description">
-                            {locale === "zh" ? "输入新内容即可立即开始新的 agent 会话。" : "Type a prompt below to start a new agent session immediately."}
-                          </div>
-                        </div>
-                      </section>
                     ) : (
                       renderAgentPane(activeTab.paneLayout)
                     )}
-                  </div>
-
-                  <div className="agent-pane-input shared">
-                    <div className="agent-compose" ref={slashMenuRef}>
-                      <button
-                        type="button"
-                        className={`agent-plus-button ${slashMenuOpen ? "active" : ""}`}
-                        onClick={() => void onToggleSlashMenu(activeTab.activePaneId)}
-                        aria-label={t("slashMenu")}
-                        title={t("slashMenu")}
-                      >
-                        <AgentPlusIcon />
-                      </button>
-                      {slashMenuOpen && slashMenuPaneId === activeTab.activePaneId && (
-                        <div className="agent-slash-menu" data-testid="agent-slash-menu">
-                          <div className="agent-slash-menu-head">
-                            <span>{t("slashMenu")}</span>
-                            {slashMenuLoading && <span className="agent-slash-menu-status">{t("loading")}</span>}
-                          </div>
-                          <div className="agent-slash-menu-body">
-                            {slashMenuSections.map((section) => (
-                              <div key={section.id} className="agent-slash-group">
-                                <div className="agent-slash-group-title">{section.label}</div>
-                                <div className="agent-slash-group-items">
-                                  {section.items.map((item) => (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      className="agent-slash-item"
-                                      onClick={() => onSelectSlashMenuItem(item)}
-                                    >
-                                      <span className="agent-slash-item-copy">
-                                        <span className="agent-slash-item-command">{item.command}</span>
-                                        <span className="agent-slash-item-description">{item.description}</span>
-                                      </span>
-                                      {item.sourceKind && (
-                                        <span className="agent-slash-item-meta">{item.sourceKind === "skill" ? t("slashSkillBadge") : t("slashCommandBadge")}</span>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                            {!slashMenuLoading && slashMenuSections.length === 0 && (
-                              <div className="agent-slash-empty">{t("slashMenuEmpty")}</div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <textarea
-                        ref={agentInputRef}
-                        className="agent-compose-field"
-                        value={agentInput}
-                        onChange={(event) => setAgentInput(event.target.value)}
-                        placeholder={t("agentInputPlaceholder")}
-                        disabled={isArchiveView}
-                        data-testid="agent-input-shared"
-                        onKeyDown={onAgentInputKeyDown}
-                        rows={3}
-                      />
-                      <div className="agent-input-actions compact">
-                        <button
-                          className="agent-send-button"
-                          onClick={() => void onSendAgent(activeTab.activePaneId)}
-                          disabled={isArchiveView}
-                          data-testid="agent-send-shared"
-                          title={t("send")}
-                          aria-label={t("send")}
-                        >
-                          <AgentSendIcon />
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </section>
