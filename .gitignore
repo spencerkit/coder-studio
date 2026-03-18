@@ -37,3 +37,5 @@ Thumbs.db
 *.swp
 .tools/
 output
+.tmp
+.playwright-cli
