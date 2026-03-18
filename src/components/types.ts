@@ -12,7 +12,7 @@ export type AppTheme = "dark" | "light";
 
 export type AppRoute = "workspace" | "settings";
 
-export type SettingsPanel = "general" | "appearance" | "git" | "worktree" | "mcp" | "archive";
+export type SettingsPanel = "general" | "appearance";
 
 // --- Workspace Types ---
 
@@ -76,10 +76,9 @@ export type AppSettings = {
 };
 
 export type SettingsNavItem = {
-  id: string;
+  id: SettingsPanel;
   label: string;
   icon: ReactNode;
-  enabled: boolean;
 };
 
 // --- Component Props ---

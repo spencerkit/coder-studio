@@ -1915,27 +1915,11 @@ div.v-resizer[data-resize="right"]:hover {
   overflow: hidden;
 }
 
-.settings-back-link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-  transition: all var(--duration-fast);
-}
-
-.settings-back-link:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-}
-
 .settings-nav-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-3);
+  padding: var(--space-5) var(--space-3);
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   overflow-y: auto;
@@ -1978,13 +1962,6 @@ div.v-resizer[data-resize="right"]:hover {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8);
-}
-
-.settings-section-heading {
-  font-size: var(--font-2xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text);
-  margin-bottom: var(--space-6);
 }
 
 .settings-section {
@@ -2040,20 +2017,35 @@ div.v-resizer[data-resize="right"]:hover {
   margin: 0 var(--space-4);
 }
 
-.settings-topbar {
+.route-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-5);
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
   height: var(--header-h);
-  background: var(--surface-glass);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
+  width: 100%;
 }
 
-.settings-topbar-copy {
-  display: flex;
-  flex-direction: column;
+.route-topbar-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+  border-radius: 0;
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+
+.route-topbar-back:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.route-topbar-title {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
 }
 
 .session-top-list {
@@ -2864,7 +2856,7 @@ div.v-resizer[data-resize="right"]:hover {
 }
 
 .topbar-settings {
-  background: var(--bg-secondary);
+  background: var(--bg);
 }
 
 .topbar-tabs-wrap {
@@ -4151,6 +4143,7 @@ body.is-resizing-panels .h-resizer::before {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .settings-group-card {

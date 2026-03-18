@@ -27,6 +27,7 @@ import {
   workbenchState
 } from "./state/workbench";
 import {
+  applyLocale,
   Locale,
   Translator,
   createTranslator,
@@ -55,13 +56,7 @@ import {
   HeaderSettingsIcon,
   RefreshIcon,
   SettingsAppearanceIcon,
-  SettingsArchiveIcon,
-  SettingsConfigIcon,
-  SettingsEnvironmentIcon,
   SettingsGeneralIcon,
-  SettingsGitIcon,
-  SettingsMcpIcon,
-  SettingsWorktreeIcon,
   SearchIcon,
   MaximizeIcon,
   MinimizeIcon,
@@ -1237,6 +1232,11 @@ export default function App() {
     setCommandPaletteActiveIndex(0);
   };
 
+  const onSelectLocale = (nextLocale: Locale) => {
+    setLocale(nextLocale);
+    persistLocale(nextLocale);
+  };
+
   const syncGlobalSettings = (next: AppSettings) => {
     const normalized = cloneAppSettings(next);
     updateState((current) => ({
@@ -1318,7 +1318,7 @@ export default function App() {
   }, [state.overlay.visible]);
 
   useEffect(() => {
-    persistLocale(locale);
+    applyLocale(locale);
   }, [locale]);
 
   useEffect(() => {
@@ -3868,14 +3868,8 @@ export default function App() {
     }
   ].filter((section) => section.items.length > 0);
   const settingsNavItems = [
-    { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon />, enabled: true },
-    { id: "configuration" as const, label: t("settingsConfiguration"), icon: <SettingsConfigIcon />, enabled: false },
-    { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon />, enabled: true },
-    { id: "mcp" as const, label: t("settingsMcpServers"), icon: <SettingsMcpIcon />, enabled: false },
-    { id: "git" as const, label: t("gitNav"), icon: <SettingsGitIcon />, enabled: false },
-    { id: "environment" as const, label: t("settingsEnvironment"), icon: <SettingsEnvironmentIcon />, enabled: false },
-    { id: "worktrees" as const, label: t("settingsWorktrees"), icon: <SettingsWorktreeIcon />, enabled: false },
-    { id: "archives" as const, label: t("settingsArchives"), icon: <SettingsArchiveIcon />, enabled: false }
+    { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
+    { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> }
   ];
   const trimmedLaunchCommand = settingsDraft.agentCommand.trim();
   const launchCommandStateClass = agentCommandStatus.loading
@@ -3987,11 +3981,12 @@ export default function App() {
       <header className={`topbar ${isSettingsRoute ? "topbar-settings" : ""}`}>
         <div className="topbar-tabs-wrap">
           {isSettingsRoute ? (
-            <div className="settings-topbar" data-testid="settings-topbar">
-              <div className="settings-topbar-copy">
-                <div className="section-kicker">{t("globalSettings")}</div>
-                <div className="settings-topbar-title">{t("settings")}</div>
-              </div>
+            <div className="route-topbar" data-testid="settings-topbar">
+              <button className="route-topbar-back" type="button" onClick={onCloseSettings}>
+                <HeaderBackIcon />
+                <span>{t("backToApp")}</span>
+              </button>
+              <div className="route-topbar-title">{t("settings")}</div>
             </div>
           ) : (
             <div className="topbar-session-strip topbar-workspace-strip" data-testid="workspace-topbar">
@@ -4068,11 +4063,6 @@ export default function App() {
         <main className="settings-route" data-testid="settings-page">
           <section className="settings-layout">
             <aside className="settings-sidebar-v2">
-              <button className="settings-back-link" type="button" onClick={onCloseSettings}>
-                <HeaderBackIcon />
-                <span>{t("backToApp")}</span>
-              </button>
-
               <nav className="settings-nav-list" aria-label={t("settings")}>
                 {settingsNavItems.map((item) => {
                   const isActive = item.id === activeSettingsPanel;
@@ -4080,14 +4070,10 @@ export default function App() {
                     <button
                       key={item.id}
                       type="button"
-                      className={`settings-nav-item ${isActive ? "active" : ""} ${item.enabled ? "" : "disabled"}`}
+                      className={`settings-nav-item ${isActive ? "active" : ""}`}
                       onClick={() => {
-                        if (!item.enabled) return;
-                        if (item.id === "general" || item.id === "appearance") {
-                          setActiveSettingsPanel(item.id);
-                        }
+                        setActiveSettingsPanel(item.id);
                       }}
-                      disabled={!item.enabled}
                     >
                       <span className="settings-nav-icon">{item.icon}</span>
                       <span>{item.label}</span>
@@ -4101,10 +4087,6 @@ export default function App() {
               <div className="settings-scroll-panel">
                 {activeSettingsPanel === "general" ? (
                   <>
-                    <div className="settings-section-heading">
-                      <h2>{t("settingsGeneral")}</h2>
-                    </div>
-
                     <div className="settings-group-card">
                       <div className="settings-row">
                         <div className="settings-row-copy">
@@ -4207,10 +4189,6 @@ export default function App() {
                   </>
                 ) : (
                   <>
-                    <div className="settings-section-heading">
-                      <h2>{t("settingsAppearance")}</h2>
-                    </div>
-
                     <div className="settings-group-card">
                       <div className="settings-row">
                         <div className="settings-row-copy">
@@ -4234,14 +4212,14 @@ export default function App() {
                             <button
                               type="button"
                               className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
-                              onClick={() => setLocale("zh")}
+                              onClick={() => onSelectLocale("zh")}
                             >
                               中文
                             </button>
                             <button
                               type="button"
                               className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
-                              onClick={() => setLocale("en")}
+                              onClick={() => onSelectLocale("en")}
                             >
                               English
                             </button>

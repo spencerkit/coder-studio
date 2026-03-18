@@ -492,6 +492,12 @@ export const getPreferredLocale = (): Locale => {
   return "en";
 };
 
+export const applyLocale = (locale: Locale) => {
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }
+};
+
 export const persistLocale = (locale: Locale) => {
   if (typeof window !== "undefined") {
     try {
@@ -500,9 +506,7 @@ export const persistLocale = (locale: Locale) => {
       // Ignore storage failures and keep the in-memory locale.
     }
   }
-  if (typeof document !== "undefined") {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  }
+  applyLocale(locale);
 };
 
 export const createTranslator = (locale: Locale): Translator => {

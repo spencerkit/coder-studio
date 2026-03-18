@@ -4,7 +4,6 @@
 
 import React from "react";
 import type { SettingsProps } from "../types";
-import { HeaderBackIcon, SettingsGeneralIcon, SettingsAppearanceIcon, SettingsGitIcon, SettingsWorktreeIcon, SettingsMcpIcon, SettingsArchiveIcon } from "../icons";
 
 export const Settings: React.FC<SettingsProps> = ({
   theme,
@@ -25,11 +24,6 @@ export const Settings: React.FC<SettingsProps> = ({
     <main className="settings-route" data-testid="settings-page">
       <section className="settings-layout">
         <aside className="settings-sidebar-v2">
-          <button className="settings-back-link" type="button" onClick={onCloseSettings}>
-            <HeaderBackIcon />
-            <span>{t("backToApp")}</span>
-          </button>
-
           <nav className="settings-nav-list" aria-label={t("settings")}>
             {settingsNavItems.map((item) => {
               const isActive = item.id === activeSettingsPanel;
@@ -37,12 +31,10 @@ export const Settings: React.FC<SettingsProps> = ({
                 <button
                   key={item.id}
                   type="button"
-                  className={`settings-nav-item ${isActive ? "active" : ""} ${item.enabled ? "" : "disabled"}`}
+                  className={`settings-nav-item ${isActive ? "active" : ""}`}
                   onClick={() => {
-                    if (!item.enabled) return;
-                    onSettingsPanelChange(item.id as any);
+                    onSettingsPanelChange(item.id);
                   }}
-                  disabled={!item.enabled}
                 >
                   <span className="settings-nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
