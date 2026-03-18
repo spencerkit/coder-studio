@@ -2885,6 +2885,8 @@ export default function App() {
 
   const onResizeStart = (type: "left" | "right-split") => (event: React.PointerEvent) => {
     event.preventDefault();
+    document.body.classList.add("is-resizing-panels");
+    document.body.classList.add(type === "right-split" ? "is-resizing-rows" : "is-resizing-columns");
     const startX = event.clientX;
     const startY = event.clientY;
     const { rightWidth, rightSplit } = stateRef.current.layout;
@@ -2896,20 +2898,19 @@ export default function App() {
 
     const onMove = (e: PointerEvent) => {
       if (type === "left") {
-        const viewportWidth = window.innerWidth || 1440;
-        const minWidth = 240;
-        const maxWidth = Math.max(minWidth, Math.min(480, Math.round(viewportWidth * 0.4)));
-        const next = Math.max(minWidth, Math.min(maxWidth, rightWidth - (e.clientX - startX)));
+        const next = Math.max(0, Math.round(rightWidth - (e.clientX - startX)));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightWidth: next } }));
       }
       if (type === "right-split") {
         const delta = e.clientY - startY;
-        const next = Math.max(46, Math.min(76, rightSplit + (delta / splitContainerHeight) * 100));
+        const next = Math.max(0, Math.min(100, rightSplit + (delta / splitContainerHeight) * 100));
         updateState((current) => ({ ...current, layout: { ...current.layout, rightSplit: next } }));
       }
     };
 
     const onUp = () => {
+      document.body.classList.remove("is-resizing-panels");
+      document.body.classList.remove("is-resizing-columns", "is-resizing-rows");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       requestAnimationFrame(() => {
@@ -3004,6 +3005,8 @@ export default function App() {
 
   const onPaneSplitResizeStart = (splitId: string, axis: "horizontal" | "vertical") => (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    document.body.classList.add("is-resizing-panels");
+    document.body.classList.add(axis === "horizontal" ? "is-resizing-rows" : "is-resizing-columns");
     const container = event.currentTarget.parentElement;
     if (!container) return;
     const rect = container.getBoundingClientRect();
@@ -3023,7 +3026,7 @@ export default function App() {
       const delta = axis === "vertical"
         ? (moveEvent.clientX - startX) / Math.max(rect.width, 1)
         : (moveEvent.clientY - startY) / Math.max(rect.height, 1);
-      const nextRatio = Math.max(0.15, Math.min(0.85, baseRatio + delta));
+      const nextRatio = Math.max(0, Math.min(1, baseRatio + delta));
       updateTab(activeTab.id, (tab) => ({
         ...tab,
         paneLayout: updateSplitRatio(tab.paneLayout, splitId, nextRatio)
@@ -3031,6 +3034,8 @@ export default function App() {
     };
 
     const onUp = () => {
+      document.body.classList.remove("is-resizing-panels");
+      document.body.classList.remove("is-resizing-columns", "is-resizing-rows");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };

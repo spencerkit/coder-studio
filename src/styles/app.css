@@ -3708,28 +3708,97 @@ div.v-resizer[data-resize="right"]:hover {
 /* --- Resizer --- */
 
 .v-resizer {
-  width: 4px;
-  background: var(--border);
+  position: relative;
+  width: 10px;
+  background: transparent;
   cursor: col-resize;
   transition: background var(--duration-fast);
   touch-action: none;
 }
 
+.v-resizer::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+  transition:
+    background var(--duration-fast),
+    width var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
 .v-resizer:hover {
-  background: var(--accent);
+  background: transparent;
+}
+
+.v-resizer:hover::before {
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 76%, var(--border) 24%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .h-resizer {
-  height: 6px;
+  position: relative;
+  height: 10px;
   width: 100%;
-  background: var(--border);
+  background: transparent;
   cursor: row-resize;
   transition: background var(--duration-fast);
   touch-action: none;
 }
 
+.h-resizer::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+  transition:
+    background var(--duration-fast),
+    height var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
 .h-resizer:hover {
-  background: var(--accent);
+  background: transparent;
+}
+
+.h-resizer:hover::before {
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 76%, var(--border) 24%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+body.is-resizing-panels {
+  user-select: none;
+}
+
+body.is-resizing-columns {
+  cursor: col-resize;
+}
+
+body.is-resizing-rows {
+  cursor: row-resize;
+}
+
+body.is-resizing-panels .v-resizer::before,
+body.is-resizing-panels .agent-split-divider::before {
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 82%, var(--border) 18%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+body.is-resizing-panels .h-resizer::before {
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 82%, var(--border) 18%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 /* --- Workspace Main --- */

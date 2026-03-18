@@ -190,17 +190,17 @@ export type WorkbenchState = {
 const WORKBENCH_STORAGE_KEY = "coder-studio.workbench";
 const clampLayoutLeftWidth = (value: number | undefined) => {
   if (!Number.isFinite(value)) return 320;
-  return Math.min(720, Math.max(280, Number(value)));
+  return Math.max(0, Number(value));
 };
 
 const clampLayoutRightWidth = (value: number | undefined) => {
   if (!Number.isFinite(value)) return 320;
-  return Math.min(480, Math.max(240, Number(value)));
+  return Math.max(0, Number(value));
 };
 
 const clampLayoutRightSplit = (value: number | undefined) => {
   if (!Number.isFinite(value)) return 64;
-  return Math.min(76, Math.max(46, Number(value)));
+  return Math.min(100, Math.max(0, Number(value)));
 };
 
 const nowLabel = () => {
@@ -328,7 +328,7 @@ const sanitizePaneLayout = (
     type: "split",
     id: node.id || createId("pane"),
     axis: node.axis === "vertical" ? "vertical" : "horizontal",
-    ratio: Number.isFinite(node.ratio) ? Math.min(0.9, Math.max(0.1, node.ratio)) : 0.5,
+    ratio: Number.isFinite(node.ratio) ? Math.min(1, Math.max(0, node.ratio)) : 0.5,
     first: sanitizePaneLayout(node.first, fallbackSessionId),
     second: sanitizePaneLayout(node.second, fallbackSessionId)
   };
