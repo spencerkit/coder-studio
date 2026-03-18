@@ -143,10 +143,12 @@ a {
   --text: #e7f3f7;
   --text-secondary: #b4cad3;
   --text-tertiary: #7d98a4;
+  --text-muted: var(--text-tertiary);
   --text-inverse: #0d1418;
 
   --border: rgba(180, 216, 225, 0.12);
   --border-strong: rgba(180, 216, 225, 0.2);
+  --line: var(--border);
 
   --accent: #5ac8fa;
   --accent-soft: rgba(90, 200, 250, 0.15);

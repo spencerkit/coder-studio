@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { Terminal as XTerminal } from "@xterm/xterm";
@@ -1016,6 +1017,16 @@ export default function App() {
   const [previewMode, setPreviewMode] = useState<"preview" | "diff">("preview");
   const [codeSidebarView, setCodeSidebarView] = useState<"files" | "git">("files");
   const [fileSearchQuery, setFileSearchQuery] = useState("");
+  const [fileSearchOpen, setFileSearchOpen] = useState(false);
+  const [fileSearchActiveIndex, setFileSearchActiveIndex] = useState(0);
+  const [fileSearchDropdownStyle, setFileSearchDropdownStyle] = useState<{
+    left: number;
+    width: number;
+    maxHeight: number;
+    placement: "above" | "below";
+    top?: number;
+    bottom?: number;
+  } | null>(null);
   const [isCodeExpanded, setIsCodeExpanded] = useState(false);
   const [overlayCanUseWsl, setOverlayCanUseWsl] = useState(false);
   const [folderBrowser, setFolderBrowser] = useState<{
@@ -1059,7 +1070,9 @@ export default function App() {
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
+  const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
@@ -2578,6 +2591,58 @@ export default function App() {
     setPreviewMode("preview");
   };
 
+  const onFileSearchSelect = async (node: TreeNode) => {
+    setFileSearchQuery("");
+    setFileSearchOpen(false);
+    setFileSearchActiveIndex(0);
+    await onFileSelect(node);
+    requestAnimationFrame(() => {
+      fileSearchInputRef.current?.blur();
+    });
+  };
+
+  const onFileSearchBlur = () => {
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof Node && fileSearchShellRef.current?.contains(active)) return;
+      setFileSearchOpen(false);
+    });
+  };
+
+  const onFileSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!normalizedFileSearchQuery) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setFileSearchOpen(true);
+      setFileSearchActiveIndex((current) => (
+        fileSearchResults.length === 0
+          ? 0
+          : Math.min(current + 1, fileSearchResults.length - 1)
+      ));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setFileSearchOpen(true);
+      setFileSearchActiveIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (!fileSearchResults.length) return;
+      event.preventDefault();
+      void onFileSearchSelect((fileSearchResults[fileSearchActiveIndex] ?? fileSearchResults[0]).node);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setFileSearchOpen(false);
+    }
+  };
+
   const onGitChangeSelect = async (change: GitChangeEntry) => {
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
     const relativePath = sanitizeGitRelativePath(change.path);
@@ -3498,6 +3563,74 @@ export default function App() {
       .sort((left, right) => right.score - left.score || left.node.path.localeCompare(right.node.path))
       .slice(0, 24)
     : [];
+  const showFileSearchDropdown = fileSearchOpen && normalizedFileSearchQuery.length > 0;
+
+  useEffect(() => {
+    if (!normalizedFileSearchQuery) {
+      setFileSearchOpen(false);
+      setFileSearchActiveIndex(0);
+      return;
+    }
+    setFileSearchActiveIndex((current) => Math.min(current, Math.max(fileSearchResults.length - 1, 0)));
+  }, [fileSearchResults.length, normalizedFileSearchQuery]);
+
+  useEffect(() => {
+    if (!showFileSearchDropdown) {
+      setFileSearchDropdownStyle(null);
+      return;
+    }
+
+    const updateDropdownPosition = () => {
+      const anchor = fileSearchShellRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(Math.max(rect.width, 320), Math.max(320, viewportWidth - 24));
+      const left = Math.min(Math.max(12, rect.left), Math.max(12, viewportWidth - width - 12));
+      const belowSpace = Math.max(0, viewportHeight - rect.bottom - 12);
+      const aboveSpace = Math.max(0, rect.top - 12);
+      const preferredHeight = 180;
+      const placeAbove = belowSpace < preferredHeight && aboveSpace > belowSpace + 40;
+      const placement = placeAbove ? "above" : "below";
+      const maxHeight = Math.max(120, Math.min(420, placeAbove ? aboveSpace : belowSpace));
+      setFileSearchDropdownStyle({
+        left,
+        width,
+        maxHeight,
+        placement,
+        top: placeAbove ? undefined : rect.bottom + 8,
+        bottom: placeAbove ? Math.max(12, viewportHeight - rect.top + 8) : undefined
+      });
+    };
+
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [showFileSearchDropdown, state.layout.rightWidth, showCodePanel, isCodeExpanded]);
+
+  useEffect(() => {
+    if (!showFileSearchDropdown) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (fileSearchShellRef.current?.contains(target)) return;
+      if ((target as Element).closest?.(".workspace-search-dropdown")) return;
+      setFileSearchOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [showFileSearchDropdown]);
+
   const currentFileChangeCount = activeTab.git.changes;
   const hasStructuredDiffContent = Boolean(
     (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
@@ -4167,13 +4300,31 @@ export default function App() {
                     )}
                   </div>
                   <div className="workspace-code-actions">
-                    <div className="workspace-search-field">
-                      <SearchIcon />
-                      <input
-                        value={fileSearchQuery}
-                        onChange={(event) => setFileSearchQuery(event.target.value)}
-                        placeholder={locale === "zh" ? "搜索文件并跳转…" : "Search files and jump..."}
-                      />
+                    <div className="workspace-search-shell" ref={fileSearchShellRef}>
+                      <div className="workspace-search-field">
+                        <SearchIcon />
+                        <input
+                          ref={fileSearchInputRef}
+                          value={fileSearchQuery}
+                          onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setFileSearchQuery(nextValue);
+                            setFileSearchOpen(Boolean(nextValue.trim()));
+                            setFileSearchActiveIndex(0);
+                          }}
+                          onFocus={(event) => {
+                            setFileSearchOpen(Boolean(event.currentTarget.value.trim()));
+                          }}
+                          onBlur={onFileSearchBlur}
+                          onKeyDown={onFileSearchKeyDown}
+                          placeholder={locale === "zh" ? "搜索文件并跳转…" : "Search files and jump..."}
+                          autoComplete="off"
+                          spellCheck={false}
+                          aria-expanded={showFileSearchDropdown}
+                          aria-controls="workspace-file-search-results"
+                          aria-activedescendant={showFileSearchDropdown ? `workspace-file-search-option-${fileSearchActiveIndex}` : undefined}
+                        />
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -4188,24 +4339,6 @@ export default function App() {
                 </div>
 
                 <div className={`workspace-code-body ${isCodeExpanded ? "expanded" : "collapsed"}`}>
-                  {!isCodeExpanded && normalizedFileSearchQuery && (
-                    <div className="workspace-inline-search-results">
-                      {fileSearchResults.length === 0 && (
-                        <div className="tree-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
-                      )}
-                      {fileSearchResults.map(({ node }) => (
-                        <button
-                          key={node.absolutePath}
-                          type="button"
-                          className={`code-search-result ${activeTab.filePreview.path === node.absolutePath ? "active" : ""}`}
-                          onClick={() => void onFileSelect(node)}
-                        >
-                          <span className="code-search-result-name">{node.name}</span>
-                          <span className="code-search-result-path">{fileParentLabel(node.path) || "."}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   <div className="workspace-code-editor">
                     {hasPreviewFile ? (
                       activeTab.filePreview.mode === "diff" ? (
@@ -4226,6 +4359,12 @@ export default function App() {
                                 renderSideBySide: true,
                                 minimap: { enabled: false },
                                 scrollBeyondLastLine: false,
+                                scrollbar: {
+                                  verticalScrollbarSize: 6,
+                                  horizontalScrollbarSize: 6,
+                                  useShadows: false,
+                                  alwaysConsumeMouseWheel: false
+                                },
                                 wordWrap: "on",
                                 fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
                                 fontSize: editorMetrics.fontSize,
@@ -4253,6 +4392,12 @@ export default function App() {
                               fontSize: editorMetrics.fontSize,
                               minimap: { enabled: false },
                               scrollBeyondLastLine: false,
+                              scrollbar: {
+                                verticalScrollbarSize: 6,
+                                horizontalScrollbarSize: 6,
+                                useShadows: false,
+                                alwaysConsumeMouseWheel: false
+                              },
                               wordWrap: "on",
                               padding: { top: editorMetrics.paddingY, bottom: editorMetrics.paddingY },
                               lineNumbersMinChars: 3,
@@ -4278,24 +4423,7 @@ export default function App() {
                         </button>
                       </div>
 
-                      {normalizedFileSearchQuery ? (
-                        <div className="code-search-results">
-                          {fileSearchResults.length === 0 && (
-                            <div className="tree-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
-                          )}
-                          {fileSearchResults.map(({ node }) => (
-                            <button
-                              key={node.absolutePath}
-                              type="button"
-                              className={`code-search-result ${activeTab.filePreview.path === node.absolutePath ? "active" : ""}`}
-                              onClick={() => void onFileSelect(node)}
-                            >
-                              <span className="code-search-result-name">{node.name}</span>
-                              <span className="code-search-result-path">{fileParentLabel(node.path) || "."}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : codeSidebarView === "files" ? (
+                      {codeSidebarView === "files" ? (
                         activeTab.fileTree.length === 0 ? (
                           <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>
                         ) : (
@@ -4482,6 +4610,46 @@ export default function App() {
         )}
       </div>
       </main>
+      )}
+
+      {showFileSearchDropdown && fileSearchDropdownStyle && appRef.current && createPortal(
+        <div
+          className={`workspace-search-dropdown floating ${fileSearchDropdownStyle.placement}`}
+          id="workspace-file-search-results"
+          role="listbox"
+          style={{
+            left: fileSearchDropdownStyle.left,
+            width: fileSearchDropdownStyle.width,
+            maxHeight: fileSearchDropdownStyle.maxHeight,
+            top: fileSearchDropdownStyle.top,
+            bottom: fileSearchDropdownStyle.bottom
+          }}
+        >
+          {fileSearchResults.length === 0 ? (
+            <div className="workspace-search-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
+          ) : (
+            fileSearchResults.map(({ node }, index) => (
+              <button
+                key={node.absolutePath}
+                id={`workspace-file-search-option-${index}`}
+                type="button"
+                role="option"
+                aria-selected={index === fileSearchActiveIndex}
+                tabIndex={-1}
+                className={`code-search-result ${index === fileSearchActiveIndex ? "active" : ""}`}
+                onMouseEnter={() => setFileSearchActiveIndex(index)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  void onFileSearchSelect(node);
+                }}
+              >
+                <span className="code-search-result-name">{node.name}</span>
+                <span className="code-search-result-path">{fileParentLabel(node.path) || "."}</span>
+              </button>
+            ))
+          )}
+        </div>,
+        appRef.current
       )}
 
       {commandPaletteOpen && (
