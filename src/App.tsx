@@ -209,6 +209,10 @@ type CommandAvailability = {
   error?: string | null;
 };
 
+type AgentStartResult = {
+  started: boolean;
+};
+
 type WorktreeModalState = {
   name: string;
   path: string;
@@ -966,6 +970,10 @@ const AGENT_SPECIAL_KEYS = [
 const AGENT_SPECIAL_KEY_MAP = Object.fromEntries(
   AGENT_SPECIAL_KEYS.map((item) => [item.key, item.sequence])
 ) as Record<string, string>;
+const AGENT_START_SYSTEM_MESSAGE = "Agent started / 智能体已启动";
+const AGENT_STARTUP_DISCOVERY_MS = 1200;
+const AGENT_STARTUP_QUIET_MS = 240;
+const AGENT_STARTUP_MAX_WAIT_MS = 5000;
 
 const BUILTIN_SLASH_COMMANDS: Array<{ command: string; description: { en: string; zh: string } }> = [
   { command: "/help", description: { en: "Show help and available commands.", zh: "显示帮助和当前可用命令。" } },
@@ -1078,6 +1086,14 @@ export default function App() {
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
   const agentInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const agentStartupStateRef = useRef(new Map<string, {
+    token: number;
+    startedAt: number;
+    lastEventAt: number;
+    sawOutput: boolean;
+    exited: boolean;
+  }>());
+  const agentStartupTokenRef = useRef(0);
   const t = useMemo(() => createTranslator(locale), [locale]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
@@ -1112,6 +1128,73 @@ export default function App() {
     const next = updater(stateRef.current);
     stateRef.current = next;
     setState(next);
+  };
+
+  const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
+
+  const armAgentStartupGate = (tabId: string, sessionId: string) => {
+    const token = ++agentStartupTokenRef.current;
+    const now = Date.now();
+    agentStartupStateRef.current.set(agentRuntimeKey(tabId, sessionId), {
+      token,
+      startedAt: now,
+      lastEventAt: now,
+      sawOutput: false,
+      exited: false
+    });
+    return token;
+  };
+
+  const clearAgentStartupGate = (tabId: string, sessionId: string, token?: number) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    const current = agentStartupStateRef.current.get(key);
+    if (!current) return;
+    if (token !== undefined && current.token !== token) return;
+    agentStartupStateRef.current.delete(key);
+  };
+
+  const noteAgentStartupEvent = (tabId: string, sessionId: string, kind: AgentEvent["kind"], data: string) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    const current = agentStartupStateRef.current.get(key);
+    if (!current) return;
+    if (kind === "exit") {
+      current.exited = true;
+      current.lastEventAt = Date.now();
+      return;
+    }
+    const cleaned = stripAnsi(data).trim();
+    const countsAsOutput = kind === "stdout"
+      || kind === "stderr"
+      || (kind === "system" && cleaned !== "" && cleaned !== AGENT_START_SYSTEM_MESSAGE);
+    if (!countsAsOutput) return;
+    current.sawOutput = true;
+    current.lastEventAt = Date.now();
+  };
+
+  const waitForAgentStartupDrain = async (tabId: string, sessionId: string, token: number) => {
+    const key = agentRuntimeKey(tabId, sessionId);
+    while (true) {
+      const current = agentStartupStateRef.current.get(key);
+      if (!current || current.token !== token) return;
+      const now = Date.now();
+      if (current.exited) {
+        clearAgentStartupGate(tabId, sessionId, token);
+        return;
+      }
+      if (current.sawOutput && now - current.lastEventAt >= AGENT_STARTUP_QUIET_MS) {
+        clearAgentStartupGate(tabId, sessionId, token);
+        return;
+      }
+      if (!current.sawOutput && now - current.startedAt >= AGENT_STARTUP_DISCOVERY_MS) {
+        clearAgentStartupGate(tabId, sessionId, token);
+        return;
+      }
+      if (now - current.startedAt >= AGENT_STARTUP_MAX_WAIT_MS) {
+        clearAgentStartupGate(tabId, sessionId, token);
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
   };
 
   const persistAppSettings = (next: AppSettings) => {
@@ -1264,6 +1347,7 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen<AgentEvent>("agent://event", (event) => {
       const { tab_id, session_id, kind, data } = event.payload;
+      noteAgentStartupEvent(tab_id, session_id, kind, data);
       const cleaned = stripAnsi(data);
       const styledChunk = sanitizeAnsiForTerminal(data);
       const isStream = kind === "stdout" || kind === "stderr";
@@ -1309,6 +1393,7 @@ export default function App() {
         })
       }));
       if (kind === "exit") {
+        clearAgentStartupGate(tab_id, session_id);
         void settleSessionAfterExit(tab_id, session_id);
       }
     });
@@ -1570,17 +1655,16 @@ export default function App() {
     }, 4000);
   };
 
-  const invokeAgent = async (command: string, payload: Record<string, unknown>, sessionId: string, label: string) => {
+  const invokeAgent = async <T = void>(command: string, payload: Record<string, unknown>, sessionId: string, label: string) => {
     try {
-      await invoke(command, payload);
-      return true;
+      return await invoke<T>(command, payload);
     } catch (error) {
       addToast({
         id: createId("toast"),
         text: `${label}: ${String(error)}`,
         sessionId
       });
-      return false;
+      return null;
     }
   };
 
@@ -2175,7 +2259,8 @@ export default function App() {
       });
       return false;
     }
-    return invokeAgent("agent_start", {
+    const startupToken = armAgentStartupGate(tab.id, session.id);
+    const result = await invokeAgent<AgentStartResult>("agent_start", {
       tabId: tab.id,
       sessionId: session.id,
       provider: tab.agent.provider,
@@ -2184,6 +2269,18 @@ export default function App() {
       cwd,
       target
     }, session.id, t("agentStartFailed"));
+    if (!result) {
+      clearAgentStartupGate(tab.id, session.id, startupToken);
+      return false;
+    }
+    if (!result.started) {
+      clearAgentStartupGate(tab.id, session.id, startupToken);
+    }
+    return {
+      ok: true,
+      started: result.started,
+      startupToken: result.started ? startupToken : null
+    };
   };
 
   const agentSend = async (tab: Tab, session: Session, input: string) => {
@@ -2195,12 +2292,13 @@ export default function App() {
       )
     }));
     void syncSessionPatch(tab.id, session.id, { status: "waiting", last_active_at: lastActiveAt });
-    await invokeAgent("agent_send", {
+    const sent = await invokeAgent("agent_send", {
       tabId: tab.id,
       sessionId: session.id,
       input,
       appendNewline: true
     }, session.id, t("agentSendFailed"));
+    return sent !== null;
   };
 
   const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
@@ -2214,6 +2312,9 @@ export default function App() {
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
     const started = await agentStartMaybe(tab, session);
     if (!started) return;
+    if (started.started && started.startupToken !== null) {
+      await waitForAgentStartupDrain(tab.id, session.id, started.startupToken);
+    }
     await invokeAgent("agent_send", {
       tabId: tab.id,
       sessionId: session.id,
@@ -3203,8 +3304,8 @@ export default function App() {
     const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
     if (!started) return;
 
-    if (wasDraft || (!sessionSnapshot.claudeSessionId && !sessionSnapshot.stream.trim())) {
-      await new Promise((resolve) => window.setTimeout(resolve, 180));
+    if (started.started && started.startupToken !== null) {
+      await waitForAgentStartupDrain(tabSnapshot.id, sessionSnapshot.id, started.startupToken);
     }
 
     const sentAt = Date.now();
@@ -3228,7 +3329,10 @@ export default function App() {
     setAgentInput("");
     focusAgentInput();
     touchSession(tabSnapshot.id, sessionSnapshot.id);
-    await agentSend(tabSnapshot, sessionSnapshot, content);
+    const sent = await agentSend(tabSnapshot, sessionSnapshot, content);
+    if (!sent) {
+      setAgentInput(content);
+    }
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {

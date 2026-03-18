@@ -81,6 +81,11 @@ pub struct SessionInfo {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AgentStartResult {
+    pub started: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GitStatus {
     pub branch: String,
     pub changes: u32,
@@ -1076,7 +1081,7 @@ fn dispatch_rpc(app: &tauri::AppHandle, command: &str, payload: Value) -> Result
         }
         "agent_start" => {
             let req: AgentStartRequest = parse_payload(payload)?;
-            agent_start(
+            serde_json::to_value(agent_start(
                 req.tab_id,
                 req.session_id,
                 req.provider,
@@ -1086,8 +1091,7 @@ fn dispatch_rpc(app: &tauri::AppHandle, command: &str, payload: Value) -> Result
                 req.target,
                 app.clone(),
                 app.state(),
-            )?;
-            Ok(Value::Null)
+            )?).map_err(|e| e.to_string())
         }
         "agent_send" => {
             let req: AgentSendRequest = parse_payload(payload)?;
@@ -3742,12 +3746,12 @@ fn agent_start(
     target: ExecTarget,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<AgentStartResult, String> {
     let key = agent_key(&tab_id, &session_id);
     {
         let agents = state.agents.lock().map_err(|e| e.to_string())?;
         if agents.contains_key(&key) {
-            return Ok(());
+            return Ok(AgentStartResult { started: false });
         }
     }
 
@@ -3865,7 +3869,7 @@ fn agent_start(
         };
     });
 
-    Ok(())
+    Ok(AgentStartResult { started: true })
 }
 
 #[tauri::command]
