@@ -39,6 +39,8 @@ import {
   persistLocale
 } from "./i18n";
 import {
+  AgentSplitHorizontalIcon,
+  AgentSplitVerticalIcon,
   AgentPlusIcon,
   AgentSendIcon,
   GitDiscardIcon,
@@ -59,8 +61,9 @@ import {
   SettingsGitIcon,
   SettingsMcpIcon,
   SettingsWorktreeIcon,
-  ThemeDarkIcon,
-  ThemeLightIcon,
+  SearchIcon,
+  MaximizeIcon,
+  MinimizeIcon,
   WorkspaceBranchIcon,
   WorkspaceChangesIcon,
   WorkspaceCodeIcon,
@@ -203,18 +206,26 @@ type ClaudeSlashMenuItem = {
   sourceKind?: "skill" | "command";
 };
 
+type CommandPaletteAction = {
+  id: string;
+  label: string;
+  description: string;
+  shortcut?: string;
+  keywords: string;
+  run: () => void;
+};
+
 type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: Tab["idlePolicy"];
 };
 
-type AppTheme = "dark" | "light";
+type AppTheme = "dark";
 type AppRoute = "workspace" | "settings";
 type SettingsPanel = "general" | "appearance";
 
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
-const APP_THEME_STORAGE_KEY = "coder-studio.app-theme";
 const SETTINGS_ROUTE_HASH = "#/settings";
 
 const defaultAppSettings = (): AppSettings => ({
@@ -254,17 +265,6 @@ const readStoredAppSettings = (): AppSettings => {
   } catch {
     return fallback;
   }
-};
-
-const readStoredTheme = (): AppTheme => {
-  if (typeof window === "undefined") return "dark";
-  try {
-    const raw = window.localStorage.getItem(APP_THEME_STORAGE_KEY);
-    if (raw === "dark" || raw === "light") return raw;
-  } catch {
-    // Ignore storage failures and fall back to media preference.
-  }
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 };
 
 const readCurrentRoute = (): AppRoute => {
@@ -307,6 +307,7 @@ type XtermBaseHandle = {
 type XtermBaseProps = {
   output: string;
   outputIdentity?: string;
+  themeIdentity?: string;
   theme: AppTheme;
   fontSize: number;
   mode?: XtermBaseMode;
@@ -320,6 +321,7 @@ type XtermBaseProps = {
 type AgentStreamTerminalProps = {
   streamId: string;
   stream: string;
+  toneKey: string;
   theme: AppTheme;
   fontSize: number;
 };
@@ -336,13 +338,42 @@ type ShellTerminalProps = {
 
 const readTerminalTheme = (source?: Element | null) => {
   if (typeof window === "undefined") {
-    return { background: "black", foreground: "white" };
+    return {
+      background: "#0b151a",
+      foreground: "#d8edf4",
+      cursor: "#8fffae",
+      cursorAccent: "#0d1418"
+    };
   }
   const styles = window.getComputedStyle((source as Element | null) ?? document.documentElement);
   const rootStyles = window.getComputedStyle(document.documentElement);
-  const background = styles.getPropertyValue("--terminal-bg").trim() || rootStyles.getPropertyValue("--terminal-bg").trim() || "black";
-  const foreground = styles.getPropertyValue("--terminal-fg").trim() || rootStyles.getPropertyValue("--terminal-fg").trim() || "white";
-  return { background, foreground };
+  const readVar = (name: string, fallback: string) =>
+    styles.getPropertyValue(name).trim() || rootStyles.getPropertyValue(name).trim() || fallback;
+
+  return {
+    background: readVar("--terminal-bg", "#0b151a"),
+    foreground: readVar("--terminal-fg", "#d8edf4"),
+    cursor: readVar("--terminal-cursor", "#8fffae"),
+    cursorAccent: readVar("--terminal-cursor-accent", "#0d1418"),
+    selectionBackground: readVar("--terminal-selection", "rgba(90, 200, 250, 0.3)"),
+    selectionInactiveBackground: readVar("--terminal-selection-inactive", "rgba(90, 200, 250, 0.2)"),
+    black: readVar("--ansi-black", "#5f7680"),
+    red: readVar("--ansi-red", "#ff9eb0"),
+    green: readVar("--ansi-green", "#8fffae"),
+    yellow: readVar("--ansi-yellow", "#ffd37a"),
+    blue: readVar("--ansi-blue", "#5ac8fa"),
+    magenta: readVar("--ansi-magenta", "#b9a4ff"),
+    cyan: readVar("--ansi-cyan", "#79f6de"),
+    white: readVar("--ansi-white", "#e7f3f7"),
+    brightBlack: readVar("--ansi-bright-black", "#8da6b0"),
+    brightRed: readVar("--ansi-bright-red", "#ffbac6"),
+    brightGreen: readVar("--ansi-bright-green", "#b8ffca"),
+    brightYellow: readVar("--ansi-bright-yellow", "#ffe7a6"),
+    brightBlue: readVar("--ansi-bright-blue", "#9edfff"),
+    brightMagenta: readVar("--ansi-bright-magenta", "#d8caff"),
+    brightCyan: readVar("--ansi-bright-cyan", "#a7fff0"),
+    brightWhite: readVar("--ansi-bright-white", "#f4fbfd")
+  };
 };
 
 const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => {
@@ -356,9 +387,19 @@ const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => 
   if (next) term.write(next);
 };
 
+const XTERM_SCROLLBAR_WIDTH = 3;
+
+const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
+  if (!mount) return null;
+  return mount.closest(".agent-pane-card")
+    ?? mount.closest(".terminal-card")
+    ?? mount.closest(".app");
+};
+
 const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   output,
   outputIdentity,
+  themeIdentity,
   theme,
   fontSize,
   mode = "interactive",
@@ -397,9 +438,10 @@ const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
         convertEol: true,
         disableStdin: mode === "readonly",
         cursorBlink: mode === "interactive",
-        fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
+        fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, SFMono-Regular, monospace",
         fontSize,
-        theme: readTerminalTheme(mount.closest(".app"))
+        overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
+        theme: readTerminalTheme(resolveTerminalThemeSource(mount))
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -423,10 +465,11 @@ const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       disableStdin: mode === "readonly",
       cursorBlink: mode === "interactive",
       fontSize,
-      theme: readTerminalTheme(mount.closest(".app"))
+      overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
+      theme: readTerminalTheme(resolveTerminalThemeSource(mount))
     };
     requestAnimationFrame(() => fitAndReport());
-  }, [fitAndReport, fontSize, mode, theme]);
+  }, [fitAndReport, fontSize, mode, theme, themeIdentity]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -507,9 +550,10 @@ const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
 
 XtermBase.displayName = "XtermBase";
 
-const AgentStreamTerminal = ({ streamId, stream, theme, fontSize }: AgentStreamTerminalProps) => (
+const AgentStreamTerminal = ({ streamId, stream, toneKey, theme, fontSize }: AgentStreamTerminalProps) => (
   <XtermBase
     outputIdentity={streamId}
+    themeIdentity={toneKey}
     output={stream}
     theme={theme}
     fontSize={fontSize}
@@ -652,25 +696,6 @@ const flattenTree = (nodes: TreeNode[] = []): TreeNode[] => {
     }
   });
   return items;
-};
-
-const sessionStatusLabel = (status: SessionStatus, t: Translator) => {
-  switch (status) {
-    case "idle":
-      return t("idle");
-    case "running":
-      return t("running");
-    case "background":
-      return t("background");
-    case "waiting":
-      return t("waiting");
-    case "suspended":
-      return t("suspended");
-    case "queued":
-      return t("queued");
-    default:
-      return status;
-  }
 };
 
 const queueTaskStatusLabel = (status: BackendQueueTask["status"], t: Translator) => {
@@ -933,10 +958,16 @@ const replaceLeadingSlashToken = (input: string, command: string) => {
   return remainder ? `${command} ${remainder}` : `${command} `;
 };
 
+const isTextInputTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+};
+
 export default function App() {
   const [state, setState] = useRelaxState(workbenchState);
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
-  const [theme, setTheme] = useState<AppTheme>(() => readStoredTheme());
+  const theme: AppTheme = "dark";
   const [appSettings, setAppSettings] = useState<AppSettings>(() => readStoredAppSettings());
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => readStoredAppSettings());
   const [route, setRoute] = useState<AppRoute>(() => readCurrentRoute());
@@ -949,6 +980,10 @@ export default function App() {
   const [worktreeView, setWorktreeView] = useState<"status" | "diff" | "tree">("status");
   const [previewMode, setPreviewMode] = useState<"preview" | "diff">("preview");
   const [leftRailView, setLeftRailView] = useState<"sessions" | "files" | "git">("sessions");
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
   const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
@@ -961,6 +996,7 @@ export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
   const agentInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1028,6 +1064,18 @@ export default function App() {
     setRoute(nextRoute);
   };
 
+  const openCommandPalette = () => {
+    setCommandPaletteOpen(true);
+    setCommandPaletteQuery("");
+    setCommandPaletteActiveIndex(0);
+  };
+
+  const closeCommandPalette = () => {
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery("");
+    setCommandPaletteActiveIndex(0);
+  };
+
   const syncGlobalSettings = (next: AppSettings) => {
     const normalized = cloneAppSettings(next);
     updateState((current) => ({
@@ -1091,25 +1139,32 @@ export default function App() {
   }, [slashMenuOpen]);
 
   useEffect(() => {
+    if (!commandPaletteOpen) return;
+    requestAnimationFrame(() => {
+      commandPaletteInputRef.current?.focus();
+      commandPaletteInputRef.current?.select();
+    });
+  }, [commandPaletteOpen]);
+
+  useEffect(() => {
     persistWorkbenchState(state);
   }, [state]);
+
+  useEffect(() => {
+    if (state.overlay.visible) {
+      closeCommandPalette();
+    }
+  }, [state.overlay.visible]);
 
   useEffect(() => {
     persistLocale(locale);
   }, [locale]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
-      } catch {
-        // Ignore storage failures and keep in-memory theme state.
-      }
-    }
     if (typeof document !== "undefined") {
-      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.theme = "dark";
     }
-  }, [theme]);
+  }, []);
 
   useEffect(() => {
     persistAppSettings(appSettings);
@@ -1680,6 +1735,15 @@ export default function App() {
         })
       };
     });
+  };
+
+  const onCycleWorkspace = (delta: 1 | -1) => {
+    const tabs = stateRef.current.tabs;
+    if (tabs.length < 2) return;
+    const activeIndex = tabs.findIndex((tab) => tab.id === stateRef.current.activeTabId);
+    if (activeIndex < 0) return;
+    const nextIndex = (activeIndex + delta + tabs.length) % tabs.length;
+    onSwitchWorkspace(tabs[nextIndex].id);
   };
 
   const onSwitchWorkspaceSession = (tabId: string, sessionId: string) => {
@@ -2821,6 +2885,11 @@ export default function App() {
 
   const splitPane = (paneId: string, axis: "horizontal" | "vertical") => {
     updateTab(activeTab.id, (tab) => {
+      const targetPaneId = findPaneSessionId(tab.paneLayout, paneId)
+        ? paneId
+        : findPaneIdBySessionId(tab.paneLayout, tab.activeSessionId)
+          ?? collectPaneLeaves(tab.paneLayout)[0]?.id;
+      if (!targetPaneId) return tab;
       const newSession = createDraftSessionForTab(tab, "branch");
       const nextLeaf = createPaneLeaf(newSession.id);
       return {
@@ -2828,7 +2897,7 @@ export default function App() {
         sessions: [newSession, ...tab.sessions.filter((session) => session.id !== newSession.id)],
         activePaneId: nextLeaf.id,
         activeSessionId: newSession.id,
-        paneLayout: replacePaneNode(tab.paneLayout, paneId, (leaf) => ({
+        paneLayout: replacePaneNode(tab.paneLayout, targetPaneId, (leaf) => ({
           type: "split",
           id: createId("split"),
           axis,
@@ -2892,6 +2961,12 @@ export default function App() {
     setSlashMenuOpen(false);
     setSlashMenuPaneId(null);
     focusAgentInput();
+  };
+
+  const onRunCommandPaletteAction = (action: CommandPaletteAction | undefined) => {
+    if (!action) return;
+    closeCommandPalette();
+    action.run();
   };
 
   const onSendAgent = async (paneId: string) => {
@@ -2986,18 +3061,82 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      const key = event.key.toLowerCase();
+      const hasModifier = event.metaKey || event.ctrlKey;
+      const isEditableTarget = isTextInputTarget(event.target);
+
+      if (hasModifier && key === "k") {
+        event.preventDefault();
+        if (commandPaletteOpen) {
+          closeCommandPalette();
+        } else {
+          openCommandPalette();
+          setSlashMenuOpen(false);
+          setSlashMenuPaneId(null);
+        }
+        return;
+      }
+
+      if (commandPaletteOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCommandPalette();
+        }
+        return;
+      }
+
+      if (hasModifier && key === "s") {
         if (!activeTab.filePreview.path) return;
         event.preventDefault();
         void onSavePreview();
         return;
       }
 
-      if (route !== "workspace" || isArchiveView) return;
+      if (route !== "workspace") return;
+
+      if (hasModifier && key === "n") {
+        event.preventDefault();
+        onAddTab();
+        return;
+      }
+
+      if (hasModifier && event.shiftKey && (event.key === "[" || event.key === "{")) {
+        event.preventDefault();
+        onCycleWorkspace(-1);
+        return;
+      }
+
+      if (hasModifier && event.shiftKey && (event.key === "]" || event.key === "}")) {
+        event.preventDefault();
+        onCycleWorkspace(1);
+        return;
+      }
+
+      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget && !isArchiveView) {
+        event.preventDefault();
+        setIsFocusMode((value) => !value);
+        return;
+      }
+
+      if (!hasModifier && !event.altKey && !event.shiftKey && event.key === "Escape" && isFocusMode) {
+        event.preventDefault();
+        setIsFocusMode(false);
+        return;
+      }
+
+      if (hasModifier && key === "enter" && !isArchiveView) {
+        event.preventDefault();
+        if (agentInput.trim()) {
+          void onSendAgent(activeTab.activePaneId);
+        }
+        return;
+      }
+
+      if (isArchiveView) return;
       const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
       const isSplitShortcut = isMacPlatform
-        ? event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "d"
-        : event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "d";
+        ? event.metaKey && !event.ctrlKey && !event.altKey && key === "d"
+        : event.altKey && !event.ctrlKey && !event.metaKey && key === "d";
       if (!isSplitShortcut) return;
       if (event.repeat) return;
       event.preventDefault();
@@ -3009,7 +3148,18 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTab.activePaneId, activeTab.filePreview.path, activeTab.filePreview.dirty, activeTab.filePreview.content, activeSession.id, isArchiveView, route]);
+  }, [
+    activeTab.activePaneId,
+    activeTab.filePreview.path,
+    activeTab.filePreview.dirty,
+    activeTab.filePreview.content,
+    activeSession.id,
+    agentInput,
+    commandPaletteOpen,
+    isArchiveView,
+    isFocusMode,
+    route
+  ]);
 
   useEffect(() => {
     if (!isArchiveView) {
@@ -3106,6 +3256,130 @@ export default function App() {
         sessions
       };
     });
+  const commandPaletteActions: CommandPaletteAction[] = [
+    {
+      id: "new-workspace",
+      label: locale === "zh" ? "新建工作区" : "New Workspace",
+      description: locale === "zh" ? "创建并切换到新的工作区" : "Create and switch to a new workspace",
+      shortcut: "⌘/Ctrl N",
+      keywords: "new workspace tab add create",
+      run: onAddTab
+    },
+    {
+      id: "toggle-focus",
+      label: locale === "zh" ? (isFocusMode ? "退出专注模式" : "进入专注模式") : (isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"),
+      description: locale === "zh" ? "隐藏左右面板，聚焦命令流" : "Hide side panels and focus the command stream",
+      shortcut: "F",
+      keywords: "focus mode zen panel hide",
+      run: () => setIsFocusMode((value) => !value)
+    },
+    {
+      id: "toggle-code",
+      label: showCodePanel
+        ? (locale === "zh" ? "隐藏代码面板" : "Hide Code Panel")
+        : (locale === "zh" ? "显示代码面板" : "Show Code Panel"),
+      description: locale === "zh" ? "切换右侧代码预览区域" : "Toggle the right-side code preview area",
+      keywords: "code panel preview right inspector",
+      run: () => toggleRightPane("code")
+    },
+    {
+      id: "toggle-terminal",
+      label: showTerminalPanel
+        ? (locale === "zh" ? "隐藏终端面板" : "Hide Terminal Panel")
+        : (locale === "zh" ? "显示终端面板" : "Show Terminal Panel"),
+      description: locale === "zh" ? "切换右侧终端区域" : "Toggle the right-side terminal area",
+      keywords: "terminal panel shell dock right",
+      run: () => toggleRightPane("terminal")
+    },
+    {
+      id: "focus-input",
+      label: locale === "zh" ? "聚焦输入框" : "Focus Prompt Input",
+      description: locale === "zh" ? "将光标移动到指令输入框" : "Move cursor to the shared prompt input",
+      shortcut: "⌘/Ctrl Enter",
+      keywords: "prompt input focus compose",
+      run: focusAgentInput
+    },
+    {
+      id: "split-pane-vertical",
+      label: t("splitVertical"),
+      description: t("splitVerticalDescription"),
+      shortcut: "Alt/⌘ D",
+      keywords: "split pane vertical agent",
+      run: () => splitPane(activeTab.activePaneId, "vertical")
+    },
+    {
+      id: "split-pane-horizontal",
+      label: t("splitHorizontal"),
+      description: t("splitHorizontalDescription"),
+      shortcut: "Shift + Alt/⌘ D",
+      keywords: "split pane horizontal agent",
+      run: () => splitPane(activeTab.activePaneId, "horizontal")
+    },
+    {
+      id: "switch-prev-workspace",
+      label: locale === "zh" ? "切换到上一个工作区" : "Switch To Previous Workspace",
+      description: locale === "zh" ? "按时间序列回到上一个工作区" : "Jump to the previous workspace in the stack",
+      shortcut: "⌘/Ctrl ⇧ [",
+      keywords: "workspace previous back",
+      run: () => onCycleWorkspace(-1)
+    },
+    {
+      id: "switch-next-workspace",
+      label: locale === "zh" ? "切换到下一个工作区" : "Switch To Next Workspace",
+      description: locale === "zh" ? "按时间序列前往下一个工作区" : "Jump to the next workspace in the stack",
+      shortcut: "⌘/Ctrl ⇧ ]",
+      keywords: "workspace next forward",
+      run: () => onCycleWorkspace(1)
+    },
+    {
+      id: "open-settings",
+      label: route === "settings"
+        ? (locale === "zh" ? "返回工作区" : "Back To Workspace")
+        : (locale === "zh" ? "打开设置" : "Open Settings"),
+      description: route === "settings"
+        ? (locale === "zh" ? "关闭设置并返回工作台" : "Close settings and return to the workbench")
+        : (locale === "zh" ? "打开全局设置面板" : "Open global settings panel"),
+      keywords: "settings preferences",
+      run: () => {
+        if (route === "settings") {
+          onCloseSettings();
+        } else {
+          onOpenSettings();
+        }
+      }
+    },
+    {
+      id: "toggle-language",
+      label: locale === "zh" ? "切换语言（中/EN）" : "Toggle Language (EN/中)",
+      description: locale === "zh" ? "在中文和英文界面间切换" : "Switch between Chinese and English UI",
+      keywords: "language locale i18n",
+      run: () => setLocale((current) => current === "zh" ? "en" : "zh")
+    },
+    ...workspaceTabs.map((tab) => ({
+      id: `workspace:${tab.id}`,
+      label: `${locale === "zh" ? "切换到" : "Switch To"} ${tab.label}`,
+      description: locale === "zh" ? "直接跳转到该工作区" : "Jump directly to this workspace",
+      keywords: `workspace ${tab.label.toLowerCase()}`,
+      run: () => onSwitchWorkspace(tab.id)
+    }))
+  ];
+  const normalizedCommandPaletteQuery = commandPaletteQuery.trim().toLowerCase();
+  const filteredCommandPaletteActions = normalizedCommandPaletteQuery
+    ? commandPaletteActions.filter((action) => {
+      const haystack = `${action.label} ${action.description} ${action.keywords}`.toLowerCase();
+      return haystack.includes(normalizedCommandPaletteQuery);
+    })
+    : commandPaletteActions;
+  const activeCommandPaletteAction = filteredCommandPaletteActions[commandPaletteActiveIndex] ?? filteredCommandPaletteActions[0];
+
+  useEffect(() => {
+    if (!filteredCommandPaletteActions.length) {
+      setCommandPaletteActiveIndex(0);
+      return;
+    }
+    setCommandPaletteActiveIndex((current) => Math.min(current, filteredCommandPaletteActions.length - 1));
+  }, [filteredCommandPaletteActions.length]);
+
   const gitChangeGroups = [
     {
       key: "changes" as const,
@@ -3278,6 +3552,7 @@ export default function App() {
       : session.status === "waiting"
         ? "queued"
         : "idle";
+    const statusTone = sessionTone(session.status);
     const plainStream = stripAnsi(session.stream);
 
     return (
@@ -3291,11 +3566,28 @@ export default function App() {
         </div>
         <div className="agent-pane-header">
           <div className="agent-pane-header-copy">
-            <span className={`session-top-dot ${sessionTone(session.status)} ${sessionTone(session.status) === "active" ? "pulse" : ""}`} />
+            <span className={`session-top-dot ${statusTone} ${statusTone === "active" ? "pulse" : ""}`} />
             <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
-            <span className="agent-pane-status">{sessionStatusLabel(session.status, t)}</span>
           </div>
           <div className="agent-pane-actions">
+            <button
+              type="button"
+              className="pane-action split"
+              onClick={() => splitPane(node.id, "vertical")}
+              title={t("splitVertical")}
+              aria-label={t("splitVertical")}
+            >
+              <AgentSplitVerticalIcon />
+            </button>
+            <button
+              type="button"
+              className="pane-action split"
+              onClick={() => splitPane(node.id, "horizontal")}
+              title={t("splitHorizontal")}
+              aria-label={t("splitHorizontal")}
+            >
+              <AgentSplitHorizontalIcon />
+            </button>
             <button type="button" className="pane-action close" onClick={() => void onCloseAgentPane(node.id, session.id)} title={t("close")}>
               <HeaderCloseIcon />
             </button>
@@ -3303,7 +3595,13 @@ export default function App() {
         </div>
         <div className="agent-pane-body" data-testid={`agent-pane-${node.id}`}>
           {plainStream.trim() ? (
-            <AgentStreamTerminal streamId={session.id} stream={session.stream} theme={theme} fontSize={editorMetrics.terminalFontSize} />
+            <AgentStreamTerminal
+              streamId={session.id}
+              stream={session.stream}
+              toneKey={isPaneActive ? "active" : "inactive"}
+              theme={theme}
+              fontSize={editorMetrics.terminalFontSize}
+            />
           ) : (
             <div className="terminal-empty">{isDraftSession(session) ? t("draftSessionPrompt") : t("noTaskInProgress")}</div>
           )}
@@ -3378,12 +3676,23 @@ export default function App() {
             <>
               <button
                 type="button"
-                className="topbar-tool"
-                onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
-                title={theme === "dark" ? t("themeLight") : t("themeDark")}
-                aria-label={t("theme")}
+                className="topbar-tool topbar-tool-wide"
+                onClick={openCommandPalette}
+                title={locale === "zh" ? "快速操作（⌘/Ctrl+K）" : "Quick actions (⌘/Ctrl+K)"}
+                aria-label={locale === "zh" ? "快速操作" : "Quick actions"}
               >
-                {theme === "dark" ? <ThemeDarkIcon /> : <ThemeLightIcon />}
+                <SearchIcon />
+                <span>{locale === "zh" ? "操作" : "Actions"}</span>
+              </button>
+              <button
+                type="button"
+                className={`topbar-tool topbar-tool-wide ${isFocusMode ? "active" : ""}`}
+                onClick={() => setIsFocusMode((value) => !value)}
+                title={locale === "zh" ? "专注模式（F）" : "Focus mode (F)"}
+                aria-label={locale === "zh" ? "专注模式" : "Focus mode"}
+              >
+                {isFocusMode ? <MinimizeIcon /> : <MaximizeIcon />}
+                <span>{locale === "zh" ? "专注" : "Focus"}</span>
               </button>
               <button
                 type="button"
@@ -3542,24 +3851,11 @@ export default function App() {
                       <div className="settings-row">
                         <div className="settings-row-copy">
                           <strong>{t("theme")}</strong>
-                          <span>{t("themeHint")}</span>
+                          <span>{locale === "zh" ? "当前版本仅保留深色主题。" : "This version uses a dark-only theme."}</span>
                         </div>
                         <div className="settings-row-control">
-                          <div className="settings-pill-select">
-                            <button
-                              type="button"
-                              className={`settings-pill-option ${theme === "light" ? "active" : ""}`}
-                              onClick={() => setTheme("light")}
-                            >
-                              {t("themeLight")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`settings-pill-option ${theme === "dark" ? "active" : ""}`}
-                              onClick={() => setTheme("dark")}
-                            >
-                              {t("themeDark")}
-                            </button>
+                          <div className="settings-pill-select single">
+                            <span className="settings-pill-option active">{t("themeDark")}</span>
                           </div>
                         </div>
                       </div>
@@ -3641,9 +3937,12 @@ export default function App() {
               <WorkspaceTerminalIcon />
               <span>{t("terminalPanel")}</span>
             </button>
+            <span className="workspace-shortcut-hint">
+              {locale === "zh" ? "⌘/Ctrl+K 快速操作 · F 专注" : "⌘/Ctrl+K actions · F focus"}
+            </span>
           </div>
         </div>
-      <div className="workspace-layout">
+      <div className={`workspace-layout ${isFocusMode ? "focus-mode" : ""}`}>
         <section className="panel left-panel">
           <div className="panel-inner sidebar-workbench">
             <div className="sidebar-rail">
@@ -3672,7 +3971,6 @@ export default function App() {
                         <span className={`session-top-dot ${sessionTone(item.status)} ${sessionTone(item.status) === "active" ? "pulse" : ""}`} />
                         <span className="session-stack-copy">
                           <span className="session-stack-title">{displaySessionTitle(item.title)}</span>
-                          <span className="session-stack-meta">{sessionStatusLabel(item.status, t)}</span>
                         </span>
                         {item.unread > 0 && <span className="session-top-unread">{item.unread > 9 ? "9+" : item.unread}</span>}
                       </div>
@@ -3915,7 +4213,6 @@ export default function App() {
                         <div className="agent-pane-header-copy">
                           <span className={`session-top-dot ${sessionTone(queueSession.status)} ${sessionTone(queueSession.status) === "active" ? "pulse" : ""}`} />
                           <span className="agent-pane-title">{displaySessionTitle(queueSession.title)}</span>
-                          <span className="agent-pane-status">{sessionStatusLabel(queueSession.status, t)}</span>
                         </div>
                       </div>
                       <div className="agent-pane-body">
@@ -4064,7 +4361,7 @@ export default function App() {
                                   originalModelPath={`${activeTab.filePreview.path}.original`}
                                   modifiedModelPath={activeTab.filePreview.path}
                                   language={inferEditorLanguage(activeTab.filePreview.path)}
-                                  theme={theme === "light" ? "vs" : "vs-dark"}
+                                  theme="vs-dark"
                                   options={{
                                     automaticLayout: true,
                                     readOnly: true,
@@ -4072,7 +4369,7 @@ export default function App() {
                                     minimap: { enabled: false },
                                     scrollBeyondLastLine: false,
                                     wordWrap: "on",
-                                    fontFamily: "IBM Plex Mono, JetBrains Mono, monospace",
+                                    fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
                                     fontSize: editorMetrics.fontSize,
                                     lineNumbersMinChars: 3,
                                     renderWhitespace: "selection"
@@ -4091,10 +4388,10 @@ export default function App() {
                                 language={inferEditorLanguage(activeTab.filePreview.path)}
                                 value={activeTab.filePreview.content}
                                 onChange={(value) => onPreviewEdit(value ?? "")}
-                                theme={theme === "light" ? "vs" : "vs-dark"}
+                                theme="vs-dark"
                                 options={{
                                   automaticLayout: true,
-                                  fontFamily: "IBM Plex Mono, JetBrains Mono, monospace",
+                                  fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
                                   fontSize: editorMetrics.fontSize,
                                   minimap: { enabled: false },
                                   scrollBeyondLastLine: false,
@@ -4187,6 +4484,83 @@ export default function App() {
         </section>
       </div>
       </main>
+      )}
+
+      {commandPaletteOpen && (
+        <div
+          className="command-palette-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeCommandPalette();
+            }
+          }}
+        >
+          <div
+            className="command-palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label={locale === "zh" ? "快速操作面板" : "Quick actions palette"}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="command-palette-search-row">
+              <SearchIcon />
+              <input
+                ref={commandPaletteInputRef}
+                className="command-palette-search-input"
+                value={commandPaletteQuery}
+                onChange={(event) => setCommandPaletteQuery(event.target.value)}
+                placeholder={locale === "zh" ? "搜索操作、面板或工作区…" : "Search actions, panels, or workspaces..."}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setCommandPaletteActiveIndex((index) => {
+                      if (!filteredCommandPaletteActions.length) return 0;
+                      return Math.min(index + 1, filteredCommandPaletteActions.length - 1);
+                    });
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setCommandPaletteActiveIndex((index) => Math.max(index - 1, 0));
+                    return;
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onRunCommandPaletteAction(activeCommandPaletteAction);
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeCommandPalette();
+                  }
+                }}
+              />
+            </div>
+            <div className="command-palette-results">
+              {filteredCommandPaletteActions.length === 0 ? (
+                <div className="command-palette-empty">
+                  {locale === "zh" ? "未找到匹配操作" : "No matching actions"}
+                </div>
+              ) : (
+                filteredCommandPaletteActions.map((action, index) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className={`command-palette-item ${index === commandPaletteActiveIndex ? "active" : ""}`}
+                    onMouseEnter={() => setCommandPaletteActiveIndex(index)}
+                    onClick={() => onRunCommandPaletteAction(action)}
+                  >
+                    <span className="command-palette-item-copy">
+                      <span className="command-palette-item-label">{action.label}</span>
+                      <span className="command-palette-item-description">{action.description}</span>
+                    </span>
+                    {action.shortcut && <span className="command-palette-shortcut">{action.shortcut}</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="toast-container">

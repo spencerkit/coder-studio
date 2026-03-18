@@ -11,6 +11,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@monaco-editor/react": "^4.7.0",
     "@relax-state/react": "^0.0.10",
     "@tauri-apps/api": "^2.10.1",
@@ -29,6 +31,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "playwright": "^1.47.0",
+    "sharp": "^0.34.5",
     "typescript": "^5.5.4",
     "vite": "^5.4.1"
   },
