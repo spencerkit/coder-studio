@@ -1648,15 +1648,12 @@ export default function App() {
       const preparedSession: Session = {
         ...baseSession,
         title,
-        status: baseSession.status === "queued" ? "queued" : "waiting",
+        status: baseSession.status === "queued" ? "queued" : "idle",
         mode: draftSession.mode,
         autoFeed: draftSession.autoFeed,
         isDraft: false,
         queue: draftSession.queue,
-        messages: [
-          ...draftSession.messages,
-          { id: createId("msg"), role: "user", content: firstInput, time: nowLabel() }
-        ],
+        messages: draftSession.messages,
         stream: draftSession.stream,
         unread: 0,
         lastActiveAt: Date.now(),
@@ -3202,30 +3199,35 @@ export default function App() {
     const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
     const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return;
-    if (!wasDraft) {
-      updateTab(tabSnapshot.id, (tab) => ({
-        ...tab,
-        sessions: tab.sessions.map((s) =>
-          s.id === sessionSnapshot.id
-            ? {
-                ...s,
-                status: resolveVisibleStatus(tab, s, "waiting"),
-                lastActiveAt: Date.now(),
-                messages: [
-                  ...s.messages,
-                  { id: createId("msg"), role: "user", content, time: nowLabel() }
-                ]
-              }
-            : s
-        )
-      }));
-    }
-    setAgentInput("");
-    focusAgentInput();
-    touchSession(tabSnapshot.id, sessionSnapshot.id);
 
     const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
     if (!started) return;
+
+    if (wasDraft || (!sessionSnapshot.claudeSessionId && !sessionSnapshot.stream.trim())) {
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+    }
+
+    const sentAt = Date.now();
+    updateTab(tabSnapshot.id, (tab) => ({
+      ...tab,
+      sessions: tab.sessions.map((s) =>
+        s.id === sessionSnapshot.id
+          ? {
+              ...s,
+              status: resolveVisibleStatus(tab, s, "waiting"),
+              lastActiveAt: sentAt,
+              messages: [
+                ...s.messages,
+                { id: createId("msg"), role: "user", content, time: nowLabel() }
+              ]
+            }
+          : s
+      )
+    }));
+
+    setAgentInput("");
+    focusAgentInput();
+    touchSession(tabSnapshot.id, sessionSnapshot.id);
     await agentSend(tabSnapshot, sessionSnapshot, content);
   };
 

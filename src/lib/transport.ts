@@ -30,22 +30,14 @@ const normalizeBaseUrl = (value: string) => {
   }
 };
 
-const readInjectedBackendBase = () => {
+const readConfiguredBackendBase = () => {
   if (typeof window === "undefined") return "";
   return normalizeBaseUrl(window.__CODER_STUDIO_BACKEND__ ?? "");
 };
 
-const collectBackendBaseCandidates = () => {
-  if (typeof window === "undefined") return [""];
-  const explicit = readInjectedBackendBase();
-  if (explicit) {
-    return [explicit];
-  }
-  return [normalizeBaseUrl(window.location.origin)];
-};
-
 const backendBaseUrl = () => {
-  return collectBackendBaseCandidates()[0] ?? "";
+  if (typeof window === "undefined") return "";
+  return readConfiguredBackendBase() || normalizeBaseUrl(window.location.origin);
 };
 
 const websocketUrl = () => {
@@ -119,8 +111,8 @@ const pruneSocket = () => {
 };
 
 export const invoke = async <T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T> => {
-  const candidates = collectBackendBaseCandidates();
   const errors: string[] = [];
+  const candidates = [backendBaseUrl()];
 
   for (const base of candidates) {
     try {

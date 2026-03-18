@@ -9,12 +9,11 @@ use std::{
 
 use axum::{
     extract::{
-        OriginalUri,
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path as AxumPath, State as AxumState,
     },
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -642,7 +641,8 @@ fn claude_slash_skills(cwd: String) -> Result<Vec<ClaudeSlashSkillEntry>, String
     Ok(entries)
 }
 
-const DEV_FRONTEND_URL: &str = "http://localhost:5174";
+const DEV_FRONTEND_URL: &str = "http://127.0.0.1:5174";
+const DEV_BACKEND_PORT: u16 = 41033;
 
 #[derive(Deserialize)]
 struct InitWorkspaceRequest {
@@ -1167,92 +1167,20 @@ async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
 }
 
-async fn dev_entry_handler(
-    AxumState(state): AxumState<HttpServerState>,
-) -> impl IntoResponse {
-    let endpoint = {
-        let app_state: State<AppState> = state.app.state();
-        app_state
-            .http_endpoint
-            .lock()
-            .ok()
-            .and_then(|value| value.clone())
-            .unwrap_or_default()
-    };
-    Html(format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent Workbench</title>
-    <script>
-      window.__CODER_STUDIO_BACKEND__ = {backend};
-    </script>
-    <script type="module">
-      import RefreshRuntime from "{frontend}/@react-refresh";
-      RefreshRuntime.injectIntoGlobalHook(window);
-      window.$RefreshReg$ = () => {{}};
-      window.$RefreshSig$ = () => (type) => type;
-      window.__vite_plugin_react_preamble_installed__ = true;
-    </script>
-    <script type="module" src="{frontend}/@vite/client"></script>
-    <script type="module" src="{frontend}/src/main.tsx"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>"#,
-        backend = serde_json::to_string(&endpoint).unwrap_or_else(|_| "\"\"".to_string()),
-        frontend = DEV_FRONTEND_URL,
-    ))
+fn frontend_dist_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist")
 }
 
-async fn dev_asset_redirect_handler(uri: OriginalUri) -> impl IntoResponse {
-    let forwarded = format!("{DEV_FRONTEND_URL}{}", uri.0);
-    Redirect::temporary(&forwarded)
+fn frontend_assets_dir() -> PathBuf {
+    frontend_dist_dir().join("assets")
 }
 
-fn inject_backend_global(html: &str, endpoint: &str) -> String {
-    let script = format!(
-        r#"<script>window.__CODER_STUDIO_BACKEND__ = {};</script>"#,
-        serde_json::to_string(endpoint).unwrap_or_else(|_| "\"\"".to_string())
-    );
-    if html.contains("window.__CODER_STUDIO_BACKEND__") {
-        html.to_string()
-    } else if let Some(index) = html.rfind("</body>") {
-        let mut output = String::with_capacity(html.len() + script.len() + 2);
-        output.push_str(&html[..index]);
-        output.push_str(&script);
-        output.push('\n');
-        output.push_str(&html[index..]);
-        output
-    } else {
-        format!("{html}\n{script}")
-    }
-}
-
-async fn index_handler(
-    AxumState(state): AxumState<HttpServerState>,
-) -> impl IntoResponse {
-    let endpoint = {
-        let app_state: State<AppState> = state.app.state();
-        app_state
-            .http_endpoint
-            .lock()
-            .ok()
-            .and_then(|value| value.clone())
-            .unwrap_or_default()
-    };
+async fn spa_shell_handler() -> impl IntoResponse {
     let index_file = frontend_dist_dir().join("index.html");
     let html = std::fs::read_to_string(index_file).unwrap_or_else(|_| {
         r#"<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Agent Workbench</title></head><body><div id="root"></div></body></html>"#.to_string()
     });
-    Html(inject_backend_global(&html, &endpoint))
-}
-
-fn frontend_dist_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist")
+    Html(html)
 }
 
 fn build_transport_router(app: &tauri::AppHandle) -> Router {
@@ -1268,24 +1196,19 @@ fn build_transport_router(app: &tauri::AppHandle) -> Router {
         .layer(cors);
 
     if cfg!(debug_assertions) {
-        api_router
-            .route("/", get(dev_entry_handler))
-            .route("/__dev", get(dev_entry_handler))
-            .fallback(get(dev_asset_redirect_handler))
-            .with_state(shared)
+        api_router.with_state(shared)
     } else {
-        let dist_dir = frontend_dist_dir();
         api_router
-            .route("/", get(index_handler))
-            .fallback_service(
-                ServeDir::new(dist_dir)
-            )
+            .nest_service("/assets", ServeDir::new(frontend_assets_dir()))
+            .route("/", get(spa_shell_handler))
+            .route("/*path", get(spa_shell_handler))
             .with_state(shared)
     }
 }
 
 fn start_transport_server(app: &tauri::AppHandle) -> Result<String, String> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
+    let bind_port = if cfg!(debug_assertions) { DEV_BACKEND_PORT } else { 0 };
+    let listener = std::net::TcpListener::bind(("127.0.0.1", bind_port)).map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let address = listener.local_addr().map_err(|e| e.to_string())?;
     let endpoint = format!("http://127.0.0.1:{}", address.port());
@@ -4078,12 +4001,12 @@ fn main() {
                 .lock()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
             *guard = Some(conn);
-            let browser_url = if cfg!(debug_assertions) {
-                format!("{transport_endpoint}/__dev")
+            if cfg!(debug_assertions) {
+                println!("Coder Studio frontend dev server: {DEV_FRONTEND_URL}");
+                println!("Coder Studio backend dev server: {transport_endpoint}");
             } else {
-                transport_endpoint.clone()
-            };
-            println!("Coder Studio headless server running at {browser_url}");
+                println!("Coder Studio server running at {transport_endpoint}");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

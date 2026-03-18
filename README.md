@@ -24,13 +24,26 @@ Install frontend dependencies:
 pnpm install
 ```
 
-Run the browser version:
+Run the frontend dev server:
 
 ```bash
 pnpm dev
 ```
 
-Run the desktop app:
+Run the backend dev server:
+
+```bash
+pnpm dev:backend
+```
+
+Development uses fixed ports:
+
+- frontend: `http://127.0.0.1:5174`
+- backend: `http://127.0.0.1:41033`
+
+The Vite dev server proxies `/api`, `/ws`, and `/health` to the backend.
+
+Run the Tauri dev process:
 
 ```bash
 pnpm tauri dev
@@ -51,4 +64,4 @@ The product is designed around an operator workflow:
 3. Queue work, inspect progress, and manually complete or stop tasks when needed.
 4. Review file diffs, shell output, and worktree state without leaving the workspace.
 
-The browser version provides a fallback interaction model for UI development and testing.
+In production, a single backend service serves the built frontend assets and API endpoints from the same origin.

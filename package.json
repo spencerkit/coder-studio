@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:frontend": "vite",
+    "dev:backend": "cargo run --manifest-path src-tauri/Cargo.toml",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",

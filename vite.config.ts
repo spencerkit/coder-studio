@@ -1,21 +1,15 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
+const DEV_FRONTEND_PORT = 5174;
+const DEV_BACKEND_PORT = 41033;
+const DEV_BACKEND_ORIGIN = `http://127.0.0.1:${DEV_BACKEND_PORT}`;
+
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
-  const backendBase = env.VITE_CODER_STUDIO_BACKEND ?? "";
+  loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [
-      react(),
-      {
-        name: "inject-coder-studio-backend",
-        transformIndexHtml(html) {
-          const injected = `<script>window.__CODER_STUDIO_BACKEND__ = ${JSON.stringify(backendBase)};</script>`;
-          return html.replace("</body>", `  ${injected}\n  </body>`);
-        }
-      }
-    ],
+    plugins: [react()],
     build: {
       rollupOptions: {
         output: {
@@ -28,8 +22,24 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      port: 5174,
-      strictPort: true
+      host: "127.0.0.1",
+      port: DEV_FRONTEND_PORT,
+      strictPort: true,
+      proxy: {
+        "/api": {
+          target: DEV_BACKEND_ORIGIN,
+          changeOrigin: true
+        },
+        "/health": {
+          target: DEV_BACKEND_ORIGIN,
+          changeOrigin: true
+        },
+        "/ws": {
+          target: DEV_BACKEND_ORIGIN,
+          ws: true,
+          changeOrigin: true
+        }
+      }
     }
   };
 });
