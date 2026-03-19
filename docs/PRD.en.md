@@ -23,7 +23,7 @@ The implementation baseline comes primarily from:
 
 Coder Studio is a Tauri-based desktop workbench that brings the following tasks into one operational surface:
 
-- connecting local or remote Git repositories
+- connecting local Git workspaces
 - starting and managing Claude agent sessions
 - splitting parallel agent workstreams
 - browsing, editing, and saving code files
@@ -45,20 +45,21 @@ The current product position is:
 ## 4. Supported Environment
 
 - runtime: desktop app built with Tauri
-- workspace sources: `Remote Git` and `Local Folder`
+- current workspace source: `Local Folder`
+- remote Git: backend plumbing still exists, but the creation entry is hidden in the current release and deferred to the next phase
 - execution targets: `Native`, plus `WSL` when available
 - agent provider: currently `Claude` only
 - languages: Chinese and English
 - theme: dark-only in the current build
-- storage: local-first, with frontend state in Local Storage and backend session/archive persistence in a local database
+- storage: local-first, with workspace/session/layout/view persistence in backend SQLite and app settings plus language preference in browser local storage
 
 ## 5. Current Product Scope
 
 ### 5.1 Workspace Onboarding
 
 - The app starts with a workspace launch overlay.
-- Users can choose `Remote Git` or `Local Folder`.
-- In remote mode, the app clones a repository URL into a temporary working directory inside the selected execution target.
+- The current release only exposes `Local Folder` for workspace creation.
+- The remote Git clone path still exists in backend code, but the UI entry is intentionally hidden and should not be described as a shipped feature.
 - In local mode, the app uses a backend-backed directory browser that supports:
   - current path display
   - Home
@@ -204,12 +205,10 @@ The current product position is:
 
 ### 5.10 Local Persistence
 
-- Workbench state is stored in Local Storage.
-- Persisted frontend data includes:
-  - workspace and layout state
-  - app settings
-  - selected language
-- The backend persists session and archive snapshots into a local database.
+- Workbench state is no longer stored in Local Storage.
+- Persisted data now includes:
+  - backend SQLite: workspaces, sessions, archives, workbench layout, and per-workspace view state
+  - browser local storage: app settings and selected language
 - Closing a non-draft pane archives the related backend session.
 - The UI can already render a read-only archive session view, but archive browsing is not yet exposed as a complete user-facing center.
 
@@ -219,9 +218,9 @@ The current product position is:
 
 1. Open the app.
 2. Enter the workspace launch overlay.
-3. Choose `Remote Git` or `Local Folder`.
-4. Choose `Native` or `WSL`.
-5. Enter a Git URL or pick a local directory.
+3. Choose `Native` or `WSL`.
+4. Pick a local directory in the built-in directory browser.
+5. Let the app resolve and attach the matching Git repository root.
 6. After launch, the main workspace loads repository data, file tree, and Git information.
 
 ### 6.2 Start the First Agent Task
@@ -275,11 +274,12 @@ The following should not be presented as current shipped user-facing functionali
 - a complete auto-suspend execution loop
 - user-facing session mode switching between `branch` and `git_tree`
 - MCP settings UI or advanced Claude configuration screens
+- a user-visible remote Git workspace creation entry
 
 ## 8. Current Constraints
 
 - Local folder onboarding depends on resolving a Git repository root rather than accepting arbitrary folders.
-- Remote repositories are cloned into temporary directories whose location depends on the execution target.
+- Remote Git still has backend plumbing, but the current release hides the entry point, so it must not be documented as a supported user flow.
 - WSL support depends on `wsl.exe` and target-specific path resolution.
 - The configured Claude launch command must exist in the selected runtime environment.
 - Queue, archive, and worktree capabilities currently show a “backend first, UI surface incomplete” shape, so documentation must describe only what users can actually do in the interface.
@@ -287,7 +287,7 @@ The following should not be presented as current shipped user-facing functionali
 ## 9. Acceptance Criteria
 
 1. The app must show the workspace launch overlay on first entry or when creating a new workspace.
-2. Users must be able to start a workspace from either `Remote Git` or `Local Folder`.
+2. Users must currently be able to start a workspace only through `Local Folder`, and the creation flow must not expose a remote Git option.
 3. In supported environments, users must be able to choose `Native` or `WSL` execution.
 4. Once a workspace loads, the main agent area must be visible and non-started panes must show the draft input field.
 5. Submitting the first draft input must materialize a session, start the agent, generate the title, and switch the pane to interactive terminal mode.

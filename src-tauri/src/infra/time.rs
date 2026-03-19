@@ -37,5 +37,6 @@ pub(crate) fn status_label(status: &SessionStatus) -> &'static str {
         SessionStatus::Waiting => "waiting",
         SessionStatus::Suspended => "suspended",
         SessionStatus::Queued => "queued",
+        SessionStatus::Interrupted => "interrupted",
     }
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ExecTarget,
   Session,
@@ -14,7 +15,6 @@ import {
   createPaneLeaf,
   createSession,
   createTab,
-  persistWorkbenchState,
   workbenchState
 } from "../../state/workbench";
 import {
@@ -92,8 +92,6 @@ import { createWorkspaceSessionActions } from "./session-actions";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
-  hideWorkspaceOverlay,
-  selectWorkspaceOverlayMode,
   updateWorkspaceOverlayInput,
   updateWorkspaceOverlayTarget
 } from "./workspace-overlay-actions";
@@ -130,11 +128,23 @@ import {
 } from "../../services/http/session.service";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import {
+  activateWorkspace as activateWorkspaceRequest,
+  closeWorkspace as closeWorkspaceRequest,
+  getWorkbenchBootstrap,
+  getWorkspaceSnapshot,
   getGitStatus,
   getWorkspaceTree,
   getWorktreeList,
-  listClaudeSlashSkills
+  listClaudeSlashSkills,
+  updateWorkbenchLayout,
+  updateWorkspaceView
 } from "../../services/http/workspace.service";
+import {
+  applyWorkbenchUiState,
+  buildWorkbenchStateFromBootstrap,
+  upsertWorkspaceSnapshot,
+  workbenchLayoutToBackend
+} from "../../shared/utils/workspace";
 import {
   AGENT_SPECIAL_KEY_MAP,
   AGENT_START_SYSTEM_MESSAGE,
@@ -219,6 +229,8 @@ const isTextInputTarget = (target: EventTarget | null) => {
 
 export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
   const [state, setState] = useRelaxState(workbenchState);
+  const navigate = useNavigate();
+  const { workspaceId: routeWorkspaceId } = useParams<{ workspaceId?: string }>();
   const theme: AppTheme = "dark";
   const [commitMessage, setCommitMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -249,6 +261,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashMenuPaneId, setSlashMenuPaneId] = useState<string | null>(null);
   const [slashMenuLoading, setSlashMenuLoading] = useState(false);
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
+  const [bootstrapReady, setBootstrapReady] = useState(false);
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
@@ -257,6 +270,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
   const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
@@ -272,6 +286,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }>());
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
   const runningAgentKeysRef = useRef(new Set<string>());
+  const autoTerminalWorkspaceIdsRef = useRef(new Set<string>());
+  const persistedLayoutRef = useRef<string>("");
+  const persistedWorkspaceViewsRef = useRef(new Map<string, string>());
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
@@ -381,6 +398,115 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [state]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const bootstrap = await withServiceFallback(() => getWorkbenchBootstrap(), null);
+      if (cancelled || !bootstrap) {
+        if (!cancelled) {
+          setBootstrapReady(true);
+        }
+        return;
+      }
+      updateState((current) => buildWorkbenchStateFromBootstrap(current, bootstrap, locale, appSettings));
+      if (!cancelled) {
+        setBootstrapReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [appSettings, locale]);
+
+  useEffect(() => {
+    if (!bootstrapReady) return;
+    if (routeWorkspaceId) {
+      const existing = stateRef.current.tabs.find((tab) => tab.id === routeWorkspaceId);
+      if (existing) {
+        if (stateRef.current.activeTabId !== routeWorkspaceId) {
+          switchWorkspaceLocally(routeWorkspaceId);
+          void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId), null).then((uiState) => {
+            if (!uiState) return;
+            updateState((current) => applyWorkbenchUiState(current, uiState));
+          });
+        }
+        void ensureWorkspaceTerminal(routeWorkspaceId);
+        return;
+      }
+
+      let cancelled = false;
+      void (async () => {
+        const uiState = await withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId), null);
+        if (!uiState || cancelled) {
+          if (!cancelled) {
+            navigate("/workspace", { replace: true });
+          }
+          return;
+        }
+        const snapshot = await withServiceFallback(() => getWorkspaceSnapshot(routeWorkspaceId), null);
+        if (!snapshot || cancelled) {
+          if (!cancelled) {
+            navigate("/workspace", { replace: true });
+          }
+          return;
+        }
+        updateState((current) => upsertWorkspaceSnapshot(current, snapshot, locale, appSettings, uiState));
+        void ensureWorkspaceTerminal(routeWorkspaceId);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (stateRef.current.activeTabId) {
+      navigate(`/workspace/${stateRef.current.activeTabId}`, { replace: true });
+    }
+  }, [appSettings, bootstrapReady, locale, navigate, routeWorkspaceId]);
+
+  useEffect(() => {
+    if (!bootstrapReady) return;
+    const serializedLayout = JSON.stringify(workbenchLayoutToBackend(state.layout));
+    if (persistedLayoutRef.current === serializedLayout) return;
+    persistedLayoutRef.current = serializedLayout;
+    void withServiceFallback(
+      () => updateWorkbenchLayout(workbenchLayoutToBackend(state.layout)),
+      null,
+    );
+  }, [
+    bootstrapReady,
+    state.layout.leftWidth,
+    state.layout.rightWidth,
+    state.layout.rightSplit,
+    state.layout.showCodePanel,
+    state.layout.showTerminalPanel,
+  ]);
+
+  useEffect(() => {
+    if (!bootstrapReady) return;
+    const liveWorkspaceIds = new Set(state.tabs.map((tab) => tab.id));
+    state.tabs.forEach((tab) => {
+      if (tab.status !== "ready" || !tab.project?.path) return;
+      const patch = {
+        active_session_id: tab.activeSessionId,
+        active_pane_id: tab.activePaneId,
+        pane_layout: tab.paneLayout,
+        file_preview: tab.filePreview,
+      };
+      const serialized = JSON.stringify(patch);
+      if (persistedWorkspaceViewsRef.current.get(tab.id) === serialized) return;
+      persistedWorkspaceViewsRef.current.set(tab.id, serialized);
+      void withServiceFallback(
+        () => updateWorkspaceView(tab.id, patch),
+        null,
+      );
+    });
+    Array.from(persistedWorkspaceViewsRef.current.keys()).forEach((workspaceId) => {
+      if (!liveWorkspaceIds.has(workspaceId)) {
+        persistedWorkspaceViewsRef.current.delete(workspaceId);
+      }
+    });
+  }, [bootstrapReady, state.tabs]);
+
+  useEffect(() => {
     if (!slashMenuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
       if (!slashMenuRef.current?.contains(event.target as Node)) {
@@ -411,10 +537,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [commandPaletteOpen]);
 
   useEffect(() => {
-    persistWorkbenchState(state);
-  }, [state]);
-
-  useEffect(() => {
     if (state.overlay.visible) {
       closeCommandPalette();
     }
@@ -440,8 +562,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [overlayCanUseWsl]);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ tab_id, session_id, kind, data }) => {
-      noteAgentStartupEvent(agentRuntimeRefs, tab_id, session_id, kind, data);
+    if (!state.overlay.visible || state.overlay.mode === "local") return;
+    updateState((current) => ({
+      ...current,
+      overlay: {
+        ...current.overlay,
+        mode: "local",
+        input: "",
+      },
+    }));
+  }, [state.overlay.mode, state.overlay.visible]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data }) => {
+      noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
       const cleaned = stripAnsi(data);
       const isStream = kind === "stdout" || kind === "stderr";
       const isSystem = kind === "system";
@@ -449,7 +583,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       updateState((current) => ({
         ...current,
         tabs: current.tabs.map((tab) => {
-          if (tab.id !== tab_id) return tab;
+          if (tab.id !== workspace_id) return tab;
           return {
             ...tab,
             sessions: tab.sessions.map((session) => {
@@ -483,16 +617,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         })
       }));
       if (kind === "exit") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, tab_id, session_id);
-        void settleSessionAfterExit(tab_id, session_id);
+        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
+        void settleSessionAfterExit(workspace_id, session_id);
       }
     });
     return unsubscribe;
   }, [t]);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentLifecycleEvents(({ tab_id, session_id, kind, data }) => {
-      noteAgentStartupLifecycle(agentRuntimeRefs, tab_id, session_id, kind);
+    const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }) => {
+      noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
       let nextStatus: SessionStatus | null = null;
       if (kind === "turn_waiting" || kind === "approval_required") {
         nextStatus = "waiting";
@@ -503,14 +637,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }
 
       if (kind === "session_ended") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, tab_id, session_id);
+        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
       }
 
       if (nextStatus) {
         updateState((current) => ({
           ...current,
           tabs: current.tabs.map((tab) => {
-            if (tab.id !== tab_id) return tab;
+            if (tab.id !== workspace_id) return tab;
             return {
               ...tab,
               sessions: tab.sessions.map((session) =>
@@ -542,7 +676,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         updateState((current) => ({
           ...current,
           tabs: current.tabs.map((tab) => {
-            if (tab.id !== tab_id) return tab;
+            if (tab.id !== workspace_id) return tab;
             return {
               ...tab,
               sessions: tab.sessions.map((session) => {
@@ -559,25 +693,25 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           })
         }));
         if (changed) {
-          void syncSessionPatch(tab_id, session_id, { claude_session_id: claudeSessionId });
+          void syncSessionPatch(workspace_id, session_id, { claude_session_id: claudeSessionId });
         }
       }
 
       if (kind === "turn_completed") {
-        void markSessionIdle(tab_id, session_id);
+        void markSessionIdle(workspace_id, session_id);
       }
     });
     return unsubscribe;
   }, [t]);
 
   useEffect(() => {
-    const unsubscribe = subscribeTerminalEvents(({ tab_id, terminal_id, data }) => {
+    const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
       if (!data) return;
       const termId = `term-${terminal_id}`;
       updateState((current) => ({
         ...current,
         tabs: current.tabs.map((tab) => {
-          if (tab.id !== tab_id) return tab;
+          if (tab.id !== workspace_id) return tab;
           return {
             ...tab,
             terminals: tab.terminals.map((term) => {
@@ -592,10 +726,24 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return unsubscribe;
   }, []);
 
-  const activeTab = useMemo(
-    () => state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0],
-    [state]
-  );
+  const activeTab = useMemo(() => {
+    const existing = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
+    if (existing) return existing;
+    if (!emptyTabRef.current) {
+      const fallback = createTab(1, locale);
+      emptyTabRef.current = {
+        ...fallback,
+        agent: {
+          ...fallback.agent,
+          provider: appSettings.agentProvider,
+          command: appSettings.agentCommand,
+        },
+        idlePolicy: { ...appSettings.idlePolicy },
+      };
+    }
+    return emptyTabRef.current;
+  }, [appSettings.agentCommand, appSettings.agentProvider, appSettings.idlePolicy, locale, state.activeTabId, state.tabs]);
+  const hasOpenWorkspace = state.tabs.length > 0;
   const showCodePanel = state.layout.showCodePanel;
   const showTerminalPanel = state.layout.showTerminalPanel;
 
@@ -766,6 +914,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     syncSessionPatch,
     touchSession
   } = createWorkspaceSessionActions({
+    appSettings,
     locale,
     t,
     stateRef,
@@ -809,97 +958,40 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return tree;
   };
 
-  const onAddTab = () => {
-    updateState((current) => {
-      const nextIndex = current.tabs.length + 1;
-      const createdTab = createTab(nextIndex, locale);
-      const newTab: Tab = {
-        ...createdTab,
-        agent: {
-          ...createdTab.agent,
-          provider: appSettings.agentProvider,
-          command: appSettings.agentCommand
-        },
-        idlePolicy: { ...appSettings.idlePolicy }
-      };
-      return {
-        ...current,
-        tabs: [...current.tabs, newTab],
-        activeTabId: newTab.id,
-        overlay: {
-          visible: true,
-          tabId: newTab.id,
-          mode: "remote",
-          input: "",
-          target: { type: "native" }
-        }
-      };
+  const ensureWorkspaceTerminal = useCallback(async (workspaceId: string) => {
+    const tab = stateRef.current.tabs.find((item) => item.id === workspaceId);
+    if (!tab?.project?.path || tab.terminals.length > 0) return;
+    if (autoTerminalWorkspaceIdsRef.current.has(workspaceId)) return;
+    autoTerminalWorkspaceIdsRef.current.add(workspaceId);
+    const created = await addWorkspaceTerminal({
+      tab,
+      locale,
+      updateTab,
+      withServiceFallback,
+      addToast,
+      activeSessionId: tab.activeSessionId,
+      createToastId: () => createId("toast"),
+      t,
     });
-  };
+    if (!created) {
+      autoTerminalWorkspaceIdsRef.current.delete(workspaceId);
+    }
+  }, [locale, t]);
 
-  const onRemoveTab = (tabId: string) => {
+  const switchWorkspaceLocally = (workspaceId: string) => {
     updateState((current) => {
-      const index = current.tabs.findIndex((tab) => tab.id === tabId);
-      if (index === -1) return current;
-
-      if (current.tabs.length === 1) {
-        const createdTab = createTab(1, locale);
-        const replacementTab: Tab = {
-          ...createdTab,
-          agent: {
-            ...createdTab.agent,
-            provider: appSettings.agentProvider,
-            command: appSettings.agentCommand
-          },
-          idlePolicy: { ...appSettings.idlePolicy }
-        };
-        return {
-          ...current,
-          tabs: [replacementTab],
-          activeTabId: replacementTab.id,
-          overlay: {
-            visible: true,
-            tabId: replacementTab.id,
-            mode: "remote",
-            input: "",
-            target: { type: "native" }
-          }
-        };
-      }
-
-      const nextTabs = current.tabs.filter((tab) => tab.id !== tabId);
-      const fallbackTab = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0];
-      const nextActiveTabId = current.activeTabId === tabId ? fallbackTab.id : current.activeTabId;
-      const nextActiveTab = nextTabs.find((tab) => tab.id === nextActiveTabId) ?? fallbackTab;
-
-      return {
-        ...current,
-        tabs: nextTabs,
-        activeTabId: nextActiveTabId,
-        overlay: {
-          ...current.overlay,
-          visible: nextActiveTab.status === "init",
-          tabId: nextActiveTab.id
-        }
-      };
-    });
-  };
-
-  const onSwitchWorkspace = (tabId: string) => {
-    updateState((current) => {
-      const targetTab = current.tabs.find((tab) => tab.id === tabId);
+      const targetTab = current.tabs.find((tab) => tab.id === workspaceId);
       if (!targetTab) return current;
       const previousActiveTabId = current.activeTabId;
       return {
         ...current,
-        activeTabId: tabId,
+        activeTabId: workspaceId,
         overlay: {
           ...current.overlay,
-          visible: targetTab.status === "init",
-          tabId
+          visible: false,
         },
         tabs: current.tabs.map((tab) => {
-          if (tab.id === tabId) {
+          if (tab.id === workspaceId) {
             return {
               ...tab,
               sessions: tab.sessions.map((session) =>
@@ -921,6 +1013,73 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         })
       };
     });
+  };
+
+  const onAddTab = () => {
+    updateState((current) => ({
+      ...current,
+      overlay: {
+        ...current.overlay,
+        visible: true,
+        mode: "local",
+        input: "",
+        target: current.overlay.target,
+      },
+    }));
+    if (!hasOpenWorkspace) {
+      navigate("/workspace", { replace: true });
+    }
+  };
+
+  const onRemoveTab = async (tabId: string) => {
+    const currentTabs = stateRef.current.tabs;
+    const currentIndex = currentTabs.findIndex((tab) => tab.id === tabId);
+    if (currentIndex === -1) return;
+    const remainingIds = currentTabs.filter((tab) => tab.id !== tabId).map((tab) => tab.id);
+    const fallbackActiveId = stateRef.current.activeTabId === tabId
+      ? (remainingIds[Math.max(0, currentIndex - 1)] ?? remainingIds[0] ?? null)
+      : stateRef.current.activeTabId;
+    const fallbackUiState = {
+      open_workspace_ids: remainingIds,
+      active_workspace_id: fallbackActiveId,
+      layout: workbenchLayoutToBackend(stateRef.current.layout),
+    };
+    const uiState = await withServiceFallback(
+      () => closeWorkspaceRequest(tabId),
+      fallbackUiState,
+    );
+    autoTerminalWorkspaceIdsRef.current.delete(tabId);
+    updateState((current) => {
+      const next = applyWorkbenchUiState(current, uiState);
+      return {
+        ...next,
+        overlay: {
+          ...next.overlay,
+          visible: next.tabs.length === 0,
+        },
+      };
+    });
+    if (uiState.active_workspace_id) {
+      navigate(`/workspace/${uiState.active_workspace_id}`);
+      void ensureWorkspaceTerminal(uiState.active_workspace_id);
+      return;
+    }
+    navigate("/workspace");
+  };
+
+  const onSwitchWorkspace = (tabId: string) => {
+    const targetTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
+    if (!targetTab) return;
+    switchWorkspaceLocally(tabId);
+    navigate(`/workspace/${tabId}`);
+    void withServiceFallback(
+      () => activateWorkspaceRequest(tabId),
+      null,
+    ).then((uiState) => {
+      if (!uiState) return;
+      updateState((current) => applyWorkbenchUiState(current, uiState));
+    });
+    void ensureWorkspaceTerminal(tabId);
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -950,8 +1109,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         activeTabId: tabId,
         overlay: {
           ...current.overlay,
-          visible: targetTab.status === "init",
-          tabId
+          visible: false,
         },
         tabs: current.tabs.map((tab) => {
           if (tab.id === tabId) {
@@ -1002,6 +1160,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         // The frontend state already switched optimistically.
       });
     }
+    if (currentState.activeTabId !== tabId) {
+      void withServiceFallback(() => activateWorkspaceRequest(tabId), null).then((uiState) => {
+        if (!uiState) return;
+        updateState((current) => applyWorkbenchUiState(current, uiState));
+      });
+      navigate(`/workspace/${tabId}`);
+      void ensureWorkspaceTerminal(tabId);
+    }
 
     if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
       void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
@@ -1014,14 +1180,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         last_active_at: nextActiveAt
       });
     }
-  };
-
-  const onOverlaySelectMode = (mode: "remote" | "local") => {
-    updateState((current) => selectWorkspaceOverlayMode(current, mode));
-  };
-
-  const onOverlayUpdateInput = (value: string) => {
-    updateState((current) => updateWorkspaceOverlayInput(current, value));
   };
 
   const onOverlayUpdateTarget = (target: ExecTarget) => {
@@ -1047,10 +1205,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     void browseOverlayDirectory(stateRef.current.overlay.target, path, selectCurrent);
   };
 
-  const onSelectOverlayDirectory = (path: string) => {
-    updateState((current) => updateWorkspaceOverlayInput(current, path));
-  };
-
   useEffect(() => {
     if (!state.overlay.visible || state.overlay.mode !== "local") return;
     void browseOverlayDirectory(
@@ -1066,21 +1220,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     browseOverlayDirectory
   ]);
 
-  const onOverlayCancel = () => {
-    updateState((current) => hideWorkspaceOverlay(current));
-  };
-
   const onStartWorkspace = async () => {
-    await startWorkspaceLaunch({
+    const launched = await startWorkspaceLaunch({
       overlay: stateRef.current.overlay,
       locale,
-      updateTab,
+      appSettings,
       updateState,
       withServiceFallback,
-      refreshTabFromBackend,
       refreshWorkspaceArtifacts,
-      onSelectInitialFile: onFileSelect
     });
+    if (!launched) return;
+    navigate(`/workspace/${launched.workspaceId}`);
+    void ensureWorkspaceTerminal(launched.workspaceId);
+    if (launched.firstFile) {
+      await onFileSelect(launched.firstFile, launched.workspaceId);
+    }
   };
 
   const buildAgentCommand = (tab: Tab) => {
@@ -1089,12 +1243,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const agentStartMaybe = async (tab: Tab, session: Session) => {
-    if (!tab.project?.path) return false;
+    const project = tab.project;
+    if (!project?.path) return false;
     const command = buildAgentCommand(tab);
-    const cwd = tab.project.path;
-    const target = tab.project.target;
+    const target = project.target;
     const availability = await withServiceFallback<CommandAvailability | null>(
-      () => checkCommandAvailability(command, target, cwd),
+      () => checkCommandAvailability(command, target, project.path),
       null
     );
     if (availability && !availability.available) {
@@ -1107,13 +1261,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
     const startupToken = armAgentStartupGate(agentRuntimeRefs, tab.id, session.id);
     const result = await invokeAgent<AgentStartResult>(() => startAgent({
-      tabId: tab.id,
+      workspaceId: tab.id,
       sessionId: session.id,
       provider: tab.agent.provider,
-      command,
-      claudeSessionId: session.claudeSessionId,
-      cwd,
-      target
+      command
     }), session.id, t("agentStartFailed"));
     if (!result) {
       clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
@@ -1204,9 +1355,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateTab(activeTab.id, (tab) => ({ ...tab, viewingArchiveId: undefined }));
   };
 
-  const onFileSelect = async (node: TreeNode) => {
+  const onFileSelect = async (node: TreeNode, workspaceId?: string) => {
     if (node.kind !== "file") return;
-    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === (workspaceId ?? activeTab.id)) ?? activeTab;
     const segments = node.path.split(/[\/]+/).filter(Boolean);
     if (segments.length > 1) {
       setRepoCollapsedPaths((current) => {
@@ -1749,6 +1900,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
+    void ensureWorkspaceTerminal(activeTab.id);
+  }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal]);
+
+  useEffect(() => {
+    if (!activeTab.project?.path) return;
     const timer = window.setInterval(() => {
       void refreshWorkspaceArtifacts(activeTab.id);
     }, 4000);
@@ -2203,18 +2359,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
       <WorkspaceLaunchOverlay
         visible={state.overlay.visible}
-        locale={locale}
-        mode={state.overlay.mode}
         target={state.overlay.target}
         input={state.overlay.input}
         canUseWsl={overlayCanUseWsl}
         folderBrowser={folderBrowser}
-        onSelectMode={onOverlaySelectMode}
         onUpdateTarget={onOverlayUpdateTarget}
-        onUpdateInput={onOverlayUpdateInput}
         onBrowseDirectory={onBrowseOverlayDirectory}
-        onSelectDirectory={onSelectOverlayDirectory}
-        onCancel={onOverlayCancel}
         onStartWorkspace={onStartWorkspace}
         t={t}
       />

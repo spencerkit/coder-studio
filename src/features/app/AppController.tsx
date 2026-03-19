@@ -14,6 +14,7 @@ import {
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
   const [appSettings, setAppSettings] = useState<AppSettings>(() => readStoredAppSettings());
+  const [lastWorkspacePath, setLastWorkspacePath] = useState("/workspace");
   const navigate = useNavigate();
   const location = useLocation();
   const route: AppRoute = location.pathname === "/settings" ? "settings" : "workspace";
@@ -30,8 +31,14 @@ export default function AppController() {
     }
   }, [appSettings]);
 
+  useEffect(() => {
+    if (location.pathname.startsWith("/workspace")) {
+      setLastWorkspacePath(location.pathname || "/workspace");
+    }
+  }, [location.pathname]);
+
   const navigateToRoute = (nextRoute: AppRoute) => {
-    navigate(nextRoute === "settings" ? "/settings" : "/");
+    navigate(nextRoute === "settings" ? "/settings" : lastWorkspacePath);
   };
 
   const onSelectLocale = (nextLocale: Locale) => {
@@ -47,8 +54,19 @@ export default function AppController() {
   return (
     <AuthGate locale={locale} onSelectLocale={onSelectLocale}>
       <Routes>
+        <Route path="/" element={<Navigate to="/workspace" replace />} />
         <Route
-          path="/"
+          path="/workspace"
+          element={
+            <WorkspaceScreen
+              locale={locale}
+              appSettings={appSettings}
+              onOpenSettings={() => navigateToRoute("settings")}
+            />
+          }
+        />
+        <Route
+          path="/workspace/:workspaceId"
           element={
             <WorkspaceScreen
               locale={locale}
@@ -65,11 +83,11 @@ export default function AppController() {
               appSettings={appSettings}
               onSelectLocale={onSelectLocale}
               onCommitSettings={onCommitSettings}
-              onCloseSettings={() => navigateToRoute("workspace")}
+              onCloseSettings={() => navigate(lastWorkspacePath)}
             />
           }
         />
-        <Route path="*" element={<Navigate to={route === "settings" ? "/settings" : "/"} replace />} />
+        <Route path="*" element={<Navigate to={route === "settings" ? "/settings" : lastWorkspacePath} replace />} />
       </Routes>
     </AuthGate>
   );

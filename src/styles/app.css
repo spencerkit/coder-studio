@@ -7108,6 +7108,12 @@ pre.diff,
   align-items: flex-start;
 }
 
+.web-folder-picker-tip {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 .web-folder-picker-roots {
   display: flex;
   flex-wrap: wrap;
@@ -7132,12 +7138,18 @@ pre.diff,
   background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
   color: inherit;
   text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out-quart),
+    background var(--duration-fast) var(--ease-out-quart),
+    transform var(--duration-fast) var(--ease-out-quart);
 }
 
 .folder-root-chip.active,
 .folder-root-chip:hover {
   background: color-mix(in srgb, var(--surface) 72%, var(--accent) 28%);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line) 58%);
+  transform: translateY(-1px);
 }
 
 .folder-root-chip small {
@@ -7153,14 +7165,28 @@ pre.diff,
 }
 
 .folder-browser-row {
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 6px;
-  border-radius: 12px;
-  border: 1px solid transparent;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   background: color-mix(in srgb, var(--surface) 92%, var(--bg) 8%);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out-quart),
+    background var(--duration-fast) var(--ease-out-quart),
+    transform var(--duration-fast) var(--ease-out-quart);
+}
+
+.folder-browser-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line) 76%);
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  transform: translateY(-1px);
 }
 
 .folder-browser-row.selected {
@@ -7168,21 +7194,51 @@ pre.diff,
   background: color-mix(in srgb, var(--surface) 76%, var(--accent) 24%);
 }
 
-.folder-browser-open {
-  flex: 1;
-  min-width: 0;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
+.folder-browser-row:focus-visible,
+.folder-root-chip:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line) 52%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.folder-browser-open:hover {
-  background: color-mix(in srgb, var(--surface) 72%, var(--accent) 28%);
+.folder-browser-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.folder-browser-row-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.folder-browser-row-name span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-browser-row-hint {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.folder-browser-row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-muted) 78%, var(--accent) 22%);
+}
+
+.folder-browser-row:hover .folder-browser-row-action,
+.folder-browser-row.selected .folder-browser-row-action {
+  color: color-mix(in srgb, var(--text) 82%, var(--accent) 18%);
 }
 
 .overlay .onboarding-modal {

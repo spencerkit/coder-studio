@@ -2,7 +2,7 @@ use crate::*;
 
 #[derive(Deserialize)]
 struct ClaudeHookEnvelope {
-    tab_id: String,
+    workspace_id: String,
     session_id: String,
     payload: Value,
 }
@@ -83,26 +83,8 @@ fn handle_claude_hook_payload(app: &tauri::AppHandle, envelope: ClaudeHookEnvelo
         .map(|value| value.to_string())
     {
         let state: State<AppState> = app.state();
-        let mut snapshot_to_persist: Option<SessionInfo> = None;
-        if let Ok(mut tabs) = state.tabs.lock() {
-            if let Some(tab) = tabs.get_mut(&envelope.tab_id) {
-                if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
-                    if let Some(session) = tab
-                        .sessions
-                        .iter_mut()
-                        .find(|session| session.id == internal_session_id)
-                    {
-                        if session.claude_session_id.as_deref() != Some(claude_session_id.as_str())
-                        {
-                            session.claude_session_id = Some(claude_session_id);
-                            snapshot_to_persist = Some(session.clone());
-                        }
-                    }
-                }
-            }
-        };
-        if let Some(snapshot) = snapshot_to_persist.as_ref() {
-            persist_session(&state, &envelope.tab_id, snapshot);
+        if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
+            let _ = set_session_claude_id(&state, &envelope.workspace_id, internal_session_id, claude_session_id);
         }
     }
 
@@ -110,7 +92,7 @@ fn handle_claude_hook_payload(app: &tauri::AppHandle, envelope: ClaudeHookEnvelo
         let data = serde_json::to_string(&envelope.payload).unwrap_or_default();
         emit_agent_lifecycle(
             app,
-            &envelope.tab_id,
+            &envelope.workspace_id,
             &envelope.session_id,
             kind,
             &source_event,
@@ -307,7 +289,7 @@ pub(crate) fn current_app_bin_for_target(target: &ExecTarget) -> Result<String, 
 pub(crate) fn run_claude_hook_helper() {
     let _ = (|| -> Result<(), String> {
         let endpoint = std::env::var("CODER_STUDIO_HOOK_ENDPOINT").map_err(|e| e.to_string())?;
-        let tab_id = std::env::var("CODER_STUDIO_TAB_ID").map_err(|e| e.to_string())?;
+        let workspace_id = std::env::var("CODER_STUDIO_WORKSPACE_ID").map_err(|e| e.to_string())?;
         let session_id = std::env::var("CODER_STUDIO_SESSION_ID").map_err(|e| e.to_string())?;
         let (host, port, path) = parse_http_endpoint(&endpoint).ok_or("invalid_hook_endpoint")?;
 
@@ -317,7 +299,7 @@ pub(crate) fn run_claude_hook_helper() {
             .map_err(|e| e.to_string())?;
         let payload = serde_json::from_str::<Value>(&stdin).map_err(|e| e.to_string())?;
         let body = json!({
-            "tab_id": tab_id,
+            "workspace_id": workspace_id,
             "session_id": session_id,
             "payload": payload
         })

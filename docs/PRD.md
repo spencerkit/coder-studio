@@ -23,7 +23,7 @@
 
 Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下工作集中到一个操作面中：
 
-- 连接本地或远程 Git 仓库
+- 连接本地 Git 工作区
 - 启动并管理 Claude Agent 会话
 - 并行拆分多个 Agent 工作流
 - 查看、编辑和保存代码文件
@@ -45,20 +45,21 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 ## 4. 当前支持范围 / Supported Environment
 
 - 运行形态：桌面应用（Tauri）
-- 工作区来源：`Remote Git` 或 `Local Folder`
+- 当前工作区来源：`Local Folder`
+- 远程 Git：后端能力保留，但当前版本已隐藏创建入口，计划下一期开放
 - 执行目标：`Native`；在环境允许时支持 `WSL`
 - Agent 提供方：当前仅支持 `Claude`
 - 语言：中文、English
 - 主题：当前仅保留深色主题
-- 数据存储：本地存储为主，前端状态保存在 Local Storage，后端会话/归档支持本地持久化
+- 数据存储：本地优先；工作区、会话、布局与视图状态持久化到后端 SQLite，应用设置和语言偏好保存在浏览器本地存储
 
 ## 5. 当前产品范围 / Current Product Scope
 
 ### 5.1 工作区创建与接入 / Workspace Onboarding
 
 - 应用启动后默认进入工作区启动浮层。
-- 用户可以选择 `Remote Git` 或 `Local Folder` 两种接入方式。
-- 远程仓库模式下，输入 Git URL 后，应用会在目标运行时环境中克隆仓库到临时目录。
+- 当前版本只开放 `Local Folder` 方式创建工作区。
+- 远程 Git 克隆链路在后端仍有实现痕迹，但当前 UI 已隐藏，不应视为正式上线能力。
 - 本地目录模式下，应用提供服务端目录浏览器，支持：
   - 查看当前浏览路径
   - 回到 Home
@@ -206,12 +207,10 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 
 ### 5.10 本地持久化 / Local Persistence
 
-- 工作台状态会保存在 Local Storage。
+- 工作区、会话、布局状态不再保存在 Local Storage。
 - 当前持久化内容包括：
-  - 工作区与布局状态
-  - 设置项
-  - 语言选择
-- 后端支持把 Session 和 Archive 快照写入本地数据库。
+  - 后端 SQLite：工作区、Session、Archive、工作台布局、Workspace 视图状态
+  - 浏览器本地存储：设置项、语言选择
 - 关闭非草稿 Pane 时，会把对应 Session 归档到后端归档数据中。
 - 当前已有只读 Archive 视图渲染能力，但归档浏览入口还不是完整正式界面的一部分。
 
@@ -221,9 +220,9 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 
 1. 用户打开应用。
 2. 进入工作区启动浮层。
-3. 选择 `Remote Git` 或 `Local Folder`。
-4. 选择 `Native` 或 `WSL` 目标。
-5. 输入 Git URL 或选择本地目录。
+3. 选择 `Native` 或 `WSL` 目标。
+4. 通过目录浏览器选择本地目录。
+5. 应用解析并接入对应 Git 仓库根目录。
 6. 启动工作区后，主界面加载仓库、文件树、Git 信息。
 
 ### 6.2 启动第一个 Agent 任务
@@ -277,11 +276,12 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 - 完整闭环的 Idle Auto-Suspend 执行逻辑
 - 用户可操作的 Session Mode 切换（`branch` / `git_tree`）
 - MCP 设置页或 Claude 高级配置面板
+- 用户可见的远程 Git 工作区创建入口
 
 ## 8. 当前已知约束 / Current Constraints
 
 - 本地目录接入依赖 Git 仓库解析，不是任意目录浏览器。
-- 远程仓库克隆到临时目录，目录位置会随运行目标变化。
+- 远程 Git 虽然存在后端链路，但当前版本已隐藏入口，因此不能作为正式可用流程写入面向用户的说明。
 - WSL 能力依赖宿主机存在 `wsl.exe`，且部分路径解析需根据 distro 环境决定。
 - Claude 命令必须在当前执行目标环境中可执行。
 - 当前归档、队列、worktree 等能力存在“底层能力先行、主界面入口不足”的状态，文档表述必须以用户实际能完成的操作为准。
@@ -289,7 +289,7 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 ## 9. 验收标准 / Acceptance Criteria
 
 1. 应用首次进入或新增工作区时，必须显示工作区启动浮层。
-2. 用户必须可以通过 `Remote Git` 或 `Local Folder` 两种方式启动工作区。
+2. 用户当前必须只能通过 `Local Folder` 方式启动工作区，创建入口中不应显示远程 Git 选项。
 3. 在支持 WSL 的环境中，用户必须可以选择 `Native` 或 `WSL` 作为执行目标。
 4. 工作区进入主界面后，必须可以看到 Agent 主区域，并且未启动 Agent 的 Pane 显示草稿输入框。
 5. 用户在草稿输入框提交首条内容后，必须触发 Session 物化、Agent 启动、标题生成，并切换为交互式终端。

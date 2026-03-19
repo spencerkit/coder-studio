@@ -1,4 +1,4 @@
-import { formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n";
+import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n";
 import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench";
 import type { BackendSession } from "../../types/app";
 
@@ -11,7 +11,7 @@ export const parseNumericId = (value: string) => {
 
 export const createSessionFromBackend = (source: BackendSession, locale: Locale, existing?: Session): Session => ({
   id: String(source.id),
-  title: existing?.title ?? formatSessionTitle(source.id, locale),
+  title: source.title || existing?.title || formatSessionTitle(source.id, locale),
   status: source.status,
   mode: source.mode,
   autoFeed: source.auto_feed,
@@ -21,25 +21,75 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
     text: task.text,
     status: task.status
   })),
-  messages: existing?.messages ?? [
-    {
-      id: createId("msg"),
-      role: "system",
-      content: formatSessionReadyMessage(source.id, locale),
-      time: nowLabel()
-    }
-  ],
-  stream: existing?.stream ?? "",
-  unread: existing?.unread ?? 0,
+  messages: source.messages?.length
+    ? source.messages
+    : (existing?.messages ?? [
+      {
+        id: createId("msg"),
+        role: "system",
+        content: formatSessionReadyMessage(source.id, locale),
+        time: nowLabel()
+      }
+    ]),
+  stream: source.stream ?? existing?.stream ?? "",
+  unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
   claudeSessionId: source.claude_session_id ?? existing?.claudeSessionId
 });
+
+type CreateDraftSessionArgs = {
+  locale: Locale;
+  workspacePath: string;
+  branch?: string;
+  mode?: SessionMode;
+  existing?: Session;
+};
+
+export const createDraftSessionPlaceholder = ({
+  locale,
+  workspacePath,
+  branch,
+  mode = "branch",
+  existing,
+}: CreateDraftSessionArgs): Session => {
+  const t = createTranslator(locale);
+  const branchSuffix = branch && branch !== "—" ? ` · ${branch}` : "";
+  const workspaceLabel = `${workspacePath}${branchSuffix}`;
+  return {
+    id: existing?.id ?? createId("session"),
+    title: existing?.title ?? t("draftSessionTitle"),
+    status: existing?.status ?? "idle",
+    mode: existing?.mode ?? mode,
+    autoFeed: existing?.autoFeed ?? true,
+    isDraft: true,
+    queue: existing?.queue ?? [],
+    messages: existing?.messages?.length
+      ? existing.messages
+      : [
+          {
+            id: createId("msg"),
+            role: "system",
+            content: t("draftSessionPrompt"),
+            time: nowLabel(),
+          },
+          {
+            id: createId("msg"),
+            role: "system",
+            content: t("draftSessionWorkspace", { path: workspaceLabel }),
+            time: nowLabel(),
+          },
+        ],
+    stream: existing?.stream ?? "",
+    unread: existing?.unread ?? 0,
+    lastActiveAt: existing?.lastActiveAt ?? Date.now(),
+    claudeSessionId: existing?.claudeSessionId,
+  };
+};
 
 export const isDraftSession = (session: Session | undefined | null) => Boolean(session?.isDraft);
 
 export const isHiddenDraftPlaceholder = (session: Session | undefined | null) => Boolean(
   session
-  && session.isDraft
   && !session.stream.trim()
   && session.queue.length === 0
   && session.messages.every((message) => message.role === "system")

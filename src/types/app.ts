@@ -1,12 +1,33 @@
 import type { ReactNode } from "react";
-import type { ExecTarget, GitChange, SessionMode, SessionStatus, Tab, TreeNode } from "../state/workbench";
+import type {
+  AgentMessage,
+  ExecTarget,
+  FilePreview,
+  GitChange,
+  IdlePolicy,
+  SessionMode,
+  SessionStatus,
+  Tab,
+  Terminal,
+  TreeNode,
+} from "../state/workbench";
 
 export type Toast = { id: string; text: string; sessionId: string };
 
-export type WorkspaceInfo = {
-  tab_id: string;
+export type WorkspaceSummary = {
+  workspace_id: string;
+  title: string;
   project_path: string;
+  source_kind: "local" | "remote";
+  source_value: string;
+  git_url?: string | null;
   target: ExecTarget;
+  idle_policy: {
+    enabled: boolean;
+    idle_minutes: number;
+    max_active: number;
+    pressure: boolean;
+  };
 };
 
 export type GitStatus = {
@@ -35,12 +56,18 @@ export type BackendQueueTask = {
   status: "queued" | "running" | "done";
 };
 
+export type BackendSessionMessage = AgentMessage;
+
 export type BackendSession = {
   id: number;
+  title: string;
   status: SessionStatus;
   mode: SessionMode;
   auto_feed: boolean;
   queue: BackendQueueTask[];
+  messages: BackendSessionMessage[];
+  stream: string;
+  unread: number;
   last_active_at: number;
   claude_session_id?: string | null;
 };
@@ -52,39 +79,76 @@ export type BackendArchiveEntry = {
   time: string;
 };
 
-export type TabSnapshot = {
-  tab_id: string;
-  project_path: string;
-  target: ExecTarget;
-  idle_policy: {
-    enabled: boolean;
-    idle_minutes: number;
-    max_active: number;
-    pressure: boolean;
-  };
+export type BackendWorkspaceViewState = {
+  active_session_id: string;
+  active_pane_id: string;
+  pane_layout: Tab["paneLayout"];
+  file_preview: FilePreview;
+};
+
+export type WorkspaceSnapshot = {
+  workspace: WorkspaceSummary;
   sessions: BackendSession[];
-  active_session_id: number;
-  archive: BackendArchiveEntry[];
+  archive: Array<BackendArchiveEntry & { snapshot: BackendSession }>;
+  view_state: BackendWorkspaceViewState;
   terminals: { id: number; output: string }[];
 };
 
+export type WorkbenchLayout = {
+  left_width: number;
+  right_width: number;
+  right_split: number;
+  show_code_panel: boolean;
+  show_terminal_panel: boolean;
+};
+
+export type WorkbenchUiState = {
+  open_workspace_ids: string[];
+  active_workspace_id?: string | null;
+  layout: WorkbenchLayout;
+};
+
+export type WorkbenchBootstrap = {
+  ui_state: WorkbenchUiState;
+  workspaces: WorkspaceSnapshot[];
+};
+
+export type WorkspaceLaunchResult = {
+  ui_state: WorkbenchUiState;
+  snapshot: WorkspaceSnapshot;
+  created: boolean;
+  already_open: boolean;
+};
+
 export type SessionPatch = {
+  title?: string;
   status?: SessionStatus;
   mode?: SessionMode;
   auto_feed?: boolean;
+  queue?: BackendQueueTask[];
+  messages?: BackendSessionMessage[];
+  stream?: string;
+  unread?: number;
   last_active_at?: number;
   claude_session_id?: string;
 };
 
+export type WorkspaceViewPatch = {
+  active_session_id?: string;
+  active_pane_id?: string;
+  pane_layout?: BackendWorkspaceViewState["pane_layout"];
+  file_preview?: BackendWorkspaceViewState["file_preview"];
+};
+
 export type AgentEvent = {
-  tab_id: string;
+  workspace_id: string;
   session_id: string;
   kind: "stdout" | "stderr" | "exit" | "system";
   data: string;
 };
 
 export type AgentLifecycleEvent = {
-  tab_id: string;
+  workspace_id: string;
   session_id: string;
   kind: "session_started" | "turn_waiting" | "tool_started" | "tool_finished" | "approval_required" | "turn_completed" | "session_ended";
   source_event: string;
@@ -92,7 +156,7 @@ export type AgentLifecycleEvent = {
 };
 
 export type TerminalEvent = {
-  tab_id: string;
+  workspace_id: string;
   terminal_id: number;
   data: string;
 };
@@ -221,7 +285,7 @@ export type WorkspaceTabItem = {
 export type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
-  idlePolicy: Tab["idlePolicy"];
+  idlePolicy: IdlePolicy;
 };
 
 export type AgentCommandStatus = {
@@ -239,5 +303,27 @@ export type SettingsPanel = "general" | "appearance";
 export type SettingsNavItem = {
   id: SettingsPanel;
   label: string;
+  description: string;
   icon: ReactNode;
 };
+
+export type SettingsSection = {
+  id: SettingsPanel;
+  title: string;
+  description: string;
+  items: SettingsNavItem[];
+};
+
+export type WorkspaceHydration = {
+  tabs: Tab[];
+  activeTabId?: string;
+  layout: {
+    leftWidth: number;
+    rightWidth: number;
+    rightSplit: number;
+    showCodePanel: boolean;
+    showTerminalPanel: boolean;
+  };
+};
+
+export type TerminalRecord = Terminal;

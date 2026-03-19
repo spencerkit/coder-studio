@@ -38,8 +38,7 @@ mod services;
 mod ws;
 
 pub(crate) use app::{
-    bootstrap_tab_state, AgentRuntime, AppState, HttpServerState, TabState, TerminalRuntime,
-    DEV_BACKEND_PORT, DEV_FRONTEND_URL,
+    AgentRuntime, AppState, HttpServerState, TerminalRuntime, DEV_BACKEND_PORT, DEV_FRONTEND_URL,
 };
 pub(crate) use auth::{
     auth_status, ensure_optional_path_allowed, ensure_path_allowed, filesystem_list_public,
@@ -49,7 +48,14 @@ pub(crate) use auth::{
 };
 pub(crate) use command::http::start_transport_server;
 pub(crate) use infra::db::{
-    delete_session, ensure_tab, init_db, persist_archive, persist_session, snapshot_tab,
+    activate_workspace_ui, append_session_stream, archive_workspace_session, close_workspace_ui,
+    create_workspace_session, init_db, launch_workspace_record, load_session,
+    mark_active_sessions_interrupted_on_boot, patch_workspace_view_state, set_session_claude_id,
+    set_session_status, switch_workspace_session,
+    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
+    update_workspace_session,
+    workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
+    workspace_snapshot as load_workspace_snapshot,
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
@@ -62,14 +68,16 @@ pub(crate) use infra::support::{
     list_directories_for_target, native_parent_path, parse_git_changes, read_target_file_text,
     resolve_git_command_path, wsl_parent_path,
 };
-pub(crate) use infra::time::{mode_label, now_label, now_ts, status_label};
+pub(crate) use infra::time::{default_idle_policy, mode_label, now_label, now_ts, status_label};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentStartResult, ArchiveEntry, ClaudeSlashSkillEntry,
     CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, QueueTask, SessionInfo, SessionMode, SessionPatch, SessionStatus, TabSnapshot,
-    TerminalEvent, TerminalInfo, TransportEvent, WorkspaceInfo, WorkspaceSource,
-    WorkspaceSourceKind, WorkspaceTree, WorktreeDetail, WorktreeInfo,
+    IdlePolicy, QueueTask, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    SessionPatch, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
+    WorkbenchLayout, WorkbenchUiState, WorkspaceLaunchResult, WorkspaceSnapshot, WorkspaceSource,
+    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
+    WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use services::agent::{agent_resize, agent_send, agent_start, agent_stop};
 pub(crate) use services::claude::{
@@ -89,9 +97,10 @@ pub(crate) use services::terminal::{
     terminal_close, terminal_create, terminal_resize, terminal_write,
 };
 pub(crate) use services::workspace::{
-    archive_session, create_session, init_workspace, init_workspace_internal, queue_add,
-    queue_complete, queue_run, session_update, switch_session, tab_snapshot, update_idle_policy,
-    worktree_inspect,
+    activate_workspace, archive_session, close_workspace, create_session,
+    launch_workspace, launch_workspace_internal, session_update, switch_session,
+    update_idle_policy, update_workbench_layout, workbench_bootstrap, workspace_snapshot,
+    workspace_view_update, worktree_inspect,
 };
 pub(crate) use ws::server::{
     agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,
@@ -116,16 +125,18 @@ fn main() {
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            init_workspace,
-            tab_snapshot,
+            launch_workspace,
+            workbench_bootstrap,
+            workspace_snapshot,
+            activate_workspace,
+            close_workspace,
+            update_workbench_layout,
+            workspace_view_update,
             create_session,
             session_update,
             switch_session,
             archive_session,
             update_idle_policy,
-            queue_add,
-            queue_run,
-            queue_complete,
             git_status,
             git_diff,
             git_changes,
@@ -165,6 +176,7 @@ fn main() {
             let db_path = app_data.join("coder-studio.db");
             let conn = Connection::open(db_path)?;
             init_db(&conn)?;
+            mark_active_sessions_interrupted_on_boot(&conn).map_err(std::io::Error::other)?;
             start_claude_hook_receiver(app.handle()).map_err(std::io::Error::other)?;
             let state: State<AppState> = app.state();
             {

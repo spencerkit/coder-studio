@@ -5,7 +5,7 @@ import { Settings } from "../../components/Settings";
 import { TopBar } from "../../components/TopBar";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import { cloneAppSettings } from "../../shared/app/settings";
-import { createTab, persistWorkbenchState, workbenchState } from "../../state/workbench";
+import { workbenchState } from "../../state/workbench";
 import type { AppSettings, SettingsPanel } from "../../types/app";
 import { buildWorkspaceTabItems } from "../workspace";
 
@@ -24,7 +24,7 @@ export const SettingsScreen = ({
   onCommitSettings,
   onCloseSettings,
 }: SettingsScreenProps) => {
-  const [state, setState] = useRelaxState(workbenchState);
+  const [state] = useRelaxState(workbenchState);
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => cloneAppSettings(appSettings));
   const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
   const [agentCommandStatus, setAgentCommandStatus] = useState<{
@@ -42,17 +42,9 @@ export const SettingsScreen = ({
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
 
-  const updateState = (updater: (current: typeof state) => typeof state) => {
-    setState(updater(state));
-  };
-
   useEffect(() => {
     setSettingsDraft(cloneAppSettings(appSettings));
   }, [appSettings]);
-
-  useEffect(() => {
-    persistWorkbenchState(state);
-  }, [state]);
 
   useEffect(() => {
     const command = settingsDraft.agentCommand.trim();
@@ -122,42 +114,6 @@ export const SettingsScreen = ({
     commitSettings(nextSettings);
   };
 
-  const onAddTab = () => {
-    updateState((current) => {
-      const nextIndex = current.tabs.length + 1;
-      const createdTab = createTab(nextIndex, locale);
-      const newTab = {
-        ...createdTab,
-        agent: {
-          ...createdTab.agent,
-          provider: appSettings.agentProvider,
-          command: appSettings.agentCommand,
-        },
-        idlePolicy: { ...appSettings.idlePolicy }
-      };
-      return {
-        ...current,
-        tabs: [...current.tabs, newTab],
-        activeTabId: newTab.id
-      };
-    });
-    onCloseSettings();
-  };
-
-  const onRemoveTab = (tabId: string) => {
-    updateState((current) => {
-      if (current.tabs.length === 1) return current;
-      const remainingTabs = current.tabs.filter((tab) => tab.id !== tabId);
-      const activeTabId = current.activeTabId === tabId ? (remainingTabs[0]?.id ?? current.activeTabId) : current.activeTabId;
-      return { ...current, tabs: remainingTabs, activeTabId };
-    });
-  };
-
-  const onSwitchWorkspace = (tabId: string) => {
-    updateState((current) => ({ ...current, activeTabId: tabId }));
-    onCloseSettings();
-  };
-
   const trimmedLaunchCommand = settingsDraft.agentCommand.trim();
   const launchCommandStateClass = agentCommandStatus.loading
     ? "checking"
@@ -185,9 +141,9 @@ export const SettingsScreen = ({
         isSettingsRoute
         locale={locale}
         workspaceTabs={workspaceTabs}
-        onSwitchWorkspace={onSwitchWorkspace}
-        onAddTab={onAddTab}
-        onRemoveTab={onRemoveTab}
+        onSwitchWorkspace={() => {}}
+        onAddTab={() => {}}
+        onRemoveTab={() => {}}
         onOpenSettings={() => {}}
         onCloseSettings={onCloseSettings}
         onOpenCommandPalette={() => {}}

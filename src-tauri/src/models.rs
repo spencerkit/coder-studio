@@ -15,7 +15,7 @@ pub enum SessionMode {
     GitTree,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
     Idle,
@@ -24,6 +24,7 @@ pub enum SessionStatus {
     Waiting,
     Suspended,
     Queued,
+    Interrupted,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -42,12 +43,32 @@ pub struct QueueTask {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionMessageRole {
+    System,
+    User,
+    Agent,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SessionMessage {
+    pub id: String,
+    pub role: SessionMessageRole,
+    pub content: String,
+    pub time: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SessionInfo {
     pub id: u64,
+    pub title: String,
     pub status: SessionStatus,
     pub mode: SessionMode,
     pub auto_feed: bool,
     pub queue: Vec<QueueTask>,
+    pub messages: Vec<SessionMessage>,
+    pub stream: String,
+    pub unread: u32,
     pub last_active_at: i64,
     pub claude_session_id: Option<String>,
 }
@@ -101,25 +122,6 @@ pub struct ArchiveEntry {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct TabSnapshot {
-    pub tab_id: String,
-    pub project_path: String,
-    pub target: ExecTarget,
-    pub idle_policy: IdlePolicy,
-    pub sessions: Vec<SessionInfo>,
-    pub active_session_id: u64,
-    pub archive: Vec<ArchiveEntry>,
-    pub terminals: Vec<TerminalInfo>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct WorkspaceInfo {
-    pub tab_id: String,
-    pub project_path: String,
-    pub target: ExecTarget,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceSourceKind {
     Remote,
@@ -128,7 +130,6 @@ pub enum WorkspaceSourceKind {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WorkspaceSource {
-    pub tab_id: String,
     pub kind: WorkspaceSourceKind,
     pub path_or_url: String,
     pub target: ExecTarget,
@@ -174,7 +175,7 @@ pub struct TerminalInfo {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AgentEvent {
-    pub tab_id: String,
+    pub workspace_id: String,
     pub session_id: String,
     pub kind: String,
     pub data: String,
@@ -182,7 +183,7 @@ pub struct AgentEvent {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AgentLifecycleEvent {
-    pub tab_id: String,
+    pub workspace_id: String,
     pub session_id: String,
     pub kind: String,
     pub source_event: String,
@@ -191,7 +192,7 @@ pub struct AgentLifecycleEvent {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TerminalEvent {
-    pub tab_id: String,
+    pub workspace_id: String,
     pub terminal_id: u64,
     pub data: String,
 }
@@ -246,11 +247,83 @@ pub struct TransportEvent {
     pub payload: Value,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkbenchLayout {
+    pub left_width: f64,
+    pub right_width: f64,
+    pub right_split: f64,
+    pub show_code_panel: bool,
+    pub show_terminal_panel: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceSummary {
+    pub workspace_id: String,
+    pub title: String,
+    pub project_path: String,
+    pub source_kind: WorkspaceSourceKind,
+    pub source_value: String,
+    pub git_url: Option<String>,
+    pub target: ExecTarget,
+    pub idle_policy: IdlePolicy,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceViewState {
+    pub active_session_id: String,
+    pub active_pane_id: String,
+    pub pane_layout: Value,
+    pub file_preview: Value,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceSnapshot {
+    pub workspace: WorkspaceSummary,
+    pub sessions: Vec<SessionInfo>,
+    pub archive: Vec<ArchiveEntry>,
+    pub view_state: WorkspaceViewState,
+    pub terminals: Vec<TerminalInfo>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkbenchUiState {
+    pub open_workspace_ids: Vec<String>,
+    pub active_workspace_id: Option<String>,
+    pub layout: WorkbenchLayout,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkbenchBootstrap {
+    pub ui_state: WorkbenchUiState,
+    pub workspaces: Vec<WorkspaceSnapshot>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceLaunchResult {
+    pub ui_state: WorkbenchUiState,
+    pub snapshot: WorkspaceSnapshot,
+    pub created: bool,
+    pub already_open: bool,
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct SessionPatch {
+    pub title: Option<String>,
     pub status: Option<SessionStatus>,
     pub mode: Option<SessionMode>,
     pub auto_feed: Option<bool>,
+    pub queue: Option<Vec<QueueTask>>,
+    pub messages: Option<Vec<SessionMessage>>,
+    pub stream: Option<String>,
+    pub unread: Option<u32>,
     pub last_active_at: Option<i64>,
     pub claude_session_id: Option<String>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct WorkspaceViewPatch {
+    pub active_session_id: Option<String>,
+    pub active_pane_id: Option<String>,
+    pub pane_layout: Option<Value>,
+    pub file_preview: Option<Value>,
 }

@@ -85,12 +85,12 @@ pub(crate) async fn ws_session(mut socket: WebSocket, app: tauri::AppHandle) {
     }
 }
 
-pub(crate) fn agent_key(tab_id: &str, session_id: &str) -> String {
-    format!("{}:{}", tab_id, session_id)
+pub(crate) fn agent_key(workspace_id: &str, session_id: &str) -> String {
+    format!("{}:{}", workspace_id, session_id)
 }
 
-pub(crate) fn terminal_key(tab_id: &str, terminal_id: u64) -> String {
-    format!("{}:{}", tab_id, terminal_id)
+pub(crate) fn terminal_key(workspace_id: &str, terminal_id: u64) -> String {
+    format!("{}:{}", workspace_id, terminal_id)
 }
 
 pub(crate) fn emit_transport_event(app: &tauri::AppHandle, event: &str, payload: Value) {
@@ -103,7 +103,7 @@ pub(crate) fn emit_transport_event(app: &tauri::AppHandle, event: &str, payload:
 
 pub(crate) fn emit_agent(
     app: &tauri::AppHandle,
-    tab_id: &str,
+    workspace_id: &str,
     session_id: &str,
     kind: &str,
     data: &str,
@@ -112,7 +112,7 @@ pub(crate) fn emit_agent(
         app,
         "agent://event",
         json!({
-            "tab_id": tab_id,
+            "workspace_id": workspace_id,
             "session_id": session_id,
             "kind": kind,
             "data": data,
@@ -121,7 +121,7 @@ pub(crate) fn emit_agent(
     let _ = app.emit(
         "agent://event",
         AgentEvent {
-            tab_id: tab_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             session_id: session_id.to_string(),
             kind: kind.to_string(),
             data: data.to_string(),
@@ -129,12 +129,12 @@ pub(crate) fn emit_agent(
     );
 }
 
-pub(crate) fn emit_terminal(app: &tauri::AppHandle, tab_id: &str, terminal_id: u64, data: &str) {
+pub(crate) fn emit_terminal(app: &tauri::AppHandle, workspace_id: &str, terminal_id: u64, data: &str) {
     emit_transport_event(
         app,
         "terminal://event",
         json!({
-            "tab_id": tab_id,
+            "workspace_id": workspace_id,
             "terminal_id": terminal_id,
             "data": data,
         }),
@@ -142,7 +142,7 @@ pub(crate) fn emit_terminal(app: &tauri::AppHandle, tab_id: &str, terminal_id: u
     let _ = app.emit(
         "terminal://event",
         TerminalEvent {
-            tab_id: tab_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             terminal_id,
             data: data.to_string(),
         },
@@ -151,7 +151,7 @@ pub(crate) fn emit_terminal(app: &tauri::AppHandle, tab_id: &str, terminal_id: u
 
 pub(crate) fn emit_agent_lifecycle(
     app: &tauri::AppHandle,
-    tab_id: &str,
+    workspace_id: &str,
     session_id: &str,
     kind: &str,
     source_event: &str,
@@ -161,7 +161,7 @@ pub(crate) fn emit_agent_lifecycle(
         app,
         "agent://lifecycle",
         json!({
-            "tab_id": tab_id,
+            "workspace_id": workspace_id,
             "session_id": session_id,
             "kind": kind,
             "source_event": source_event,
@@ -171,7 +171,7 @@ pub(crate) fn emit_agent_lifecycle(
     let _ = app.emit(
         "agent://lifecycle",
         AgentLifecycleEvent {
-            tab_id: tab_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             session_id: session_id.to_string(),
             kind: kind.to_string(),
             source_event: source_event.to_string(),

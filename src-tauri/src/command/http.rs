@@ -2,65 +2,55 @@ use crate::ws::server::ws_handler;
 use crate::*;
 
 #[derive(Deserialize)]
-struct InitWorkspaceRequest {
+struct LaunchWorkspaceRequest {
     source: WorkspaceSource,
 }
 
 #[derive(Deserialize)]
-struct TabIdRequest {
-    tab_id: String,
+struct WorkspaceIdRequest {
+    workspace_id: String,
 }
 
 #[derive(Deserialize)]
 struct SessionCreateRequest {
-    tab_id: String,
+    workspace_id: String,
     mode: SessionMode,
 }
 
 #[derive(Deserialize)]
 struct SessionUpdateRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: u64,
     patch: SessionPatch,
 }
 
 #[derive(Deserialize)]
 struct SwitchSessionRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: u64,
 }
 
 #[derive(Deserialize)]
 struct ArchiveSessionRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: u64,
 }
 
 #[derive(Deserialize)]
 struct IdlePolicyRequest {
-    tab_id: String,
+    workspace_id: String,
     policy: IdlePolicy,
 }
 
 #[derive(Deserialize)]
-struct QueueAddRequest {
-    tab_id: String,
-    session_id: u64,
-    text: String,
+struct WorkspaceViewRequest {
+    workspace_id: String,
+    patch: WorkspaceViewPatch,
 }
 
 #[derive(Deserialize)]
-struct QueueRunRequest {
-    tab_id: String,
-    session_id: u64,
-    task_id: u64,
-}
-
-#[derive(Deserialize)]
-struct QueueCompleteRequest {
-    tab_id: String,
-    session_id: u64,
-    task_id: u64,
+struct WorkbenchLayoutRequest {
+    layout: WorkbenchLayout,
 }
 
 #[derive(Deserialize)]
@@ -160,21 +150,21 @@ struct ClaudeSlashSkillsRequest {
 
 #[derive(Deserialize)]
 struct TerminalCreateRequest {
-    tab_id: String,
+    workspace_id: String,
     cwd: String,
     target: ExecTarget,
 }
 
 #[derive(Deserialize)]
 struct TerminalWriteRequest {
-    tab_id: String,
+    workspace_id: String,
     terminal_id: u64,
     input: String,
 }
 
 #[derive(Deserialize)]
 struct TerminalResizeRequest {
-    tab_id: String,
+    workspace_id: String,
     terminal_id: u64,
     cols: u16,
     rows: u16,
@@ -182,24 +172,21 @@ struct TerminalResizeRequest {
 
 #[derive(Deserialize)]
 struct TerminalCloseRequest {
-    tab_id: String,
+    workspace_id: String,
     terminal_id: u64,
 }
 
 #[derive(Deserialize)]
 struct AgentStartRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: String,
     provider: String,
     command: String,
-    claude_session_id: Option<String>,
-    cwd: String,
-    target: ExecTarget,
 }
 
 #[derive(Deserialize)]
 struct AgentSendRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: String,
     input: String,
     append_newline: Option<bool>,
@@ -207,13 +194,13 @@ struct AgentSendRequest {
 
 #[derive(Deserialize)]
 struct AgentStopRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: String,
 }
 
 #[derive(Deserialize)]
 struct AgentResizeRequest {
-    tab_id: String,
+    workspace_id: String,
     session_id: String,
     cols: u16,
     rows: u16,
@@ -339,6 +326,58 @@ fn require_optional_path_access(
     Ok(())
 }
 
+fn require_workspace_access(
+    app: &tauri::AppHandle,
+    workspace_id: &str,
+    authorized: &AuthorizedRequest,
+) -> Result<(String, ExecTarget), RpcError> {
+    let context = workspace_access_context(&app.state(), workspace_id).map_err(rpc_bad_request)?;
+    require_path_access(&context.0, &context.1, authorized)?;
+    Ok(context)
+}
+
+fn filter_bootstrap_for_public_mode(
+    bootstrap: WorkbenchBootstrap,
+    authorized: &AuthorizedRequest,
+) -> WorkbenchBootstrap {
+    if !authorized.request.public_mode {
+        return bootstrap;
+    }
+
+    let mut allowed_ids = Vec::new();
+    let workspaces = bootstrap
+        .workspaces
+        .into_iter()
+        .filter(|snapshot| {
+            let allowed = ensure_path_allowed(
+                &snapshot.workspace.project_path,
+                &snapshot.workspace.target,
+                &authorized.allowed_roots,
+            )
+            .is_ok();
+            if allowed {
+                allowed_ids.push(snapshot.workspace.workspace_id.clone());
+            }
+            allowed
+        })
+        .collect::<Vec<_>>();
+
+    let active_workspace_id = bootstrap
+        .ui_state
+        .active_workspace_id
+        .filter(|id| allowed_ids.iter().any(|item| item == id))
+        .or_else(|| allowed_ids.first().cloned());
+
+    WorkbenchBootstrap {
+        ui_state: WorkbenchUiState {
+            open_workspace_ids: allowed_ids,
+            active_workspace_id,
+            layout: bootstrap.ui_state.layout,
+        },
+        workspaces,
+    }
+}
+
 fn dispatch_rpc(
     app: &tauri::AppHandle,
     command: &str,
@@ -346,8 +385,8 @@ fn dispatch_rpc(
     authorized: &AuthorizedRequest,
 ) -> Result<Value, RpcError> {
     match command {
-        "init_workspace" => {
-            let req: InitWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+        "launch_workspace" => {
+            let req: LaunchWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             if authorized.request.public_mode {
                 if matches!(&req.source.kind, WorkspaceSourceKind::Local) {
                     require_path_access(&req.source.path_or_url, &req.source.target, authorized)?;
@@ -361,73 +400,103 @@ fn dispatch_rpc(
                     None
                 };
                 serde_json::to_value(
-                    init_workspace_internal(req.source, clone_root, app.state())
+                    launch_workspace_internal(req.source, clone_root, app.state())
                         .map_err(rpc_bad_request)?,
                 )
                 .map_err(|e| rpc_bad_request(e.to_string()))
             } else {
                 serde_json::to_value(
-                    init_workspace(req.source, app.state()).map_err(rpc_bad_request)?,
+                    launch_workspace(req.source, app.state()).map_err(rpc_bad_request)?,
                 )
                 .map_err(|e| rpc_bad_request(e.to_string()))
             }
         }
-        "tab_snapshot" => {
-            let req: TabIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            serde_json::to_value(tab_snapshot(req.tab_id, app.state()).map_err(rpc_bad_request)?)
+        "workbench_bootstrap" => {
+            let _req: EmptyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let bootstrap = workbench_bootstrap(app.state()).map_err(rpc_bad_request)?;
+            serde_json::to_value(filter_bootstrap_for_public_mode(bootstrap, authorized))
                 .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_snapshot" => {
+            let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                workspace_snapshot(req.workspace_id.clone(), app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "activate_workspace" => {
+            let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                activate_workspace(req.workspace_id, app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "close_workspace" => {
+            let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                close_workspace(req.workspace_id, app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "update_workbench_layout" => {
+            let req: WorkbenchLayoutRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                update_workbench_layout(req.layout, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_view_update" => {
+            let req: WorkspaceViewRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                workspace_view_update(req.workspace_id, req.patch, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "create_session" => {
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
-                create_session(req.tab_id, req.mode, app.state()).map_err(rpc_bad_request)?,
+                create_session(req.workspace_id, req.mode, app.state()).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "session_update" => {
             let req: SessionUpdateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            session_update(req.tab_id, req.session_id, req.patch, app.state())
-                .map_err(rpc_bad_request)?;
-            Ok(Value::Null)
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                session_update(req.workspace_id, req.session_id, req.patch, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "switch_session" => {
             let req: SwitchSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            switch_session(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
-            Ok(Value::Null)
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                switch_session(req.workspace_id, req.session_id, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "archive_session" => {
             let req: ArchiveSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
-                archive_session(req.tab_id, req.session_id, app.state())
+                archive_session(req.workspace_id, req.session_id, app.state())
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            update_idle_policy(req.tab_id, req.policy, app.state()).map_err(rpc_bad_request)?;
-            Ok(Value::Null)
-        }
-        "queue_add" => {
-            let req: QueueAddRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            serde_json::to_value(
-                queue_add(req.tab_id, req.session_id, req.text, app.state())
-                    .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "queue_run" => {
-            let req: QueueRunRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            serde_json::to_value(
-                queue_run(req.tab_id, req.session_id, req.task_id, app.state())
-                    .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "queue_complete" => {
-            let req: QueueCompleteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            queue_complete(req.tab_id, req.session_id, req.task_id, app.state())
-                .map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            update_idle_policy(req.workspace_id, req.policy, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_status" => {
@@ -571,8 +640,7 @@ fn dispatch_rpc(
             serde_json::to_value(listing).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "command_exists" => {
-            let req: CommandAvailabilityRequest =
-                parse_payload(payload).map_err(rpc_bad_request)?;
+            let req: CommandAvailabilityRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_optional_path_access(req.cwd.as_deref(), &req.target, authorized)?;
             serde_json::to_value(
                 command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
@@ -595,42 +663,44 @@ fn dispatch_rpc(
         }
         "terminal_create" => {
             let req: TerminalCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
             require_path_access(&req.cwd, &req.target, authorized)?;
             serde_json::to_value(
-                terminal_create(req.tab_id, req.cwd, req.target, app.clone(), app.state())
+                terminal_create(req.workspace_id, req.cwd, req.target, app.clone(), app.state())
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "terminal_write" => {
             let req: TerminalWriteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            terminal_write(req.tab_id, req.terminal_id, req.input, app.state())
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            terminal_write(req.workspace_id, req.terminal_id, req.input, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_resize" => {
             let req: TerminalResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            terminal_resize(req.tab_id, req.terminal_id, req.cols, req.rows, app.state())
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            terminal_resize(req.workspace_id, req.terminal_id, req.cols, req.rows, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_close" => {
             let req: TerminalCloseRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            terminal_close(req.tab_id, req.terminal_id, app.state()).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            terminal_close(req.workspace_id, req.terminal_id, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_start" => {
             let req: AgentStartRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.cwd, &req.target, authorized)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
                 agent_start(
-                    req.tab_id,
+                    req.workspace_id,
                     req.session_id,
                     req.provider,
                     req.command,
-                    req.claude_session_id,
-                    req.cwd,
-                    req.target,
                     app.clone(),
                     app.state(),
                 )
@@ -640,8 +710,9 @@ fn dispatch_rpc(
         }
         "agent_send" => {
             let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
             agent_send(
-                req.tab_id,
+                req.workspace_id,
                 req.session_id,
                 req.input,
                 req.append_newline,
@@ -652,12 +723,14 @@ fn dispatch_rpc(
         }
         "agent_stop" => {
             let req: AgentStopRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            agent_stop(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            agent_stop(req.workspace_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_resize" => {
             let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            agent_resize(req.tab_id, req.session_id, req.cols, req.rows, app.state())
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            agent_resize(req.workspace_id, req.session_id, req.cols, req.rows, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }

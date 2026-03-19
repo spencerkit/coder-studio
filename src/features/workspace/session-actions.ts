@@ -17,7 +17,7 @@ import {
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
 } from "../../services/http/session.service";
-import { getTabSnapshot } from "../../services/http/workspace.service";
+import { getWorkspaceSnapshot } from "../../services/http/workspace.service";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -27,6 +27,7 @@ import {
   replacePaneNode,
 } from "../../shared/utils/panes";
 import {
+  createDraftSessionPlaceholder,
   createSessionFromBackend,
   isForegroundActiveStatus,
   isDraftSession,
@@ -37,12 +38,14 @@ import {
   sessionTitleFromInput,
   toBackgroundStatus,
 } from "../../shared/utils/session";
-import type { BackendArchiveEntry, BackendSession, SessionPatch, TabSnapshot, Toast } from "../../types/app";
+import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
+import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
 
 type WorkspaceSessionActionDeps = {
+  appSettings: AppSettings;
   locale: Locale;
   t: Translator;
   stateRef: MutableRefObject<WorkbenchState>;
@@ -52,6 +55,7 @@ type WorkspaceSessionActionDeps = {
 };
 
 export const createWorkspaceSessionActions = ({
+  appSettings,
   locale,
   t,
   stateRef,
@@ -59,26 +63,17 @@ export const createWorkspaceSessionActions = ({
   withServiceFallback,
   addToast,
 }: WorkspaceSessionActionDeps) => {
-  const buildDraftSessionMessages = (tab: Tab) => {
-    const workspacePath = tab.project?.path ?? t("noWorkspace");
-    const branch = tab.git.branch && tab.git.branch !== "—" ? ` · ${tab.git.branch}` : "";
-    const workspaceLabel = `${workspacePath}${branch}`;
-    return [
-      { id: createId("msg"), role: "system" as const, content: t("draftSessionPrompt"), time: nowLabel() },
-      { id: createId("msg"), role: "system" as const, content: t("draftSessionWorkspace", { path: workspaceLabel }), time: nowLabel() },
-    ];
-  };
+  const buildDraftSessionMessages = (tab: Tab) => createDraftSessionPlaceholder({
+    locale,
+    workspacePath: tab.project?.path ?? t("noWorkspace"),
+    branch: tab.git.branch,
+  }).messages;
 
-  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => ({
-    ...createSession(tab.sessions.length + 1, mode, locale),
-    title: t("draftSessionTitle"),
-    status: "idle",
-    isDraft: true,
-    messages: buildDraftSessionMessages(tab),
-    queue: [],
-    stream: "",
-    unread: 0,
-    lastActiveAt: Date.now(),
+  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => createDraftSessionPlaceholder({
+    locale,
+    workspacePath: tab.project?.path ?? t("noWorkspace"),
+    branch: tab.git.branch,
+    mode,
   });
 
   const syncSessionPatch = async (tabId: string, sessionId: string, patch: SessionPatch) => {
@@ -156,63 +151,10 @@ export const createWorkspaceSessionActions = ({
   };
 
   const refreshTabFromBackend = async (tabId: string) => {
-    const snapshot = await withServiceFallback<TabSnapshot | null>(() => getTabSnapshot(tabId), null);
+    const snapshot = await withServiceFallback<WorkspaceSnapshot | null>(() => getWorkspaceSnapshot(tabId), null);
     if (!snapshot) return;
 
-    updateTab(tabId, (tab) => {
-      const nextSessions = snapshot.sessions.map((session) => {
-        const existing = tab.sessions.find((item) => parseNumericId(item.id) === session.id);
-        return createSessionFromBackend(session, locale, existing);
-      });
-      const nextActiveSessionId = String(snapshot.active_session_id);
-      const validSessionIds = new Set(nextSessions.map((session) => session.id));
-      const currentLeafIds = collectPaneLeaves(tab.paneLayout).map((leaf) => leaf.sessionId);
-      const hasValidPaneSession = currentLeafIds.some((sessionId) => validSessionIds.has(sessionId));
-      const remapPaneLayout = (node: Tab["paneLayout"]): Tab["paneLayout"] => {
-        if (node.type === "leaf") {
-          return {
-            ...node,
-            sessionId: validSessionIds.has(node.sessionId) ? node.sessionId : nextActiveSessionId,
-          };
-        }
-        return {
-          ...node,
-          first: remapPaneLayout(node.first),
-          second: remapPaneLayout(node.second),
-        };
-      };
-      const nextPaneLayout = hasValidPaneSession
-        ? remapPaneLayout(tab.paneLayout)
-        : createPaneLeaf(nextActiveSessionId);
-      const nextLeafIds = collectPaneLeaves(nextPaneLayout);
-      const nextTerminals = snapshot.terminals.map((terminal, index) => {
-        const termId = `term-${terminal.id}`;
-        const existing = tab.terminals.find((item) => item.id === termId);
-        return {
-          id: termId,
-          title: existing?.title ?? formatTerminalTitle(index + 1, locale),
-          output: existing?.output ?? terminal.output ?? "",
-        };
-      });
-
-      return {
-        ...tab,
-        idlePolicy: {
-          enabled: snapshot.idle_policy.enabled,
-          idleMinutes: snapshot.idle_policy.idle_minutes,
-          maxActive: snapshot.idle_policy.max_active,
-          pressure: snapshot.idle_policy.pressure,
-        },
-        sessions: nextSessions,
-        activeSessionId: nextActiveSessionId,
-        paneLayout: nextPaneLayout,
-        activePaneId: nextLeafIds.some((leaf) => leaf.id === tab.activePaneId) ? tab.activePaneId : (nextLeafIds[0]?.id ?? tab.activePaneId),
-        terminals: nextTerminals.length ? nextTerminals : tab.terminals,
-        activeTerminalId: nextTerminals.find((terminal) => terminal.id === tab.activeTerminalId)?.id
-          ?? nextTerminals[0]?.id
-          ?? tab.activeTerminalId,
-      };
-    });
+    updateTab(tabId, (tab) => createTabFromWorkspaceSnapshot(snapshot, locale, appSettings, tab));
   };
 
   const onNewSession = async () => {

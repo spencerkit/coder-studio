@@ -7,7 +7,7 @@ import {
   getPreferredLocale
 } from "../i18n";
 
-export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued";
+export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued" | "interrupted";
 export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";
@@ -180,14 +180,12 @@ export type WorkbenchState = {
   layout: LayoutState;
   overlay: {
     visible: boolean;
-    tabId?: string;
     mode: "remote" | "local";
     input: string;
     target: ExecTarget;
   };
 };
 
-const WORKBENCH_STORAGE_KEY = "coder-studio.workbench";
 const clampLayoutLeftWidth = (value: number | undefined) => {
   if (!Number.isFinite(value)) return 320;
   return Math.max(0, Number(value));
@@ -280,11 +278,10 @@ export const createTab = (index: number, locale: Locale = getPreferredLocale()):
   };
 };
 
-const createDefaultWorkbenchState = (): WorkbenchState => {
-  const initialTab = createTab(1, getPreferredLocale());
+export const createDefaultWorkbenchState = (): WorkbenchState => {
   return {
-    tabs: [initialTab],
-    activeTabId: initialTab.id,
+    tabs: [],
+    activeTabId: "",
     layout: {
       leftWidth: 320,
       rightWidth: 320,
@@ -294,8 +291,7 @@ const createDefaultWorkbenchState = (): WorkbenchState => {
     },
     overlay: {
       visible: true,
-      tabId: initialTab.id,
-      mode: "remote",
+      mode: "local",
       input: "",
       target: { type: "native" }
     }
@@ -335,7 +331,9 @@ const sanitizePaneLayout = (
 };
 
 const sanitizeTabSessions = (tab: Tab, locale: Locale): Tab => {
-  const sessions = (tab.sessions ?? []).filter((session) => session && !session.isDraft);
+  const allSessions = (tab.sessions ?? []).filter(Boolean);
+  const persistedSessions = allSessions.filter((session) => !session.isDraft);
+  const sessions = persistedSessions.length ? persistedSessions : allSessions;
   const fallbackSessions = sessions.length ? sessions : [createSession(1, "branch", locale)];
   const activeSessionId = fallbackSessions.some((session) => session.id === tab.activeSessionId)
     ? tab.activeSessionId
@@ -371,7 +369,7 @@ const sanitizeTabSessions = (tab: Tab, locale: Locale): Tab => {
   };
 };
 
-const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefined): WorkbenchState => {
+export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefined): WorkbenchState => {
   const fallback = createDefaultWorkbenchState();
   if (!input?.tabs?.length) return fallback;
 
@@ -400,7 +398,6 @@ const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefin
     },
     overlay: {
       visible: hasHistory ? false : input.overlay?.visible ?? fallback.overlay.visible,
-      tabId: input.overlay?.tabId ?? activeTabId,
       mode: input.overlay?.mode ?? fallback.overlay.mode,
       input: input.overlay?.input ?? fallback.overlay.input,
       target: input.overlay?.target ?? fallback.overlay.target
@@ -408,33 +405,12 @@ const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefin
   };
 };
 
-const readStoredWorkbenchState = (): WorkbenchState => {
-  if (typeof window === "undefined") return createDefaultWorkbenchState();
-  try {
-    const raw = window.localStorage.getItem(WORKBENCH_STORAGE_KEY);
-    if (!raw) return createDefaultWorkbenchState();
-    return normalizeWorkbenchState(JSON.parse(raw) as Partial<WorkbenchState>);
-  } catch {
-    return createDefaultWorkbenchState();
-  }
-};
+export const hydrateWorkbenchState = (input: Partial<WorkbenchState> | null | undefined): WorkbenchState => normalizeWorkbenchState(input);
 
-export const persistWorkbenchState = (next: WorkbenchState) => {
-  if (typeof window === "undefined") return;
-  try {
-    const locale = getPreferredLocale();
-    const sanitized: WorkbenchState = {
-      ...next,
-      tabs: next.tabs.map((tab) => sanitizeTabSessions(tab, locale))
-    };
-    window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify(sanitized));
-  } catch {
-    // Ignore storage failures and keep state in memory.
-  }
+export const persistWorkbenchState = (_next: WorkbenchState) => {
+  // Workbench business state now lives in backend SQLite only.
 };
-
-export const workbenchStorageKey = WORKBENCH_STORAGE_KEY;
 
 export const workbenchState = state<WorkbenchState>({
-  ...readStoredWorkbenchState()
+  ...createDefaultWorkbenchState()
 });
