@@ -10,6 +10,7 @@ use tauri::AppHandle;
 use tokio::sync::broadcast;
 
 use crate::{
+    auth::{ip_guard::IpGuardMap, AuthRuntime},
     infra::time::{default_idle_policy, now_ts},
     models::{
         ArchiveEntry, ExecTarget, IdlePolicy, SessionInfo, SessionMode, SessionStatus,
@@ -52,7 +53,9 @@ pub(crate) struct TabState {
 pub(crate) struct AppState {
     pub tabs: Mutex<HashMap<String, TabState>>,
     pub db: Mutex<Option<Connection>>,
+    pub auth: Mutex<AuthRuntime>,
     pub agents: Mutex<HashMap<String, Arc<AgentRuntime>>>,
+    pub ip_guard: Mutex<IpGuardMap>,
     pub terminals: Mutex<HashMap<String, Arc<TerminalRuntime>>>,
     pub hook_endpoint: Mutex<Option<String>>,
     pub http_endpoint: Mutex<Option<String>>,
@@ -65,7 +68,9 @@ impl Default for AppState {
         Self {
             tabs: Mutex::new(HashMap::new()),
             db: Mutex::new(None),
+            auth: Mutex::new(AuthRuntime::default()),
             agents: Mutex::new(HashMap::new()),
+            ip_guard: Mutex::new(HashMap::new()),
             terminals: Mutex::new(HashMap::new()),
             hook_endpoint: Mutex::new(None),
             http_endpoint: Mutex::new(None),

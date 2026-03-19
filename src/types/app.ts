@@ -152,6 +152,18 @@ export type AgentStartResult = {
   started: boolean;
 };
 
+export type AuthStatus = {
+  public_mode: boolean;
+  authenticated: boolean;
+  password_configured: boolean;
+  local_host: boolean;
+  secure_transport_required: boolean;
+  secure_transport_ok: boolean;
+  session_idle_minutes: number;
+  session_max_hours: number;
+  allowed_roots: string[];
+};
+
 export type WorktreeModalState = {
   name: string;
   path: string;

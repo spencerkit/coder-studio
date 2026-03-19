@@ -1,0 +1,163 @@
+# Deployment Guide
+
+[中文](README.md)
+
+This directory explains how to deploy the current build to a publicly reachable environment with the implemented single-passphrase authentication.
+
+## Current Deployment Capabilities
+
+The current code supports:
+
+- single-user, single-passphrase login
+- `HttpOnly` session cookie
+- a `24` hour IP ban after `3` failed passphrase attempts within `10` minutes
+- server-side path restrictions through `allowedRoots`
+- authentication on both `HTTP RPC` and `WebSocket`
+- HTTPS-required passphrase submission for non-local hosts
+- local access on `localhost`, `127.0.0.1`, and `::1` defaults to non-public mode
+- local access with `?auth=force` explicitly forces public mode
+
+## Recommended Topology
+
+Recommended structure:
+
+1. run the Coder Studio process on a loopback address
+2. terminate HTTPS with `Caddy` or `Nginx`
+3. reverse proxy `/`, `/api`, `/ws`, and `/health` to the local Coder Studio process
+
+Why this is recommended:
+
+- the application process does not terminate TLS itself
+- non-local login requires secure transport
+- a reverse proxy is the right place for certificates, domains, and public ingress
+
+## Configuration File
+
+After the first launch, the app creates `auth.json` inside the app data directory.
+
+Typical locations:
+
+- Linux: `~/.local/share/com.agent.workbench/auth.json`
+- macOS: `~/Library/Application Support/com.agent.workbench/auth.json`
+- Windows: `%AppData%\\com.agent.workbench\\auth.json`
+
+Key fields:
+
+```json
+{
+  "version": 1,
+  "publicMode": true,
+  "password": "replace-this-passphrase",
+  "allowedRoots": ["/srv/coder-studio/workspaces"],
+  "bindHost": "127.0.0.1",
+  "bindPort": 41033,
+  "sessionIdleMinutes": 15,
+  "sessionMaxHours": 12,
+  "sessions": []
+}
+```
+
+Field meanings:
+
+- `publicMode`: enables public access mode
+- `password`: the access passphrase, currently stored in plain text by request
+- `allowedRoots`: root directories that can be browsed or used for workspaces
+- `bindHost`: transport service bind address
+- `bindPort`: transport service bind port
+
+## Recommended `bindHost` / `bindPort`
+
+Recommended production values:
+
+- `bindHost`: `127.0.0.1`
+- `bindPort`: `41033`
+
+That means:
+
+- the app only listens locally
+- all public traffic must come through an HTTPS reverse proxy
+
+If you explicitly want the process to listen beyond loopback, you can set:
+
+- `bindHost`: `0.0.0.0`
+
+But even then, public access should still sit behind an HTTPS reverse proxy because the app does not provide TLS directly.
+
+## Reverse Proxy Requirements
+
+Your proxy should forward:
+
+- `Host`
+- `X-Forwarded-Host`
+- `X-Forwarded-For`
+- `X-Forwarded-Proto`
+
+`X-Forwarded-Proto=https` is especially important because the app uses it to decide whether secure transport is in place.
+
+## Caddy Example
+
+```caddyfile
+coder.example.com {
+  reverse_proxy 127.0.0.1:41033
+}
+```
+
+`Caddy` handles HTTPS and WebSocket proxying out of the box, so this is the simplest public setup.
+
+## Nginx Example
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name coder.example.com;
+
+  ssl_certificate /path/to/fullchain.pem;
+  ssl_certificate_key /path/to/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:41033;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}
+```
+
+## Deployment Steps
+
+1. Build the app: `pnpm tauri build`
+2. Start it once on the target machine so it generates `auth.json`
+3. Edit `auth.json` and set at least:
+   - `password`
+   - `allowedRoots`
+   - `bindHost`
+   - `bindPort`
+4. Restart the app
+5. Configure an HTTPS reverse proxy to `bindHost:bindPort`
+6. Open your domain and verify the login screen appears first
+
+## Verification Checklist
+
+- opening the public domain shows the passphrase login screen first
+- 3 wrong passphrase attempts trigger the IP block response
+- after login, WebSocket connections establish normally
+- only directories inside `allowedRoots` are accessible
+- `dialog_pick_folder` is unavailable in public mode
+- direct local access via `http://localhost:41033` defaults to non-public mode
+- direct local access via `http://localhost:41033/?auth=force` forces the login screen
+
+## Current Boundaries
+
+The current version does not include:
+
+- multi-user auth
+- a password change UI
+- second-factor auth
+- audit logs
+- persisted failed-login records
+
+If those are needed later, they should be handled as a separate second-phase design.

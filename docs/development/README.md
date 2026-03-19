@@ -66,6 +66,8 @@ pnpm dev:backend
 
 - 用户说明：`README.md`
 - English README: `README.en.md`
+- 部署文档：`docs/deployment/README.md`
+- English Deployment Guide: `docs/deployment/README.en.md`
 - 中文 PRD：`docs/PRD.md`
 - English PRD: `docs/PRD.en.md`
 

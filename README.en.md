@@ -29,6 +29,7 @@ Its core job is to reduce context switching across the full workflow:
 - Quick actions palette with `Cmd/Ctrl + K`
 - Settings for Launch Command, Idle Policy, and language
 - Bilingual UI: Chinese / English
+- Public mode auth with one passphrase, session cookie, IP blocking, and `allowedRoots`
 
 ## Prerequisites
 
@@ -96,6 +97,21 @@ Desktop package build:
 pnpm tauri build
 ```
 
+## Public Deployment
+
+For a publicly reachable deployment, the current build now includes:
+
+- single-passphrase login
+- `HttpOnly` session cookie
+- a `24` hour IP block after `3` failed passphrase attempts within `10` minutes
+- server-side path restrictions via `allowedRoots`
+- HTTPS-required login for non-local hosts
+
+Deployment details are documented here:
+
+- Chinese deployment guide: `docs/deployment/README.md`
+- English deployment guide: `docs/deployment/README.en.md`
+
 ## Getting Started
 
 1. Launch the app.
@@ -140,7 +156,9 @@ Product docs:
 Development docs:
 
 - Chinese index: `docs/development/README.md`
+- Chinese deployment guide: `docs/deployment/README.md`
 - English index: `docs/development/README.en.md`
+- English deployment guide: `docs/deployment/README.en.md`
 - Architecture: `docs/development/architecture.en.md`
 - Frontend state: `docs/development/frontend-state.en.md`
 - Tauri commands: `docs/development/tauri-commands.en.md`

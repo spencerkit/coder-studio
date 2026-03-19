@@ -1,10 +1,37 @@
 use crate::ws::protocol::{WsClientEnvelope, WsEnvelope};
 use crate::*;
 
+fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
+    uri.query()
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes()).any(|(key, value)| {
+                key == "auth" && value.eq_ignore_ascii_case("force")
+            })
+        })
+        .unwrap_or(false)
+}
+
 pub(crate) async fn ws_handler(
     ws: WebSocketUpgrade,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> impl IntoResponse {
+    if let Err(error) = require_session(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+    ) {
+        return error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        });
+    }
     ws.on_upgrade(move |socket| ws_session(socket, state.app))
 }
 

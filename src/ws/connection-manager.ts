@@ -1,4 +1,5 @@
 import { healthUrl, websocketUrl } from "../shared/runtime/backend";
+import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service";
 import { WsHeartbeat } from "./heartbeat";
 import { parseWsEnvelope, type WsEventEnvelope } from "./protocol";
 
@@ -54,6 +55,9 @@ export class WsConnectionManager {
 
   private connect() {
     if (typeof window === "undefined") return;
+    if (isPublicModeActive() && !isAuthenticated()) {
+      return;
+    }
     let nextUrl = "";
     try {
       nextUrl = websocketUrl();
@@ -81,6 +85,7 @@ export class WsConnectionManager {
     this.healthProbe = fetch(healthUrl(), {
       method: "GET",
       cache: "no-store",
+      credentials: "include",
     })
       .then((response) => response.ok)
       .catch(() => false)

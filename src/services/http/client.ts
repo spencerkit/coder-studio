@@ -1,4 +1,5 @@
-import { backendBaseUrl, hasTauriRuntime } from "../../shared/runtime/backend";
+import { applyRuntimeQuery, backendBaseUrl, hasTauriRuntime } from "../../shared/runtime/backend";
+import { isPublicModeActive, markUnauthorized } from "./auth.service";
 
 export const invokeRpc = async <T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T> => {
   const errors: string[] = [];
@@ -6,9 +7,10 @@ export const invokeRpc = async <T = unknown>(command: string, payload: Record<st
 
   for (const base of candidates) {
     try {
-      const endpoint = new URL(`/api/rpc/${command}`, `${base}/`).toString();
+      const endpoint = applyRuntimeQuery(new URL(`/api/rpc/${command}`, `${base}/`)).toString();
       const response = await fetch(endpoint, {
         method: "POST",
+        credentials: "include",
         headers: {
           "content-type": "application/json"
         },
@@ -23,7 +25,11 @@ export const invokeRpc = async <T = unknown>(command: string, payload: Record<st
       }
 
       if (!response.ok || body.ok === false) {
-        throw new Error(body.error || `HTTP ${response.status}`);
+        const code = body.error || `HTTP ${response.status}`;
+        if (response.status === 401 || code === "session_missing" || code === "session_expired") {
+          markUnauthorized(code);
+        }
+        throw new Error(code);
       }
 
       return body.data as T;
@@ -33,7 +39,7 @@ export const invokeRpc = async <T = unknown>(command: string, payload: Record<st
     }
   }
 
-  if (hasTauriRuntime()) {
+  if (hasTauriRuntime() && !isPublicModeActive()) {
     try {
       const tauriCore = await import("@tauri-apps/api/core");
       return await tauriCore.invoke<T>(command, payload);

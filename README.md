@@ -28,6 +28,7 @@ Coder Studio（桌面应用名：`Agent Workbench`）是一个本地优先的桌
 - 快速操作：`Cmd/Ctrl + K` 打开命令面板
 - 设置：Launch Command、Idle Policy、语言切换
 - 国际化：中文 / English
+- Public Mode：单口令鉴权、会话 Cookie、IP 封禁、`allowedRoots` 目录白名单
 
 ## 安装前提
 
@@ -95,6 +96,21 @@ pnpm build
 pnpm tauri build
 ```
 
+## 公开部署
+
+如果要把这个项目部署到公网可访问设备上，当前版本已经提供：
+
+- 单口令登录
+- `HttpOnly` session cookie
+- 同一 IP `10` 分钟内 `3` 次口令错误后封禁 `24` 小时
+- 基于 `allowedRoots` 的服务端目录白名单
+- 对外访问时要求通过 HTTPS 反向代理提交口令
+
+部署细节请看：
+
+- 中文部署文档：`docs/deployment/README.md`
+- English Deployment Guide: `docs/deployment/README.en.md`
+
 ## 用户如何上手
 
 1. 启动应用。
@@ -139,7 +155,9 @@ pnpm tauri build
 开发文档：
 
 - 开发文档入口：`docs/development/README.md`
+- 部署文档：`docs/deployment/README.md`
 - Development Docs: `docs/development/README.en.md`
+- Deployment Guide: `docs/deployment/README.en.md`
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`
 - Tauri 命令清单：`docs/development/tauri-commands.md`

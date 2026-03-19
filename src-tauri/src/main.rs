@@ -10,9 +10,9 @@ pub(crate) use std::{
 pub(crate) use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path as AxumPath, State as AxumState,
+        ConnectInfo, OriginalUri, Path as AxumPath, State as AxumState,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -30,6 +30,7 @@ pub(crate) use tower_http::{
 };
 
 mod app;
+mod auth;
 mod command;
 mod infra;
 mod models;
@@ -39,6 +40,12 @@ mod ws;
 pub(crate) use app::{
     bootstrap_tab_state, AgentRuntime, AppState, HttpServerState, TabState, TerminalRuntime,
     DEV_BACKEND_PORT, DEV_FRONTEND_URL,
+};
+pub(crate) use auth::{
+    auth_status, ensure_optional_path_allowed, ensure_path_allowed, filter_allowed_worktrees,
+    filesystem_list_public, filesystem_roots_public, load_or_initialize_auth_runtime,
+    lock as auth_lock, login as auth_login, logout as auth_logout, require_session,
+    select_clone_root_for_target, transport_bind_config, AuthorizedRequest, RequestContext,
 };
 pub(crate) use command::http::start_transport_server;
 pub(crate) use infra::db::{
@@ -84,6 +91,7 @@ pub(crate) use services::terminal::{
 pub(crate) use services::workspace::{
     archive_session, create_session, init_workspace, queue_add, queue_complete, queue_run,
     session_update, switch_session, tab_snapshot, update_idle_policy, worktree_inspect,
+    init_workspace_internal,
 };
 pub(crate) use ws::server::{
     agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,
@@ -143,18 +151,27 @@ fn main() {
         .setup(|app| {
             let app_data = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data)?;
+            let auth_runtime =
+                load_or_initialize_auth_runtime(&app_data).map_err(std::io::Error::other)?;
             let db_path = app_data.join("agent-workbench.db");
             let conn = Connection::open(db_path)?;
             init_db(&conn)?;
             start_claude_hook_receiver(app.handle()).map_err(std::io::Error::other)?;
-            let transport_endpoint =
-                start_transport_server(app.handle()).map_err(std::io::Error::other)?;
             let state: State<AppState> = app.state();
+            {
+                let mut auth_guard = state
+                    .auth
+                    .lock()
+                    .map_err(|e| std::io::Error::other(e.to_string()))?;
+                *auth_guard = auth_runtime;
+            }
             let mut guard = state
                 .db
                 .lock()
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
             *guard = Some(conn);
+            let transport_endpoint =
+                start_transport_server(app.handle()).map_err(std::io::Error::other)?;
             if cfg!(debug_assertions) {
                 println!("Coder Studio frontend dev server: {DEV_FRONTEND_URL}");
                 println!("Coder Studio backend dev server: {transport_endpoint}");

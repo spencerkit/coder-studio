@@ -64,6 +64,8 @@ Chinese versions:
 
 - User guide: `README.en.md`
 - Chinese user guide: `README.md`
+- Chinese deployment guide: `docs/deployment/README.md`
+- English deployment guide: `docs/deployment/README.en.md`
 - Chinese PRD: `docs/PRD.md`
 - English PRD: `docs/PRD.en.md`
 

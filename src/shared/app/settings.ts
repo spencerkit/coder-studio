@@ -1,8 +1,6 @@
-import type { AppRoute, AppSettings } from "../../types/app";
+import type { AppSettings } from "../../types/app";
 
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
-const SETTINGS_ROUTE_HASH = "#/settings";
-
 export const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
   agentCommand: "claude",
@@ -46,10 +44,3 @@ export const persistStoredAppSettings = (settings: AppSettings) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 };
-
-export const readCurrentRoute = (): AppRoute => {
-  if (typeof window === "undefined") return "workspace";
-  return window.location.hash === SETTINGS_ROUTE_HASH ? "settings" : "workspace";
-};
-
-export const routeHashFor = (route: AppRoute) => (route === "settings" ? SETTINGS_ROUTE_HASH : "");

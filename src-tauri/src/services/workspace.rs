@@ -1,17 +1,19 @@
 use crate::*;
 
-#[tauri::command]
-pub(crate) fn init_workspace(
+pub(crate) fn init_workspace_internal(
     source: WorkspaceSource,
+    clone_root_override: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceInfo, String> {
     let mut tabs = state.tabs.lock().map_err(|e| e.to_string())?;
     let tab = ensure_tab(&mut tabs, &source.tab_id, &source.target);
     let project_path = match source.kind {
         WorkspaceSourceKind::Remote => {
-            let root = temp_root(&source.target)?;
+            let root = clone_root_override.unwrap_or(temp_root(&source.target)?);
             if matches!(source.target, ExecTarget::Wsl { .. }) {
                 let _ = run_cmd(&source.target, "", &["mkdir", "-p", &root]);
+            } else {
+                std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
             }
             let name = repo_name_from_url(&source.path_or_url);
             let target_path = if matches!(source.target, ExecTarget::Wsl { .. }) {
@@ -39,6 +41,14 @@ pub(crate) fn init_workspace(
         project_path,
         target: tab.target.clone(),
     })
+}
+
+#[tauri::command]
+pub(crate) fn init_workspace(
+    source: WorkspaceSource,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceInfo, String> {
+    init_workspace_internal(source, None, state)
 }
 
 #[tauri::command]

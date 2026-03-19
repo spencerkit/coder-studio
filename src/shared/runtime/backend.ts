@@ -23,6 +23,28 @@ export const readConfiguredBackendBase = () => {
   return normalizeBaseUrl(window.__CODER_STUDIO_BACKEND__ ?? "");
 };
 
+export const isLocalBrowserOrigin = () => {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+};
+
+export const isAuthForceRequested = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get("auth") === "force";
+  } catch {
+    return false;
+  }
+};
+
+export const applyRuntimeQuery = (url: URL) => {
+  if (isAuthForceRequested()) {
+    url.searchParams.set("auth", "force");
+  }
+  return url;
+};
+
 export const backendBaseUrl = () => {
   if (typeof window === "undefined") return "";
   return readConfiguredBackendBase() || normalizeBaseUrl(window.location.origin);
@@ -34,7 +56,7 @@ export const healthUrl = () => {
   base.pathname = "/health";
   base.search = "";
   base.hash = "";
-  return base.toString();
+  return applyRuntimeQuery(base).toString();
 };
 
 export const websocketUrl = () => {
@@ -44,7 +66,7 @@ export const websocketUrl = () => {
   base.pathname = "/ws";
   base.search = "";
   base.hash = "";
-  return base.toString();
+  return applyRuntimeQuery(base).toString();
 };
 
 export const hasTauriRuntime = () => typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);

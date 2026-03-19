@@ -219,6 +219,26 @@ struct AgentResizeRequest {
     rows: u16,
 }
 
+#[derive(Deserialize)]
+struct LoginRequest {
+    password: String,
+}
+
+struct RpcError {
+    status: StatusCode,
+    error: String,
+}
+
+fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
+    uri.query()
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes()).any(|(key, value)| {
+                key == "auth" && value.eq_ignore_ascii_case("force")
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn camel_to_snake(key: &str) -> String {
     let mut out = String::with_capacity(key.len());
     for ch in key.chars() {
@@ -260,6 +280,18 @@ fn json_success(data: Value) -> Response {
     .into_response()
 }
 
+fn json_success_with_cookie(data: Value, cookie: &str) -> Response {
+    let mut response = json_success(data);
+    if !cookie.is_empty() {
+        if let Ok(value) = axum::http::HeaderValue::from_str(cookie) {
+            response
+                .headers_mut()
+                .append(axum::http::header::SET_COOKIE, value);
+        }
+    }
+    response
+}
+
 fn json_error(status: StatusCode, error: String) -> Response {
     (
         status,
@@ -271,255 +303,483 @@ fn json_error(status: StatusCode, error: String) -> Response {
         .into_response()
 }
 
-pub(crate) fn dispatch_rpc(
+fn rpc_bad_request(error: impl Into<String>) -> RpcError {
+    RpcError {
+        status: StatusCode::BAD_REQUEST,
+        error: error.into(),
+    }
+}
+
+fn rpc_forbidden(error: impl Into<String>) -> RpcError {
+    RpcError {
+        status: StatusCode::FORBIDDEN,
+        error: error.into(),
+    }
+}
+
+fn require_path_access(
+    path: &str,
+    target: &ExecTarget,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    if authorized.request.public_mode {
+        ensure_path_allowed(path, target, &authorized.allowed_roots).map_err(rpc_forbidden)?;
+    }
+    Ok(())
+}
+
+fn require_optional_path_access(
+    path: Option<&str>,
+    target: &ExecTarget,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    if authorized.request.public_mode {
+        ensure_optional_path_allowed(path, target, &authorized.allowed_roots)
+            .map_err(rpc_forbidden)?;
+    }
+    Ok(())
+}
+
+fn dispatch_rpc(
     app: &tauri::AppHandle,
     command: &str,
     payload: Value,
-) -> Result<Value, String> {
+    authorized: &AuthorizedRequest,
+) -> Result<Value, RpcError> {
     match command {
         "init_workspace" => {
-            let req: InitWorkspaceRequest = parse_payload(payload)?;
-            serde_json::to_value(init_workspace(req.source, app.state())?)
-                .map_err(|e| e.to_string())
+            let req: InitWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            if authorized.request.public_mode {
+                if matches!(&req.source.kind, WorkspaceSourceKind::Local) {
+                    require_path_access(&req.source.path_or_url, &req.source.target, authorized)?;
+                }
+                let clone_root = if matches!(&req.source.kind, WorkspaceSourceKind::Remote) {
+                    Some(
+                        select_clone_root_for_target(&req.source.target, &authorized.allowed_roots)
+                            .map_err(rpc_forbidden)?,
+                    )
+                } else {
+                    None
+                };
+                serde_json::to_value(
+                    init_workspace_internal(req.source, clone_root, app.state())
+                        .map_err(rpc_bad_request)?,
+                )
+                    .map_err(|e| rpc_bad_request(e.to_string()))
+            } else {
+                serde_json::to_value(init_workspace(req.source, app.state()).map_err(rpc_bad_request)?)
+                    .map_err(|e| rpc_bad_request(e.to_string()))
+            }
         }
         "tab_snapshot" => {
-            let req: TabIdRequest = parse_payload(payload)?;
-            serde_json::to_value(tab_snapshot(req.tab_id, app.state())?).map_err(|e| e.to_string())
+            let req: TabIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(tab_snapshot(req.tab_id, app.state()).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "create_session" => {
-            let req: SessionCreateRequest = parse_payload(payload)?;
-            serde_json::to_value(create_session(req.tab_id, req.mode, app.state())?)
-                .map_err(|e| e.to_string())
+            let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                create_session(req.tab_id, req.mode, app.state()).map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "session_update" => {
-            let req: SessionUpdateRequest = parse_payload(payload)?;
-            session_update(req.tab_id, req.session_id, req.patch, app.state())?;
+            let req: SessionUpdateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            session_update(req.tab_id, req.session_id, req.patch, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "switch_session" => {
-            let req: SwitchSessionRequest = parse_payload(payload)?;
-            switch_session(req.tab_id, req.session_id, app.state())?;
+            let req: SwitchSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            switch_session(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "archive_session" => {
-            let req: ArchiveSessionRequest = parse_payload(payload)?;
-            serde_json::to_value(archive_session(req.tab_id, req.session_id, app.state())?)
-                .map_err(|e| e.to_string())
+            let req: ArchiveSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                archive_session(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_idle_policy" => {
-            let req: IdlePolicyRequest = parse_payload(payload)?;
-            update_idle_policy(req.tab_id, req.policy, app.state())?;
+            let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            update_idle_policy(req.tab_id, req.policy, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "queue_add" => {
-            let req: QueueAddRequest = parse_payload(payload)?;
-            serde_json::to_value(queue_add(
-                req.tab_id,
-                req.session_id,
-                req.text,
-                app.state(),
-            )?)
-            .map_err(|e| e.to_string())
+            let req: QueueAddRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                queue_add(req.tab_id, req.session_id, req.text, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "queue_run" => {
-            let req: QueueRunRequest = parse_payload(payload)?;
-            serde_json::to_value(queue_run(
-                req.tab_id,
-                req.session_id,
-                req.task_id,
-                app.state(),
-            )?)
-            .map_err(|e| e.to_string())
+            let req: QueueRunRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                queue_run(req.tab_id, req.session_id, req.task_id, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "queue_complete" => {
-            let req: QueueCompleteRequest = parse_payload(payload)?;
-            queue_complete(req.tab_id, req.session_id, req.task_id, app.state())?;
+            let req: QueueCompleteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            queue_complete(req.tab_id, req.session_id, req.task_id, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_status" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            serde_json::to_value(git_status(req.path, req.target)?).map_err(|e| e.to_string())
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(git_status(req.path, req.target).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_diff" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            serde_json::to_value(git_diff(req.path, req.target)?).map_err(|e| e.to_string())
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(git_diff(req.path, req.target).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_changes" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            serde_json::to_value(git_changes(req.path, req.target)?).map_err(|e| e.to_string())
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(git_changes(req.path, req.target).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_diff_file" => {
-            let req: GitDiffFileRequest = parse_payload(payload)?;
-            serde_json::to_value(git_diff_file(
-                req.path,
-                req.target,
-                req.file_path,
-                req.staged,
-            )?)
-            .map_err(|e| e.to_string())
+            let req: GitDiffFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(
+                git_diff_file(req.path, req.target, req.file_path, req.staged)
+                    .map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_file_diff_payload" => {
-            let req: GitFileSectionRequest = parse_payload(payload)?;
-            serde_json::to_value(git_file_diff_payload(
-                req.path,
-                req.target,
-                req.file_path,
-                req.section,
-            )?)
-            .map_err(|e| e.to_string())
+            let req: GitFileSectionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(
+                git_file_diff_payload(req.path, req.target, req.file_path, req.section)
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_stage_all" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            git_stage_all(req.path, req.target)?;
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_stage_all(req.path, req.target).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_stage_file" => {
-            let req: GitFileRequest = parse_payload(payload)?;
-            git_stage_file(req.path, req.target, req.file_path)?;
+            let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_stage_file(req.path, req.target, req.file_path).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_unstage_all" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            git_unstage_all(req.path, req.target)?;
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_unstage_all(req.path, req.target).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_unstage_file" => {
-            let req: GitFileRequest = parse_payload(payload)?;
-            git_unstage_file(req.path, req.target, req.file_path)?;
+            let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_unstage_file(req.path, req.target, req.file_path).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_discard_all" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            git_discard_all(req.path, req.target)?;
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_discard_all(req.path, req.target).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_discard_file" => {
-            let req: GitDiscardFileRequest = parse_payload(payload)?;
-            git_discard_file(req.path, req.target, req.file_path, req.section)?;
+            let req: GitDiscardFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            git_discard_file(req.path, req.target, req.file_path, req.section)
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_commit" => {
-            let req: GitCommitRequest = parse_payload(payload)?;
-            serde_json::to_value(git_commit(req.path, req.target, req.message)?)
-                .map_err(|e| e.to_string())
+            let req: GitCommitRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(git_commit(req.path, req.target, req.message).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "worktree_list" => {
-            let req: PathTargetRequest = parse_payload(payload)?;
-            serde_json::to_value(worktree_list(req.path, req.target)?).map_err(|e| e.to_string())
+            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            let worktrees = worktree_list(req.path, req.target.clone()).map_err(rpc_bad_request)?;
+            let filtered = if authorized.request.public_mode {
+                filter_allowed_worktrees(worktrees, &req.target, &authorized.allowed_roots)
+            } else {
+                worktrees
+            };
+            serde_json::to_value(filtered).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "worktree_inspect" => {
-            let req: WorktreeInspectRequest = parse_payload(payload)?;
-            serde_json::to_value(worktree_inspect(req.path, req.target, Some(req.depth))?)
-                .map_err(|e| e.to_string())
+            let req: WorktreeInspectRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(
+                worktree_inspect(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "workspace_tree" => {
-            let req: WorkspaceTreeRequest = parse_payload(payload)?;
-            serde_json::to_value(workspace_tree(req.path, req.target, Some(req.depth))?)
-                .map_err(|e| e.to_string())
+            let req: WorkspaceTreeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &req.target, authorized)?;
+            serde_json::to_value(
+                workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "file_preview" => {
-            let req: FilePreviewRequest = parse_payload(payload)?;
-            serde_json::to_value(file_preview(req.path)?).map_err(|e| e.to_string())
+            let req: FilePreviewRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &ExecTarget::Native, authorized)?;
+            serde_json::to_value(file_preview(req.path).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "file_save" => {
-            let req: FileSaveRequest = parse_payload(payload)?;
-            serde_json::to_value(file_save(req.path, req.content)?).map_err(|e| e.to_string())
+            let req: FileSaveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.path, &ExecTarget::Native, authorized)?;
+            serde_json::to_value(file_save(req.path, req.content).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "filesystem_roots" => {
-            let req: FilesystemRootsRequest = parse_payload(payload)?;
-            serde_json::to_value(filesystem_roots(req.target)?).map_err(|e| e.to_string())
+            let req: FilesystemRootsRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let roots = if authorized.request.public_mode {
+                filesystem_roots_public(&req.target, &authorized.allowed_roots)
+                    .map_err(rpc_forbidden)?
+            } else {
+                filesystem_roots(req.target).map_err(rpc_bad_request)?
+            };
+            serde_json::to_value(roots).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "filesystem_list" => {
-            let req: FilesystemListRequest = parse_payload(payload)?;
-            serde_json::to_value(filesystem_list(req.target, req.path)?).map_err(|e| e.to_string())
+            let req: FilesystemListRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let listing = if authorized.request.public_mode {
+                filesystem_list_public(req.target, req.path, &authorized.allowed_roots)
+                    .map_err(rpc_forbidden)?
+            } else {
+                filesystem_list(req.target, req.path).map_err(rpc_bad_request)?
+            };
+            serde_json::to_value(listing).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "command_exists" => {
-            let req: CommandAvailabilityRequest = parse_payload(payload)?;
-            serde_json::to_value(command_exists(req.command, req.target, req.cwd)?)
-                .map_err(|e| e.to_string())
+            let req: CommandAvailabilityRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_optional_path_access(req.cwd.as_deref(), &req.target, authorized)?;
+            serde_json::to_value(
+                command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
+            )
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "dialog_pick_folder" => {
-            let _req: EmptyRequest = parse_payload(payload)?;
-            serde_json::to_value(dialog_pick_folder(app.clone())?).map_err(|e| e.to_string())
+            let _req: EmptyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            if authorized.request.public_mode {
+                return Err(rpc_forbidden("dialog_disabled_in_public_mode"));
+            }
+            serde_json::to_value(dialog_pick_folder(app.clone()).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "claude_slash_skills" => {
-            let req: ClaudeSlashSkillsRequest = parse_payload(payload)?;
-            serde_json::to_value(claude_slash_skills(req.cwd)?).map_err(|e| e.to_string())
+            let req: ClaudeSlashSkillsRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.cwd, &ExecTarget::Native, authorized)?;
+            serde_json::to_value(claude_slash_skills(req.cwd).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "terminal_create" => {
-            let req: TerminalCreateRequest = parse_payload(payload)?;
-            serde_json::to_value(terminal_create(
-                req.tab_id,
-                req.cwd,
-                req.target,
-                app.clone(),
-                app.state(),
-            )?)
-            .map_err(|e| e.to_string())
+            let req: TerminalCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.cwd, &req.target, authorized)?;
+            serde_json::to_value(
+                terminal_create(req.tab_id, req.cwd, req.target, app.clone(), app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "terminal_write" => {
-            let req: TerminalWriteRequest = parse_payload(payload)?;
-            terminal_write(req.tab_id, req.terminal_id, req.input, app.state())?;
+            let req: TerminalWriteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            terminal_write(req.tab_id, req.terminal_id, req.input, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_resize" => {
-            let req: TerminalResizeRequest = parse_payload(payload)?;
-            terminal_resize(req.tab_id, req.terminal_id, req.cols, req.rows, app.state())?;
+            let req: TerminalResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            terminal_resize(req.tab_id, req.terminal_id, req.cols, req.rows, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_close" => {
-            let req: TerminalCloseRequest = parse_payload(payload)?;
-            terminal_close(req.tab_id, req.terminal_id, app.state())?;
+            let req: TerminalCloseRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            terminal_close(req.tab_id, req.terminal_id, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_start" => {
-            let req: AgentStartRequest = parse_payload(payload)?;
-            serde_json::to_value(agent_start(
-                req.tab_id,
-                req.session_id,
-                req.provider,
-                req.command,
-                req.claude_session_id,
-                req.cwd,
-                req.target,
-                app.clone(),
-                app.state(),
-            )?)
-            .map_err(|e| e.to_string())
+            let req: AgentStartRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.cwd, &req.target, authorized)?;
+            serde_json::to_value(
+                agent_start(
+                    req.tab_id,
+                    req.session_id,
+                    req.provider,
+                    req.command,
+                    req.claude_session_id,
+                    req.cwd,
+                    req.target,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "agent_send" => {
-            let req: AgentSendRequest = parse_payload(payload)?;
-            agent_send(
-                req.tab_id,
-                req.session_id,
-                req.input,
-                req.append_newline,
-                app.state(),
-            )?;
+            let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            agent_send(req.tab_id, req.session_id, req.input, req.append_newline, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_stop" => {
-            let req: AgentStopRequest = parse_payload(payload)?;
-            agent_stop(req.tab_id, req.session_id, app.state())?;
+            let req: AgentStopRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            agent_stop(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_resize" => {
-            let req: AgentResizeRequest = parse_payload(payload)?;
-            agent_resize(req.tab_id, req.session_id, req.cols, req.rows, app.state())?;
+            let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            agent_resize(req.tab_id, req.session_id, req.cols, req.rows, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
-        _ => Err(format!("unsupported_command:{command}")),
+        _ => Err(rpc_bad_request(format!("unsupported_command:{command}"))),
+    }
+}
+
+pub(crate) async fn auth_status_handler(
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    match auth_status(&state.app, &headers, client_addr, request_forces_public_mode(&uri)) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        }),
+    }
+}
+
+pub(crate) async fn auth_login_handler(
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+    Json(payload): Json<Value>,
+) -> Response {
+    let req: LoginRequest = match parse_payload(payload) {
+        Ok(req) => req,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, error),
+    };
+    match auth_login(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+        &req.password,
+    ) {
+        Ok((data, cookie)) => {
+            json_success_with_cookie(serde_json::to_value(data).unwrap_or(Value::Null), &cookie)
+        }
+        Err(error) => error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        }),
+    }
+}
+
+pub(crate) async fn auth_logout_handler(
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    match auth_logout(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+    ) {
+        Ok((data, cookie)) => {
+            json_success_with_cookie(serde_json::to_value(data).unwrap_or(Value::Null), &cookie)
+        }
+        Err(error) => error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        }),
+    }
+}
+
+pub(crate) async fn auth_lock_handler(
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    match auth_lock(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+    ) {
+        Ok((data, cookie)) => {
+            json_success_with_cookie(serde_json::to_value(data).unwrap_or(Value::Null), &cookie)
+        }
+        Err(error) => error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        }),
     }
 }
 
 pub(crate) async fn rpc_handler(
     AxumPath(command): AxumPath<String>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
     Json(payload): Json<Value>,
 ) -> Response {
-    match dispatch_rpc(&state.app, &command, payload) {
+    let authorized = match require_session(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+    ) {
+        Ok(authorized) => authorized,
+        Err(error) => return error.into_response(&RequestContext {
+            ip: client_addr.ip().to_string(),
+            user_agent: String::new(),
+            is_local_host: client_addr.ip().is_loopback(),
+            is_secure_transport: false,
+            public_mode: true,
+        }),
+    };
+
+    match dispatch_rpc(&state.app, &command, payload, &authorized) {
         Ok(data) => json_success(data),
-        Err(error) => json_error(StatusCode::BAD_REQUEST, error),
+        Err(error) => json_error(error.status, error.error),
     }
 }
 
@@ -552,6 +812,10 @@ pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
     let api_router = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
+        .route("/api/auth/status", get(auth_status_handler))
+        .route("/api/auth/login", post(auth_login_handler))
+        .route("/api/auth/logout", post(auth_logout_handler))
+        .route("/api/auth/lock", post(auth_lock_handler))
         .route("/api/rpc/:command", post(rpc_handler))
         .layer(cors);
 
@@ -567,16 +831,16 @@ pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
 }
 
 pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, String> {
-    let bind_port = if cfg!(debug_assertions) {
-        DEV_BACKEND_PORT
+    let (bind_host, bind_port) = if cfg!(debug_assertions) {
+        ("127.0.0.1".to_string(), DEV_BACKEND_PORT)
     } else {
-        0
+        transport_bind_config(app)?
     };
-    let listener =
-        std::net::TcpListener::bind(("127.0.0.1", bind_port)).map_err(|e| e.to_string())?;
+    let listener = std::net::TcpListener::bind((bind_host.as_str(), bind_port))
+        .map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let address = listener.local_addr().map_err(|e| e.to_string())?;
-    let endpoint = format!("http://127.0.0.1:{}", address.port());
+    let endpoint = format!("http://{}:{}", bind_host, address.port());
     {
         let state: State<AppState> = app.state();
         let mut guard = state.http_endpoint.lock().map_err(|e| e.to_string())?;
@@ -588,7 +852,7 @@ pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, S
             Ok(listener) => listener,
             Err(_) => return,
         };
-        let _ = axum::serve(listener, router).await;
+        let _ = axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await;
     });
     Ok(endpoint)
 }
