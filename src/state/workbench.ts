@@ -304,6 +304,23 @@ const collectLeafPaneIds = (node: SessionPaneNode | undefined | null): string[] 
   return [...collectLeafPaneIds(node.first), ...collectLeafPaneIds(node.second)];
 };
 
+const collectLeafSessionIds = (node: SessionPaneNode | undefined | null): string[] => {
+  if (!node) return [];
+  if (node.type === "leaf") return [node.sessionId];
+  return [...collectLeafSessionIds(node.first), ...collectLeafSessionIds(node.second)];
+};
+
+const findPaneIdForSessionId = (
+  node: SessionPaneNode | undefined | null,
+  sessionId: string,
+): string | undefined => {
+  if (!node) return undefined;
+  if (node.type === "leaf") {
+    return node.sessionId === sessionId ? node.id : undefined;
+  }
+  return findPaneIdForSessionId(node.first, sessionId) ?? findPaneIdForSessionId(node.second, sessionId);
+};
+
 const sanitizePaneLayout = (
   node: SessionPaneNode | undefined | null,
   fallbackSessionId: string
@@ -330,6 +347,40 @@ const sanitizePaneLayout = (
   };
 };
 
+const prunePaneLayout = (
+  node: SessionPaneNode | undefined | null,
+  validSessionIds: Set<string>,
+  seenSessionIds: Set<string>,
+): SessionPaneNode | null => {
+  if (!node) return null;
+
+  if (node.type === "leaf") {
+    if (!validSessionIds.has(node.sessionId) || seenSessionIds.has(node.sessionId)) {
+      return null;
+    }
+    seenSessionIds.add(node.sessionId);
+    return {
+      type: "leaf",
+      id: node.id || createId("pane"),
+      sessionId: node.sessionId,
+    };
+  }
+
+  const first = prunePaneLayout(node.first, validSessionIds, seenSessionIds);
+  const second = prunePaneLayout(node.second, validSessionIds, seenSessionIds);
+  if (!first && !second) return null;
+  if (!first) return second;
+  if (!second) return first;
+  return {
+    type: "split",
+    id: node.id || createId("split"),
+    axis: node.axis === "vertical" ? "vertical" : "horizontal",
+    ratio: Number.isFinite(node.ratio) ? Math.min(1, Math.max(0, node.ratio)) : 0.5,
+    first,
+    second,
+  };
+};
+
 const sanitizeTabSessions = (tab: Tab, locale: Locale): Tab => {
   const allSessions = (tab.sessions ?? []).filter(Boolean);
   const persistedSessions = allSessions.filter((session) => !session.isDraft);
@@ -340,24 +391,22 @@ const sanitizeTabSessions = (tab: Tab, locale: Locale): Tab => {
     : fallbackSessions[0].id;
   const validSessionIds = new Set(fallbackSessions.map((session) => session.id));
   const sanitizedLayout = sanitizePaneLayout(tab.paneLayout, activeSessionId);
-  const normalizedLayout = (() => {
-    const visit = (node: SessionPaneNode): SessionPaneNode => {
-      if (node.type === "leaf") {
-        return {
-          ...node,
-          sessionId: validSessionIds.has(node.sessionId) ? node.sessionId : activeSessionId
-        };
-      }
-      return {
-        ...node,
-        first: visit(node.first),
-        second: visit(node.second)
-      };
-    };
-    return visit(sanitizedLayout);
-  })();
+  const normalizedBaseLayout = prunePaneLayout(sanitizedLayout, validSessionIds, new Set()) ?? createPaneLayout(activeSessionId);
+  const coveredSessionIds = new Set(collectLeafSessionIds(normalizedBaseLayout));
+  const missingSessionIds = fallbackSessions
+    .map((session) => session.id)
+    .filter((sessionId) => !coveredSessionIds.has(sessionId));
+  const normalizedLayout = missingSessionIds.reduce<SessionPaneNode>((layout, sessionId) => ({
+    type: "split",
+    id: createId("split"),
+    axis: "vertical",
+    ratio: 0.5,
+    first: layout,
+    second: createPaneLeaf(sessionId),
+  }), normalizedBaseLayout);
   const leafIds = collectLeafPaneIds(normalizedLayout);
-  const activePaneId = leafIds.includes(tab.activePaneId) ? tab.activePaneId : leafIds[0];
+  const activePaneId = findPaneIdForSessionId(normalizedLayout, activeSessionId)
+    ?? (leafIds.includes(tab.activePaneId) ? tab.activePaneId : leafIds[0]);
 
   return {
     ...tab,
