@@ -96,6 +96,12 @@ Additional flags on specific commands:
 - `config password set --stdin`: reads the passphrase from stdin
 - `auth ip unblock --all`: removes all currently blocked IPs at once
 
+## Exit Codes
+
+- `0`: success
+- `1`: runtime or operation failure
+- `2`: command usage, argument, or input validation failure
+
 ## Runtime Commands
 
 ### `start`

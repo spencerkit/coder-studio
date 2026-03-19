@@ -31,6 +31,23 @@ import {
 } from './runtime-controller.mjs';
 import { readPackageVersion } from './state.mjs';
 
+const EXIT_SUCCESS = 0;
+const EXIT_FAILURE = 1;
+const EXIT_USAGE = 2;
+
+class CliError extends Error {
+  constructor(message, { exitCode = EXIT_FAILURE, helpTopic = null } = {}) {
+    super(message);
+    this.name = 'CliError';
+    this.exitCode = exitCode;
+    this.helpTopic = helpTopic;
+  }
+}
+
+function usageError(message, helpTopic = null) {
+  return new CliError(message, { exitCode: EXIT_USAGE, helpTopic });
+}
+
 function parseArgv(argv) {
   const args = [...argv];
   const command = args.shift() || 'help';
@@ -90,6 +107,23 @@ Usage:
   coder-studio auth <subcommand>
   coder-studio --version
 
+Global Flags:
+  --json         machine-readable output
+  --host <host>  override configured host for this invocation
+  --port <port>  override configured port for this invocation
+  -h, --help     show help
+
+Exit Codes:
+  0  success
+  1  runtime or operation failure
+  2  usage or argument error
+
+Examples:
+  coder-studio start
+  coder-studio config show --json
+  coder-studio config root set /srv/coder-studio/workspaces
+  coder-studio auth ip list
+
 Run \`coder-studio config --help\` or \`coder-studio auth --help\` for detailed usage.
 `);
 }
@@ -112,6 +146,13 @@ Usage:
 
 Supported keys:
   ${listConfigKeys().join('\n  ')}
+
+Examples:
+  coder-studio config show
+  coder-studio config get server.port
+  coder-studio config set server.port 42033
+  coder-studio config root set /srv/coder-studio/workspaces
+  coder-studio config password set --stdin
 `);
 }
 
@@ -123,6 +164,11 @@ Usage:
   coder-studio auth ip list [--json]
   coder-studio auth ip unblock <ip> [--json]
   coder-studio auth ip unblock --all [--json]
+
+Examples:
+  coder-studio auth status
+  coder-studio auth ip list
+  coder-studio auth ip unblock 203.0.113.10
 `);
 }
 
@@ -317,12 +363,18 @@ async function applyConfigUpdate(context, key, rawValue, { unset = false } = {})
   return { result, snapshot: result.snapshot };
 }
 
+function assertSupportedConfigKey(key) {
+  if (!listConfigKeys().includes(key)) {
+    throw usageError(`unsupported config key: ${key}`, 'config');
+  }
+}
+
 async function handleConfigCommand(positionals, flags, context) {
   const [subcommand, ...rest] = positionals;
 
   if (!subcommand || flags.help) {
     printConfigHelp();
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'path') {
@@ -334,7 +386,7 @@ async function handleConfigCommand(positionals, flags, context) {
       console.log(`configPath: ${report.configPath}`);
       console.log(`authPath: ${report.authPath}`);
     }
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'show') {
@@ -356,14 +408,15 @@ async function handleConfigCommand(positionals, flags, context) {
       printRuntimeMetadata(effective.status, effective.adminError);
       console.log(`runtime.liveConfig: ${effective.runtimeView ? 'yes' : 'no'}`);
     }
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'get') {
     const key = rest[0];
     if (!key) {
-      throw new Error('config_get_requires_key');
+      throw usageError('config get requires <key>', 'config');
     }
+    assertSupportedConfigKey(key);
     const effective = await loadEffectiveConfig(context);
     if (flags.json) {
       if (key === 'auth.password') {
@@ -376,30 +429,32 @@ async function handleConfigCommand(positionals, flags, context) {
     } else {
       console.log(getPublicConfigValue(effective.snapshot, key) ?? 'null');
     }
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'set') {
     const [key, ...valueParts] = rest;
     if (!key || valueParts.length === 0) {
-      throw new Error('config_set_requires_key_and_value');
+      throw usageError('config set requires <key> <value>', 'config');
     }
+    assertSupportedConfigKey(key);
     const value = valueParts.join(' ');
     const { result, snapshot } = await applyConfigUpdate(context, key, value);
     if (flags.json) printJson({ changedKeys: result.changedKeys, restartRequired: result.restartRequired, sessionsReset: result.sessionsReset, values: flattenPublicConfig(snapshot) });
     else printConfigMutation(result, snapshot, key);
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'unset') {
     const key = rest[0];
     if (!key) {
-      throw new Error('config_unset_requires_key');
+      throw usageError('config unset requires <key>', 'config');
     }
+    assertSupportedConfigKey(key);
     const { result, snapshot } = await applyConfigUpdate(context, key, null, { unset: true });
     if (flags.json) printJson({ changedKeys: result.changedKeys, restartRequired: result.restartRequired, sessionsReset: result.sessionsReset, values: flattenPublicConfig(snapshot) });
     else printConfigMutation(result, snapshot, key);
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'validate') {
@@ -418,7 +473,7 @@ async function handleConfigCommand(positionals, flags, context) {
         for (const warning of report.warnings) console.log(`- ${warning}`);
       }
     }
-    return report.ok ? 0 : 1;
+    return report.ok ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   if (subcommand === 'root') {
@@ -428,23 +483,23 @@ async function handleConfigCommand(positionals, flags, context) {
       const value = effective.snapshot.values.root.path;
       if (flags.json) printJson({ key: 'root.path', value });
       else console.log(value ?? 'null');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'set') {
-      if (valueParts.length === 0) throw new Error('config_root_set_requires_path');
+      if (valueParts.length === 0) throw usageError('config root set requires <path>', 'config');
       const value = valueParts.join(' ');
       const { result, snapshot } = await applyConfigUpdate(context, 'root.path', value);
       if (flags.json) printJson({ changedKeys: result.changedKeys, values: flattenPublicConfig(snapshot) });
       else printConfigMutation(result, snapshot, 'root.path');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'clear') {
       const { result, snapshot } = await applyConfigUpdate(context, 'root.path', null, { unset: true });
       if (flags.json) printJson({ changedKeys: result.changedKeys, values: flattenPublicConfig(snapshot) });
       else printConfigMutation(result, snapshot, 'root.path');
-      return 0;
+      return EXIT_SUCCESS;
     }
-    throw new Error('unsupported_config_root_subcommand');
+    throw usageError(`unsupported config root subcommand: ${action || '(missing)'}`, 'config');
   }
 
   if (subcommand === 'password') {
@@ -454,53 +509,53 @@ async function handleConfigCommand(positionals, flags, context) {
       const configured = effective.snapshot.values.auth.passwordConfigured;
       if (flags.json) printJson({ configured });
       else console.log(configured ? 'configured' : 'not configured');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'set') {
       const value = flags.stdin ? await readSecretFromStdin() : valueParts.join(' ');
-      if (!value) throw new Error('config_password_set_requires_value');
+      if (!value) throw usageError('config password set requires <value> or --stdin', 'config');
       const { result, snapshot } = await applyConfigUpdate(context, 'auth.password', value);
       if (flags.json) printJson({ changedKeys: result.changedKeys, configured: snapshot.values.auth.passwordConfigured, sessionsReset: result.sessionsReset });
       else printConfigMutation(result, snapshot, 'auth.password');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'clear') {
       const { result, snapshot } = await applyConfigUpdate(context, 'auth.password', null, { unset: true });
       if (flags.json) printJson({ changedKeys: result.changedKeys, configured: snapshot.values.auth.passwordConfigured, sessionsReset: result.sessionsReset });
       else printConfigMutation(result, snapshot, 'auth.password');
-      return 0;
+      return EXIT_SUCCESS;
     }
-    throw new Error('unsupported_config_password_subcommand');
+    throw usageError(`unsupported config password subcommand: ${action || '(missing)'}`, 'config');
   }
 
   if (subcommand === 'auth') {
     const [action, value] = rest;
     if (action === 'public-mode') {
-      if (!value) throw new Error('config_auth_public_mode_requires_value');
+      if (!value) throw usageError('config auth public-mode requires <on|off>', 'config');
       const normalized = normalizeConfigValue('auth.publicMode', value);
       const { result, snapshot } = await applyConfigUpdate(context, 'auth.publicMode', normalized);
       if (flags.json) printJson({ changedKeys: result.changedKeys, values: flattenPublicConfig(snapshot), sessionsReset: result.sessionsReset });
       else printConfigMutation(result, snapshot, 'auth.publicMode');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'session-idle') {
-      if (!value) throw new Error('config_auth_session_idle_requires_value');
+      if (!value) throw usageError('config auth session-idle requires <minutes>', 'config');
       const { result, snapshot } = await applyConfigUpdate(context, 'auth.sessionIdleMinutes', value);
       if (flags.json) printJson({ changedKeys: result.changedKeys, values: flattenPublicConfig(snapshot) });
       else printConfigMutation(result, snapshot, 'auth.sessionIdleMinutes');
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'session-max') {
-      if (!value) throw new Error('config_auth_session_max_requires_value');
+      if (!value) throw usageError('config auth session-max requires <hours>', 'config');
       const { result, snapshot } = await applyConfigUpdate(context, 'auth.sessionMaxHours', value);
       if (flags.json) printJson({ changedKeys: result.changedKeys, values: flattenPublicConfig(snapshot) });
       else printConfigMutation(result, snapshot, 'auth.sessionMaxHours');
-      return 0;
+      return EXIT_SUCCESS;
     }
-    throw new Error('unsupported_config_auth_subcommand');
+    throw usageError(`unsupported config auth subcommand: ${action || '(missing)'}`, 'config');
   }
 
-  throw new Error(`unsupported_config_subcommand:${subcommand}`);
+  throw usageError(`unsupported config subcommand: ${subcommand}`, 'config');
 }
 
 function printAuthStatus(report) {
@@ -538,7 +593,7 @@ async function handleAuthCommand(positionals, flags, context) {
   const [subcommand, ...rest] = positionals;
   if (!subcommand || flags.help) {
     printAuthHelp();
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   const live = await loadLiveRuntimeView(context);
@@ -575,7 +630,7 @@ async function handleAuthCommand(positionals, flags, context) {
         };
     if (flags.json) printJson(report);
     else printAuthStatus(report);
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (subcommand === 'ip') {
@@ -586,27 +641,94 @@ async function handleAuthCommand(positionals, flags, context) {
         if (!runtimeIsActive(live.status)) console.log('runtime is not running; blocked IPs are memory-only');
         printIpBlocks(live.ipBlocks);
       }
-      return 0;
+      return EXIT_SUCCESS;
     }
     if (action === 'unblock') {
       if (!runtimeIsActive(live.status)) {
         if (flags.json) printJson({ running: false, removed: 0, entries: [] });
         else console.log('runtime is not running; nothing to unblock');
-        return 0;
+        return EXIT_SUCCESS;
       }
       const payload = flags.all ? { all: true } : { ip: value };
-      if (!payload.all && !payload.ip) throw new Error('auth_ip_unblock_requires_ip_or_all');
+      if (!payload.all && !payload.ip) {
+        throw usageError('auth ip unblock requires <ip> or --all', 'auth');
+      }
       const result = await unblockAdminIp(live.status.endpoint, payload);
       if (flags.json) printJson(result);
       else {
         console.log(`removed: ${result.removed}`);
         printIpBlocks(result.entries);
       }
-      return 0;
+      return EXIT_SUCCESS;
     }
   }
 
-  throw new Error(`unsupported_auth_subcommand:${subcommand}`);
+  throw usageError(`unsupported auth subcommand: ${subcommand}`, 'auth');
+}
+
+function normalizeCliError(error) {
+  if (error instanceof CliError) {
+    return error;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const configPrefix = 'unsupported config key:';
+  if (message.startsWith('unsupported_config_key:')) {
+    return usageError(`unsupported config key: ${message.slice('unsupported_config_key:'.length)}`, 'config');
+  }
+
+  const messageMap = new Map([
+    ['invalid_server_host', 'invalid value for server.host'],
+    ['invalid_server_port', 'invalid value for server.port'],
+    ['invalid_auth_public_mode', 'invalid value for auth.publicMode; expected on/off or true/false'],
+    ['invalid_auth_password', 'invalid value for auth.password'],
+    ['invalid_auth_session_idle_minutes', 'invalid value for auth.sessionIdleMinutes'],
+    ['invalid_auth_session_max_hours', 'invalid value for auth.sessionMaxHours'],
+    ['invalid_logs_tail_lines', 'invalid value for logs.tailLines'],
+    ['invalid_system_open_command', 'invalid value for system.openCommand'],
+    ['invalid_root_path', 'invalid value for root.path'],
+    ['missing_ip', 'missing IP address'],
+    ['path_has_no_existing_parent', 'root.path must have an existing parent directory'],
+    ['empty_path', 'root.path must not be empty'],
+  ]);
+
+  if (messageMap.has(message)) {
+    return usageError(messageMap.get(message), 'config');
+  }
+
+  if (message.startsWith('invalid_')) {
+    return usageError(message.replace(/^invalid_/, 'invalid value: '), 'config');
+  }
+
+  if (message.startsWith(configPrefix)) {
+    return usageError(message, 'config');
+  }
+
+  return new CliError(message, { exitCode: EXIT_FAILURE });
+}
+
+function printCliError(error, flags) {
+  const normalized = normalizeCliError(error);
+  if (flags.json) {
+    printJson({
+      ok: false,
+      error: normalized.message,
+      exitCode: normalized.exitCode,
+      kind: normalized.exitCode === EXIT_USAGE ? 'usage' : 'runtime',
+      helpTopic: normalized.helpTopic ?? undefined,
+    });
+    return normalized.exitCode;
+  }
+
+  console.error(`error: ${normalized.message}`);
+  if (normalized.helpTopic === 'config') {
+    console.error('hint: run `coder-studio config --help`');
+  } else if (normalized.helpTopic === 'auth') {
+    console.error('hint: run `coder-studio auth --help`');
+  } else if (normalized.helpTopic === 'main') {
+    console.error('hint: run `coder-studio help`');
+  }
+  return normalized.exitCode;
 }
 
 export async function runCli(argv = process.argv.slice(2)) {
@@ -614,12 +736,12 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   if (command === '--version' || command === '-v' || flags.version) {
     console.log(await readPackageVersion());
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   if (command === 'help' || flags.help && !['config', 'auth'].includes(command)) {
     printHelp();
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   try {
@@ -657,14 +779,14 @@ export async function runCli(argv = process.argv.slice(2)) {
         console.log(`pid: ${result.pid ?? 'n/a'}`);
         console.log(`logPath: ${result.logPath}`);
       }
-      return result.status === 'failed' ? 1 : 0;
+      return result.status === 'failed' ? EXIT_FAILURE : EXIT_SUCCESS;
     }
 
     if (command === 'stop') {
       const result = await stopRuntime(options);
       if (flags.json) printJson(result);
       else console.log(result.changed ? 'coder-studio stopped' : 'coder-studio already stopped');
-      return 0;
+      return EXIT_SUCCESS;
     }
 
     if (command === 'restart') {
@@ -675,47 +797,41 @@ export async function runCli(argv = process.argv.slice(2)) {
         console.log(`endpoint: ${result.endpoint}`);
         console.log(`pid: ${result.pid ?? 'n/a'}`);
       }
-      return 0;
+      return EXIT_SUCCESS;
     }
 
     if (command === 'status') {
       const status = await getStatus(options);
       if (flags.json) printJson(status);
       else printStatus(status);
-      return status.status === 'stopped' ? 1 : 0;
+      return status.status === 'stopped' ? EXIT_FAILURE : EXIT_SUCCESS;
     }
 
     if (command === 'logs') {
       if (flags.follow) {
         await followLogs(context.options.logPath, Number.isFinite(flags.lines) ? flags.lines : context.config.values.logs.tailLines);
-        return 0;
+        return EXIT_SUCCESS;
       }
       const output = await readRuntimeLogs({ ...options, lines: Number.isFinite(flags.lines) ? flags.lines : context.config.values.logs.tailLines });
       if (output) console.log(output);
-      return 0;
+      return EXIT_SUCCESS;
     }
 
     if (command === 'open') {
       const result = await openRuntime(options);
       if (flags.json) printJson(result);
       else console.log(`opened: ${result.endpoint}`);
-      return 0;
+      return EXIT_SUCCESS;
     }
 
     if (command === 'doctor') {
       const report = await doctorRuntime(options);
       await printDoctor(report, Boolean(flags.json));
-      return report.status.status === 'running' || report.status.status === 'degraded' ? 0 : 1;
+      return report.status.status === 'running' || report.status.status === 'degraded' ? EXIT_SUCCESS : EXIT_FAILURE;
     }
   } catch (error) {
-    if (flags.json) {
-      printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
-    } else {
-      console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    return 1;
+    return printCliError(error, flags);
   }
 
-  printHelp();
-  return 1;
+  return printCliError(usageError(`unsupported command: ${command}`, 'main'), flags);
 }

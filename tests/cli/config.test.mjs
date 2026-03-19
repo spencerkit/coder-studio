@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import {
   buildEndpoint,
   DEFAULT_PORT,
@@ -15,6 +17,23 @@ import {
   updateLocalConfig,
   validateConfigSnapshot,
 } from '../../packages/coder-studio/lib/user-config.mjs';
+
+const execFileAsync = promisify(execFile);
+const CLI_BIN = path.resolve('packages/coder-studio/bin/coder-studio.mjs');
+
+async function runCli(args, { env = process.env, allowFailure = false } = {}) {
+  try {
+    return await execFileAsync(process.execPath, [CLI_BIN, ...args], {
+      env,
+      maxBuffer: 1024 * 1024 * 8,
+    });
+  } catch (error) {
+    if (allowFailure) {
+      return error;
+    }
+    throw error;
+  }
+}
 
 test('resolveStateDir prefers CODER_STUDIO_HOME override', () => {
   const result = resolveStateDir({ CODER_STUDIO_HOME: '/tmp/coder-studio-custom' }, 'linux');
@@ -118,4 +137,32 @@ test('validateConfigSnapshot reports missing root when public mode is enabled', 
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('cli help documents exit codes and common examples', async () => {
+  const result = await runCli(['help']);
+  assert.match(result.stdout, /Exit Codes:/);
+  assert.match(result.stdout, /coder-studio config show --json/);
+  assert.match(result.stdout, /coder-studio auth ip list/);
+});
+
+test('cli returns usage exit code and hint for unsupported commands', async () => {
+  const result = await runCli(['wat'], { allowFailure: true });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /unsupported command: wat/);
+  assert.match(result.stderr, /coder-studio help/);
+});
+
+test('cli returns usage exit code in json mode for invalid config usage', async () => {
+  const result = await runCli(['config', 'set', 'server.port'], { allowFailure: true });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /config set requires <key> <value>/);
+
+  const jsonResult = await runCli(['config', 'set', 'server.port', 'abc', '--json'], { allowFailure: true });
+  assert.equal(jsonResult.code, 2);
+  const body = JSON.parse(jsonResult.stdout);
+  assert.equal(body.ok, false);
+  assert.equal(body.exitCode, 2);
+  assert.equal(body.kind, 'usage');
+  assert.match(body.error, /server\.port/);
 });

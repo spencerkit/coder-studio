@@ -333,7 +333,7 @@ pub(crate) fn admin_update_config(
     for (key, value) in updates {
         match key.as_str() {
             "server.host" => {
-                let next = parse_admin_string(value, "server.host")?;
+                let next = parse_admin_string(value, "server_host")?;
                 if auth.file.bind_host != next {
                     auth.file.bind_host = next;
                     changed_keys.push(key.clone());
@@ -356,7 +356,7 @@ pub(crate) fn admin_update_config(
                 }
             }
             "auth.publicMode" => {
-                let next = parse_admin_bool(value, "auth.publicMode")?;
+                let next = parse_admin_bool(value, "auth_public_mode")?;
                 if auth.file.public_mode != next {
                     auth.file.public_mode = next;
                     changed_keys.push(key.clone());
@@ -372,14 +372,14 @@ pub(crate) fn admin_update_config(
                 }
             }
             "auth.sessionIdleMinutes" => {
-                let next = parse_admin_positive_u64(value, "auth.sessionIdleMinutes")?;
+                let next = parse_admin_positive_u64(value, "auth_session_idle_minutes")?;
                 if auth.file.session_idle_minutes != next {
                     auth.file.session_idle_minutes = next;
                     changed_keys.push(key.clone());
                 }
             }
             "auth.sessionMaxHours" => {
-                let next = parse_admin_positive_u64(value, "auth.sessionMaxHours")?;
+                let next = parse_admin_positive_u64(value, "auth_session_max_hours")?;
                 if auth.file.session_max_hours != next {
                     auth.file.session_max_hours = next;
                     changed_keys.push(key.clone());
@@ -917,9 +917,9 @@ fn parse_admin_positive_u64(value: &Value, key: &str) -> Result<u64, String> {
 fn parse_admin_port(value: &Value) -> Result<u16, String> {
     let number = value
         .as_u64()
-        .ok_or_else(|| "invalid_server.port".to_string())?;
+        .ok_or_else(|| "invalid_server_port".to_string())?;
     if number == 0 || number > u16::MAX as u64 {
-        return Err("invalid_server.port".to_string());
+        return Err("invalid_server_port".to_string());
     }
     Ok(number as u16)
 }

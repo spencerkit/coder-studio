@@ -96,6 +96,12 @@ coder-studio --version
 - `config password set --stdin`：从标准输入读取口令
 - `auth ip unblock --all`：一次解除全部当前封禁 IP
 
+## 退出码
+
+- `0`：执行成功
+- `1`：运行时或操作失败
+- `2`：命令用法、参数或输入值错误
+
 ## 运行时命令
 
 ### `start`
