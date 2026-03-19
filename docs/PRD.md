@@ -1,4 +1,4 @@
-# Agent Workbench PRD（Current Implementation Baseline）
+# Coder Studio PRD（Current Implementation Baseline）
 
 版本：2026-03-19  
 状态：现状对齐版 / Current implementation baseline  
@@ -21,7 +21,7 @@
 
 ## 2. 产品定义 / Product Summary
 
-Agent Workbench 是一个基于 Tauri 的桌面端本地工作台，用来把以下工作集中到一个操作面中：
+Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下工作集中到一个操作面中：
 
 - 连接本地或远程 Git 仓库
 - 启动并管理 Claude Agent 会话

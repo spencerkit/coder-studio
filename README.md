@@ -2,11 +2,11 @@
 
 [English](README.en.md) | [中文](README.md)
 
-Coder Studio（桌面应用名：`Agent Workbench`）是一个本地优先的桌面工作台，用于把仓库接入、Claude Agent 运行、代码浏览与编辑、Git 操作、内置终端放到同一个界面中。
+Coder Studio 是一个本地优先的桌面工作台，用于把仓库接入、Claude Agent 运行、代码浏览与编辑、Git 操作、内置终端放到同一个界面中。
 
 ## 项目是什么
 
-这个项目当前的产品形态不是“通用 AI 平台”，而是一个围绕真实 Git 仓库工作的桌面端 Agent Workbench。
+这个项目当前的产品形态不是“通用 AI 平台”，而是一个围绕真实 Git 仓库工作的桌面端工作台。
 
 它解决的核心问题是：
 
@@ -49,6 +49,26 @@ Coder Studio（桌面应用名：`Agent Workbench`）是一个本地优先的桌
 
 ```bash
 pnpm install
+```
+
+## npm CLI 安装
+
+发布后可以直接安装：
+
+```bash
+npm install -g @spencer-kit/coder-studio
+```
+
+安装后可用命令：
+
+```bash
+coder-studio start
+coder-studio stop
+coder-studio restart
+coder-studio status
+coder-studio logs -f
+coder-studio open
+coder-studio doctor
 ```
 
 ## 运行
@@ -156,8 +176,10 @@ pnpm tauri build
 
 - 开发文档入口：`docs/development/README.md`
 - 部署文档：`docs/deployment/README.md`
+- npm 发布与 CLI：`docs/development/npm-release.md`
 - Development Docs: `docs/development/README.en.md`
 - Deployment Guide: `docs/deployment/README.en.md`
+- npm Packaging and Release: `docs/development/npm-release.en.md`
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`
 - Tauri 命令清单：`docs/development/tauri-commands.md`

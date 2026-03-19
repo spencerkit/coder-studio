@@ -2,11 +2,11 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Coder Studio (desktop app name: `Agent Workbench`) is a local-first desktop workbench for connecting repositories, running Claude-based coding agents, browsing and editing code, reviewing Git changes, and working in embedded terminals from one surface.
+Coder Studio is a local-first desktop workbench for connecting repositories, running Claude-based coding agents, browsing and editing code, reviewing Git changes, and working in embedded terminals from one surface.
 
 ## What This Project Is
 
-This project is not currently positioned as a generic multi-provider AI platform. It is a desktop Agent Workbench centered around real Git repositories.
+This project is not currently positioned as a generic multi-provider AI platform. It is a desktop workbench centered around real Git repositories.
 
 Its core job is to reduce context switching across the full workflow:
 
@@ -50,6 +50,26 @@ To actually start agents, you also need:
 
 ```bash
 pnpm install
+```
+
+## npm CLI Install
+
+Once published, install it directly with:
+
+```bash
+npm install -g @spencer-kit/coder-studio
+```
+
+Available commands:
+
+```bash
+coder-studio start
+coder-studio stop
+coder-studio restart
+coder-studio status
+coder-studio logs -f
+coder-studio open
+coder-studio doctor
 ```
 
 ## Run
@@ -157,8 +177,10 @@ Development docs:
 
 - Chinese index: `docs/development/README.md`
 - Chinese deployment guide: `docs/deployment/README.md`
+- Chinese npm packaging guide: `docs/development/npm-release.md`
 - English index: `docs/development/README.en.md`
 - English deployment guide: `docs/deployment/README.en.md`
+- English npm packaging guide: `docs/development/npm-release.en.md`
 - Architecture: `docs/development/architecture.en.md`
 - Frontend state: `docs/development/frontend-state.en.md`
 - Tauri commands: `docs/development/tauri-commands.en.md`

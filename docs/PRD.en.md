@@ -1,4 +1,4 @@
-# Agent Workbench PRD (Current Implementation Baseline)
+# Coder Studio PRD (Current Implementation Baseline)
 
 Version: 2026-03-19  
 Status: current implementation baseline  
@@ -21,7 +21,7 @@ The implementation baseline comes primarily from:
 
 ## 2. Product Summary
 
-Agent Workbench is a Tauri-based desktop workbench that brings the following tasks into one operational surface:
+Coder Studio is a Tauri-based desktop workbench that brings the following tasks into one operational surface:
 
 - connecting local or remote Git repositories
 - starting and managing Claude agent sessions
