@@ -42,8 +42,8 @@ pub(crate) use app::{
     DEV_BACKEND_PORT, DEV_FRONTEND_URL,
 };
 pub(crate) use auth::{
-    auth_status, ensure_optional_path_allowed, ensure_path_allowed, filter_allowed_worktrees,
-    filesystem_list_public, filesystem_roots_public, load_or_initialize_auth_runtime,
+    auth_status, ensure_optional_path_allowed, ensure_path_allowed, filesystem_list_public,
+    filesystem_roots_public, filter_allowed_worktrees, load_or_initialize_auth_runtime,
     lock as auth_lock, login as auth_login, logout as auth_logout, require_session,
     select_clone_root_for_target, transport_bind_config, AuthorizedRequest, RequestContext,
 };
@@ -89,13 +89,22 @@ pub(crate) use services::terminal::{
     terminal_close, terminal_create, terminal_resize, terminal_write,
 };
 pub(crate) use services::workspace::{
-    archive_session, create_session, init_workspace, queue_add, queue_complete, queue_run,
-    session_update, switch_session, tab_snapshot, update_idle_policy, worktree_inspect,
-    init_workspace_internal,
+    archive_session, create_session, init_workspace, init_workspace_internal, queue_add,
+    queue_complete, queue_run, session_update, switch_session, tab_snapshot, update_idle_policy,
+    worktree_inspect,
 };
 pub(crate) use ws::server::{
     agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,
 };
+
+fn resolve_app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, std::io::Error> {
+    if let Ok(path) = std::env::var("CODER_STUDIO_DATA_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+    app.path()
+        .app_data_dir()
+        .map_err(|error| std::io::Error::other(error.to_string()))
+}
 
 fn main() {
     if std::env::args().any(|arg| arg == "--coder-studio-claude-hook") {
@@ -149,11 +158,11 @@ fn main() {
             agent_resize
         ])
         .setup(|app| {
-            let app_data = app.path().app_data_dir()?;
+            let app_data = resolve_app_data_dir(app.handle())?;
             std::fs::create_dir_all(&app_data)?;
             let auth_runtime =
                 load_or_initialize_auth_runtime(&app_data).map_err(std::io::Error::other)?;
-            let db_path = app_data.join("agent-workbench.db");
+            let db_path = app_data.join("coder-studio.db");
             let conn = Connection::open(db_path)?;
             init_db(&conn)?;
             start_claude_hook_receiver(app.handle()).map_err(std::io::Error::other)?;

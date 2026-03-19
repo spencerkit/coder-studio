@@ -4,9 +4,8 @@ use crate::*;
 fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
     uri.query()
         .map(|query| {
-            url::form_urlencoded::parse(query.as_bytes()).any(|(key, value)| {
-                key == "auth" && value.eq_ignore_ascii_case("force")
-            })
+            url::form_urlencoded::parse(query.as_bytes())
+                .any(|(key, value)| key == "auth" && value.eq_ignore_ascii_case("force"))
         })
         .unwrap_or(false)
 }

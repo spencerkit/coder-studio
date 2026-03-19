@@ -27,8 +27,14 @@ pnpm tauri dev
 Split debugging mode:
 
 ```bash
-pnpm dev
+pnpm dev:frontend
 pnpm dev:backend
+```
+
+Combined dev stack and development E2E:
+
+```bash
+pnpm dev:stack
 ```
 
 Current development ports:
@@ -52,6 +58,7 @@ Current development ports:
 - Architecture: `docs/development/architecture.en.md`
 - Frontend state: `docs/development/frontend-state.en.md`
 - Tauri commands: `docs/development/tauri-commands.en.md`
+- npm packaging and release: `docs/development/npm-release.en.md`
 
 Chinese versions:
 
@@ -59,6 +66,7 @@ Chinese versions:
 - `docs/development/architecture.md`
 - `docs/development/frontend-state.md`
 - `docs/development/tauri-commands.md`
+- `docs/development/npm-release.md`
 
 ## Related Docs
 

@@ -1,0 +1,26 @@
+{
+  "name": "@spencer-kit/coder-studio",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CLI runtime manager for Coder Studio.",
+  "bin": {
+    "coder-studio": "./bin/coder-studio.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@spencer-kit/coder-studio-linux-x64": "0.1.0",
+    "@spencer-kit/coder-studio-darwin-arm64": "0.1.0",
+    "@spencer-kit/coder-studio-darwin-x64": "0.1.0",
+    "@spencer-kit/coder-studio-win32-x64": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

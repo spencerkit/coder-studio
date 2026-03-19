@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-platform:
+    name: Publish ${{ matrix.package_slug }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            package_slug: coder-studio-linux-x64
+          - os: macos-latest
+            package_slug: coder-studio-darwin-arm64
+          - os: macos-15-intel
+            package_slug: coder-studio-darwin-x64
+          - os: windows-latest
+            package_slug: coder-studio-win32-x64
+    steps:
+      - uses: actions/checkout@v4
+      - if: startsWith(matrix.os, 'ubuntu')
+        name: Install Linux runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            wget
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
+          test "v$VERSION" = "$GITHUB_REF_NAME"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:web
+      - run: pnpm build:runtime
+      - run: pnpm build:packages
+      - run: pnpm --dir packages/${{ matrix.package_slug }} pack --pack-destination ../../.artifacts
+      - run: npm publish packages/${{ matrix.package_slug }} --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package_slug }}
+          path: .artifacts/*.tgz
+
+  publish-main:
+    name: Publish @spencer-kit/coder-studio
+    needs: publish-platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - name: Verify tag matches package version
+        run: |
+          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
+          test "v$VERSION" = "$GITHUB_REF_NAME"
+      - run: pnpm install --frozen-lockfile
+      - run: npm publish packages/coder-studio --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    name: Create GitHub Release
+    needs:
+      - publish-platform
+      - publish-main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: .release-artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: .release-artifacts/**/*.tgz

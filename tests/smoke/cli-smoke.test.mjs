@@ -1,0 +1,92 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { NPM_CMD, PNPM_CMD, run } from '../helpers/exec.mjs';
+
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const ARTIFACTS_DIR = path.join(ROOT, '.artifacts');
+const CLI_BIN_NAME = process.platform === 'win32' ? 'coder-studio.cmd' : 'coder-studio';
+const DEFAULT_TEST_PORT = 41933;
+
+async function ensureTarballs() {
+  await run(PNPM_CMD, ['pack:local'], { cwd: ROOT });
+  const files = await fs.readdir(ARTIFACTS_DIR);
+  const main = files.find((file) => file.startsWith('spencer-kit-coder-studio-') && !file.includes(process.platform));
+  const platform = files.find((file) => file.includes(process.platform));
+  assert.ok(main, 'main package tarball should exist');
+  assert.ok(platform, 'platform package tarball should exist');
+  return {
+    main: path.join(ARTIFACTS_DIR, main),
+    platform: path.join(ARTIFACTS_DIR, platform)
+  };
+}
+
+async function installLocalPackage(installDir, tarballs) {
+  await fs.writeFile(path.join(installDir, 'package.json'), JSON.stringify({ name: 'coder-studio-smoke', private: true }, null, 2));
+  await run(NPM_CMD, ['install', '--no-package-lock', '--no-save', tarballs.main, tarballs.platform], {
+    cwd: installDir,
+    env: {
+      ...process.env,
+      npm_config_fund: 'false',
+      npm_config_audit: 'false'
+    }
+  });
+  return path.join(installDir, 'node_modules', '.bin', CLI_BIN_NAME);
+}
+
+async function runCli(cliPath, args, env, allowFailure = false) {
+  try {
+    return await run(cliPath, args, { env });
+  } catch (error) {
+    if (allowFailure) {
+      return error;
+    }
+    throw error;
+  }
+}
+
+test('installed package can start, restart, report status and stop', { timeout: 600000 }, async () => {
+  const tarballs = await ensureTarballs();
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-smoke-'));
+  const installDir = path.join(tempRoot, 'install');
+  const stateDir = path.join(tempRoot, 'state');
+  await fs.mkdir(installDir, { recursive: true });
+
+  const cliPath = await installLocalPackage(installDir, tarballs);
+  const env = {
+    ...process.env,
+    CODER_STUDIO_HOME: stateDir
+  };
+
+  try {
+    const start = await runCli(cliPath, ['start', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const startResult = JSON.parse(start.stdout);
+    assert.equal(startResult.status, 'running');
+
+    const status = await runCli(cliPath, ['status', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const statusResult = JSON.parse(status.stdout);
+    assert.equal(statusResult.status, 'running');
+    assert.equal(statusResult.managed, true);
+    assert.equal(statusResult.endpoint, `http://127.0.0.1:${DEFAULT_TEST_PORT}`);
+
+    const doctor = await runCli(cliPath, ['doctor', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const doctorResult = JSON.parse(doctor.stdout);
+    assert.equal(doctorResult.status.status, 'running');
+    assert.ok(doctorResult.bundle.binaryPath.includes('coder-studio'));
+
+    const restart = await runCli(cliPath, ['restart', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const restartResult = JSON.parse(restart.stdout);
+    assert.equal(restartResult.status, 'running');
+
+    await runCli(cliPath, ['stop', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const stopped = await runCli(cliPath, ['status', '--port', String(DEFAULT_TEST_PORT), '--json'], env, true);
+    const stoppedResult = JSON.parse(stopped.stdout || stopped.stdout?.toString?.() || '{}');
+    assert.equal(stoppedResult.status, 'stopped');
+  } finally {
+    await runCli(cliPath, ['stop', '--port', String(DEFAULT_TEST_PORT), '--json'], env, true);
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

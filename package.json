@@ -1,16 +1,29 @@
 {
-  "name": "agent-workbench",
+  "name": "coder-studio-workspace",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:stack": "node scripts/test/start-dev-stack.mjs",
     "dev:frontend": "vite",
     "dev:backend": "cargo run --manifest-path src-tauri/Cargo.toml",
-    "build": "vite build",
+    "build": "pnpm build:web",
+    "build:web": "vite build",
+    "build:runtime": "cargo build --release --manifest-path src-tauri/Cargo.toml",
+    "build:packages": "node scripts/build/build-packages.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:release": "playwright test -c playwright.release.config.ts",
+    "test:cli": "node --test tests/cli/config.test.mjs tests/cli/platform.test.mjs",
+    "test:smoke": "node --test tests/smoke/cli-smoke.test.mjs",
+    "pack:local": "node scripts/release/pack-local.mjs",
+    "release:check": "pnpm build:web && pnpm build:runtime && pnpm build:packages",
+    "version:sync": "node scripts/release/sync-version.mjs",
+    "changeset": "changeset",
+    "changeset:version": "pnpm changeset version && pnpm version:sync",
+    "release:publish": "changeset publish"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.8",
@@ -28,6 +41,7 @@
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
     "@playwright/test": "^1.58.2",
     "@tauri-apps/cli": "^2.0.0",
     "@types/react": "^19.2.14",

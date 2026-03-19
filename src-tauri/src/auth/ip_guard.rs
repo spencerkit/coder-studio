@@ -30,7 +30,9 @@ pub(crate) fn record_failure(map: &mut IpGuardMap, ip: &str, now_ms: i64) -> Opt
     }
 
     let state = map.entry(ip.to_string()).or_default();
-    if state.first_failed_at_ms == 0 || now_ms.saturating_sub(state.first_failed_at_ms) > BLOCK_WINDOW_MS {
+    if state.first_failed_at_ms == 0
+        || now_ms.saturating_sub(state.first_failed_at_ms) > BLOCK_WINDOW_MS
+    {
         state.fail_count = 1;
         state.first_failed_at_ms = now_ms;
         state.last_failed_at_ms = now_ms;

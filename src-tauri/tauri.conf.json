@@ -1,7 +1,7 @@
 {
-  "productName": "Agent Workbench",
+  "productName": "Coder Studio",
   "version": "0.1.0",
-  "identifier": "com.agent.workbench",
+  "identifier": "com.spencerkit.coderstudio",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build",

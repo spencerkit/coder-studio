@@ -1,0 +1,11 @@
+{
+  "name": "@spencer-kit/coder-studio-linux-x64",
+  "version": "0.1.0",
+  "description": "Linux x64 runtime bundle for Coder Studio.",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin", "dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

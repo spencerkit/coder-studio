@@ -225,10 +225,22 @@ pub(crate) fn auth_status(
         false
     };
 
-    Ok(status_response(&auth.file, &request, authenticated && password_configured))
+    Ok(status_response(
+        &auth.file,
+        &request,
+        authenticated && password_configured,
+    ))
 }
 
 pub(crate) fn transport_bind_config(app: &tauri::AppHandle) -> Result<(String, u16), String> {
+    if let Ok(host) = std::env::var("CODER_STUDIO_HOST") {
+        let port = std::env::var("CODER_STUDIO_PORT")
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(crate::DEV_BACKEND_PORT);
+        return Ok((host, port));
+    }
+
     let state: State<AppState> = app.state();
     let auth = state.auth.lock().map_err(|e| e.to_string())?;
     Ok((auth.file.bind_host.clone(), auth.file.bind_port))
@@ -301,7 +313,8 @@ pub(crate) fn login(
     prune_expired_sessions(&mut auth.file, now_ms);
     let token = random_hex(32).map_err(AuthFailure::internal)?;
     let created_at = format_rfc3339(now_ms);
-    let expires_at_ms = now_ms.saturating_add((auth.file.session_max_hours as i64) * 60 * 60 * 1000);
+    let expires_at_ms =
+        now_ms.saturating_add((auth.file.session_max_hours as i64) * 60 * 60 * 1000);
     let expires_at = format_rfc3339(expires_at_ms);
     auth.file.sessions.push(AuthSessionRecord {
         id: format!("sess_{}", random_hex(8).map_err(AuthFailure::internal)?),
@@ -373,9 +386,11 @@ pub(crate) fn require_session(
     }
 
     ensure_transport_allowed(&request)?;
-    let token = read_cookie_token(headers)
-        .ok_or_else(|| AuthFailure::new(StatusCode::UNAUTHORIZED, "session_missing").clear_cookie())?;
-    let authenticated = authenticate_session(&mut auth, &token, true).map_err(AuthFailure::internal)?;
+    let token = read_cookie_token(headers).ok_or_else(|| {
+        AuthFailure::new(StatusCode::UNAUTHORIZED, "session_missing").clear_cookie()
+    })?;
+    let authenticated =
+        authenticate_session(&mut auth, &token, true).map_err(AuthFailure::internal)?;
     if authenticated.is_none() {
         return Err(AuthFailure::new(StatusCode::UNAUTHORIZED, "session_expired").clear_cookie());
     }
@@ -531,10 +546,7 @@ pub(crate) fn filter_allowed_worktrees(
         .collect()
 }
 
-pub(crate) fn ensure_ip_not_blocked(
-    app: &tauri::AppHandle,
-    ip: &str,
-) -> Result<(), AuthFailure> {
+pub(crate) fn ensure_ip_not_blocked(app: &tauri::AppHandle, ip: &str) -> Result<(), AuthFailure> {
     let state: State<AppState> = app.state();
     let mut guard = state
         .ip_guard
@@ -630,7 +642,11 @@ fn password_configured(file: &AuthFile) -> bool {
     !file.password.trim().is_empty()
 }
 
-fn status_response(file: &AuthFile, request: &RequestContext, authenticated: bool) -> AuthStatusResponse {
+fn status_response(
+    file: &AuthFile,
+    request: &RequestContext,
+    authenticated: bool,
+) -> AuthStatusResponse {
     AuthStatusResponse {
         public_mode: request.public_mode,
         authenticated,
@@ -677,7 +693,12 @@ fn request_context(
 
 fn request_ip(headers: &HeaderMap, client_addr: SocketAddr) -> String {
     if let Some(forwarded_for) = header_name_string(headers, "x-forwarded-for") {
-        if let Some(ip) = forwarded_for.split(',').next().map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(ip) = forwarded_for
+            .split(',')
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             return ip.to_string();
         }
     }
@@ -723,7 +744,10 @@ fn forwarded_token(headers: &HeaderMap, key: &str) -> Option<String> {
 }
 
 fn header_string(headers: &HeaderMap, key: axum::http::header::HeaderName) -> Option<String> {
-    headers.get(key).and_then(|value| value.to_str().ok()).map(|value| value.to_string())
+    headers
+        .get(key)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string())
 }
 
 fn header_name_string(headers: &HeaderMap, key: &str) -> Option<String> {
@@ -735,7 +759,9 @@ fn header_name_string(headers: &HeaderMap, key: &str) -> Option<String> {
 
 fn header_url_scheme(headers: &HeaderMap, key: axum::http::header::HeaderName) -> Option<String> {
     let url = headers.get(key)?.to_str().ok()?;
-    Url::parse(url).ok().map(|parsed| parsed.scheme().to_string())
+    Url::parse(url)
+        .ok()
+        .map(|parsed| parsed.scheme().to_string())
 }
 
 fn header_url_host(headers: &HeaderMap, key: axum::http::header::HeaderName) -> Option<String> {
@@ -764,11 +790,17 @@ fn normalize_host(value: &str) -> String {
             .map(|(host, _)| host.to_ascii_lowercase())
             .unwrap_or_else(|| trimmed.to_ascii_lowercase());
     }
-    trimmed.trim_matches('[').trim_matches(']').to_ascii_lowercase()
+    trimmed
+        .trim_matches('[')
+        .trim_matches(']')
+        .to_ascii_lowercase()
 }
 
 fn is_local_host(value: &str) -> bool {
-    matches!(normalize_host(value).as_str(), "localhost" | "127.0.0.1" | "::1")
+    matches!(
+        normalize_host(value).as_str(),
+        "localhost" | "127.0.0.1" | "::1"
+    )
 }
 
 fn read_cookie_token(headers: &HeaderMap) -> Option<String> {
@@ -806,7 +838,8 @@ fn authenticate_session(
         return Ok(None);
     };
 
-    let last_seen_ms = parse_rfc3339_ms(&runtime.file.sessions[index].last_seen_at).unwrap_or_default();
+    let last_seen_ms =
+        parse_rfc3339_ms(&runtime.file.sessions[index].last_seen_at).unwrap_or_default();
     if touch && now_ms.saturating_sub(last_seen_ms) >= SESSION_TOUCH_SAVE_INTERVAL_MS {
         runtime.file.sessions[index].last_seen_at = format_rfc3339(now_ms);
         changed = true;
@@ -915,7 +948,10 @@ fn format_cookie_time(value: i64) -> String {
         .to_string()
 }
 
-fn normalized_allowed_roots(target: &ExecTarget, allowed_roots: &[String]) -> Result<Vec<String>, String> {
+fn normalized_allowed_roots(
+    target: &ExecTarget,
+    allowed_roots: &[String],
+) -> Result<Vec<String>, String> {
     let mut roots = Vec::new();
     for root in allowed_roots {
         let normalized = match normalize_path_for_target(root, target) {

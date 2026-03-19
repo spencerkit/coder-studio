@@ -39,3 +39,12 @@ Thumbs.db
 output
 .tmp
 .playwright-cli
+.artifacts/
+packages/coder-studio-linux-x64/bin/coder-studio
+packages/coder-studio-linux-x64/dist/
+packages/coder-studio-darwin-arm64/bin/coder-studio
+packages/coder-studio-darwin-arm64/dist/
+packages/coder-studio-darwin-x64/bin/coder-studio
+packages/coder-studio-darwin-x64/dist/
+packages/coder-studio-win32-x64/bin/coder-studio.exe
+packages/coder-studio-win32-x64/dist/

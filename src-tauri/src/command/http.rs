@@ -232,9 +232,8 @@ struct RpcError {
 fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
     uri.query()
         .map(|query| {
-            url::form_urlencoded::parse(query.as_bytes()).any(|(key, value)| {
-                key == "auth" && value.eq_ignore_ascii_case("force")
-            })
+            url::form_urlencoded::parse(query.as_bytes())
+                .any(|(key, value)| key == "auth" && value.eq_ignore_ascii_case("force"))
         })
         .unwrap_or(false)
 }
@@ -365,10 +364,12 @@ fn dispatch_rpc(
                     init_workspace_internal(req.source, clone_root, app.state())
                         .map_err(rpc_bad_request)?,
                 )
-                    .map_err(|e| rpc_bad_request(e.to_string()))
+                .map_err(|e| rpc_bad_request(e.to_string()))
             } else {
-                serde_json::to_value(init_workspace(req.source, app.state()).map_err(rpc_bad_request)?)
-                    .map_err(|e| rpc_bad_request(e.to_string()))
+                serde_json::to_value(
+                    init_workspace(req.source, app.state()).map_err(rpc_bad_request)?,
+                )
+                .map_err(|e| rpc_bad_request(e.to_string()))
             }
         }
         "tab_snapshot" => {
@@ -381,7 +382,7 @@ fn dispatch_rpc(
             serde_json::to_value(
                 create_session(req.tab_id, req.mode, app.state()).map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "session_update" => {
             let req: SessionUpdateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -397,9 +398,10 @@ fn dispatch_rpc(
         "archive_session" => {
             let req: ArchiveSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             serde_json::to_value(
-                archive_session(req.tab_id, req.session_id, app.state()).map_err(rpc_bad_request)?,
+                archive_session(req.tab_id, req.session_id, app.state())
+                    .map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -412,7 +414,7 @@ fn dispatch_rpc(
                 queue_add(req.tab_id, req.session_id, req.text, app.state())
                     .map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "queue_run" => {
             let req: QueueRunRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -420,7 +422,7 @@ fn dispatch_rpc(
                 queue_run(req.tab_id, req.session_id, req.task_id, app.state())
                     .map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "queue_complete" => {
             let req: QueueCompleteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -453,7 +455,7 @@ fn dispatch_rpc(
                 git_diff_file(req.path, req.target, req.file_path, req.staged)
                     .map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_file_diff_payload" => {
             let req: GitFileSectionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -504,8 +506,10 @@ fn dispatch_rpc(
         "git_commit" => {
             let req: GitCommitRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(git_commit(req.path, req.target, req.message).map_err(rpc_bad_request)?)
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            serde_json::to_value(
+                git_commit(req.path, req.target, req.message).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "worktree_list" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -524,7 +528,7 @@ fn dispatch_rpc(
             serde_json::to_value(
                 worktree_inspect(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "workspace_tree" => {
             let req: WorkspaceTreeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -532,7 +536,7 @@ fn dispatch_rpc(
             serde_json::to_value(
                 workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "file_preview" => {
             let req: FilePreviewRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -567,12 +571,13 @@ fn dispatch_rpc(
             serde_json::to_value(listing).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "command_exists" => {
-            let req: CommandAvailabilityRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let req: CommandAvailabilityRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
             require_optional_path_access(req.cwd.as_deref(), &req.target, authorized)?;
             serde_json::to_value(
                 command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
             )
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "dialog_pick_folder" => {
             let _req: EmptyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -635,8 +640,14 @@ fn dispatch_rpc(
         }
         "agent_send" => {
             let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            agent_send(req.tab_id, req.session_id, req.input, req.append_newline, app.state())
-                .map_err(rpc_bad_request)?;
+            agent_send(
+                req.tab_id,
+                req.session_id,
+                req.input,
+                req.append_newline,
+                app.state(),
+            )
+            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_stop" => {
@@ -660,7 +671,12 @@ pub(crate) async fn auth_status_handler(
     ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> Response {
-    match auth_status(&state.app, &headers, client_addr, request_forces_public_mode(&uri)) {
+    match auth_status(
+        &state.app,
+        &headers,
+        client_addr,
+        request_forces_public_mode(&uri),
+    ) {
         Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
         Err(error) => error.into_response(&RequestContext {
             ip: client_addr.ip().to_string(),
@@ -768,13 +784,15 @@ pub(crate) async fn rpc_handler(
         request_forces_public_mode(&uri),
     ) {
         Ok(authorized) => authorized,
-        Err(error) => return error.into_response(&RequestContext {
-            ip: client_addr.ip().to_string(),
-            user_agent: String::new(),
-            is_local_host: client_addr.ip().is_loopback(),
-            is_secure_transport: false,
-            public_mode: true,
-        }),
+        Err(error) => {
+            return error.into_response(&RequestContext {
+                ip: client_addr.ip().to_string(),
+                user_agent: String::new(),
+                is_local_host: client_addr.ip().is_loopback(),
+                is_secure_transport: false,
+                public_mode: true,
+            })
+        }
     };
 
     match dispatch_rpc(&state.app, &command, payload, &authorized) {
@@ -784,10 +802,32 @@ pub(crate) async fn rpc_handler(
 }
 
 pub(crate) async fn health_handler() -> impl IntoResponse {
-    Json(json!({ "ok": true }))
+    Json(json!({
+        "ok": true,
+        "product": "coder-studio",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
 }
 
 pub(crate) fn frontend_dist_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("CODER_STUDIO_DIST_DIR") {
+        return PathBuf::from(path);
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let sibling_dist = exe_dir.join("../dist");
+            if sibling_dist.exists() {
+                return sibling_dist;
+            }
+
+            let local_dist = exe_dir.join("dist");
+            if local_dist.exists() {
+                return local_dist;
+            }
+        }
+    }
+
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist")
 }
 
@@ -798,9 +838,29 @@ pub(crate) fn frontend_assets_dir() -> PathBuf {
 pub(crate) async fn spa_shell_handler() -> impl IntoResponse {
     let index_file = frontend_dist_dir().join("index.html");
     let html = std::fs::read_to_string(index_file).unwrap_or_else(|_| {
-        r#"<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Agent Workbench</title></head><body><div id="root"></div></body></html>"#.to_string()
+        r#"<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Coder Studio</title></head><body><div id="root"></div></body></html>"#.to_string()
     });
     Html(html)
+}
+
+pub(crate) async fn shutdown_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    if !client_addr.ip().is_loopback() {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "shutdown_requires_loopback".to_string(),
+        );
+    }
+
+    let app = state.app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        app.exit(0);
+    });
+
+    json_success(json!({ "ok": true }))
 }
 
 pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
@@ -812,6 +872,7 @@ pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
     let api_router = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
+        .route("/api/system/shutdown", post(shutdown_handler))
         .route("/api/auth/status", get(auth_status_handler))
         .route("/api/auth/login", post(auth_login_handler))
         .route("/api/auth/logout", post(auth_logout_handler))
@@ -836,8 +897,8 @@ pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, S
     } else {
         transport_bind_config(app)?
     };
-    let listener = std::net::TcpListener::bind((bind_host.as_str(), bind_port))
-        .map_err(|e| e.to_string())?;
+    let listener =
+        std::net::TcpListener::bind((bind_host.as_str(), bind_port)).map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let address = listener.local_addr().map_err(|e| e.to_string())?;
     let endpoint = format!("http://{}:{}", bind_host, address.port());
@@ -852,7 +913,11 @@ pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, S
             Ok(listener) => listener,
             Err(_) => return,
         };
-        let _ = axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await;
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
     });
     Ok(endpoint)
 }

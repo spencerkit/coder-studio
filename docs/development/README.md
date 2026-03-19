@@ -29,8 +29,14 @@ pnpm tauri dev
 分离式调试：
 
 ```bash
-pnpm dev
+pnpm dev:frontend
 pnpm dev:backend
+```
+
+联动调试与开发态 E2E：
+
+```bash
+pnpm dev:stack
 ```
 
 当前开发端口：
@@ -54,6 +60,7 @@ pnpm dev:backend
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`
 - Tauri 命令清单：`docs/development/tauri-commands.md`
+- npm 发布与 CLI：`docs/development/npm-release.md`
 
 英文版：
 
@@ -61,6 +68,7 @@ pnpm dev:backend
 - `docs/development/architecture.en.md`
 - `docs/development/frontend-state.en.md`
 - `docs/development/tauri-commands.en.md`
+- `docs/development/npm-release.en.md`
 
 ## 关联文档
 

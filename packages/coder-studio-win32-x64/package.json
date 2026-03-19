@@ -1,0 +1,11 @@
+{
+  "name": "@spencer-kit/coder-studio-win32-x64",
+  "version": "0.1.0",
+  "description": "Windows x64 runtime bundle for Coder Studio.",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["bin", "dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

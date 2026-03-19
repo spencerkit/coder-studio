@@ -1,0 +1,11 @@
+{
+  "name": "@spencer-kit/coder-studio-darwin-x64",
+  "version": "0.1.0",
+  "description": "macOS x64 runtime bundle for Coder Studio.",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin", "dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

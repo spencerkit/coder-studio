@@ -412,9 +412,9 @@ pub(crate) fn resolve_git_repo_path(path: &str, target: &ExecTarget) -> Result<S
 
 pub(crate) fn temp_root(target: &ExecTarget) -> Result<String, String> {
     if matches!(target, ExecTarget::Wsl { .. }) {
-        Ok("/tmp/agent-workbench".to_string())
+        Ok("/tmp/coder-studio".to_string())
     } else {
-        let root = std::env::temp_dir().join("agent-workbench");
+        let root = std::env::temp_dir().join("coder-studio");
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
         Ok(root.to_string_lossy().to_string())
     }
