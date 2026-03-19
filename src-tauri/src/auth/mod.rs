@@ -45,7 +45,9 @@ pub(crate) struct AuthFile {
     pub public_mode: bool,
     #[serde(default)]
     pub password: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub root_path: String,
+    #[serde(default, skip_serializing)]
     pub allowed_roots: Vec<String>,
     #[serde(default = "default_bind_host")]
     pub bind_host: String,
@@ -72,6 +74,7 @@ impl Default for AuthRuntime {
                 version: 1,
                 public_mode: default_public_mode(),
                 password: String::new(),
+                root_path: String::new(),
                 allowed_roots: Vec::new(),
                 bind_host: default_bind_host(),
                 bind_port: default_bind_port(),
@@ -94,6 +97,71 @@ pub(crate) struct AuthStatusResponse {
     pub session_idle_minutes: u64,
     pub session_max_hours: u64,
     pub allowed_roots: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminServerConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminRootConfig {
+    pub path: Option<String>,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminAuthConfig {
+    pub public_mode: bool,
+    pub password_configured: bool,
+    pub session_idle_minutes: u64,
+    pub session_max_hours: u64,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminConfigResponse {
+    pub server: AdminServerConfig,
+    pub root: AdminRootConfig,
+    pub auth: AdminAuthConfig,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminConfigUpdateResponse {
+    pub config: AdminConfigResponse,
+    pub changed_keys: Vec<String>,
+    pub restart_required: bool,
+    pub sessions_reset: bool,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BlockedIpEntry {
+    pub ip: String,
+    pub fail_count: u32,
+    pub first_failed_at: Option<String>,
+    pub last_failed_at: Option<String>,
+    pub blocked_until: String,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminAuthStatusResponse {
+    pub server: AdminServerConfig,
+    pub root: AdminRootConfig,
+    pub auth: AdminAuthConfig,
+    pub blocked_ip_count: usize,
+}
+
+#[derive(Clone, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdminIpUnblockResponse {
+    pub removed: usize,
+    pub entries: Vec<BlockedIpEntry>,
 }
 
 #[derive(Clone, Debug)]
@@ -244,6 +312,152 @@ pub(crate) fn transport_bind_config(app: &tauri::AppHandle) -> Result<(String, u
     let state: State<AppState> = app.state();
     let auth = state.auth.lock().map_err(|e| e.to_string())?;
     Ok((auth.file.bind_host.clone(), auth.file.bind_port))
+}
+
+pub(crate) fn admin_config(app: &tauri::AppHandle) -> Result<AdminConfigResponse, String> {
+    let state: State<AppState> = app.state();
+    let auth = state.auth.lock().map_err(|e| e.to_string())?;
+    Ok(admin_config_response(&auth.file))
+}
+
+pub(crate) fn admin_update_config(
+    app: &tauri::AppHandle,
+    updates: &Map<String, Value>,
+) -> Result<AdminConfigUpdateResponse, String> {
+    let state: State<AppState> = app.state();
+    let mut auth = state.auth.lock().map_err(|e| e.to_string())?;
+    let mut changed_keys = Vec::new();
+    let mut restart_required = false;
+    let mut sessions_reset = false;
+
+    for (key, value) in updates {
+        match key.as_str() {
+            "server.host" => {
+                let next = parse_admin_string(value, "server.host")?;
+                if auth.file.bind_host != next {
+                    auth.file.bind_host = next;
+                    changed_keys.push(key.clone());
+                    restart_required = true;
+                }
+            }
+            "server.port" => {
+                let next = parse_admin_port(value)?;
+                if auth.file.bind_port != next {
+                    auth.file.bind_port = next;
+                    changed_keys.push(key.clone());
+                    restart_required = true;
+                }
+            }
+            "root.path" => {
+                let next = parse_admin_root_path(value)?;
+                if effective_root_path(&auth.file) != next {
+                    set_root_path(&mut auth.file, next);
+                    changed_keys.push(key.clone());
+                }
+            }
+            "auth.publicMode" => {
+                let next = parse_admin_bool(value, "auth.publicMode")?;
+                if auth.file.public_mode != next {
+                    auth.file.public_mode = next;
+                    changed_keys.push(key.clone());
+                    sessions_reset = true;
+                }
+            }
+            "auth.password" => {
+                let next = parse_admin_optional_string(value)?.unwrap_or_default();
+                if auth.file.password != next {
+                    auth.file.password = next;
+                    changed_keys.push(key.clone());
+                    sessions_reset = true;
+                }
+            }
+            "auth.sessionIdleMinutes" => {
+                let next = parse_admin_positive_u64(value, "auth.sessionIdleMinutes")?;
+                if auth.file.session_idle_minutes != next {
+                    auth.file.session_idle_minutes = next;
+                    changed_keys.push(key.clone());
+                }
+            }
+            "auth.sessionMaxHours" => {
+                let next = parse_admin_positive_u64(value, "auth.sessionMaxHours")?;
+                if auth.file.session_max_hours != next {
+                    auth.file.session_max_hours = next;
+                    changed_keys.push(key.clone());
+                }
+            }
+            other => return Err(format!("unsupported_config_key:{other}")),
+        }
+    }
+
+    sanitize_auth_file(&mut auth.file);
+    if sessions_reset {
+        auth.file.sessions.clear();
+    }
+    save_runtime(&mut auth)?;
+
+    Ok(AdminConfigUpdateResponse {
+        config: admin_config_response(&auth.file),
+        changed_keys,
+        restart_required,
+        sessions_reset,
+    })
+}
+
+pub(crate) fn admin_auth_status(app: &tauri::AppHandle) -> Result<AdminAuthStatusResponse, String> {
+    let state: State<AppState> = app.state();
+    let auth = state.auth.lock().map_err(|e| e.to_string())?;
+    let blocked_ip_count = {
+        let mut ip_guard = state.ip_guard.lock().map_err(|e| e.to_string())?;
+        ip_guard::list_blocked(&mut ip_guard, now_epoch_ms()).len()
+    };
+
+    Ok(AdminAuthStatusResponse {
+        server: AdminServerConfig {
+            host: auth.file.bind_host.clone(),
+            port: auth.file.bind_port,
+        },
+        root: AdminRootConfig {
+            path: effective_root_path(&auth.file),
+        },
+        auth: AdminAuthConfig {
+            public_mode: auth.file.public_mode,
+            password_configured: password_configured(&auth.file),
+            session_idle_minutes: auth.file.session_idle_minutes,
+            session_max_hours: auth.file.session_max_hours,
+        },
+        blocked_ip_count,
+    })
+}
+
+pub(crate) fn admin_blocked_ips(app: &tauri::AppHandle) -> Result<Vec<BlockedIpEntry>, String> {
+    let state: State<AppState> = app.state();
+    let mut ip_guard = state.ip_guard.lock().map_err(|e| e.to_string())?;
+    Ok(ip_guard::list_blocked(&mut ip_guard, now_epoch_ms())
+        .into_iter()
+        .map(blocked_ip_entry)
+        .collect())
+}
+
+pub(crate) fn admin_unblock_ip(
+    app: &tauri::AppHandle,
+    ip: Option<&str>,
+    clear_all: bool,
+) -> Result<AdminIpUnblockResponse, String> {
+    let state: State<AppState> = app.state();
+    let mut ip_guard = state.ip_guard.lock().map_err(|e| e.to_string())?;
+    let now_ms = now_epoch_ms();
+    let removed = if clear_all {
+        ip_guard::unblock_all(&mut ip_guard, now_ms)
+    } else if let Some(ip) = ip.map(str::trim).filter(|value| !value.is_empty()) {
+        usize::from(ip_guard::unblock_ip(&mut ip_guard, ip))
+    } else {
+        return Err("missing_ip".to_string());
+    };
+    let entries = ip_guard::list_blocked(&mut ip_guard, now_ms)
+        .into_iter()
+        .map(blocked_ip_entry)
+        .collect();
+    Ok(AdminIpUnblockResponse { removed, entries })
 }
 
 pub(crate) fn login(
@@ -562,17 +776,22 @@ pub(crate) fn ensure_ip_not_blocked(app: &tauri::AppHandle, ip: &str) -> Result<
 }
 
 fn build_default_auth_file() -> Result<AuthFile, String> {
-    let mut allowed_roots = Vec::new();
+    let mut root_path = String::new();
     if let Ok(home) = filesystem_home_for_target(&ExecTarget::Native) {
         let root = PathBuf::from(home).join("coder-studio-workspaces");
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-        allowed_roots.push(root.to_string_lossy().to_string());
+        root_path = root.to_string_lossy().to_string();
     }
     Ok(AuthFile {
         version: 1,
         public_mode: default_public_mode(),
         password: String::new(),
-        allowed_roots,
+        root_path: root_path.clone(),
+        allowed_roots: if root_path.is_empty() {
+            Vec::new()
+        } else {
+            vec![root_path]
+        },
         bind_host: default_bind_host(),
         bind_port: default_bind_port(),
         session_idle_minutes: DEFAULT_SESSION_IDLE_MINUTES,
@@ -603,17 +822,115 @@ fn sanitize_auth_file(file: &mut AuthFile) {
     if file.bind_port == 0 {
         file.bind_port = DEFAULT_BIND_PORT;
     }
-    let mut roots = Vec::new();
-    for root in std::mem::take(&mut file.allowed_roots) {
-        let trimmed = root.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if !roots.iter().any(|existing| existing == trimmed) {
-            roots.push(trimmed.to_string());
-        }
+    let root_path = if let Some(root) = trim_to_option(&file.root_path) {
+        Some(root)
+    } else {
+        std::mem::take(&mut file.allowed_roots)
+            .into_iter()
+            .find_map(|root| trim_to_option(&root))
+    };
+    set_root_path(file, root_path);
+}
+
+fn trim_to_option(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     }
-    file.allowed_roots = roots;
+}
+
+fn set_root_path(file: &mut AuthFile, root_path: Option<String>) {
+    let root_path = root_path.unwrap_or_default();
+    file.root_path = root_path.clone();
+    file.allowed_roots = if root_path.is_empty() {
+        Vec::new()
+    } else {
+        vec![root_path]
+    };
+}
+
+fn effective_root_path(file: &AuthFile) -> Option<String> {
+    trim_to_option(&file.root_path)
+}
+
+fn admin_config_response(file: &AuthFile) -> AdminConfigResponse {
+    AdminConfigResponse {
+        server: AdminServerConfig {
+            host: file.bind_host.clone(),
+            port: file.bind_port,
+        },
+        root: AdminRootConfig {
+            path: effective_root_path(file),
+        },
+        auth: AdminAuthConfig {
+            public_mode: file.public_mode,
+            password_configured: password_configured(file),
+            session_idle_minutes: file.session_idle_minutes,
+            session_max_hours: file.session_max_hours,
+        },
+    }
+}
+
+fn blocked_ip_entry(record: ip_guard::IpBlockRecord) -> BlockedIpEntry {
+    BlockedIpEntry {
+        ip: record.ip,
+        fail_count: record.fail_count,
+        first_failed_at: format_optional_rfc3339(record.first_failed_at_ms),
+        last_failed_at: format_optional_rfc3339(record.last_failed_at_ms),
+        blocked_until: format_rfc3339(record.blocked_until_ms),
+    }
+}
+
+fn format_optional_rfc3339(value: i64) -> Option<String> {
+    if value <= 0 {
+        None
+    } else {
+        Some(format_rfc3339(value))
+    }
+}
+
+fn parse_admin_string(value: &Value, key: &str) -> Result<String, String> {
+    parse_admin_optional_string(value)?.ok_or_else(|| format!("invalid_{key}"))
+}
+
+fn parse_admin_optional_string(value: &Value) -> Result<Option<String>, String> {
+    match value {
+        Value::Null => Ok(None),
+        Value::String(text) => Ok(trim_to_option(text)),
+        other => Err(format!("invalid_string:{other}")),
+    }
+}
+
+fn parse_admin_bool(value: &Value, key: &str) -> Result<bool, String> {
+    value.as_bool().ok_or_else(|| format!("invalid_{key}"))
+}
+
+fn parse_admin_positive_u64(value: &Value, key: &str) -> Result<u64, String> {
+    value
+        .as_u64()
+        .filter(|candidate| *candidate > 0)
+        .ok_or_else(|| format!("invalid_{key}"))
+}
+
+fn parse_admin_port(value: &Value) -> Result<u16, String> {
+    let number = value
+        .as_u64()
+        .ok_or_else(|| "invalid_server.port".to_string())?;
+    if number == 0 || number > u16::MAX as u64 {
+        return Err("invalid_server.port".to_string());
+    }
+    Ok(number as u16)
+}
+
+fn parse_admin_root_path(value: &Value) -> Result<Option<String>, String> {
+    let Some(path) = parse_admin_optional_string(value)? else {
+        return Ok(None);
+    };
+    let normalized = normalize_native_path(&path)?;
+    ensure_directory_exists(&ExecTarget::Native, &normalized)?;
+    Ok(Some(normalized))
 }
 
 fn save_runtime(runtime: &mut AuthRuntime) -> Result<(), String> {
@@ -1042,4 +1359,61 @@ fn path_label(path: &str) -> String {
         .map(|value| value.to_string_lossy().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| path.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_auth_file_migrates_allowed_roots_to_root_path() {
+        let mut file = AuthFile {
+            version: 1,
+            public_mode: true,
+            password: String::new(),
+            root_path: String::new(),
+            allowed_roots: vec!["/tmp/workspaces".to_string(), "/tmp/other".to_string()],
+            bind_host: String::new(),
+            bind_port: 0,
+            session_idle_minutes: 0,
+            session_max_hours: 0,
+            sessions: Vec::new(),
+        };
+
+        sanitize_auth_file(&mut file);
+
+        assert_eq!(file.root_path, "/tmp/workspaces");
+        assert_eq!(file.allowed_roots, vec!["/tmp/workspaces".to_string()]);
+        assert_eq!(file.bind_host, DEFAULT_BIND_HOST);
+        assert_eq!(file.bind_port, DEFAULT_BIND_PORT);
+        assert_eq!(file.session_idle_minutes, DEFAULT_SESSION_IDLE_MINUTES);
+        assert_eq!(file.session_max_hours, DEFAULT_SESSION_MAX_HOURS);
+    }
+
+    #[test]
+    fn set_root_path_keeps_single_effective_root() {
+        let mut file = AuthFile {
+            version: 1,
+            public_mode: true,
+            password: String::new(),
+            root_path: String::new(),
+            allowed_roots: vec!["/tmp/workspaces".to_string()],
+            bind_host: DEFAULT_BIND_HOST.to_string(),
+            bind_port: DEFAULT_BIND_PORT,
+            session_idle_minutes: DEFAULT_SESSION_IDLE_MINUTES,
+            session_max_hours: DEFAULT_SESSION_MAX_HOURS,
+            sessions: Vec::new(),
+        };
+
+        set_root_path(&mut file, Some("/srv/coder-studio".to_string()));
+        assert_eq!(
+            effective_root_path(&file),
+            Some("/srv/coder-studio".to_string())
+        );
+        assert_eq!(file.allowed_roots, vec!["/srv/coder-studio".to_string()]);
+
+        set_root_path(&mut file, None);
+        assert_eq!(effective_root_path(&file), None);
+        assert!(file.allowed_roots.is_empty());
+    }
 }

@@ -28,7 +28,7 @@ Coder Studio 是一个本地优先的桌面工作台，用于把仓库接入、C
 - 快速操作：`Cmd/Ctrl + K` 打开命令面板
 - 设置：Launch Command、Idle Policy、语言切换
 - 国际化：中文 / English
-- Public Mode：单口令鉴权、会话 Cookie、IP 封禁、`allowedRoots` 目录白名单
+- Public Mode：单口令鉴权、会话 Cookie、IP 封禁、`root.path` 单根目录白名单
 
 ## 安装前提
 
@@ -69,7 +69,15 @@ coder-studio status
 coder-studio logs -f
 coder-studio open
 coder-studio doctor
+coder-studio config show
+coder-studio config validate
+coder-studio config root set /srv/coder-studio/workspaces
+coder-studio config password set --stdin
+coder-studio auth status
+coder-studio auth ip list
 ```
+
+详细命令说明见：`docs/development/cli.md`
 
 ## 运行
 
@@ -123,7 +131,7 @@ pnpm tauri build
 - 单口令登录
 - `HttpOnly` session cookie
 - 同一 IP `10` 分钟内 `3` 次口令错误后封禁 `24` 小时
-- 基于 `allowedRoots` 的服务端目录白名单
+- 基于 `root.path` 的服务端单根目录白名单
 - 对外访问时要求通过 HTTPS 反向代理提交口令
 
 部署细节请看：
@@ -176,9 +184,11 @@ pnpm tauri build
 
 - 开发文档入口：`docs/development/README.md`
 - 部署文档：`docs/deployment/README.md`
+- CLI 命令手册：`docs/development/cli.md`
 - npm 发布与 CLI：`docs/development/npm-release.md`
 - Development Docs: `docs/development/README.en.md`
 - Deployment Guide: `docs/deployment/README.en.md`
+- CLI Manual: `docs/development/cli.en.md`
 - npm Packaging and Release: `docs/development/npm-release.en.md`
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`

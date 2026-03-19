@@ -1,13 +1,34 @@
+import os from 'node:os';
+import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
-const REMOTE_REPO_URL = 'https://example.com/repo.git';
+const HOME_DIR = os.homedir();
+const HOME_LABEL = path.basename(HOME_DIR) || HOME_DIR;
 
-const launchRemoteWorkspace = async (page: Page, repoUrl = REMOTE_REPO_URL) => {
+const openLaunchOverlay = async (page: Page) => {
   await page.goto('/');
-  await expect(page.getByTestId('overlay')).toBeVisible();
-  await page.getByTestId('choice-remote').click();
-  await page.getByTestId('git-input').fill(repoUrl);
+  const overlay = page.getByTestId('overlay');
+  if (await overlay.count()) {
+    await expect(overlay).toBeVisible();
+    return;
+  }
+  await page.getByRole('button', { name: 'Add workspace' }).click();
+  await expect(overlay).toBeVisible();
+};
+
+const launchLocalWorkspace = async (page: Page) => {
+  await page.goto('/');
+  if (await page.getByTestId('workspace-topbar').count()) {
+    return;
+  }
+
+  await openLaunchOverlay(page);
+  await expect(page.getByTestId('choice-local-only')).toBeVisible();
+  await expect(page.getByTestId('folder-select')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Home' }).click();
+  await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -24,23 +45,23 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('remote workspace flow opens the workspace shell', async ({ page }) => {
-  await launchRemoteWorkspace(page);
-  await expect(page.getByTestId('workspace-topbar')).toContainText('repo.git');
+test('local workspace flow opens the workspace shell', async ({ page }) => {
+  await launchLocalWorkspace(page);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(HOME_LABEL);
   await expect(page.getByTestId('settings-open')).toBeVisible();
 });
 
-test('local mode shows the server-side folder picker shell', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId('choice-local').click();
+test('launch overlay shows the server-side folder picker shell', async ({ page }) => {
+  await openLaunchOverlay(page);
 
+  await expect(page.getByTestId('choice-local-only')).toBeVisible();
   await expect(page.getByTestId('folder-select')).toBeVisible();
   await expect(page.getByTestId('folder-selected')).toBeVisible();
   await expect(page.getByTestId('start-workspace')).toBeVisible();
 });
 
 test('settings appearance controls can switch locale', async ({ page }) => {
-  await launchRemoteWorkspace(page);
+  await launchLocalWorkspace(page);
   await page.getByTestId('settings-open').click();
   await page.getByRole('button', { name: 'Appearance' }).click();
   await page.getByRole('button', { name: '中文' }).click();
@@ -50,7 +71,7 @@ test('settings appearance controls can switch locale', async ({ page }) => {
 });
 
 test('settings persist across route changes and reloads', async ({ page }) => {
-  await launchRemoteWorkspace(page);
+  await launchLocalWorkspace(page);
   await page.getByTestId('settings-open').click();
 
   await expect(page.getByTestId('settings-page')).toBeVisible();
@@ -68,9 +89,9 @@ test('settings persist across route changes and reloads', async ({ page }) => {
 });
 
 test('restores the last workspace after reload', async ({ page }) => {
-  await launchRemoteWorkspace(page);
+  await launchLocalWorkspace(page);
   await page.reload();
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-topbar')).toContainText('repo.git');
+  await expect(page.getByTestId('workspace-topbar')).toContainText(HOME_LABEL);
 });

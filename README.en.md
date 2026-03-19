@@ -29,7 +29,7 @@ Its core job is to reduce context switching across the full workflow:
 - Quick actions palette with `Cmd/Ctrl + K`
 - Settings for Launch Command, Idle Policy, and language
 - Bilingual UI: Chinese / English
-- Public mode auth with one passphrase, session cookie, IP blocking, and `allowedRoots`
+- Public mode auth with one passphrase, session cookie, IP blocking, and a single `root.path` access root
 
 ## Prerequisites
 
@@ -70,7 +70,15 @@ coder-studio status
 coder-studio logs -f
 coder-studio open
 coder-studio doctor
+coder-studio config show
+coder-studio config validate
+coder-studio config root set /srv/coder-studio/workspaces
+coder-studio config password set --stdin
+coder-studio auth status
+coder-studio auth ip list
 ```
+
+For the detailed command reference, see `docs/development/cli.en.md`.
 
 ## Run
 
@@ -124,7 +132,7 @@ For a publicly reachable deployment, the current build now includes:
 - single-passphrase login
 - `HttpOnly` session cookie
 - a `24` hour IP block after `3` failed passphrase attempts within `10` minutes
-- server-side path restrictions via `allowedRoots`
+- server-side single-root restrictions via `root.path`
 - HTTPS-required login for non-local hosts
 
 Deployment details are documented here:
@@ -177,9 +185,11 @@ Development docs:
 
 - Chinese index: `docs/development/README.md`
 - Chinese deployment guide: `docs/deployment/README.md`
+- Chinese CLI manual: `docs/development/cli.md`
 - Chinese npm packaging guide: `docs/development/npm-release.md`
 - English index: `docs/development/README.en.md`
 - English deployment guide: `docs/deployment/README.en.md`
+- English CLI manual: `docs/development/cli.en.md`
 - English npm packaging guide: `docs/development/npm-release.en.md`
 - Architecture: `docs/development/architecture.en.md`
 - Frontend state: `docs/development/frontend-state.en.md`

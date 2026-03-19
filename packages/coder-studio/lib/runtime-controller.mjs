@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
-import { buildEndpoint, DEFAULT_HOST, DEFAULT_PORT, resolveDataDir, resolveLogPath, resolveStateDir } from './config.mjs';
+import { buildEndpoint, DEFAULT_HOST, DEFAULT_LOG_TAIL_LINES, DEFAULT_PORT, resolveDataDir, resolveLogPath, resolveStateDir } from './config.mjs';
 import { fetchHealth, requestShutdown, waitForHealth } from './http.mjs';
 import { assertRuntimeBundle, resolvePlatformPackage } from './platform.mjs';
 import { ensureFile, isPidRunning, openExternal, spawnBackground, spawnForeground, terminateProcess, waitForProcessExit } from './process-utils.mjs';
@@ -13,6 +13,7 @@ function resolveOptions(input = {}) {
   const endpoint = input.endpoint || buildEndpoint(host, port);
   const dataDir = input.dataDir || resolveDataDir(stateDir, input.env);
   const logPath = input.logPath || resolveLogPath(stateDir);
+  const tailLines = Number(input.tailLines ?? DEFAULT_LOG_TAIL_LINES);
   return {
     ...input,
     stateDir,
@@ -21,6 +22,8 @@ function resolveOptions(input = {}) {
     endpoint,
     dataDir,
     logPath,
+    tailLines: Number.isFinite(tailLines) && tailLines > 0 ? tailLines : DEFAULT_LOG_TAIL_LINES,
+    openCommand: input.openCommand || null,
     env: input.env || process.env
   };
 }
@@ -324,13 +327,14 @@ export async function openRuntime(input = {}) {
   const status = await getStatus(options);
   const running = status.status === 'running' || status.status === 'degraded';
   const active = running ? status : await startRuntime(options);
-  await openExternal(active.endpoint, options.env);
+  const openEnv = options.openCommand ? { ...options.env, CODER_STUDIO_OPEN_COMMAND: options.openCommand } : options.env;
+  await openExternal(active.endpoint, openEnv);
   return active;
 }
 
 export async function readRuntimeLogs(input = {}) {
   const options = resolveOptions(input);
-  return readLogTail(options.logPath, input.lines ?? 80);
+  return readLogTail(options.logPath, input.lines ?? options.tailLines ?? DEFAULT_LOG_TAIL_LINES);
 }
 
 export async function doctorRuntime(input = {}) {

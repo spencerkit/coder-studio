@@ -1,5 +1,5 @@
 pub(crate) use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -41,6 +41,7 @@ pub(crate) use app::{
     AgentRuntime, AppState, HttpServerState, TerminalRuntime, DEV_BACKEND_PORT, DEV_FRONTEND_URL,
 };
 pub(crate) use auth::{
+    admin_auth_status, admin_blocked_ips, admin_config, admin_unblock_ip, admin_update_config,
     auth_status, ensure_optional_path_allowed, ensure_path_allowed, filesystem_list_public,
     filesystem_roots_public, filter_allowed_worktrees, load_or_initialize_auth_runtime,
     lock as auth_lock, login as auth_login, logout as auth_logout, require_session,
@@ -53,9 +54,8 @@ pub(crate) use infra::db::{
     mark_active_sessions_interrupted_on_boot, patch_workspace_view_state, set_session_claude_id,
     set_session_status, switch_workspace_session,
     update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session,
-    workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
-    workspace_snapshot as load_workspace_snapshot,
+    update_workspace_session, workbench_bootstrap as load_workbench_bootstrap,
+    workspace_access_context, workspace_snapshot as load_workspace_snapshot,
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
@@ -68,13 +68,13 @@ pub(crate) use infra::support::{
     list_directories_for_target, native_parent_path, parse_git_changes, read_target_file_text,
     resolve_git_command_path, wsl_parent_path,
 };
-pub(crate) use infra::time::{default_idle_policy, mode_label, now_label, now_ts, status_label};
+pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentStartResult, ArchiveEntry, ClaudeSlashSkillEntry,
     CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, QueueTask, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
-    SessionPatch, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
+    IdlePolicy, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
+    SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
     WorkbenchLayout, WorkbenchUiState, WorkspaceLaunchResult, WorkspaceSnapshot, WorkspaceSource,
     WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
     WorktreeDetail, WorktreeInfo,
@@ -97,10 +97,10 @@ pub(crate) use services::terminal::{
     terminal_close, terminal_create, terminal_resize, terminal_write,
 };
 pub(crate) use services::workspace::{
-    activate_workspace, archive_session, close_workspace, create_session,
-    launch_workspace, launch_workspace_internal, session_update, switch_session,
-    update_idle_policy, update_workbench_layout, workbench_bootstrap, workspace_snapshot,
-    workspace_view_update, worktree_inspect,
+    activate_workspace, archive_session, close_workspace, create_session, launch_workspace,
+    launch_workspace_internal, session_update, switch_session, update_idle_policy,
+    update_workbench_layout, workbench_bootstrap, workspace_snapshot, workspace_view_update,
+    worktree_inspect,
 };
 pub(crate) use ws::server::{
     agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,

@@ -48,11 +48,12 @@ async function runCli(cliPath, args, env, allowFailure = false) {
   }
 }
 
-test('installed package can start, restart, report status and stop', { timeout: 600000 }, async () => {
+test('installed package can manage runtime and auth config', { timeout: 600000 }, async () => {
   const tarballs = await ensureTarballs();
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-smoke-'));
   const installDir = path.join(tempRoot, 'install');
   const stateDir = path.join(tempRoot, 'state');
+  const accessibleRoot = path.join(tempRoot, 'accessible-root');
   await fs.mkdir(installDir, { recursive: true });
 
   const cliPath = await installLocalPackage(installDir, tarballs);
@@ -62,31 +63,75 @@ test('installed package can start, restart, report status and stop', { timeout: 
   };
 
   try {
-    const start = await runCli(cliPath, ['start', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const configShow = await runCli(cliPath, ['config', 'show', '--json'], env);
+    const configShowResult = JSON.parse(configShow.stdout);
+    assert.equal(configShowResult.values['server.port'], 41033);
+
+    const setPort = await runCli(cliPath, ['config', 'set', 'server.port', String(DEFAULT_TEST_PORT), '--json'], env);
+    assert.deepEqual(JSON.parse(setPort.stdout).changedKeys, ['server.port']);
+
+    const setRoot = await runCli(cliPath, ['config', 'root', 'set', accessibleRoot, '--json'], env);
+    assert.deepEqual(JSON.parse(setRoot.stdout).changedKeys, ['root.path']);
+
+    const setPassword = await runCli(cliPath, ['config', 'password', 'set', 'secret-pass', '--json'], env);
+    const setPasswordResult = JSON.parse(setPassword.stdout);
+    assert.equal(setPasswordResult.configured, true);
+
+    const validate = await runCli(cliPath, ['config', 'validate', '--json'], env);
+    const validateResult = JSON.parse(validate.stdout);
+    assert.equal(validateResult.ok, true);
+
+    const start = await runCli(cliPath, ['start', '--json'], env);
     const startResult = JSON.parse(start.stdout);
     assert.equal(startResult.status, 'running');
+    assert.equal(startResult.endpoint, `http://127.0.0.1:${DEFAULT_TEST_PORT}`);
 
-    const status = await runCli(cliPath, ['status', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const status = await runCli(cliPath, ['status', '--json'], env);
     const statusResult = JSON.parse(status.stdout);
     assert.equal(statusResult.status, 'running');
     assert.equal(statusResult.managed, true);
     assert.equal(statusResult.endpoint, `http://127.0.0.1:${DEFAULT_TEST_PORT}`);
 
-    const doctor = await runCli(cliPath, ['doctor', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const authStatus = await runCli(cliPath, ['auth', 'status', '--json'], env);
+    const authStatusResult = JSON.parse(authStatus.stdout);
+    assert.equal(authStatusResult.runtimeRunning, true);
+    assert.equal(authStatusResult.server.port, DEFAULT_TEST_PORT);
+    assert.equal(authStatusResult.root.path, accessibleRoot);
+    assert.equal(authStatusResult.auth.passwordConfigured, true);
+
+    const ipList = await runCli(cliPath, ['auth', 'ip', 'list', '--json'], env);
+    const ipListResult = JSON.parse(ipList.stdout);
+    assert.equal(ipListResult.running, true);
+    assert.deepEqual(ipListResult.entries, []);
+
+    const unblockAll = await runCli(cliPath, ['auth', 'ip', 'unblock', '--all', '--json'], env);
+    const unblockAllResult = JSON.parse(unblockAll.stdout);
+    assert.equal(unblockAllResult.removed, 0);
+
+    const liveRoot = path.join(tempRoot, 'live-root');
+    const liveRootUpdate = await runCli(cliPath, ['config', 'root', 'set', liveRoot, '--json'], env);
+    const liveRootUpdateResult = JSON.parse(liveRootUpdate.stdout);
+    assert.deepEqual(liveRootUpdateResult.changedKeys, ['root.path']);
+
+    const authStatusAfterUpdate = await runCli(cliPath, ['auth', 'status', '--json'], env);
+    const authStatusAfterUpdateResult = JSON.parse(authStatusAfterUpdate.stdout);
+    assert.equal(authStatusAfterUpdateResult.root.path, liveRoot);
+
+    const doctor = await runCli(cliPath, ['doctor', '--json'], env);
     const doctorResult = JSON.parse(doctor.stdout);
     assert.equal(doctorResult.status.status, 'running');
     assert.ok(doctorResult.bundle.binaryPath.includes('coder-studio'));
 
-    const restart = await runCli(cliPath, ['restart', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
+    const restart = await runCli(cliPath, ['restart', '--json'], env);
     const restartResult = JSON.parse(restart.stdout);
     assert.equal(restartResult.status, 'running');
 
-    await runCli(cliPath, ['stop', '--port', String(DEFAULT_TEST_PORT), '--json'], env);
-    const stopped = await runCli(cliPath, ['status', '--port', String(DEFAULT_TEST_PORT), '--json'], env, true);
+    await runCli(cliPath, ['stop', '--json'], env);
+    const stopped = await runCli(cliPath, ['status', '--json'], env, true);
     const stoppedResult = JSON.parse(stopped.stdout || stopped.stdout?.toString?.() || '{}');
     assert.equal(stoppedResult.status, 'stopped');
   } finally {
-    await runCli(cliPath, ['stop', '--port', String(DEFAULT_TEST_PORT), '--json'], env, true);
+    await runCli(cliPath, ['stop', '--json'], env, true);
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });

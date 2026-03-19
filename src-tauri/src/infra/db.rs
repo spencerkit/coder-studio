@@ -1,5 +1,5 @@
-use chrono::TimeZone;
 use crate::*;
+use chrono::TimeZone;
 use serde::de::DeserializeOwned;
 
 const SESSION_STREAM_LIMIT: usize = 200_000;
@@ -19,7 +19,6 @@ struct WorkspaceRow {
 
 #[derive(Clone)]
 struct SessionRow {
-    id: u64,
     workspace_id: String,
     archived_at: Option<i64>,
     sort_order: i64,
@@ -162,7 +161,10 @@ fn load_workspace_row(conn: &Connection, workspace_id: &str) -> Result<Workspace
         })
 }
 
-fn load_workspace_row_by_root(conn: &Connection, root_path: &str) -> Result<Option<WorkspaceRow>, String> {
+fn load_workspace_row_by_root(
+    conn: &Connection,
+    root_path: &str,
+) -> Result<Option<WorkspaceRow>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, title, root_path, source_kind, source_value, git_url, target_json, idle_policy_json
@@ -183,7 +185,6 @@ fn session_from_payload(payload: &str) -> Result<SessionInfo, String> {
 
 fn session_row_from_query(row: &rusqlite::Row<'_>) -> Result<SessionRow, rusqlite::Error> {
     Ok(SessionRow {
-        id: row.get::<_, i64>("id")? as u64,
         workspace_id: row.get("workspace_id")?,
         archived_at: row.get("archived_at")?,
         sort_order: row.get("sort_order")?,
@@ -191,22 +192,35 @@ fn session_row_from_query(row: &rusqlite::Row<'_>) -> Result<SessionRow, rusqlit
     })
 }
 
-fn load_session_row(conn: &Connection, workspace_id: &str, session_id: u64) -> Result<SessionRow, String> {
+fn load_session_row(
+    conn: &Connection,
+    workspace_id: &str,
+    session_id: u64,
+) -> Result<SessionRow, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, workspace_id, archived_at, sort_order, payload
+            "SELECT workspace_id, archived_at, sort_order, payload
              FROM workspace_sessions
              WHERE workspace_id = ?1 AND id = ?2",
         )
         .map_err(|e| e.to_string())?;
-    stmt.query_row(params![workspace_id, session_id as i64], session_row_from_query)
-        .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => "session_not_found".to_string(),
-            other => other.to_string(),
-        })
+    stmt.query_row(
+        params![workspace_id, session_id as i64],
+        session_row_from_query,
+    )
+    .map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => "session_not_found".to_string(),
+        other => other.to_string(),
+    })
 }
 
-fn persist_session_row(conn: &Connection, workspace_id: &str, session: &SessionInfo, archived_at: Option<i64>, sort_order: i64) -> Result<(), String> {
+fn persist_session_row(
+    conn: &Connection,
+    workspace_id: &str,
+    session: &SessionInfo,
+    archived_at: Option<i64>,
+    sort_order: i64,
+) -> Result<(), String> {
     let payload = json_string(session)?;
     conn.execute(
         "UPDATE workspace_sessions
@@ -279,7 +293,10 @@ fn default_view_state(active_session_id: u64) -> WorkspaceViewState {
     }
 }
 
-fn load_view_state_from_conn(conn: &Connection, workspace_id: &str) -> Result<WorkspaceViewState, String> {
+fn load_view_state_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<WorkspaceViewState, String> {
     let payload: String = conn
         .query_row(
             "SELECT payload FROM workspace_view_state WHERE workspace_id = ?1",
@@ -293,7 +310,11 @@ fn load_view_state_from_conn(conn: &Connection, workspace_id: &str) -> Result<Wo
     parse_json(&payload)
 }
 
-fn save_view_state_to_conn(conn: &Connection, workspace_id: &str, view_state: &WorkspaceViewState) -> Result<(), String> {
+fn save_view_state_to_conn(
+    conn: &Connection,
+    workspace_id: &str,
+    view_state: &WorkspaceViewState,
+) -> Result<(), String> {
     let payload = json_string(view_state)?;
     conn.execute(
         "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
@@ -305,14 +326,18 @@ fn save_view_state_to_conn(conn: &Connection, workspace_id: &str, view_state: &W
     Ok(())
 }
 
-fn load_sessions_from_conn(conn: &Connection, workspace_id: &str, archived: bool) -> Result<Vec<SessionRow>, String> {
+fn load_sessions_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+    archived: bool,
+) -> Result<Vec<SessionRow>, String> {
     let sql = if archived {
-        "SELECT id, workspace_id, archived_at, sort_order, payload
+        "SELECT workspace_id, archived_at, sort_order, payload
          FROM workspace_sessions
          WHERE workspace_id = ?1 AND archived_at IS NOT NULL
          ORDER BY archived_at DESC, id DESC"
     } else {
-        "SELECT id, workspace_id, archived_at, sort_order, payload
+        "SELECT workspace_id, archived_at, sort_order, payload
          FROM workspace_sessions
          WHERE workspace_id = ?1 AND archived_at IS NULL
          ORDER BY sort_order ASC, last_active_at DESC, id DESC"
@@ -348,7 +373,10 @@ fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, S
         .collect()
 }
 
-fn build_snapshot_from_conn(conn: &Connection, workspace_id: &str) -> Result<WorkspaceSnapshot, String> {
+fn build_snapshot_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<WorkspaceSnapshot, String> {
     let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
     let mut sessions = load_sessions_from_conn(conn, workspace_id, false)?
         .into_iter()
@@ -408,18 +436,31 @@ fn build_bootstrap_from_conn(conn: &Connection) -> Result<WorkbenchBootstrap, St
     if next_open_ids != ui_state.open_workspace_ids {
         ui_state.open_workspace_ids = next_open_ids;
         if let Some(active) = ui_state.active_workspace_id.clone() {
-            if !ui_state.open_workspace_ids.iter().any(|item| item == &active) {
+            if !ui_state
+                .open_workspace_ids
+                .iter()
+                .any(|item| item == &active)
+            {
                 ui_state.active_workspace_id = ui_state.open_workspace_ids.first().cloned();
             }
         }
         save_ui_state_to_conn(conn, &ui_state)?;
     }
-    Ok(WorkbenchBootstrap { ui_state, workspaces })
+    Ok(WorkbenchBootstrap {
+        ui_state,
+        workspaces,
+    })
 }
 
-fn ensure_workspace_open_in_ui(conn: &Connection, workspace_id: &str) -> Result<(WorkbenchUiState, bool), String> {
+fn ensure_workspace_open_in_ui(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(WorkbenchUiState, bool), String> {
     let mut ui_state = load_ui_state_from_conn(conn)?;
-    let already_open = ui_state.open_workspace_ids.iter().any(|item| item == workspace_id);
+    let already_open = ui_state
+        .open_workspace_ids
+        .iter()
+        .any(|item| item == workspace_id);
     if !already_open {
         ui_state.open_workspace_ids.push(workspace_id.to_string());
     }
@@ -499,7 +540,13 @@ pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Res
         let row = row.map_err(|e| e.to_string())?;
         let mut session = session_from_payload(&row.payload)?;
         session.status = SessionStatus::Interrupted;
-        persist_session_row(conn, &row.workspace_id, &session, row.archived_at, row.sort_order)?;
+        persist_session_row(
+            conn,
+            &row.workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )?;
     }
     Ok(())
 }
@@ -513,11 +560,16 @@ pub(crate) fn with_db<T>(
     f(conn)
 }
 
-pub(crate) fn workbench_bootstrap(state: &State<'_, AppState>) -> Result<WorkbenchBootstrap, String> {
+pub(crate) fn workbench_bootstrap(
+    state: &State<'_, AppState>,
+) -> Result<WorkbenchBootstrap, String> {
     with_db(state, build_bootstrap_from_conn)
 }
 
-pub(crate) fn workspace_snapshot(state: &State<'_, AppState>, workspace_id: &str) -> Result<WorkspaceSnapshot, String> {
+pub(crate) fn workspace_snapshot(
+    state: &State<'_, AppState>,
+    workspace_id: &str,
+) -> Result<WorkspaceSnapshot, String> {
     with_db(state, |conn| build_snapshot_from_conn(conn, workspace_id))
 }
 
@@ -539,7 +591,8 @@ pub(crate) fn launch_workspace_record(
 ) -> Result<WorkspaceLaunchResult, String> {
     with_db(state, |conn| {
         let mut created = false;
-        let workspace_row = if let Some(existing) = load_workspace_row_by_root(conn, &project_path)? {
+        let workspace_row = if let Some(existing) = load_workspace_row_by_root(conn, &project_path)?
+        {
             existing
         } else {
             created = true;
@@ -618,7 +671,12 @@ pub(crate) fn create_workspace_session(
             .collect::<Result<Vec<_>, _>>()?;
         let active_count = active_sessions
             .iter()
-            .filter(|session| !matches!(session.status, SessionStatus::Suspended | SessionStatus::Queued))
+            .filter(|session| {
+                !matches!(
+                    session.status,
+                    SessionStatus::Suspended | SessionStatus::Queued
+                )
+            })
             .count() as u32;
         let status = if active_count >= workspace.idle_policy.max_active {
             SessionStatus::Queued
@@ -686,7 +744,13 @@ pub(crate) fn update_workspace_session(
         if let Some(claude_session_id) = patch.claude_session_id {
             session.claude_session_id = Some(claude_session_id);
         }
-        persist_session_row(conn, workspace_id, &session, row.archived_at, row.sort_order)?;
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )?;
         Ok(session)
     })
 }
@@ -700,7 +764,13 @@ pub(crate) fn switch_workspace_session(
         let row = load_session_row(conn, workspace_id, session_id)?;
         let mut session = session_from_payload(&row.payload)?;
         session.last_active_at = now_ts();
-        persist_session_row(conn, workspace_id, &session, row.archived_at, row.sort_order)?;
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )?;
         Ok(session)
     })
 }
@@ -761,7 +831,9 @@ pub(crate) fn close_workspace_ui(
 ) -> Result<WorkbenchUiState, String> {
     with_db(state, |conn| {
         let mut ui_state = load_ui_state_from_conn(conn)?;
-        ui_state.open_workspace_ids.retain(|item| item != workspace_id);
+        ui_state
+            .open_workspace_ids
+            .retain(|item| item != workspace_id);
         if ui_state.active_workspace_id.as_deref() == Some(workspace_id) {
             ui_state.active_workspace_id = ui_state.open_workspace_ids.last().cloned();
         }
@@ -810,9 +882,18 @@ pub(crate) fn append_session_stream(
     with_db(state, |conn| {
         let row = load_session_row(conn, workspace_id, session_id)?;
         let mut session = session_from_payload(&row.payload)?;
-        session.stream = truncate_tail(&format!("{}{}", session.stream, chunk), SESSION_STREAM_LIMIT);
+        session.stream = truncate_tail(
+            &format!("{}{}", session.stream, chunk),
+            SESSION_STREAM_LIMIT,
+        );
         session.last_active_at = now_ts();
-        persist_session_row(conn, workspace_id, &session, row.archived_at, row.sort_order)
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )
     })
 }
 
@@ -827,7 +908,13 @@ pub(crate) fn set_session_status(
         let mut session = session_from_payload(&row.payload)?;
         session.status = status;
         session.last_active_at = now_ts();
-        persist_session_row(conn, workspace_id, &session, row.archived_at, row.sort_order)
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )
     })
 }
 
@@ -841,7 +928,13 @@ pub(crate) fn set_session_claude_id(
         let row = load_session_row(conn, workspace_id, session_id)?;
         let mut session = session_from_payload(&row.payload)?;
         session.claude_session_id = Some(claude_session_id);
-        persist_session_row(conn, workspace_id, &session, row.archived_at, row.sort_order)
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )
     })
 }
 
@@ -860,7 +953,8 @@ pub(crate) fn truncate_tail(value: &str, limit: usize) -> String {
     if value.len() <= limit {
         return value.to_string();
     }
-    value.chars()
+    value
+        .chars()
         .rev()
         .take(limit)
         .collect::<String>()

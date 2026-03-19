@@ -11,7 +11,7 @@
 - 单用户单口令登录
 - `HttpOnly` session cookie
 - 同一 IP 在 `10` 分钟内连续 `3` 次口令错误后，封禁 `24` 小时
-- `allowedRoots` 服务端目录白名单
+- `rootPath` 服务端单根目录白名单
 - `HTTP RPC` 与 `WebSocket` 同时鉴权
 - 非本地访问时要求通过 HTTPS 提交口令
 - `localhost` / `127.0.0.1` / `::1` 访问时默认走非 public mode
@@ -37,9 +37,9 @@
 
 常见位置：
 
-- Linux：`~/.local/share/com.agent.workbench/auth.json`
-- macOS：`~/Library/Application Support/com.agent.workbench/auth.json`
-- Windows：`%AppData%\\com.agent.workbench\\auth.json`
+- Linux：`~/.local/share/com.spencerkit.coderstudio/auth.json`
+- macOS：`~/Library/Application Support/com.spencerkit.coderstudio/auth.json`
+- Windows：`%AppData%\\com.spencerkit.coderstudio\\auth.json`
 
 关键字段如下：
 
@@ -48,7 +48,7 @@
   "version": 1,
   "publicMode": true,
   "password": "replace-this-passphrase",
-  "allowedRoots": ["/srv/coder-studio/workspaces"],
+  "rootPath": "/srv/coder-studio/workspaces",
   "bindHost": "127.0.0.1",
   "bindPort": 41033,
   "sessionIdleMinutes": 15,
@@ -61,9 +61,14 @@
 
 - `publicMode`：是否启用公开访问模式
 - `password`：访问口令，当前按你的要求以明文保存在本地 JSON 中
-- `allowedRoots`：允许通过 Web 界面访问和创建工作区的根目录
+- `rootPath`：允许通过 Web 界面访问和创建工作区的唯一根目录
 - `bindHost`：传输服务监听地址
 - `bindPort`：传输服务监听端口
+
+说明：
+
+- 旧版本 `allowedRoots` 仍然兼容读取
+- 新版本 CLI 与运行时会统一写回 `rootPath`
 
 ## bindHost / bindPort 建议
 
@@ -131,21 +136,32 @@ server {
 
 1. 构建应用：`pnpm tauri build`
 2. 在目标机器上先启动一次应用，让它生成 `auth.json`
-3. 编辑 `auth.json`，至少设置：
+3. 编辑 `auth.json`，或者直接使用 CLI，至少设置：
    - `password`
-   - `allowedRoots`
+   - `rootPath`
    - `bindHost`
    - `bindPort`
 4. 重启应用
 5. 配置 HTTPS 反向代理到 `bindHost:bindPort`
 6. 打开你的域名，确认先出现登录页
 
+推荐直接使用 CLI：
+
+```bash
+coder-studio config root set /srv/coder-studio/workspaces
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio config auth public-mode on
+coder-studio config set server.host 127.0.0.1
+coder-studio config set server.port 41033
+coder-studio restart
+```
+
 ## 验证清单
 
 - 访问域名时先看到口令登录页
 - 口令错误 3 次后返回封禁提示
 - 登录成功后可以正常建立 WebSocket
-- 只能浏览 `allowedRoots` 下的目录
+- 只能浏览 `rootPath` 下的目录
 - `dialog_pick_folder` 在 public mode 下不可用
 - 直接用 `http://localhost:41033` 本地访问时默认不走 public mode
 - 直接用 `http://localhost:41033/?auth=force` 本地访问时会强制显示登录页

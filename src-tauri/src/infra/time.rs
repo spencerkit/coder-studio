@@ -22,13 +22,6 @@ pub(crate) fn default_idle_policy() -> IdlePolicy {
     }
 }
 
-pub(crate) fn mode_label(mode: &SessionMode) -> &'static str {
-    match mode {
-        SessionMode::Branch => "branch",
-        SessionMode::GitTree => "git_tree",
-    }
-}
-
 pub(crate) fn status_label(status: &SessionStatus) -> &'static str {
     match status {
         SessionStatus::Idle => "idle",

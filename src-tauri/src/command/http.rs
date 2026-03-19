@@ -211,6 +211,17 @@ struct LoginRequest {
     password: String,
 }
 
+#[derive(Deserialize)]
+struct SystemConfigPatchRequest {
+    updates: Map<String, Value>,
+}
+
+#[derive(Deserialize)]
+struct SystemAuthIpUnblockRequest {
+    ip: Option<String>,
+    all: Option<bool>,
+}
+
 struct RpcError {
     status: StatusCode,
     error: String,
@@ -421,7 +432,8 @@ fn dispatch_rpc(
             let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
-                workspace_snapshot(req.workspace_id.clone(), app.state()).map_err(rpc_bad_request)?,
+                workspace_snapshot(req.workspace_id.clone(), app.state())
+                    .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -444,8 +456,7 @@ fn dispatch_rpc(
         "update_workbench_layout" => {
             let req: WorkbenchLayoutRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             serde_json::to_value(
-                update_workbench_layout(req.layout, app.state())
-                    .map_err(rpc_bad_request)?,
+                update_workbench_layout(req.layout, app.state()).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -496,7 +507,8 @@ fn dispatch_rpc(
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
-            update_idle_policy(req.workspace_id, req.policy, app.state()).map_err(rpc_bad_request)?;
+            update_idle_policy(req.workspace_id, req.policy, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "git_status" => {
@@ -640,7 +652,8 @@ fn dispatch_rpc(
             serde_json::to_value(listing).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "command_exists" => {
-            let req: CommandAvailabilityRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let req: CommandAvailabilityRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
             require_optional_path_access(req.cwd.as_deref(), &req.target, authorized)?;
             serde_json::to_value(
                 command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
@@ -666,8 +679,14 @@ fn dispatch_rpc(
             require_workspace_access(app, &req.workspace_id, authorized)?;
             require_path_access(&req.cwd, &req.target, authorized)?;
             serde_json::to_value(
-                terminal_create(req.workspace_id, req.cwd, req.target, app.clone(), app.state())
-                    .map_err(rpc_bad_request)?,
+                terminal_create(
+                    req.workspace_id,
+                    req.cwd,
+                    req.target,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -681,8 +700,14 @@ fn dispatch_rpc(
         "terminal_resize" => {
             let req: TerminalResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
-            terminal_resize(req.workspace_id, req.terminal_id, req.cols, req.rows, app.state())
-                .map_err(rpc_bad_request)?;
+            terminal_resize(
+                req.workspace_id,
+                req.terminal_id,
+                req.cols,
+                req.rows,
+                app.state(),
+            )
+            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_close" => {
@@ -730,11 +755,110 @@ fn dispatch_rpc(
         "agent_resize" => {
             let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
-            agent_resize(req.workspace_id, req.session_id, req.cols, req.rows, app.state())
-                .map_err(rpc_bad_request)?;
+            agent_resize(
+                req.workspace_id,
+                req.session_id,
+                req.cols,
+                req.rows,
+                app.state(),
+            )
+            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         _ => Err(rpc_bad_request(format!("unsupported_command:{command}"))),
+    }
+}
+
+fn require_loopback(client_addr: std::net::SocketAddr) -> Result<(), Response> {
+    if client_addr.ip().is_loopback() {
+        Ok(())
+    } else {
+        Err(json_error(
+            StatusCode::FORBIDDEN,
+            "loopback_required".to_string(),
+        ))
+    }
+}
+
+pub(crate) async fn system_config_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    if let Err(response) = require_loopback(client_addr) {
+        return response;
+    }
+
+    match admin_config(&state.app) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+pub(crate) async fn system_config_patch_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+    Json(payload): Json<Value>,
+) -> Response {
+    if let Err(response) = require_loopback(client_addr) {
+        return response;
+    }
+
+    let req: SystemConfigPatchRequest = match parse_payload(payload) {
+        Ok(req) => req,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, error),
+    };
+
+    match admin_update_config(&state.app, &req.updates) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => json_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+pub(crate) async fn system_auth_status_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    if let Err(response) = require_loopback(client_addr) {
+        return response;
+    }
+
+    match admin_auth_status(&state.app) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+pub(crate) async fn system_auth_ip_blocks_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+) -> Response {
+    if let Err(response) = require_loopback(client_addr) {
+        return response;
+    }
+
+    match admin_blocked_ips(&state.app) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+pub(crate) async fn system_auth_ip_unblock_handler(
+    ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
+    AxumState(state): AxumState<HttpServerState>,
+    Json(payload): Json<Value>,
+) -> Response {
+    if let Err(response) = require_loopback(client_addr) {
+        return response;
+    }
+
+    let req: SystemAuthIpUnblockRequest = match parse_payload(payload) {
+        Ok(req) => req,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, error),
+    };
+
+    match admin_unblock_ip(&state.app, req.ip.as_deref(), req.all.unwrap_or(false)) {
+        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Err(error) => json_error(StatusCode::BAD_REQUEST, error),
     }
 }
 
@@ -946,6 +1070,19 @@ pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
         .route("/ws", get(ws_handler))
         .route("/health", get(health_handler))
         .route("/api/system/shutdown", post(shutdown_handler))
+        .route(
+            "/api/system/config",
+            get(system_config_handler).patch(system_config_patch_handler),
+        )
+        .route("/api/system/auth/status", get(system_auth_status_handler))
+        .route(
+            "/api/system/auth/ip-blocks",
+            get(system_auth_ip_blocks_handler),
+        )
+        .route(
+            "/api/system/auth/ip-blocks/unblock",
+            post(system_auth_ip_unblock_handler),
+        )
         .route("/api/auth/status", get(auth_status_handler))
         .route("/api/auth/login", post(auth_login_handler))
         .route("/api/auth/logout", post(auth_logout_handler))

@@ -11,7 +11,7 @@ The current code supports:
 - single-user, single-passphrase login
 - `HttpOnly` session cookie
 - a `24` hour IP ban after `3` failed passphrase attempts within `10` minutes
-- server-side path restrictions through `allowedRoots`
+- server-side single-root restrictions through `rootPath`
 - authentication on both `HTTP RPC` and `WebSocket`
 - HTTPS-required passphrase submission for non-local hosts
 - local access on `localhost`, `127.0.0.1`, and `::1` defaults to non-public mode
@@ -37,9 +37,9 @@ After the first launch, the app creates `auth.json` inside the app data director
 
 Typical locations:
 
-- Linux: `~/.local/share/com.agent.workbench/auth.json`
-- macOS: `~/Library/Application Support/com.agent.workbench/auth.json`
-- Windows: `%AppData%\\com.agent.workbench\\auth.json`
+- Linux: `~/.local/share/com.spencerkit.coderstudio/auth.json`
+- macOS: `~/Library/Application Support/com.spencerkit.coderstudio/auth.json`
+- Windows: `%AppData%\\com.spencerkit.coderstudio\\auth.json`
 
 Key fields:
 
@@ -48,7 +48,7 @@ Key fields:
   "version": 1,
   "publicMode": true,
   "password": "replace-this-passphrase",
-  "allowedRoots": ["/srv/coder-studio/workspaces"],
+  "rootPath": "/srv/coder-studio/workspaces",
   "bindHost": "127.0.0.1",
   "bindPort": 41033,
   "sessionIdleMinutes": 15,
@@ -61,9 +61,14 @@ Field meanings:
 
 - `publicMode`: enables public access mode
 - `password`: the access passphrase, currently stored in plain text by request
-- `allowedRoots`: root directories that can be browsed or used for workspaces
+- `rootPath`: the single root directory that can be browsed or used for workspaces
 - `bindHost`: transport service bind address
 - `bindPort`: transport service bind port
+
+Notes:
+
+- legacy `allowedRoots` values are still read for compatibility
+- the current CLI and runtime write back only `rootPath`
 
 ## Recommended `bindHost` / `bindPort`
 
@@ -131,21 +136,32 @@ server {
 
 1. Build the app: `pnpm tauri build`
 2. Start it once on the target machine so it generates `auth.json`
-3. Edit `auth.json` and set at least:
+3. Edit `auth.json`, or use the CLI, and set at least:
    - `password`
-   - `allowedRoots`
+   - `rootPath`
    - `bindHost`
    - `bindPort`
 4. Restart the app
 5. Configure an HTTPS reverse proxy to `bindHost:bindPort`
 6. Open your domain and verify the login screen appears first
 
+Recommended CLI flow:
+
+```bash
+coder-studio config root set /srv/coder-studio/workspaces
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio config auth public-mode on
+coder-studio config set server.host 127.0.0.1
+coder-studio config set server.port 41033
+coder-studio restart
+```
+
 ## Verification Checklist
 
 - opening the public domain shows the passphrase login screen first
 - 3 wrong passphrase attempts trigger the IP block response
 - after login, WebSocket connections establish normally
-- only directories inside `allowedRoots` are accessible
+- only directories inside `rootPath` are accessible
 - `dialog_pick_folder` is unavailable in public mode
 - direct local access via `http://localhost:41033` defaults to non-public mode
 - direct local access via `http://localhost:41033/?auth=force` forces the login screen

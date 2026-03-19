@@ -3,6 +3,9 @@ import path from 'node:path';
 
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 41033;
+export const DEFAULT_LOG_TAIL_LINES = 80;
+export const DEFAULT_SESSION_IDLE_MINUTES = 15;
+export const DEFAULT_SESSION_MAX_HOURS = 12;
 export const STATE_DIR_NAME = 'coder-studio';
 
 export function resolveStateDir(env = process.env, platform = process.platform) {
@@ -31,6 +34,14 @@ export function resolveDataDir(stateDir, env = process.env) {
   return path.join(stateDir, 'data');
 }
 
+export function resolveConfigPath(stateDir) {
+  return path.join(stateDir, 'config.json');
+}
+
+export function resolveAuthPath(dataDir) {
+  return path.join(dataDir, 'auth.json');
+}
+
 export function resolveLogPath(stateDir) {
   return path.join(stateDir, 'coder-studio.log');
 }
@@ -43,6 +54,18 @@ export function resolveRuntimePath(stateDir) {
   return path.join(stateDir, 'runtime.json');
 }
 
+function formatHostForUrl(host) {
+  if (!host) return DEFAULT_HOST;
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return host;
+  }
+  return host.includes(':') ? `[${host}]` : host;
+}
+
 export function buildEndpoint(host = DEFAULT_HOST, port = DEFAULT_PORT) {
-  return `http://${host}:${port}`;
+  return `http://${formatHostForUrl(host)}:${port}`;
+}
+
+export function defaultRootPath() {
+  return path.join(os.homedir(), 'coder-studio-workspaces');
 }

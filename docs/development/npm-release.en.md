@@ -30,6 +30,9 @@ coder-studio status
 coder-studio logs -f
 coder-studio open
 coder-studio doctor
+coder-studio config show
+coder-studio config validate
+coder-studio auth status
 coder-studio --version
 ```
 
@@ -40,6 +43,8 @@ Useful flags:
 - `--foreground`: keeps the runtime in the foreground for debugging and E2E
 - `--json`: machine-readable output for scripts and CI
 
+For the detailed command reference, see `docs/development/cli.en.md`.
+
 ## Local Runtime State
 
 The CLI persists runtime metadata in a local state directory:
@@ -47,6 +52,7 @@ The CLI persists runtime metadata in a local state directory:
 - `runtime.json`
 - `coder-studio.pid`
 - `coder-studio.log`
+- `config.json`
 - `data/`
 
 Use `CODER_STUDIO_HOME` to override the state directory for tests or isolated environments.

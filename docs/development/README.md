@@ -60,6 +60,7 @@ pnpm dev:stack
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`
 - Tauri 命令清单：`docs/development/tauri-commands.md`
+- CLI 命令手册：`docs/development/cli.md`
 - npm 发布与 CLI：`docs/development/npm-release.md`
 
 英文版：
@@ -68,6 +69,7 @@ pnpm dev:stack
 - `docs/development/architecture.en.md`
 - `docs/development/frontend-state.en.md`
 - `docs/development/tauri-commands.en.md`
+- `docs/development/cli.en.md`
 - `docs/development/npm-release.en.md`
 
 ## 关联文档

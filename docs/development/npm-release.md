@@ -30,6 +30,9 @@ coder-studio status
 coder-studio logs -f
 coder-studio open
 coder-studio doctor
+coder-studio config show
+coder-studio config validate
+coder-studio auth status
 coder-studio --version
 ```
 
@@ -40,6 +43,8 @@ coder-studio --version
 - `--foreground`：前台启动，适合调试和 E2E
 - `--json`：结构化输出，适合脚本和 CI
 
+详细命令说明见：`docs/development/cli.md`
+
 ## 本地状态目录
 
 CLI 默认会在本机状态目录下写入运行信息：
@@ -47,6 +52,7 @@ CLI 默认会在本机状态目录下写入运行信息：
 - `runtime.json`
 - `coder-studio.pid`
 - `coder-studio.log`
+- `config.json`
 - `data/`
 
 测试和隔离场景可以通过 `CODER_STUDIO_HOME` 覆盖状态目录。
