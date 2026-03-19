@@ -1,0 +1,1 @@
+export { WorkspaceTerminalFeature } from "./WorkspaceTerminalFeature";

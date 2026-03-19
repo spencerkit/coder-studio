@@ -1,215 +1,212 @@
-// ==========================================================================
-// Coder Studio - Settings Component
-// ==========================================================================
+import type { Locale, Translator } from "../../i18n";
+import type { AppSettings, SettingsPanel } from "../../types/app";
+import { SettingsAppearanceIcon, SettingsGeneralIcon } from "../icons";
 
-import React from "react";
-import type { SettingsProps } from "../types";
+type SettingsProps = {
+  locale: Locale;
+  activeSettingsPanel: SettingsPanel;
+  settingsDraft: AppSettings;
+  launchCommandStatus: {
+    stateClass: string;
+    text: string;
+    detailText: string;
+  };
+  onSettingsPanelChange: (panel: SettingsPanel) => void;
+  onSettingsChange: (patch: Partial<AppSettings>) => void;
+  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["idlePolicy"]>) => void;
+  onSelectLocale: (locale: Locale) => void;
+  t: Translator;
+};
 
-export const Settings: React.FC<SettingsProps> = ({
-  theme,
+const settingsNavItems = (t: Translator) => [
+  { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
+  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> }
+];
+
+export const Settings = ({
   locale,
-  settings,
-  settingsNavItems,
   activeSettingsPanel,
   settingsDraft,
+  launchCommandStatus,
+  onSettingsPanelChange,
   onSettingsChange,
   onSettingsIdlePolicyChange,
-  onSettingsPanelChange,
-  onThemeChange,
-  onLocaleChange,
-  onCloseSettings,
+  onSelectLocale,
   t
-}) => {
-  return (
-    <main className="settings-route" data-testid="settings-page">
-      <section className="settings-layout">
-        <aside className="settings-sidebar-v2">
-          <nav className="settings-nav-list" aria-label={t("settings")}>
-            {settingsNavItems.map((item) => {
-              const isActive = item.id === activeSettingsPanel;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`settings-nav-item ${isActive ? "active" : ""}`}
-                  onClick={() => {
-                    onSettingsPanelChange(item.id);
-                  }}
-                >
-                  <span className="settings-nav-icon">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+}: SettingsProps) => (
+  <main className="settings-route" data-testid="settings-page">
+    <section className="settings-layout">
+      <aside className="settings-sidebar-v2">
+        <nav className="settings-nav-list" aria-label={t("settings")}>
+          {settingsNavItems(t).map((item) => {
+            const isActive = item.id === activeSettingsPanel;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`settings-nav-item ${isActive ? "active" : ""}`}
+                onClick={() => onSettingsPanelChange(item.id)}
+              >
+                <span className="settings-nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
 
-        <section className="settings-content-v2">
-          <div className="settings-scroll-panel">
-            {activeSettingsPanel === "general" ? (
-              <>
-                <div className="settings-section-heading">
-                  <h2>{t("settingsGeneral")}</h2>
+      <section className="settings-content-v2">
+        <div className="settings-scroll-panel">
+          {activeSettingsPanel === "general" ? (
+            <div className="settings-group-card">
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("launchCommand")}</strong>
+                  <span>{t("launchCommandHint")}</span>
                 </div>
-
-                <div className="settings-group-card">
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("launchCommand")}</strong>
-                      <span>{t("launchCommandHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <input
-                        className="settings-inline-input"
-                        value={settingsDraft.agentCommand}
-                        onChange={(e) => onSettingsChange({ agentCommand: e.target.value })}
-                        data-testid="settings-agent-command"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("autoSuspendIdle")}</strong>
-                      <span>{t("autoSuspendIdleHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <label className="toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsDraft.idlePolicy.enabled}
-                          onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.idlePolicy.enabled })}
-                          data-testid="settings-idle-enabled"
-                        />
-                        <span className="toggle-track"><span className="toggle-thumb" /></span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("idleAfter")}</strong>
-                      <span>{t("idleAfterHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <input
-                        type="number"
-                        className="settings-inline-input"
-                        min={1}
-                        value={settingsDraft.idlePolicy.idleMinutes}
-                        onChange={(e) => onSettingsIdlePolicyChange({ idleMinutes: Number(e.target.value) })}
-                        data-testid="settings-idle-minutes"
-                      />
-                      <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>{t("minutes")}</span>
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("maxActiveSessions")}</strong>
-                      <span>{t("maxActiveSessionsHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <input
-                        type="number"
-                        className="settings-inline-input"
-                        min={1}
-                        value={settingsDraft.idlePolicy.maxActive}
-                        onChange={(e) => onSettingsIdlePolicyChange({ maxActive: Number(e.target.value) })}
-                        data-testid="settings-max-active"
-                      />
-                      <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>{t("sessionsWord")}</span>
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("memoryPressure")}</strong>
-                      <span>{t("memoryPressureHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <label className="toggle">
-                        <input
-                          type="checkbox"
-                          checked={settingsDraft.idlePolicy.pressure}
-                          onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.idlePolicy.pressure })}
-                        />
-                        <span className="toggle-track"><span className="toggle-thumb" /></span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="settings-section-heading">
-                  <h2>{t("settingsAppearance")}</h2>
-                </div>
-
-                <div className="settings-group-card">
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("theme")}</strong>
-                      <span>{t("themeHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <div className="settings-pill-select">
-                        <button
-                          type="button"
-                          className={`settings-pill-option ${theme === "light" ? "active" : ""}`}
-                          onClick={() => onThemeChange("light")}
-                        >
-                          {t("themeLight")}
-                        </button>
-                        <button
-                          type="button"
-                          className={`settings-pill-option ${theme === "dark" ? "active" : ""}`}
-                          onClick={() => onThemeChange("dark")}
-                        >
-                          {t("themeDark")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="settings-row">
-                    <div className="settings-row-copy">
-                      <strong>{t("languageLabel")}</strong>
-                      <span>{t("languageHint")}</span>
-                    </div>
-                    <div className="settings-row-control">
-                      <div className="settings-pill-select">
-                        <button
-                          type="button"
-                          className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
-                          onClick={() => onLocaleChange("zh")}
-                        >
-                          中文
-                        </button>
-                        <button
-                          type="button"
-                          className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
-                          onClick={() => onLocaleChange("en")}
-                        >
-                          English
-                        </button>
+                <div className="settings-row-control">
+                  <div className="settings-command-field">
+                    <input
+                      className="settings-inline-input"
+                      value={settingsDraft.agentCommand}
+                      onChange={(event) => onSettingsChange({ agentCommand: event.target.value })}
+                      placeholder={t("launchCommandPlaceholder")}
+                      data-testid="settings-agent-command"
+                    />
+                    <div
+                      className={`settings-inline-status ${launchCommandStatus.stateClass}`}
+                      data-testid="settings-agent-command-status"
+                    >
+                      <span className="settings-inline-status-dot" aria-hidden="true" />
+                      <div className="settings-inline-status-copy">
+                        <span>{launchCommandStatus.text}</span>
+                        {launchCommandStatus.detailText && <small>{launchCommandStatus.detailText}</small>}
                       </div>
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
 
-          <div className="settings-footer-bar">
-            <div className="settings-page-status">
-              {t("settingsAutoSave")}
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("autoSuspend")}</strong>
+                  <span>{t("autoSuspendHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.idlePolicy.enabled}
+                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.idlePolicy.enabled })}
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("idleAfter")}</strong>
+                  <span>{t("idleAfterHint")}</span>
+                </div>
+                <div className="settings-row-control settings-number-control">
+                  <input
+                    className="settings-inline-number"
+                    type="number"
+                    min={1}
+                    value={settingsDraft.idlePolicy.idleMinutes}
+                    onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
+                    data-testid="settings-idle-minutes"
+                  />
+                  <span>{t("minutesShort")}</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("maxActive")}</strong>
+                  <span>{t("maxActiveHint")}</span>
+                </div>
+                <div className="settings-row-control settings-number-control">
+                  <input
+                    className="settings-inline-number"
+                    type="number"
+                    min={1}
+                    value={settingsDraft.idlePolicy.maxActive}
+                    onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
+                    data-testid="settings-max-active"
+                  />
+                  <span>{t("sessionsWord")}</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("memoryPressure")}</strong>
+                  <span>{t("memoryPressureHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.idlePolicy.pressure}
+                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.idlePolicy.pressure })}
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
             </div>
+          ) : (
+            <div className="settings-group-card">
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("theme")}</strong>
+                  <span>{locale === "zh" ? "当前版本仅保留深色主题。" : "This version uses a dark-only theme."}</span>
+                </div>
+                <div className="settings-row-control">
+                  <div className="settings-pill-select single">
+                    <span className="settings-pill-option active">{t("themeDark")}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("languageLabel")}</strong>
+                  <span>{t("languageHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <div className="settings-pill-select">
+                    <button
+                      type="button"
+                      className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
+                      onClick={() => onSelectLocale("zh")}
+                    >
+                      中文
+                    </button>
+                    <button
+                      type="button"
+                      className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
+                      onClick={() => onSelectLocale("en")}
+                    >
+                      English
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="settings-footer-bar">
+          <div className="settings-page-status">
+            {t("settingsAutoSave")}
           </div>
-        </section>
+        </div>
       </section>
-    </main>
-  );
-};
+    </section>
+  </main>
+);
 
 export default Settings;

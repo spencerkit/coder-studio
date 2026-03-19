@@ -1,5 +1,17 @@
-import { test, expect } from '@playwright/test';
-import path from 'node:path';
+import type { Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
+const REMOTE_REPO_URL = 'https://example.com/repo.git';
+
+const launchRemoteWorkspace = async (page: Page, repoUrl = REMOTE_REPO_URL) => {
+  await page.goto('/');
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await page.getByTestId('choice-remote').click();
+  await page.getByTestId('git-input').fill(repoUrl);
+  await page.getByTestId('start-workspace').click();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+};
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -12,82 +24,53 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('remote git main flow', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByTestId('app-logo')).toBeVisible();
-  await expect(page.getByTestId('overlay')).toBeVisible();
-
-  await page.getByTestId('choice-remote').click();
-  await page.getByTestId('git-input').fill('https://example.com/repo.git');
-  await page.getByTestId('start-workspace').click();
-
-  await expect(page.getByTestId('workspace-pill')).toContainText('https://example.com/repo.git');
-  await expect(page.getByTestId('agent-terminal')).toBeVisible();
-  await expect(page.getByTestId('agent-input')).toBeVisible();
-
-  await page.getByTestId('session-new').click();
-  await page.getByTestId('queue-input').fill('Summarize repo');
-  await page.getByTestId('queue-add').click();
-  await page.getByTestId('queue-run').click();
-
-  await expect(page.locator('.queue-list').getByText('Summarize repo', { exact: true })).toBeVisible();
+test('remote workspace flow opens the workspace shell', async ({ page }) => {
+  await launchRemoteWorkspace(page);
+  await expect(page.getByTestId('workspace-topbar')).toContainText('repo.git');
+  await expect(page.getByTestId('settings-open')).toBeVisible();
 });
 
-test('local folder selection flow', async ({ page }) => {
+test('local mode shows the server-side folder picker shell', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('choice-local').click();
 
-  const folderInput = page.getByTestId('folder-input');
-  const folderPath = path.join(process.cwd(), 'tests', 'fixtures', 'project');
-  await folderInput.setInputFiles(folderPath);
-
-  await expect(page.getByTestId('folder-selected')).toContainText('project');
-  await page.getByTestId('start-workspace').click();
-
-  await expect(page.getByTestId('workspace-pill')).toContainText('project');
+  await expect(page.getByTestId('folder-select')).toBeVisible();
+  await expect(page.getByTestId('folder-selected')).toBeVisible();
+  await expect(page.getByTestId('start-workspace')).toBeVisible();
 });
 
-test('language toggle switches ui copy between english and chinese', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByTestId('start-workspace')).toHaveText('Start Workspace');
-
-  await page.getByTestId('overlay-locale-zh').click();
-  await expect(page.getByTestId('start-workspace')).toHaveText('开始工作区');
-  await expect(page.getByTestId('choice-local')).toContainText('本地目录');
-
-  await page.getByTestId('overlay-locale-en').click();
-  await expect(page.getByTestId('start-workspace')).toHaveText('Start Workspace');
-  await expect(page.getByTestId('choice-local')).toContainText('Local Folder');
-});
-
-test('global settings apply agent defaults to every workspace', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId('choice-remote').click();
-  await page.getByTestId('git-input').fill('https://example.com/repo.git');
-  await page.getByTestId('start-workspace').click();
-
+test('settings appearance controls can switch locale', async ({ page }) => {
+  await launchRemoteWorkspace(page);
   await page.getByTestId('settings-open').click();
-  await expect(page.getByTestId('settings-modal')).toBeVisible();
-  await page.getByTestId('settings-agent-provider').selectOption('codex');
-  await page.getByTestId('settings-agent-command').fill('codex --fast');
-  await page.getByTestId('settings-max-active').fill('5');
-  await page.getByTestId('settings-apply').click();
-
-  await expect(page.locator('.workspace-capsules')).toContainText('codex --fast');
-  await expect(page.locator('.brief-grid')).toContainText('codex');
+  await page.getByRole('button', { name: 'Appearance' }).click();
+  await page.getByRole('button', { name: '中文' }).click();
+  await expect(page.getByRole('button', { name: '返回应用' })).toBeVisible();
+  await page.getByRole('button', { name: 'English' }).click();
+  await expect(page.getByRole('button', { name: 'Back to app' })).toBeVisible();
 });
 
-test('restores previous workspace session history on reopen', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId('choice-remote').click();
-  await page.getByTestId('git-input').fill('https://example.com/repo.git');
-  await page.getByTestId('start-workspace').click();
-  await page.getByTestId('queue-input').fill('Review open tasks');
-  await page.getByTestId('queue-add').click();
+test('settings persist across route changes and reloads', async ({ page }) => {
+  await launchRemoteWorkspace(page);
+  await page.getByTestId('settings-open').click();
 
+  await expect(page.getByTestId('settings-page')).toBeVisible();
+  await page.getByTestId('settings-agent-command').fill('claude --print');
+  await page.getByTestId('settings-max-active').fill('5');
+
+  await page.getByRole('button', { name: 'Back to app' }).click();
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
+  await page.getByTestId('settings-open').click();
+  await expect(page.getByTestId('settings-agent-command')).toHaveValue('claude --print');
+  await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
+});
+
+test('restores the last workspace after reload', async ({ page }) => {
+  await launchRemoteWorkspace(page);
   await page.reload();
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-pill')).toContainText('https://example.com/repo.git');
-  await expect(page.locator('.queue-list')).toContainText('Review open tasks');
+  await expect(page.getByTestId('workspace-topbar')).toContainText('repo.git');
 });

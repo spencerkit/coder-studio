@@ -1,0 +1,2224 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRelaxState } from "@relax-state/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
+import {
+  ExecTarget,
+  Session,
+  SessionStatus,
+  Tab,
+  TreeNode,
+  WorkbenchState,
+  WorktreeInfo,
+  createEmptyPreview,
+  createId,
+  createPaneLeaf,
+  createSession,
+  createTab,
+  persistWorkbenchState,
+  workbenchState
+} from "../../state/workbench";
+import {
+  Locale,
+  createTranslator,
+  formatSessionTitle,
+  formatTerminalTitle,
+  localizeSessionTitle,
+  localizeTerminalTitle,
+  localizeWorkspaceTitle,
+} from "../../i18n";
+import {
+  AgentSplitHorizontalIcon,
+  AgentSplitVerticalIcon,
+  AgentPlusIcon,
+  AgentSendIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  HeaderCloseIcon,
+} from "../../components/icons";
+import { CommandPalette } from "../../components/CommandPalette";
+import { TopBar } from "../../components/TopBar";
+import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
+import { WorktreeModal } from "../../components/WorktreeModal";
+import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
+import { WorkspaceShell } from "../../components/workspace";
+import { subscribeAgentEvents, subscribeAgentLifecycleEvents, subscribeTerminalEvents } from "../../command";
+import {
+  AgentWorkspaceFeature,
+  armAgentStartupGate,
+  buildSlashMenuItems,
+  buildSlashMenuSections,
+  clearAgentRuntimeTracking,
+  clearAgentStartupGate,
+  commitAgentSessionTitle,
+  focusAgentTerminal,
+  fitAgentTerminals,
+  isAgentRuntimeRunning,
+  markAgentRuntimeStarted,
+  noteAgentStartupEvent,
+  noteAgentStartupLifecycle,
+  setAgentTerminalRef,
+  setDraftPromptInputRef,
+  syncAgentPaneSize,
+  syncAgentRuntimeSize,
+  trackAgentInitialTitleInput,
+  waitForAgentStartupDrain
+} from "../../features/agents";
+import { buildCommandPaletteActions, filterCommandPaletteActions } from "../../features/command-palette";
+import { WorkspaceCodeFeature } from "../../features/editor";
+import { WorkspaceTerminalFeature } from "../../features/terminal";
+import {
+  activateWorkspacePane,
+  addWorkspaceTerminal,
+  buildWorkspaceGitChangeGroups,
+  closeWorkspaceTerminal,
+  findPreviewGitChange,
+  loadWorkspaceFilePreview,
+  loadWorkspaceGitChangePreview,
+  loadWorkspaceRepositoryDiff,
+  openWorkspacePreviewPath,
+  openWorkspaceWorktree,
+  performWorkspaceGitOperation,
+  resolveWorkspacePreviewPathLabel,
+  saveWorkspacePreview,
+  selectWorkspaceTerminal,
+  splitWorkspacePane,
+  startWorkspacePaneSplitResize,
+  startWorkspacePanelResize,
+  syncWorkspaceTerminalSize,
+  toggleWorkspaceRightPane,
+  writeWorkspaceTerminalData
+} from "./";
+import { createWorkspaceSessionActions } from "./session-actions";
+import { startWorkspaceLaunch } from "./workspace-launch-actions";
+import {
+  browseWorkspaceOverlayDirectory,
+  hideWorkspaceOverlay,
+  selectWorkspaceOverlayMode,
+  updateWorkspaceOverlayInput,
+  updateWorkspaceOverlayTarget
+} from "./workspace-overlay-actions";
+import {
+  buildWorkspaceFileSearchResults,
+  closeWorkspaceFileSearch,
+  createInitialWorkspaceFileSearchState,
+  moveWorkspaceFileSearchIndex,
+  normalizeWorkspaceFileSearchQuery,
+  openWorkspaceFileSearch,
+  resetWorkspaceFileSearch,
+  resolveWorkspaceFileSearchDropdownStyle,
+  setWorkspaceFileSearchActiveIndex,
+  shouldShowWorkspaceFileSearchDropdown,
+  syncWorkspaceFileSearchState,
+  updateWorkspaceFileSearchQuery,
+  withWorkspaceFileSearchDropdownStyle
+} from "./file-search-actions";
+import { startAgent, sendAgentInput } from "../../services/http/agent.service";
+import { withFallback } from "../../services/http/client";
+import {
+  commitGitChanges,
+  discardAllGitChanges,
+  discardGitFile,
+  getGitChanges,
+  stageAllGitChanges,
+  stageGitFile,
+  unstageAllGitChanges,
+  unstageGitFile
+} from "../../services/http/git.service";
+import {
+  switchSession as switchSessionRequest,
+  updateIdlePolicy as updateIdlePolicyRequest
+} from "../../services/http/session.service";
+import { checkCommandAvailability } from "../../services/http/system.service";
+import {
+  getGitStatus,
+  getWorkspaceTree,
+  getWorktreeList,
+  listClaudeSlashSkills
+} from "../../services/http/workspace.service";
+import {
+  AGENT_SPECIAL_KEY_MAP,
+  AGENT_START_SYSTEM_MESSAGE,
+  AGENT_STREAM_BUFFER_LIMIT,
+  TERMINAL_STREAM_BUFFER_LIMIT,
+  replaceLeadingSlashToken
+} from "../../shared/app/constants";
+import {
+  cloneAppSettings,
+} from "../../shared/app/settings";
+import { stripAnsi } from "../../shared/utils/ansi";
+import { inferEditorLanguage } from "../../shared/utils/editor";
+import {
+  collectPaneLeaves,
+  findPaneIdBySessionId,
+  findPaneSessionId,
+  remapPaneSession,
+  removePaneNode,
+  replacePaneNode,
+} from "../../shared/utils/panes";
+import {
+  displayPathName,
+  fileParentLabel,
+  sanitizeGitRelativePath,
+} from "../../shared/utils/path";
+import {
+  createSessionFromBackend,
+  formatRelativeSessionTime,
+  isForegroundActiveStatus,
+  isDraftSession,
+  isHiddenDraftPlaceholder,
+  nowLabel,
+  parseNumericId,
+  resolveVisibleStatus,
+  restoreVisibleStatus,
+  sessionCompletionRatio,
+  sessionTitleFromInput,
+  sessionTone,
+  toBackgroundStatus
+} from "../../shared/utils/session";
+import { sortTreeNodes } from "../../shared/utils/tree";
+import type {
+  AgentEvent,
+  AgentLifecycleEvent,
+  AgentStartResult,
+  AppSettings,
+  AppTheme,
+  ClaudeSlashMenuItem,
+  ClaudeSlashSkillEntry,
+  CommandAvailability,
+  CommandPaletteAction,
+  FolderBrowserState,
+  GitChangeAction,
+  GitChangeEntry,
+  GitStatus,
+  Toast,
+  WorktreeModalState,
+  WorktreeView,
+  WorkspaceTree
+} from "../../types/app";
+
+const withServiceFallback = async <T,>(operation: () => Promise<T>, fallback: T): Promise<T> => withFallback(operation, fallback);
+
+type WorkspaceScreenProps = {
+  locale: Locale;
+  appSettings: AppSettings;
+  onOpenSettings: () => void;
+};
+
+const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTranslator>) =>
+  target.type === "wsl"
+    ? target.distro?.trim()
+      ? `WSL (${target.distro.trim()})`
+      : "WSL"
+    : t("nativeTarget");
+
+const isTextInputTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+};
+
+export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
+  const [state, setState] = useRelaxState(workbenchState);
+  const theme: AppTheme = "dark";
+  const [commitMessage, setCommitMessage] = useState("");
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [worktreeModal, setWorktreeModal] = useState<WorktreeModalState | null>(null);
+  const [worktreeView, setWorktreeView] = useState<WorktreeView>("status");
+  const [previewMode, setPreviewMode] = useState<"preview" | "diff">("preview");
+  const [codeSidebarView, setCodeSidebarView] = useState<"files" | "git">("files");
+  const [isCodeExpanded, setIsCodeExpanded] = useState(false);
+  const [overlayCanUseWsl, setOverlayCanUseWsl] = useState(false);
+  const [folderBrowser, setFolderBrowser] = useState<FolderBrowserState>({
+    loading: false,
+    currentPath: "",
+    homePath: "",
+    roots: [],
+    entries: []
+  });
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
+  const [fileSearchState, setFileSearchState] = useState(createInitialWorkspaceFileSearchState);
+  const [draftPromptInputs, setDraftPromptInputs] = useState<Record<string, string>>({});
+  const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
+  const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
+  const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
+  const [selectedGitChangeKey, setSelectedGitChangeKey] = useState<string>("");
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashMenuPaneId, setSlashMenuPaneId] = useState<string | null>(null);
+  const [slashMenuLoading, setSlashMenuLoading] = useState(false);
+  const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
+  const stateRef = useRef(state);
+  const appRef = useRef<HTMLDivElement | null>(null);
+  const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
+  const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const slashMenuRef = useRef<HTMLDivElement | null>(null);
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
+  const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
+  const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
+  const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
+  const agentRuntimeSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
+  const agentResizeStateRef = useRef(new Map<string, {
+    inflight: boolean;
+    pending?: { cols: number; rows: number };
+  }>());
+  const agentTitleTrackerRef = useRef(new Map<string, {
+    draftSessionId?: string;
+    buffer: string;
+    locked: boolean;
+  }>());
+  const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
+  const runningAgentKeysRef = useRef(new Set<string>());
+  const agentStartupStateRef = useRef(new Map<string, {
+    token: number;
+    startedAt: number;
+    lastEventAt: number;
+    sawOutput: boolean;
+    sawReady: boolean;
+    exited: boolean;
+  }>());
+  const agentStartupTokenRef = useRef(0);
+  const t = useMemo(() => createTranslator(locale), [locale]);
+  const editorMetrics = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
+    }
+    const source = appRef.current ?? document.documentElement;
+    const styles = window.getComputedStyle(source);
+    return {
+      fontSize: Number.parseInt(styles.getPropertyValue("--editor-font-size"), 10) || 13,
+      paddingY: Number.parseInt(styles.getPropertyValue("--editor-padding-y"), 10) || 12,
+      terminalFontSize: Number.parseInt(styles.getPropertyValue("--terminal-font-size"), 10) || 12
+    };
+  }, [theme]);
+
+  const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
+    const next = updater(stateRef.current);
+    stateRef.current = next;
+    setState(next);
+  };
+
+  const agentRuntimeRefs = useMemo(() => ({
+    draftPromptInputRefs,
+    agentTerminalRefs,
+    agentTerminalQueueRef,
+    agentPaneSizeRef,
+    agentRuntimeSizeRef,
+    agentResizeStateRef,
+    agentTitleTrackerRef,
+    runningAgentKeysRef,
+    agentStartupStateRef,
+    agentStartupTokenRef
+  }), []);
+
+  const fitWorkspaceAgentTerminals = () => {
+    fitAgentTerminals(agentRuntimeRefs);
+  };
+
+  const registerAgentTerminalRef = (paneId: string, handle: XtermBaseHandle | null) => {
+    setAgentTerminalRef(agentRuntimeRefs, paneId, handle);
+  };
+
+  const registerDraftPromptInputRef = (paneId: string, element: HTMLInputElement | null) => {
+    setDraftPromptInputRef(agentRuntimeRefs, paneId, element);
+  };
+
+  const focusWorkspaceAgentPane = (paneId = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId)?.activePaneId) => {
+    focusAgentTerminal(agentRuntimeRefs, paneId);
+  };
+
+  const commitTrackedAgentSessionTitle = (paneId: string, tabId: string, sessionId: string, rawInput: string) => {
+    commitAgentSessionTitle({
+      refs: agentRuntimeRefs,
+      paneId,
+      tabId,
+      sessionId,
+      rawInput,
+      locale,
+      t,
+      updateTab
+    });
+  };
+
+  const openCommandPalette = () => {
+    setCommandPaletteOpen(true);
+    setCommandPaletteQuery("");
+    setCommandPaletteActiveIndex(0);
+  };
+
+  const closeCommandPalette = () => {
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery("");
+    setCommandPaletteActiveIndex(0);
+  };
+
+  const syncGlobalSettings = (next: AppSettings) => {
+    const normalized = cloneAppSettings(next);
+    updateState((current) => ({
+      ...current,
+      tabs: current.tabs.map((tab) => ({
+        ...tab,
+        agent: {
+          ...tab.agent,
+          provider: normalized.agentProvider,
+          command: normalized.agentCommand
+        },
+        idlePolicy: { ...normalized.idlePolicy }
+      }))
+    }));
+    stateRef.current.tabs.forEach((tab) => {
+      void updateIdlePolicyRequest(tab.id, normalized.idlePolicy).catch(() => {
+        // Best effort sync; in-memory settings remain source of truth if backend lags.
+      });
+    });
+  };
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!slashMenuRef.current?.contains(event.target as Node)) {
+        setSlashMenuOpen(false);
+        setSlashMenuPaneId(null);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSlashMenuOpen(false);
+        setSlashMenuPaneId(null);
+      }
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [slashMenuOpen]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) return;
+    requestAnimationFrame(() => {
+      commandPaletteInputRef.current?.focus();
+      commandPaletteInputRef.current?.select();
+    });
+  }, [commandPaletteOpen]);
+
+  useEffect(() => {
+    persistWorkbenchState(state);
+  }, [state]);
+
+  useEffect(() => {
+    if (state.overlay.visible) {
+      closeCommandPalette();
+    }
+  }, [state.overlay.visible]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = "dark";
+    }
+  }, []);
+
+  useEffect(() => {
+    syncGlobalSettings(appSettings);
+  }, [appSettings]);
+
+  useEffect(() => {
+    if (!overlayCanUseWsl && stateRef.current.overlay.target.type === "wsl") {
+      updateState((current) => ({
+        ...current,
+        overlay: { ...current.overlay, target: { type: "native" } }
+      }));
+    }
+  }, [overlayCanUseWsl]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAgentEvents(({ tab_id, session_id, kind, data }) => {
+      noteAgentStartupEvent(agentRuntimeRefs, tab_id, session_id, kind, data);
+      const cleaned = stripAnsi(data);
+      const isStream = kind === "stdout" || kind === "stderr";
+      const isSystem = kind === "system";
+      const isExit = kind === "exit";
+      updateState((current) => ({
+        ...current,
+        tabs: current.tabs.map((tab) => {
+          if (tab.id !== tab_id) return tab;
+          return {
+            ...tab,
+            sessions: tab.sessions.map((session) => {
+              if (session.id !== session_id) return session;
+              const nextStatus = isStream
+                ? session.status
+                : isExit
+                  ? "idle"
+                  : session.status;
+              const streamChunk = isExit
+                ? "\n[agent exited]\n"
+                : isSystem
+                  ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
+                  : data;
+              const nextStream = `${session.stream}${streamChunk}`.slice(-AGENT_STREAM_BUFFER_LIMIT);
+              const message = isExit
+                ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
+                : isSystem
+                  ? { id: createId("msg"), role: "system" as const, content: cleaned, time: nowLabel() }
+                  : null;
+              const unread = tab.activeSessionId === session.id ? 0 : session.unread + (isSystem || isExit || isStream ? 1 : 0);
+              return {
+                ...session,
+                status: nextStatus,
+                unread,
+                stream: nextStream,
+                messages: message ? [...session.messages, message] : session.messages
+              };
+            })
+          };
+        })
+      }));
+      if (kind === "exit") {
+        clearAgentRuntimeTracking(agentRuntimeRefs, tab_id, session_id);
+        void settleSessionAfterExit(tab_id, session_id);
+      }
+    });
+    return unsubscribe;
+  }, [t]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAgentLifecycleEvents(({ tab_id, session_id, kind, data }) => {
+      noteAgentStartupLifecycle(agentRuntimeRefs, tab_id, session_id, kind);
+      let nextStatus: SessionStatus | null = null;
+      if (kind === "turn_waiting" || kind === "approval_required") {
+        nextStatus = "waiting";
+      } else if (kind === "tool_started" || kind === "tool_finished") {
+        nextStatus = "running";
+      } else if (kind === "turn_completed" || kind === "session_ended") {
+        nextStatus = "idle";
+      }
+
+      if (kind === "session_ended") {
+        clearAgentRuntimeTracking(agentRuntimeRefs, tab_id, session_id);
+      }
+
+      if (nextStatus) {
+        updateState((current) => ({
+          ...current,
+          tabs: current.tabs.map((tab) => {
+            if (tab.id !== tab_id) return tab;
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === session_id
+                  ? {
+                      ...session,
+                      status: resolveVisibleStatus(tab, session, nextStatus)
+                    }
+                  : session
+              )
+            };
+          })
+        }));
+      }
+
+      const claudeSessionId = (() => {
+        try {
+          const payload = JSON.parse(data) as { session_id?: string };
+          return typeof payload.session_id === "string" && payload.session_id.trim()
+            ? payload.session_id.trim()
+            : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      if (claudeSessionId) {
+        let changed = false;
+        updateState((current) => ({
+          ...current,
+          tabs: current.tabs.map((tab) => {
+            if (tab.id !== tab_id) return tab;
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) => {
+                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
+                  return session;
+                }
+                changed = true;
+                return {
+                  ...session,
+                  claudeSessionId
+                };
+              })
+            };
+          })
+        }));
+        if (changed) {
+          void syncSessionPatch(tab_id, session_id, { claude_session_id: claudeSessionId });
+        }
+      }
+
+      if (kind === "turn_completed") {
+        void markSessionIdle(tab_id, session_id);
+      }
+    });
+    return unsubscribe;
+  }, [t]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTerminalEvents(({ tab_id, terminal_id, data }) => {
+      if (!data) return;
+      const termId = `term-${terminal_id}`;
+      updateState((current) => ({
+        ...current,
+        tabs: current.tabs.map((tab) => {
+          if (tab.id !== tab_id) return tab;
+          return {
+            ...tab,
+            terminals: tab.terminals.map((term) => {
+              if (term.id !== termId) return term;
+              const nextOutput = `${term.output}${data}`.slice(-TERMINAL_STREAM_BUFFER_LIMIT);
+              return { ...term, output: nextOutput };
+            })
+          };
+        })
+      }));
+    });
+    return unsubscribe;
+  }, []);
+
+  const activeTab = useMemo(
+    () => state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0],
+    [state]
+  );
+  const showCodePanel = state.layout.showCodePanel;
+  const showTerminalPanel = state.layout.showTerminalPanel;
+
+  const activeSession = useMemo(
+    () => activeTab.sessions.find((s) => s.id === activeTab.activeSessionId) ?? activeTab.sessions[0],
+    [activeTab]
+  );
+  const activePaneSessionId = useMemo(
+    () => findPaneSessionId(activeTab.paneLayout, activeTab.activePaneId) ?? activeTab.activeSessionId,
+    [activeTab]
+  );
+  const activePaneSession = useMemo(
+    () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
+    [activePaneSessionId, activeSession, activeTab.sessions]
+  );
+  const activeTabSessionIdsKey = useMemo(
+    () => activeTab.sessions.map((session) => session.id).join("|"),
+    [activeTab.sessions]
+  );
+  const fileSearchQuery = fileSearchState.query;
+  const fileSearchActiveIndex = fileSearchState.activeIndex;
+  const fileSearchDropdownStyle = fileSearchState.dropdownStyle;
+  const normalizedFileSearchQuery = normalizeWorkspaceFileSearchQuery(fileSearchState.query);
+  const fileSearchResults = useMemo(
+    () => buildWorkspaceFileSearchResults(activeTab.fileTree, activeTab.project?.path, fileSearchState.query),
+    [activeTab.fileTree, activeTab.project?.path, fileSearchState.query]
+  );
+  const showFileSearchDropdown = shouldShowWorkspaceFileSearchDropdown(fileSearchState);
+
+  useEffect(() => {
+    setFileSearchState((current) => syncWorkspaceFileSearchState(current, fileSearchResults.length));
+  }, [fileSearchResults.length, normalizedFileSearchQuery]);
+
+  useEffect(() => {
+    if (!showFileSearchDropdown) {
+      setFileSearchState((current) => withWorkspaceFileSearchDropdownStyle(current, null));
+      return;
+    }
+
+    const updateDropdownPosition = () => {
+      const anchor = fileSearchShellRef.current;
+      if (!anchor) return;
+      setFileSearchState((current) => withWorkspaceFileSearchDropdownStyle(
+        current,
+        resolveWorkspaceFileSearchDropdownStyle(anchor.getBoundingClientRect(), window.innerWidth, window.innerHeight)
+      ));
+    };
+
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [showFileSearchDropdown, state.layout.rightWidth, showCodePanel, isCodeExpanded]);
+
+  useEffect(() => {
+    if (!showFileSearchDropdown) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (fileSearchShellRef.current?.contains(target)) return;
+      if ((target as Element).closest?.(".workspace-search-dropdown")) return;
+      setFileSearchState((current) => closeWorkspaceFileSearch(current));
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [showFileSearchDropdown]);
+
+  const displayWorkspaceTitle = (value: string) => localizeWorkspaceTitle(value, locale);
+  const displaySessionTitle = (value: string) => localizeSessionTitle(value, locale);
+  const displayTerminalTitle = (value: string) => localizeTerminalTitle(value, locale);
+  const hasPreviewFile = Boolean(activeTab.filePreview.path);
+
+  const archivedEntry = activeTab.viewingArchiveId
+    ? activeTab.archive.find((entry) => entry.id === activeTab.viewingArchiveId)
+    : undefined;
+  const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
+  const isArchiveView = Boolean(archivedEntry);
+  const viewedSession = isArchiveView ? sessionForView : activeSession;
+  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
+
+  useEffect(() => {
+    updateTab(activeTab.id, (tab) => {
+      const leaves = collectPaneLeaves(tab.paneLayout);
+      const covered = new Set(leaves.map((leaf) => leaf.sessionId));
+      const missingSessions = tab.sessions.filter((session) => !covered.has(session.id));
+      if (missingSessions.length === 0) return tab;
+
+      let nextLayout = tab.paneLayout;
+      missingSessions.forEach((session) => {
+        const nextLeaf = createPaneLeaf(session.id);
+        nextLayout = {
+          type: "split",
+          id: createId("split"),
+          axis: "vertical",
+          ratio: 0.5,
+          first: nextLayout,
+          second: nextLeaf
+        };
+      });
+
+      const nextActivePaneId = findPaneIdBySessionId(nextLayout, tab.activeSessionId)
+        ?? collectPaneLeaves(nextLayout)[0]?.id
+        ?? tab.activePaneId;
+
+      return {
+        ...tab,
+        paneLayout: nextLayout,
+        activePaneId: nextActivePaneId
+      };
+    });
+  }, [activeTab.id, activeTabSessionIdsKey]);
+
+  const addToast = (toast: Toast) => {
+    setToasts((prev) => [...prev, toast]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+    }, 4000);
+  };
+
+  const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
+    try {
+      return await operation();
+    } catch (error) {
+      addToast({
+        id: createId("toast"),
+        text: `${label}: ${String(error)}`,
+        sessionId
+      });
+      return null;
+    }
+  };
+
+  const loadSlashSkills = async (cwd?: string) => {
+    setSlashMenuLoading(true);
+    const items = await withServiceFallback(
+      () => listClaudeSlashSkills(cwd ?? activeTab.project?.path ?? ""),
+      []
+    );
+    setSlashSkillItems(items);
+    setSlashMenuLoading(false);
+  };
+
+  const updateTab = (tabId: string, updater: (tab: Tab) => Tab) => {
+    updateState((current) => ({
+      ...current,
+      tabs: current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab))
+    }));
+  };
+
+  const {
+    archiveSessionForTab,
+    createDraftSessionForTab,
+    markSessionIdle,
+    materializeSession,
+    onCloseAgentPane: closeAgentPaneSession,
+    onNewSession,
+    onSwitchSession: switchSessionInActiveTab,
+    refreshTabFromBackend,
+    settleSessionAfterExit,
+    syncSessionPatch,
+    touchSession
+  } = createWorkspaceSessionActions({
+    locale,
+    t,
+    stateRef,
+    updateTab,
+    withServiceFallback,
+    addToast
+  });
+
+  const refreshWorkspaceArtifacts = async (tabId: string) => {
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const path = tab?.project?.path;
+    const target = tab?.project?.target;
+    if (!tab || !path || !target) return null;
+
+    const [git, gitChanges, worktrees, tree] = await Promise.all([
+      withServiceFallback<GitStatus>(() => getGitStatus(path, target), {
+        branch: tab.git.branch || "main",
+        changes: tab.git.changes ?? 0,
+        last_commit: tab.git.lastCommit || "—"
+      }),
+      withServiceFallback<GitChangeEntry[]>(() => getGitChanges(path, target), tab.gitChanges ?? []),
+      withServiceFallback<WorktreeInfo[]>(() => getWorktreeList(path, target), tab.worktrees),
+      withServiceFallback<WorkspaceTree>(() => getWorkspaceTree(path, target, 4), {
+        root: { name: ".", path, kind: "dir", children: [] },
+        changes: []
+      })
+    ]);
+
+    updateTab(tabId, (currentTab) => ({
+      ...currentTab,
+      git: {
+        branch: git.branch || currentTab.git.branch || "main",
+        changes: git.changes ?? currentTab.git.changes ?? 0,
+        lastCommit: git.last_commit || currentTab.git.lastCommit || "—"
+      },
+      gitChanges,
+      worktrees,
+      fileTree: tree.root.children ?? [],
+      changesTree: tree.changes ?? []
+    }));
+    return tree;
+  };
+
+  const onAddTab = () => {
+    updateState((current) => {
+      const nextIndex = current.tabs.length + 1;
+      const createdTab = createTab(nextIndex, locale);
+      const newTab: Tab = {
+        ...createdTab,
+        agent: {
+          ...createdTab.agent,
+          provider: appSettings.agentProvider,
+          command: appSettings.agentCommand
+        },
+        idlePolicy: { ...appSettings.idlePolicy }
+      };
+      return {
+        ...current,
+        tabs: [...current.tabs, newTab],
+        activeTabId: newTab.id,
+        overlay: {
+          visible: true,
+          tabId: newTab.id,
+          mode: "remote",
+          input: "",
+          target: { type: "native" }
+        }
+      };
+    });
+  };
+
+  const onRemoveTab = (tabId: string) => {
+    updateState((current) => {
+      const index = current.tabs.findIndex((tab) => tab.id === tabId);
+      if (index === -1) return current;
+
+      if (current.tabs.length === 1) {
+        const createdTab = createTab(1, locale);
+        const replacementTab: Tab = {
+          ...createdTab,
+          agent: {
+            ...createdTab.agent,
+            provider: appSettings.agentProvider,
+            command: appSettings.agentCommand
+          },
+          idlePolicy: { ...appSettings.idlePolicy }
+        };
+        return {
+          ...current,
+          tabs: [replacementTab],
+          activeTabId: replacementTab.id,
+          overlay: {
+            visible: true,
+            tabId: replacementTab.id,
+            mode: "remote",
+            input: "",
+            target: { type: "native" }
+          }
+        };
+      }
+
+      const nextTabs = current.tabs.filter((tab) => tab.id !== tabId);
+      const fallbackTab = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0];
+      const nextActiveTabId = current.activeTabId === tabId ? fallbackTab.id : current.activeTabId;
+      const nextActiveTab = nextTabs.find((tab) => tab.id === nextActiveTabId) ?? fallbackTab;
+
+      return {
+        ...current,
+        tabs: nextTabs,
+        activeTabId: nextActiveTabId,
+        overlay: {
+          ...current.overlay,
+          visible: nextActiveTab.status === "init",
+          tabId: nextActiveTab.id
+        }
+      };
+    });
+  };
+
+  const onSwitchWorkspace = (tabId: string) => {
+    updateState((current) => {
+      const targetTab = current.tabs.find((tab) => tab.id === tabId);
+      if (!targetTab) return current;
+      const previousActiveTabId = current.activeTabId;
+      return {
+        ...current,
+        activeTabId: tabId,
+        overlay: {
+          ...current.overlay,
+          visible: targetTab.status === "init",
+          tabId
+        },
+        tabs: current.tabs.map((tab) => {
+          if (tab.id === tabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId
+                  ? { ...session, unread: 0, status: restoreVisibleStatus(session), lastActiveAt: Date.now() }
+                  : session
+              )
+            };
+          }
+          if (tab.id === previousActiveTabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId ? { ...session, status: toBackgroundStatus(session.status) } : session
+              )
+            };
+          }
+          return tab;
+        })
+      };
+    });
+  };
+
+  const onCycleWorkspace = (direction: number) => {
+    const tabs = stateRef.current.tabs;
+    if (tabs.length < 2) return;
+    const activeIndex = tabs.findIndex((tab) => tab.id === stateRef.current.activeTabId);
+    if (activeIndex < 0) return;
+    const delta = direction >= 0 ? 1 : -1;
+    const nextIndex = (activeIndex + delta + tabs.length) % tabs.length;
+    onSwitchWorkspace(tabs[nextIndex].id);
+  };
+
+  const onSwitchWorkspaceSession = (tabId: string, sessionId: string) => {
+    const currentState = stateRef.current;
+    const targetTabSnapshot = currentState.tabs.find((tab) => tab.id === tabId);
+    const previousTabSnapshot = currentState.tabs.find((tab) => tab.id === currentState.activeTabId);
+    const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
+    const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
+    const nextActiveAt = Date.now();
+    updateState((current) => {
+      const targetTab = current.tabs.find((tab) => tab.id === tabId);
+      if (!targetTab) return current;
+      const previousActiveTabId = current.activeTabId;
+
+      return {
+        ...current,
+        activeTabId: tabId,
+        overlay: {
+          ...current.overlay,
+          visible: targetTab.status === "init",
+          tabId
+        },
+        tabs: current.tabs.map((tab) => {
+          if (tab.id === tabId) {
+            return {
+              ...tab,
+              activeSessionId: sessionId,
+              paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+                ...leaf,
+                sessionId
+              })),
+              viewingArchiveId: undefined,
+              sessions: tab.sessions.map((session) => {
+                if (session.id === sessionId) {
+                  return {
+                    ...session,
+                    unread: 0,
+                    status: restoreVisibleStatus(session),
+                    lastActiveAt: nextActiveAt
+                  };
+                }
+                if (session.id === tab.activeSessionId) {
+                  return { ...session, status: toBackgroundStatus(session.status) };
+                }
+                return session;
+              })
+            };
+          }
+
+          if (tab.id === previousActiveTabId) {
+            return {
+              ...tab,
+              sessions: tab.sessions.map((session) =>
+                session.id === tab.activeSessionId
+                  ? { ...session, status: toBackgroundStatus(session.status) }
+                  : session
+              )
+            };
+          }
+
+          return tab;
+        })
+      };
+    });
+
+    const backendSessionId = parseNumericId(sessionId);
+    if (backendSessionId !== null) {
+      void switchSessionRequest(tabId, backendSessionId).catch(() => {
+        // The frontend state already switched optimistically.
+      });
+    }
+
+    if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
+      void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
+    }
+
+    if (nextSession) {
+      const nextStatus = restoreVisibleStatus(nextSession);
+      void syncSessionPatch(tabId, sessionId, {
+        status: nextStatus,
+        last_active_at: nextActiveAt
+      });
+    }
+  };
+
+  const onOverlaySelectMode = (mode: "remote" | "local") => {
+    updateState((current) => selectWorkspaceOverlayMode(current, mode));
+  };
+
+  const onOverlayUpdateInput = (value: string) => {
+    updateState((current) => updateWorkspaceOverlayInput(current, value));
+  };
+
+  const onOverlayUpdateTarget = (target: ExecTarget) => {
+    updateState((current) => updateWorkspaceOverlayTarget(current, target));
+  };
+
+  const browseOverlayDirectory = useCallback(async (target: ExecTarget, path?: string, selectCurrent = false) => {
+    await browseWorkspaceOverlayDirectory({
+      target,
+      path,
+      selectCurrent,
+      locale,
+      t,
+      setFolderBrowser,
+      setOverlayCanUseWsl,
+      updateOverlayInput: (value) => {
+        updateState((current) => updateWorkspaceOverlayInput(current, value));
+      }
+    });
+  }, [locale, t]);
+
+  const onBrowseOverlayDirectory = (path?: string, selectCurrent = false) => {
+    void browseOverlayDirectory(stateRef.current.overlay.target, path, selectCurrent);
+  };
+
+  const onSelectOverlayDirectory = (path: string) => {
+    updateState((current) => updateWorkspaceOverlayInput(current, path));
+  };
+
+  useEffect(() => {
+    if (!state.overlay.visible || state.overlay.mode !== "local") return;
+    void browseOverlayDirectory(
+      state.overlay.target,
+      state.overlay.input || undefined,
+      !state.overlay.input
+    );
+  }, [
+    state.overlay.visible,
+    state.overlay.mode,
+    state.overlay.target.type,
+    state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
+    browseOverlayDirectory
+  ]);
+
+  const onOverlayCancel = () => {
+    updateState((current) => hideWorkspaceOverlay(current));
+  };
+
+  const onStartWorkspace = async () => {
+    await startWorkspaceLaunch({
+      overlay: stateRef.current.overlay,
+      locale,
+      updateTab,
+      updateState,
+      withServiceFallback,
+      refreshTabFromBackend,
+      refreshWorkspaceArtifacts,
+      onSelectInitialFile: onFileSelect
+    });
+  };
+
+  const buildAgentCommand = (tab: Tab) => {
+    const path = tab.project?.path ?? "";
+    return tab.agent.command.replace("{path}", path);
+  };
+
+  const agentStartMaybe = async (tab: Tab, session: Session) => {
+    if (!tab.project?.path) return false;
+    const command = buildAgentCommand(tab);
+    const cwd = tab.project.path;
+    const target = tab.project.target;
+    const availability = await withServiceFallback<CommandAvailability | null>(
+      () => checkCommandAvailability(command, target, cwd),
+      null
+    );
+    if (availability && !availability.available) {
+      addToast({
+        id: createId("toast"),
+        text: `${t("agentStartFailed")}: ${availability.error ?? t("launchCommandMissing", { runtime: formatExecTargetLabel(target, t) })}`,
+        sessionId: session.id
+      });
+      return false;
+    }
+    const startupToken = armAgentStartupGate(agentRuntimeRefs, tab.id, session.id);
+    const result = await invokeAgent<AgentStartResult>(() => startAgent({
+      tabId: tab.id,
+      sessionId: session.id,
+      provider: tab.agent.provider,
+      command,
+      claudeSessionId: session.claudeSessionId,
+      cwd,
+      target
+    }), session.id, t("agentStartFailed"));
+    if (!result) {
+      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
+      return false;
+    }
+    markAgentRuntimeStarted(agentRuntimeRefs, tab.id, session.id);
+    if (!result.started) {
+      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
+    }
+    return {
+      ok: true,
+      started: result.started,
+      startupToken: result.started ? startupToken : null
+    };
+  };
+
+  const agentSend = async (tab: Tab, session: Session, input: string) => {
+    const lastActiveAt = Date.now();
+    updateTab(tab.id, (current) => ({
+      ...current,
+      sessions: current.sessions.map((s) =>
+        s.id === session.id ? { ...s, status: resolveVisibleStatus(current, s, "waiting"), lastActiveAt } : s
+      )
+    }));
+    void syncSessionPatch(tab.id, session.id, { status: "waiting", last_active_at: lastActiveAt });
+    const sent = await invokeAgent(
+      () => sendAgentInput(tab.id, session.id, input, true),
+      session.id,
+      t("agentSendFailed")
+    );
+    return sent !== null;
+  };
+
+  const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
+    const lastActiveAt = Date.now();
+    updateTab(tab.id, (current) => ({
+      ...current,
+      sessions: current.sessions.map((item) =>
+        item.id === session.id ? { ...item, lastActiveAt } : item
+      )
+    }));
+    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
+    const sent = await invokeAgent(
+      () => sendAgentInput(tab.id, session.id, input, false),
+      session.id,
+      t("agentKeySendFailed")
+    );
+    return sent !== null;
+  };
+
+  const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
+    const lastActiveAt = Date.now();
+    updateTab(tab.id, (current) => ({
+      ...current,
+      sessions: current.sessions.map((item) =>
+        item.id === session.id ? { ...item, lastActiveAt } : item
+      )
+    }));
+    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
+    const started = await agentStartMaybe(tab, session);
+    if (!started) return;
+    if (started.started && started.startupToken !== null) {
+      await waitForAgentStartupDrain(agentRuntimeRefs, tab.id, session.id, started.startupToken);
+    }
+    await sendAgentRawChunk(tab, session, input);
+  };
+
+  const onSwitchSession = (sessionId: string) => {
+    switchSessionInActiveTab(activeTab, sessionId);
+  };
+
+  const onCloseAgentPane = (paneId: string, sessionId: string) => {
+    closeAgentPaneSession(activeTab, paneId, sessionId);
+  };
+
+  const onArchiveSession = async (sessionId: string) => {
+    await archiveSessionForTab(activeTab.id, sessionId);
+  };
+
+  const onSelectArchive = (entryId: string) => {
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      viewingArchiveId: entryId
+    }));
+  };
+
+  const onExitArchive = () => {
+    updateTab(activeTab.id, (tab) => ({ ...tab, viewingArchiveId: undefined }));
+  };
+
+  const onFileSelect = async (node: TreeNode) => {
+    if (node.kind !== "file") return;
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const segments = node.path.split(/[\/]+/).filter(Boolean);
+    if (segments.length > 1) {
+      setRepoCollapsedPaths((current) => {
+        const next = new Set(current);
+        let prefix = "";
+        for (const segment of segments.slice(0, -1)) {
+          prefix = prefix ? `${prefix}/${segment}` : segment;
+          next.add(prefix);
+        }
+        return next;
+      });
+    }
+
+    await loadWorkspaceFilePreview({
+      tab: currentTab,
+      node,
+      updateTab,
+      withServiceFallback,
+      t,
+    });
+    setSelectedGitChangeKey("");
+    setPreviewMode("preview");
+  };
+
+  const openPreviewPath = async (path: string, options?: { clearGitSelection?: boolean; statusLabel?: string; parentPath?: string }) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await openWorkspacePreviewPath({
+      tab: currentTab,
+      path,
+      updateTab,
+      withServiceFallback,
+      t,
+      options,
+    });
+    if (options?.clearGitSelection ?? false) {
+      setSelectedGitChangeKey("");
+    }
+    setPreviewMode("preview");
+  };
+
+  const onFileSearchSelect = async (node: TreeNode) => {
+    setFileSearchState((current) => resetWorkspaceFileSearch(current));
+    setCodeSidebarView("files");
+    await onFileSelect(node);
+    requestAnimationFrame(() => {
+      fileSearchInputRef.current?.blur();
+    });
+  };
+
+  const onFileSearchBlur = () => {
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof Node && fileSearchShellRef.current?.contains(active)) return;
+      setFileSearchState((current) => closeWorkspaceFileSearch(current));
+    });
+  };
+
+  const onFileSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!normalizedFileSearchQuery) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setFileSearchState((current) => moveWorkspaceFileSearchIndex(current, 1, fileSearchResults.length));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setFileSearchState((current) => moveWorkspaceFileSearchIndex(current, -1, fileSearchResults.length));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (!fileSearchResults.length) return;
+      event.preventDefault();
+      void onFileSearchSelect((fileSearchResults[fileSearchActiveIndex] ?? fileSearchResults[0]).node);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setFileSearchState((current) => closeWorkspaceFileSearch(current));
+    }
+  };
+
+  const onGitChangeSelect = async (change: GitChangeEntry) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const nextKey = await loadWorkspaceGitChangePreview({
+      tab: currentTab,
+      change,
+      updateTab,
+      withServiceFallback,
+    });
+    setPreviewMode("diff");
+    setSelectedGitChangeKey(nextKey);
+  };
+
+  const onGitChangeAction = async (change: GitChangeEntry, action: GitChangeAction) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const relativePath = sanitizeGitRelativePath(change.path);
+    const basePayload = {
+      path: currentTab.project?.path ?? "",
+      target: currentTab.project?.target ?? { type: "native" },
+      filePath: relativePath,
+    };
+
+    if (action === "stage") {
+      await invokeGitAction(() => stageGitFile(basePayload.path, basePayload.target, basePayload.filePath));
+      return;
+    }
+    if (action === "unstage") {
+      await invokeGitAction(() => unstageGitFile(basePayload.path, basePayload.target, basePayload.filePath));
+      return;
+    }
+    await invokeGitAction(() => discardGitFile(
+      basePayload.path,
+      basePayload.target,
+      basePayload.filePath,
+      change.section,
+    ));
+  };
+
+  const onPreviewEdit = (content: string) => {
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      filePreview: {
+        ...tab.filePreview,
+        content,
+        dirty: true,
+      },
+    }));
+  };
+
+  const onPreviewMode = async (mode: "preview" | "diff") => {
+    setPreviewMode(mode);
+    if (mode === "preview") return;
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await refreshWorkspaceArtifacts(currentTab.id);
+    await loadWorkspaceRepositoryDiff({
+      tab: currentTab,
+      updateTab,
+      withServiceFallback,
+    });
+  };
+
+  const onSavePreview = async () => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await saveWorkspacePreview({
+      tab: currentTab,
+      activeSessionId: activeSession.id,
+      updateTab,
+      withServiceFallback,
+      refreshWorkspaceArtifacts,
+      addToast,
+      t,
+      createToastId: () => createId("toast"),
+    });
+  };
+
+  const invokeGitAction = async (operation: () => Promise<unknown>) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    return performWorkspaceGitOperation({
+      tab: currentTab,
+      activeSessionId: activeSession.id,
+      selectedGitChangeKey,
+      previewMode,
+      updateTab,
+      refreshWorkspaceArtifacts,
+      onSelectGitChange: async (change) => {
+        await onGitChangeSelect(change);
+      },
+      onReloadRepositoryDiff: async () => {
+        await onPreviewMode("diff");
+      },
+      onClearPreviewSelection: () => {
+        setSelectedGitChangeKey("");
+        setPreviewMode("preview");
+      },
+      addToast,
+      t,
+      createToastId: () => createId("toast"),
+      getCurrentTab: (tabId) => stateRef.current.tabs.find((tab) => tab.id === tabId),
+      operation,
+    });
+  };
+
+  const onGitStageAll = async () => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await invokeGitAction(() => stageAllGitChanges(
+      currentTab.project?.path ?? "",
+      currentTab.project?.target ?? { type: "native" },
+    ));
+  };
+
+  const onGitUnstageAll = async () => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await invokeGitAction(() => unstageAllGitChanges(
+      currentTab.project?.path ?? "",
+      currentTab.project?.target ?? { type: "native" },
+    ));
+  };
+
+  const onGitDiscardAll = async () => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const ok = await invokeGitAction(() => discardAllGitChanges(
+      currentTab.project?.path ?? "",
+      currentTab.project?.target ?? { type: "native" },
+    ));
+    if (ok) {
+      updateTab(currentTab.id, (tab) => ({
+        ...tab,
+        filePreview: createEmptyPreview(),
+      }));
+      setPreviewMode("preview");
+    }
+  };
+
+  const onGitCommit = async () => {
+    if (!commitMessage.trim()) return;
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const ok = await invokeGitAction(() => commitGitChanges(
+      currentTab.project?.path ?? "",
+      currentTab.project?.target ?? { type: "native" },
+      commitMessage.trim(),
+    ));
+    if (ok) {
+      setCommitMessage("");
+      addToast({
+        id: createId("toast"),
+        text: t("gitCommitSucceeded"),
+        sessionId: activeSession.id,
+      });
+    }
+  };
+
+  const onAddTerminal = async () => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await addWorkspaceTerminal({
+      tab: currentTab,
+      locale,
+      updateTab,
+      withServiceFallback,
+      addToast,
+      activeSessionId: activeSession.id,
+      createToastId: () => createId("toast"),
+      t,
+    });
+  };
+
+  const onTerminalSelect = (terminalId: string) => {
+    selectWorkspaceTerminal(updateTab, activeTab.id, terminalId);
+  };
+
+  const onCloseTerminal = async (terminalId: string) => {
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    await closeWorkspaceTerminal(currentTab, terminalId, updateTab, withServiceFallback);
+  };
+
+  const onOpenWorktree = async (tree: WorktreeInfo) => {
+    await openWorkspaceWorktree({
+      tree,
+      target: activeTab.project?.target ?? { type: "native" },
+      fallbackTree: activeTab.fileTree,
+      fallbackChanges: activeTab.changesTree,
+      setWorktreeView,
+      setWorktreeModal,
+      withServiceFallback,
+    });
+  };
+
+  const onResizeStart = (type: "left" | "right-split") => (event: React.PointerEvent) => {
+    startWorkspacePanelResize({
+      event,
+      type,
+      stateRef,
+      updateState,
+      shellTerminalRef,
+      fitAgentTerminals: fitWorkspaceAgentTerminals,
+    });
+  };
+
+  const toggleRightPane = (pane: "code" | "terminal") => {
+    updateState((current) => toggleWorkspaceRightPane(current, pane));
+    if (pane === "code") {
+      setIsCodeExpanded(false);
+    }
+    requestAnimationFrame(() => {
+      shellTerminalRef.current?.fit();
+    });
+  };
+
+  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
+  const showAgentPanel = !isCodeExpanded;
+
+  const toggleCodeExpanded = async () => {
+    if (isCodeExpanded) {
+      if (codeSidebarView === "git" && activeTab.filePreview.mode === "diff" && activeTab.filePreview.path) {
+        await openPreviewPath(activeTab.filePreview.path, {
+          clearGitSelection: false,
+          statusLabel: activeTab.filePreview.statusLabel,
+          parentPath: activeTab.filePreview.parentPath
+        });
+      }
+      setCodeSidebarView("files");
+    }
+    setIsCodeExpanded((value) => !value);
+  };
+
+  const setActivePane = (paneId: string, sessionId: string) => {
+    activateWorkspacePane(updateTab, activeTab.id, paneId, sessionId);
+  };
+
+  const splitPane = (paneId: string, axis: "horizontal" | "vertical") => {
+    splitWorkspacePane({
+      tab: activeTab,
+      paneId,
+      axis,
+      updateTab,
+      createDraftSessionForTab,
+      onFocusPane: focusWorkspaceAgentPane,
+    });
+  };
+
+  const onPaneSplitResizeStart = (splitId: string, axis: "horizontal" | "vertical") => (event: React.PointerEvent<HTMLDivElement>) => {
+    startWorkspacePaneSplitResize({
+      event,
+      tabId: activeTab.id,
+      paneLayout: activeTab.paneLayout,
+      splitId,
+      axis,
+      updateTab,
+      fitAgentTerminals: fitWorkspaceAgentTerminals,
+    });
+  };
+
+  const onToggleSlashMenu = async (paneId: string) => {
+    const nextOpen = !(slashMenuOpen && slashMenuPaneId === paneId);
+    setSlashMenuPaneId(nextOpen ? paneId : null);
+    setSlashMenuOpen(nextOpen);
+    if (nextOpen) {
+      await loadSlashSkills(activeTab.project?.path);
+    }
+  };
+
+  const onSelectSlashMenuItem = (item: ClaudeSlashMenuItem) => {
+    setSlashMenuOpen(false);
+    setSlashMenuPaneId(null);
+    void onAgentTerminalData(activeTab.activePaneId, `${item.command} `);
+    focusWorkspaceAgentPane(activeTab.activePaneId);
+  };
+
+  const onRunCommandPaletteAction = (action: CommandPaletteAction | undefined) => {
+    if (!action) return;
+    closeCommandPalette();
+    action.run();
+  };
+
+  const ensureAgentPaneSessionReady = async (paneId: string) => {
+    if (isArchiveView) return null;
+    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    if (!activeTabSnapshot) return null;
+    const paneSessionId = findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId;
+    const activeSessionSnapshot = activeTabSnapshot.sessions.find((session) => session.id === paneSessionId);
+    if (!activeSessionSnapshot) return null;
+
+    const materialized = isDraftSession(activeSessionSnapshot)
+      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
+      : { tab: activeTabSnapshot, session: activeSessionSnapshot };
+    const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
+    const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
+    if (!tabSnapshot || !sessionSnapshot) return null;
+
+    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      if (!started) return null;
+      if (started.started) {
+        syncAgentPaneSize(agentRuntimeRefs, paneId, tabSnapshot.id, sessionSnapshot.id);
+      }
+      if (started.started && started.startupToken !== null) {
+        await waitForAgentStartupDrain(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id, started.startupToken);
+      }
+    }
+
+    syncAgentPaneSize(agentRuntimeRefs, paneId, tabSnapshot.id, sessionSnapshot.id);
+    touchSession(tabSnapshot.id, sessionSnapshot.id);
+    return { tab: tabSnapshot, session: sessionSnapshot };
+  };
+
+  const onAgentTerminalData = async (paneId: string, data: string) => {
+    if (isArchiveView || !data) return;
+    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    const paneSessionId = activeTabSnapshot
+      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
+      : null;
+    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
+      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
+      : null;
+    const pendingTitle = currentSessionSnapshot
+      ? trackAgentInitialTitleInput(agentRuntimeRefs, paneId, currentSessionSnapshot, data)
+      : null;
+    const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
+    const nextQueue = currentQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const ready = await ensureAgentPaneSessionReady(paneId);
+        if (!ready) return;
+        if (pendingTitle) {
+          commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, pendingTitle);
+        }
+        await sendAgentRawChunk(ready.tab, ready.session, data);
+      });
+    agentTerminalQueueRef.current.set(paneId, nextQueue);
+    await nextQueue;
+  };
+
+  const onSubmitDraftPrompt = async (paneId: string) => {
+    const content = (draftPromptInputs[paneId] ?? "").trim();
+    if (!content) return;
+    setDraftPromptInputs((current) => ({
+      ...current,
+      [paneId]: ""
+    }));
+    await onAgentTerminalData(paneId, content);
+    await onAgentTerminalData(paneId, "\r");
+  };
+
+  const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
+    const ready = await ensureAgentPaneSessionReady(paneId);
+    if (!ready) return;
+    await sendAgentRawChunk(ready.tab, ready.session, sequence);
+    focusWorkspaceAgentPane(paneId);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const hasModifier = event.metaKey || event.ctrlKey;
+      const isEditableTarget = isTextInputTarget(event.target);
+
+      if (hasModifier && key === "k") {
+        event.preventDefault();
+        if (commandPaletteOpen) {
+          closeCommandPalette();
+        } else {
+          openCommandPalette();
+          setSlashMenuOpen(false);
+          setSlashMenuPaneId(null);
+        }
+        return;
+      }
+
+      if (commandPaletteOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCommandPalette();
+        }
+        return;
+      }
+
+      if (hasModifier && key === "s") {
+        if (!activeTab.filePreview.path) return;
+        event.preventDefault();
+        void onSavePreview();
+        return;
+      }
+
+      if (hasModifier && key === "n") {
+        event.preventDefault();
+        onAddTab();
+        return;
+      }
+
+      if (hasModifier && event.shiftKey && (event.key === "[" || event.key === "{")) {
+        event.preventDefault();
+        onCycleWorkspace(-1);
+        return;
+      }
+
+      if (hasModifier && event.shiftKey && (event.key === "]" || event.key === "}")) {
+        event.preventDefault();
+        onCycleWorkspace(1);
+        return;
+      }
+
+      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget && !isArchiveView) {
+        event.preventDefault();
+        setIsFocusMode((value) => !value);
+        return;
+      }
+
+      if (!hasModifier && !event.altKey && !event.shiftKey && event.key === "Escape" && isFocusMode) {
+        event.preventDefault();
+        setIsFocusMode(false);
+        return;
+      }
+
+      if (isArchiveView) return;
+      const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
+      const isSplitShortcut = isMacPlatform
+        ? event.metaKey && !event.ctrlKey && !event.altKey && key === "d"
+        : event.altKey && !event.ctrlKey && !event.metaKey && key === "d";
+      if (!isSplitShortcut) return;
+      if (event.repeat) return;
+      event.preventDefault();
+      const splitAxis: "horizontal" | "vertical" = event.shiftKey ? "horizontal" : "vertical";
+      splitPane(activeTab.activePaneId, splitAxis);
+      setSlashMenuOpen(false);
+      setSlashMenuPaneId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    activeTab.activePaneId,
+    activeTab.filePreview.path,
+    activeTab.filePreview.dirty,
+    activeTab.filePreview.content,
+    activeSession.id,
+    commandPaletteOpen,
+    isArchiveView,
+    isFocusMode
+  ]);
+
+  useEffect(() => {
+    if (!isArchiveView) {
+      focusWorkspaceAgentPane();
+    }
+  }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
+
+  useEffect(() => {
+    setCommitMessage("");
+    setSelectedGitChangeKey("");
+    setSlashMenuOpen(false);
+    setSlashMenuPaneId(null);
+  }, [activeTab.id]);
+
+  useEffect(() => {
+    if (!activeTab.project?.path) return;
+    void refreshWorkspaceArtifacts(activeTab.id);
+  }, [codeSidebarView, activeTab.id, activeTab.project?.path]);
+
+  useEffect(() => {
+    if (!activeTab.project?.path) return;
+    const timer = window.setInterval(() => {
+      void refreshWorkspaceArtifacts(activeTab.id);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeTab.id, activeTab.project?.path]);
+
+  const onShellTerminalSize = useCallback((size: { cols: number; rows: number }) => {
+    syncWorkspaceTerminalSize(
+      terminalSizeRef,
+      activeTab.id,
+      activeTerminal?.id,
+      size.cols,
+      size.rows
+    );
+  }, [activeTerminal?.id, activeTab.id]);
+
+  const onShellTerminalData = useCallback((data: string) => {
+    writeWorkspaceTerminalData(activeTab.id, activeTerminal?.id, data);
+  }, [activeTerminal?.id, activeTab.id]);
+
+  const onAgentTerminalSize = useCallback((
+    paneId: string,
+    tabId: string,
+    sessionId: string,
+    size: { cols: number; rows: number }
+  ) => {
+    agentPaneSizeRef.current.set(paneId, size);
+    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabId, sessionId)) return;
+    syncAgentRuntimeSize(agentRuntimeRefs, tabId, sessionId, size);
+  }, []);
+
+  useEffect(() => {
+    if (!showTerminalPanel || isCodeExpanded) return;
+    requestAnimationFrame(() => {
+      shellTerminalRef.current?.fit();
+    });
+  }, [showTerminalPanel, isCodeExpanded, state.layout.rightSplit]);
+
+  useEffect(() => {
+    if (activeTerminal && showTerminalPanel && !isCodeExpanded) {
+      shellTerminalRef.current?.focus();
+    }
+  }, [activeTerminal?.id, showTerminalPanel, isCodeExpanded]);
+
+  useEffect(() => {
+    if (activeTerminal) return;
+    terminalSizeRef.current = { id: undefined, cols: 0, rows: 0 };
+  }, [activeTerminal?.id]);
+  const layoutStyle = {
+    ["--left-w" as string]: `${state.layout.leftWidth}px`,
+    ["--right-w" as string]: `${state.layout.rightWidth}px`,
+    ["--right-split" as string]: `${state.layout.rightSplit}%`
+  };
+
+  const workspaceTabs = [...state.tabs]
+    .sort((left, right) => {
+      if (sessionSort === "name") {
+        return (displayPathName(left.project?.path) || displayWorkspaceTitle(left.title))
+          .localeCompare(displayPathName(right.project?.path) || displayWorkspaceTitle(right.title), locale === "zh" ? "zh-CN" : "en");
+      }
+      const leftTime = Math.max(...left.sessions.map((session) => session.lastActiveAt));
+      const rightTime = Math.max(...right.sessions.map((session) => session.lastActiveAt));
+      return rightTime - leftTime;
+    })
+    .map((tab) => {
+      const sessions = [...tab.sessions].sort((left, right) => {
+        if (sessionSort === "name") {
+          return displaySessionTitle(left.title).localeCompare(displaySessionTitle(right.title), locale === "zh" ? "zh-CN" : "en");
+        }
+        return right.lastActiveAt - left.lastActiveAt;
+      });
+      const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
+      const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
+      return {
+        id: tab.id,
+        label: displayPathName(tab.project?.path) || displayWorkspaceTitle(tab.title),
+        active: tab.id === state.activeTabId,
+        hasRunning,
+        unread,
+        sessions
+      };
+    });
+  const commandPaletteActions = buildCommandPaletteActions({
+    locale,
+    t,
+    route: "workspace",
+    isFocusMode,
+    showCodePanel,
+    showTerminalPanel,
+    workspaceTabs,
+    onAddTab,
+    onToggleFocusMode: () => setIsFocusMode((value) => !value),
+    onToggleCodePanel: () => toggleRightPane("code"),
+    onToggleTerminalPanel: () => toggleRightPane("terminal"),
+    onFocusAgent: () => focusWorkspaceAgentPane(),
+    onSplitVertical: () => splitPane(activeTab.activePaneId, "vertical"),
+    onSplitHorizontal: () => splitPane(activeTab.activePaneId, "horizontal"),
+    onCycleWorkspace,
+    onOpenSettings,
+    onCloseSettings: () => {},
+    onSwitchWorkspace
+  });
+  const filteredCommandPaletteActions = filterCommandPaletteActions(commandPaletteActions, commandPaletteQuery);
+  const activeCommandPaletteAction = filteredCommandPaletteActions[commandPaletteActiveIndex] ?? filteredCommandPaletteActions[0];
+
+  useEffect(() => {
+    if (!filteredCommandPaletteActions.length) {
+      setCommandPaletteActiveIndex(0);
+      return;
+    }
+    setCommandPaletteActiveIndex((current) => Math.min(current, filteredCommandPaletteActions.length - 1));
+  }, [filteredCommandPaletteActions.length]);
+
+  const gitChangeGroups = buildWorkspaceGitChangeGroups(activeTab.gitChanges, t);
+  const previewGitChange = findPreviewGitChange(activeTab.filePreview.path, activeTab.gitChanges);
+  const activeGitChangeKey = previewGitChange
+    ? `${previewGitChange.section}:${previewGitChange.path}:${previewGitChange.code}`
+    : selectedGitChangeKey;
+  const gitSummary = {
+    changes: gitChangeGroups.find((group) => group.key === "changes")?.items.length ?? 0,
+    staged: gitChangeGroups.find((group) => group.key === "staged")?.items.length ?? 0,
+    untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
+  };
+  const previewFileName = displayPathName(activeTab.filePreview.path);
+  const workspaceFolderName = displayPathName(activeTab.project?.path) || t("noWorkspace");
+  const previewPathLabel = resolveWorkspacePreviewPathLabel(
+    activeTab.filePreview.path,
+    activeTab.project?.path,
+    previewFileName
+  );
+
+  const currentFileChangeCount = activeTab.git.changes;
+  const hasStructuredDiffContent = Boolean(
+    (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
+    || (activeTab.filePreview.modifiedContent && activeTab.filePreview.modifiedContent.length > 0)
+  );
+  const hasTerminalOutput = Boolean(activeTerminal?.output?.trim());
+  const terminalProgressPercent = activeTerminal
+    ? (hasTerminalOutput ? 88 : 52)
+    : 8;
+  const terminalProgressTone = activeTerminal
+    ? (hasTerminalOutput ? "live" : "steady")
+    : "idle";
+  const workspaceAgentPanel = (
+    <AgentWorkspaceFeature
+      visible={showAgentPanel}
+      activeTab={activeTab}
+      activePaneSession={activePaneSession}
+      viewedSession={viewedSession}
+      isArchiveView={isArchiveView}
+      showCodePanel={showCodePanel}
+      theme={theme}
+      terminalFontSize={editorMetrics.terminalFontSize}
+      draftPromptInputs={draftPromptInputs}
+      displaySessionTitle={displaySessionTitle}
+      onExitArchive={onExitArchive}
+      onSetActivePane={setActivePane}
+      onSplitPane={splitPane}
+      onCloseAgentPane={onCloseAgentPane}
+      onSubmitDraftPrompt={(paneId) => {
+        void onSubmitDraftPrompt(paneId);
+      }}
+      onDraftPromptChange={(paneId, value) => {
+        setDraftPromptInputs((current) => ({
+          ...current,
+          [paneId]: value
+        }));
+      }}
+      setDraftPromptInputRef={registerDraftPromptInputRef}
+      setAgentTerminalRef={registerAgentTerminalRef}
+      onAgentTerminalData={(paneId, data) => {
+        void onAgentTerminalData(paneId, data);
+      }}
+      onAgentTerminalSize={onAgentTerminalSize}
+      onPaneSplitResizeStart={onPaneSplitResizeStart}
+      onCodeResizeStart={onResizeStart("left")}
+      t={t}
+    />
+  );
+
+  const workspaceEditorContent = hasPreviewFile ? (
+    activeTab.filePreview.mode === "diff" ? (
+      activeTab.filePreview.source === "git" && Boolean(activeTab.filePreview.section) && hasStructuredDiffContent ? (
+        <div className="editor-surface diff-editor-surface" data-testid="preview-diff-editor">
+          <DiffEditor
+            key={`${activeTab.filePreview.path}:${activeTab.filePreview.section ?? "diff"}`}
+            height="100%"
+            original={activeTab.filePreview.originalContent ?? ""}
+            modified={activeTab.filePreview.modifiedContent ?? ""}
+            originalModelPath={`${activeTab.filePreview.path}.original`}
+            modifiedModelPath={activeTab.filePreview.path}
+            language={inferEditorLanguage(activeTab.filePreview.path)}
+            theme="vs-dark"
+            options={{
+              automaticLayout: true,
+              readOnly: true,
+              renderSideBySide: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              scrollbar: {
+                verticalScrollbarSize: 6,
+                horizontalScrollbarSize: 6,
+                useShadows: false,
+                alwaysConsumeMouseWheel: false
+              },
+              wordWrap: "on",
+              fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
+              fontSize: editorMetrics.fontSize,
+              lineNumbersMinChars: 3,
+              renderWhitespace: "selection"
+            }}
+          />
+        </div>
+      ) : (
+        <pre className="diff code-surface">{activeTab.filePreview.diff || t("noDiffAvailable")}</pre>
+      )
+    ) : (
+      <div className="editor-surface" data-testid="preview-editor">
+        <Editor
+          key={activeTab.filePreview.path}
+          height="100%"
+          path={activeTab.filePreview.path}
+          language={inferEditorLanguage(activeTab.filePreview.path)}
+          value={activeTab.filePreview.content}
+          onChange={(value) => onPreviewEdit(value ?? "")}
+          theme="vs-dark"
+          options={{
+            automaticLayout: true,
+            fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, monospace",
+            fontSize: editorMetrics.fontSize,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            scrollbar: {
+              verticalScrollbarSize: 6,
+              horizontalScrollbarSize: 6,
+              useShadows: false,
+              alwaysConsumeMouseWheel: false
+            },
+            wordWrap: "on",
+            padding: { top: editorMetrics.paddingY, bottom: editorMetrics.paddingY },
+            lineNumbersMinChars: 3,
+            renderWhitespace: "selection"
+          }}
+        />
+      </div>
+    )
+  ) : (
+    <div className="preview-empty">{t("selectFileFromNavigator")}</div>
+  );
+
+  const workspaceCodePanel = showCodePanel ? (
+    <WorkspaceCodeFeature
+      container={appRef.current}
+      locale={locale}
+      isExpanded={isCodeExpanded}
+      width={state.layout.rightWidth}
+      codeSidebarView={codeSidebarView}
+      previewPathLabel={previewPathLabel}
+      previewFileName={previewFileName}
+      editorContent={workspaceEditorContent}
+      fileParentLabel={fileParentLabel}
+      sidebar={{
+        view: codeSidebarView,
+        fileTree: activeTab.fileTree,
+        rootPath: activeTab.project?.path,
+        selectedPath: activeTab.filePreview.path,
+        repoCollapsedPaths,
+        gitChangeGroups,
+        activeGitChangeKey,
+        commitMessage,
+        onCommitMessageChange: setCommitMessage,
+        onFileSelect,
+        onToggleRepoCollapse: (path) => {
+          setRepoCollapsedPaths((current) => {
+            const next = new Set(current);
+            if (next.has(path)) {
+              next.delete(path);
+            } else {
+              next.add(path);
+            }
+            return next;
+          });
+        },
+        onRefresh: () => {
+          void refreshWorkspaceArtifacts(activeTab.id);
+        },
+        onStageAll: () => {
+          void onGitStageAll();
+        },
+        onUnstageAll: () => {
+          void onGitUnstageAll();
+        },
+        onDiscardAll: () => {
+          void onGitDiscardAll();
+        },
+        onCommit: () => {
+          void onGitCommit();
+        },
+        onGitChangeSelect: (change) => {
+          void onGitChangeSelect(change);
+        },
+        onGitChangeAction: (change, action) => {
+          void onGitChangeAction(change, action);
+        }
+      }}
+      fileSearch={{
+        query: fileSearchQuery,
+        activeIndex: fileSearchActiveIndex,
+        showDropdown: showFileSearchDropdown,
+        dropdownStyle: fileSearchDropdownStyle,
+        results: fileSearchResults.map(({ node }) => node),
+        searchShellRef: fileSearchShellRef,
+        inputRef: fileSearchInputRef,
+        onChange: (nextValue) => {
+          setFileSearchState((current) => updateWorkspaceFileSearchQuery(current, nextValue));
+        },
+        onFocus: (currentValue) => {
+          setFileSearchState((current) => openWorkspaceFileSearch(current, currentValue));
+        },
+        onBlur: onFileSearchBlur,
+        onKeyDown: onFileSearchKeyDown,
+        onHover: (index) => {
+          setFileSearchState((current) => setWorkspaceFileSearchActiveIndex(current, index));
+        },
+        onSelect: (node) => {
+          const matchedNode = fileSearchResults.find((result) => result.node.absolutePath === node.absolutePath)?.node
+            ?? fileSearchResults.find((result) => result.node.path === node.path)?.node;
+          if (matchedNode) {
+            void onFileSearchSelect(matchedNode);
+          }
+        }
+      }}
+      onSetSidebarView={setCodeSidebarView}
+      onToggleExpanded={() => {
+        void toggleCodeExpanded();
+      }}
+      t={t}
+    />
+  ) : null;
+
+  const workspaceTerminalPanel = (
+    <WorkspaceTerminalFeature
+      visible={!isCodeExpanded && showTerminalPanel}
+      progressPercent={terminalProgressPercent}
+      progressTone={terminalProgressTone}
+      activeTerminal={activeTerminal ? { id: activeTerminal.id, output: activeTerminal.output ?? "" } : undefined}
+      terminals={activeTab.terminals.map((term) => ({
+        id: term.id,
+        title: displayTerminalTitle(term.title)
+      }))}
+      shellTerminalRef={shellTerminalRef}
+      theme={theme}
+      fontSize={editorMetrics.terminalFontSize}
+      autoFocus={showTerminalPanel && !isCodeExpanded}
+      onTerminalData={onShellTerminalData}
+      onTerminalSize={onShellTerminalSize}
+      onResizeStart={onResizeStart("right-split")}
+      onSelect={onTerminalSelect}
+      onCloseActive={() => {
+        if (activeTerminal) {
+          void onCloseTerminal(activeTerminal.id);
+        }
+      }}
+      onAdd={() => {
+        void onAddTerminal();
+      }}
+      t={t}
+    />
+  );
+
+  return (
+    <div ref={appRef} className="app" style={layoutStyle} data-theme={theme}>
+      <TopBar
+        isSettingsRoute={false}
+        locale={locale}
+        workspaceTabs={workspaceTabs}
+        onSwitchWorkspace={onSwitchWorkspace}
+        onAddTab={onAddTab}
+        onRemoveTab={onRemoveTab}
+        onOpenSettings={onOpenSettings}
+        onCloseSettings={() => {}}
+        onOpenCommandPalette={openCommandPalette}
+        t={t}
+      />
+
+      <WorkspaceShell
+        locale={locale}
+        isFocusMode={isFocusMode}
+        isCodeExpanded={isCodeExpanded}
+        showAgentPanel={showAgentPanel}
+        showCodePanel={showCodePanel}
+        showTerminalPanel={showTerminalPanel}
+        rightSplit={state.layout.rightSplit}
+        workspaceFolderName={workspaceFolderName}
+        branchName={activeTab.git.branch}
+        changeCount={currentFileChangeCount}
+        agentPanel={workspaceAgentPanel}
+        codePanel={workspaceCodePanel}
+        terminalPanel={workspaceTerminalPanel}
+        onToggleRightPane={toggleRightPane}
+        t={t}
+      />
+
+      {commandPaletteOpen && (
+        <CommandPalette
+          locale={locale}
+          inputRef={commandPaletteInputRef}
+          query={commandPaletteQuery}
+          activeIndex={commandPaletteActiveIndex}
+          actions={filteredCommandPaletteActions}
+          activeAction={activeCommandPaletteAction}
+          onClose={closeCommandPalette}
+          onQueryChange={setCommandPaletteQuery}
+          onActivateIndex={setCommandPaletteActiveIndex}
+          onRunAction={onRunCommandPaletteAction}
+        />
+      )}
+
+
+      <div className="toast-container">
+        {toasts.map((toast) => (
+          <button key={toast.id} className="toast" onClick={() => onSwitchSession(toast.sessionId)}>
+            {toast.text}
+          </button>
+        ))}
+      </div>
+
+      {worktreeModal && (
+        <WorktreeModal
+          locale={locale}
+          worktree={worktreeModal}
+          view={worktreeView}
+          collapsedPaths={worktreeCollapsedPaths}
+          onClose={() => setWorktreeModal(null)}
+          onViewChange={setWorktreeView}
+          onFileSelect={onFileSelect}
+          onToggleCollapse={(path) => {
+            setWorktreeCollapsedPaths((current) => {
+              const next = new Set(current);
+              if (next.has(path)) {
+                next.delete(path);
+              } else {
+                next.add(path);
+              }
+              return next;
+            });
+          }}
+          t={t}
+        />
+      )}
+
+
+      <WorkspaceLaunchOverlay
+        visible={state.overlay.visible}
+        locale={locale}
+        mode={state.overlay.mode}
+        target={state.overlay.target}
+        input={state.overlay.input}
+        canUseWsl={overlayCanUseWsl}
+        folderBrowser={folderBrowser}
+        onSelectMode={onOverlaySelectMode}
+        onUpdateTarget={onOverlayUpdateTarget}
+        onUpdateInput={onOverlayUpdateInput}
+        onBrowseDirectory={onBrowseOverlayDirectory}
+        onSelectDirectory={onSelectOverlayDirectory}
+        onCancel={onOverlayCancel}
+        onStartWorkspace={onStartWorkspace}
+        t={t}
+      />
+
+    </div>
+  );
+}

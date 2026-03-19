@@ -13,10 +13,12 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ["react", "react-dom"],
-            tauri: ["@tauri-apps/api", "@tauri-apps/plugin-dialog"],
-            terminal: ["@xterm/xterm", "@xterm/addon-fit"]
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("/react/") || id.includes("/react-dom/")) return "react";
+            if (id.includes("/@tauri-apps/api/") || id.includes("/@tauri-apps/plugin-dialog/")) return "tauri";
+            if (id.includes("/@xterm/xterm/") || id.includes("/@xterm/addon-fit/")) return "terminal";
+            return undefined;
           }
         }
       }
