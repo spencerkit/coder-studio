@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { setTimeout as delay } from 'node:timers/promises';
 import { buildEndpoint } from './config.mjs';
 

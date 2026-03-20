@@ -4,18 +4,20 @@
 
 当前仓库已经拆成以下发布结构：
 
-- `packages/cli`：主 npm 包源码，发布名为 `@spencer-kit/coder-studio`
+- `packages/cli`：主 npm 包源码与发布元数据，发布名为 `@spencer-kit/coder-studio`
+- `packages/cli/src`：CLI TypeScript 源码
 - `templates/npm/platform-packages/*`：平台包模板
-- `.build/stage/npm/*`：平台包 staging 目录
+- `.build/cli`：CLI 编译产物
+- `.build/stage/npm/*`：主包与平台包 staging 目录
 - `.artifacts/`：最终 tarball、manifest、checksum
 
 分层职责：
 
-- 源码层：`packages/cli`、`apps/web`、`apps/server`
+- 源码层：`packages/cli`、`packages/cli/src`、`apps/web`、`apps/server`
 - 模板层：`templates/npm/platform-packages/*`
-- 产物层：`.build/web/dist`、`.build/server/target`、`.build/stage/npm/*`、`.artifacts/`
+- 产物层：`.build/web/dist`、`.build/server/target`、`.build/cli`、`.build/stage/npm/*`、`.artifacts/`
 
-主包负责 CLI，平台包模板负责发布元数据，staging 目录负责承接原生二进制和前端静态资源。
+主包源码负责 CLI 的 TypeScript 实现，`.build/cli` 承接编译结果，平台包模板负责发布元数据，staging 目录负责承接真正可发布的 npm 包内容。
 
 ## CLI 用法
 
@@ -67,7 +69,8 @@ CLI 默认会在本机状态目录下写入运行信息：
 ```bash
 pnpm version:check
 pnpm build:web
-pnpm build:runtime
+pnpm build:server
+pnpm build:cli
 pnpm build:packages
 pnpm pack:local
 pnpm release:verify
@@ -78,8 +81,9 @@ pnpm release:verify:full
 
 - `version:check`：校验根包、主包、平台包、`Cargo.toml`、`tauri.conf.json` 版本是否完全一致
 - `build:web`：构建前端到 `.build/web/dist`
-- `build:runtime`：构建 Rust/Tauri release 二进制到 `.build/server/target`
-- `build:packages`：从模板目录生成 `.build/stage/npm/<platform>`，并注入二进制与前端产物
+- `build:server`：构建 Rust/Tauri release 二进制到 `.build/server/target`
+- `build:cli`：把 `packages/cli/src` 编译到 `.build/cli`
+- `build:packages`：生成 `.build/stage/npm/coder-studio` 和当前平台的 `.build/stage/npm/<platform>`，分别注入 CLI 编译产物与原生二进制/前端产物
 - `pack:local`：执行 release 构建后，生成本地主包和当前平台包 tarball 到 `.artifacts/`
 - `release:verify`：跑版本校验、CLI 单测、Rust 单测、本地打包和 smoke
 - `release:verify:full`：在 `release:verify` 基础上追加 release E2E
@@ -142,7 +146,10 @@ ls .artifacts
 - `release-manifest.json`
 - `SHA256SUMS.txt`
 
-而 `.build/stage/npm/` 会包含当前平台的可发布 staging 包目录。
+而 `.build/stage/npm/` 会包含：
+
+- `coder-studio`：主包 staging 目录
+- `<platform>`：当前平台运行时包 staging 目录
 
 ## GitHub Actions
 
@@ -162,7 +169,7 @@ ls .artifacts
 - `release.yml`
   - 先执行 `preflight` 校验 tag 与版本一致，并跑 `pnpm version:check`
   - 再按平台矩阵从 `.build/stage/npm/*` 发布 4 个运行时包
-  - 再发布主包 `@spencer-kit/coder-studio`
+  - 再从 `.build/stage/npm/coder-studio` 发布主包 `@spencer-kit/coder-studio`
   - 最后汇总 tarball，生成 `release-manifest.json` 和 `SHA256SUMS.txt`，附加到 GitHub Release
 
 ## 发布触发方式

@@ -30,7 +30,7 @@ await execFileAsync(
 );
 await execFileAsync(
   PNPM_CMD,
-  ['--dir', path.relative(ROOT, MAIN_PACKAGE.sourceDir), 'pack', '--pack-destination', path.relative(MAIN_PACKAGE.sourceDir, ARTIFACTS_DIR)],
+  ['--dir', path.relative(ROOT, MAIN_PACKAGE.stageDir), 'pack', '--pack-destination', path.relative(MAIN_PACKAGE.stageDir, ARTIFACTS_DIR)],
   {
     cwd: ROOT,
     maxBuffer: 1024 * 1024 * 16,

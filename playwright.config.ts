@@ -8,7 +8,7 @@ export default defineConfig({
   webServer: {
     command: 'node scripts/test/start-dev-stack.mjs',
     port: 5174,
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120000
   }
 });

@@ -58,12 +58,14 @@ pnpm install
 - 源码层
   - `apps/web`：前端源码
   - `apps/server`：Rust / Tauri 服务端源码
-  - `packages/cli`：npm CLI 包源码
+  - `packages/cli`：npm CLI 包源码与发布元数据
+  - `packages/cli/src`：CLI TypeScript 源码
 - 模板层
   - `templates/npm/platform-packages/*`：各平台 npm 包模板
 - 产物层
   - `.build/web/dist`：前端构建产物
   - `.build/server/target`：Rust 构建产物
+  - `.build/cli`：CLI 编译产物
   - `.build/stage/npm/*`：发布前 staging 包
   - `.artifacts/`：最终 tarball、manifest、checksum
 
@@ -145,6 +147,12 @@ pnpm build
 
 ```bash
 pnpm build:server
+```
+
+构建 CLI：
+
+```bash
+pnpm build:cli
 ```
 
 构建 Tauri 壳层：

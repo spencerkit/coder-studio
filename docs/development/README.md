@@ -54,6 +54,7 @@ pnpm dev:stack
 - server 入口：`apps/server/src/main.rs`
 - server HTTP 传输层：`apps/server/src/command/http.rs`
 - Rust 服务实现：`apps/server/src/services/`
+- CLI TypeScript 源码：`packages/cli/src/`
 
 ## 文档列表
 

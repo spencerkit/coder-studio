@@ -10,16 +10,16 @@ import {
   DEFAULT_PORT,
   resolveDataDir,
   resolveStateDir,
-} from '../../packages/cli/lib/config.mjs';
+} from '../../.build/cli/lib/config.mjs';
 import {
   flattenPublicConfig,
   loadLocalConfig,
   updateLocalConfig,
   validateConfigSnapshot,
-} from '../../packages/cli/lib/user-config.mjs';
+} from '../../.build/cli/lib/user-config.mjs';
 
 const execFileAsync = promisify(execFile);
-const CLI_BIN = path.resolve('packages/cli/bin/coder-studio.mjs');
+const CLI_BIN = path.resolve('.build/cli/bin/coder-studio.mjs');
 
 async function runCli(args, { env = process.env, allowFailure = false } = {}) {
   try {

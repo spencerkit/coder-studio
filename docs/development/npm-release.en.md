@@ -4,18 +4,20 @@
 
 The repository now publishes these packages:
 
-- `packages/cli`: source for the primary `@spencer-kit/coder-studio` package
+- `packages/cli`: source manifest and publish metadata for the primary `@spencer-kit/coder-studio` package
+- `packages/cli/src`: CLI TypeScript source
 - `templates/npm/platform-packages/*`: platform package templates
-- `.build/stage/npm/*`: generated publish staging directories
+- `.build/cli`: compiled CLI output
+- `.build/stage/npm/*`: generated publish staging directories for the main package and platform packages
 - `.artifacts/`: final tarballs, manifest, and checksums
 
 Layer responsibilities:
 
-- source: `packages/cli`, `apps/web`, `apps/server`
+- source: `packages/cli`, `packages/cli/src`, `apps/web`, `apps/server`
 - templates: `templates/npm/platform-packages/*`
-- build outputs: `.build/web/dist`, `.build/server/target`, `.build/stage/npm/*`, `.artifacts/`
+- build outputs: `.build/web/dist`, `.build/server/target`, `.build/cli`, `.build/stage/npm/*`, `.artifacts/`
 
-The main package owns the CLI. Platform package templates own publish metadata. The staging directories receive native binaries and built frontend assets.
+The main package source owns the CLI implementation, `.build/cli` receives compiled output, platform package templates own publish metadata, and the staging directories receive the actual publishable package contents.
 
 ## CLI Usage
 
@@ -67,7 +69,8 @@ Use `CODER_STUDIO_HOME` to override the state directory for tests or isolated en
 ```bash
 pnpm version:check
 pnpm build:web
-pnpm build:runtime
+pnpm build:server
+pnpm build:cli
 pnpm build:packages
 pnpm pack:local
 pnpm release:verify
@@ -78,8 +81,9 @@ What they do:
 
 - `version:check`: verifies the root package, main package, platform packages, `Cargo.toml`, and `tauri.conf.json` all share the same version
 - `build:web`: builds the frontend into `.build/web/dist`
-- `build:runtime`: builds the Rust/Tauri release binary into `.build/server/target`
-- `build:packages`: materializes `.build/stage/npm/<platform>` from templates and injects the binary plus frontend assets
+- `build:server`: builds the Rust/Tauri release binary into `.build/server/target`
+- `build:cli`: compiles `packages/cli/src` into `.build/cli`
+- `build:packages`: materializes `.build/stage/npm/coder-studio` and `.build/stage/npm/<platform>` by injecting compiled CLI output plus native/frontend assets
 - `pack:local`: runs the release build and emits local tarballs into `.artifacts/`
 - `release:verify`: runs version checks, CLI tests, Rust tests, local packaging, and smoke validation
 - `release:verify:full`: adds release E2E on top of `release:verify`
@@ -142,7 +146,10 @@ ls .artifacts
 - `release-manifest.json`
 - `SHA256SUMS.txt`
 
-`.build/stage/npm/` holds the generated publishable staging package for the current platform.
+`.build/stage/npm/` holds:
+
+- `coder-studio`: the generated publishable main package
+- `<platform>`: the generated publishable runtime package for the current platform
 
 ## GitHub Actions
 
@@ -162,7 +169,7 @@ The automation is split into three workflows:
 - `release.yml`
   - starts with a `preflight` job that validates the tag and runs `pnpm version:check`
   - publishes the 4 platform runtime packages from `.build/stage/npm/*`
-  - publishes the main `@spencer-kit/coder-studio` package
+  - publishes the main `@spencer-kit/coder-studio` package from `.build/stage/npm/coder-studio`
   - aggregates tarballs and attaches `release-manifest.json` plus `SHA256SUMS.txt` to the GitHub Release
 
 ## Release Trigger

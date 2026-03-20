@@ -102,10 +102,10 @@ jobs:
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm version:check
+      - run: pnpm release:check
       - run: node -e "require('fs').mkdirSync('.artifacts', { recursive: true })"
-      - run: pnpm --dir packages/cli pack --pack-destination ../../.artifacts
-      - run: npm publish packages/cli --access public
+      - run: pnpm --dir .build/stage/npm/coder-studio pack --pack-destination ../../../../.artifacts
+      - run: npm publish .build/stage/npm/coder-studio --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - uses: actions/upload-artifact@v4

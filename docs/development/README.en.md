@@ -52,6 +52,7 @@ Current development ports:
 - server entry point: `apps/server/src/main.rs`
 - server HTTP transport layer: `apps/server/src/command/http.rs`
 - Rust services: `apps/server/src/services/`
+- CLI TypeScript source: `packages/cli/src/`
 
 ## Document Index
 

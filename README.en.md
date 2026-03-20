@@ -92,12 +92,14 @@ The repository is organized into three layers:
 - source
   - `apps/web`: frontend source
   - `apps/server`: Rust / Tauri server source
-  - `packages/cli`: npm CLI package source
+  - `packages/cli`: npm CLI package source and publish metadata
+  - `packages/cli/src`: CLI TypeScript source
 - templates
   - `templates/npm/platform-packages/*`: per-platform npm package templates
 - build outputs
   - `.build/web/dist`: frontend build output
   - `.build/server/target`: Rust build output
+  - `.build/cli`: compiled CLI output
   - `.build/stage/npm/*`: pre-publish staging packages
   - `.artifacts/`: tarballs, manifests, and checksums
 
@@ -146,6 +148,12 @@ Server runtime build:
 
 ```bash
 pnpm build:server
+```
+
+CLI build:
+
+```bash
+pnpm build:cli
 ```
 
 Tauri shell build:

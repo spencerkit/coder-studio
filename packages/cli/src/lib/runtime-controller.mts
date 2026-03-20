@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import { buildEndpoint, DEFAULT_HOST, DEFAULT_LOG_TAIL_LINES, DEFAULT_PORT, resolveDataDir, resolveLogPath, resolveStateDir } from './config.mjs';

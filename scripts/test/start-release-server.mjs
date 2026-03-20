@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startRuntime, stopRuntime } from '../../packages/cli/lib/runtime-controller.mjs';
+import { startRuntime, stopRuntime } from '../../.build/cli/lib/runtime-controller.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const binaryName = process.platform === 'win32' ? 'coder-studio.exe' : 'coder-studio';

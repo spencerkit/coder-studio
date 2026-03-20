@@ -7,6 +7,7 @@ export const WEB_APP_DIR = path.join(ROOT, 'apps', 'web');
 export const WEB_DIST_DIR = path.join(BUILD_ROOT, 'web', 'dist');
 export const SERVER_APP_DIR = path.join(ROOT, 'apps', 'server');
 export const SERVER_TARGET_DIR = path.join(BUILD_ROOT, 'server', 'target');
+export const CLI_BUILD_DIR = path.join(BUILD_ROOT, 'cli');
 export const NPM_TEMPLATE_ROOT = path.join(ROOT, 'templates', 'npm', 'platform-packages');
 export const NPM_STAGE_ROOT = path.join(BUILD_ROOT, 'stage', 'npm');
 
@@ -14,6 +15,8 @@ export const MAIN_PACKAGE = {
   slug: 'coder-studio',
   name: '@spencer-kit/coder-studio',
   sourceDir: path.join(ROOT, 'packages', 'cli'),
+  buildDir: CLI_BUILD_DIR,
+  stageDir: path.join(NPM_STAGE_ROOT, 'coder-studio'),
 };
 
 const PLATFORM_PACKAGE_DEFS = [

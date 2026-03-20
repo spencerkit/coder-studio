@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "./src",
+    "outDir": "../../.build/cli",
+    "types": ["node"],
+    "lib": ["ES2023"],
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.mts"]
+}
