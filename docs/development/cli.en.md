@@ -80,6 +80,7 @@ Shell completion:
 coder-studio completion bash
 coder-studio completion zsh
 coder-studio completion fish
+coder-studio completion install bash
 ```
 
 Version:
@@ -118,6 +119,14 @@ Additional flags on specific commands:
 
 The CLI can print completion scripts for `bash`, `zsh`, and `fish`. The command only writes the script to stdout.
 
+Print scripts directly:
+
+```bash
+coder-studio completion bash
+coder-studio completion zsh
+coder-studio completion fish
+```
+
 Load it for the current shell session:
 
 ```bash
@@ -126,7 +135,21 @@ source <(coder-studio completion zsh)
 coder-studio completion fish | source
 ```
 
-Persistent installation examples:
+Install into your local shell setup automatically:
+
+```bash
+coder-studio completion install bash
+coder-studio completion install zsh
+coder-studio completion install fish
+```
+
+Install behavior:
+
+- `bash`: writes `~/.coder-studio/completions/coder-studio.bash` and adds a managed `source` block to `~/.bashrc`
+- `zsh`: writes `~/.coder-studio/completions/coder-studio.zsh` and adds a managed `source` block to `~/.zshrc`
+- `fish`: writes `${XDG_CONFIG_HOME:-~/.config}/fish/completions/coder-studio.fish` without editing a profile
+
+Manual persistent installation examples:
 
 ```bash
 coder-studio completion bash >> ~/.bashrc
@@ -136,7 +159,8 @@ coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
 
 Notes:
 
-- `completion` does not support `--json`
+- `coder-studio completion install <shell> --json` returns structured install output
+- `coder-studio completion <shell>` does not support `--json`
 - `coder-studio help completion` shows command usage
 
 ## Exit Codes

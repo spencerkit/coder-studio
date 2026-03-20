@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { generateCompletionScript, SUPPORTED_COMPLETION_SHELLS } from './completion.mjs';
+import { generateCompletionScript, installCompletionScript, SUPPORTED_COMPLETION_SHELLS } from './completion.mjs';
 import { resolveLogPath } from './config.mjs';
 import {
   buildConfigPathsReport,
@@ -108,6 +108,7 @@ Usage:
   coder-studio config <subcommand>
   coder-studio auth <subcommand>
   coder-studio completion <bash|zsh|fish>
+  coder-studio completion install <bash|zsh|fish> [--json]
   coder-studio --version
 
 Global Flags:
@@ -129,6 +130,7 @@ Examples:
   coder-studio config root set /srv/coder-studio/workspaces
   coder-studio auth ip list
   eval "$(coder-studio completion bash)"
+  coder-studio completion install bash
 
 Run \`coder-studio config --help\`, \`coder-studio auth --help\`, or \`coder-studio help completion\` for detailed usage.
 `);
@@ -300,15 +302,31 @@ function printCompletionHelp() {
 
 Usage:
   coder-studio completion <bash|zsh|fish>
+  coder-studio completion install <bash|zsh|fish> [--json]
 
 Description:
-  Print a shell completion script to stdout. Evaluate or source the output in your shell profile.
+  Print or install shell completion scripts.
 
 Examples:
   eval "$(coder-studio completion bash)"
   source <(coder-studio completion zsh)
   coder-studio completion fish | source
+  coder-studio completion install bash
+  coder-studio completion install zsh --json
 `);
+}
+
+function printCompletionInstall(result) {
+  console.log(`installed: ${result.shell}`);
+  console.log(`scriptPath: ${result.scriptPath}`);
+  if (result.profilePath) {
+    console.log(`profilePath: ${result.profilePath}`);
+    console.log(`profileUpdated: ${result.profileUpdated ? 'yes' : 'no'}`);
+  } else {
+    console.log('profilePath: n/a');
+    console.log('profileUpdated: no');
+  }
+  console.log(`activationCommand: ${result.activationCommand}`);
 }
 
 function printHelpTopic(topic) {
@@ -933,23 +951,41 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'completion') {
-      if (flags.json) {
-        throw usageError('completion does not support --json', 'completion');
-      }
-
-      const [shell, ...rest] = positionals;
-      if (!shell) {
+      const [modeOrShell, maybeShell, ...rest] = positionals;
+      if (!modeOrShell) {
         printCompletionHelp();
         return EXIT_SUCCESS;
       }
-      if (rest.length > 0) {
-        throw usageError('completion accepts exactly one <shell> argument', 'completion');
-      }
-      if (!SUPPORTED_COMPLETION_SHELLS.includes(shell)) {
-        throw usageError(`unsupported completion shell: ${shell}`, 'completion');
+
+      if (modeOrShell === 'install') {
+        const shell = maybeShell;
+        if (!shell) {
+          throw usageError('completion install requires <bash|zsh|fish>', 'completion');
+        }
+        if (rest.length > 0) {
+          throw usageError('completion install accepts exactly one <shell> argument', 'completion');
+        }
+        if (!SUPPORTED_COMPLETION_SHELLS.includes(shell)) {
+          throw usageError(`unsupported completion shell: ${shell}`, 'completion');
+        }
+
+        const result = await installCompletionScript(shell);
+        if (flags.json) printJson(result);
+        else printCompletionInstall(result);
+        return EXIT_SUCCESS;
       }
 
-      process.stdout.write(generateCompletionScript(shell));
+      if (flags.json) {
+        throw usageError('completion does not support --json', 'completion');
+      }
+      if (maybeShell || rest.length > 0) {
+        throw usageError('completion accepts exactly one <shell> argument', 'completion');
+      }
+      if (!SUPPORTED_COMPLETION_SHELLS.includes(modeOrShell)) {
+        throw usageError(`unsupported completion shell: ${modeOrShell}`, 'completion');
+      }
+
+      process.stdout.write(generateCompletionScript(modeOrShell));
       return EXIT_SUCCESS;
     }
 

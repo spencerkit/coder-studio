@@ -158,6 +158,7 @@ test('cli supports dedicated help topics', async () => {
   const completionHelp = await runCli(['help', 'completion']);
   assert.match(completionHelp.stdout, /^coder-studio completion/m);
   assert.match(completionHelp.stdout, /completion <bash\|zsh\|fish>/);
+  assert.match(completionHelp.stdout, /completion install <bash\|zsh\|fish>/);
 
   const commandHelp = await runCli(['start', '--help']);
   assert.match(commandHelp.stdout, /^coder-studio start/m);
@@ -187,6 +188,80 @@ test('cli validates completion shell arguments', async () => {
   assert.equal(body.exitCode, 2);
   assert.equal(body.kind, 'usage');
   assert.match(body.error, /completion does not support --json/);
+});
+
+test('cli installs bash completion into the user profile', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-completion-'));
+  const homeDir = path.join(tempRoot, 'home');
+  await fs.mkdir(homeDir, { recursive: true });
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    XDG_CONFIG_HOME: path.join(homeDir, '.config'),
+  };
+
+  try {
+    const installResult = await runCli(['completion', 'install', 'bash', '--json'], { env });
+    const body = JSON.parse(installResult.stdout);
+    assert.equal(body.shell, 'bash');
+    assert.match(body.scriptPath, /coder-studio\.bash$/);
+    assert.match(body.profilePath, /\.bashrc$/);
+    assert.equal(body.profileUpdated, true);
+    assert.equal(body.activationCommand, 'source ~/.bashrc');
+
+    const script = await fs.readFile(body.scriptPath, 'utf8');
+    assert.match(script, /complete -F __coder_studio_complete coder-studio/);
+
+    const profile = await fs.readFile(body.profilePath, 'utf8');
+    assert.match(profile, /coder-studio completion/);
+    assert.match(profile, /source "\$HOME\/\.coder-studio\/completions\/coder-studio\.bash"/);
+
+    const secondResult = await runCli(['completion', 'install', 'bash', '--json'], { env });
+    const secondBody = JSON.parse(secondResult.stdout);
+    assert.equal(secondBody.profileUpdated, false);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cli installs fish completion without mutating a shell profile', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-completion-'));
+  const homeDir = path.join(tempRoot, 'home');
+  const xdgConfigHome = path.join(tempRoot, 'xdg-config');
+  await fs.mkdir(homeDir, { recursive: true });
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    XDG_CONFIG_HOME: xdgConfigHome,
+  };
+
+  try {
+    const installResult = await runCli(['completion', 'install', 'fish', '--json'], { env });
+    const body = JSON.parse(installResult.stdout);
+    assert.equal(body.shell, 'fish');
+    assert.equal(body.profilePath, null);
+    assert.equal(body.profileUpdated, false);
+    assert.equal(body.activationCommand, 'exec fish');
+    assert.equal(
+      body.scriptPath,
+      path.join(xdgConfigHome, 'fish', 'completions', 'coder-studio.fish'),
+    );
+
+    const script = await fs.readFile(body.scriptPath, 'utf8');
+    assert.match(script, /complete -c coder-studio/);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cli validates completion install usage', async () => {
+  const missingShell = await runCli(['completion', 'install'], { allowFailure: true });
+  assert.equal(missingShell.code, 2);
+  assert.match(missingShell.stderr, /completion install requires <bash\|zsh\|fish>/);
+
+  const extraArg = await runCli(['completion', 'install', 'bash', 'extra'], { allowFailure: true });
+  assert.equal(extraArg.code, 2);
+  assert.match(extraArg.stderr, /completion install accepts exactly one <shell> argument/);
 });
 
 test('cli returns usage exit code and hint for unsupported commands', async () => {

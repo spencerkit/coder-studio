@@ -78,6 +78,7 @@ coder-studio auth ip list
 coder-studio help start
 coder-studio help completion
 eval "$(coder-studio completion bash)"
+coder-studio completion install bash
 ```
 
 详细命令说明见：`docs/development/cli.md`

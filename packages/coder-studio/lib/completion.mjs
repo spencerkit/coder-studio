@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { listConfigKeys } from './user-config.mjs';
 
 export const SUPPORTED_COMPLETION_SHELLS = ['bash', 'zsh', 'fish'];
@@ -36,8 +39,13 @@ const DOCTOR_FLAGS = ['--host', '--port', '--json', '--help', '-h'];
 const CONFIG_FLAGS = ['--json', '--help', '-h'];
 const AUTH_FLAGS = ['--json', '--help', '-h'];
 const COMPLETION_FLAGS = ['--help', '-h'];
+const COMPLETION_COMMANDS = ['install', ...SUPPORTED_COMPLETION_SHELLS];
+const COMPLETION_INSTALL_FLAGS = ['--json', '--help', '-h'];
 const CONFIG_PASSWORD_SET_FLAGS = ['--stdin', '--help', '-h'];
 const AUTH_IP_UNBLOCK_FLAGS = ['--all', '--json', '--help', '-h'];
+
+const MANAGED_BLOCK_START = '# >>> coder-studio completion >>>';
+const MANAGED_BLOCK_END = '# <<< coder-studio completion <<<';
 
 function words(items) {
   return items.join(' ');
@@ -108,6 +116,18 @@ function generateBashScript() {
     '      return 0',
     '      ;;',
     '    completion)',
+    '      if [[ $COMP_CWORD -eq 2 ]]; then',
+    `        COMPREPLY=( $(compgen -W "${words(COMPLETION_COMMANDS.concat(COMPLETION_FLAGS))}" -- "$cur") )`,
+    '        return 0',
+    '      fi',
+    '      if [[ "$subcommand" == "install" ]]; then',
+    '        if [[ $COMP_CWORD -eq 3 ]]; then',
+    `          COMPREPLY=( $(compgen -W "${words(SUPPORTED_COMPLETION_SHELLS)}" -- "$cur") )`,
+    '        else',
+    `          COMPREPLY=( $(compgen -W "${words(COMPLETION_INSTALL_FLAGS)}" -- "$cur") )`,
+    '        fi',
+    '        return 0',
+    '      fi',
     `      COMPREPLY=( $(compgen -W "${words(SUPPORTED_COMPLETION_SHELLS.concat(COMPLETION_FLAGS))}" -- "$cur") )`,
     '      return 0',
     '      ;;',
@@ -193,7 +213,7 @@ function generateZshScript() {
   return lines([
     '#compdef coder-studio',
     '',
-    '__coder_studio_complete() {',
+    '_coder_studio_complete() {',
     '  local -a suggestions',
     '  local command subcommand nested prev',
     '  command="${words[2]}"',
@@ -239,7 +259,17 @@ function generateZshScript() {
     `      suggestions=(${words(DOCTOR_FLAGS)})`,
     '      ;;',
     '    completion)',
-    `      suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)} ${words(COMPLETION_FLAGS)})`,
+    '      if (( CURRENT == 3 )); then',
+    `        suggestions=(${words(COMPLETION_COMMANDS)} ${words(COMPLETION_FLAGS)})`,
+    '      elif [[ "$subcommand" == "install" ]]; then',
+    '        if (( CURRENT == 4 )); then',
+    `          suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)})`,
+    '        else',
+    `          suggestions=(${words(COMPLETION_INSTALL_FLAGS)})`,
+    '        fi',
+    '      else',
+    `        suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)} ${words(COMPLETION_FLAGS)})`,
+    '      fi',
     '      ;;',
     '    config)',
     '      if (( CURRENT == 3 )); then',
@@ -320,7 +350,12 @@ function generateZshScript() {
     '  (( ${#suggestions[@]} )) && compadd -- "${suggestions[@]}"',
     '}',
     '',
-    '__coder_studio_complete "$@"',
+    'if ! typeset -f compdef >/dev/null 2>&1; then',
+    '  autoload -Uz compinit',
+    '  compinit >/dev/null 2>&1',
+    'fi',
+    '',
+    'compdef _coder_studio_complete coder-studio',
   ]);
 }
 
@@ -365,8 +400,10 @@ function generateFishScript() {
     'complete -c coder-studio -n "__fish_seen_subcommand_from doctor" -l json',
     'complete -c coder-studio -n "__fish_seen_subcommand_from doctor" -l help -s h',
     '',
-    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and not __fish_seen_subcommand_from bash zsh fish" -a "bash zsh fish"',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and not __fish_seen_subcommand_from install bash zsh fish" -a "install bash zsh fish"',
     'complete -c coder-studio -n "__fish_seen_subcommand_from completion" -l help -s h',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from install; and not __fish_seen_subcommand_from bash zsh fish" -a "bash zsh fish"',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from install" -l json',
     '',
     'complete -c coder-studio -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from path show get set unset validate root password auth" -a "path show get set unset validate root password auth"',
     'complete -c coder-studio -n "__fish_seen_subcommand_from config" -l json',
@@ -385,6 +422,92 @@ function generateFishScript() {
     'complete -c coder-studio -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from ip; and __fish_seen_subcommand_from unblock" -l all',
     'complete -c coder-studio -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from ip; and __fish_seen_subcommand_from unblock" -l json',
   ]);
+}
+
+function resolveInstallPlan(shell, env = process.env) {
+  const home = os.homedir();
+  const sharedCompletionDir = path.join(home, '.coder-studio', 'completions');
+  const xdgConfigHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
+
+  switch (shell) {
+    case 'bash':
+      return {
+        shell,
+        scriptPath: path.join(sharedCompletionDir, 'coder-studio.bash'),
+        profilePath: path.join(home, '.bashrc'),
+        sourceLine: '[ -f "$HOME/.coder-studio/completions/coder-studio.bash" ] && source "$HOME/.coder-studio/completions/coder-studio.bash"',
+        activationCommand: 'source ~/.bashrc',
+      };
+    case 'zsh':
+      return {
+        shell,
+        scriptPath: path.join(sharedCompletionDir, 'coder-studio.zsh'),
+        profilePath: path.join(home, '.zshrc'),
+        sourceLine: '[ -f "$HOME/.coder-studio/completions/coder-studio.zsh" ] && source "$HOME/.coder-studio/completions/coder-studio.zsh"',
+        activationCommand: 'source ~/.zshrc',
+      };
+    case 'fish':
+      return {
+        shell,
+        scriptPath: path.join(xdgConfigHome, 'fish', 'completions', 'coder-studio.fish'),
+        profilePath: null,
+        sourceLine: null,
+        activationCommand: 'exec fish',
+      };
+    default:
+      throw new Error(`unsupported completion shell: ${shell}`);
+  }
+}
+
+function buildManagedBlock(sourceLine) {
+  return `${MANAGED_BLOCK_START}\n${sourceLine}\n${MANAGED_BLOCK_END}`;
+}
+
+function upsertManagedBlock(currentText, block) {
+  const pattern = new RegExp(`${MANAGED_BLOCK_START}[\\s\\S]*?${MANAGED_BLOCK_END}`, 'm');
+  if (pattern.test(currentText)) {
+    return currentText.replace(pattern, block);
+  }
+
+  const normalized = currentText.trimEnd();
+  return normalized ? `${normalized}\n\n${block}\n` : `${block}\n`;
+}
+
+async function readOptionalText(filePath) {
+  try {
+    return await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return '';
+    }
+    throw error;
+  }
+}
+
+export async function installCompletionScript(shell, { env = process.env } = {}) {
+  const plan = resolveInstallPlan(shell, env);
+  const script = generateCompletionScript(shell);
+
+  await fs.mkdir(path.dirname(plan.scriptPath), { recursive: true });
+  await fs.writeFile(plan.scriptPath, script, 'utf8');
+
+  let profileUpdated = false;
+  if (plan.profilePath && plan.sourceLine) {
+    const currentProfile = await readOptionalText(plan.profilePath);
+    const nextProfile = upsertManagedBlock(currentProfile, buildManagedBlock(plan.sourceLine));
+    profileUpdated = nextProfile !== currentProfile;
+    if (profileUpdated) {
+      await fs.writeFile(plan.profilePath, nextProfile, 'utf8');
+    }
+  }
+
+  return {
+    shell: plan.shell,
+    scriptPath: plan.scriptPath,
+    profilePath: plan.profilePath,
+    profileUpdated,
+    activationCommand: plan.activationCommand,
+  };
 }
 
 export function generateCompletionScript(shell) {

@@ -80,6 +80,7 @@ Shell Completion：
 coder-studio completion bash
 coder-studio completion zsh
 coder-studio completion fish
+coder-studio completion install bash
 ```
 
 版本信息：
@@ -118,6 +119,14 @@ coder-studio help completion
 
 CLI 可以输出 `bash`、`zsh`、`fish` 的补全脚本，命令本身只负责把脚本打印到标准输出。
 
+直接打印脚本：
+
+```bash
+coder-studio completion bash
+coder-studio completion zsh
+coder-studio completion fish
+```
+
 即时加载：
 
 ```bash
@@ -126,7 +135,21 @@ source <(coder-studio completion zsh)
 coder-studio completion fish | source
 ```
 
-持久化安装示例：
+自动安装到本地 shell 配置：
+
+```bash
+coder-studio completion install bash
+coder-studio completion install zsh
+coder-studio completion install fish
+```
+
+安装行为：
+
+- `bash`：写入 `~/.coder-studio/completions/coder-studio.bash`，并在 `~/.bashrc` 注入受管的 `source` 片段
+- `zsh`：写入 `~/.coder-studio/completions/coder-studio.zsh`，并在 `~/.zshrc` 注入受管的 `source` 片段
+- `fish`：写入 `${XDG_CONFIG_HOME:-~/.config}/fish/completions/coder-studio.fish`，不修改 profile
+
+手动持久化安装示例：
 
 ```bash
 coder-studio completion bash >> ~/.bashrc
@@ -136,7 +159,8 @@ coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
 
 说明：
 
-- `completion` 不支持 `--json`
+- `coder-studio completion install <shell> --json` 会返回安装结果
+- `coder-studio completion <shell>` 不支持 `--json`
 - `coder-studio help completion` 可查看命令说明
 
 ## 退出码
