@@ -81,6 +81,7 @@ coder-studio completion bash
 coder-studio completion zsh
 coder-studio completion fish
 coder-studio completion install bash
+coder-studio completion uninstall bash
 ```
 
 Version:
@@ -139,6 +140,7 @@ Install into your local shell setup automatically:
 
 ```bash
 coder-studio completion install bash
+coder-studio completion install bash --force
 coder-studio completion install zsh
 coder-studio completion install fish
 ```
@@ -148,6 +150,19 @@ Install behavior:
 - `bash`: writes `~/.coder-studio/completions/coder-studio.bash` and adds a managed `source` block to `~/.bashrc`
 - `zsh`: writes `~/.coder-studio/completions/coder-studio.zsh` and adds a managed `source` block to `~/.zshrc`
 - `fish`: writes `${XDG_CONFIG_HOME:-~/.config}/fish/completions/coder-studio.fish` without editing a profile
+
+Uninstall:
+
+```bash
+coder-studio completion uninstall bash
+coder-studio completion uninstall zsh
+coder-studio completion uninstall fish
+```
+
+Notes:
+
+- `install --force` rewrites the completion file and reapplies the managed profile block
+- `uninstall` removes the completion script and strips the managed profile block added by the CLI
 
 Manual persistent installation examples:
 
@@ -160,6 +175,7 @@ coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
 Notes:
 
 - `coder-studio completion install <shell> --json` returns structured install output
+- `coder-studio completion uninstall <shell> --json` returns structured uninstall output
 - `coder-studio completion <shell>` does not support `--json`
 - `coder-studio help completion` shows command usage
 

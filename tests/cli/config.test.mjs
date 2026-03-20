@@ -159,6 +159,7 @@ test('cli supports dedicated help topics', async () => {
   assert.match(completionHelp.stdout, /^coder-studio completion/m);
   assert.match(completionHelp.stdout, /completion <bash\|zsh\|fish>/);
   assert.match(completionHelp.stdout, /completion install <bash\|zsh\|fish>/);
+  assert.match(completionHelp.stdout, /completion uninstall <bash\|zsh\|fish>/);
 
   const commandHelp = await runCli(['start', '--help']);
   assert.match(commandHelp.stdout, /^coder-studio start/m);
@@ -188,6 +189,10 @@ test('cli validates completion shell arguments', async () => {
   assert.equal(body.exitCode, 2);
   assert.equal(body.kind, 'usage');
   assert.match(body.error, /completion does not support --json/);
+
+  const invalidForce = await runCli(['completion', 'bash', '--force'], { allowFailure: true });
+  assert.equal(invalidForce.code, 2);
+  assert.match(invalidForce.stderr, /completion does not support --force/);
 });
 
 test('cli installs bash completion into the user profile', async () => {
@@ -206,8 +211,10 @@ test('cli installs bash completion into the user profile', async () => {
     assert.equal(body.shell, 'bash');
     assert.match(body.scriptPath, /coder-studio\.bash$/);
     assert.match(body.profilePath, /\.bashrc$/);
+    assert.equal(body.scriptUpdated, true);
     assert.equal(body.profileUpdated, true);
     assert.equal(body.activationCommand, 'source ~/.bashrc');
+    assert.equal(body.forced, false);
 
     const script = await fs.readFile(body.scriptPath, 'utf8');
     assert.match(script, /complete -F __coder_studio_complete coder-studio/);
@@ -218,7 +225,14 @@ test('cli installs bash completion into the user profile', async () => {
 
     const secondResult = await runCli(['completion', 'install', 'bash', '--json'], { env });
     const secondBody = JSON.parse(secondResult.stdout);
+    assert.equal(secondBody.scriptUpdated, false);
     assert.equal(secondBody.profileUpdated, false);
+
+    const thirdResult = await runCli(['completion', 'install', 'bash', '--json', '--force'], { env });
+    const thirdBody = JSON.parse(thirdResult.stdout);
+    assert.equal(thirdBody.scriptUpdated, true);
+    assert.equal(thirdBody.profileUpdated, true);
+    assert.equal(thirdBody.forced, true);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
@@ -239,9 +253,11 @@ test('cli installs fish completion without mutating a shell profile', async () =
     const installResult = await runCli(['completion', 'install', 'fish', '--json'], { env });
     const body = JSON.parse(installResult.stdout);
     assert.equal(body.shell, 'fish');
+    assert.equal(body.scriptUpdated, true);
     assert.equal(body.profilePath, null);
     assert.equal(body.profileUpdated, false);
     assert.equal(body.activationCommand, 'exec fish');
+    assert.equal(body.forced, false);
     assert.equal(
       body.scriptPath,
       path.join(xdgConfigHome, 'fish', 'completions', 'coder-studio.fish'),
@@ -262,6 +278,52 @@ test('cli validates completion install usage', async () => {
   const extraArg = await runCli(['completion', 'install', 'bash', 'extra'], { allowFailure: true });
   assert.equal(extraArg.code, 2);
   assert.match(extraArg.stderr, /completion install accepts exactly one <shell> argument/);
+});
+
+test('cli uninstalls bash completion and removes the managed profile block', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-completion-'));
+  const homeDir = path.join(tempRoot, 'home');
+  await fs.mkdir(homeDir, { recursive: true });
+  const env = {
+    ...process.env,
+    HOME: homeDir,
+    XDG_CONFIG_HOME: path.join(homeDir, '.config'),
+  };
+
+  try {
+    await runCli(['completion', 'install', 'bash', '--json'], { env });
+    const uninstallResult = await runCli(['completion', 'uninstall', 'bash', '--json'], { env });
+    const body = JSON.parse(uninstallResult.stdout);
+    assert.equal(body.shell, 'bash');
+    assert.equal(body.scriptRemoved, true);
+    assert.match(body.profilePath, /\.bashrc$/);
+    assert.equal(body.profileUpdated, true);
+
+    await assert.rejects(fs.access(body.scriptPath));
+    const profile = await fs.readFile(body.profilePath, 'utf8');
+    assert.doesNotMatch(profile, /coder-studio completion/);
+
+    const secondResult = await runCli(['completion', 'uninstall', 'bash', '--json'], { env });
+    const secondBody = JSON.parse(secondResult.stdout);
+    assert.equal(secondBody.scriptRemoved, false);
+    assert.equal(secondBody.profileUpdated, false);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cli validates completion uninstall usage', async () => {
+  const missingShell = await runCli(['completion', 'uninstall'], { allowFailure: true });
+  assert.equal(missingShell.code, 2);
+  assert.match(missingShell.stderr, /completion uninstall requires <bash\|zsh\|fish>/);
+
+  const extraArg = await runCli(['completion', 'uninstall', 'bash', 'extra'], { allowFailure: true });
+  assert.equal(extraArg.code, 2);
+  assert.match(extraArg.stderr, /completion uninstall accepts exactly one <shell> argument/);
+
+  const invalidForce = await runCli(['completion', 'uninstall', 'bash', '--force'], { allowFailure: true });
+  assert.equal(invalidForce.code, 2);
+  assert.match(invalidForce.stderr, /completion uninstall does not support --force/);
 });
 
 test('cli returns usage exit code and hint for unsupported commands', async () => {

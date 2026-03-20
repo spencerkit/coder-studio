@@ -81,6 +81,7 @@ coder-studio completion bash
 coder-studio completion zsh
 coder-studio completion fish
 coder-studio completion install bash
+coder-studio completion uninstall bash
 ```
 
 版本信息：
@@ -139,6 +140,7 @@ coder-studio completion fish | source
 
 ```bash
 coder-studio completion install bash
+coder-studio completion install bash --force
 coder-studio completion install zsh
 coder-studio completion install fish
 ```
@@ -148,6 +150,19 @@ coder-studio completion install fish
 - `bash`：写入 `~/.coder-studio/completions/coder-studio.bash`，并在 `~/.bashrc` 注入受管的 `source` 片段
 - `zsh`：写入 `~/.coder-studio/completions/coder-studio.zsh`，并在 `~/.zshrc` 注入受管的 `source` 片段
 - `fish`：写入 `${XDG_CONFIG_HOME:-~/.config}/fish/completions/coder-studio.fish`，不修改 profile
+
+卸载：
+
+```bash
+coder-studio completion uninstall bash
+coder-studio completion uninstall zsh
+coder-studio completion uninstall fish
+```
+
+说明：
+
+- `install --force` 会强制重写脚本文件，并重新写入受管 profile 片段
+- `uninstall` 会删除补全脚本，并移除 CLI 注入的受管 profile 片段
 
 手动持久化安装示例：
 
@@ -160,6 +175,7 @@ coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
 说明：
 
 - `coder-studio completion install <shell> --json` 会返回安装结果
+- `coder-studio completion uninstall <shell> --json` 会返回卸载结果
 - `coder-studio completion <shell>` 不支持 `--json`
 - `coder-studio help completion` 可查看命令说明
 

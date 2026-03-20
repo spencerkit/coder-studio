@@ -1,5 +1,10 @@
 import fs from 'node:fs/promises';
-import { generateCompletionScript, installCompletionScript, SUPPORTED_COMPLETION_SHELLS } from './completion.mjs';
+import {
+  generateCompletionScript,
+  installCompletionScript,
+  uninstallCompletionScript,
+  SUPPORTED_COMPLETION_SHELLS,
+} from './completion.mjs';
 import { resolveLogPath } from './config.mjs';
 import {
   buildConfigPathsReport,
@@ -108,7 +113,8 @@ Usage:
   coder-studio config <subcommand>
   coder-studio auth <subcommand>
   coder-studio completion <bash|zsh|fish>
-  coder-studio completion install <bash|zsh|fish> [--json]
+  coder-studio completion install <bash|zsh|fish> [--json] [--force]
+  coder-studio completion uninstall <bash|zsh|fish> [--json]
   coder-studio --version
 
 Global Flags:
@@ -131,6 +137,7 @@ Examples:
   coder-studio auth ip list
   eval "$(coder-studio completion bash)"
   coder-studio completion install bash
+  coder-studio completion uninstall bash
 
 Run \`coder-studio config --help\`, \`coder-studio auth --help\`, or \`coder-studio help completion\` for detailed usage.
 `);
@@ -302,23 +309,27 @@ function printCompletionHelp() {
 
 Usage:
   coder-studio completion <bash|zsh|fish>
-  coder-studio completion install <bash|zsh|fish> [--json]
+  coder-studio completion install <bash|zsh|fish> [--json] [--force]
+  coder-studio completion uninstall <bash|zsh|fish> [--json]
 
 Description:
-  Print or install shell completion scripts.
+  Print, install, or uninstall shell completion scripts.
 
 Examples:
   eval "$(coder-studio completion bash)"
   source <(coder-studio completion zsh)
   coder-studio completion fish | source
   coder-studio completion install bash
+  coder-studio completion install bash --force
   coder-studio completion install zsh --json
+  coder-studio completion uninstall bash
 `);
 }
 
 function printCompletionInstall(result) {
   console.log(`installed: ${result.shell}`);
   console.log(`scriptPath: ${result.scriptPath}`);
+  console.log(`scriptUpdated: ${result.scriptUpdated ? 'yes' : 'no'}`);
   if (result.profilePath) {
     console.log(`profilePath: ${result.profilePath}`);
     console.log(`profileUpdated: ${result.profileUpdated ? 'yes' : 'no'}`);
@@ -327,6 +338,20 @@ function printCompletionInstall(result) {
     console.log('profileUpdated: no');
   }
   console.log(`activationCommand: ${result.activationCommand}`);
+  console.log(`forced: ${result.forced ? 'yes' : 'no'}`);
+}
+
+function printCompletionUninstall(result) {
+  console.log(`uninstalled: ${result.shell}`);
+  console.log(`scriptPath: ${result.scriptPath}`);
+  console.log(`scriptRemoved: ${result.scriptRemoved ? 'yes' : 'no'}`);
+  if (result.profilePath) {
+    console.log(`profilePath: ${result.profilePath}`);
+    console.log(`profileUpdated: ${result.profileUpdated ? 'yes' : 'no'}`);
+  } else {
+    console.log('profilePath: n/a');
+    console.log('profileUpdated: no');
+  }
 }
 
 function printHelpTopic(topic) {
@@ -969,14 +994,38 @@ export async function runCli(argv = process.argv.slice(2)) {
           throw usageError(`unsupported completion shell: ${shell}`, 'completion');
         }
 
-        const result = await installCompletionScript(shell);
+        const result = await installCompletionScript(shell, { force: Boolean(flags.force) });
         if (flags.json) printJson(result);
         else printCompletionInstall(result);
         return EXIT_SUCCESS;
       }
 
+      if (modeOrShell === 'uninstall') {
+        const shell = maybeShell;
+        if (!shell) {
+          throw usageError('completion uninstall requires <bash|zsh|fish>', 'completion');
+        }
+        if (rest.length > 0) {
+          throw usageError('completion uninstall accepts exactly one <shell> argument', 'completion');
+        }
+        if (flags.force) {
+          throw usageError('completion uninstall does not support --force', 'completion');
+        }
+        if (!SUPPORTED_COMPLETION_SHELLS.includes(shell)) {
+          throw usageError(`unsupported completion shell: ${shell}`, 'completion');
+        }
+
+        const result = await uninstallCompletionScript(shell);
+        if (flags.json) printJson(result);
+        else printCompletionUninstall(result);
+        return EXIT_SUCCESS;
+      }
+
       if (flags.json) {
         throw usageError('completion does not support --json', 'completion');
+      }
+      if (flags.force) {
+        throw usageError('completion does not support --force', 'completion');
       }
       if (maybeShell || rest.length > 0) {
         throw usageError('completion accepts exactly one <shell> argument', 'completion');

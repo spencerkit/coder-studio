@@ -39,8 +39,9 @@ const DOCTOR_FLAGS = ['--host', '--port', '--json', '--help', '-h'];
 const CONFIG_FLAGS = ['--json', '--help', '-h'];
 const AUTH_FLAGS = ['--json', '--help', '-h'];
 const COMPLETION_FLAGS = ['--help', '-h'];
-const COMPLETION_COMMANDS = ['install', ...SUPPORTED_COMPLETION_SHELLS];
-const COMPLETION_INSTALL_FLAGS = ['--json', '--help', '-h'];
+const COMPLETION_COMMANDS = ['install', 'uninstall', ...SUPPORTED_COMPLETION_SHELLS];
+const COMPLETION_INSTALL_FLAGS = ['--json', '--force', '--help', '-h'];
+const COMPLETION_UNINSTALL_FLAGS = ['--json', '--help', '-h'];
 const CONFIG_PASSWORD_SET_FLAGS = ['--stdin', '--help', '-h'];
 const AUTH_IP_UNBLOCK_FLAGS = ['--all', '--json', '--help', '-h'];
 
@@ -128,6 +129,14 @@ function generateBashScript() {
     '        fi',
     '        return 0',
     '      fi',
+    '      if [[ "$subcommand" == "uninstall" ]]; then',
+    '        if [[ $COMP_CWORD -eq 3 ]]; then',
+    `          COMPREPLY=( $(compgen -W "${words(SUPPORTED_COMPLETION_SHELLS)}" -- "$cur") )`,
+    '        else',
+    `          COMPREPLY=( $(compgen -W "${words(COMPLETION_UNINSTALL_FLAGS)}" -- "$cur") )`,
+    '        fi',
+    '        return 0',
+    '      fi',
     `      COMPREPLY=( $(compgen -W "${words(SUPPORTED_COMPLETION_SHELLS.concat(COMPLETION_FLAGS))}" -- "$cur") )`,
     '      return 0',
     '      ;;',
@@ -187,7 +196,7 @@ function generateBashScript() {
     '          ;;',
     '        ip)',
     '          if [[ $COMP_CWORD -eq 3 ]]; then',
-    `            COMPREPLY=( $(compgen -W "${words(AUTH_IP_SUBCOMMANDS.concat(COMPLETION_FLAGS))}" -- "$cur") )`,
+    `          COMPREPLY=( $(compgen -W "${words(AUTH_IP_SUBCOMMANDS.concat(COMPLETION_FLAGS))}" -- "$cur") )`,
     '            return 0',
     '          fi',
     '          if [[ "$nested" == "list" ]]; then',
@@ -266,6 +275,12 @@ function generateZshScript() {
     `          suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)})`,
     '        else',
     `          suggestions=(${words(COMPLETION_INSTALL_FLAGS)})`,
+    '        fi',
+    '      elif [[ "$subcommand" == "uninstall" ]]; then',
+    '        if (( CURRENT == 4 )); then',
+    `          suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)})`,
+    '        else',
+    `          suggestions=(${words(COMPLETION_UNINSTALL_FLAGS)})`,
     '        fi',
     '      else',
     `        suggestions=(${words(SUPPORTED_COMPLETION_SHELLS)} ${words(COMPLETION_FLAGS)})`,
@@ -400,10 +415,13 @@ function generateFishScript() {
     'complete -c coder-studio -n "__fish_seen_subcommand_from doctor" -l json',
     'complete -c coder-studio -n "__fish_seen_subcommand_from doctor" -l help -s h',
     '',
-    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and not __fish_seen_subcommand_from install bash zsh fish" -a "install bash zsh fish"',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and not __fish_seen_subcommand_from install uninstall bash zsh fish" -a "install uninstall bash zsh fish"',
     'complete -c coder-studio -n "__fish_seen_subcommand_from completion" -l help -s h',
     'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from install; and not __fish_seen_subcommand_from bash zsh fish" -a "bash zsh fish"',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from install" -l force',
     'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from install" -l json',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from uninstall; and not __fish_seen_subcommand_from bash zsh fish" -a "bash zsh fish"',
+    'complete -c coder-studio -n "__fish_seen_subcommand_from completion; and __fish_seen_subcommand_from uninstall" -l json',
     '',
     'complete -c coder-studio -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from path show get set unset validate root password auth" -a "path show get set unset validate root password auth"',
     'complete -c coder-studio -n "__fish_seen_subcommand_from config" -l json',
@@ -463,14 +481,28 @@ function buildManagedBlock(sourceLine) {
   return `${MANAGED_BLOCK_START}\n${sourceLine}\n${MANAGED_BLOCK_END}`;
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function upsertManagedBlock(currentText, block) {
-  const pattern = new RegExp(`${MANAGED_BLOCK_START}[\\s\\S]*?${MANAGED_BLOCK_END}`, 'm');
+  const pattern = new RegExp(`${escapeRegex(MANAGED_BLOCK_START)}[\\s\\S]*?${escapeRegex(MANAGED_BLOCK_END)}`, 'm');
   if (pattern.test(currentText)) {
     return currentText.replace(pattern, block);
   }
 
   const normalized = currentText.trimEnd();
   return normalized ? `${normalized}\n\n${block}\n` : `${block}\n`;
+}
+
+function removeManagedBlock(currentText) {
+  const pattern = new RegExp(`\\n*${escapeRegex(MANAGED_BLOCK_START)}\\n[\\s\\S]*?\\n${escapeRegex(MANAGED_BLOCK_END)}\\n*`, 'm');
+  if (!pattern.test(currentText)) {
+    return currentText;
+  }
+
+  const next = currentText.replace(pattern, '\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+  return next ? `${next}\n` : '';
 }
 
 async function readOptionalText(filePath) {
@@ -484,17 +516,48 @@ async function readOptionalText(filePath) {
   }
 }
 
-export async function installCompletionScript(shell, { env = process.env } = {}) {
+export async function installCompletionScript(shell, { env = process.env, force = false } = {}) {
   const plan = resolveInstallPlan(shell, env);
   const script = generateCompletionScript(shell);
 
   await fs.mkdir(path.dirname(plan.scriptPath), { recursive: true });
-  await fs.writeFile(plan.scriptPath, script, 'utf8');
+  const currentScript = await readOptionalText(plan.scriptPath);
+  const scriptUpdated = force || currentScript !== script;
+  if (scriptUpdated) {
+    await fs.writeFile(plan.scriptPath, script, 'utf8');
+  }
 
   let profileUpdated = false;
   if (plan.profilePath && plan.sourceLine) {
     const currentProfile = await readOptionalText(plan.profilePath);
     const nextProfile = upsertManagedBlock(currentProfile, buildManagedBlock(plan.sourceLine));
+    profileUpdated = force || nextProfile !== currentProfile;
+    if (profileUpdated) {
+      await fs.writeFile(plan.profilePath, nextProfile, 'utf8');
+    }
+  }
+
+  return {
+    shell: plan.shell,
+    scriptPath: plan.scriptPath,
+    scriptUpdated,
+    profilePath: plan.profilePath,
+    profileUpdated,
+    activationCommand: plan.activationCommand,
+    forced: Boolean(force),
+  };
+}
+
+export async function uninstallCompletionScript(shell, { env = process.env } = {}) {
+  const plan = resolveInstallPlan(shell, env);
+  const currentScript = await readOptionalText(plan.scriptPath);
+  const scriptRemoved = currentScript.length > 0;
+  await fs.rm(plan.scriptPath, { force: true });
+
+  let profileUpdated = false;
+  if (plan.profilePath) {
+    const currentProfile = await readOptionalText(plan.profilePath);
+    const nextProfile = removeManagedBlock(currentProfile);
     profileUpdated = nextProfile !== currentProfile;
     if (profileUpdated) {
       await fs.writeFile(plan.profilePath, nextProfile, 'utf8');
@@ -504,9 +567,9 @@ export async function installCompletionScript(shell, { env = process.env } = {})
   return {
     shell: plan.shell,
     scriptPath: plan.scriptPath,
+    scriptRemoved,
     profilePath: plan.profilePath,
     profileUpdated,
-    activationCommand: plan.activationCommand,
   };
 }
 

@@ -80,6 +80,7 @@ coder-studio help start
 coder-studio help completion
 eval "$(coder-studio completion bash)"
 coder-studio completion install bash
+coder-studio completion uninstall bash
 ```
 
 For the detailed command reference, see `docs/development/cli.en.md`.
