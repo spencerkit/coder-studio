@@ -1959,34 +1959,24 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     ["--right-split" as string]: `${state.layout.rightSplit}%`
   };
 
-  const workspaceTabs = [...state.tabs]
-    .sort((left, right) => {
+  const workspaceTabs = state.tabs.map((tab) => {
+    const sessions = [...tab.sessions].sort((left, right) => {
       if (sessionSort === "name") {
-        return (displayPathName(left.project?.path) || displayWorkspaceTitle(left.title))
-          .localeCompare(displayPathName(right.project?.path) || displayWorkspaceTitle(right.title), locale === "zh" ? "zh-CN" : "en");
+        return displaySessionTitle(left.title).localeCompare(displaySessionTitle(right.title), locale === "zh" ? "zh-CN" : "en");
       }
-      const leftTime = Math.max(...left.sessions.map((session) => session.lastActiveAt));
-      const rightTime = Math.max(...right.sessions.map((session) => session.lastActiveAt));
-      return rightTime - leftTime;
-    })
-    .map((tab) => {
-      const sessions = [...tab.sessions].sort((left, right) => {
-        if (sessionSort === "name") {
-          return displaySessionTitle(left.title).localeCompare(displaySessionTitle(right.title), locale === "zh" ? "zh-CN" : "en");
-        }
-        return right.lastActiveAt - left.lastActiveAt;
-      });
-      const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
-      const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
-      return {
-        id: tab.id,
-        label: displayPathName(tab.project?.path) || displayWorkspaceTitle(tab.title),
-        active: tab.id === state.activeTabId,
-        hasRunning,
-        unread,
-        sessions
-      };
+      return right.lastActiveAt - left.lastActiveAt;
     });
+    const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
+    const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
+    return {
+      id: tab.id,
+      label: displayPathName(tab.project?.path) || displayWorkspaceTitle(tab.title),
+      active: tab.id === state.activeTabId,
+      hasRunning,
+      unread,
+      sessions
+    };
+  });
   const commandPaletteActions = buildCommandPaletteActions({
     locale,
     t,

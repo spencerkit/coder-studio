@@ -107,7 +107,7 @@ export const buildCommandPaletteActions = ({
   {
     id: "switch-prev-workspace",
     label: locale === "zh" ? "切换到上一个工作区" : "Switch To Previous Workspace",
-    description: locale === "zh" ? "按时间序列回到上一个工作区" : "Jump to the previous workspace in the stack",
+    description: locale === "zh" ? "按当前标签顺序回到上一个工作区" : "Jump to the previous workspace tab",
     shortcut: "⌘/Ctrl ⇧ [",
     keywords: "workspace previous back",
     run: () => onCycleWorkspace(-1),
@@ -115,7 +115,7 @@ export const buildCommandPaletteActions = ({
   {
     id: "switch-next-workspace",
     label: locale === "zh" ? "切换到下一个工作区" : "Switch To Next Workspace",
-    description: locale === "zh" ? "按时间序列前往下一个工作区" : "Jump to the next workspace in the stack",
+    description: locale === "zh" ? "按当前标签顺序前往下一个工作区" : "Jump to the next workspace tab",
     shortcut: "⌘/Ctrl ⇧ ]",
     keywords: "workspace next forward",
     run: () => onCycleWorkspace(1),

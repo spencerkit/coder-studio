@@ -1,10 +1,16 @@
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 const HOME_DIR = os.homedir();
 const HOME_LABEL = path.basename(HOME_DIR) || HOME_DIR;
+const TAB_STABILITY_DIRS = [
+  path.join(HOME_DIR, 'coder-studio-e2e-tab-a'),
+  path.join(HOME_DIR, 'coder-studio-e2e-tab-b'),
+];
+const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir));
 
 const openLaunchOverlay = async (page: Page) => {
   await page.goto('/');
@@ -34,6 +40,29 @@ const launchLocalWorkspace = async (page: Page) => {
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
 };
 
+const invokeRpc = async <T>(page: Page, command: string, payload: Record<string, unknown> = {}) => {
+  const response = await page.request.post(`/api/rpc/${command}`, { data: payload });
+  expect(response.ok()).toBeTruthy();
+  const body = await response.json();
+  expect(body.ok).not.toBe(false);
+  return body.data as T;
+};
+
+const launchWorkspaceByPath = async (page: Page, workspacePath: string) => {
+  await invokeRpc(page, 'launch_workspace', {
+    source: {
+      kind: 'local',
+      pathOrUrl: workspacePath,
+      target: { type: 'native' },
+    },
+  });
+};
+
+const readWorkspaceTabLabels = async (page: Page) =>
+  page.locator('.workspace-top-tab .session-top-label').evaluateAll((nodes) =>
+    nodes.map((node) => node.textContent?.trim() ?? '').filter(Boolean)
+  );
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!window.sessionStorage.getItem('coder-studio.test-init')) {
@@ -43,6 +72,14 @@ test.beforeEach(async ({ page }) => {
       window.sessionStorage.setItem('coder-studio.test-init', '1');
     }
   });
+});
+
+test.beforeAll(async () => {
+  await Promise.all(TAB_STABILITY_DIRS.map((dir) => fs.mkdir(dir, { recursive: true })));
+});
+
+test.afterAll(async () => {
+  await Promise.all(TAB_STABILITY_DIRS.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 test('local workspace flow opens the workspace shell', async ({ page }) => {
@@ -94,4 +131,25 @@ test('restores the last workspace after reload', async ({ page }) => {
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toContainText(HOME_LABEL);
+});
+
+test('workspace tabs keep a stable order when switching between workspaces', async ({ page }) => {
+  await launchWorkspaceByPath(page, TAB_STABILITY_DIRS[0]);
+  await launchWorkspaceByPath(page, TAB_STABILITY_DIRS[1]);
+  await page.goto('/');
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+  const initialOrder = await readWorkspaceTabLabels(page);
+  const initialFirstIndex = initialOrder.indexOf(TAB_STABILITY_LABELS[0]);
+  const initialSecondIndex = initialOrder.indexOf(TAB_STABILITY_LABELS[1]);
+  expect(initialFirstIndex).toBeGreaterThanOrEqual(0);
+  expect(initialSecondIndex).toBeGreaterThan(initialFirstIndex);
+
+  await page.locator('.workspace-top-tab').filter({ hasText: TAB_STABILITY_LABELS[0] }).click();
+  await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(TAB_STABILITY_LABELS[0]);
+  await expect.poll(() => readWorkspaceTabLabels(page)).toEqual(initialOrder);
+
+  await page.locator('.workspace-top-tab').filter({ hasText: TAB_STABILITY_LABELS[1] }).click();
+  await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(TAB_STABILITY_LABELS[1]);
+  await expect.poll(() => readWorkspaceTabLabels(page)).toEqual(initialOrder);
 });
