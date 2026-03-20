@@ -303,7 +303,7 @@ pub(crate) fn worktree_list(path: String, target: ExecTarget) -> Result<Vec<Work
             current.name = current
                 .path
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or("worktree")
                 .to_string();
         } else if line.starts_with("branch ") {

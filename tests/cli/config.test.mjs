@@ -44,7 +44,7 @@ test('resolveStateDir respects platform defaults', () => {
   const linux = resolveStateDir({ XDG_STATE_HOME: '/tmp/xdg-state' }, 'linux');
   const darwin = resolveStateDir({}, 'darwin');
   assert.equal(linux, path.join('/tmp/xdg-state', 'coder-studio'));
-  assert.match(darwin, /Library\/Application Support\/coder-studio$/);
+  assert.ok(darwin.endsWith(path.join('Library', 'Application Support', 'coder-studio')));
 });
 
 test('resolveDataDir nests under stateDir by default', () => {

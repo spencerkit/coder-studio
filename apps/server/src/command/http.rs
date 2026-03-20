@@ -769,11 +769,11 @@ fn dispatch_rpc(
     }
 }
 
-fn require_loopback(client_addr: std::net::SocketAddr) -> Result<(), Response> {
+fn require_loopback(client_addr: std::net::SocketAddr) -> Option<Response> {
     if client_addr.ip().is_loopback() {
-        Ok(())
+        None
     } else {
-        Err(json_error(
+        Some(json_error(
             StatusCode::FORBIDDEN,
             "loopback_required".to_string(),
         ))
@@ -784,7 +784,7 @@ pub(crate) async fn system_config_handler(
     ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> Response {
-    if let Err(response) = require_loopback(client_addr) {
+    if let Some(response) = require_loopback(client_addr) {
         return response;
     }
 
@@ -799,7 +799,7 @@ pub(crate) async fn system_config_patch_handler(
     AxumState(state): AxumState<HttpServerState>,
     Json(payload): Json<Value>,
 ) -> Response {
-    if let Err(response) = require_loopback(client_addr) {
+    if let Some(response) = require_loopback(client_addr) {
         return response;
     }
 
@@ -818,7 +818,7 @@ pub(crate) async fn system_auth_status_handler(
     ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> Response {
-    if let Err(response) = require_loopback(client_addr) {
+    if let Some(response) = require_loopback(client_addr) {
         return response;
     }
 
@@ -832,7 +832,7 @@ pub(crate) async fn system_auth_ip_blocks_handler(
     ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> Response {
-    if let Err(response) = require_loopback(client_addr) {
+    if let Some(response) = require_loopback(client_addr) {
         return response;
     }
 
@@ -847,7 +847,7 @@ pub(crate) async fn system_auth_ip_unblock_handler(
     AxumState(state): AxumState<HttpServerState>,
     Json(payload): Json<Value>,
 ) -> Response {
-    if let Err(response) = require_loopback(client_addr) {
+    if let Some(response) = require_loopback(client_addr) {
         return response;
     }
 

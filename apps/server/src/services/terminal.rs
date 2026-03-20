@@ -68,7 +68,12 @@ pub(crate) fn terminal_create(
         if let Ok(mut child) = runtime.child.lock() {
             let _ = child.wait();
         }
-        emit_terminal(&app_handle, &workspace_id, terminal_id, "\n[terminal exited]\n");
+        emit_terminal(
+            &app_handle,
+            &workspace_id,
+            terminal_id,
+            "\n[terminal exited]\n",
+        );
         let state: State<AppState> = state_handle.state();
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);

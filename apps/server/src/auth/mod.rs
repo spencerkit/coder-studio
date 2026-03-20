@@ -1229,7 +1229,7 @@ fn random_hex(bytes_len: usize) -> Result<String, String> {
 fn sha256_hex(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
-    hex_encode(&hasher.finalize())
+    hex_encode(hasher.finalize())
 }
 
 fn hex_encode(bytes: impl AsRef<[u8]>) -> String {

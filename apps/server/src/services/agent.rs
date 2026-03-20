@@ -103,9 +103,16 @@ pub(crate) fn agent_start(
                     if text.is_empty() {
                         continue;
                     }
-                    emit_agent(&app_handle, &workspace_id_out, &session_out, "stdout", &text);
+                    emit_agent(
+                        &app_handle,
+                        &workspace_id_out,
+                        &session_out,
+                        "stdout",
+                        &text,
+                    );
                     let state: State<AppState> = state_handle.state();
-                    let _ = append_session_stream(&state, &workspace_id_out, session_out_num, &text);
+                    let _ =
+                        append_session_stream(&state, &workspace_id_out, session_out_num, &text);
                 }
                 Err(_) => break,
             }
@@ -194,7 +201,12 @@ pub(crate) fn agent_stop(
     }
     drop(agents);
     if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = set_session_status(&state, &workspace_id, session_id_num, SessionStatus::Interrupted);
+        let _ = set_session_status(
+            &state,
+            &workspace_id,
+            session_id_num,
+            SessionStatus::Interrupted,
+        );
     }
     Ok(())
 }

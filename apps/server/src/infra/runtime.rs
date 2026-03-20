@@ -120,10 +120,11 @@ pub(crate) fn run_wsl_shell_command(
     script: &str,
 ) -> Result<String, String> {
     let mut cmd = Command::new("wsl.exe");
-    if let ExecTarget::Wsl { distro } = target {
-        if let Some(d) = distro {
-            cmd.args(["-d", d]);
-        }
+    if let ExecTarget::Wsl {
+        distro: Some(distro),
+    } = target
+    {
+        cmd.args(["-d", distro]);
     }
     let shell_cmd = if cwd.is_empty() {
         script.to_string()
@@ -422,6 +423,6 @@ pub(crate) fn temp_root(target: &ExecTarget) -> Result<String, String> {
 
 pub(crate) fn repo_name_from_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
-    let name = trimmed.split('/').last().unwrap_or("repo");
+    let name = trimmed.split('/').next_back().unwrap_or("repo");
     name.trim_end_matches(".git").to_string()
 }

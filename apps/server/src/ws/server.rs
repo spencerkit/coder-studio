@@ -52,7 +52,7 @@ pub(crate) async fn ws_session(mut socket: WebSocket, app: tauri::AppHandle) {
                                 let Ok(body) = serde_json::to_string(&WsEnvelope::Pong { ts }) else {
                                     continue;
                                 };
-                                if socket.send(Message::Text(body.into())).await.is_err() {
+                                if socket.send(Message::Text(body)).await.is_err() {
                                     break;
                                 }
                             }
@@ -73,7 +73,7 @@ pub(crate) async fn ws_session(mut socket: WebSocket, app: tauri::AppHandle) {
                         let Ok(text) = serde_json::to_string(&envelope) else {
                             continue;
                         };
-                        if socket.send(Message::Text(text.into())).await.is_err() {
+                        if socket.send(Message::Text(text)).await.is_err() {
                             break;
                         }
                     }
@@ -129,7 +129,12 @@ pub(crate) fn emit_agent(
     );
 }
 
-pub(crate) fn emit_terminal(app: &tauri::AppHandle, workspace_id: &str, terminal_id: u64, data: &str) {
+pub(crate) fn emit_terminal(
+    app: &tauri::AppHandle,
+    workspace_id: &str,
+    terminal_id: u64,
+    data: &str,
+) {
     emit_transport_event(
         app,
         "terminal://event",
