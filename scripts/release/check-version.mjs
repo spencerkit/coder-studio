@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { MAIN_PACKAGE, PLATFORM_PACKAGES, ROOT } from '../lib/package-matrix.mjs';
+import { MAIN_PACKAGE, PLATFORM_PACKAGES, ROOT, SERVER_APP_DIR } from '../lib/package-matrix.mjs';
 
 function isDirectRun() {
   return process.argv[1] ? pathToFileURL(process.argv[1]).href === import.meta.url : false;
@@ -14,27 +14,27 @@ async function readJson(filePath) {
 function readPackageVersionFromCargoToml(source) {
   const packageSectionMatch = source.match(/\[package\]([\s\S]*?)(?:\n\[[^\]]+\]|$)/);
   if (!packageSectionMatch) {
-    throw new Error('missing [package] section in src-tauri/Cargo.toml');
+    throw new Error('missing [package] section in apps/server/Cargo.toml');
   }
 
   const versionMatch = packageSectionMatch[1].match(/^version = "([^"]+)"$/m);
   if (!versionMatch) {
-    throw new Error('missing package version in src-tauri/Cargo.toml');
+    throw new Error('missing package version in apps/server/Cargo.toml');
   }
   return versionMatch[1];
 }
 
 export async function collectReleaseVersionState(rootDir = ROOT) {
   const rootPackage = await readJson(path.join(rootDir, 'package.json'));
-  const mainPackage = await readJson(path.join(rootDir, 'packages', MAIN_PACKAGE.slug, 'package.json'));
+  const mainPackage = await readJson(path.join(MAIN_PACKAGE.sourceDir, 'package.json'));
   const platformPackages = await Promise.all(
     PLATFORM_PACKAGES.map(async (entry) => ({
       ...entry,
-      packageJson: await readJson(path.join(rootDir, 'packages', entry.slug, 'package.json')),
+      packageJson: await readJson(path.join(entry.templateDir, 'package.json')),
     })),
   );
-  const cargoToml = await fs.readFile(path.join(rootDir, 'src-tauri', 'Cargo.toml'), 'utf8');
-  const tauriConfig = await readJson(path.join(rootDir, 'src-tauri', 'tauri.conf.json'));
+  const cargoToml = await fs.readFile(path.join(SERVER_APP_DIR, 'Cargo.toml'), 'utf8');
+  const tauriConfig = await readJson(path.join(SERVER_APP_DIR, 'tauri.conf.json'));
 
   return {
     rootVersion: rootPackage.version,

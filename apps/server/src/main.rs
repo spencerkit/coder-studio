@@ -194,8 +194,8 @@ fn main() {
             let transport_endpoint =
                 start_transport_server(app.handle()).map_err(std::io::Error::other)?;
             if cfg!(debug_assertions) {
-                println!("Coder Studio frontend dev server: {DEV_FRONTEND_URL}");
-                println!("Coder Studio backend dev server: {transport_endpoint}");
+                println!("Coder Studio web dev server: {DEV_FRONTEND_URL}");
+                println!("Coder Studio local server: {transport_endpoint}");
             } else {
                 println!("Coder Studio server running at {transport_endpoint}");
             }

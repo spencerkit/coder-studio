@@ -15,9 +15,9 @@
 
 相关代码：
 
-- 前端 RPC 客户端：`src/services/http/client.ts`
-- 后端命令分发：`src-tauri/src/command/http.rs`
-- Tauri 注册列表：`src-tauri/src/main.rs`
+- 前端 RPC 客户端：`apps/web/src/services/http/client.ts`
+- 后端命令分发：`apps/server/src/command/http.rs`
+- Tauri 注册列表：`apps/server/src/main.rs`
 
 流式事件不走 RPC 返回值，而走 WebSocket：
 

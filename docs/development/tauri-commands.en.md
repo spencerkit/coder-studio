@@ -15,9 +15,9 @@ The actual order is:
 
 Relevant code:
 
-- frontend RPC client: `src/services/http/client.ts`
-- backend command dispatcher: `src-tauri/src/command/http.rs`
-- Tauri registration list: `src-tauri/src/main.rs`
+- frontend RPC client: `apps/web/src/services/http/client.ts`
+- backend command dispatcher: `apps/server/src/command/http.rs`
+- Tauri registration list: `apps/server/src/main.rs`
 
 Streamed events do not come back through RPC responses. They are delivered over WebSocket:
 

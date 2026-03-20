@@ -6,18 +6,18 @@ This document describes the current high-level architecture, module responsibili
 
 ## 1. Overall Shape
 
-The project is a Tauri desktop application with a React + Vite frontend and a Rust backend.
+The project consists of a React + Vite frontend and a Rust server runtime. That server runtime is hosted by Tauri and exposes local HTTP / WS transport.
 
 The runtime layering looks like this:
 
 ```text
-React UI (src/App.tsx)
+React UI (apps/web/src/App.tsx)
     |
     |-- HTTP RPC (/api/rpc/:command) first
     |-- Tauri invoke fallback
     |-- WebSocket subscriptions (/ws)
     v
-Rust Tauri Host
+Rust Server Runtime (via Tauri)
     |
     |-- workspace/session services
     |-- git / filesystem services
@@ -41,11 +41,11 @@ Local Persistence
 
 The frontend is still driven largely by a single top-level view:
 
-- `src/App.tsx`: most UI, interaction, and orchestration logic
-- `src/state/workbench.ts`: core models for workspaces, sessions, panes, terminals, and file previews
-- `src/types/app.ts`: shared frontend/backend payload types
-- `src/services/http/`: RPC wrappers
-- `src/ws/`: WebSocket connection and subscription layer
+- `apps/web/src/App.tsx`: most UI, interaction, and orchestration logic
+- `apps/web/src/state/workbench.ts`: core models for workspaces, sessions, panes, terminals, and file previews
+- `apps/web/src/types/app.ts`: shared frontend/backend payload types
+- `apps/web/src/services/http/`: RPC wrappers
+- `apps/web/src/ws/`: WebSocket connection and subscription layer
 
 The frontend is responsible for:
 
@@ -55,19 +55,19 @@ The frontend is responsible for:
 - consuming agent, terminal, and Claude lifecycle events
 - coordinating code preview, Git actions, terminal behavior, and settings state
 
-## 3. Backend Responsibilities
+## 3. Server Responsibilities
 
-The backend entry point is `src-tauri/src/main.rs`.
+The server entry point is `apps/server/src/main.rs`.
 
 Concrete service responsibilities are split into:
 
-- `src-tauri/src/services/workspace.rs`
-- `src-tauri/src/services/git.rs`
-- `src-tauri/src/services/filesystem.rs`
-- `src-tauri/src/services/terminal.rs`
-- `src-tauri/src/services/agent.rs`
+- `apps/server/src/services/workspace.rs`
+- `apps/server/src/services/git.rs`
+- `apps/server/src/services/filesystem.rs`
+- `apps/server/src/services/terminal.rs`
+- `apps/server/src/services/agent.rs`
 
-The backend is responsible for:
+The server is responsible for:
 
 - repository initialization and workspace resolution
 - session metadata management
@@ -86,15 +86,15 @@ The current implementation supports two command paths:
 
 This enables:
 
-- direct Tauri runtime usage in desktop mode
-- local HTTP/WS backend usage in split-debug mode
+- direct invoke / runtime access in Tauri shell mode
+- direct local HTTP/WS server usage in split-debug mode
 - one event stream mechanism for agent and terminal output
 
 Relevant code:
 
-- frontend: `src/services/http/client.ts`
-- backend: `src-tauri/src/command/http.rs`
-- WebSocket: `src/ws/connection-manager.ts`, `src-tauri/src/ws/server.rs`
+- frontend: `apps/web/src/services/http/client.ts`
+- server: `apps/server/src/command/http.rs`
+- WebSocket: `apps/web/src/ws/connection-manager.ts`, `apps/server/src/ws/server.rs`
 
 ## 5. Core Runtime Flows
 
@@ -188,8 +188,8 @@ The backend stores:
 
 Database initialization and persistence logic live in:
 
-- `src-tauri/src/main.rs`
-- `src-tauri/src/infra/db.rs`
+- `apps/server/src/main.rs`
+- `apps/server/src/infra/db.rs`
 
 ## 7. Dev Mode vs Production Mode
 
@@ -206,7 +206,7 @@ In production mode:
 
 ## 8. Current Architectural Constraints
 
-- Main UI orchestration is still highly concentrated in `src/App.tsx`.
+- Main UI orchestration is still highly concentrated in `apps/web/src/App.tsx`.
 - Queue, archive, and worktree backend capabilities are ahead of their UI exposure.
 - Some modeled concepts such as `branch` / `git_tree` are not yet full product flows.
 - The frontend still relies heavily on “refresh workspace artifacts” instead of more granular incremental syncing.

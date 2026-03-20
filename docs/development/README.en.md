@@ -18,7 +18,7 @@ Install dependencies:
 pnpm install
 ```
 
-Desktop development mode:
+Tauri shell development mode:
 
 ```bash
 pnpm tauri dev
@@ -28,7 +28,7 @@ Split debugging mode:
 
 ```bash
 pnpm dev:frontend
-pnpm dev:backend
+pnpm dev:server
 ```
 
 Combined dev stack and development E2E:
@@ -40,18 +40,18 @@ pnpm dev:stack
 Current development ports:
 
 - frontend: `127.0.0.1:5174`
-- backend transport service: `127.0.0.1:41033`
+- local server transport service: `127.0.0.1:41033`
 
 ## Key Code Locations
 
-- main frontend view: `src/App.tsx`
-- frontend global state: `src/state/workbench.ts`
-- frontend shared types: `src/types/app.ts`
-- HTTP RPC wrappers: `src/services/http/`
-- WebSocket event layer: `src/ws/`
-- Tauri entry point: `src-tauri/src/main.rs`
-- Tauri HTTP transport layer: `src-tauri/src/command/http.rs`
-- Rust services: `src-tauri/src/services/`
+- main frontend view: `apps/web/src/App.tsx`
+- frontend global state: `apps/web/src/state/workbench.ts`
+- frontend shared types: `apps/web/src/types/app.ts`
+- HTTP RPC wrappers: `apps/web/src/services/http/`
+- WebSocket event layer: `apps/web/src/ws/`
+- server entry point: `apps/server/src/main.rs`
+- server HTTP transport layer: `apps/server/src/command/http.rs`
+- Rust services: `apps/server/src/services/`
 
 ## Document Index
 

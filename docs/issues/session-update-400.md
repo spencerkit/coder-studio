@@ -33,9 +33,9 @@ HTTP 层会把后端 `Err(...)` 统一映射成 `400`，因此这个现象从一
 相关代码：
 
 - `src/services/http/session.service.ts`
-- `src/App.tsx`
-- `src-tauri/src/command/http.rs`
-- `src-tauri/src/services/workspace.rs`
+- `apps/web/src/App.tsx`
+- `apps/server/src/command/http.rs`
+- `apps/server/src/services/workspace.rs`
 
 ## 已知高概率原因
 

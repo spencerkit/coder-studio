@@ -4,13 +4,18 @@
 
 The repository now publishes these packages:
 
-- `@spencer-kit/coder-studio`: the primary CLI package
-- `@spencer-kit/coder-studio-linux-x64`: Linux x64 runtime bundle
-- `@spencer-kit/coder-studio-darwin-arm64`: macOS Apple Silicon runtime bundle
-- `@spencer-kit/coder-studio-darwin-x64`: macOS Intel runtime bundle
-- `@spencer-kit/coder-studio-win32-x64`: Windows x64 runtime bundle
+- `packages/cli`: source for the primary `@spencer-kit/coder-studio` package
+- `templates/npm/platform-packages/*`: platform package templates
+- `.build/stage/npm/*`: generated publish staging directories
+- `.artifacts/`: final tarballs, manifest, and checksums
 
-The main package owns the CLI. Platform packages carry the native runtime binary and built frontend assets.
+Layer responsibilities:
+
+- source: `packages/cli`, `apps/web`, `apps/server`
+- templates: `templates/npm/platform-packages/*`
+- build outputs: `.build/web/dist`, `.build/server/target`, `.build/stage/npm/*`, `.artifacts/`
+
+The main package owns the CLI. Platform package templates own publish metadata. The staging directories receive native binaries and built frontend assets.
 
 ## CLI Usage
 
@@ -72,9 +77,9 @@ pnpm release:verify:full
 What they do:
 
 - `version:check`: verifies the root package, main package, platform packages, `Cargo.toml`, and `tauri.conf.json` all share the same version
-- `build:web`: builds the frontend into `dist/`
-- `build:runtime`: builds the Rust/Tauri release binary
-- `build:packages`: assembles the current platform runtime package
+- `build:web`: builds the frontend into `.build/web/dist`
+- `build:runtime`: builds the Rust/Tauri release binary into `.build/server/target`
+- `build:packages`: materializes `.build/stage/npm/<platform>` from templates and injects the binary plus frontend assets
 - `pack:local`: runs the release build and emits local tarballs into `.artifacts/`
 - `release:verify`: runs version checks, CLI tests, Rust tests, local packaging, and smoke validation
 - `release:verify:full`: adds release E2E on top of `release:verify`
@@ -101,9 +106,10 @@ git commit -m "chore(release): version packages"
 
 The version sync step updates:
 
-- `packages/*/package.json`
-- `src-tauri/Cargo.toml`
-- `src-tauri/tauri.conf.json`
+- `packages/cli/package.json`
+- `templates/npm/platform-packages/*/package.json`
+- `apps/server/Cargo.toml`
+- `apps/server/tauri.conf.json`
 - the root `package.json`
 
 `changeset:version` now runs `pnpm version:check` after syncing so version drift fails immediately.
@@ -136,6 +142,8 @@ ls .artifacts
 - `release-manifest.json`
 - `SHA256SUMS.txt`
 
+`.build/stage/npm/` holds the generated publishable staging package for the current platform.
+
 ## GitHub Actions
 
 The automation is split into three workflows:
@@ -153,7 +161,7 @@ The automation is split into three workflows:
   - now has explicit `contents` / `pull-requests` write permissions
 - `release.yml`
   - starts with a `preflight` job that validates the tag and runs `pnpm version:check`
-  - publishes the 4 platform runtime packages
+  - publishes the 4 platform runtime packages from `.build/stage/npm/*`
   - publishes the main `@spencer-kit/coder-studio` package
   - aggregates tarballs and attaches `release-manifest.json` plus `SHA256SUMS.txt` to the GitHub Release
 
@@ -168,8 +176,8 @@ git push origin v0.1.0
 
 The workflow then:
 
-1. checks that the tag matches `packages/coder-studio/package.json`
-2. publishes platform packages
+1. checks that the tag matches `packages/cli/package.json`
+2. generates staging packages from templates and publishes platform packages
 3. publishes the main package
 4. creates the GitHub Release assets
 

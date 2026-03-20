@@ -79,15 +79,7 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
 
-  packages/coder-studio: {}
-
-  packages/coder-studio-darwin-arm64: {}
-
-  packages/coder-studio-darwin-x64: {}
-
-  packages/coder-studio-linux-x64: {}
-
-  packages/coder-studio-win32-x64: {}
+  packages/cli: {}
 
 packages:
 

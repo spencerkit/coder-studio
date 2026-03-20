@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createReleaseManifest } from './write-release-manifest.mjs';
 import { assertVersionConsistency } from './check-version.mjs';
-import { MAIN_PACKAGE, ROOT, resolvePlatformPackageMeta } from '../lib/package-matrix.mjs';
+import { MAIN_PACKAGE, resolvePlatformPackageMeta, ROOT } from '../lib/package-matrix.mjs';
 
 const execFileAsync = promisify(execFile);
 const ARTIFACTS_DIR = path.join(ROOT, '.artifacts');
@@ -22,7 +22,7 @@ await fs.mkdir(ARTIFACTS_DIR, { recursive: true });
 
 await execFileAsync(
   PNPM_CMD,
-  ['--dir', path.join('packages', platformPackage.slug), 'pack', '--pack-destination', path.relative(path.join(ROOT, 'packages', platformPackage.slug), ARTIFACTS_DIR)],
+  ['--dir', path.relative(ROOT, platformPackage.stageDir), 'pack', '--pack-destination', path.relative(platformPackage.stageDir, ARTIFACTS_DIR)],
   {
     cwd: ROOT,
     maxBuffer: 1024 * 1024 * 16,
@@ -30,7 +30,7 @@ await execFileAsync(
 );
 await execFileAsync(
   PNPM_CMD,
-  ['--dir', path.join('packages', MAIN_PACKAGE.slug), 'pack', '--pack-destination', path.relative(path.join(ROOT, 'packages', MAIN_PACKAGE.slug), ARTIFACTS_DIR)],
+  ['--dir', path.relative(ROOT, MAIN_PACKAGE.sourceDir), 'pack', '--pack-destination', path.relative(MAIN_PACKAGE.sourceDir, ARTIFACTS_DIR)],
   {
     cwd: ROOT,
     maxBuffer: 1024 * 1024 * 16,

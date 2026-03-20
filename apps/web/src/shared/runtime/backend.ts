@@ -5,6 +5,9 @@ declare global {
   }
 }
 
+const TAURI_DEV_SERVER_ORIGIN = "http://127.0.0.1:41033";
+const TAURI_DEV_FRONTEND_PORT = "5174";
+
 export const normalizeBaseUrl = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -45,9 +48,21 @@ export const applyRuntimeQuery = (url: URL) => {
   return url;
 };
 
+export const hasTauriRuntime = () => typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+
+export const isTauriDevShell = () => {
+  if (typeof window === "undefined") return false;
+  return hasTauriRuntime()
+    && isLocalBrowserOrigin()
+    && window.location.port === TAURI_DEV_FRONTEND_PORT;
+};
+
 export const backendBaseUrl = () => {
   if (typeof window === "undefined") return "";
-  return readConfiguredBackendBase() || normalizeBaseUrl(window.location.origin);
+  const configured = readConfiguredBackendBase();
+  if (configured) return configured;
+  if (isTauriDevShell()) return TAURI_DEV_SERVER_ORIGIN;
+  return normalizeBaseUrl(window.location.origin);
 };
 
 export const healthUrl = () => {
@@ -68,5 +83,3 @@ export const websocketUrl = () => {
   base.hash = "";
   return applyRuntimeQuery(base).toString();
 };
-
-export const hasTauriRuntime = () => typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);

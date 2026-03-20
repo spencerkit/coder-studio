@@ -29,7 +29,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify tag matches package version
         run: |
-          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
+          VERSION=$(node -e "console.log(require('./packages/cli/package.json').version)")
           test "v$VERSION" = "$GITHUB_REF_NAME"
       - run: pnpm version:check
 
@@ -68,7 +68,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: apps/server -> .build/server/target
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -78,8 +78,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm release:check
       - run: node -e "require('fs').mkdirSync('.artifacts', { recursive: true })"
-      - run: pnpm --dir packages/${{ matrix.package_slug }} pack --pack-destination ../../.artifacts
-      - run: npm publish packages/${{ matrix.package_slug }} --access public
+      - run: pnpm --dir .build/stage/npm/${{ matrix.package_slug }} pack --pack-destination ../../../../.artifacts
+      - run: npm publish .build/stage/npm/${{ matrix.package_slug }} --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - uses: actions/upload-artifact@v4
@@ -104,8 +104,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm version:check
       - run: node -e "require('fs').mkdirSync('.artifacts', { recursive: true })"
-      - run: pnpm --dir packages/coder-studio pack --pack-destination ../../.artifacts
-      - run: npm publish packages/coder-studio --access public
+      - run: pnpm --dir packages/cli pack --pack-destination ../../.artifacts
+      - run: npm publish packages/cli --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - uses: actions/upload-artifact@v4

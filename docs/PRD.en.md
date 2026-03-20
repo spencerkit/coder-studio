@@ -14,14 +14,14 @@ This PRD documents the current product baseline and answers three questions:
 
 The implementation baseline comes primarily from:
 
-- `src/App.tsx`
-- `src/state/workbench.ts`
-- `src/i18n.ts`
-- `src-tauri/src/main.rs`
+- `apps/web/src/App.tsx`
+- `apps/web/src/state/workbench.ts`
+- `apps/web/src/i18n.ts`
+- `apps/server/src/main.rs`
 
 ## 2. Product Summary
 
-Coder Studio is a Tauri-based desktop workbench that brings the following tasks into one operational surface:
+Coder Studio is a local-first developer workbench that currently runs as a local server with a web UI, while Rust / Tauri provide the native runtime underneath. It brings the following tasks into one operational surface:
 
 - connecting local Git workspaces
 - starting and managing Claude agent sessions
@@ -32,19 +32,19 @@ Coder Studio is a Tauri-based desktop workbench that brings the following tasks 
 
 The current product position is:
 
-- local-first, single-user desktop workbench
+- local-first, single-user developer workbench exposed by a local server runtime
 - repository-centric agent collaboration surface
 - not a full IDE and not a multi-user collaboration platform
 
 ## 3. Target Users
 
-1. Individual developers who want one desktop surface for agents, code inspection, Git, and terminals.
+1. Individual developers who want one local work surface for agents, code inspection, Git, and terminals.
 2. Engineers who need to switch tasks quickly while working against real repositories.
 3. Claude Code users who want Claude CLI execution, repository context, and review workflows in the same app.
 
 ## 4. Supported Environment
 
-- runtime: desktop app built with Tauri
+- runtime: local server runtime built on Rust / Tauri and accessible from a browser or the Tauri shell
 - current workspace source: `Local Folder`
 - remote Git: backend plumbing still exists, but the creation entry is hidden in the current release and deferred to the next phase
 - execution targets: `Native`, plus `WSL` when available

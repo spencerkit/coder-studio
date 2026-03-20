@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolvePlatformPackage } from '../../packages/coder-studio/lib/platform.mjs';
+import { resolvePlatformPackage } from '../../packages/cli/lib/platform.mjs';
 
 test('resolvePlatformPackage supports explicit binary and dist overrides', () => {
   const result = resolvePlatformPackage({

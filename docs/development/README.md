@@ -20,7 +20,7 @@
 pnpm install
 ```
 
-桌面开发模式：
+Tauri 壳层开发模式：
 
 ```bash
 pnpm tauri dev
@@ -30,7 +30,7 @@ pnpm tauri dev
 
 ```bash
 pnpm dev:frontend
-pnpm dev:backend
+pnpm dev:server
 ```
 
 联动调试与开发态 E2E：
@@ -42,18 +42,18 @@ pnpm dev:stack
 当前开发端口：
 
 - 前端：`127.0.0.1:5174`
-- 后端传输服务：`127.0.0.1:41033`
+- 本地 server 传输服务：`127.0.0.1:41033`
 
 ## 关键代码位置
 
-- 前端主视图：`src/App.tsx`
-- 前端全局状态：`src/state/workbench.ts`
-- 前端类型：`src/types/app.ts`
-- HTTP RPC 调用封装：`src/services/http/`
-- WebSocket 事件层：`src/ws/`
-- Tauri 入口：`src-tauri/src/main.rs`
-- Tauri HTTP 传输层：`src-tauri/src/command/http.rs`
-- Rust 服务实现：`src-tauri/src/services/`
+- 前端主视图：`apps/web/src/App.tsx`
+- 前端全局状态：`apps/web/src/state/workbench.ts`
+- 前端类型：`apps/web/src/types/app.ts`
+- HTTP RPC 调用封装：`apps/web/src/services/http/`
+- WebSocket 事件层：`apps/web/src/ws/`
+- server 入口：`apps/server/src/main.rs`
+- server HTTP 传输层：`apps/server/src/command/http.rs`
+- Rust 服务实现：`apps/server/src/services/`
 
 ## 文档列表
 

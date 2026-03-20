@@ -8,9 +8,9 @@
 
 当前前端状态分成三层：
 
-- 全局工作台状态：`src/state/workbench.ts`
-- 页面级本地状态：`src/App.tsx`
-- 前后端交互类型：`src/types/app.ts`
+- 全局工作台状态：`apps/web/src/state/workbench.ts`
+- 页面级本地状态：`apps/web/src/App.tsx`
+- 前后端交互类型：`apps/web/src/types/app.ts`
 
 简单理解：
 
@@ -112,7 +112,7 @@ Pane 结构是树，不是线性列表。
 
 ## 3. 页面级本地状态
 
-`src/App.tsx` 里维护了大量仅用于界面交互的状态，例如：
+`apps/web/src/App.tsx` 里维护了大量仅用于界面交互的状态，例如：
 
 - `locale`
 - `appSettings` / `settingsDraft`

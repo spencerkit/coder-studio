@@ -2,11 +2,11 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Coder Studio is a local-first desktop workbench for connecting repositories, running Claude-based coding agents, browsing and editing code, reviewing Git changes, and working in embedded terminals from one surface.
+Coder Studio is a local-first developer workbench that currently runs as a local server with a web UI, bringing repositories, Claude-based coding agents, code browsing, Git review, and embedded terminals into one surface.
 
 ## What This Project Is
 
-This project is not currently positioned as a generic multi-provider AI platform. It is a desktop workbench centered around real Git repositories.
+This project is not currently positioned as a generic multi-provider AI platform. It is a local workbench centered around real Git repositories, exposed by a local server runtime.
 
 Its core job is to reduce context switching across the full workflow:
 
@@ -85,17 +85,35 @@ coder-studio completion uninstall bash
 
 For the detailed command reference, see `docs/development/cli.en.md`.
 
+## Source / Template / Artifact Layers
+
+The repository is organized into three layers:
+
+- source
+  - `apps/web`: frontend source
+  - `apps/server`: Rust / Tauri server source
+  - `packages/cli`: npm CLI package source
+- templates
+  - `templates/npm/platform-packages/*`: per-platform npm package templates
+- build outputs
+  - `.build/web/dist`: frontend build output
+  - `.build/server/target`: Rust build output
+  - `.build/stage/npm/*`: pre-publish staging packages
+  - `.artifacts/`: tarballs, manifests, and checksums
+
+This keeps maintainable source, publish templates, and generated artifacts out of the same directories.
+
 ## Run
 
-### Option 1: Desktop development mode (recommended)
+### Option 1: Tauri shell development mode (recommended)
 
 ```bash
 pnpm tauri dev
 ```
 
-This is the closest workflow to the real desktop product.
+This is the closest workflow to the Tauri shell development experience.
 
-### Option 2: Split frontend/backend debugging
+### Option 2: Split frontend/server debugging
 
 Terminal 1:
 
@@ -106,15 +124,15 @@ pnpm dev
 Terminal 2:
 
 ```bash
-pnpm dev:backend
+pnpm dev:server
 ```
 
 Current development ports:
 
 - frontend: `http://127.0.0.1:5174`
-- backend transport service: `http://127.0.0.1:41033`
+- local server transport service: `http://127.0.0.1:41033`
 
-The frontend dev server proxies `/api`, `/ws`, and `/health` to the local backend.
+The frontend dev server proxies `/api`, `/ws`, and `/health` to the local server.
 
 ## Build
 
@@ -124,7 +142,13 @@ Frontend build:
 pnpm build
 ```
 
-Desktop package build:
+Server runtime build:
+
+```bash
+pnpm build:server
+```
+
+Tauri shell build:
 
 ```bash
 pnpm tauri build

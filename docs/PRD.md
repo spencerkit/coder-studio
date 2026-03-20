@@ -14,14 +14,14 @@
 
 本文档的事实基线来自当前实现，包括但不限于：
 
-- `src/App.tsx`
-- `src/state/workbench.ts`
-- `src/i18n.ts`
-- `src-tauri/src/main.rs`
+- `apps/web/src/App.tsx`
+- `apps/web/src/state/workbench.ts`
+- `apps/web/src/i18n.ts`
+- `apps/server/src/main.rs`
 
 ## 2. 产品定义 / Product Summary
 
-Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下工作集中到一个操作面中：
+Coder Studio 是一个本地优先的开发工作台，当前以本地 server + Web 界面形态运行，底层由 Rust / Tauri 承载，用来把以下工作集中到一个操作面中：
 
 - 连接本地 Git 工作区
 - 启动并管理 Claude Agent 会话
@@ -32,19 +32,19 @@ Coder Studio 是一个基于 Tauri 的桌面端本地工作台，用来把以下
 
 当前版本的产品定位是：
 
-- 本地优先的单机开发工作台
+- 本地优先的单机开发工作台，默认通过本地 server 提供界面与 API
 - 面向代码仓库的 Agent 协作界面
 - 不是完整 IDE，也不是多用户协作平台
 
 ## 3. 目标用户 / Target Users
 
-1. 独立开发者：希望在一个桌面应用中同时驱动 Agent、代码预览、Git 与终端。
+1. 独立开发者：希望在一个本地工作台中同时驱动 Agent、代码预览、Git 与终端。
 2. 工程师：需要在处理真实仓库时快速切换任务、查看改动、提交代码。
 3. 使用 Claude Code 的开发者：希望把 Claude CLI 的运行、状态感知和仓库操作整合在一起。
 
 ## 4. 当前支持范围 / Supported Environment
 
-- 运行形态：桌面应用（Tauri）
+- 运行形态：本地 server runtime（Rust / Tauri 承载，可通过浏览器或 Tauri 壳层访问）
 - 当前工作区来源：`Local Folder`
 - 远程 Git：后端能力保留，但当前版本已隐藏创建入口，计划下一期开放
 - 执行目标：`Native`；在环境允许时支持 `WSL`

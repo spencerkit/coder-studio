@@ -72,7 +72,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: apps/server -> .build/server/target
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -80,10 +80,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:cli
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo check --manifest-path src-tauri/Cargo.toml
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo fmt --manifest-path apps/server/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path apps/server/Cargo.toml --all-targets -- -D warnings
+      - run: cargo check --manifest-path apps/server/Cargo.toml
+      - run: cargo test --manifest-path apps/server/Cargo.toml
       - run: pnpm pack:local
       - run: pnpm test:smoke
       - run: npx playwright install --with-deps chromium

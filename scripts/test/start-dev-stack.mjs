@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const backend = spawn(PNPM_CMD, ['dev:backend'], {
+const server = spawn(PNPM_CMD, ['dev:server'], {
   cwd: ROOT,
   stdio: 'inherit',
   windowsHide: true
@@ -25,20 +25,20 @@ const killChild = (child) => {
 const shutdown = () => {
   if (shuttingDown) return;
   shuttingDown = true;
-  killChild(backend);
+  killChild(server);
   killChild(frontend);
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-backend.on('exit', (code) => {
+server.on('exit', (code) => {
   if (!shuttingDown) {
     process.exitCode = code ?? 1;
     shutdown();
   }
 });
 
-async function waitForBackend() {
+async function waitForServer() {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
     try {
@@ -47,15 +47,15 @@ async function waitForBackend() {
         return;
       }
     } catch {
-      // Backend is still starting.
+      // Server is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error('backend_start_timeout');
+  throw new Error('server_start_timeout');
 }
 
 try {
-  await waitForBackend();
+  await waitForServer();
 } catch (error) {
   shutdown();
   throw error;
@@ -75,6 +75,6 @@ frontend.on('exit', (code) => {
 });
 
 await new Promise((resolve) => {
-  backend.on('exit', resolve);
+  server.on('exit', resolve);
   frontend.on('exit', resolve);
 });

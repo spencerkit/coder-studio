@@ -6,18 +6,18 @@
 
 ## 1. 总体结构
 
-当前项目是一个基于 Tauri 的桌面应用，前端使用 React + Vite，后端使用 Rust。
+当前项目由 React + Vite 前端和 Rust server 运行时组成；server 运行时由 Tauri 承载，并对外暴露本地 HTTP / WS 服务。
 
 逻辑分层可以概括为：
 
 ```text
-React UI (src/App.tsx)
+React UI (apps/web/src/App.tsx)
     |
     |-- HTTP RPC (/api/rpc/:command) 优先
     |-- Tauri invoke 兜底
     |-- WebSocket 事件订阅 (/ws)
     v
-Rust Tauri Host
+Rust Server Runtime (via Tauri)
     |
     |-- workspace/session 服务
     |-- git / filesystem 服务
@@ -41,11 +41,11 @@ Rust Tauri Host
 
 前端当前主要由单页主视图驱动：
 
-- `src/App.tsx`：绝大多数界面、交互和状态协调逻辑
-- `src/state/workbench.ts`：工作区、会话、Pane、终端、文件预览等核心状态模型
-- `src/types/app.ts`：前后端交互载荷类型
-- `src/services/http/`：RPC 调用封装
-- `src/ws/`：WebSocket 连接与事件订阅
+- `apps/web/src/App.tsx`：绝大多数界面、交互和状态协调逻辑
+- `apps/web/src/state/workbench.ts`：工作区、会话、Pane、终端、文件预览等核心状态模型
+- `apps/web/src/types/app.ts`：前后端交互载荷类型
+- `apps/web/src/services/http/`：RPC 调用封装
+- `apps/web/src/ws/`：WebSocket 连接与事件订阅
 
 前端负责：
 
@@ -55,19 +55,19 @@ Rust Tauri Host
 - 消费 Agent / Terminal / Claude lifecycle 事件
 - 协调代码预览、Git 操作、终端操作和设置页状态
 
-## 3. 后端职责
+## 3. 服务端职责
 
-后端入口在：`src-tauri/src/main.rs`
+服务端入口在：`apps/server/src/main.rs`
 
 具体服务按职责拆分在：
 
-- `src-tauri/src/services/workspace.rs`
-- `src-tauri/src/services/git.rs`
-- `src-tauri/src/services/filesystem.rs`
-- `src-tauri/src/services/terminal.rs`
-- `src-tauri/src/services/agent.rs`
+- `apps/server/src/services/workspace.rs`
+- `apps/server/src/services/git.rs`
+- `apps/server/src/services/filesystem.rs`
+- `apps/server/src/services/terminal.rs`
+- `apps/server/src/services/agent.rs`
 
-后端负责：
+服务端负责：
 
 - 仓库初始化与工作区解析
 - session 元数据维护
@@ -86,15 +86,15 @@ Rust Tauri Host
 
 这一层的好处是：
 
-- 桌面模式可直接使用 Tauri runtime
-- 分离调试时可以通过本地 HTTP/WS 后端运行
+- Tauri 壳层模式可直接走 invoke / runtime
+- 分离调试时可以直接连接本地 HTTP/WS server
 - WebSocket 可以统一承载 Agent 与 Terminal 的流式事件
 
 对应代码：
 
-- 前端：`src/services/http/client.ts`
-- 后端：`src-tauri/src/command/http.rs`
-- WebSocket：`src/ws/connection-manager.ts`、`src-tauri/src/ws/server.rs`
+- 前端：`apps/web/src/services/http/client.ts`
+- 服务端：`apps/server/src/command/http.rs`
+- WebSocket：`apps/web/src/ws/connection-manager.ts`、`apps/server/src/ws/server.rs`
 
 ## 5. 核心数据流
 
@@ -188,8 +188,8 @@ lifecycle 事件用于：
 
 数据库初始化和持久化逻辑位于：
 
-- `src-tauri/src/main.rs`
-- `src-tauri/src/infra/db.rs`
+- `apps/server/src/main.rs`
+- `apps/server/src/infra/db.rs`
 
 ## 7. 开发模式与生产模式差异
 
@@ -206,7 +206,7 @@ lifecycle 事件用于：
 
 ## 8. 当前架构约束
 
-- 当前 UI 主逻辑高度集中在 `src/App.tsx`
+- 当前 UI 主逻辑高度集中在 `apps/web/src/App.tsx`
 - session、queue、archive、worktree 的底层能力与 UI 暴露程度还不完全对齐
 - `branch` / `git_tree` 等模型能力仍有一部分停留在数据层，不是完整产品流
 - 前端长期依赖“刷新工作区产物”来同步 Git 和文件状态，局部增量更新还不多

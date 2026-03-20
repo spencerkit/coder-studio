@@ -2,11 +2,11 @@
 
 [English](README.en.md) | [中文](README.md)
 
-Coder Studio 是一个本地优先的桌面工作台，用于把仓库接入、Claude Agent 运行、代码浏览与编辑、Git 操作、内置终端放到同一个界面中。
+Coder Studio 是一个本地优先的开发工作台，当前以本地 server + Web 界面形态运行，用于把仓库接入、Claude Agent 运行、代码浏览与编辑、Git 操作、内置终端放到同一个界面中。
 
 ## 项目是什么
 
-这个项目当前的产品形态不是“通用 AI 平台”，而是一个围绕真实 Git 仓库工作的桌面端工作台。
+这个项目当前的产品形态不是“通用 AI 平台”，而是一个围绕真实 Git 仓库工作的本地工作台；默认通过本地 server 暴露界面与 API。
 
 它解决的核心问题是：
 
@@ -51,6 +51,24 @@ Coder Studio 是一个本地优先的桌面工作台，用于把仓库接入、C
 pnpm install
 ```
 
+## 目录分层
+
+当前仓库按三层组织：
+
+- 源码层
+  - `apps/web`：前端源码
+  - `apps/server`：Rust / Tauri 服务端源码
+  - `packages/cli`：npm CLI 包源码
+- 模板层
+  - `templates/npm/platform-packages/*`：各平台 npm 包模板
+- 产物层
+  - `.build/web/dist`：前端构建产物
+  - `.build/server/target`：Rust 构建产物
+  - `.build/stage/npm/*`：发布前 staging 包
+  - `.artifacts/`：最终 tarball、manifest、checksum
+
+这样做的目标是让“可维护源码”、“发布模板”和“构建产物”不再混在同一层目录里。
+
 ## npm CLI 安装
 
 发布后可以直接安装：
@@ -86,13 +104,13 @@ coder-studio completion uninstall bash
 
 ## 运行
 
-### 方式 1：桌面开发模式（推荐）
+### 方式 1：Tauri 壳层开发模式（推荐）
 
 ```bash
 pnpm tauri dev
 ```
 
-这是最接近真实产品形态的运行方式。
+这是最接近 Tauri 壳层联调的运行方式。
 
 ### 方式 2：前后端分离调试
 
@@ -105,15 +123,15 @@ pnpm dev
 终端 2：
 
 ```bash
-pnpm dev:backend
+pnpm dev:server
 ```
 
 当前开发端口：
 
 - 前端：`http://127.0.0.1:5174`
-- 后端传输服务：`http://127.0.0.1:41033`
+- 本地 server 传输服务：`http://127.0.0.1:41033`
 
-前端开发服务器会把 `/api`、`/ws`、`/health` 代理到本地后端。
+前端开发服务器会把 `/api`、`/ws`、`/health` 代理到本地 server。
 
 ## 构建
 
@@ -123,7 +141,13 @@ pnpm dev:backend
 pnpm build
 ```
 
-打包桌面应用：
+构建 server runtime：
+
+```bash
+pnpm build:server
+```
+
+构建 Tauri 壳层：
 
 ```bash
 pnpm tauri build

@@ -8,9 +8,9 @@ This document explains where frontend state lives today, which entities matter m
 
 Frontend state currently lives in three layers:
 
-- global workbench state: `src/state/workbench.ts`
-- page-level local UI state: `src/App.tsx`
-- frontend/backend interaction types: `src/types/app.ts`
+- global workbench state: `apps/web/src/state/workbench.ts`
+- page-level local UI state: `apps/web/src/App.tsx`
+- frontend/backend interaction types: `apps/web/src/types/app.ts`
 
 A simple mental model is:
 
@@ -112,7 +112,7 @@ The actual PTY runtime handle does not live in frontend state. It is held by the
 
 ## 3. Page-Level Local State
 
-`src/App.tsx` also maintains a large set of UI-control state, including:
+`apps/web/src/App.tsx` also maintains a large set of UI-control state, including:
 
 - `locale`
 - `appSettings` / `settingsDraft`
