@@ -12,15 +12,27 @@ const CLI_BIN_NAME = process.platform === 'win32' ? 'coder-studio.cmd' : 'coder-
 const DEFAULT_TEST_PORT = 41933;
 
 async function ensureTarballs() {
-  await run(PNPM_CMD, ['pack:local'], { cwd: ROOT });
-  const files = await fs.readdir(ARTIFACTS_DIR);
+  let files = [];
+  try {
+    files = await fs.readdir(ARTIFACTS_DIR);
+  } catch {
+    files = [];
+  }
+
   const main = files.find((file) => file.startsWith('spencer-kit-coder-studio-') && !file.includes(process.platform));
   const platform = files.find((file) => file.includes(process.platform));
-  assert.ok(main, 'main package tarball should exist');
-  assert.ok(platform, 'platform package tarball should exist');
+  if (!main || !platform) {
+    await run(PNPM_CMD, ['pack:local'], { cwd: ROOT });
+    files = await fs.readdir(ARTIFACTS_DIR);
+  }
+
+  const resolvedMain = files.find((file) => file.startsWith('spencer-kit-coder-studio-') && !file.includes(process.platform));
+  const resolvedPlatform = files.find((file) => file.includes(process.platform));
+  assert.ok(resolvedMain, 'main package tarball should exist');
+  assert.ok(resolvedPlatform, 'platform package tarball should exist');
   return {
-    main: path.join(ARTIFACTS_DIR, main),
-    platform: path.join(ARTIFACTS_DIR, platform)
+    main: path.join(ARTIFACTS_DIR, resolvedMain),
+    platform: path.join(ARTIFACTS_DIR, resolvedPlatform)
   };
 }
 

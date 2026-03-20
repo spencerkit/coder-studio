@@ -60,18 +60,24 @@ Use `CODER_STUDIO_HOME` to override the state directory for tests or isolated en
 ## Build Commands
 
 ```bash
+pnpm version:check
 pnpm build:web
 pnpm build:runtime
 pnpm build:packages
 pnpm pack:local
+pnpm release:verify
+pnpm release:verify:full
 ```
 
 What they do:
 
+- `version:check`: verifies the root package, main package, platform packages, `Cargo.toml`, and `tauri.conf.json` all share the same version
 - `build:web`: builds the frontend into `dist/`
 - `build:runtime`: builds the Rust/Tauri release binary
 - `build:packages`: assembles the current platform runtime package
-- `pack:local`: emits local tarballs into `.artifacts/`
+- `pack:local`: runs the release build and emits local tarballs into `.artifacts/`
+- `release:verify`: runs version checks, CLI tests, Rust tests, local packaging, and smoke validation
+- `release:verify:full`: adds release E2E on top of `release:verify`
 
 ## Versioning
 
@@ -84,6 +90,15 @@ pnpm changeset
 pnpm changeset:version
 ```
 
+A recommended local flow:
+
+```bash
+pnpm changeset
+pnpm changeset:version
+git add .
+git commit -m "chore(release): version packages"
+```
+
 The version sync step updates:
 
 - `packages/*/package.json`
@@ -91,13 +106,81 @@ The version sync step updates:
 - `src-tauri/tauri.conf.json`
 - the root `package.json`
 
+`changeset:version` now runs `pnpm version:check` after syncing so version drift fails immediately.
+
+## Local Pre-Release Validation
+
+Minimum validation:
+
+```bash
+pnpm release:verify
+```
+
+Full validation:
+
+```bash
+pnpm release:verify:full
+```
+
+Local artifacts:
+
+```bash
+pnpm pack:local
+ls .artifacts
+```
+
+`.artifacts/` now includes:
+
+- the main package tarball
+- the current platform tarball
+- `release-manifest.json`
+- `SHA256SUMS.txt`
+
 ## GitHub Actions
 
 The automation is split into three workflows:
 
-- `ci.yml`: PR/main validation for CLI tests, Rust verification, builds, smoke tests, and release E2E
-- `changesets.yml`: creates version PRs from pending changesets on `main`
-- `release.yml`: publishes platform packages, publishes the main package, and creates a GitHub Release from `v*` tags
+- `ci.yml`
+  - adds a `version-consistency` gate
+  - runs cross-platform CLI unit tests
+  - runs Rust fmt/clippy/check/test on Linux
+  - runs `pnpm pack:local`
+  - runs smoke and release E2E
+  - uploads Linux release artifacts
+- `changesets.yml`
+  - runs only on `main`
+  - creates or updates the version PR
+  - now has explicit `contents` / `pull-requests` write permissions
+- `release.yml`
+  - starts with a `preflight` job that validates the tag and runs `pnpm version:check`
+  - publishes the 4 platform runtime packages
+  - publishes the main `@spencer-kit/coder-studio` package
+  - aggregates tarballs and attaches `release-manifest.json` plus `SHA256SUMS.txt` to the GitHub Release
+
+## Release Trigger
+
+After the version PR is merged, push a tag that matches the package version:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow then:
+
+1. checks that the tag matches `packages/coder-studio/package.json`
+2. publishes platform packages
+3. publishes the main package
+4. creates the GitHub Release assets
+
+## GitHub / npm Requirements
+
+The current release workflow expects:
+
+- the default GitHub `GITHUB_TOKEN`
+- a repository secret named `NPM_TOKEN`
+
+`NPM_TOKEN` must be allowed to publish the `@spencer-kit/*` packages on npm.
 
 ## Local Test Matrix
 
@@ -111,6 +194,7 @@ pnpm test:e2e:release
 Coverage:
 
 - `test:cli`: configuration, platform resolution, and state handling
+- `test:cli` now also covers release version consistency and release manifest generation
 - `test:smoke`: installs local tarballs and runs `start/status/restart/stop`
 - `test:e2e`: development-mode frontend/backend integration
 - `test:e2e:release`: browser E2E against the built release runtime

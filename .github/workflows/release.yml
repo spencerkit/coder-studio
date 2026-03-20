@@ -7,10 +7,35 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Release Preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify tag matches package version
+        run: |
+          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
+          test "v$VERSION" = "$GITHUB_REF_NAME"
+      - run: pnpm version:check
+
   publish-platform:
     name: Publish ${{ matrix.package_slug }}
+    needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -41,21 +66,18 @@ jobs:
             patchelf \
             wget
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
-      - name: Verify tag matches package version
-        shell: bash
-        run: |
-          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
-          test "v$VERSION" = "$GITHUB_REF_NAME"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:web
-      - run: pnpm build:runtime
-      - run: pnpm build:packages
+      - run: pnpm release:check
+      - run: node -e "require('fs').mkdirSync('.artifacts', { recursive: true })"
       - run: pnpm --dir packages/${{ matrix.package_slug }} pack --pack-destination ../../.artifacts
       - run: npm publish packages/${{ matrix.package_slug }} --access public
         env:
@@ -67,7 +89,9 @@ jobs:
 
   publish-main:
     name: Publish @spencer-kit/coder-studio
-    needs: publish-platform
+    needs:
+      - preflight
+      - publish-platform
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,14 +101,17 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
-      - name: Verify tag matches package version
-        run: |
-          VERSION=$(node -e "console.log(require('./packages/coder-studio/package.json').version)")
-          test "v$VERSION" = "$GITHUB_REF_NAME"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm version:check
+      - run: node -e "require('fs').mkdirSync('.artifacts', { recursive: true })"
+      - run: pnpm --dir packages/coder-studio pack --pack-destination ../../.artifacts
       - run: npm publish packages/coder-studio --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coder-studio-main
+          path: .artifacts/*.tgz
 
   github-release:
     name: Create GitHub Release
@@ -93,9 +120,19 @@ jobs:
       - publish-main
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           path: .release-artifacts
+          merge-multiple: true
+      - run: node scripts/release/write-release-manifest.mjs .release-artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          files: .release-artifacts/**/*.tgz
+          files: |
+            .release-artifacts/*.tgz
+            .release-artifacts/release-manifest.json
+            .release-artifacts/SHA256SUMS.txt

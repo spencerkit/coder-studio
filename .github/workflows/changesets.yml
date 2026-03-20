@@ -5,6 +5,14 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changesets-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version:
     runs-on: ubuntu-latest
