@@ -142,8 +142,21 @@ test('validateConfigSnapshot reports missing root when public mode is enabled', 
 test('cli help documents exit codes and common examples', async () => {
   const result = await runCli(['help']);
   assert.match(result.stdout, /Exit Codes:/);
+  assert.match(result.stdout, /coder-studio help start/);
   assert.match(result.stdout, /coder-studio config show --json/);
   assert.match(result.stdout, /coder-studio auth ip list/);
+});
+
+test('cli supports dedicated help topics', async () => {
+  const startHelp = await runCli(['help', 'start']);
+  assert.match(startHelp.stdout, /^coder-studio start/m);
+  assert.match(startHelp.stdout, /--foreground/);
+
+  const configHelp = await runCli(['config', '--help']);
+  assert.match(configHelp.stdout, /^coder-studio config/m);
+
+  const commandHelp = await runCli(['start', '--help']);
+  assert.match(commandHelp.stdout, /^coder-studio start/m);
 });
 
 test('cli returns usage exit code and hint for unsupported commands', async () => {
@@ -151,6 +164,12 @@ test('cli returns usage exit code and hint for unsupported commands', async () =
   assert.equal(result.code, 2);
   assert.match(result.stderr, /unsupported command: wat/);
   assert.match(result.stderr, /coder-studio help/);
+});
+
+test('cli returns usage exit code for unsupported help topics', async () => {
+  const result = await runCli(['help', 'wat'], { allowFailure: true });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /unsupported help topic: wat/);
 });
 
 test('cli returns usage exit code in json mode for invalid config usage', async () => {

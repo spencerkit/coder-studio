@@ -80,6 +80,15 @@ Version:
 coder-studio --version
 ```
 
+Help:
+
+```bash
+coder-studio help
+coder-studio help start
+coder-studio help config
+coder-studio help auth
+```
+
 ## Global Flags
 
 Most runtime commands support:

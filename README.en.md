@@ -76,6 +76,7 @@ coder-studio config root set /srv/coder-studio/workspaces
 coder-studio config password set --stdin
 coder-studio auth status
 coder-studio auth ip list
+coder-studio help start
 ```
 
 For the detailed command reference, see `docs/development/cli.en.md`.

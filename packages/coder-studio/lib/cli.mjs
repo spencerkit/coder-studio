@@ -96,6 +96,7 @@ function printHelp() {
   console.log(`Coder Studio CLI
 
 Usage:
+  coder-studio help [command]
   coder-studio start [--host 127.0.0.1] [--port 41033] [--foreground] [--json]
   coder-studio stop [--json]
   coder-studio restart [--json]
@@ -119,12 +120,130 @@ Exit Codes:
   2  usage or argument error
 
 Examples:
+  coder-studio help start
   coder-studio start
   coder-studio config show --json
   coder-studio config root set /srv/coder-studio/workspaces
   coder-studio auth ip list
 
 Run \`coder-studio config --help\` or \`coder-studio auth --help\` for detailed usage.
+`);
+}
+
+function printStartHelp() {
+  console.log(`coder-studio start
+
+Usage:
+  coder-studio start [--host <host>] [--port <port>] [--foreground] [--json]
+
+Options:
+  --host <host>   override configured host for this invocation
+  --port <port>   override configured port for this invocation
+  --foreground    keep the runtime in the foreground
+  --json          machine-readable output
+
+Examples:
+  coder-studio start
+  coder-studio start --foreground
+  coder-studio start --port 42033 --json
+`);
+}
+
+function printStopHelp() {
+  console.log(`coder-studio stop
+
+Usage:
+  coder-studio stop [--json]
+
+Options:
+  --json  machine-readable output
+
+Examples:
+  coder-studio stop
+  coder-studio stop --json
+`);
+}
+
+function printRestartHelp() {
+  console.log(`coder-studio restart
+
+Usage:
+  coder-studio restart [--json]
+
+Options:
+  --json  machine-readable output
+
+Examples:
+  coder-studio restart
+  coder-studio restart --json
+`);
+}
+
+function printStatusHelp() {
+  console.log(`coder-studio status
+
+Usage:
+  coder-studio status [--host <host>] [--port <port>] [--json]
+
+Options:
+  --host <host>  override configured host for this invocation
+  --port <port>  override configured port for this invocation
+  --json         machine-readable output
+
+Examples:
+  coder-studio status
+  coder-studio status --json
+`);
+}
+
+function printLogsHelp() {
+  console.log(`coder-studio logs
+
+Usage:
+  coder-studio logs [-f] [-n <lines>]
+
+Options:
+  -f, --follow     follow the runtime log
+  -n, --lines <n>  read the last <n> lines
+
+Examples:
+  coder-studio logs
+  coder-studio logs -n 200
+  coder-studio logs -f
+`);
+}
+
+function printOpenHelp() {
+  console.log(`coder-studio open
+
+Usage:
+  coder-studio open [--host <host>] [--port <port>] [--json]
+
+Options:
+  --host <host>  override configured host for this invocation
+  --port <port>  override configured port for this invocation
+  --json         machine-readable output
+
+Examples:
+  coder-studio open
+  coder-studio open --json
+`);
+}
+
+function printDoctorHelp() {
+  console.log(`coder-studio doctor
+
+Usage:
+  coder-studio doctor [--host <host>] [--port <port>] [--json]
+
+Options:
+  --host <host>  override configured host for this invocation
+  --port <port>  override configured port for this invocation
+  --json         machine-readable output
+
+Examples:
+  coder-studio doctor
+  coder-studio doctor --json
 `);
 }
 
@@ -170,6 +289,46 @@ Examples:
   coder-studio auth ip list
   coder-studio auth ip unblock 203.0.113.10
 `);
+}
+
+function printHelpTopic(topic) {
+  switch (topic) {
+    case undefined:
+    case null:
+    case '':
+    case 'main':
+      printHelp();
+      return EXIT_SUCCESS;
+    case 'start':
+      printStartHelp();
+      return EXIT_SUCCESS;
+    case 'stop':
+      printStopHelp();
+      return EXIT_SUCCESS;
+    case 'restart':
+      printRestartHelp();
+      return EXIT_SUCCESS;
+    case 'status':
+      printStatusHelp();
+      return EXIT_SUCCESS;
+    case 'logs':
+      printLogsHelp();
+      return EXIT_SUCCESS;
+    case 'open':
+      printOpenHelp();
+      return EXIT_SUCCESS;
+    case 'doctor':
+      printDoctorHelp();
+      return EXIT_SUCCESS;
+    case 'config':
+      printConfigHelp();
+      return EXIT_SUCCESS;
+    case 'auth':
+      printAuthHelp();
+      return EXIT_SUCCESS;
+    default:
+      throw usageError(`unsupported help topic: ${topic}`, 'main');
+  }
 }
 
 function printStatus(status) {
@@ -734,17 +893,20 @@ function printCliError(error, flags) {
 export async function runCli(argv = process.argv.slice(2)) {
   const { command, flags, positionals } = parseArgv(argv);
 
-  if (command === '--version' || command === '-v' || flags.version) {
-    console.log(await readPackageVersion());
-    return EXIT_SUCCESS;
-  }
-
-  if (command === 'help' || flags.help && !['config', 'auth'].includes(command)) {
-    printHelp();
-    return EXIT_SUCCESS;
-  }
-
   try {
+    if (command === '--version' || command === '-v' || flags.version) {
+      console.log(await readPackageVersion());
+      return EXIT_SUCCESS;
+    }
+
+    if (command === 'help') {
+      return printHelpTopic(positionals[0]);
+    }
+
+    if (flags.help) {
+      return printHelpTopic(command);
+    }
+
     if (command === 'config') {
       const context = await resolveCommandContext(flags);
       return await handleConfigCommand(positionals, flags, context);

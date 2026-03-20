@@ -80,6 +80,15 @@ coder-studio auth ip unblock --all
 coder-studio --version
 ```
 
+帮助：
+
+```bash
+coder-studio help
+coder-studio help start
+coder-studio help config
+coder-studio help auth
+```
+
 ## 全局参数
 
 大部分运行时命令支持：
