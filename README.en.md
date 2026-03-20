@@ -77,6 +77,8 @@ coder-studio config password set --stdin
 coder-studio auth status
 coder-studio auth ip list
 coder-studio help start
+coder-studio help completion
+eval "$(coder-studio completion bash)"
 ```
 
 For the detailed command reference, see `docs/development/cli.en.md`.

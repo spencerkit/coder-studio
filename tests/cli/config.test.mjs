@@ -155,8 +155,38 @@ test('cli supports dedicated help topics', async () => {
   const configHelp = await runCli(['config', '--help']);
   assert.match(configHelp.stdout, /^coder-studio config/m);
 
+  const completionHelp = await runCli(['help', 'completion']);
+  assert.match(completionHelp.stdout, /^coder-studio completion/m);
+  assert.match(completionHelp.stdout, /completion <bash\|zsh\|fish>/);
+
   const commandHelp = await runCli(['start', '--help']);
   assert.match(commandHelp.stdout, /^coder-studio start/m);
+});
+
+test('cli prints shell completion scripts', async () => {
+  const bash = await runCli(['completion', 'bash']);
+  assert.match(bash.stdout, /complete -F __coder_studio_complete coder-studio/);
+
+  const zsh = await runCli(['completion', 'zsh']);
+  assert.match(zsh.stdout, /#compdef coder-studio/);
+
+  const fish = await runCli(['completion', 'fish']);
+  assert.match(fish.stdout, /complete -c coder-studio/);
+});
+
+test('cli validates completion shell arguments', async () => {
+  const invalidShell = await runCli(['completion', 'powershell'], { allowFailure: true });
+  assert.equal(invalidShell.code, 2);
+  assert.match(invalidShell.stderr, /unsupported completion shell: powershell/);
+  assert.match(invalidShell.stderr, /coder-studio help completion/);
+
+  const invalidJson = await runCli(['completion', 'bash', '--json'], { allowFailure: true });
+  assert.equal(invalidJson.code, 2);
+  const body = JSON.parse(invalidJson.stdout);
+  assert.equal(body.ok, false);
+  assert.equal(body.exitCode, 2);
+  assert.equal(body.kind, 'usage');
+  assert.match(body.error, /completion does not support --json/);
 });
 
 test('cli returns usage exit code and hint for unsupported commands', async () => {

@@ -74,6 +74,14 @@ coder-studio auth ip unblock 203.0.113.12
 coder-studio auth ip unblock --all
 ```
 
+Shell completion:
+
+```bash
+coder-studio completion bash
+coder-studio completion zsh
+coder-studio completion fish
+```
+
 Version:
 
 ```bash
@@ -87,6 +95,7 @@ coder-studio help
 coder-studio help start
 coder-studio help config
 coder-studio help auth
+coder-studio help completion
 ```
 
 ## Global Flags
@@ -104,6 +113,31 @@ Additional flags on specific commands:
 - `logs -n <lines>`: reads a specific number of tail lines
 - `config password set --stdin`: reads the passphrase from stdin
 - `auth ip unblock --all`: removes all currently blocked IPs at once
+
+## Shell Completion
+
+The CLI can print completion scripts for `bash`, `zsh`, and `fish`. The command only writes the script to stdout.
+
+Load it for the current shell session:
+
+```bash
+eval "$(coder-studio completion bash)"
+source <(coder-studio completion zsh)
+coder-studio completion fish | source
+```
+
+Persistent installation examples:
+
+```bash
+coder-studio completion bash >> ~/.bashrc
+coder-studio completion zsh > ~/.zfunc/_coder-studio
+coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
+```
+
+Notes:
+
+- `completion` does not support `--json`
+- `coder-studio help completion` shows command usage
 
 ## Exit Codes
 

@@ -74,6 +74,14 @@ coder-studio auth ip unblock 203.0.113.12
 coder-studio auth ip unblock --all
 ```
 
+Shell Completion：
+
+```bash
+coder-studio completion bash
+coder-studio completion zsh
+coder-studio completion fish
+```
+
 版本信息：
 
 ```bash
@@ -87,6 +95,7 @@ coder-studio help
 coder-studio help start
 coder-studio help config
 coder-studio help auth
+coder-studio help completion
 ```
 
 ## 全局参数
@@ -104,6 +113,31 @@ coder-studio help auth
 - `logs -n <lines>`：指定读取的日志行数
 - `config password set --stdin`：从标准输入读取口令
 - `auth ip unblock --all`：一次解除全部当前封禁 IP
+
+## Shell Completion
+
+CLI 可以输出 `bash`、`zsh`、`fish` 的补全脚本，命令本身只负责把脚本打印到标准输出。
+
+即时加载：
+
+```bash
+eval "$(coder-studio completion bash)"
+source <(coder-studio completion zsh)
+coder-studio completion fish | source
+```
+
+持久化安装示例：
+
+```bash
+coder-studio completion bash >> ~/.bashrc
+coder-studio completion zsh > ~/.zfunc/_coder-studio
+coder-studio completion fish > ~/.config/fish/completions/coder-studio.fish
+```
+
+说明：
+
+- `completion` 不支持 `--json`
+- `coder-studio help completion` 可查看命令说明
 
 ## 退出码
 

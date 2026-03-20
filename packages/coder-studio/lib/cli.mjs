@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { generateCompletionScript, SUPPORTED_COMPLETION_SHELLS } from './completion.mjs';
 import { resolveLogPath } from './config.mjs';
 import {
   buildConfigPathsReport,
@@ -106,6 +107,7 @@ Usage:
   coder-studio doctor [--json]
   coder-studio config <subcommand>
   coder-studio auth <subcommand>
+  coder-studio completion <bash|zsh|fish>
   coder-studio --version
 
 Global Flags:
@@ -121,12 +123,14 @@ Exit Codes:
 
 Examples:
   coder-studio help start
+  coder-studio help completion
   coder-studio start
   coder-studio config show --json
   coder-studio config root set /srv/coder-studio/workspaces
   coder-studio auth ip list
+  eval "$(coder-studio completion bash)"
 
-Run \`coder-studio config --help\` or \`coder-studio auth --help\` for detailed usage.
+Run \`coder-studio config --help\`, \`coder-studio auth --help\`, or \`coder-studio help completion\` for detailed usage.
 `);
 }
 
@@ -291,6 +295,22 @@ Examples:
 `);
 }
 
+function printCompletionHelp() {
+  console.log(`coder-studio completion
+
+Usage:
+  coder-studio completion <bash|zsh|fish>
+
+Description:
+  Print a shell completion script to stdout. Evaluate or source the output in your shell profile.
+
+Examples:
+  eval "$(coder-studio completion bash)"
+  source <(coder-studio completion zsh)
+  coder-studio completion fish | source
+`);
+}
+
 function printHelpTopic(topic) {
   switch (topic) {
     case undefined:
@@ -325,6 +345,9 @@ function printHelpTopic(topic) {
       return EXIT_SUCCESS;
     case 'auth':
       printAuthHelp();
+      return EXIT_SUCCESS;
+    case 'completion':
+      printCompletionHelp();
       return EXIT_SUCCESS;
     default:
       throw usageError(`unsupported help topic: ${topic}`, 'main');
@@ -884,6 +907,8 @@ function printCliError(error, flags) {
     console.error('hint: run `coder-studio config --help`');
   } else if (normalized.helpTopic === 'auth') {
     console.error('hint: run `coder-studio auth --help`');
+  } else if (normalized.helpTopic === 'completion') {
+    console.error('hint: run `coder-studio help completion`');
   } else if (normalized.helpTopic === 'main') {
     console.error('hint: run `coder-studio help`');
   }
@@ -905,6 +930,27 @@ export async function runCli(argv = process.argv.slice(2)) {
 
     if (flags.help) {
       return printHelpTopic(command);
+    }
+
+    if (command === 'completion') {
+      if (flags.json) {
+        throw usageError('completion does not support --json', 'completion');
+      }
+
+      const [shell, ...rest] = positionals;
+      if (!shell) {
+        printCompletionHelp();
+        return EXIT_SUCCESS;
+      }
+      if (rest.length > 0) {
+        throw usageError('completion accepts exactly one <shell> argument', 'completion');
+      }
+      if (!SUPPORTED_COMPLETION_SHELLS.includes(shell)) {
+        throw usageError(`unsupported completion shell: ${shell}`, 'completion');
+      }
+
+      process.stdout.write(generateCompletionScript(shell));
+      return EXIT_SUCCESS;
     }
 
     if (command === 'config') {
