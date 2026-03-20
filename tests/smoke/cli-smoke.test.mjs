@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,6 @@ import { NPM_CMD, PNPM_CMD, run } from '../helpers/exec.mjs';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const ARTIFACTS_DIR = path.join(ROOT, '.artifacts');
 const CLI_BIN_NAME = process.platform === 'win32' ? 'coder-studio.cmd' : 'coder-studio';
-const DEFAULT_TEST_PORT = 41933;
 
 async function ensureTarballs() {
   let files = [];
@@ -60,6 +60,80 @@ async function runCli(cliPath, args, env, allowFailure = false) {
   }
 }
 
+async function readIfExists(filePath) {
+  try {
+    return await fs.readFile(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+async function findAvailablePort() {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close(() => reject(new Error('failed_to_resolve_ephemeral_port')));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+function formatCliFailure(error, details = {}) {
+  const sections = [];
+  if (details.stdout) sections.push(`stdout:\n${details.stdout.trimEnd()}`);
+  if (details.stderr) sections.push(`stderr:\n${details.stderr.trimEnd()}`);
+  if (details.logOutput) sections.push(`log:\n${details.logOutput.trimEnd()}`);
+  if (sections.length === 0) {
+    return error;
+  }
+
+  error.message = `${error.message}\n\n${sections.join('\n\n---\n\n')}`;
+  return error;
+}
+
+async function startRuntimeWithRetry(cliPath, env, stateDir, attempts = 5) {
+  let lastError = null;
+
+  for (let index = 0; index < attempts; index += 1) {
+    const port = await findAvailablePort();
+    await runCli(cliPath, ['config', 'set', 'server.port', String(port), '--json'], env);
+
+    try {
+      const start = await runCli(cliPath, ['start', '--json'], env);
+      return {
+        port,
+        result: JSON.parse(start.stdout),
+      };
+    } catch (error) {
+      const stdout = String(error.stdout ?? '');
+      const stderr = String(error.stderr ?? '');
+      const logOutput = await readIfExists(path.join(stateDir, 'coder-studio.log'));
+      lastError = formatCliFailure(error, { stdout, stderr, logOutput });
+      const addressInUse = stdout.includes('runtime_exited_early')
+        && logOutput.includes('Address already in use');
+      await runCli(cliPath, ['stop', '--json'], env, true);
+      if (!addressInUse) {
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError ?? new Error('failed_to_start_runtime');
+}
+
 test('installed package can manage runtime and auth config', { timeout: 600000 }, async () => {
   const tarballs = await ensureTarballs();
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-smoke-'));
@@ -79,9 +153,6 @@ test('installed package can manage runtime and auth config', { timeout: 600000 }
     const configShowResult = JSON.parse(configShow.stdout);
     assert.equal(configShowResult.values['server.port'], 41033);
 
-    const setPort = await runCli(cliPath, ['config', 'set', 'server.port', String(DEFAULT_TEST_PORT), '--json'], env);
-    assert.deepEqual(JSON.parse(setPort.stdout).changedKeys, ['server.port']);
-
     const setRoot = await runCli(cliPath, ['config', 'root', 'set', accessibleRoot, '--json'], env);
     assert.deepEqual(JSON.parse(setRoot.stdout).changedKeys, ['root.path']);
 
@@ -93,21 +164,20 @@ test('installed package can manage runtime and auth config', { timeout: 600000 }
     const validateResult = JSON.parse(validate.stdout);
     assert.equal(validateResult.ok, true);
 
-    const start = await runCli(cliPath, ['start', '--json'], env);
-    const startResult = JSON.parse(start.stdout);
+    const { port: testPort, result: startResult } = await startRuntimeWithRetry(cliPath, env, stateDir);
     assert.equal(startResult.status, 'running');
-    assert.equal(startResult.endpoint, `http://127.0.0.1:${DEFAULT_TEST_PORT}`);
+    assert.equal(startResult.endpoint, `http://127.0.0.1:${testPort}`);
 
     const status = await runCli(cliPath, ['status', '--json'], env);
     const statusResult = JSON.parse(status.stdout);
     assert.equal(statusResult.status, 'running');
     assert.equal(statusResult.managed, true);
-    assert.equal(statusResult.endpoint, `http://127.0.0.1:${DEFAULT_TEST_PORT}`);
+    assert.equal(statusResult.endpoint, `http://127.0.0.1:${testPort}`);
 
     const authStatus = await runCli(cliPath, ['auth', 'status', '--json'], env);
     const authStatusResult = JSON.parse(authStatus.stdout);
     assert.equal(authStatusResult.runtimeRunning, true);
-    assert.equal(authStatusResult.server.port, DEFAULT_TEST_PORT);
+    assert.equal(authStatusResult.server.port, testPort);
     assert.equal(authStatusResult.root.path, accessibleRoot);
     assert.equal(authStatusResult.auth.passwordConfigured, true);
 
