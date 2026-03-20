@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - uses: changesets/action@v1
         with:
           version: pnpm changeset:version

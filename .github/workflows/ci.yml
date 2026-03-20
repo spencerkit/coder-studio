@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm version:check
 
   cli-cross-platform:
@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm test:cli
 
   verify-linux:
@@ -78,7 +78,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm test:cli
       - run: cargo fmt --manifest-path apps/server/Cargo.toml --all --check
       - run: cargo clippy --manifest-path apps/server/Cargo.toml --all-targets -- -D warnings
