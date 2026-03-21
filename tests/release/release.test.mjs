@@ -4,8 +4,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ROOT } from '../../scripts/lib/package-matrix.mjs';
+import { assertReleaseAssets } from '../../scripts/release/check-assets.mjs';
 import { assertVersionConsistency, collectReleaseVersionState } from '../../scripts/release/check-version.mjs';
 import { createReleaseManifest } from '../../scripts/release/write-release-manifest.mjs';
+
+test('release assets required for packaging are present', async () => {
+  await assertReleaseAssets();
+});
 
 test('release versions stay aligned across package manifests', async () => {
   const report = await assertVersionConsistency(ROOT);
