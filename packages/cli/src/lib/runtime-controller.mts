@@ -7,14 +7,24 @@ import { assertRuntimeBundle, resolvePlatformPackage } from './platform.mjs';
 import { ensureFile, isPidRunning, openExternal, spawnBackground, spawnForeground, terminateProcess, waitForProcessExit } from './process-utils.mjs';
 import { buildRuntimeState, clearRuntimeState, ensureStateDirs, readPackageVersion, readRuntimeState, readLogTail, writeRuntimeState } from './state.mjs';
 
+const DEFAULT_START_TIMEOUT_MS = 15000;
+
+function resolveStartTimeout(input, env) {
+  const candidate = input ?? env?.CODER_STUDIO_START_TIMEOUT_MS;
+  const timeout = Number(candidate);
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_START_TIMEOUT_MS;
+}
+
 function resolveOptions(input = {}) {
   const stateDir = input.stateDir || resolveStateDir(input.env);
+  const env = input.env || process.env;
   const host = input.host || DEFAULT_HOST;
   const port = Number(input.port ?? DEFAULT_PORT);
   const endpoint = input.endpoint || buildEndpoint(host, port);
-  const dataDir = input.dataDir || resolveDataDir(stateDir, input.env);
+  const dataDir = input.dataDir || resolveDataDir(stateDir, env);
   const logPath = input.logPath || resolveLogPath(stateDir);
   const tailLines = Number(input.tailLines ?? DEFAULT_LOG_TAIL_LINES);
+  const timeoutMs = resolveStartTimeout(input.timeoutMs, env);
   return {
     ...input,
     stateDir,
@@ -23,9 +33,10 @@ function resolveOptions(input = {}) {
     endpoint,
     dataDir,
     logPath,
+    timeoutMs,
     tailLines: Number.isFinite(tailLines) && tailLines > 0 ? tailLines : DEFAULT_LOG_TAIL_LINES,
     openCommand: input.openCommand || null,
-    env: input.env || process.env
+    env
   };
 }
 
@@ -192,7 +203,7 @@ export async function startRuntime(input = {}) {
     const errorPromise = once(child, 'error').then(([error]) => { throw error; });
 
     await Promise.race([
-      waitForReady(options.endpoint, child.pid, options.timeoutMs ?? 15000),
+      waitForReady(options.endpoint, child.pid, options.timeoutMs),
       exitPromise.then(() => {
         throw new Error('runtime_exited_early');
       }),
@@ -250,7 +261,7 @@ export async function startRuntime(input = {}) {
 
   try {
     await Promise.race([
-      waitForReady(options.endpoint, child.pid, options.timeoutMs ?? 15000),
+      waitForReady(options.endpoint, child.pid, options.timeoutMs),
       exitPromise.then(() => {
         throw new Error('runtime_exited_early');
       }),

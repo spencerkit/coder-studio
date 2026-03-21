@@ -52,6 +52,8 @@ jobs:
     name: Verify Linux Runtime
     runs-on: ubuntu-latest
     needs: version-consistency
+    env:
+      CODER_STUDIO_START_TIMEOUT_MS: 45000
     steps:
       - uses: actions/checkout@v4
       - name: Install Linux runtime dependencies
