@@ -12,20 +12,37 @@ const TAB_STABILITY_DIRS = [
 ];
 const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir));
 
+const gotoWorkspaceRoot = async (page: Page) => {
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === 'POST' && response.url().includes('/api/rpc/workbench_bootstrap')
+    ),
+    page.goto('/'),
+  ]);
+  await page.waitForFunction(() =>
+    Boolean(document.querySelector('[data-testid="overlay"]'))
+    || document.querySelectorAll('.workspace-top-tab').length > 0
+  );
+};
+
+const countWorkspaceTabs = async (page: Page) => page.locator('.workspace-top-tab').count();
+
 const openLaunchOverlay = async (page: Page) => {
-  await page.goto('/');
+  await gotoWorkspaceRoot(page);
   const overlay = page.getByTestId('overlay');
-  if (await overlay.count()) {
+  if (await overlay.isVisible()) {
     await expect(overlay).toBeVisible();
     return;
   }
+
+  await expect.poll(() => countWorkspaceTabs(page)).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Add workspace' }).click();
   await expect(overlay).toBeVisible();
 };
 
 const launchLocalWorkspace = async (page: Page) => {
-  await page.goto('/');
-  if (await page.getByTestId('workspace-topbar').count()) {
+  await gotoWorkspaceRoot(page);
+  if (await countWorkspaceTabs(page)) {
     return;
   }
 

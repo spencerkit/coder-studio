@@ -17,6 +17,7 @@ const env = {
 
 await fs.mkdir(path.join(ROOT, '.tmp'), { recursive: true });
 await stopRuntime({ stateDir, env }).catch(() => undefined);
+await fs.rm(stateDir, { recursive: true, force: true });
 await startRuntime({
   stateDir,
   host: '127.0.0.1',
