@@ -35,6 +35,17 @@ Why this is recommended:
 
 After the first launch, the app creates `auth.json` inside the app data directory.
 
+If you use the CLI defaults, the first launch starts with these values automatically:
+
+- `publicMode`: `true`
+- `rootPath`: `~/coder-studio-workspaces`
+- `bindHost`: `127.0.0.1`
+- `bindPort`: `41033`
+- `sessionIdleMinutes`: `15`
+- `sessionMaxHours`: `12`
+
+That means you do not need to preconfigure `rootPath`, `bindHost`, or `bindPort` just to get started. In the default case, setting the password is enough.
+
 Typical locations:
 
 - Linux: `~/.local/share/com.spencerkit.coderstudio/auth.json`
@@ -135,17 +146,27 @@ server {
 ## Deployment Steps
 
 1. Build the app: `pnpm tauri build`
-2. Start it once on the target machine so it generates `auth.json`
-3. Edit `auth.json`, or use the CLI, and set at least:
-   - `password`
-   - `rootPath`
-   - `bindHost`
-   - `bindPort`
-4. Restart the app
-5. Configure an HTTPS reverse proxy to `bindHost:bindPort`
-6. Open your domain and verify the login screen appears first
+2. Install the CLI on the target machine: `npm install -g @spencer-kit/coder-studio`
+3. Set the access passphrase
+4. Override `rootPath`, `bindHost`, or `bindPort` only if you need non-default values
+5. Start or restart the app
+6. Configure an HTTPS reverse proxy to `bindHost:bindPort`
+7. Open your domain and verify the login screen appears first
 
-Recommended CLI flow:
+Minimal setup:
+
+```bash
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio start
+```
+
+Notes:
+
+- if you accept the default workspace directory and bind address, the two commands above are enough
+- on an interactive terminal, the first `coder-studio start`, `coder-studio restart`, or `coder-studio open` also prompts for a passphrase if none is configured yet, then continues startup
+- non-interactive environments do not enter the prompt flow, so configure the passphrase first with `coder-studio config password set --stdin`
+
+Use this flow only when you want custom paths or bind settings:
 
 ```bash
 coder-studio config root set /srv/coder-studio/workspaces
@@ -153,7 +174,7 @@ printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
 coder-studio config auth public-mode on
 coder-studio config set server.host 127.0.0.1
 coder-studio config set server.port 41033
-coder-studio restart
+coder-studio start
 ```
 
 ## Verification Checklist

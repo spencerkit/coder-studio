@@ -1,5 +1,7 @@
 // @ts-nocheck
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import { emitKeypressEvents } from 'node:readline';
 import {
   generateCompletionScript,
   installCompletionScript,
@@ -41,6 +43,7 @@ import { readPackageVersion } from './state.mjs';
 const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
 const EXIT_USAGE = 2;
+const RUNTIME_DB_FILENAME = 'coder-studio.db';
 
 class CliError extends Error {
   constructor(message, { exitCode = EXIT_FAILURE, helpTopic = null } = {}) {
@@ -575,6 +578,127 @@ async function readSecretFromStdin() {
   return Buffer.concat(chunks).toString('utf8').trimEnd();
 }
 
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function promptHiddenInput(label) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || typeof process.stdin.setRawMode !== 'function') {
+    throw new CliError('interactive password setup requires a TTY', { exitCode: EXIT_FAILURE });
+  }
+
+  const stdin = process.stdin;
+  const stdout = process.stdout;
+  const wasRaw = Boolean(stdin.isRaw);
+
+  emitKeypressEvents(stdin);
+  stdin.resume();
+  if (!wasRaw) {
+    stdin.setRawMode(true);
+  }
+
+  stdout.write(label);
+
+  return await new Promise((resolve, reject) => {
+    let value = '';
+
+    const cleanup = () => {
+      stdin.off('keypress', onKeypress);
+      if (!wasRaw) {
+        stdin.setRawMode(false);
+      }
+      stdout.write('\n');
+    };
+
+    const finish = (callback) => {
+      cleanup();
+      callback();
+    };
+
+    const onKeypress = (chunk, key = {}) => {
+      if (key.ctrl && (key.name === 'c' || key.name === 'd')) {
+        finish(() => reject(new CliError('initial password setup cancelled', { exitCode: EXIT_FAILURE })));
+        return;
+      }
+
+      if (key.name === 'return' || key.name === 'enter') {
+        finish(() => resolve(value));
+        return;
+      }
+
+      if (key.name === 'backspace' || key.name === 'delete') {
+        value = value.slice(0, -1);
+        return;
+      }
+
+      if (typeof chunk === 'string' && chunk.length > 0 && !key.ctrl && !key.meta) {
+        value += chunk;
+      }
+    };
+
+    stdin.on('keypress', onKeypress);
+  });
+}
+
+async function ensureInitialPasswordConfigured(context, flags) {
+  const status = await getStatus(context.options);
+  if (runtimeIsActive(status)) {
+    return context;
+  }
+
+  const needsPassword = context.config.values.auth.publicMode && !context.config.values.auth.passwordConfigured;
+  if (!needsPassword) {
+    return context;
+  }
+
+  const dbPath = path.join(context.config.paths.dataDir, RUNTIME_DB_FILENAME);
+  if (await pathExists(dbPath)) {
+    return context;
+  }
+
+  if (flags.json || !process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new CliError(
+      'first launch requires configuring auth.password before start; run `coder-studio config password set --stdin` and retry',
+      { exitCode: EXIT_FAILURE },
+    );
+  }
+
+  console.log('First launch detected. Set an access password before starting Coder Studio.');
+
+  while (true) {
+    const password = await promptHiddenInput('New password: ');
+    if (!password.trim()) {
+      console.log('Password cannot be empty.');
+      continue;
+    }
+
+    const confirmation = await promptHiddenInput('Confirm password: ');
+    if (password !== confirmation) {
+      console.log('Passwords do not match. Try again.');
+      continue;
+    }
+
+    await updateLocalConfig(
+      { stateDir: context.config.paths.stateDir, dataDir: context.config.paths.dataDir },
+      { 'auth.password': password },
+    );
+
+    console.log('Password saved. Starting Coder Studio...');
+    return {
+      ...context,
+      config: await loadLocalConfig({
+        stateDir: context.config.paths.stateDir,
+        dataDir: context.config.paths.dataDir,
+      }),
+    };
+  }
+}
+
 async function applyConfigUpdate(context, key, rawValue, { unset = false } = {}) {
   const status = await getStatus(context.options);
   if (runtimeIsActive(status) && status.managed && isRuntimeConfigKey(key)) {
@@ -1049,10 +1173,12 @@ export async function runCli(argv = process.argv.slice(2)) {
       return await handleAuthCommand(positionals, flags, context);
     }
 
-    const context = await resolveCommandContext(flags);
-    const options = context.options;
+    let context = await resolveCommandContext(flags);
+    let options = context.options;
 
     if (command === 'start') {
+      context = await ensureInitialPasswordConfigured(context, flags);
+      options = context.options;
       const result = await startRuntime({
         ...options,
         foreground: Boolean(flags.foreground),
@@ -1084,6 +1210,8 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'restart') {
+      context = await ensureInitialPasswordConfigured(context, flags);
+      options = context.options;
       const result = await restartRuntime(options);
       if (flags.json) printJson(result);
       else {
@@ -1112,6 +1240,8 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'open') {
+      context = await ensureInitialPasswordConfigured(context, flags);
+      options = context.options;
       const result = await openRuntime(options);
       if (flags.json) printJson(result);
       else console.log(`opened: ${result.endpoint}`);

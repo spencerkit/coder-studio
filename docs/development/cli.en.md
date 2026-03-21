@@ -342,19 +342,33 @@ The CLI exposes one config view, but it persists values into two files:
 - `root.path` is written into `auth.json` as the single-root `rootPath` field
 - legacy `allowedRoots` values are still read for compatibility, but CLI writes back only `rootPath`
 - `auth.password` is hidden in `show` and `get`
+- with the default configuration, the CLI uses:
+  - `server.host = 127.0.0.1`
+  - `server.port = 41033`
+  - `root.path = ~/coder-studio-workspaces`
+  - `auth.publicMode = true`
 - while the runtime is already running:
   - `root.path`, `auth.publicMode`, `auth.password`, and session lifetime settings are applied immediately
   - `server.host` and `server.port` are persisted immediately, but require `restart` before the bind address changes
 - changing `auth.password` or `auth.publicMode` clears current authenticated sessions
+- in an interactive terminal, if this is the first launch and `auth.password` is still missing, `start`, `restart`, and `open` prompt for a new passphrase and confirmation before continuing startup
+- in `--json`, CI, or other non-interactive environments, the prompt flow is skipped; configure the passphrase first with `coder-studio config password set --stdin`
 
 ### Common Examples
 
-Minimal public-mode setup:
+Start with the default configuration:
+
+```bash
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio start
+```
+
+Minimal setup when you want a custom workspace root:
 
 ```bash
 coder-studio config root set /srv/coder-studio/workspaces
 printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
-coder-studio config auth public-mode on
+coder-studio start
 ```
 
 Change the port and restart:

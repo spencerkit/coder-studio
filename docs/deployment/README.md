@@ -35,6 +35,17 @@
 
 应用首次启动后，会在 app data 目录生成 `auth.json`。
 
+如果你直接使用 CLI 默认配置，首次启动会自动带上这些默认值：
+
+- `publicMode`: `true`
+- `rootPath`: `~/coder-studio-workspaces`
+- `bindHost`: `127.0.0.1`
+- `bindPort`: `41033`
+- `sessionIdleMinutes`: `15`
+- `sessionMaxHours`: `12`
+
+也就是说，默认情况下你不需要先手动设置 `rootPath`、`bindHost` 或 `bindPort`；只要把密码设好，就可以先启动。
+
 常见位置：
 
 - Linux：`~/.local/share/com.spencerkit.coderstudio/auth.json`
@@ -135,17 +146,27 @@ server {
 ## 部署步骤
 
 1. 构建应用：`pnpm tauri build`
-2. 在目标机器上先启动一次应用，让它生成 `auth.json`
-3. 编辑 `auth.json`，或者直接使用 CLI，至少设置：
-   - `password`
-   - `rootPath`
-   - `bindHost`
-   - `bindPort`
-4. 重启应用
-5. 配置 HTTPS 反向代理到 `bindHost:bindPort`
-6. 打开你的域名，确认先出现登录页
+2. 在目标机器上安装 CLI：`npm install -g @spencer-kit/coder-studio`
+3. 设置访问口令
+4. 如有需要，再覆盖默认的 `rootPath`、`bindHost`、`bindPort`
+5. 启动或重启应用
+6. 配置 HTTPS 反向代理到 `bindHost:bindPort`
+7. 打开你的域名，确认先出现登录页
 
-推荐直接使用 CLI：
+最小可用配置：
+
+```bash
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio start
+```
+
+说明：
+
+- 如果你接受默认目录和默认监听地址，上面两条命令就够了
+- 交互式终端里首次执行 `coder-studio start`、`coder-studio restart` 或 `coder-studio open` 时，如果还没设置密码，CLI 也会先提示你输入并确认密码，然后再继续启动
+- 非交互环境下不会进入提示流程，这时应先执行 `coder-studio config password set --stdin`
+
+需要自定义目录或监听地址时，再使用：
 
 ```bash
 coder-studio config root set /srv/coder-studio/workspaces
@@ -153,7 +174,7 @@ printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
 coder-studio config auth public-mode on
 coder-studio config set server.host 127.0.0.1
 coder-studio config set server.port 41033
-coder-studio restart
+coder-studio start
 ```
 
 ## 验证清单

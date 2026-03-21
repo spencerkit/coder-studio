@@ -342,19 +342,33 @@ CLI 对外只暴露一套配置视图，但底层分成两个文件：
 - `root.path` 会以单根目录模型写入 `auth.json` 的 `rootPath`
 - 旧版本 `allowedRoots` 配置仍可读取，但 CLI 写回时只会写 `rootPath`
 - `auth.password` 在 `show` / `get` 中不会返回明文
+- 默认配置下，CLI 会使用：
+  - `server.host = 127.0.0.1`
+  - `server.port = 41033`
+  - `root.path = ~/coder-studio-workspaces`
+  - `auth.publicMode = true`
 - 运行时已经启动时：
   - `root.path`、`auth.publicMode`、`auth.password`、会话时长配置会即时写入并立即生效
   - `server.host`、`server.port` 会写入配置，但需要 `restart` 后才会真正改变监听地址
 - 修改 `auth.password` 或 `auth.publicMode` 时，当前活跃登录会话会被清空
+- 在交互式终端中，如果这是首次启动且 `auth.password` 仍未配置，`start`、`restart`、`open` 会先提示输入并确认密码，然后再继续启动
+- 在 `--json`、CI 或其他非交互环境中，不会进入提示流程；首次启动前请先执行 `coder-studio config password set --stdin`
 
 ### 常用示例
 
-设置公网模式的最小配置：
+使用默认配置直接启动：
+
+```bash
+printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
+coder-studio start
+```
+
+设置自定义目录时的最小配置：
 
 ```bash
 coder-studio config root set /srv/coder-studio/workspaces
 printf '%s' 'replace-this-passphrase' | coder-studio config password set --stdin
-coder-studio config auth public-mode on
+coder-studio start
 ```
 
 切换监听端口并重启：

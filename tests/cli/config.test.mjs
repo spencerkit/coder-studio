@@ -139,6 +139,53 @@ test('validateConfigSnapshot reports missing root when public mode is enabled', 
   }
 });
 
+test('cli start requires password on first non-interactive launch', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-config-'));
+  const stateDir = path.join(tempRoot, 'state');
+  const env = {
+    ...process.env,
+    CODER_STUDIO_HOME: stateDir,
+  };
+
+  try {
+    const result = await runCli(['start', '--json'], { env, allowFailure: true });
+    assert.equal(result.code, 1);
+
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.ok, false);
+    assert.equal(body.kind, 'runtime');
+    assert.match(body.error, /first launch requires configuring auth\.password/i);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cli start still requires password after preconfiguring other first-launch settings', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-config-'));
+  const stateDir = path.join(tempRoot, 'state');
+  const workspaceRoot = path.join(tempRoot, 'workspaces');
+  const env = {
+    ...process.env,
+    CODER_STUDIO_HOME: stateDir,
+  };
+
+  try {
+    const configured = await runCli(['config', 'root', 'set', workspaceRoot, '--json'], { env });
+    const configuredBody = JSON.parse(configured.stdout);
+    assert.deepEqual(configuredBody.changedKeys, ['root.path']);
+
+    const result = await runCli(['start', '--json'], { env, allowFailure: true });
+    assert.equal(result.code, 1);
+
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.ok, false);
+    assert.equal(body.kind, 'runtime');
+    assert.match(body.error, /first launch requires configuring auth\.password/i);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('cli help documents exit codes and common examples', async () => {
   const result = await runCli(['help']);
   assert.match(result.stdout, /Exit Codes:/);
