@@ -66,6 +66,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf \
+            xvfb \
             wget
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -85,9 +86,9 @@ jobs:
       - run: cargo check --manifest-path apps/server/Cargo.toml
       - run: cargo test --manifest-path apps/server/Cargo.toml
       - run: pnpm pack:local
-      - run: pnpm test:smoke
+      - run: xvfb-run -a pnpm test:smoke
       - run: npx playwright install --with-deps chromium
-      - run: pnpm test:e2e:release
+      - run: xvfb-run -a pnpm test:e2e:release
       - uses: actions/upload-artifact@v4
         if: success()
         with:
