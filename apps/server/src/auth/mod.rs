@@ -267,7 +267,7 @@ pub(crate) fn load_or_initialize_auth_runtime(app_data_dir: &Path) -> Result<Aut
 }
 
 pub(crate) fn auth_status(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     headers: &HeaderMap,
     client_addr: SocketAddr,
     force_public: bool,
@@ -300,7 +300,7 @@ pub(crate) fn auth_status(
     ))
 }
 
-pub(crate) fn transport_bind_config(app: &tauri::AppHandle) -> Result<(String, u16), String> {
+pub(crate) fn transport_bind_config(app: &AppHandle) -> Result<(String, u16), String> {
     if let Ok(host) = std::env::var("CODER_STUDIO_HOST") {
         let port = std::env::var("CODER_STUDIO_PORT")
             .ok()
@@ -314,14 +314,14 @@ pub(crate) fn transport_bind_config(app: &tauri::AppHandle) -> Result<(String, u
     Ok((auth.file.bind_host.clone(), auth.file.bind_port))
 }
 
-pub(crate) fn admin_config(app: &tauri::AppHandle) -> Result<AdminConfigResponse, String> {
+pub(crate) fn admin_config(app: &AppHandle) -> Result<AdminConfigResponse, String> {
     let state: State<AppState> = app.state();
     let auth = state.auth.lock().map_err(|e| e.to_string())?;
     Ok(admin_config_response(&auth.file))
 }
 
 pub(crate) fn admin_update_config(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     updates: &Map<String, Value>,
 ) -> Result<AdminConfigUpdateResponse, String> {
     let state: State<AppState> = app.state();
@@ -403,7 +403,7 @@ pub(crate) fn admin_update_config(
     })
 }
 
-pub(crate) fn admin_auth_status(app: &tauri::AppHandle) -> Result<AdminAuthStatusResponse, String> {
+pub(crate) fn admin_auth_status(app: &AppHandle) -> Result<AdminAuthStatusResponse, String> {
     let state: State<AppState> = app.state();
     let auth = state.auth.lock().map_err(|e| e.to_string())?;
     let blocked_ip_count = {
@@ -429,7 +429,7 @@ pub(crate) fn admin_auth_status(app: &tauri::AppHandle) -> Result<AdminAuthStatu
     })
 }
 
-pub(crate) fn admin_blocked_ips(app: &tauri::AppHandle) -> Result<Vec<BlockedIpEntry>, String> {
+pub(crate) fn admin_blocked_ips(app: &AppHandle) -> Result<Vec<BlockedIpEntry>, String> {
     let state: State<AppState> = app.state();
     let mut ip_guard = state.ip_guard.lock().map_err(|e| e.to_string())?;
     Ok(ip_guard::list_blocked(&mut ip_guard, now_epoch_ms())
@@ -439,7 +439,7 @@ pub(crate) fn admin_blocked_ips(app: &tauri::AppHandle) -> Result<Vec<BlockedIpE
 }
 
 pub(crate) fn admin_unblock_ip(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     ip: Option<&str>,
     clear_all: bool,
 ) -> Result<AdminIpUnblockResponse, String> {
@@ -461,7 +461,7 @@ pub(crate) fn admin_unblock_ip(
 }
 
 pub(crate) fn login(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     headers: &HeaderMap,
     client_addr: SocketAddr,
     force_public: bool,
@@ -549,7 +549,7 @@ pub(crate) fn login(
 }
 
 pub(crate) fn logout(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     headers: &HeaderMap,
     client_addr: SocketAddr,
     force_public: bool,
@@ -571,7 +571,7 @@ pub(crate) fn logout(
 }
 
 pub(crate) fn lock(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     headers: &HeaderMap,
     client_addr: SocketAddr,
     force_public: bool,
@@ -580,7 +580,7 @@ pub(crate) fn lock(
 }
 
 pub(crate) fn require_session(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     headers: &HeaderMap,
     client_addr: SocketAddr,
     force_public: bool,
@@ -760,7 +760,7 @@ pub(crate) fn filter_allowed_worktrees(
         .collect()
 }
 
-pub(crate) fn ensure_ip_not_blocked(app: &tauri::AppHandle, ip: &str) -> Result<(), AuthFailure> {
+pub(crate) fn ensure_ip_not_blocked(app: &AppHandle, ip: &str) -> Result<(), AuthFailure> {
     let state: State<AppState> = app.state();
     let mut guard = state
         .ip_guard

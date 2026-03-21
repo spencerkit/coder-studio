@@ -6,12 +6,12 @@ use std::{
 
 use portable_pty::{Child, MasterPty};
 use rusqlite::Connection;
-use tauri::AppHandle;
 use tokio::sync::broadcast;
 
 use crate::{
     auth::{ip_guard::IpGuardMap, AuthRuntime},
     models::TransportEvent,
+    AppHandle,
 };
 
 #[derive(Clone)]

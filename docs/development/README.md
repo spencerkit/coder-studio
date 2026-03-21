@@ -10,7 +10,7 @@
 
 1. `architecture.md`：先看整体分层、运行时结构和关键数据流
 2. `frontend-state.md`：再看前端核心状态模型和界面状态流转
-3. `tauri-commands.md`：最后看 Tauri 命令、传输层和事件通道
+3. `tauri-commands.md`：最后看当前传输命令清单和事件通道
 
 ## 本地开发
 
@@ -20,10 +20,10 @@
 pnpm install
 ```
 
-Tauri 壳层开发模式：
+联动开发模式：
 
 ```bash
-pnpm tauri dev
+pnpm dev:stack
 ```
 
 分离式调试：
@@ -60,7 +60,7 @@ pnpm dev:stack
 
 - 架构说明：`docs/development/architecture.md`
 - Frontend 状态：`docs/development/frontend-state.md`
-- Tauri 命令清单：`docs/development/tauri-commands.md`
+- 传输命令清单：`docs/development/tauri-commands.md`
 - CLI 命令手册：`docs/development/cli.md`
 - npm 发布与 CLI：`docs/development/npm-release.md`
 

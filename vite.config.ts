@@ -24,7 +24,6 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
             if (id.includes('/react/') || id.includes('/react-dom/')) return 'react';
-            if (id.includes('/@tauri-apps/api/') || id.includes('/@tauri-apps/plugin-dialog/')) return 'tauri';
             if (id.includes('/@xterm/xterm/') || id.includes('/@xterm/addon-fit/')) return 'terminal';
             return undefined;
           },

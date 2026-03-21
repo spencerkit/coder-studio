@@ -21,8 +21,6 @@ pub(crate) use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 pub(crate) use rusqlite::{params, Connection};
 pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use serde_json::{json, Map, Value};
-pub(crate) use tauri::{Emitter, Manager, State};
-pub(crate) use tauri_plugin_dialog::DialogExt;
 pub(crate) use tokio::sync::broadcast;
 pub(crate) use tower_http::{
     cors::{Any, CorsLayer},
@@ -34,6 +32,7 @@ mod auth;
 mod command;
 mod infra;
 mod models;
+mod runtime;
 mod services;
 mod ws;
 
@@ -79,13 +78,14 @@ pub(crate) use models::{
     WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
     WorktreeDetail, WorktreeInfo,
 };
+pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{agent_resize, agent_send, agent_start, agent_stop};
 pub(crate) use services::claude::{
     current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
     run_claude_hook_helper, start_claude_hook_receiver,
 };
 pub(crate) use services::filesystem::{
-    dialog_pick_folder, file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
+    file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
 };
 pub(crate) use services::git::{
     git_changes, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
@@ -106,101 +106,125 @@ pub(crate) use ws::server::{
     agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,
 };
 
-fn resolve_app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, std::io::Error> {
-    if let Ok(path) = std::env::var("CODER_STUDIO_DATA_DIR") {
-        return Ok(PathBuf::from(path));
-    }
-    app.path()
-        .app_data_dir()
-        .map_err(|error| std::io::Error::other(error.to_string()))
+use runtime::RuntimeHandle;
+
+fn env_path(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key).map(PathBuf::from)
 }
 
-fn main() {
+fn home_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        env_path("USERPROFILE").or_else(|| {
+            let drive = std::env::var_os("HOMEDRIVE")?;
+            let path = std::env::var_os("HOMEPATH")?;
+            Some(PathBuf::from(format!(
+                "{}{}",
+                drive.to_string_lossy(),
+                path.to_string_lossy()
+            )))
+        })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        env_path("HOME")
+    }
+}
+
+fn resolve_state_dir() -> Result<PathBuf, std::io::Error> {
+    if let Some(path) = env_path("CODER_STUDIO_HOME") {
+        return Ok(path);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = home_dir().ok_or_else(|| std::io::Error::other("missing home directory"))?;
+        return Ok(home.join("Library/Application Support").join("coder-studio"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let home = home_dir().ok_or_else(|| std::io::Error::other("missing home directory"))?;
+        let local_app_data = env_path("LOCALAPPDATA").unwrap_or_else(|| home.join("AppData/Local"));
+        return Ok(local_app_data.join("coder-studio"));
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        if let Some(path) = env_path("XDG_STATE_HOME") {
+            return Ok(path.join("coder-studio"));
+        }
+
+        let home = home_dir().ok_or_else(|| std::io::Error::other("missing home directory"))?;
+        Ok(home.join(".local/state").join("coder-studio"))
+    }
+}
+
+fn resolve_app_data_dir() -> Result<PathBuf, std::io::Error> {
+    if let Some(path) = env_path("CODER_STUDIO_DATA_DIR") {
+        return Ok(path);
+    }
+
+    Ok(resolve_state_dir()?.join("data"))
+}
+
+#[tokio::main]
+async fn main() {
     if std::env::args().any(|arg| arg == "--coder-studio-claude-hook") {
         run_claude_hook_helper();
         return;
     }
 
-    tauri::Builder::default()
-        .manage(AppState::default())
-        .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![
-            launch_workspace,
-            workbench_bootstrap,
-            workspace_snapshot,
-            activate_workspace,
-            close_workspace,
-            update_workbench_layout,
-            workspace_view_update,
-            create_session,
-            session_update,
-            switch_session,
-            archive_session,
-            update_idle_policy,
-            git_status,
-            git_diff,
-            git_changes,
-            git_diff_file,
-            git_file_diff_payload,
-            git_stage_all,
-            git_stage_file,
-            git_unstage_all,
-            git_unstage_file,
-            git_discard_all,
-            git_discard_file,
-            git_commit,
-            worktree_list,
-            worktree_inspect,
-            workspace_tree,
-            file_preview,
-            file_save,
-            filesystem_roots,
-            filesystem_list,
-            command_exists,
-            dialog_pick_folder,
-            claude_slash_skills,
-            terminal_create,
-            terminal_write,
-            terminal_resize,
-            terminal_close,
-            agent_start,
-            agent_send,
-            agent_stop,
-            agent_resize
-        ])
-        .setup(|app| {
-            let app_data = resolve_app_data_dir(app.handle())?;
-            std::fs::create_dir_all(&app_data)?;
-            let auth_runtime =
-                load_or_initialize_auth_runtime(&app_data).map_err(std::io::Error::other)?;
-            let db_path = app_data.join("coder-studio.db");
-            let conn = Connection::open(db_path)?;
-            init_db(&conn)?;
-            mark_active_sessions_interrupted_on_boot(&conn).map_err(std::io::Error::other)?;
-            start_claude_hook_receiver(app.handle()).map_err(std::io::Error::other)?;
-            let state: State<AppState> = app.state();
-            {
-                let mut auth_guard = state
-                    .auth
-                    .lock()
-                    .map_err(|e| std::io::Error::other(e.to_string()))?;
-                *auth_guard = auth_runtime;
-            }
-            let mut guard = state
-                .db
-                .lock()
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
-            *guard = Some(conn);
-            let transport_endpoint =
-                start_transport_server(app.handle()).map_err(std::io::Error::other)?;
-            if cfg!(debug_assertions) {
-                println!("Coder Studio web dev server: {DEV_FRONTEND_URL}");
-                println!("Coder Studio local server: {transport_endpoint}");
-            } else {
-                println!("Coder Studio server running at {transport_endpoint}");
-            }
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    if let Err(error) = run().await {
+        eprintln!("failed to start coder-studio: {error}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), String> {
+    let app_data = resolve_app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&app_data).map_err(|e| e.to_string())?;
+
+    let auth_runtime = load_or_initialize_auth_runtime(&app_data)?;
+    let db_path = app_data.join("coder-studio.db");
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    init_db(&conn).map_err(|e| e.to_string())?;
+    mark_active_sessions_interrupted_on_boot(&conn)?;
+
+    let (app, mut shutdown_rx) = RuntimeHandle::new();
+    start_claude_hook_receiver(&app)?;
+
+    let state: State<AppState> = app.state();
+    {
+        let mut auth_guard = state.auth.lock().map_err(|e| e.to_string())?;
+        *auth_guard = auth_runtime;
+    }
+    {
+        let mut db_guard = state.db.lock().map_err(|e| e.to_string())?;
+        *db_guard = Some(conn);
+    }
+
+    let transport_server = start_transport_server(&app)?;
+    if cfg!(debug_assertions) {
+        println!("Coder Studio web dev server: {DEV_FRONTEND_URL}");
+        println!("Coder Studio local server: {}", transport_server.endpoint);
+    } else {
+        println!("Coder Studio server running at {}", transport_server.endpoint);
+    }
+
+    axum::serve(
+        transport_server.listener,
+        transport_server
+            .router
+            .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        tokio::select! {
+            _ = shutdown_rx.changed() => {}
+            _ = tokio::signal::ctrl_c() => {}
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }

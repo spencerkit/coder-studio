@@ -19,7 +19,6 @@ test('release versions stay aligned across package manifests', async () => {
   const state = await collectReleaseVersionState(ROOT);
   assert.equal(state.mainVersion, state.rootVersion);
   assert.equal(state.mainVersion, state.cargoVersion);
-  assert.equal(state.mainVersion, state.tauriVersion);
 });
 
 test('release manifest writer emits checksums for tarballs', async () => {

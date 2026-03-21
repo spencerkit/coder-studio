@@ -35,7 +35,6 @@ pub(crate) fn launch_workspace_internal(
     launch_workspace_record(&state, source, project_path, default_idle_policy())
 }
 
-#[tauri::command]
 pub(crate) fn launch_workspace(
     source: WorkspaceSource,
     state: State<'_, AppState>,
@@ -43,14 +42,12 @@ pub(crate) fn launch_workspace(
     launch_workspace_internal(source, None, state)
 }
 
-#[tauri::command]
 pub(crate) fn workbench_bootstrap(
     state: State<'_, AppState>,
 ) -> Result<WorkbenchBootstrap, String> {
     load_workbench_bootstrap(&state)
 }
 
-#[tauri::command]
 pub(crate) fn workspace_snapshot(
     workspace_id: String,
     state: State<'_, AppState>,
@@ -58,7 +55,6 @@ pub(crate) fn workspace_snapshot(
     load_workspace_snapshot(&state, &workspace_id)
 }
 
-#[tauri::command]
 pub(crate) fn activate_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
@@ -66,7 +62,6 @@ pub(crate) fn activate_workspace(
     activate_workspace_ui(&state, &workspace_id)
 }
 
-#[tauri::command]
 pub(crate) fn close_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
@@ -74,7 +69,6 @@ pub(crate) fn close_workspace(
     close_workspace_ui(&state, &workspace_id)
 }
 
-#[tauri::command]
 pub(crate) fn update_workbench_layout(
     layout: WorkbenchLayout,
     state: State<'_, AppState>,
@@ -82,7 +76,6 @@ pub(crate) fn update_workbench_layout(
     persist_workbench_layout(&state, layout)
 }
 
-#[tauri::command]
 pub(crate) fn workspace_view_update(
     workspace_id: String,
     patch: WorkspaceViewPatch,
@@ -91,7 +84,6 @@ pub(crate) fn workspace_view_update(
     patch_workspace_view_state(&state, &workspace_id, patch)
 }
 
-#[tauri::command]
 pub(crate) fn create_session(
     workspace_id: String,
     mode: SessionMode,
@@ -100,7 +92,6 @@ pub(crate) fn create_session(
     create_workspace_session(&state, &workspace_id, mode)
 }
 
-#[tauri::command]
 pub(crate) fn session_update(
     workspace_id: String,
     session_id: u64,
@@ -110,7 +101,6 @@ pub(crate) fn session_update(
     update_workspace_session(&state, &workspace_id, session_id, patch)
 }
 
-#[tauri::command]
 pub(crate) fn switch_session(
     workspace_id: String,
     session_id: u64,
@@ -119,7 +109,6 @@ pub(crate) fn switch_session(
     switch_workspace_session(&state, &workspace_id, session_id)
 }
 
-#[tauri::command]
 pub(crate) fn archive_session(
     workspace_id: String,
     session_id: u64,
@@ -140,7 +129,6 @@ pub(crate) fn archive_session(
     Ok(entry)
 }
 
-#[tauri::command]
 pub(crate) fn update_idle_policy(
     workspace_id: String,
     policy: IdlePolicy,
@@ -149,7 +137,6 @@ pub(crate) fn update_idle_policy(
     update_workspace_idle_policy(&state, &workspace_id, policy)
 }
 
-#[tauri::command]
 pub(crate) fn worktree_inspect(
     path: String,
     target: ExecTarget,

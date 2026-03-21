@@ -1,12 +1,11 @@
 use crate::*;
 
-#[tauri::command]
 pub(crate) fn agent_start(
     workspace_id: String,
     session_id: String,
     provider: String,
     command: String,
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AgentStartResult, String> {
     let key = agent_key(&workspace_id, &session_id);
@@ -136,7 +135,6 @@ pub(crate) fn agent_start(
     Ok(AgentStartResult { started: true })
 }
 
-#[tauri::command]
 pub(crate) fn agent_send(
     workspace_id: String,
     session_id: String,
@@ -182,7 +180,6 @@ pub(crate) fn agent_send(
     }
 }
 
-#[tauri::command]
 pub(crate) fn agent_stop(
     workspace_id: String,
     session_id: String,
@@ -211,7 +208,6 @@ pub(crate) fn agent_stop(
     Ok(())
 }
 
-#[tauri::command]
 pub(crate) fn agent_resize(
     workspace_id: String,
     session_id: String,

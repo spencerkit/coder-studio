@@ -6,18 +6,17 @@ This document describes the current high-level architecture, module responsibili
 
 ## 1. Overall Shape
 
-The project consists of a React + Vite frontend and a Rust server runtime. That server runtime is hosted by Tauri and exposes local HTTP / WS transport.
+The project consists of a React + Vite frontend and a Rust server runtime. The server runtime directly exposes local HTTP / WS transport.
 
 The runtime layering looks like this:
 
 ```text
 React UI (apps/web/src/App.tsx)
     |
-    |-- HTTP RPC (/api/rpc/:command) first
-    |-- Tauri invoke fallback
+    |-- HTTP RPC (/api/rpc/:command)
     |-- WebSocket subscriptions (/ws)
     v
-Rust Server Runtime (via Tauri)
+Rust Server Runtime
     |
     |-- workspace/session services
     |-- git / filesystem services
@@ -79,14 +78,13 @@ The server is responsible for:
 
 ## 4. Transport Layer Design
 
-The current implementation supports two command paths:
+The current implementation uses a single command path:
 
-- HTTP RPC: the frontend tries `/api/rpc/:command` first
-- Tauri invoke: if HTTP is unavailable, it falls back to `@tauri-apps/api/core.invoke`
+- HTTP RPC: the frontend calls `/api/rpc/:command`
 
 This enables:
 
-- direct invoke / runtime access in Tauri shell mode
+- one consistent frontend/backend protocol
 - direct local HTTP/WS server usage in split-debug mode
 - one event stream mechanism for agent and terminal output
 

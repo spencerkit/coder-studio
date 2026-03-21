@@ -106,13 +106,13 @@ coder-studio completion uninstall bash
 
 ## 运行
 
-### 方式 1：Tauri 壳层开发模式（推荐）
+### 方式 1：联动开发模式（推荐）
 
 ```bash
-pnpm tauri dev
+pnpm dev:stack
 ```
 
-这是最接近 Tauri 壳层联调的运行方式。
+这会同时拉起前端开发服务器、本地 server 和开发态 E2E 所需的联动环境。
 
 ### 方式 2：前后端分离调试
 
@@ -155,10 +155,12 @@ pnpm build:server
 pnpm build:cli
 ```
 
-构建 Tauri 壳层：
+构建完整运行时：
 
 ```bash
-pnpm tauri build
+pnpm build:web
+pnpm build:server
+pnpm build:cli
 ```
 
 ## 公开部署

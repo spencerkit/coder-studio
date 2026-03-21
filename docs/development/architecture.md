@@ -6,18 +6,17 @@
 
 ## 1. 总体结构
 
-当前项目由 React + Vite 前端和 Rust server 运行时组成；server 运行时由 Tauri 承载，并对外暴露本地 HTTP / WS 服务。
+当前项目由 React + Vite 前端和 Rust server 运行时组成；server 运行时直接暴露本地 HTTP / WS 服务。
 
 逻辑分层可以概括为：
 
 ```text
 React UI (apps/web/src/App.tsx)
     |
-    |-- HTTP RPC (/api/rpc/:command) 优先
-    |-- Tauri invoke 兜底
+    |-- HTTP RPC (/api/rpc/:command)
     |-- WebSocket 事件订阅 (/ws)
     v
-Rust Server Runtime (via Tauri)
+Rust Server Runtime
     |
     |-- workspace/session 服务
     |-- git / filesystem 服务
@@ -79,14 +78,13 @@ Rust Server Runtime (via Tauri)
 
 ## 4. 传输层设计
 
-当前实现同时支持两套调用路径：
+当前实现的命令调用统一走 HTTP RPC：
 
-- HTTP RPC：前端优先调用 `/api/rpc/:command`
-- Tauri invoke：HTTP 不可用时回退到 `@tauri-apps/api/core.invoke`
+- HTTP RPC：前端调用 `/api/rpc/:command`
 
 这一层的好处是：
 
-- Tauri 壳层模式可直接走 invoke / runtime
+- 前后端协议单一，运行时更轻
 - 分离调试时可以直接连接本地 HTTP/WS server
 - WebSocket 可以统一承载 Agent 与 Terminal 的流式事件
 

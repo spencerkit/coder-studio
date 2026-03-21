@@ -1,4 +1,4 @@
-import { applyRuntimeQuery, backendBaseUrl, hasTauriRuntime } from "../../shared/runtime/backend";
+import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend";
 import { isPublicModeActive, markUnauthorized } from "./auth.service";
 
 export const invokeRpc = async <T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T> => {
@@ -36,16 +36,6 @@ export const invokeRpc = async <T = unknown>(command: string, payload: Record<st
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       errors.push(`${base || "unknown_base"}: ${reason}`);
-    }
-  }
-
-  if (hasTauriRuntime() && !isPublicModeActive()) {
-    try {
-      const tauriCore = await import("@tauri-apps/api/core");
-      return await tauriCore.invoke<T>(command, payload);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      errors.push(`tauri_invoke: ${reason}`);
     }
   }
 

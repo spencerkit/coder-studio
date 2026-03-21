@@ -79,9 +79,9 @@ pnpm release:verify:full
 
 What they do:
 
-- `version:check`: verifies the root package, main package, platform packages, `Cargo.toml`, and `tauri.conf.json` all share the same version
+- `version:check`: verifies the root package, main package, platform packages, and `Cargo.toml` all share the same version
 - `build:web`: builds the frontend into `.build/web/dist`
-- `build:server`: builds the Rust/Tauri release binary into `.build/server/target`
+- `build:server`: builds the Rust release binary into `.build/server/target`
 - `build:cli`: compiles `packages/cli/src` into `.build/cli`
 - `build:packages`: materializes `.build/stage/npm/coder-studio` and `.build/stage/npm/<platform>` by injecting compiled CLI output plus native/frontend assets
 - `pack:local`: runs the release build and emits local tarballs into `.artifacts/`
@@ -113,7 +113,6 @@ The version sync step updates:
 - `packages/cli/package.json`
 - `templates/npm/platform-packages/*/package.json`
 - `apps/server/Cargo.toml`
-- `apps/server/tauri.conf.json`
 - the root `package.json`
 
 `changeset:version` now runs `pnpm version:check` after syncing so version drift fails immediately.

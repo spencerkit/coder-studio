@@ -30,11 +30,4 @@ const nextCargoToml = cargoToml
   .replace(/^version = ".*"$/m, `version = "${version}"`);
 await fs.writeFile(cargoTomlPath, nextCargoToml, 'utf8');
 
-const tauriConfigPath = path.join(SERVER_APP_DIR, 'tauri.conf.json');
-const tauriConfig = JSON.parse(await fs.readFile(tauriConfigPath, 'utf8'));
-tauriConfig.productName = 'Coder Studio';
-tauriConfig.version = version;
-tauriConfig.identifier = 'com.spencerkit.coderstudio';
-await fs.writeFile(tauriConfigPath, `${JSON.stringify(tauriConfig, null, 2)}\n`, 'utf8');
-
 console.log(`synced version ${version}`);

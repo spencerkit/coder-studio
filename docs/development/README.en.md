@@ -8,7 +8,7 @@ This directory documents how the current implementation works. The goal is to he
 
 1. `architecture.en.md`: overall layering, runtime structure, and major data flows
 2. `frontend-state.en.md`: frontend entities and state transitions
-3. `tauri-commands.en.md`: Tauri command inventory, transport layer, and event channels
+3. `tauri-commands.en.md`: current transport command inventory and event channels
 
 ## Local Development
 
@@ -18,10 +18,10 @@ Install dependencies:
 pnpm install
 ```
 
-Tauri shell development mode:
+Combined development mode:
 
 ```bash
-pnpm tauri dev
+pnpm dev:stack
 ```
 
 Split debugging mode:
@@ -58,7 +58,7 @@ Current development ports:
 
 - Architecture: `docs/development/architecture.en.md`
 - Frontend state: `docs/development/frontend-state.en.md`
-- Tauri commands: `docs/development/tauri-commands.en.md`
+- Transport command inventory: `docs/development/tauri-commands.en.md`
 - CLI manual: `docs/development/cli.en.md`
 - npm packaging and release: `docs/development/npm-release.en.md`
 

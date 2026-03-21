@@ -2,7 +2,6 @@
 use crate::infra::support::windows_drive_roots;
 use crate::*;
 
-#[tauri::command]
 pub(crate) fn workspace_tree(
     path: String,
     target: ExecTarget,
@@ -70,7 +69,6 @@ pub(crate) fn workspace_tree(
     })
 }
 
-#[tauri::command]
 pub(crate) fn file_preview(path: String) -> Result<FilePreview, String> {
     const MAX_PREVIEW_BYTES: usize = 200_000;
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
@@ -82,13 +80,11 @@ pub(crate) fn file_preview(path: String) -> Result<FilePreview, String> {
     Ok(FilePreview { path, content })
 }
 
-#[tauri::command]
 pub(crate) fn file_save(path: String, content: String) -> Result<FilePreview, String> {
     std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
     Ok(FilePreview { path, content })
 }
 
-#[tauri::command]
 pub(crate) fn filesystem_roots(target: ExecTarget) -> Result<Vec<FilesystemRoot>, String> {
     match target {
         ExecTarget::Native => {
@@ -137,7 +133,6 @@ pub(crate) fn filesystem_roots(target: ExecTarget) -> Result<Vec<FilesystemRoot>
     }
 }
 
-#[tauri::command]
 pub(crate) fn filesystem_list(
     target: ExecTarget,
     path: Option<String>,
@@ -203,16 +198,4 @@ pub(crate) fn filesystem_list(
         requested_path,
         fallback_reason,
     })
-}
-
-#[tauri::command]
-pub(crate) fn dialog_pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    Ok(app
-        .dialog()
-        .file()
-        .blocking_pick_folder()
-        .map(|path| path.into_path())
-        .transpose()
-        .map_err(|e| e.to_string())?
-        .map(|path| path.to_string_lossy().to_string()))
 }

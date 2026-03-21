@@ -254,7 +254,6 @@ fn walk_project_claude_roots(
     }
 }
 
-#[tauri::command]
 pub(crate) fn claude_slash_skills(cwd: String) -> Result<Vec<ClaudeSlashSkillEntry>, String> {
     let mut entries = Vec::new();
     let mut seen_commands = HashSet::new();
@@ -285,7 +284,6 @@ pub(crate) fn claude_slash_skills(cwd: String) -> Result<Vec<ClaudeSlashSkillEnt
     Ok(entries)
 }
 
-#[tauri::command]
 pub(crate) fn command_exists(
     command: String,
     target: ExecTarget,

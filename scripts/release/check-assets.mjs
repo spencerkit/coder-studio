@@ -1,17 +1,27 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { SERVER_APP_DIR } from '../lib/package-matrix.mjs';
+import { MAIN_PACKAGE, PLATFORM_PACKAGES } from '../lib/package-matrix.mjs';
 
 const REQUIRED_ASSETS = [
   {
-    label: 'tauri icon png',
-    filePath: path.join(SERVER_APP_DIR, 'icons', 'icon.png'),
+    label: 'main package README',
+    filePath: path.join(MAIN_PACKAGE.sourceDir, 'README.md'),
   },
   {
-    label: 'windows icon',
-    filePath: path.join(SERVER_APP_DIR, 'icons', 'icon.ico'),
+    label: 'cli entrypoint',
+    filePath: path.join(MAIN_PACKAGE.sourceDir, 'src', 'bin', 'coder-studio.mts'),
   },
+  ...PLATFORM_PACKAGES.flatMap((entry) => ([
+    {
+      label: `${entry.slug} template package`,
+      filePath: path.join(entry.templateDir, 'package.json'),
+    },
+    {
+      label: `${entry.slug} template README`,
+      filePath: path.join(entry.templateDir, 'README.md'),
+    },
+  ])),
 ];
 
 function isDirectRun() {

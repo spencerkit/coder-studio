@@ -107,13 +107,13 @@ This keeps maintainable source, publish templates, and generated artifacts out o
 
 ## Run
 
-### Option 1: Tauri shell development mode (recommended)
+### Option 1: Combined development mode (recommended)
 
 ```bash
-pnpm tauri dev
+pnpm dev:stack
 ```
 
-This is the closest workflow to the Tauri shell development experience.
+This starts the frontend dev server, the local server runtime, and the linked development flow used by local E2E.
 
 ### Option 2: Split frontend/server debugging
 
@@ -156,10 +156,12 @@ CLI build:
 pnpm build:cli
 ```
 
-Tauri shell build:
+Full runtime build:
 
 ```bash
-pnpm tauri build
+pnpm build:web
+pnpm build:server
+pnpm build:cli
 ```
 
 ## Public Deployment
