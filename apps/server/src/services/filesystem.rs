@@ -93,17 +93,22 @@ pub(crate) fn filesystem_roots(target: ExecTarget) -> Result<Vec<FilesystemRoot>
     match target {
         ExecTarget::Native => {
             let home = filesystem_home_for_target(&ExecTarget::Native)?;
-            let roots = vec![FilesystemRoot {
+            let home_root = FilesystemRoot {
                 id: "home".to_string(),
                 label: "Home".to_string(),
                 path: home.clone(),
                 description: "User home directory".to_string(),
-            }];
+            };
             #[cfg(target_os = "windows")]
             {
+                let mut roots = vec![home_root];
                 roots.extend(windows_drive_roots());
+                Ok(roots)
             }
-            Ok(roots)
+            #[cfg(not(target_os = "windows"))]
+            {
+                Ok(vec![home_root])
+            }
         }
         ExecTarget::Wsl { distro } => {
             let exec_target = ExecTarget::Wsl { distro };

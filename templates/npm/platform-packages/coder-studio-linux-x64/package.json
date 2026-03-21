@@ -1,6 +1,6 @@
 {
   "name": "@spencer-kit/coder-studio-linux-x64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Linux x64 runtime bundle for Coder Studio.",
   "os": [
     "linux"
