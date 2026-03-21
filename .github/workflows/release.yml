@@ -86,6 +86,8 @@ jobs:
         with:
           name: ${{ matrix.package_slug }}
           path: .artifacts/*.tgz
+          if-no-files-found: error
+          include-hidden-files: true
 
   publish-main:
     name: Publish @spencer-kit/coder-studio
@@ -125,6 +127,8 @@ jobs:
         with:
           name: coder-studio-main
           path: .artifacts/*.tgz
+          if-no-files-found: error
+          include-hidden-files: true
 
   github-release:
     name: Create GitHub Release
