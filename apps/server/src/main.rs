@@ -140,7 +140,9 @@ fn resolve_state_dir() -> Result<PathBuf, std::io::Error> {
     #[cfg(target_os = "macos")]
     {
         let home = home_dir().ok_or_else(|| std::io::Error::other("missing home directory"))?;
-        return Ok(home.join("Library/Application Support").join("coder-studio"));
+        return Ok(home
+            .join("Library/Application Support")
+            .join("coder-studio"));
     }
 
     #[cfg(target_os = "windows")]
@@ -210,7 +212,10 @@ async fn run() -> Result<(), String> {
         println!("Coder Studio web dev server: {DEV_FRONTEND_URL}");
         println!("Coder Studio local server: {}", transport_server.endpoint);
     } else {
-        println!("Coder Studio server running at {}", transport_server.endpoint);
+        println!(
+            "Coder Studio server running at {}",
+            transport_server.endpoint
+        );
     }
 
     axum::serve(

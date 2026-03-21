@@ -129,12 +129,7 @@ pub(crate) fn emit_agent(
     );
 }
 
-pub(crate) fn emit_terminal(
-    app: &AppHandle,
-    workspace_id: &str,
-    terminal_id: u64,
-    data: &str,
-) {
+pub(crate) fn emit_terminal(app: &AppHandle, workspace_id: &str, terminal_id: u64, data: &str) {
     emit_transport_event(
         app,
         "terminal://event",
