@@ -85,7 +85,7 @@ fn handle_claude_hook_payload(app: &AppHandle, envelope: ClaudeHookEnvelope) {
         let state: State<AppState> = app.state();
         if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
             let _ = set_session_claude_id(
-                &state,
+                state,
                 &envelope.workspace_id,
                 internal_session_id,
                 claude_session_id,

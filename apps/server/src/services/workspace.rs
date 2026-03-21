@@ -32,7 +32,7 @@ pub(crate) fn launch_workspace_internal(
         WorkspaceSourceKind::Local => resolve_git_repo_path(&source.path_or_url, &source.target)?,
     };
 
-    launch_workspace_record(&state, source, project_path, default_idle_policy())
+    launch_workspace_record(state, source, project_path, default_idle_policy())
 }
 
 pub(crate) fn launch_workspace(
@@ -45,35 +45,35 @@ pub(crate) fn launch_workspace(
 pub(crate) fn workbench_bootstrap(
     state: State<'_, AppState>,
 ) -> Result<WorkbenchBootstrap, String> {
-    load_workbench_bootstrap(&state)
+    load_workbench_bootstrap(state)
 }
 
 pub(crate) fn workspace_snapshot(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceSnapshot, String> {
-    load_workspace_snapshot(&state, &workspace_id)
+    load_workspace_snapshot(state, &workspace_id)
 }
 
 pub(crate) fn activate_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    activate_workspace_ui(&state, &workspace_id)
+    activate_workspace_ui(state, &workspace_id)
 }
 
 pub(crate) fn close_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    close_workspace_ui(&state, &workspace_id)
+    close_workspace_ui(state, &workspace_id)
 }
 
 pub(crate) fn update_workbench_layout(
     layout: WorkbenchLayout,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    persist_workbench_layout(&state, layout)
+    persist_workbench_layout(state, layout)
 }
 
 pub(crate) fn workspace_view_update(
@@ -81,7 +81,7 @@ pub(crate) fn workspace_view_update(
     patch: WorkspaceViewPatch,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceViewState, String> {
-    patch_workspace_view_state(&state, &workspace_id, patch)
+    patch_workspace_view_state(state, &workspace_id, patch)
 }
 
 pub(crate) fn create_session(
@@ -89,7 +89,7 @@ pub(crate) fn create_session(
     mode: SessionMode,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    create_workspace_session(&state, &workspace_id, mode)
+    create_workspace_session(state, &workspace_id, mode)
 }
 
 pub(crate) fn session_update(
@@ -98,7 +98,7 @@ pub(crate) fn session_update(
     patch: SessionPatch,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    update_workspace_session(&state, &workspace_id, session_id, patch)
+    update_workspace_session(state, &workspace_id, session_id, patch)
 }
 
 pub(crate) fn switch_session(
@@ -106,7 +106,7 @@ pub(crate) fn switch_session(
     session_id: u64,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    switch_workspace_session(&state, &workspace_id, session_id)
+    switch_workspace_session(state, &workspace_id, session_id)
 }
 
 pub(crate) fn archive_session(
@@ -114,7 +114,7 @@ pub(crate) fn archive_session(
     session_id: u64,
     state: State<'_, AppState>,
 ) -> Result<ArchiveEntry, String> {
-    let entry = archive_workspace_session(&state, &workspace_id, session_id)?;
+    let entry = archive_workspace_session(state, &workspace_id, session_id)?;
     let key = agent_key(&workspace_id, &session_id.to_string());
     if let Ok(mut agents) = state.agents.lock() {
         if let Some(runtime) = agents.remove(&key) {
@@ -134,7 +134,7 @@ pub(crate) fn update_idle_policy(
     policy: IdlePolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    update_workspace_idle_policy(&state, &workspace_id, policy)
+    update_workspace_idle_policy(state, &workspace_id, policy)
 }
 
 pub(crate) fn worktree_inspect(
