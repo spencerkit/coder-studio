@@ -2,10 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRuntime, stopRuntime } from '../../.build/cli/lib/runtime-controller.mjs';
+import { resolveServerBinaryPath } from '../lib/server-build.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
-const binaryName = process.platform === 'win32' ? 'coder-studio.exe' : 'coder-studio';
-const binaryPath = path.join(ROOT, '.build', 'server', 'target', 'release', binaryName);
+const binaryPath = resolveServerBinaryPath();
 const distDir = path.join(ROOT, '.build', 'web', 'dist');
 const stateDir = path.join(ROOT, '.tmp', 'release-e2e-runtime');
 const env = {

@@ -4,6 +4,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ROOT } from '../../scripts/lib/package-matrix.mjs';
+import {
+  buildServerCargoArgs,
+  resolveServerBinaryPath,
+} from '../../scripts/lib/server-build.mjs';
 import { assertReleaseAssets } from '../../scripts/release/check-assets.mjs';
 import { assertVersionConsistency, collectReleaseVersionState } from '../../scripts/release/check-version.mjs';
 import { createReleaseManifest } from '../../scripts/release/write-release-manifest.mjs';
@@ -19,6 +23,30 @@ test('release versions stay aligned across package manifests', async () => {
   const state = await collectReleaseVersionState(ROOT);
   assert.equal(state.mainVersion, state.rootVersion);
   assert.equal(state.mainVersion, state.cargoVersion);
+});
+
+test('server build helpers default to the native release output path', () => {
+  const env = {};
+  assert.equal(
+    resolveServerBinaryPath({ env, platform: 'linux' }),
+    path.join(ROOT, '.build', 'server', 'target', 'release', 'coder-studio'),
+  );
+  assert.deepEqual(
+    buildServerCargoArgs({ env }),
+    ['build', '--release', '--manifest-path', path.join('apps', 'server', 'Cargo.toml')],
+  );
+});
+
+test('server build helpers route Linux musl builds into the target-specific output path', () => {
+  const env = { CODER_STUDIO_RUST_TARGET: 'x86_64-unknown-linux-musl' };
+  assert.equal(
+    resolveServerBinaryPath({ env, platform: 'linux' }),
+    path.join(ROOT, '.build', 'server', 'target', 'x86_64-unknown-linux-musl', 'release', 'coder-studio'),
+  );
+  assert.deepEqual(
+    buildServerCargoArgs({ env }),
+    ['build', '--release', '--manifest-path', path.join('apps', 'server', 'Cargo.toml'), '--target', 'x86_64-unknown-linux-musl'],
+  );
 });
 
 test('release manifest writer emits checksums for tarballs', async () => {
