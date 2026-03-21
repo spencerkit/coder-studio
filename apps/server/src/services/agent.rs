@@ -110,8 +110,7 @@ pub(crate) fn agent_start(
                         &text,
                     );
                     let state: State<AppState> = state_handle.state();
-                    let _ =
-                        append_session_stream(state, &workspace_id_out, session_out_num, &text);
+                    let _ = append_session_stream(state, &workspace_id_out, session_out_num, &text);
                 }
                 Err(_) => break,
             }
