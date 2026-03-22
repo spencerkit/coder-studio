@@ -13,7 +13,7 @@
 - 同一 IP 在 `10` 分钟内连续 `3` 次口令错误后，封禁 `24` 小时
 - `rootPath` 服务端单根目录白名单
 - `HTTP RPC` 与 `WebSocket` 同时鉴权
-- 非本地访问时要求通过 HTTPS 提交口令
+- 非本地访问时允许通过 HTTP 或 HTTPS 提交口令
 - `localhost` / `127.0.0.1` / `::1` 访问时默认走非 public mode
 - 本地访问时如果 URL 带 `?auth=force`，则强制走 public mode
 
@@ -28,7 +28,7 @@
 推荐这样做的原因：
 
 - 应用进程本身不做 TLS 终止
-- 对外登录默认要求安全传输
+- HTTPS 入口可以避免口令和 session cookie 以明文经过网络
 - 反向代理更适合处理证书、域名和公开入口
 
 ## 配置文件
@@ -91,13 +91,13 @@
 这表示：
 
 - 应用只监听本机
-- 对外流量必须先经过 HTTPS 反向代理
+- 对外流量更适合先经过反向代理
 
 如果你明确知道自己在做什么，也可以改成：
 
 - `bindHost`: `0.0.0.0`
 
-但即使这样，公网访问也仍然建议放在 HTTPS 反向代理后面，因为应用本身不直接提供 TLS。
+但即使这样，公网访问也仍然建议放在 HTTPS 反向代理后面，因为应用本身不直接提供 TLS，而且 HTTP 会让口令和非 `Secure` cookie 暴露在明文链路上。
 
 ## 反向代理要求
 
@@ -108,7 +108,7 @@
 - `X-Forwarded-For`
 - `X-Forwarded-Proto`
 
-其中 `X-Forwarded-Proto=https` 很关键，因为应用会用它判断当前是否为安全传输。
+如果代理层已经做了 HTTPS，建议继续透传 `X-Forwarded-Proto=https`，这样运行时返回的 session cookie 会自动带上 `Secure` 属性。
 
 ## Caddy 示例
 
@@ -150,7 +150,7 @@ server {
 3. 设置访问口令
 4. 如有需要，再覆盖默认的 `rootPath`、`bindHost`、`bindPort`
 5. 启动或重启应用
-6. 配置 HTTPS 反向代理到 `bindHost:bindPort`
+6. 按需要配置反向代理到 `bindHost:bindPort`，公网入口推荐使用 HTTPS
 7. 打开你的域名，确认先出现登录页
 
 最小可用配置：

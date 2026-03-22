@@ -479,7 +479,6 @@ pub(crate) fn login(
     if !request.public_mode {
         return Ok((status_response(&auth.file, &request, true), String::new()));
     }
-    ensure_transport_allowed(&request)?;
     if !password_configured(&auth.file) {
         return Err(AuthFailure::new(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -599,7 +598,6 @@ pub(crate) fn require_session(
         });
     }
 
-    ensure_transport_allowed(&request)?;
     let token = read_cookie_token(headers).ok_or_else(|| {
         AuthFailure::new(StatusCode::UNAUTHORIZED, "session_missing").clear_cookie()
     })?;
@@ -969,22 +967,12 @@ fn status_response(
         authenticated,
         password_configured: password_configured(file),
         local_host: request.is_local_host,
-        secure_transport_required: request.public_mode && !request.is_local_host,
+        secure_transport_required: false,
         secure_transport_ok: request.is_local_host || request.is_secure_transport,
         session_idle_minutes: file.session_idle_minutes,
         session_max_hours: file.session_max_hours,
         allowed_roots: file.allowed_roots.clone(),
     }
-}
-
-fn ensure_transport_allowed(request: &RequestContext) -> Result<(), AuthFailure> {
-    if request.public_mode && !request.is_local_host && !request.is_secure_transport {
-        return Err(AuthFailure::new(
-            StatusCode::BAD_REQUEST,
-            "secure_transport_required",
-        ));
-    }
-    Ok(())
 }
 
 fn request_context(
@@ -1415,5 +1403,58 @@ mod tests {
         set_root_path(&mut file, None);
         assert_eq!(effective_root_path(&file), None);
         assert!(file.allowed_roots.is_empty());
+    }
+
+    #[test]
+    fn insecure_remote_public_mode_is_allowed_in_status_response() {
+        let file = AuthFile {
+            version: 1,
+            public_mode: true,
+            password: "demo-passphrase".to_string(),
+            root_path: "/srv/coder-studio".to_string(),
+            allowed_roots: vec!["/srv/coder-studio".to_string()],
+            bind_host: DEFAULT_BIND_HOST.to_string(),
+            bind_port: DEFAULT_BIND_PORT,
+            session_idle_minutes: DEFAULT_SESSION_IDLE_MINUTES,
+            session_max_hours: DEFAULT_SESSION_MAX_HOURS,
+            sessions: Vec::new(),
+        };
+        let request = RequestContext {
+            ip: "203.0.113.10".to_string(),
+            user_agent: "test".to_string(),
+            is_local_host: false,
+            is_secure_transport: false,
+            public_mode: true,
+        };
+
+        let status = status_response(&file, &request, false);
+
+        assert!(status.public_mode);
+        assert!(!status.authenticated);
+        assert!(!status.local_host);
+        assert!(!status.secure_transport_required);
+        assert!(!status.secure_transport_ok);
+    }
+
+    #[test]
+    fn remote_http_sessions_use_non_secure_cookies() {
+        let expires_at_ms = now_epoch_ms() + 60_000;
+        let insecure_request = RequestContext {
+            ip: "203.0.113.10".to_string(),
+            user_agent: "test".to_string(),
+            is_local_host: false,
+            is_secure_transport: false,
+            public_mode: true,
+        };
+        let secure_request = RequestContext {
+            is_secure_transport: true,
+            ..insecure_request.clone()
+        };
+
+        let insecure_cookie = build_session_cookie("token", expires_at_ms, &insecure_request);
+        let secure_cookie = build_session_cookie("token", expires_at_ms, &secure_request);
+
+        assert!(!insecure_cookie.contains("; Secure"));
+        assert!(secure_cookie.contains("; Secure"));
     }
 }

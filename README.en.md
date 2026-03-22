@@ -172,7 +172,7 @@ For a publicly reachable deployment, the current build now includes:
 - `HttpOnly` session cookie
 - a `24` hour IP block after `3` failed passphrase attempts within `10` minutes
 - server-side single-root restrictions via `root.path`
-- HTTPS-required login for non-local hosts
+- public access over HTTP or HTTPS, with HTTPS reverse proxy still recommended
 
 Deployment details are documented here:
 

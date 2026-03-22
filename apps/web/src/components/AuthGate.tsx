@@ -22,7 +22,6 @@ type AuthGateProps = {
 type AuthViewMode =
   | "sign-in"
   | "not-configured"
-  | "transport-required"
   | "blocked"
   | "unavailable";
 
@@ -310,16 +309,13 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
   }
 
   const blockedLabel = formatBlockedUntil(blockedUntil, locale);
-  const securityBlocked = status.secure_transport_required && !status.secure_transport_ok;
   const viewMode: AuthViewMode = !status.password_configured || errorCode === "auth_not_configured"
     ? "not-configured"
-    : securityBlocked
-      ? "transport-required"
-      : errorCode === "ip_blocked"
-        ? "blocked"
-        : errorCode === "auth_unavailable"
-          ? "unavailable"
-          : "sign-in";
+    : errorCode === "ip_blocked"
+      ? "blocked"
+      : errorCode === "auth_unavailable"
+        ? "unavailable"
+        : "sign-in";
 
   const inlineMessage =
     errorCode === "invalid_credentials"
@@ -330,9 +326,7 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
 
   const helperText = viewMode === "sign-in"
     ? t("authAllowedRootsHint")
-    : viewMode === "transport-required"
-      ? t("authSecureTransportRequired")
-      : viewMode === "blocked"
+    : viewMode === "blocked"
         ? t("authBlockedUntil", { time: blockedLabel || "—" })
         : viewMode === "unavailable"
           ? t("authUnavailable")
@@ -352,11 +346,6 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
   if (viewMode === "not-configured") {
     statusTitle = t("authNotConfiguredTitle");
     statusDescription = t("authNotConfiguredDescription");
-    statusTone = "warning";
-    showRetry = true;
-  } else if (viewMode === "transport-required") {
-    statusTitle = t("authTransportRequiredTitle");
-    statusDescription = t("authTransportRequiredDescription");
     statusTone = "warning";
     showRetry = true;
   } else if (viewMode === "blocked") {
@@ -416,7 +405,6 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
             <div className="auth-card-bar">
               <div className="auth-badge-stack">
                 <span className="section-kicker">{t("authPublicModeBadge")}</span>
-                {viewMode === "transport-required" ? <span className="auth-state-pill warning">HTTPS</span> : null}
                 {viewMode === "not-configured" ? <span className="auth-state-pill warning">auth.json</span> : null}
                 {viewMode === "blocked" ? <span className="auth-state-pill danger">IP</span> : null}
               </div>

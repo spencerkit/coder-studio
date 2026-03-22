@@ -171,7 +171,7 @@ pnpm build:cli
 - `HttpOnly` session cookie
 - 同一 IP `10` 分钟内 `3` 次口令错误后封禁 `24` 小时
 - 基于 `root.path` 的服务端单根目录白名单
-- 对外访问时要求通过 HTTPS 反向代理提交口令
+- 支持通过 HTTP 或 HTTPS 对外访问，推荐在公网入口前使用 HTTPS 反向代理
 
 部署细节请看：
 
