@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 const HOME_DIR = os.homedir();
@@ -11,6 +11,8 @@ const TAB_STABILITY_DIRS = [
   path.join(HOME_DIR, 'coder-studio-e2e-tab-b'),
 ];
 const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir));
+const REMOTE_HTTP_HOST = 'coder-studio.test';
+const REMOTE_HTTP_PASSWORD = 'demo-passphrase';
 
 const gotoWorkspaceRoot = async (page: Page) => {
   await Promise.all([
@@ -63,6 +65,30 @@ const invokeRpc = async <T>(page: Page, command: string, payload: Record<string,
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+};
+
+const patchSystemConfig = async (request: APIRequestContext, updates: Record<string, unknown>) => {
+  const response = await request.patch('http://127.0.0.1:4173/api/system/config', {
+    data: { updates },
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = await response.json();
+  expect(body.ok).not.toBe(false);
+  return body.data as {
+    config: {
+      root: { path?: string | null };
+    };
+  };
+};
+
+const readSystemConfig = async (request: APIRequestContext) => {
+  const response = await request.get('http://127.0.0.1:4173/api/system/config');
+  expect(response.ok()).toBeTruthy();
+  const body = await response.json();
+  expect(body.ok).not.toBe(false);
+  return body.data as {
+    root: { path?: string | null };
+  };
 };
 
 const launchWorkspaceByPath = async (page: Page, workspacePath: string) => {
@@ -169,4 +195,43 @@ test('workspace tabs keep a stable order when switching between workspaces', asy
   await page.locator('.workspace-top-tab').filter({ hasText: TAB_STABILITY_LABELS[1] }).click();
   await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(TAB_STABILITY_LABELS[1]);
   await expect.poll(() => readWorkspaceTabLabels(page)).toEqual(initialOrder);
+});
+
+test('release runtime allows sign-in from a remote HTTP host', async ({ page, request, baseURL }) => {
+  test.skip(!baseURL?.includes(':4173'), 'Release runtime only');
+
+  const currentConfig = await readSystemConfig(request);
+  const originalRootPath = currentConfig.root.path ?? null;
+
+  try {
+    await patchSystemConfig(request, {
+      'auth.password': REMOTE_HTTP_PASSWORD,
+      'root.path': process.cwd(),
+    });
+
+    await page.route('**/*', async (route) => {
+      await route.continue({
+        headers: {
+          ...route.request().headers(),
+          'x-forwarded-host': REMOTE_HTTP_HOST,
+          'x-forwarded-proto': 'http',
+        },
+      });
+    });
+
+    await page.goto('/?auth=force');
+    await expect(page.getByRole('heading', { name: 'Unlock Coder Studio' })).toBeVisible();
+    await expect(page.getByText('HTTPS is required on this host')).toHaveCount(0);
+
+    await page.getByPlaceholder('Enter passphrase').fill(REMOTE_HTTP_PASSWORD);
+    await page.getByRole('button', { name: 'Enter workspace' }).click();
+
+    await expect(page.getByTestId('overlay')).toBeVisible();
+    await expect(page.getByTestId('folder-select')).toBeVisible();
+  } finally {
+    await patchSystemConfig(request, {
+      'auth.password': null,
+      'root.path': originalRootPath,
+    });
+  }
 });

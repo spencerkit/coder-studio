@@ -13,7 +13,7 @@ The current code supports:
 - a `24` hour IP ban after `3` failed passphrase attempts within `10` minutes
 - server-side single-root restrictions through `rootPath`
 - authentication on both `HTTP RPC` and `WebSocket`
-- HTTPS-required passphrase submission for non-local hosts
+- passphrase submission over either HTTP or HTTPS for non-local hosts
 - local access on `localhost`, `127.0.0.1`, and `::1` defaults to non-public mode
 - local access with `?auth=force` explicitly forces public mode
 
@@ -28,7 +28,7 @@ Recommended structure:
 Why this is recommended:
 
 - the application process does not terminate TLS itself
-- non-local login requires secure transport
+- HTTPS avoids sending the passphrase and session cookie over a clear-text network path
 - a reverse proxy is the right place for certificates, domains, and public ingress
 
 ## Configuration File
@@ -91,13 +91,13 @@ Recommended production values:
 That means:
 
 - the app only listens locally
-- all public traffic must come through an HTTPS reverse proxy
+- public traffic is easier to control through a reverse proxy
 
 If you explicitly want the process to listen beyond loopback, you can set:
 
 - `bindHost`: `0.0.0.0`
 
-But even then, public access should still sit behind an HTTPS reverse proxy because the app does not provide TLS directly.
+But even then, public access should still sit behind an HTTPS reverse proxy because the app does not provide TLS directly, and plain HTTP would expose the passphrase plus a non-`Secure` session cookie on the wire.
 
 ## Reverse Proxy Requirements
 
@@ -108,7 +108,7 @@ Your proxy should forward:
 - `X-Forwarded-For`
 - `X-Forwarded-Proto`
 
-`X-Forwarded-Proto=https` is especially important because the app uses it to decide whether secure transport is in place.
+If the proxy terminates HTTPS, keep forwarding `X-Forwarded-Proto=https` so the runtime can mark the returned session cookie as `Secure`.
 
 ## Caddy Example
 
@@ -150,7 +150,7 @@ server {
 3. Set the access passphrase
 4. Override `rootPath`, `bindHost`, or `bindPort` only if you need non-default values
 5. Start or restart the app
-6. Configure an HTTPS reverse proxy to `bindHost:bindPort`
+6. Configure a reverse proxy to `bindHost:bindPort` as needed, with HTTPS still recommended for public ingress
 7. Open your domain and verify the login screen appears first
 
 Minimal setup:

@@ -4,6 +4,10 @@
 
 Coder Studio 是一个本地优先的开发工作台，当前以本地 server + Web 界面形态运行，用于把仓库接入、Claude Agent 运行、代码浏览与编辑、Git 操作、内置终端放到同一个界面中。
 
+## 社区支持
+
+感谢 LinuxDo 各位佬的支持！欢迎大家加入 [LinuxDo](https://linux.do/)，各种技术交流、AI 前沿资讯、AI 经验分享，尽在 LinuxDo！
+
 ## 项目是什么
 
 这个项目当前的产品形态不是“通用 AI 平台”，而是一个围绕真实 Git 仓库工作的本地工作台；默认通过本地 server 暴露界面与 API。
@@ -171,7 +175,7 @@ pnpm build:cli
 - `HttpOnly` session cookie
 - 同一 IP `10` 分钟内 `3` 次口令错误后封禁 `24` 小时
 - 基于 `root.path` 的服务端单根目录白名单
-- 对外访问时要求通过 HTTPS 反向代理提交口令
+- 支持通过 HTTP 或 HTTPS 对外访问，推荐在公网入口前使用 HTTPS 反向代理
 
 部署细节请看：
 
@@ -216,6 +220,7 @@ pnpm build:cli
 
 用户文档：
 
+- 更新日志：`CHANGELOG.md`
 - 中文 PRD：`docs/PRD.md`
 - English PRD: `docs/PRD.en.md`
 
