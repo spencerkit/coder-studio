@@ -159,6 +159,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     if (!mount) return;
     if (!termRef.current) {
       const term = new XTerminal({
+        allowProposedApi: true,
         convertEol: true,
         customGlyphs: true,
         disableStdin: mode === "readonly",
@@ -192,6 +193,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     const term = termRef.current;
     if (!mount || !term) return;
     term.options = {
+      allowProposedApi: true,
       customGlyphs: true,
       disableStdin: mode === "readonly",
       cursorBlink: mode === "interactive",
