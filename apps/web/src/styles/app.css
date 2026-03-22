@@ -5590,6 +5590,41 @@ pre.diff,
   gap: 14px;
 }
 
+.runtime-check-shell {
+  gap: 16px;
+}
+
+.runtime-check-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent) 18%);
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent-2-soft) 10%);
+}
+
+.runtime-check-summary strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.runtime-check-summary p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.runtime-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.runtime-check-note {
+  margin-top: -2px;
+}
+
 .choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

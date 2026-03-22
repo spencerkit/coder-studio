@@ -41,9 +41,21 @@ pub(crate) fn shell_escape_windows(value: &str) -> String {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn apply_windows_no_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_windows_no_window(_cmd: &mut Command) {}
+
 pub(crate) fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = if let ExecTarget::Wsl { distro } = target {
         let mut c = Command::new("wsl.exe");
+        apply_windows_no_window(&mut c);
         if let Some(d) = distro {
             c.args(["-d", d]);
         }
@@ -63,6 +75,7 @@ pub(crate) fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<S
         c
     } else {
         let mut c = std::process::Command::new(args[0]);
+        apply_windows_no_window(&mut c);
         c.args(&args[1..]);
         if !cwd.is_empty() {
             c.current_dir(cwd);
@@ -120,6 +133,7 @@ pub(crate) fn run_wsl_shell_command(
     script: &str,
 ) -> Result<String, String> {
     let mut cmd = Command::new("wsl.exe");
+    apply_windows_no_window(&mut cmd);
     if let ExecTarget::Wsl {
         distro: Some(distro),
     } = target
@@ -210,6 +224,7 @@ pub(crate) fn probe_native_command(
     }
 
     let mut cmd = Command::new("cmd");
+    apply_windows_no_window(&mut cmd);
     cmd.args(["/C", "where", command_name]);
     if let Some(base) = cwd.filter(|value| !value.is_empty()) {
         cmd.current_dir(base);
@@ -283,12 +298,61 @@ pub(crate) fn build_agent_shell_command(cwd: &str, command: &str, windows: bool)
 }
 
 #[cfg(not(target_os = "windows"))]
+fn locale_uses_utf8(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.contains("utf-8") || normalized.contains("utf8")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_utf8_locale() -> String {
+    for key in ["LC_CTYPE", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() && locale_uses_utf8(trimmed) {
+                return trimmed.to_string();
+            }
+        }
+    }
+    "C.UTF-8".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_unix_shell_path() -> String {
+    if let Ok(shell) = std::env::var("SHELL") {
+        let trimmed = shell.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let bash = Path::new("/bin/bash");
+    if bash.exists() {
+        return bash.to_string_lossy().to_string();
+    }
+
+    "/bin/sh".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn apply_unix_pty_env_defaults(cmd: &mut CommandBuilder, shell_path: Option<&str>) {
+    let locale = resolve_utf8_locale();
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("LC_CTYPE", locale.clone());
+
+    let lang = std::env::var("LANG").unwrap_or_default();
+    if lang.trim().is_empty() || !locale_uses_utf8(&lang) {
+        cmd.env("LANG", locale);
+    }
+
+    if let Some(shell) = shell_path.map(str::trim).filter(|value| !value.is_empty()) {
+        cmd.env("SHELL", shell.to_string());
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
 pub(crate) fn resolve_unix_agent_shell() -> (String, String) {
-    let shell = std::env::var("SHELL")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "/bin/sh".to_string());
+    let shell = resolve_unix_shell_path();
     let shell_name = Path::new(&shell)
         .file_name()
         .and_then(|name| name.to_str())
@@ -384,12 +448,12 @@ pub(crate) fn build_terminal_pty_command(target: &ExecTarget, cwd: &str) -> Comm
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-            let mut cmd = CommandBuilder::new(shell);
+            let shell = resolve_unix_shell_path();
+            let mut cmd = CommandBuilder::new(shell.clone());
             if !cwd.is_empty() {
                 cmd.cwd(cwd);
             }
-            cmd.env("TERM", "xterm-256color");
+            apply_unix_pty_env_defaults(&mut cmd, Some(&shell));
             cmd
         }
     }

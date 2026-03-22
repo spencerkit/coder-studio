@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 
 type XtermBaseMode = "interactive" | "readonly";
@@ -94,6 +95,22 @@ const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => 
 };
 
 const XTERM_SCROLLBAR_WIDTH = 3;
+const XTERM_FONT_FAMILY = [
+  "\"JetBrains Mono\"",
+  "\"Symbols Nerd Font Mono\"",
+  "\"MesloLGS NF\"",
+  "\"CaskaydiaMono Nerd Font Mono\"",
+  "\"SauceCodePro Nerd Font Mono\"",
+  "\"DejaVu Sans Mono\"",
+  "\"Noto Sans Mono\"",
+  "\"Noto Sans Mono CJK SC\"",
+  "\"Noto Sans Symbols 2\"",
+  "\"Noto Color Emoji\"",
+  "\"Cascadia Mono\"",
+  "ui-monospace",
+  "\"SFMono-Regular\"",
+  "monospace",
+].join(", ");
 
 const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
   if (!mount) return null;
@@ -118,6 +135,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const unicodeRef = useRef<Unicode11Addon | null>(null);
   const outputSnapshotRef = useRef("");
   const identityRef = useRef<string | undefined>(undefined);
   const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -142,18 +160,24 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     if (!termRef.current) {
       const term = new XTerminal({
         convertEol: true,
+        customGlyphs: true,
         disableStdin: mode === "readonly",
         cursorBlink: mode === "interactive",
-        fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, SFMono-Regular, monospace",
+        fontFamily: XTERM_FONT_FAMILY,
         fontSize,
+        rescaleOverlappingGlyphs: true,
         overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
         theme: readTerminalTheme(resolveTerminalThemeSource(mount))
       });
       const fitAddon = new FitAddon();
+      const unicodeAddon = new Unicode11Addon();
       term.loadAddon(fitAddon);
+      term.loadAddon(unicodeAddon);
+      term.unicode.activeVersion = "11";
       term.open(mount);
       termRef.current = term;
       fitRef.current = fitAddon;
+      unicodeRef.current = unicodeAddon;
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;
@@ -168,9 +192,12 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     const term = termRef.current;
     if (!mount || !term) return;
     term.options = {
+      customGlyphs: true,
       disableStdin: mode === "readonly",
       cursorBlink: mode === "interactive",
+      fontFamily: XTERM_FONT_FAMILY,
       fontSize,
+      rescaleOverlappingGlyphs: true,
       overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
       theme: readTerminalTheme(resolveTerminalThemeSource(mount))
     };
@@ -235,6 +262,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
+      unicodeRef.current = null;
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;

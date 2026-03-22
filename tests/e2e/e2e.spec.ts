@@ -14,6 +14,61 @@ const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir))
 const REMOTE_HTTP_HOST = 'coder-studio.test';
 const REMOTE_HTTP_PASSWORD = 'demo-passphrase';
 
+type RuntimeCommandMockState = {
+  claude: boolean;
+  git: boolean;
+  delayMs: number;
+};
+
+const runtimeCommandMockStates = new WeakMap<Page, RuntimeCommandMockState>();
+
+const commandBinary = (command: string | undefined) => command?.trim().split(/\s+/, 1)[0] ?? '';
+
+const installRuntimeCommandMock = async (page: Page, initial?: Partial<RuntimeCommandMockState>) => {
+  const state: RuntimeCommandMockState = {
+    claude: true,
+    git: true,
+    delayMs: 0,
+    ...initial,
+  };
+  runtimeCommandMockStates.set(page, state);
+
+  await page.route('**/api/rpc/command_exists', async (route) => {
+    const body = route.request().postDataJSON() as { command?: string } | null;
+    const command = body?.command ?? '';
+    const binary = commandBinary(command);
+    if (binary !== 'claude' && binary !== 'git') {
+      await route.fallback();
+      return;
+    }
+
+    if (state.delayMs > 0) {
+      await page.waitForTimeout(state.delayMs);
+    }
+
+    const available = binary === 'claude' ? state.claude : state.git;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          command,
+          available,
+          resolved_path: available ? `/mock/bin/${binary}` : null,
+          error: available ? null : `\`${binary}\` was not found`,
+        },
+      }),
+    });
+  });
+};
+
+const runtimeCommandMockState = (page: Page) => {
+  const state = runtimeCommandMockStates.get(page);
+  expect(state, 'runtime command mock state').toBeTruthy();
+  return state as RuntimeCommandMockState;
+};
+
 const gotoWorkspaceRoot = async (page: Page) => {
   await Promise.all([
     page.waitForResponse((response) =>
@@ -106,6 +161,18 @@ const readWorkspaceTabLabels = async (page: Page) =>
     nodes.map((node) => node.textContent?.trim() ?? '').filter(Boolean)
   );
 
+const closeAllOpenWorkspaces = async (page: Page) => {
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+    };
+  }>(page, 'workbench_bootstrap');
+
+  for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
+    await invokeRpc(page, 'close_workspace', { workspace_id: workspaceId });
+  }
+};
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!window.sessionStorage.getItem('coder-studio.test-init')) {
@@ -115,6 +182,7 @@ test.beforeEach(async ({ page }) => {
       window.sessionStorage.setItem('coder-studio.test-init', '1');
     }
   });
+  await installRuntimeCommandMock(page);
 });
 
 test.beforeAll(async () => {
@@ -138,6 +206,26 @@ test('launch overlay shows the server-side folder picker shell', async ({ page }
   await expect(page.getByTestId('folder-select')).toBeVisible();
   await expect(page.getByTestId('folder-selected')).toBeVisible();
   await expect(page.getByTestId('start-workspace')).toBeVisible();
+});
+
+test('runtime validation blocks workspace selection until required tools are installed', async ({ page }) => {
+  const runtime = runtimeCommandMockState(page);
+  runtime.claude = false;
+  await closeAllOpenWorkspaces(page);
+
+  await page.goto('/');
+
+  await expect(page.getByTestId('runtime-validation-overlay')).toBeVisible();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
+  await expect(page.getByText('Required tools are missing. Install them first before entering workspace selection.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry Check' })).toBeEnabled();
+
+  runtime.claude = true;
+  await page.getByRole('button', { name: 'Retry Check' }).click();
+
+  await expect(page.getByTestId('runtime-validation-overlay')).toHaveCount(0);
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('folder-select')).toBeVisible();
 });
 
 test('settings appearance controls can switch locale', async ({ page }) => {
@@ -210,7 +298,7 @@ test('release runtime allows sign-in from a remote HTTP host', async ({ page, re
     });
 
     await page.route('**/*', async (route) => {
-      await route.continue({
+      await route.fallback({
         headers: {
           ...route.request().headers(),
           'x-forwarded-host': REMOTE_HTTP_HOST,

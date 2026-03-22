@@ -29,6 +29,11 @@ pub(crate) fn agent_start(
     };
 
     let (program, args) = build_agent_pty_command(&target, &cwd, &command);
+    let shell_env = if matches!(target, ExecTarget::Native) {
+        Some(program.clone())
+    } else {
+        None
+    };
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -41,6 +46,11 @@ pub(crate) fn agent_start(
     let mut cmd = CommandBuilder::new(program);
     for arg in args {
         cmd.arg(arg);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    if matches!(target, ExecTarget::Native) {
+        crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
     if provider == "claude" {
