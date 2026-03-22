@@ -1,23 +1,18 @@
-# Tauri Command Inventory
+# Transport Command Inventory
 
 [中文](tauri-commands.md)
 
-This document lists the current Tauri commands, their transport path, and how they are used in the current product.
+This document lists the current transport commands, their execution path, and how they are used in the current product. The filename is kept for historical continuity, but the runtime no longer depends on a Tauri shell.
 
 ## 1. Invocation Path
 
-The frontend does not rely exclusively on Tauri `invoke`.
-
-The actual order is:
-
-1. try HTTP RPC via `/api/rpc/:command`
-2. if HTTP is unavailable, fall back to `@tauri-apps/api/core.invoke`
+The frontend now uses HTTP RPC via `/api/rpc/:command`.
 
 Relevant code:
 
 - frontend RPC client: `apps/web/src/services/http/client.ts`
 - backend command dispatcher: `apps/server/src/command/http.rs`
-- Tauri registration list: `apps/server/src/main.rs`
+- server entry point: `apps/server/src/main.rs`
 
 Streamed events do not come back through RPC responses. They are delivered over WebSocket:
 
@@ -89,12 +84,9 @@ Notes:
 | `file_save` | save file content | used |
 | `filesystem_roots` | fetch available filesystem roots | indirectly used |
 | `filesystem_list` | browse backend-side directories | used |
-| `dialog_pick_folder` | open native folder picker dialog | not prominent in current main flow |
-
 Notes:
 
 - Current local-folder onboarding is primarily driven by the backend directory browser built around `filesystem_list`.
-- `dialog_pick_folder` exists, but it is not the main onboarding path today.
 
 ## 6. System and Runtime Probing
 

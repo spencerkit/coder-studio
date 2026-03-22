@@ -1,12 +1,11 @@
 use crate::*;
 
-#[tauri::command]
 pub(crate) fn agent_start(
     workspace_id: String,
     session_id: String,
     provider: String,
     command: String,
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AgentStartResult, String> {
     let key = agent_key(&workspace_id, &session_id);
@@ -20,8 +19,8 @@ pub(crate) fn agent_start(
     let session_id_num = session_id
         .parse::<u64>()
         .map_err(|_| "invalid_session_id".to_string())?;
-    let (cwd, target) = workspace_access_context(&state, &workspace_id)?;
-    let stored_session = load_session(&state, &workspace_id, session_id_num)?;
+    let (cwd, target) = workspace_access_context(state, &workspace_id)?;
+    let stored_session = load_session(state, &workspace_id, session_id_num)?;
     let effective_claude_session_id = stored_session.claude_session_id.clone();
     let command = if provider == "claude" {
         build_claude_resume_command(&command, effective_claude_session_id.as_deref())
@@ -111,8 +110,7 @@ pub(crate) fn agent_start(
                         &text,
                     );
                     let state: State<AppState> = state_handle.state();
-                    let _ =
-                        append_session_stream(&state, &workspace_id_out, session_out_num, &text);
+                    let _ = append_session_stream(state, &workspace_id_out, session_out_num, &text);
                 }
                 Err(_) => break,
             }
@@ -127,7 +125,7 @@ pub(crate) fn agent_start(
         }
         emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
         let state: State<AppState> = state_handle.state();
-        let _ = set_session_status(&state, &workspace_id, session_id_num, SessionStatus::Idle);
+        let _ = set_session_status(state, &workspace_id, session_id_num, SessionStatus::Idle);
         if let Ok(mut agents) = state.agents.lock() {
             agents.remove(&key);
         };
@@ -136,7 +134,6 @@ pub(crate) fn agent_start(
     Ok(AgentStartResult { started: true })
 }
 
-#[tauri::command]
 pub(crate) fn agent_send(
     workspace_id: String,
     session_id: String,
@@ -159,7 +156,7 @@ pub(crate) fn agent_send(
         handle.flush().map_err(|e| e.to_string())?;
         if let Ok(session_id_num) = session_id.parse::<u64>() {
             let _ = update_workspace_session(
-                &state,
+                state,
                 &workspace_id,
                 session_id_num,
                 SessionPatch {
@@ -182,7 +179,6 @@ pub(crate) fn agent_send(
     }
 }
 
-#[tauri::command]
 pub(crate) fn agent_stop(
     workspace_id: String,
     session_id: String,
@@ -202,7 +198,7 @@ pub(crate) fn agent_stop(
     drop(agents);
     if let Ok(session_id_num) = session_id.parse::<u64>() {
         let _ = set_session_status(
-            &state,
+            state,
             &workspace_id,
             session_id_num,
             SessionStatus::Interrupted,
@@ -211,7 +207,6 @@ pub(crate) fn agent_stop(
     Ok(())
 }
 
-#[tauri::command]
 pub(crate) fn agent_resize(
     workspace_id: String,
     session_id: String,

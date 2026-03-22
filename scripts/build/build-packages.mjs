@@ -4,9 +4,9 @@ import {
   MAIN_PACKAGE,
   NPM_STAGE_ROOT,
   resolvePlatformPackageMeta,
-  SERVER_TARGET_DIR,
   WEB_DIST_DIR,
 } from '../lib/package-matrix.mjs';
+import { resolveServerBinaryPath } from '../lib/server-build.mjs';
 
 const packageMeta = resolvePlatformPackageMeta();
 if (!packageMeta) {
@@ -14,7 +14,7 @@ if (!packageMeta) {
 }
 
 const binaryName = process.platform === 'win32' ? 'coder-studio.exe' : 'coder-studio';
-const binarySource = path.join(SERVER_TARGET_DIR, 'release', binaryName);
+const binarySource = resolveServerBinaryPath();
 const distSource = WEB_DIST_DIR;
 const packageRoot = packageMeta.stageDir;
 const binaryTarget = path.join(packageRoot, 'bin', binaryName);

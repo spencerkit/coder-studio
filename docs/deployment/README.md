@@ -145,7 +145,7 @@ server {
 
 ## 部署步骤
 
-1. 构建应用：`pnpm tauri build`
+1. 构建应用：`pnpm build:web && pnpm build:server && pnpm build:cli`
 2. 在目标机器上安装 CLI：`npm install -g @spencer-kit/coder-studio`
 3. 设置访问口令
 4. 如有需要，再覆盖默认的 `rootPath`、`bindHost`、`bindPort`
@@ -183,7 +183,6 @@ coder-studio start
 - 口令错误 3 次后返回封禁提示
 - 登录成功后可以正常建立 WebSocket
 - 只能浏览 `rootPath` 下的目录
-- `dialog_pick_folder` 在 public mode 下不可用
 - 直接用 `http://localhost:41033` 本地访问时默认不走 public mode
 - 直接用 `http://localhost:41033/?auth=force` 本地访问时会强制显示登录页
 

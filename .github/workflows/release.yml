@@ -16,7 +16,7 @@ concurrency:
 jobs:
   preflight:
     name: Release Preflight
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             package_slug: coder-studio-linux-x64
           - os: macos-latest
             package_slug: coder-studio-darwin-arm64
@@ -52,20 +52,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - if: startsWith(matrix.os, 'ubuntu')
-        name: Install Linux runtime dependencies
+        name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             curl \
             file \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            librsvg2-dev \
-            patchelf \
+            musl-tools \
             wget
       - uses: dtolnay/rust-toolchain@stable
+      - if: startsWith(matrix.os, 'ubuntu')
+        name: Install Linux musl target
+        run: rustup target add x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/server -> .build/server/target
@@ -75,6 +74,9 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
+      - if: startsWith(matrix.os, 'ubuntu')
+        name: Use Linux musl release target
+        run: echo "CODER_STUDIO_RUST_TARGET=x86_64-unknown-linux-musl" >> "$GITHUB_ENV"
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm release:check
       - run: 'node -e "require(''fs'').mkdirSync(''.artifacts'', { recursive: true })"'
@@ -94,28 +96,32 @@ jobs:
     needs:
       - preflight
       - publish-platform
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install Linux runtime dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             curl \
             file \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            librsvg2-dev \
-            patchelf \
+            musl-tools \
             wget
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux musl target
+        run: rustup target add x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/server -> .build/server/target
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
+      - name: Use Linux musl release target
+        run: echo "CODER_STUDIO_RUST_TARGET=x86_64-unknown-linux-musl" >> "$GITHUB_ENV"
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm release:check
       - run: 'node -e "require(''fs'').mkdirSync(''.artifacts'', { recursive: true })"'
@@ -135,7 +141,7 @@ jobs:
     needs:
       - publish-platform
       - publish-main
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

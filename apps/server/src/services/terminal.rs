@@ -1,11 +1,10 @@
 use crate::*;
 
-#[tauri::command]
 pub(crate) fn terminal_create(
     workspace_id: String,
     cwd: String,
     target: ExecTarget,
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<TerminalInfo, String> {
     let terminal_id = {
@@ -86,7 +85,6 @@ pub(crate) fn terminal_create(
     })
 }
 
-#[tauri::command]
 pub(crate) fn terminal_write(
     workspace_id: String,
     terminal_id: u64,
@@ -108,7 +106,6 @@ pub(crate) fn terminal_write(
     }
 }
 
-#[tauri::command]
 pub(crate) fn terminal_resize(
     workspace_id: String,
     terminal_id: u64,
@@ -130,7 +127,6 @@ pub(crate) fn terminal_resize(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub(crate) fn terminal_close(
     workspace_id: String,
     terminal_id: u64,

@@ -14,7 +14,6 @@ pub(crate) fn git_status_label(code: char) -> &'static str {
     }
 }
 
-#[tauri::command]
 pub(crate) fn git_status(path: String, target: ExecTarget) -> Result<GitStatus, String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     let branch = run_cmd(
@@ -42,7 +41,6 @@ pub(crate) fn git_status(path: String, target: ExecTarget) -> Result<GitStatus, 
     })
 }
 
-#[tauri::command]
 pub(crate) fn git_diff(path: String, target: ExecTarget) -> Result<String, String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     if git_has_head(&resolved, &target) {
@@ -55,14 +53,12 @@ pub(crate) fn git_diff(path: String, target: ExecTarget) -> Result<String, Strin
     ]))
 }
 
-#[tauri::command]
 pub(crate) fn git_changes(path: String, target: ExecTarget) -> Result<Vec<GitChangeEntry>, String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     let raw = run_cmd(&target, &resolved, &["git", "status", "--porcelain"]).unwrap_or_default();
     Ok(parse_git_changes(&raw))
 }
 
-#[tauri::command]
 pub(crate) fn git_diff_file(
     path: String,
     target: ExecTarget,
@@ -86,7 +82,6 @@ pub(crate) fn git_diff_file(
     }
 }
 
-#[tauri::command]
 pub(crate) fn git_file_diff_payload(
     path: String,
     target: ExecTarget,
@@ -131,13 +126,11 @@ pub(crate) fn git_file_diff_payload(
     })
 }
 
-#[tauri::command]
 pub(crate) fn git_stage_all(path: String, target: ExecTarget) -> Result<(), String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     run_cmd(&target, &resolved, &["git", "add", "-A"]).map(|_| ())
 }
 
-#[tauri::command]
 pub(crate) fn git_stage_file(
     path: String,
     target: ExecTarget,
@@ -150,7 +143,6 @@ pub(crate) fn git_stage_file(
         .map_err(|error| format!("{} (input: {}, resolved: {})", error, file_path, relative))
 }
 
-#[tauri::command]
 pub(crate) fn git_unstage_all(path: String, target: ExecTarget) -> Result<(), String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     if git_has_head(&resolved, &target) {
@@ -160,7 +152,6 @@ pub(crate) fn git_unstage_all(path: String, target: ExecTarget) -> Result<(), St
     }
 }
 
-#[tauri::command]
 pub(crate) fn git_unstage_file(
     path: String,
     target: ExecTarget,
@@ -187,7 +178,6 @@ pub(crate) fn git_unstage_file(
     }
 }
 
-#[tauri::command]
 pub(crate) fn git_discard_all(path: String, target: ExecTarget) -> Result<(), String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     if git_has_head(&resolved, &target) {
@@ -199,7 +189,6 @@ pub(crate) fn git_discard_all(path: String, target: ExecTarget) -> Result<(), St
     Ok(())
 }
 
-#[tauri::command]
 pub(crate) fn git_discard_file(
     path: String,
     target: ExecTarget,
@@ -253,7 +242,6 @@ pub(crate) fn git_discard_file(
     }
 }
 
-#[tauri::command]
 pub(crate) fn git_commit(
     path: String,
     target: ExecTarget,
@@ -267,7 +255,6 @@ pub(crate) fn git_commit(
     run_cmd(&target, &resolved, &["git", "commit", "-m", trimmed])
 }
 
-#[tauri::command]
 pub(crate) fn worktree_list(path: String, target: ExecTarget) -> Result<Vec<WorktreeInfo>, String> {
     let resolved = resolve_git_repo_path(&path, &target)?;
     let raw = run_cmd(

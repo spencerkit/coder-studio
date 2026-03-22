@@ -34,7 +34,7 @@ pub(crate) async fn ws_handler(
     ws.on_upgrade(move |socket| ws_session(socket, state.app))
 }
 
-pub(crate) async fn ws_session(mut socket: WebSocket, app: tauri::AppHandle) {
+pub(crate) async fn ws_session(mut socket: WebSocket, app: AppHandle) {
     let state: State<AppState> = app.state();
     let mut rx = state.transport_events.subscribe();
 
@@ -93,7 +93,7 @@ pub(crate) fn terminal_key(workspace_id: &str, terminal_id: u64) -> String {
     format!("{}:{}", workspace_id, terminal_id)
 }
 
-pub(crate) fn emit_transport_event(app: &tauri::AppHandle, event: &str, payload: Value) {
+pub(crate) fn emit_transport_event(app: &AppHandle, event: &str, payload: Value) {
     let state: State<AppState> = app.state();
     let _ = state.transport_events.send(TransportEvent {
         event: event.to_string(),
@@ -102,7 +102,7 @@ pub(crate) fn emit_transport_event(app: &tauri::AppHandle, event: &str, payload:
 }
 
 pub(crate) fn emit_agent(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     workspace_id: &str,
     session_id: &str,
     kind: &str,
@@ -129,12 +129,7 @@ pub(crate) fn emit_agent(
     );
 }
 
-pub(crate) fn emit_terminal(
-    app: &tauri::AppHandle,
-    workspace_id: &str,
-    terminal_id: u64,
-    data: &str,
-) {
+pub(crate) fn emit_terminal(app: &AppHandle, workspace_id: &str, terminal_id: u64, data: &str) {
     emit_transport_event(
         app,
         "terminal://event",
@@ -155,7 +150,7 @@ pub(crate) fn emit_terminal(
 }
 
 pub(crate) fn emit_agent_lifecycle(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     workspace_id: &str,
     session_id: &str,
     kind: &str,

@@ -34,13 +34,11 @@ export async function collectReleaseVersionState(rootDir = ROOT) {
     })),
   );
   const cargoToml = await fs.readFile(path.join(SERVER_APP_DIR, 'Cargo.toml'), 'utf8');
-  const tauriConfig = await readJson(path.join(SERVER_APP_DIR, 'tauri.conf.json'));
 
   return {
     rootVersion: rootPackage.version,
     mainVersion: mainPackage.version,
     cargoVersion: readPackageVersionFromCargoToml(cargoToml),
-    tauriVersion: tauriConfig.version,
     optionalDependencies: mainPackage.optionalDependencies ?? {},
     platformPackages,
   };
@@ -55,9 +53,6 @@ export function validateReleaseVersionState(state) {
   }
   if (state.cargoVersion !== expectedVersion) {
     errors.push(`Cargo.toml version ${state.cargoVersion} does not match main package version ${expectedVersion}`);
-  }
-  if (state.tauriVersion !== expectedVersion) {
-    errors.push(`tauri.conf.json version ${state.tauriVersion} does not match main package version ${expectedVersion}`);
   }
 
   const optionalDependencyNames = Object.keys(state.optionalDependencies).sort();

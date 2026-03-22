@@ -1,23 +1,18 @@
-# Tauri 命令清单
+# 传输命令清单
 
 [English](tauri-commands.en.md)
 
-本文档整理当前 Tauri 命令、调用路径，以及它们在现有产品中的使用范围。
+本文档整理当前传输命令、调用路径，以及它们在现有产品中的使用范围。文件名沿用历史命名，但当前运行时已经不再依赖 Tauri 壳层。
 
 ## 1. 调用路径
 
-当前前端并不是只依赖 Tauri `invoke`。
-
-实际顺序是：
-
-1. 优先通过 HTTP RPC 调用 `/api/rpc/:command`
-2. 如果 HTTP 不可用，再回退到 `@tauri-apps/api/core.invoke`
+当前前端统一通过 HTTP RPC 调用 `/api/rpc/:command`。
 
 相关代码：
 
 - 前端 RPC 客户端：`apps/web/src/services/http/client.ts`
 - 后端命令分发：`apps/server/src/command/http.rs`
-- Tauri 注册列表：`apps/server/src/main.rs`
+- server 入口：`apps/server/src/main.rs`
 
 流式事件不走 RPC 返回值，而走 WebSocket：
 
@@ -89,12 +84,9 @@
 | `file_save` | 保存文件 | 已使用 |
 | `filesystem_roots` | 获取可浏览根目录 | 间接使用 |
 | `filesystem_list` | 浏览服务端目录 | 已使用 |
-| `dialog_pick_folder` | 打开系统目录选择对话框 | 当前主流程未明显使用 |
-
 说明：
 
 - 当前本地目录选择主流程依赖 `filesystem_list` 驱动的服务端目录浏览器。
-- `dialog_pick_folder` 虽然存在，但不是当前 onboarding 主路径。
 
 ## 6. 系统与运行时探测
 

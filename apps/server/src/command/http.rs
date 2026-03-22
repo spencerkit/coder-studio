@@ -338,11 +338,11 @@ fn require_optional_path_access(
 }
 
 fn require_workspace_access(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     workspace_id: &str,
     authorized: &AuthorizedRequest,
 ) -> Result<(String, ExecTarget), RpcError> {
-    let context = workspace_access_context(&app.state(), workspace_id).map_err(rpc_bad_request)?;
+    let context = workspace_access_context(app.state(), workspace_id).map_err(rpc_bad_request)?;
     require_path_access(&context.0, &context.1, authorized)?;
     Ok(context)
 }
@@ -390,7 +390,7 @@ fn filter_bootstrap_for_public_mode(
 }
 
 fn dispatch_rpc(
-    app: &tauri::AppHandle,
+    app: &AppHandle,
     command: &str,
     payload: Value,
     authorized: &AuthorizedRequest,
@@ -659,14 +659,6 @@ fn dispatch_rpc(
                 command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "dialog_pick_folder" => {
-            let _req: EmptyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            if authorized.request.public_mode {
-                return Err(rpc_forbidden("dialog_disabled_in_public_mode"));
-            }
-            serde_json::to_value(dialog_pick_folder(app.clone()).map_err(rpc_bad_request)?)
-                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "claude_slash_skills" => {
             let req: ClaudeSlashSkillsRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -1006,6 +998,12 @@ pub(crate) async fn health_handler() -> impl IntoResponse {
     }))
 }
 
+pub(crate) struct TransportServer {
+    pub endpoint: String,
+    pub listener: tokio::net::TcpListener,
+    pub router: Router,
+}
+
 pub(crate) fn frontend_dist_dir() -> PathBuf {
     if let Ok(path) = std::env::var("CODER_STUDIO_DIST_DIR") {
         return PathBuf::from(path);
@@ -1052,7 +1050,7 @@ pub(crate) async fn shutdown_handler(
     }
 
     let app = state.app.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         app.exit(0);
     });
@@ -1060,7 +1058,7 @@ pub(crate) async fn shutdown_handler(
     json_success(json!({ "ok": true }))
 }
 
-pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
+pub(crate) fn build_transport_router(app: &AppHandle) -> Router {
     let shared = HttpServerState { app: app.clone() };
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1101,7 +1099,7 @@ pub(crate) fn build_transport_router(app: &tauri::AppHandle) -> Router {
     }
 }
 
-pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, String> {
+pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer, String> {
     let (bind_host, bind_port) = if cfg!(debug_assertions) {
         ("127.0.0.1".to_string(), DEV_BACKEND_PORT)
     } else {
@@ -1118,16 +1116,10 @@ pub(crate) fn start_transport_server(app: &tauri::AppHandle) -> Result<String, S
         *guard = Some(endpoint.clone());
     }
     let router = build_transport_router(app);
-    tauri::async_runtime::spawn(async move {
-        let listener = match tokio::net::TcpListener::from_std(listener) {
-            Ok(listener) => listener,
-            Err(_) => return,
-        };
-        let _ = axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-        )
-        .await;
-    });
-    Ok(endpoint)
+    let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
+    Ok(TransportServer {
+        endpoint,
+        listener,
+        router,
+    })
 }

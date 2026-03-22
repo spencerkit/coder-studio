@@ -73,7 +73,7 @@ fn normalize_claude_lifecycle(payload: &Value) -> Option<(&'static str, String)>
     Some((normalized, hook_event.to_string()))
 }
 
-fn handle_claude_hook_payload(app: &tauri::AppHandle, envelope: ClaudeHookEnvelope) {
+fn handle_claude_hook_payload(app: &AppHandle, envelope: ClaudeHookEnvelope) {
     if let Some(claude_session_id) = envelope
         .payload
         .get("session_id")
@@ -85,7 +85,7 @@ fn handle_claude_hook_payload(app: &tauri::AppHandle, envelope: ClaudeHookEnvelo
         let state: State<AppState> = app.state();
         if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
             let _ = set_session_claude_id(
-                &state,
+                state,
                 &envelope.workspace_id,
                 internal_session_id,
                 claude_session_id,
@@ -106,7 +106,7 @@ fn handle_claude_hook_payload(app: &tauri::AppHandle, envelope: ClaudeHookEnvelo
     }
 }
 
-pub(crate) fn start_claude_hook_receiver(app: &tauri::AppHandle) -> Result<(), String> {
+pub(crate) fn start_claude_hook_receiver(app: &AppHandle) -> Result<(), String> {
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     let endpoint = format!(
         "http://127.0.0.1:{}/claude-hook",
@@ -149,7 +149,7 @@ pub(crate) fn start_claude_hook_receiver(app: &tauri::AppHandle) -> Result<(), S
     Ok(())
 }
 
-pub(crate) fn current_hook_endpoint(app: &tauri::AppHandle) -> Result<String, String> {
+pub(crate) fn current_hook_endpoint(app: &AppHandle) -> Result<String, String> {
     let state: State<AppState> = app.state();
     let guard = state.hook_endpoint.lock().map_err(|e| e.to_string())?;
     guard.clone().ok_or("hook_endpoint_not_ready".to_string())

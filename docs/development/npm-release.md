@@ -79,9 +79,9 @@ pnpm release:verify:full
 
 说明：
 
-- `version:check`：校验根包、主包、平台包、`Cargo.toml`、`tauri.conf.json` 版本是否完全一致
+- `version:check`：校验根包、主包、平台包、`Cargo.toml` 版本是否完全一致
 - `build:web`：构建前端到 `.build/web/dist`
-- `build:server`：构建 Rust/Tauri release 二进制到 `.build/server/target`
+- `build:server`：构建 Rust release 二进制到 `.build/server/target`
 - `build:cli`：把 `packages/cli/src` 编译到 `.build/cli`
 - `build:packages`：生成 `.build/stage/npm/coder-studio` 和当前平台的 `.build/stage/npm/<platform>`，分别注入 CLI 编译产物与原生二进制/前端产物
 - `pack:local`：执行 release 构建后，生成本地主包和当前平台包 tarball 到 `.artifacts/`
@@ -113,7 +113,6 @@ git commit -m "chore(release): version packages"
 - `packages/cli/package.json`
 - `templates/npm/platform-packages/*/package.json`
 - `apps/server/Cargo.toml`
-- `apps/server/tauri.conf.json`
 - 根目录 `package.json`
 
 `changeset:version` 现在会在同步后自动执行 `pnpm version:check`，确保版本没有漂移。

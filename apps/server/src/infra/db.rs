@@ -552,7 +552,7 @@ pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Res
 }
 
 pub(crate) fn with_db<T>(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     f: impl FnOnce(&Connection) -> Result<T, String>,
 ) -> Result<T, String> {
     let guard = state.db.lock().map_err(|e| e.to_string())?;
@@ -561,20 +561,20 @@ pub(crate) fn with_db<T>(
 }
 
 pub(crate) fn workbench_bootstrap(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> Result<WorkbenchBootstrap, String> {
     with_db(state, build_bootstrap_from_conn)
 }
 
 pub(crate) fn workspace_snapshot(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
     with_db(state, |conn| build_snapshot_from_conn(conn, workspace_id))
 }
 
 pub(crate) fn workspace_access_context(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<(String, ExecTarget), String> {
     with_db(state, |conn| {
@@ -584,7 +584,7 @@ pub(crate) fn workspace_access_context(
 }
 
 pub(crate) fn launch_workspace_record(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     source: WorkspaceSource,
     project_path: String,
     idle_policy: IdlePolicy,
@@ -659,7 +659,7 @@ fn create_workspace_session_from_template(
 }
 
 pub(crate) fn create_workspace_session(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     mode: SessionMode,
 ) -> Result<SessionInfo, String> {
@@ -706,7 +706,7 @@ pub(crate) fn create_workspace_session(
 }
 
 pub(crate) fn update_workspace_session(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
     patch: SessionPatch,
@@ -756,7 +756,7 @@ pub(crate) fn update_workspace_session(
 }
 
 pub(crate) fn switch_workspace_session(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
 ) -> Result<SessionInfo, String> {
@@ -776,7 +776,7 @@ pub(crate) fn switch_workspace_session(
 }
 
 pub(crate) fn archive_workspace_session(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
 ) -> Result<ArchiveEntry, String> {
@@ -800,7 +800,7 @@ pub(crate) fn archive_workspace_session(
 }
 
 pub(crate) fn update_workspace_idle_policy(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     policy: IdlePolicy,
 ) -> Result<(), String> {
@@ -815,7 +815,7 @@ pub(crate) fn update_workspace_idle_policy(
 }
 
 pub(crate) fn activate_workspace_ui(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkbenchUiState, String> {
     with_db(state, |conn| {
@@ -826,7 +826,7 @@ pub(crate) fn activate_workspace_ui(
 }
 
 pub(crate) fn close_workspace_ui(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkbenchUiState, String> {
     with_db(state, |conn| {
@@ -843,7 +843,7 @@ pub(crate) fn close_workspace_ui(
 }
 
 pub(crate) fn update_workbench_layout(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     layout: WorkbenchLayout,
 ) -> Result<WorkbenchUiState, String> {
     with_db(state, |conn| {
@@ -855,7 +855,7 @@ pub(crate) fn update_workbench_layout(
 }
 
 pub(crate) fn patch_workspace_view_state(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     patch: WorkspaceViewPatch,
 ) -> Result<WorkspaceViewState, String> {
@@ -874,7 +874,7 @@ pub(crate) fn patch_workspace_view_state(
 }
 
 pub(crate) fn append_session_stream(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
     chunk: &str,
@@ -898,7 +898,7 @@ pub(crate) fn append_session_stream(
 }
 
 pub(crate) fn set_session_status(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
     status: SessionStatus,
@@ -919,7 +919,7 @@ pub(crate) fn set_session_status(
 }
 
 pub(crate) fn set_session_claude_id(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
     claude_session_id: String,
@@ -939,7 +939,7 @@ pub(crate) fn set_session_claude_id(
 }
 
 pub(crate) fn load_session(
-    state: &State<'_, AppState>,
+    state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
 ) -> Result<SessionInfo, String> {

@@ -16,7 +16,7 @@ concurrency:
 jobs:
   version-consistency:
     name: Version Consistency
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-22.04
           - macos-latest
           - windows-latest
     steps:
@@ -50,29 +50,28 @@ jobs:
 
   verify-linux:
     name: Verify Linux Runtime
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: version-consistency
     env:
       CODER_STUDIO_START_TIMEOUT_MS: 45000
+      CODER_STUDIO_RUST_TARGET: x86_64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
-      - name: Install Linux runtime dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             curl \
             file \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            librsvg2-dev \
-            patchelf \
+            musl-tools \
             xvfb \
             wget
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Install Linux musl target
+        run: rustup target add x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/server -> .build/server/target

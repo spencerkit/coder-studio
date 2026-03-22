@@ -145,7 +145,7 @@ server {
 
 ## Deployment Steps
 
-1. Build the app: `pnpm tauri build`
+1. Build the app: `pnpm build:web && pnpm build:server && pnpm build:cli`
 2. Install the CLI on the target machine: `npm install -g @spencer-kit/coder-studio`
 3. Set the access passphrase
 4. Override `rootPath`, `bindHost`, or `bindPort` only if you need non-default values
@@ -183,7 +183,6 @@ coder-studio start
 - 3 wrong passphrase attempts trigger the IP block response
 - after login, WebSocket connections establish normally
 - only directories inside `rootPath` are accessible
-- `dialog_pick_folder` is unavailable in public mode
 - direct local access via `http://localhost:41033` defaults to non-public mode
 - direct local access via `http://localhost:41033/?auth=force` forces the login screen
 
