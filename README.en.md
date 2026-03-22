@@ -217,6 +217,7 @@ The following should not be described as fully shipped user-facing functionality
 
 Product docs:
 
+- Changelog: `CHANGELOG.md`
 - Chinese PRD: `docs/PRD.md`
 - English PRD: `docs/PRD.en.md`
 
