@@ -1,4 +1,5 @@
 import type { AgentStartResult } from "../../types/app";
+import type { TerminalGridSize } from "../../shared/utils/terminal";
 import { invokeRpc } from "./client";
 
 export const startAgent = (args: {
@@ -6,6 +7,8 @@ export const startAgent = (args: {
   sessionId: string;
   provider: "claude";
   command: string;
+  cols?: TerminalGridSize["cols"];
+  rows?: TerminalGridSize["rows"];
 }) => invokeRpc<AgentStartResult>("agent_start", args);
 
 export const sendAgentInput = (workspaceId: string, sessionId: string, input: string, appendNewline: boolean) =>

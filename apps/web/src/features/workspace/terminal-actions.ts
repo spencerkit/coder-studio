@@ -1,5 +1,6 @@
 import type { MutableRefObject } from "react";
 import { formatTerminalTitle, type Locale, type Translator } from "../../i18n";
+import type { TerminalGridSize } from "../../shared/utils/terminal";
 import type { Tab } from "../../state/workbench";
 import {
   closeTerminal as closeTerminalRequest,
@@ -55,6 +56,7 @@ type AddWorkspaceTerminalArgs = {
   activeSessionId: string;
   createToastId: () => string;
   t: Translator;
+  initialSize?: TerminalGridSize | null;
 };
 
 export const addWorkspaceTerminal = async ({
@@ -66,6 +68,7 @@ export const addWorkspaceTerminal = async ({
   activeSessionId,
   createToastId,
   t,
+  initialSize,
 }: AddWorkspaceTerminalArgs) => {
   const activeProject = tab.project;
   if (!activeProject?.path) {
@@ -74,7 +77,7 @@ export const addWorkspaceTerminal = async ({
   }
 
   const info = await withServiceFallback<{ id: number; output: string }>(
-    () => createTerminalRequest(tab.id, activeProject.path, activeProject.target),
+    () => createTerminalRequest(tab.id, activeProject.path, activeProject.target, initialSize),
     { id: Date.now(), output: "" },
   );
 

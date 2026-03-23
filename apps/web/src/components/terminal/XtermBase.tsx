@@ -3,6 +3,7 @@ import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
+import { XTERM_FONT_FAMILY, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
 
 type XtermBaseMode = "interactive" | "readonly";
 
@@ -93,24 +94,6 @@ const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => 
   term.reset();
   if (next) term.write(next);
 };
-
-const XTERM_SCROLLBAR_WIDTH = 3;
-const XTERM_FONT_FAMILY = [
-  "\"JetBrains Mono\"",
-  "\"Symbols Nerd Font Mono\"",
-  "\"MesloLGS NF\"",
-  "\"CaskaydiaMono Nerd Font Mono\"",
-  "\"SauceCodePro Nerd Font Mono\"",
-  "\"DejaVu Sans Mono\"",
-  "\"Noto Sans Mono\"",
-  "\"Noto Sans Mono CJK SC\"",
-  "\"Noto Sans Symbols 2\"",
-  "\"Noto Color Emoji\"",
-  "\"Cascadia Mono\"",
-  "ui-monospace",
-  "\"SFMono-Regular\"",
-  "monospace",
-].join(", ");
 
 const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
   if (!mount) return null;
@@ -215,6 +198,29 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     observer.observe(mount);
     return () => observer.disconnect();
   }, [fitAndReport]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !("fonts" in document)) return;
+    const fontSet = document.fonts;
+    let cancelled = false;
+
+    const refit = () => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          fitAndReport();
+        }
+      });
+    };
+
+    void fontSet.ready.then(refit).catch(() => undefined);
+    fontSet.addEventListener?.("loadingdone", refit);
+
+    return () => {
+      cancelled = true;
+      fontSet.removeEventListener?.("loadingdone", refit);
+    };
+  }, [fitAndReport, fontSize]);
 
   useEffect(() => {
     const term = termRef.current;

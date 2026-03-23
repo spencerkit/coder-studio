@@ -162,6 +162,7 @@ import {
 } from "../../shared/app/settings";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
+import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -305,6 +306,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
@@ -391,6 +393,27 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       terminalFontSize: Number.parseInt(styles.getPropertyValue("--terminal-font-size"), 10) || 12
     };
   }, [theme]);
+  const measureWorkspaceTerminalSize = useCallback(
+    () => estimateTerminalGrid(shellTerminalViewportRef.current, editorMetrics.terminalFontSize),
+    [editorMetrics.terminalFontSize],
+  );
+  const resolveAgentInitialSize = useCallback((paneId?: string | null): TerminalGridSize | null => {
+    if (!paneId) return null;
+
+    const liveSize = agentPaneSizeRef.current.get(paneId)
+      ?? agentTerminalRefs.current.get(paneId)?.size();
+    if (liveSize) {
+      return liveSize;
+    }
+
+    const draftInput = draftPromptInputRefs.current.get(paneId);
+    const draftPane = draftInput?.closest(".agent-pane-body");
+    if (!(draftPane instanceof HTMLElement)) {
+      return null;
+    }
+
+    return estimateTerminalGrid(draftPane, editorMetrics.terminalFontSize);
+  }, [editorMetrics.terminalFontSize]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
     const next = updater(stateRef.current);
@@ -1065,6 +1088,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const tab = stateRef.current.tabs.find((item) => item.id === workspaceId);
     if (!tab?.project?.path || tab.terminals.length > 0) return;
     if (autoTerminalWorkspaceIdsRef.current.has(workspaceId)) return;
+    if (stateRef.current.activeTabId !== workspaceId) return;
+    if (!stateRef.current.layout.showTerminalPanel || isCodeExpanded) return;
+
+    const initialSize = measureWorkspaceTerminalSize();
+    if (!initialSize) return;
+
     autoTerminalWorkspaceIdsRef.current.add(workspaceId);
     const created = await addWorkspaceTerminal({
       tab,
@@ -1075,11 +1104,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       activeSessionId: tab.activeSessionId,
       createToastId: () => createId("toast"),
       t,
+      initialSize,
     });
     if (!created) {
       autoTerminalWorkspaceIdsRef.current.delete(workspaceId);
     }
-  }, [locale, t]);
+  }, [isCodeExpanded, locale, measureWorkspaceTerminalSize, t]);
 
   const switchWorkspaceLocally = (workspaceId: string) => {
     updateState((current) => {
@@ -1345,11 +1375,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return tab.agent.command.replace("{path}", path);
   };
 
-  const agentStartMaybe = async (tab: Tab, session: Session) => {
+  const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
     const project = tab.project;
     if (!project?.path) return false;
     const command = buildAgentCommand(tab);
     const target = project.target;
+    const initialSize = resolveAgentInitialSize(paneId);
     const availability = await withServiceFallback<CommandAvailability | null>(
       () => checkCommandAvailability(command, target, project.path),
       null
@@ -1367,7 +1398,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       workspaceId: tab.id,
       sessionId: session.id,
       provider: tab.agent.provider,
-      command
+      command,
+      cols: initialSize?.cols,
+      rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));
     if (!result) {
       clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
@@ -1698,6 +1731,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const onAddTerminal = async () => {
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const initialSize = measureWorkspaceTerminalSize();
     await addWorkspaceTerminal({
       tab: currentTab,
       locale,
@@ -1707,6 +1741,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       activeSessionId: activeSession.id,
       createToastId: () => createId("toast"),
       t,
+      initialSize,
     });
   };
 
@@ -1834,7 +1869,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!tabSnapshot || !sessionSnapshot) return null;
 
     if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot, paneId);
       if (!started) return null;
       if (started.started) {
         syncAgentPaneSize(agentRuntimeRefs, paneId, tabSnapshot.id, sessionSnapshot.id);
@@ -2003,8 +2038,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
+    if (!showTerminalPanel || isCodeExpanded) return;
     void ensureWorkspaceTerminal(activeTab.id);
-  }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal]);
+  }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal, isCodeExpanded, showTerminalPanel]);
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
@@ -2348,6 +2384,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         id: term.id,
         title: displayTerminalTitle(term.title)
       }))}
+      terminalViewportRef={shellTerminalViewportRef}
       shellTerminalRef={shellTerminalRef}
       theme={theme}
       fontSize={editorMetrics.terminalFontSize}

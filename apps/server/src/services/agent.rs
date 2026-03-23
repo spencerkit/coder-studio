@@ -1,10 +1,24 @@
 use crate::*;
 
+const DEFAULT_PTY_COLS: u16 = 120;
+const DEFAULT_PTY_ROWS: u16 = 30;
+
+fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
+    PtySize {
+        rows: rows.filter(|value| *value > 0).unwrap_or(DEFAULT_PTY_ROWS),
+        cols: cols.filter(|value| *value > 0).unwrap_or(DEFAULT_PTY_COLS),
+        pixel_width: 0,
+        pixel_height: 0,
+    }
+}
+
 pub(crate) fn agent_start(
     workspace_id: String,
     session_id: String,
     provider: String,
     command: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AgentStartResult, String> {
@@ -36,12 +50,7 @@ pub(crate) fn agent_start(
     };
     let pty_system = native_pty_system();
     let pair = pty_system
-        .openpty(PtySize {
-            rows: 30,
-            cols: 120,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
+        .openpty(initial_pty_size(cols, rows))
         .map_err(|e| e.to_string())?;
     let mut cmd = CommandBuilder::new(program);
     for arg in args {

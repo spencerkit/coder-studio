@@ -19,6 +19,7 @@ type WorkspaceTerminalFeatureProps = {
   progressTone: "live" | "steady" | "idle";
   activeTerminal?: ActiveTerminal;
   terminals: TerminalOption[];
+  terminalViewportRef: RefObject<HTMLDivElement | null>;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
   theme: "dark";
   fontSize: number;
@@ -38,6 +39,7 @@ export const WorkspaceTerminalFeature = ({
   progressTone,
   activeTerminal,
   terminals,
+  terminalViewportRef,
   shellTerminalRef,
   theme,
   fontSize,
@@ -58,6 +60,7 @@ export const WorkspaceTerminalFeature = ({
       progressTone={progressTone}
       activeTerminalId={activeTerminal?.id}
       terminals={terminals}
+      terminalViewportRef={terminalViewportRef}
       terminalContent={activeTerminal ? (
         <ShellTerminal
           ref={shellTerminalRef}

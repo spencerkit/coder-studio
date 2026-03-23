@@ -153,6 +153,8 @@ struct TerminalCreateRequest {
     workspace_id: String,
     cwd: String,
     target: ExecTarget,
+    cols: Option<u16>,
+    rows: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -182,6 +184,8 @@ struct AgentStartRequest {
     session_id: String,
     provider: String,
     command: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -675,6 +679,8 @@ fn dispatch_rpc(
                     req.workspace_id,
                     req.cwd,
                     req.target,
+                    req.cols,
+                    req.rows,
                     app.clone(),
                     app.state(),
                 )
@@ -718,6 +724,8 @@ fn dispatch_rpc(
                     req.session_id,
                     req.provider,
                     req.command,
+                    req.cols,
+                    req.rows,
                     app.clone(),
                     app.state(),
                 )
