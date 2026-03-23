@@ -3,7 +3,8 @@ import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
-import { XTERM_FONT_FAMILY, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
+import type { TerminalCompatibilityMode } from "../../types/app";
+import { resetTerminalMeasurementCache, resolveTerminalFontFamily, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
 
 type XtermBaseMode = "interactive" | "readonly";
 
@@ -19,6 +20,7 @@ export type XtermBaseProps = {
   themeIdentity?: string;
   theme: "dark";
   fontSize: number;
+  compatibilityMode?: TerminalCompatibilityMode;
   mode?: XtermBaseMode;
   className?: string;
   sanitizeOutput?: (value: string) => string;
@@ -108,6 +110,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   themeIdentity,
   theme,
   fontSize,
+  compatibilityMode = "standard",
   mode = "interactive",
   className = "agent-pane-xterm",
   sanitizeOutput,
@@ -136,9 +139,15 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     fitRef.current?.fit();
     emitSize();
   }, [emitSize]);
+  const scheduleFit = useCallback(() => {
+    requestAnimationFrame(() => {
+      fitAndReport();
+    });
+  }, [fitAndReport]);
 
   useEffect(() => {
     const mount = mountRef.current;
+    const fontFamily = resolveTerminalFontFamily(compatibilityMode);
     if (!mount) return;
     if (!termRef.current) {
       const term = new XTerminal({
@@ -147,7 +156,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
         customGlyphs: true,
         disableStdin: mode === "readonly",
         cursorBlink: mode === "interactive",
-        fontFamily: XTERM_FONT_FAMILY,
+        fontFamily,
         fontSize,
         rescaleOverlappingGlyphs: true,
         overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
@@ -169,35 +178,83 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       return;
     }
     fitAndReport();
-  }, [fitAndReport, fontSize, mode]);
+  }, [compatibilityMode, fitAndReport, fontSize, mode]);
 
   useEffect(() => {
     const mount = mountRef.current;
     const term = termRef.current;
     if (!mount || !term) return;
+    const fontFamily = resolveTerminalFontFamily(compatibilityMode);
     term.options = {
       allowProposedApi: true,
       customGlyphs: true,
       disableStdin: mode === "readonly",
       cursorBlink: mode === "interactive",
-      fontFamily: XTERM_FONT_FAMILY,
+      fontFamily,
       fontSize,
       rescaleOverlappingGlyphs: true,
       overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
       theme: readTerminalTheme(resolveTerminalThemeSource(mount))
     };
-    requestAnimationFrame(() => fitAndReport());
-  }, [fitAndReport, fontSize, mode, theme, themeIdentity]);
+    scheduleFit();
+  }, [compatibilityMode, fontSize, mode, scheduleFit, theme, themeIdentity]);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
     const observer = new ResizeObserver(() => {
-      fitAndReport();
+      scheduleFit();
     });
     observer.observe(mount);
     return () => observer.disconnect();
-  }, [fitAndReport]);
+  }, [scheduleFit]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    let dprMediaQuery: MediaQueryList | null = null;
+    let removeDprListener = () => {};
+
+    const registerDprListener = () => {
+      removeDprListener();
+      const dpr = window.devicePixelRatio || 1;
+      dprMediaQuery = window.matchMedia(`(resolution: ${dpr}dppx)`);
+      const onChange = () => {
+        scheduleFit();
+        registerDprListener();
+      };
+
+      if (typeof dprMediaQuery.addEventListener === "function") {
+        dprMediaQuery.addEventListener("change", onChange);
+        removeDprListener = () => dprMediaQuery?.removeEventListener("change", onChange);
+        return;
+      }
+
+      dprMediaQuery.addListener(onChange);
+      removeDprListener = () => dprMediaQuery?.removeListener(onChange);
+    };
+
+    const onWindowResize = () => scheduleFit();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleFit();
+      }
+    };
+
+    registerDprListener();
+    window.addEventListener("resize", onWindowResize);
+    window.addEventListener("pageshow", onWindowResize);
+    window.visualViewport?.addEventListener("resize", onWindowResize);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      removeDprListener();
+      window.removeEventListener("resize", onWindowResize);
+      window.removeEventListener("pageshow", onWindowResize);
+      window.visualViewport?.removeEventListener("resize", onWindowResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [scheduleFit]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !("fonts" in document)) return;
@@ -206,11 +263,8 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
 
     const refit = () => {
       if (cancelled) return;
-      requestAnimationFrame(() => {
-        if (!cancelled) {
-          fitAndReport();
-        }
-      });
+      resetTerminalMeasurementCache();
+      scheduleFit();
     };
 
     void fontSet.ready.then(refit).catch(() => undefined);
@@ -220,7 +274,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       cancelled = true;
       fontSet.removeEventListener?.("loadingdone", refit);
     };
-  }, [fitAndReport, fontSize]);
+  }, [fontSize, scheduleFit]);
 
   useEffect(() => {
     const term = termRef.current;

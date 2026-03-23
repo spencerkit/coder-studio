@@ -228,32 +228,108 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
     : t("nativeTarget");
 
 const REQUIRED_RUNTIME_COMMANDS = [
-  { id: "claude", command: "claude" },
   { id: "git", command: "git" },
 ] as const satisfies ReadonlyArray<{
   id: RuntimeRequirementStatus["id"];
   command: string;
 }>;
 
-const serializeExecTarget = (target: ExecTarget) =>
-  target.type === "wsl"
-    ? `wsl:${target.distro?.trim() ?? ""}`
-    : "native";
+type RuntimeRequirementSpec = {
+  id: RuntimeRequirementStatus["id"];
+  command: string;
+  deferred?: boolean;
+  detailText?: string;
+};
 
-const createRuntimeRequirementStatus = (): RuntimeRequirementStatus[] =>
-  REQUIRED_RUNTIME_COMMANDS.map(({ id, command }) => ({
+const parseRuntimeCommandBinary = (command: string) => {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+
+  let token = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+
+  for (const ch of trimmed) {
+    if (escaped) {
+      token += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\" && !inSingle) {
+      escaped = true;
+      continue;
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (ch === "\"" && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (/\s/.test(ch) && !inSingle && !inDouble) {
+      if (token) break;
+      continue;
+    }
+    token += ch;
+  }
+
+  return token.trim();
+};
+
+const commandUsesWorkspaceRelativePath = (binary: string) => {
+  return binary.startsWith("./")
+    || binary.startsWith("../")
+    || binary.startsWith(".\\")
+    || binary.startsWith("..\\");
+};
+
+const buildRuntimeRequirementSpecs = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
+): RuntimeRequirementSpec[] => {
+  const trimmedAgentCommand = agentCommand.trim();
+  const commandBinary = parseRuntimeCommandBinary(trimmedAgentCommand);
+  const claudeRequirement: RuntimeRequirementSpec = {
+    id: "claude",
+    command: trimmedAgentCommand,
+  };
+
+  if (commandBinary.includes("{path}") || commandUsesWorkspaceRelativePath(commandBinary)) {
+    claudeRequirement.deferred = true;
+    claudeRequirement.detailText = t("runtimeCheckClaudeDeferredHint");
+  }
+
+  return [claudeRequirement, ...REQUIRED_RUNTIME_COMMANDS];
+};
+
+const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
+  target.type === "wsl"
+    ? `wsl:${target.distro?.trim() ?? ""}:${agentCommand.trim()}`
+    : `native:${agentCommand.trim()}`;
+
+const createRuntimeRequirementStatus = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
+): RuntimeRequirementStatus[] =>
+  buildRuntimeRequirementSpecs(agentCommand, t).map(({ id, command, deferred, detailText }) => ({
     id,
     command,
-    available: null,
+    available: deferred ? true : null,
+    detailText,
   }));
 
 const createRuntimeValidationState = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
   targetKey = "",
   status: RuntimeValidationState["status"] = "idle",
 ): RuntimeValidationState => ({
   status,
   targetKey,
-  requirements: createRuntimeRequirementStatus(),
+  requirements: createRuntimeRequirementStatus(agentCommand, t),
 });
 
 const isTextInputTarget = (target: EventTarget | null) => {
@@ -297,7 +373,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashMenuLoading, setSlashMenuLoading] = useState(false);
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
-  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState());
+  const t = useMemo(() => createTranslator(locale), [locale]);
+  const terminalCompatibilityMode = appSettings.terminalCompatibilityMode;
+  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
+    appSettings.agentCommand,
+    t,
+  ));
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
@@ -337,14 +418,22 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
-  const t = useMemo(() => createTranslator(locale), [locale]);
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
-    const targetKey = serializeExecTarget(target);
+    const targetKey = serializeRuntimeValidationKey(target, appSettings.agentCommand);
+    const requirementSpecs = buildRuntimeRequirementSpecs(appSettings.agentCommand, t);
     const requestId = ++runtimeValidationRequestIdRef.current;
-    setRuntimeValidation(createRuntimeValidationState(targetKey, "checking"));
+    setRuntimeValidation(createRuntimeValidationState(appSettings.agentCommand, t, targetKey, "checking"));
 
     const results = await Promise.all(
-      REQUIRED_RUNTIME_COMMANDS.map(async ({ id, command }) => {
+      requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
+        if (deferred) {
+          return {
+            id,
+            command,
+            available: true,
+            detailText,
+          } satisfies RuntimeRequirementStatus;
+        }
         try {
           const result = await checkCommandAvailability(command, target);
           return {
@@ -353,6 +442,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             available: result.available,
             resolvedPath: result.resolved_path ?? undefined,
             error: result.error ?? undefined,
+            detailText,
           } satisfies RuntimeRequirementStatus;
         } catch (error) {
           return {
@@ -360,6 +450,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             command,
             available: false,
             error: error instanceof Error ? error.message : String(error),
+            detailText,
           } satisfies RuntimeRequirementStatus;
         }
       }),
@@ -380,7 +471,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       targetKey,
       requirements: results,
     });
-  }, []);
+  }, [appSettings.agentCommand, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -394,8 +485,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     };
   }, [theme]);
   const measureWorkspaceTerminalSize = useCallback(
-    () => estimateTerminalGrid(shellTerminalViewportRef.current, editorMetrics.terminalFontSize),
-    [editorMetrics.terminalFontSize],
+    () => estimateTerminalGrid(
+      shellTerminalViewportRef.current,
+      editorMetrics.terminalFontSize,
+      terminalCompatibilityMode,
+    ),
+    [editorMetrics.terminalFontSize, terminalCompatibilityMode],
   );
   const resolveAgentInitialSize = useCallback((paneId?: string | null): TerminalGridSize | null => {
     if (!paneId) return null;
@@ -412,8 +507,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       return null;
     }
 
-    return estimateTerminalGrid(draftPane, editorMetrics.terminalFontSize);
-  }, [editorMetrics.terminalFontSize]);
+    return estimateTerminalGrid(
+      draftPane,
+      editorMetrics.terminalFontSize,
+      terminalCompatibilityMode,
+    );
+  }, [editorMetrics.terminalFontSize, terminalCompatibilityMode]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
     const next = updater(stateRef.current);
@@ -678,12 +777,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!bootstrapReady || !state.overlay.visible) return;
-    const targetKey = serializeExecTarget(state.overlay.target);
+    const targetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
     if (validatedRuntimeTargetsRef.current.has(targetKey)) {
       return;
     }
     void runRuntimeValidation(state.overlay.target);
   }, [
+    appSettings.agentCommand,
     bootstrapReady,
     runRuntimeValidation,
     state.overlay.target.type,
@@ -862,11 +962,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return emptyTabRef.current;
   }, [appSettings.agentCommand, appSettings.agentProvider, appSettings.idlePolicy, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
-  const runtimeValidationTargetKey = serializeExecTarget(state.overlay.target);
+  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
   const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
   const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
     ? runtimeValidation
-    : createRuntimeValidationState(runtimeValidationTargetKey, "checking");
+    : createRuntimeValidationState(appSettings.agentCommand, t, runtimeValidationTargetKey, "checking");
   const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;
   const showWorkspaceLaunchOverlay = overlayVisible && runtimeValidatedForTarget;
   const hasOpenWorkspace = state.tabs.length > 0;
@@ -2187,6 +2287,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       showCodePanel={showCodePanel}
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
+      terminalCompatibilityMode={terminalCompatibilityMode}
       draftPromptInputs={draftPromptInputs}
       displaySessionTitle={displaySessionTitle}
       onExitArchive={onExitArchive}
@@ -2388,6 +2489,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       shellTerminalRef={shellTerminalRef}
       theme={theme}
       fontSize={editorMetrics.terminalFontSize}
+      compatibilityMode={terminalCompatibilityMode}
       autoFocus={showTerminalPanel && !isCodeExpanded}
       onTerminalData={onShellTerminalData}
       onTerminalSize={onShellTerminalSize}

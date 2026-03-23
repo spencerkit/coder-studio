@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import {
   buildEndpoint,
   DEFAULT_PORT,
@@ -17,21 +16,56 @@ import {
   updateLocalConfig,
   validateConfigSnapshot,
 } from '../../.build/cli/lib/user-config.mjs';
-
-const execFileAsync = promisify(execFile);
 const CLI_BIN = path.resolve('.build/cli/bin/coder-studio.mjs');
 
 async function runCli(args, { env = process.env, allowFailure = false } = {}) {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-cli-run-'));
+  const stdoutPath = path.join(tempRoot, 'stdout.log');
+  const stderrPath = path.join(tempRoot, 'stderr.log');
+  const stdoutHandle = await fs.open(stdoutPath, 'w');
+  const stderrHandle = await fs.open(stderrPath, 'w');
+
   try {
-    return await execFileAsync(process.execPath, [CLI_BIN, ...args], {
+    const result = spawnSync(process.execPath, [CLI_BIN, ...args], {
       env,
-      maxBuffer: 1024 * 1024 * 8,
+      stdio: ['ignore', stdoutHandle.fd, stderrHandle.fd],
     });
+
+    await stdoutHandle.close();
+    await stderrHandle.close();
+
+    const [stdout, stderr] = await Promise.all([
+      fs.readFile(stdoutPath, 'utf8').catch(() => ''),
+      fs.readFile(stderrPath, 'utf8').catch(() => ''),
+    ]);
+
+    if (result.error) {
+      throw Object.assign(result.error, {
+        code: result.status ?? 1,
+        stdout,
+        stderr,
+      });
+    }
+
+    if ((result.status ?? 0) !== 0) {
+      const error = Object.assign(new Error(`cli exited with code ${result.status}`), {
+        code: result.status ?? 1,
+        stdout,
+        stderr,
+      });
+      throw error;
+    }
+
+    return { stdout, stderr };
   } catch (error) {
     if (allowFailure) {
       return error;
     }
     throw error;
+  } finally {
+    await stdoutHandle.close().catch(() => undefined);
+    await stderrHandle.close().catch(() => undefined);
+    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

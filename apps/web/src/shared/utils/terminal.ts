@@ -1,3 +1,5 @@
+import type { TerminalCompatibilityMode } from "../../types/app";
+
 export type TerminalGridSize = {
   cols: number;
   rows: number;
@@ -5,7 +7,7 @@ export type TerminalGridSize = {
 
 export const XTERM_SCROLLBAR_WIDTH = 3;
 
-export const XTERM_FONT_FAMILY = [
+const STANDARD_TERMINAL_FONT_FAMILY = [
   "\"JetBrains Mono\"",
   "\"Symbols Nerd Font Mono\"",
   "\"MesloLGS NF\"",
@@ -22,18 +24,46 @@ export const XTERM_FONT_FAMILY = [
   "monospace",
 ].join(", ");
 
+const COMPATIBILITY_TERMINAL_FONT_FAMILY = [
+  "\"JetBrains Mono\"",
+  "\"DejaVu Sans Mono\"",
+  "\"Noto Sans Mono\"",
+  "\"Noto Sans Mono CJK SC\"",
+  "\"Cascadia Mono\"",
+  "\"Noto Sans Symbols 2\"",
+  "\"Noto Color Emoji\"",
+  "ui-monospace",
+  "\"SFMono-Regular\"",
+  "monospace",
+].join(", ");
+
 const MIN_TERMINAL_COLS = 20;
 const MIN_TERMINAL_ROWS = 8;
 const TERMINAL_HORIZONTAL_GUTTER = XTERM_SCROLLBAR_WIDTH + 4;
 const TERMINAL_VERTICAL_GUTTER = 2;
-const cellMeasureCache = new Map<number, { width: number; height: number }>();
+const cellMeasureCache = new Map<string, { width: number; height: number }>();
 
-const measureTerminalCell = (fontSize: number) => {
+export const resetTerminalMeasurementCache = () => {
+  cellMeasureCache.clear();
+};
+
+export const resolveTerminalFontFamily = (
+  compatibilityMode: TerminalCompatibilityMode = "standard",
+) => compatibilityMode === "compatibility"
+  ? COMPATIBILITY_TERMINAL_FONT_FAMILY
+  : STANDARD_TERMINAL_FONT_FAMILY;
+
+const measureTerminalCell = (
+  fontSize: number,
+  compatibilityMode: TerminalCompatibilityMode,
+) => {
   if (typeof document === "undefined") {
     return null;
   }
 
-  const cached = cellMeasureCache.get(fontSize);
+  const fontFamily = resolveTerminalFontFamily(compatibilityMode);
+  const cacheKey = `${compatibilityMode}:${fontSize}`;
+  const cached = cellMeasureCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -52,7 +82,7 @@ const measureTerminalCell = (fontSize: number) => {
     lineHeight: "1",
     letterSpacing: "0",
     fontKerning: "none",
-    fontFamily: XTERM_FONT_FAMILY,
+    fontFamily,
     fontSize: `${fontSize}px`,
   });
 
@@ -66,8 +96,11 @@ const measureTerminalCell = (fontSize: number) => {
     height: rect.height,
   };
 
+  const canCache = !("fonts" in document) || document.fonts.status === "loaded";
   if (measured.width > 0 && measured.height > 0) {
-    cellMeasureCache.set(fontSize, measured);
+    if (canCache) {
+      cellMeasureCache.set(cacheKey, measured);
+    }
     return measured;
   }
 
@@ -77,6 +110,7 @@ const measureTerminalCell = (fontSize: number) => {
 export const estimateTerminalGrid = (
   container: HTMLElement | null,
   fontSize: number,
+  compatibilityMode: TerminalCompatibilityMode = "standard",
 ): TerminalGridSize | null => {
   if (typeof window === "undefined" || !container) {
     return null;
@@ -97,7 +131,7 @@ export const estimateTerminalGrid = (
     return null;
   }
 
-  const cell = measureTerminalCell(fontSize);
+  const cell = measureTerminalCell(fontSize, compatibilityMode);
   if (!cell) {
     return null;
   }

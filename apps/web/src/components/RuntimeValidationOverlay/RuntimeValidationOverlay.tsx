@@ -9,6 +9,7 @@ export type RuntimeRequirementStatus = {
   available: boolean | null;
   resolvedPath?: string;
   error?: string;
+  detailText?: string;
 };
 
 export type RuntimeValidationState = {
@@ -109,13 +110,13 @@ export const RuntimeValidationOverlay = ({
                 : requirement.available === false
                   ? "missing"
                   : "checking";
-              const detailText = requirement.available === true
+              const detailText = requirement.detailText || (requirement.available === true
                 ? (requirement.resolvedPath
                     ? t("launchCommandResolvedPath", { path: requirement.resolvedPath })
                     : copy.hint)
                 : requirement.available === false
                   ? (requirement.error || copy.hint)
-                  : copy.hint;
+                  : copy.hint);
 
               return (
                 <div key={requirement.id} className={`settings-inline-status ${stateClass}`}>

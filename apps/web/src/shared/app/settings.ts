@@ -9,13 +9,15 @@ export const defaultAppSettings = (): AppSettings => ({
     idleMinutes: 10,
     maxActive: 3,
     pressure: true
-  }
+  },
+  terminalCompatibilityMode: "standard"
 });
 
 export const cloneAppSettings = (settings: AppSettings): AppSettings => ({
   agentProvider: settings.agentProvider,
   agentCommand: settings.agentCommand,
-  idlePolicy: { ...settings.idlePolicy }
+  idlePolicy: { ...settings.idlePolicy },
+  terminalCompatibilityMode: settings.terminalCompatibilityMode
 });
 
 export const readStoredAppSettings = (): AppSettings => {
@@ -33,7 +35,10 @@ export const readStoredAppSettings = (): AppSettings => {
         idleMinutes: Number.isFinite(parsed.idlePolicy?.idleMinutes) ? Math.max(1, Number(parsed.idlePolicy?.idleMinutes)) : fallback.idlePolicy.idleMinutes,
         maxActive: Number.isFinite(parsed.idlePolicy?.maxActive) ? Math.max(1, Number(parsed.idlePolicy?.maxActive)) : fallback.idlePolicy.maxActive,
         pressure: parsed.idlePolicy?.pressure ?? fallback.idlePolicy.pressure
-      }
+      },
+      terminalCompatibilityMode: parsed.terminalCompatibilityMode === "compatibility"
+        ? "compatibility"
+        : fallback.terminalCompatibilityMode
     };
   } catch {
     return fallback;

@@ -304,16 +304,33 @@ fn locale_uses_utf8(value: &str) -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn resolve_utf8_locale() -> String {
-    for key in ["LC_CTYPE", "LANG"] {
+fn platform_utf8_locale_fallback() -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        return Some("C.UTF-8");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return Some("en_US.UTF-8");
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_utf8_locale() -> Option<String> {
+    for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
         if let Ok(value) = std::env::var(key) {
             let trimmed = value.trim();
             if !trimmed.is_empty() && locale_uses_utf8(trimmed) {
-                return trimmed.to_string();
+                return Some(trimmed.to_string());
             }
         }
     }
-    "C.UTF-8".to_string()
+
+    platform_utf8_locale_fallback().map(str::to_string)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -335,14 +352,16 @@ fn resolve_unix_shell_path() -> String {
 
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn apply_unix_pty_env_defaults(cmd: &mut CommandBuilder, shell_path: Option<&str>) {
-    let locale = resolve_utf8_locale();
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    cmd.env("LC_CTYPE", locale.clone());
 
-    let lang = std::env::var("LANG").unwrap_or_default();
-    if lang.trim().is_empty() || !locale_uses_utf8(&lang) {
-        cmd.env("LANG", locale);
+    if let Some(locale) = resolve_utf8_locale() {
+        cmd.env("LC_CTYPE", locale.clone());
+
+        let lang = std::env::var("LANG").unwrap_or_default();
+        if lang.trim().is_empty() || !locale_uses_utf8(&lang) {
+            cmd.env("LANG", locale);
+        }
     }
 
     if let Some(shell) = shell_path.map(str::trim).filter(|value| !value.is_empty()) {

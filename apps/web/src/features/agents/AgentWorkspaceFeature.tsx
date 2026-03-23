@@ -1,6 +1,6 @@
 import type { PointerEventHandler, ReactNode } from "react";
 import type { Translator } from "../../i18n";
-import type { AppTheme } from "../../types/app";
+import type { AppTheme, TerminalCompatibilityMode } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
 import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
@@ -16,6 +16,7 @@ type AgentWorkspaceFeatureProps = {
   showCodePanel: boolean;
   theme: AppTheme;
   terminalFontSize: number;
+  terminalCompatibilityMode: TerminalCompatibilityMode;
   draftPromptInputs: Record<string, string>;
   displaySessionTitle: (value: string) => string;
   onExitArchive: () => void;
@@ -42,6 +43,7 @@ export const AgentWorkspaceFeature = ({
   showCodePanel,
   theme,
   terminalFontSize,
+  terminalCompatibilityMode,
   draftPromptInputs,
   displaySessionTitle,
   onExitArchive,
@@ -185,6 +187,7 @@ export const AgentWorkspaceFeature = ({
               toneKey={isPaneActive ? "active" : "inactive"}
               theme={theme}
               fontSize={terminalFontSize}
+              compatibilityMode={terminalCompatibilityMode}
               mode="interactive"
               autoFocus={isPaneActive}
               onData={(data) => {
@@ -231,6 +234,7 @@ export const AgentWorkspaceFeature = ({
                       toneKey="active"
                       theme={theme}
                       fontSize={terminalFontSize}
+                      compatibilityMode={terminalCompatibilityMode}
                     />
                   ) : (
                     <div className="terminal-empty">{t("archiveViewReadonly")}</div>

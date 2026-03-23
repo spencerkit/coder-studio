@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import type { TerminalCompatibilityMode } from "../../types/app";
 import { XtermBase, type XtermBaseHandle } from "./XtermBase";
 
 export type AgentStreamTerminalProps = {
@@ -7,6 +8,7 @@ export type AgentStreamTerminalProps = {
   toneKey: string;
   theme: "dark";
   fontSize: number;
+  compatibilityMode?: TerminalCompatibilityMode;
   mode?: "interactive" | "readonly";
   autoFocus?: boolean;
   onData?: (value: string) => void;
@@ -19,6 +21,7 @@ export const AgentStreamTerminal = forwardRef<XtermBaseHandle, AgentStreamTermin
   toneKey,
   theme,
   fontSize,
+  compatibilityMode = "standard",
   mode = "readonly",
   autoFocus = false,
   onData,
@@ -31,6 +34,7 @@ export const AgentStreamTerminal = forwardRef<XtermBaseHandle, AgentStreamTermin
     output={stream}
     theme={theme}
     fontSize={fontSize}
+    compatibilityMode={compatibilityMode}
     mode={mode}
     onData={onData}
     onSize={onSize}
