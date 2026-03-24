@@ -1,3 +1,7 @@
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { promisify } from 'node:util';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
@@ -33,6 +37,22 @@ type ReconnectBaseline = {
   countsAfterNextPoll: PollCounts;
 };
 
+type ArtifactsDirtyBaseline = {
+  dirtyFrame: WsEventFrame;
+  savedPath: string;
+};
+
+type WatcherInvalidationBaseline = {
+  dirtyFrame: WsEventFrame;
+  workspacePath: string;
+};
+
+type GitIndexInvalidationBaseline = {
+  workspacePath: string;
+  countsAfterFileWrite: number;
+  countsAfterGitAdd: number;
+};
+
 type WorkspaceHandle = {
   workspaceId: string;
   workspacePath: string;
@@ -59,8 +79,11 @@ const POLL_COMMANDS: PollCommand[] = [
   'worktree_list',
   'workspace_tree',
 ];
+const BACKEND_WS_PATH = '/ws';
 const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
+const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
+const execFileAsync = promisify(execFile);
 
 const incrementCounts = (counts: PollCounts) => ({
   git_status: counts.git_status + 1,
@@ -77,7 +100,7 @@ const emptyPollCounts = (): PollCounts => ({
 });
 
 test.describe('workspace transport baseline', () => {
-  test('legacy polling refreshes git/tree/worktree on the 4-second cadence', async ({ page }) => {
+  test('fallback polling refreshes git/tree/worktree on the configured cadence', async ({ page }) => {
     const baseline = await observePollingBaseline(page);
 
     expect(baseline.commands).toEqual(POLL_COMMANDS);
@@ -119,6 +142,31 @@ test.describe('workspace transport baseline', () => {
     expect(baseline.countsAfterReconnectBeforePoll).toEqual(baseline.countsAtDisconnect);
     expect(baseline.countsAfterNextPoll).toEqual(incrementCounts(baseline.countsAtDisconnect));
   });
+
+  test('workspace artifact invalidations stream over /ws', async ({ page }) => {
+    const baseline = await observeArtifactsDirtyBaseline(page);
+
+    expect(baseline.dirtyFrame.event).toBe('workspace://artifacts_dirty');
+    expect(baseline.dirtyFrame.payload.path).toBe(baseline.savedPath);
+    expect(baseline.dirtyFrame.payload.reason).toBe('file_save');
+    expect((baseline.dirtyFrame.payload.target as { type?: string } | undefined)?.type).toBe('native');
+  });
+
+  test('out-of-band file edits stream workspace invalidations over /ws', async ({ page }) => {
+    const baseline = await observeWatcherInvalidationBaseline(page);
+
+    expect(baseline.dirtyFrame.event).toBe('workspace://artifacts_dirty');
+    expect(baseline.dirtyFrame.payload.path).toBe(baseline.workspacePath);
+    expect(baseline.dirtyFrame.payload.reason).toBe('file_watcher');
+    expect((baseline.dirtyFrame.payload.target as { type?: string } | undefined)?.type).toBe('native');
+  });
+
+  test('git index writes from external git add also stream workspace invalidations over /ws', async ({ page }) => {
+    const baseline = await observeGitIndexInvalidationBaseline(page);
+
+    expect(baseline.countsAfterGitAdd).toBeGreaterThan(baseline.countsAfterFileWrite);
+    expect(baseline.workspacePath).toBe(WORKSPACE_PATH);
+  });
 });
 
 async function observePollingBaseline(page: Page): Promise<PollingBaseline> {
@@ -146,7 +194,7 @@ async function observePollingBaseline(page: Page): Promise<PollingBaseline> {
 async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await installTransportProbe(page);
   const workspace = await openWorkspace(page);
-  await expect.poll(async () => (await readTransportTracker(page)).urls.length).toBeGreaterThan(0);
+  await waitForBackendSocket(page);
 
   const controlPlaneCommands: string[] = [];
 
@@ -162,7 +210,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await invokeRpc(page, 'terminal_write', {
     workspaceId: workspace.workspaceId,
     terminalId: terminal.id,
-    input: 'printf "transport-terminal\\n"\r',
+    input: buildTerminalProbeInput(workspace.target),
   });
   controlPlaneCommands.push('terminal_write');
 
@@ -177,7 +225,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     workspaceId: workspace.workspaceId,
     sessionId,
     provider: 'shell',
-    command: 'cat',
+    command: buildAgentProbeCommand(workspace.target),
     cols: 120,
     rows: 30,
   });
@@ -219,18 +267,21 @@ async function observeReconnectBaseline(page: Page): Promise<ReconnectBaseline> 
   const probe = await installTransportProbe(page);
   await openWorkspace(page);
   await waitForPollCycle(probe.counts);
-  await expect.poll(async () => (await readTransportTracker(page)).connectTimes.length).toBeGreaterThan(0);
+  await waitForBackendSocket(page);
   await page.waitForTimeout(250);
 
   const trackerBeforeDisconnect = await readTransportTracker(page);
   const countsAtDisconnect = snapshotCounts(probe.counts);
-  const connectCountBeforeDisconnect = trackerBeforeDisconnect.connectTimes.length;
+  const backendConnectCountBeforeDisconnect = countTrackedSockets(
+    trackerBeforeDisconnect,
+    BACKEND_WS_PATH,
+  );
   const closeCountBeforeDisconnect = trackerBeforeDisconnect.closeTimes.length;
   const scheduledTimeoutCountBeforeDisconnect = trackerBeforeDisconnect.scheduledTimeouts.length;
 
-  await page.evaluate(() => {
-    window.__transportTest?.closeMatching('/ws');
-  });
+  await page.evaluate((fragment) => {
+    window.__transportTest?.closeMatching(fragment);
+  }, BACKEND_WS_PATH);
 
   await expect.poll(async () => (await readTransportTracker(page)).closeTimes.length).toBeGreaterThan(closeCountBeforeDisconnect);
   await expect
@@ -238,7 +289,11 @@ async function observeReconnectBaseline(page: Page): Promise<ReconnectBaseline> 
       timeout: 10000,
     })
     .toContain(WS_RECONNECT_DELAY_MS);
-  await expect.poll(async () => (await readTransportTracker(page)).connectTimes.length).toBeGreaterThan(connectCountBeforeDisconnect);
+  await expect
+    .poll(async () => countTrackedSockets(await readTransportTracker(page), BACKEND_WS_PATH), {
+      timeout: 10000,
+    })
+    .toBeGreaterThan(backendConnectCountBeforeDisconnect);
   const tracker = await readTransportTracker(page);
   const reconnectDelayMs = tracker.scheduledTimeouts
     .slice(scheduledTimeoutCountBeforeDisconnect)
@@ -256,6 +311,103 @@ async function observeReconnectBaseline(page: Page): Promise<ReconnectBaseline> 
   };
 }
 
+async function observeArtifactsDirtyBaseline(page: Page): Promise<ArtifactsDirtyBaseline> {
+  await installTransportProbe(page);
+  await openWorkspace(page);
+  await waitForBackendSocket(page);
+
+  const preview = await invokeRpc<{ path: string; content: string }>(page, 'file_preview', {
+    path: WORKSPACE_PROBE_FILE,
+  });
+  await invokeRpc(page, 'file_save', {
+    path: preview.path,
+    content: preview.content,
+  });
+
+  const dirtyFrame = await waitForWsEvent(
+    page,
+    'workspace://artifacts_dirty',
+    (payload) => payload.path === preview.path && payload.reason === 'file_save',
+  );
+
+  return {
+    dirtyFrame,
+    savedPath: preview.path,
+  };
+}
+
+async function observeWatcherInvalidationBaseline(page: Page): Promise<WatcherInvalidationBaseline> {
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+
+  const probeFile = path.join(
+    WORKSPACE_PATH,
+    'tests',
+    'e2e',
+    `.transport-watcher-probe-${process.pid}-${Date.now()}.txt`,
+  );
+
+  await fs.mkdir(path.dirname(probeFile), { recursive: true });
+  try {
+    await fs.writeFile(probeFile, `watcher ${Date.now()}\n`, 'utf8');
+    const dirtyFrame = await waitForWsEvent(
+      page,
+      'workspace://artifacts_dirty',
+      (payload) => payload.path === workspace.workspacePath && payload.reason === 'file_watcher',
+    );
+
+    return {
+      dirtyFrame,
+      workspacePath: workspace.workspacePath,
+    };
+  } finally {
+    await fs.rm(probeFile, { force: true });
+  }
+}
+
+async function observeGitIndexInvalidationBaseline(page: Page): Promise<GitIndexInvalidationBaseline> {
+  const probe = await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  await waitForPollCycle(probe.counts);
+
+  const probeFile = path.join(
+    WORKSPACE_PATH,
+    'tests',
+    'e2e',
+    `.transport-index-probe-${process.pid}-${Date.now()}.txt`,
+  );
+  const predicate = (payload: Record<string, unknown>) =>
+    payload.path === workspace.workspacePath && payload.reason === 'file_watcher';
+  const baselineCount = await countWsEvents(page, 'workspace://artifacts_dirty', predicate);
+
+  await fs.mkdir(path.dirname(probeFile), { recursive: true });
+  try {
+    await fs.writeFile(probeFile, `index ${Date.now()}\n`, 'utf8');
+    await waitForWsEventCount(page, 'workspace://artifacts_dirty', predicate, baselineCount + 1);
+    await page.waitForTimeout(400);
+    const countsAfterFileWrite = await countWsEvents(page, 'workspace://artifacts_dirty', predicate);
+
+    await execFileAsync('git', ['add', '--', probeFile], { cwd: WORKSPACE_PATH });
+    await waitForWsEventCount(page, 'workspace://artifacts_dirty', predicate, countsAfterFileWrite + 1);
+    const countsAfterGitAdd = await countWsEvents(page, 'workspace://artifacts_dirty', predicate);
+
+    return {
+      workspacePath: workspace.workspacePath,
+      countsAfterFileWrite,
+      countsAfterGitAdd,
+    };
+  } finally {
+    try {
+      await execFileAsync('git', ['reset', 'HEAD', '--', probeFile], { cwd: WORKSPACE_PATH });
+    } catch {
+      // Best-effort cleanup for repos without HEAD or already-reset files.
+    }
+    await fs.rm(probeFile, { force: true });
+  }
+}
+
 async function installTransportProbe(page: Page) {
   const counts = emptyPollCounts();
   const initialCommandOrder: PollCommand[] = [];
@@ -263,6 +415,9 @@ async function installTransportProbe(page: Page) {
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket;
     const nativeSetTimeout = window.setTimeout.bind(window);
+    (window as typeof window & {
+      __CODER_STUDIO_ARTIFACT_FALLBACK_POLL_INTERVAL_MS__?: number;
+    }).__CODER_STUDIO_ARTIFACT_FALLBACK_POLL_INTERVAL_MS__ = 4000;
     const store = {
       urls: [] as string[],
       connectTimes: [] as number[],
@@ -378,12 +533,14 @@ async function invokeRpc<T>(page: Page, command: string, payload: Record<string,
 }
 
 async function waitForPollCycle(counts: PollCounts) {
-  await waitForCounts(counts, {
-    git_status: 1,
-    git_changes: 1,
-    worktree_list: 1,
-    workspace_tree: 1,
-  });
+  await expect
+    .poll(() => {
+      const snapshot = snapshotCounts(counts);
+      return Object.values(snapshot).every((count) => count >= 1);
+    }, {
+      timeout: 10000,
+    })
+    .toBe(true);
 }
 
 async function waitForCounts(actual: PollCounts, expected: PollCounts) {
@@ -409,6 +566,32 @@ function rpcCommand(url: string) {
 
 function isPollCommand(command: string): command is PollCommand {
   return POLL_COMMANDS.includes(command as PollCommand);
+}
+
+function isWindowsNativeTarget(target: WorkspaceHandle['target']) {
+  return process.platform === 'win32' && target.type === 'native';
+}
+
+function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
+  return isWindowsNativeTarget(target)
+    ? 'echo transport-terminal\r'
+    : 'printf "transport-terminal\\n"\r';
+}
+
+function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
+  return isWindowsNativeTarget(target) ? 'findstr "^"' : 'cat';
+}
+
+function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {
+  return tracker.urls.filter((url) => url.includes(fragment)).length;
+}
+
+async function waitForBackendSocket(page: Page) {
+  await expect
+    .poll(async () => countTrackedSockets(await readTransportTracker(page), BACKEND_WS_PATH), {
+      timeout: 10000,
+    })
+    .toBeGreaterThan(0);
 }
 
 async function readTransportTracker(page: Page): Promise<TransportTrackerSnapshot> {
@@ -444,6 +627,35 @@ async function waitForWsEvent(
       && frame.event === eventName
       && predicate(frame.payload),
     )!;
+}
+
+async function countWsEvents(
+  page: Page,
+  eventName: string,
+  predicate: (payload: Record<string, unknown>) => boolean,
+) {
+  const tracker = await readTransportTracker(page);
+  return tracker.frames
+    .map(parseBackendEnvelope)
+    .filter((frame): frame is WsEventFrame =>
+      Boolean(frame)
+      && frame.event === eventName
+      && predicate(frame.payload),
+    )
+    .length;
+}
+
+async function waitForWsEventCount(
+  page: Page,
+  eventName: string,
+  predicate: (payload: Record<string, unknown>) => boolean,
+  expectedCount: number,
+) {
+  await expect
+    .poll(() => countWsEvents(page, eventName, predicate), {
+      timeout: 10000,
+    })
+    .toBeGreaterThanOrEqual(expectedCount);
 }
 
 function parseBackendEnvelope(frame: string): WsEventFrame | null {

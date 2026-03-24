@@ -32,7 +32,19 @@ pub(crate) fn launch_workspace_internal(
         WorkspaceSourceKind::Local => resolve_git_repo_path(&source.path_or_url, &source.target)?,
     };
 
-    launch_workspace_record(state, source, project_path, default_idle_policy())
+    let result = launch_workspace_record(state, source, project_path, default_idle_policy())?;
+    if let Err(error) = ensure_workspace_watch(
+        state,
+        &result.snapshot.workspace.workspace_id,
+        &result.snapshot.workspace.project_path,
+        &result.snapshot.workspace.target,
+    ) {
+        eprintln!(
+            "failed to watch workspace {} after launch: {error}",
+            result.snapshot.workspace.workspace_id
+        );
+    }
+    Ok(result)
 }
 
 pub(crate) fn launch_workspace(
@@ -52,13 +64,30 @@ pub(crate) fn workspace_snapshot(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceSnapshot, String> {
-    load_workspace_snapshot(state, &workspace_id)
+    let snapshot = load_workspace_snapshot(state, &workspace_id)?;
+    if let Err(error) = ensure_workspace_watch(
+        state,
+        &snapshot.workspace.workspace_id,
+        &snapshot.workspace.project_path,
+        &snapshot.workspace.target,
+    ) {
+        eprintln!(
+            "failed to watch workspace {} while loading snapshot: {error}",
+            snapshot.workspace.workspace_id
+        );
+    }
+    Ok(snapshot)
 }
 
 pub(crate) fn activate_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
+    if let Ok((project_path, target)) = workspace_access_context(state, &workspace_id) {
+        if let Err(error) = ensure_workspace_watch(state, &workspace_id, &project_path, &target) {
+            eprintln!("failed to watch workspace {workspace_id} on activate: {error}");
+        }
+    }
     activate_workspace_ui(state, &workspace_id)
 }
 
@@ -66,7 +95,9 @@ pub(crate) fn close_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    close_workspace_ui(state, &workspace_id)
+    let ui_state = close_workspace_ui(state, &workspace_id)?;
+    stop_workspace_watch(state, &workspace_id);
+    Ok(ui_state)
 }
 
 pub(crate) fn update_workbench_layout(

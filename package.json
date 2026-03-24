@@ -21,6 +21,7 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:release": "pnpm build:web && pnpm build:server && pnpm build:cli && playwright test -c playwright.release.config.ts",
+    "test:smoke:windows:transport": "node scripts/test/windows-transport-smoke.mjs",
     "test:cli": "pnpm build:cli && node --test tests/cli/config.test.mjs tests/cli/platform.test.mjs tests/release/release.test.mjs",
     "test:smoke": "node --test tests/smoke/cli-smoke.test.mjs",
     "pack:local": "pnpm release:check && node scripts/release/pack-local.mjs",

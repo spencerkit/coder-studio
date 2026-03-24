@@ -203,7 +203,12 @@ pnpm test:cli
 pnpm test:smoke
 pnpm test:e2e
 pnpm test:e2e:release
+pnpm test:smoke:windows:transport
 ```
+
+If the Windows machine does not have a usable WSL instance yet, you can temporarily run `pnpm test:smoke:windows:transport -- --skip-wsl-preflight`; to pin a distro, use `-- --wsl-distro Ubuntu`.
+
+The default GitHub-hosted Windows smoke in CI skips that WSL preflight. If you already have a self-hosted Windows runner with WSL enabled, you can manually trigger the `Windows WSL Smoke` workflow. It expects runner labels `self-hosted`, `windows`, `x64`, and `wsl`, runs the full WSL preflight, and accepts an optional `wsl_distro` workflow input when you want to pin a distro.
 
 Coverage:
 
@@ -212,3 +217,4 @@ Coverage:
 - `test:smoke`: installs local tarballs and runs `start/status/restart/stop`
 - `test:e2e`: development-mode frontend/backend integration
 - `test:e2e:release`: browser E2E against the built release runtime
+- `test:smoke:windows:transport`: real-machine Windows smoke; runs a WSL `wslpath -w` preflight by default, then validates the transport Rust / web / E2E path

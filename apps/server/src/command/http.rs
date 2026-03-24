@@ -518,88 +518,112 @@ fn dispatch_rpc(
         "git_status" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(git_status(req.path, req.target).map_err(rpc_bad_request)?)
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = git_status(req.path, req.target).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_diff" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(git_diff(req.path, req.target).map_err(rpc_bad_request)?)
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = git_diff(req.path, req.target).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_changes" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(git_changes(req.path, req.target).map_err(rpc_bad_request)?)
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = git_changes(req.path, req.target).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_diff_file" => {
             let req: GitDiffFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(
-                git_diff_file(req.path, req.target, req.file_path, req.staged)
-                    .map_err(rpc_bad_request)?,
-            )
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result =
+                git_diff_file(req.path, req.target, req.file_path, req.staged).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_file_diff_payload" => {
             let req: GitFileSectionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(
-                git_file_diff_payload(req.path, req.target, req.file_path, req.section)
-                    .map_err(rpc_bad_request)?,
-            )
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = git_file_diff_payload(req.path, req.target, req.file_path, req.section)
+                .map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_stage_all" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_stage_all(req.path, req.target).map_err(rpc_bad_request)?;
+            git_stage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_all");
             Ok(Value::Null)
         }
         "git_stage_file" => {
             let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_stage_file(req.path, req.target, req.file_path).map_err(rpc_bad_request)?;
+            git_stage_file(req.path.clone(), req.target.clone(), req.file_path)
+                .map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_file");
             Ok(Value::Null)
         }
         "git_unstage_all" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_unstage_all(req.path, req.target).map_err(rpc_bad_request)?;
+            git_unstage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_all");
             Ok(Value::Null)
         }
         "git_unstage_file" => {
             let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_unstage_file(req.path, req.target, req.file_path).map_err(rpc_bad_request)?;
+            git_unstage_file(req.path.clone(), req.target.clone(), req.file_path)
+                .map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_file");
             Ok(Value::Null)
         }
         "git_discard_all" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_discard_all(req.path, req.target).map_err(rpc_bad_request)?;
+            git_discard_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_all");
             Ok(Value::Null)
         }
         "git_discard_file" => {
             let req: GitDiscardFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            git_discard_file(req.path, req.target, req.file_path, req.section)
+            git_discard_file(req.path.clone(), req.target.clone(), req.file_path, req.section)
                 .map_err(rpc_bad_request)?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_file");
             Ok(Value::Null)
         }
         "git_commit" => {
             let req: GitCommitRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(
-                git_commit(req.path, req.target, req.message).map_err(rpc_bad_request)?,
+            let result = serde_json::to_value(
+                git_commit(req.path.clone(), req.target.clone(), req.message).map_err(rpc_bad_request)?,
             )
-            .map_err(|e| rpc_bad_request(e.to_string()))
+            .map_err(|e| rpc_bad_request(e.to_string()))?;
+            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_commit");
+            Ok(result)
         }
         "worktree_list" => {
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            let worktrees = worktree_list(req.path, req.target.clone()).map_err(rpc_bad_request)?;
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let worktrees = worktree_list(req.path, req.target.clone()).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            let worktrees = worktrees?;
             let filtered = if authorized.request.public_mode {
                 filter_allowed_worktrees(worktrees, &req.target, &authorized.allowed_roots)
             } else {
@@ -610,17 +634,19 @@ fn dispatch_rpc(
         "worktree_inspect" => {
             let req: WorktreeInspectRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(
-                worktree_inspect(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
-            )
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = worktree_inspect(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "workspace_tree" => {
             let req: WorkspaceTreeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
-            serde_json::to_value(
-                workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request)?,
-            )
+            let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
+            let result = workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request);
+            end_workspace_watch_suppression(app.state(), &suppressed);
+            serde_json::to_value(result?)
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "file_preview" => {
@@ -632,8 +658,12 @@ fn dispatch_rpc(
         "file_save" => {
             let req: FileSaveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &ExecTarget::Native, authorized)?;
-            serde_json::to_value(file_save(req.path, req.content).map_err(rpc_bad_request)?)
-                .map_err(|e| rpc_bad_request(e.to_string()))
+            let saved = serde_json::to_value(
+                file_save(req.path.clone(), req.content).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))?;
+            emit_workspace_artifacts_dirty(app, &req.path, &ExecTarget::Native, "file_save");
+            Ok(saved)
         }
         "filesystem_roots" => {
             let req: FilesystemRootsRequest = parse_payload(payload).map_err(rpc_bad_request)?;

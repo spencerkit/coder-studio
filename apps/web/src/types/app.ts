@@ -163,6 +163,12 @@ export type TerminalEvent = {
   data: string;
 };
 
+export type ArtifactsDirtyEvent = {
+  path: string;
+  target: ExecTarget;
+  reason: string;
+};
+
 export type WorktreeDetail = {
   name: string;
   path: string;

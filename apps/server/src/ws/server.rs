@@ -179,3 +179,20 @@ pub(crate) fn emit_agent_lifecycle(
         },
     );
 }
+
+pub(crate) fn emit_workspace_artifacts_dirty(
+    app: &AppHandle,
+    path: &str,
+    target: &ExecTarget,
+    reason: &str,
+) {
+    emit_transport_event(
+        app,
+        "workspace://artifacts_dirty",
+        json!({
+            "path": path,
+            "target": target,
+            "reason": reason,
+        }),
+    );
+}

@@ -5,7 +5,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ExecTarget,
   Session,
-  SessionStatus,
   Tab,
   TreeNode,
   WorkbenchState,
@@ -46,21 +45,17 @@ import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/term
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
 import { WorkspaceShell } from "../../components/workspace";
-import { subscribeAgentEvents, subscribeAgentLifecycleEvents, subscribeTerminalEvents } from "../../command";
 import {
   AgentWorkspaceFeature,
   armAgentStartupGate,
   buildSlashMenuItems,
   buildSlashMenuSections,
-  clearAgentRuntimeTracking,
   clearAgentStartupGate,
   commitAgentSessionTitle,
   focusAgentTerminal,
   fitAgentTerminals,
   isAgentRuntimeRunning,
   markAgentRuntimeStarted,
-  noteAgentStartupEvent,
-  noteAgentStartupLifecycle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
   syncAgentPaneSize,
@@ -94,6 +89,7 @@ import {
   writeWorkspaceTerminalData
 } from "./";
 import { createWorkspaceSessionActions } from "./session-actions";
+import { useWorkspaceArtifactsSync, useWorkspaceTransportSync } from "./workspace-sync-hooks";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
@@ -121,7 +117,6 @@ import {
   commitGitChanges,
   discardAllGitChanges,
   discardGitFile,
-  getGitChanges,
   stageAllGitChanges,
   stageGitFile,
   unstageAllGitChanges,
@@ -137,9 +132,6 @@ import {
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
-  getGitStatus,
-  getWorkspaceTree,
-  getWorktreeList,
   listClaudeSlashSkills,
   updateWorkbenchLayout,
   updateWorkspaceView
@@ -152,9 +144,6 @@ import {
 } from "../../shared/utils/workspace";
 import {
   AGENT_SPECIAL_KEY_MAP,
-  AGENT_START_SYSTEM_MESSAGE,
-  AGENT_STREAM_BUFFER_LIMIT,
-  TERMINAL_STREAM_BUFFER_LIMIT,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
 import {
@@ -193,8 +182,6 @@ import {
 } from "../../shared/utils/session";
 import { sortTreeNodes } from "../../shared/utils/tree";
 import type {
-  AgentEvent,
-  AgentLifecycleEvent,
   AgentStartResult,
   AppSettings,
   AppTheme,
@@ -205,11 +192,9 @@ import type {
   FolderBrowserState,
   GitChangeAction,
   GitChangeEntry,
-  GitStatus,
   Toast,
   WorktreeModalState,
   WorktreeView,
-  WorkspaceTree
 } from "../../types/app";
 
 const withServiceFallback = async <T,>(operation: () => Promise<T>, fallback: T): Promise<T> => withFallback(operation, fallback);
@@ -791,159 +776,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.overlay.visible,
   ]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data }) => {
-      noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
-      const cleaned = stripAnsi(data);
-      const isStream = kind === "stdout" || kind === "stderr";
-      const isSystem = kind === "system";
-      const isExit = kind === "exit";
-      updateState((current) => ({
-        ...current,
-        tabs: current.tabs.map((tab) => {
-          if (tab.id !== workspace_id) return tab;
-          return {
-            ...tab,
-            sessions: tab.sessions.map((session) => {
-              if (session.id !== session_id) return session;
-              const nextStatus = isStream
-                ? session.status
-                : isExit
-                  ? "idle"
-                  : session.status;
-              const streamChunk = isExit
-                ? "\n[agent exited]\n"
-                : isSystem
-                  ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
-                  : data;
-              const nextStream = `${session.stream}${streamChunk}`.slice(-AGENT_STREAM_BUFFER_LIMIT);
-              const message = isExit
-                ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
-                : isSystem
-                  ? { id: createId("msg"), role: "system" as const, content: cleaned, time: nowLabel() }
-                  : null;
-              const unread = tab.activeSessionId === session.id ? 0 : session.unread + (isSystem || isExit || isStream ? 1 : 0);
-              return {
-                ...session,
-                status: nextStatus,
-                unread,
-                stream: nextStream,
-                messages: message ? [...session.messages, message] : session.messages
-              };
-            })
-          };
-        })
-      }));
-      if (kind === "exit") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-        void settleSessionAfterExit(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [t]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }) => {
-      noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
-      let nextStatus: SessionStatus | null = null;
-      if (kind === "turn_waiting" || kind === "approval_required") {
-        nextStatus = "waiting";
-      } else if (kind === "tool_started" || kind === "tool_finished") {
-        nextStatus = "running";
-      } else if (kind === "turn_completed" || kind === "session_ended") {
-        nextStatus = "idle";
-      }
-
-      if (kind === "session_ended") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-      }
-
-      if (nextStatus) {
-        updateState((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === session_id
-                  ? {
-                      ...session,
-                      status: resolveVisibleStatus(tab, session, nextStatus)
-                    }
-                  : session
-              )
-            };
-          })
-        }));
-      }
-
-      const claudeSessionId = (() => {
-        try {
-          const payload = JSON.parse(data) as { session_id?: string };
-          return typeof payload.session_id === "string" && payload.session_id.trim()
-            ? payload.session_id.trim()
-            : null;
-        } catch {
-          return null;
-        }
-      })();
-
-      if (claudeSessionId) {
-        let changed = false;
-        updateState((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
-                  return session;
-                }
-                changed = true;
-                return {
-                  ...session,
-                  claudeSessionId
-                };
-              })
-            };
-          })
-        }));
-        if (changed) {
-          void syncSessionPatch(workspace_id, session_id, { claude_session_id: claudeSessionId });
-        }
-      }
-
-      if (kind === "turn_completed") {
-        void markSessionIdle(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [t]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
-      if (!data) return;
-      const termId = `term-${terminal_id}`;
-      updateState((current) => ({
-        ...current,
-        tabs: current.tabs.map((tab) => {
-          if (tab.id !== workspace_id) return tab;
-          return {
-            ...tab,
-            terminals: tab.terminals.map((term) => {
-              if (term.id !== termId) return term;
-              const nextOutput = `${term.output}${data}`.slice(-TERMINAL_STREAM_BUFFER_LIMIT);
-              return { ...term, output: nextOutput };
-            })
-          };
-        })
-      }));
-    });
-    return unsubscribe;
-  }, []);
-
   const activeTab = useMemo(() => {
     const existing = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
     if (existing) return existing;
@@ -1149,40 +981,27 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     addToast
   });
 
-  const refreshWorkspaceArtifacts = async (tabId: string) => {
-    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
-    const path = tab?.project?.path;
-    const target = tab?.project?.target;
-    if (!tab || !path || !target) return null;
+  useWorkspaceTransportSync({
+    agentRuntimeRefs,
+    bootstrapReady,
+    refreshTabFromBackend,
+    markSessionIdle,
+    settleSessionAfterExit,
+    syncSessionPatch,
+    stateRef,
+    t,
+    updateState,
+  });
 
-    const [git, gitChanges, worktrees, tree] = await Promise.all([
-      withServiceFallback<GitStatus>(() => getGitStatus(path, target), {
-        branch: tab.git.branch || "main",
-        changes: tab.git.changes ?? 0,
-        last_commit: tab.git.lastCommit || "—"
-      }),
-      withServiceFallback<GitChangeEntry[]>(() => getGitChanges(path, target), tab.gitChanges ?? []),
-      withServiceFallback<WorktreeInfo[]>(() => getWorktreeList(path, target), tab.worktrees),
-      withServiceFallback<WorkspaceTree>(() => getWorkspaceTree(path, target, 4), {
-        root: { name: ".", path, kind: "dir", children: [] },
-        changes: []
-      })
-    ]);
-
-    updateTab(tabId, (currentTab) => ({
-      ...currentTab,
-      git: {
-        branch: git.branch || currentTab.git.branch || "main",
-        changes: git.changes ?? currentTab.git.changes ?? 0,
-        lastCommit: git.last_commit || currentTab.git.lastCommit || "—"
-      },
-      gitChanges,
-      worktrees,
-      fileTree: tree.root.children ?? [],
-      changesTree: tree.changes ?? []
-    }));
-    return tree;
-  };
+  const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
+    activeTabId: activeTab.id,
+    activeProjectPath: activeTab.project?.path,
+    bootstrapReady,
+    codeSidebarView,
+    stateRef,
+    updateTab,
+    withServiceFallback,
+  });
 
   const ensureWorkspaceTerminal = useCallback(async (workspaceId: string) => {
     const tab = stateRef.current.tabs.find((item) => item.id === workspaceId);
@@ -2133,22 +1952,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
-    void refreshWorkspaceArtifacts(activeTab.id);
-  }, [codeSidebarView, activeTab.id, activeTab.project?.path]);
-
-  useEffect(() => {
-    if (!activeTab.project?.path) return;
     if (!showTerminalPanel || isCodeExpanded) return;
     void ensureWorkspaceTerminal(activeTab.id);
   }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal, isCodeExpanded, showTerminalPanel]);
-
-  useEffect(() => {
-    if (!activeTab.project?.path) return;
-    const timer = window.setInterval(() => {
-      void refreshWorkspaceArtifacts(activeTab.id);
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [activeTab.id, activeTab.project?.path]);
 
   const onShellTerminalSize = useCallback((size: { cols: number; rows: number }) => {
     syncWorkspaceTerminalSize(

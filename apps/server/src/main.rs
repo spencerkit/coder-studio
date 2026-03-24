@@ -37,7 +37,8 @@ mod services;
 mod ws;
 
 pub(crate) use app::{
-    AgentRuntime, AppState, HttpServerState, TerminalRuntime, DEV_BACKEND_PORT, DEV_FRONTEND_URL,
+    AgentRuntime, AppState, HttpServerState, TerminalRuntime, WorkspaceWatch,
+    WorkspaceWatchSuppression, DEV_BACKEND_PORT, DEV_FRONTEND_URL,
 };
 pub(crate) use auth::{
     admin_auth_status, admin_blocked_ips, admin_config, admin_unblock_ip, admin_update_config,
@@ -96,6 +97,10 @@ pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
     terminal_close, terminal_create, terminal_resize, terminal_write,
 };
+pub(crate) use services::workspace_watch::{
+    begin_workspace_watch_suppression, end_workspace_watch_suppression, ensure_workspace_watch,
+    stop_workspace_watch,
+};
 pub(crate) use services::workspace::{
     activate_workspace, archive_session, close_workspace, create_session, launch_workspace,
     launch_workspace_internal, session_update, switch_session, update_idle_policy,
@@ -103,7 +108,8 @@ pub(crate) use services::workspace::{
     worktree_inspect,
 };
 pub(crate) use ws::server::{
-    agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, terminal_key,
+    agent_key, emit_agent, emit_agent_lifecycle, emit_terminal,
+    emit_workspace_artifacts_dirty, terminal_key,
 };
 
 use runtime::RuntimeHandle;

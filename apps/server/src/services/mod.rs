@@ -5,3 +5,4 @@ pub(crate) mod git;
 pub(crate) mod system;
 pub(crate) mod terminal;
 pub(crate) mod workspace;
+pub(crate) mod workspace_watch;

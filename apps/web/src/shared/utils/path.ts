@@ -10,6 +10,23 @@ export const resolvePath = (base: string | undefined, path: string) => {
 export const normalizeComparablePath = (value: string) => value.replace(/\\/g, "/");
 export const sanitizeGitRelativePath = (value: string) => normalizeComparablePath(value).replace(/^[:/\\]+/, "");
 
+export const normalizePathForMatch = (value: string) => {
+  const normalized = normalizeComparablePath(value).replace(/\/+$/, "");
+  return looksLikeWindowsPath(value) ? normalized.toLowerCase() : normalized;
+};
+
+export const isPathWithin = (parent: string, candidate: string) => {
+  const normalizedParent = normalizePathForMatch(parent);
+  const normalizedCandidate = normalizePathForMatch(candidate);
+  if (!normalizedParent || !normalizedCandidate) return false;
+  return normalizedCandidate === normalizedParent || normalizedCandidate.startsWith(`${normalizedParent}/`);
+};
+
+export const pathsIntersect = (left?: string, right?: string) => {
+  if (!left || !right) return false;
+  return isPathWithin(left, right) || isPathWithin(right, left);
+};
+
 export const matchesGitPreviewPath = (previewPath: string, changePath: string) => {
   const normalizedPreview = normalizeComparablePath(previewPath);
   const normalizedChange = normalizeComparablePath(changePath);
