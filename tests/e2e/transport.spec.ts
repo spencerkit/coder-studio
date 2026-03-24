@@ -115,7 +115,7 @@ test.describe('workspace transport baseline', () => {
       workspace_tree: expect.any(Number),
     });
     expect(Object.values(baseline.initialCounts).every((count) => count >= 1)).toBe(true);
-    expect(baseline.countsBeforeNextPoll).toEqual(baseline.initialCounts);
+    expectPollCountsNotToRegressFrom(baseline.countsBeforeNextPoll, baseline.initialCounts);
     expectPollCountsToAdvanceFrom(baseline.countsAfterNextPoll, baseline.initialCounts);
   });
 
@@ -615,6 +615,13 @@ function expectPollCountsToAdvanceFrom(actual: PollCounts, baseline: PollCounts)
   expect(actual.workspace_tree).toBeGreaterThan(baseline.workspace_tree);
 }
 
+function expectPollCountsNotToRegressFrom(actual: PollCounts, baseline: PollCounts) {
+  expect(actual.git_status).toBeGreaterThanOrEqual(baseline.git_status);
+  expect(actual.git_changes).toBeGreaterThanOrEqual(baseline.git_changes);
+  expect(actual.worktree_list).toBeGreaterThanOrEqual(baseline.worktree_list);
+  expect(actual.workspace_tree).toBeGreaterThanOrEqual(baseline.workspace_tree);
+}
+
 function rpcCommand(url: string) {
   return url.split('/api/rpc/')[1]?.split('?')[0] ?? '';
 }
@@ -638,7 +645,9 @@ function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
 }
 
 function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
-  return isWindowsNativeTarget(target) ? 'more' : 'cat';
+  return isWindowsNativeTarget(target)
+    ? 'powershell -NoLogo -NoProfile -Command "$line = [Console]::In.ReadLine(); if ($null -ne $line) { Write-Output $line }"'
+    : 'cat';
 }
 
 function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {

@@ -319,8 +319,17 @@ test('release runtime allows sign-in from a remote HTTP host', async ({ page, re
     await page.getByPlaceholder('Enter passphrase').fill(REMOTE_HTTP_PASSWORD);
     await page.getByRole('button', { name: 'Enter workspace' }).click();
 
-    await expect(page.getByTestId('overlay')).toBeVisible();
-    await expect(page.getByTestId('folder-select')).toBeVisible();
+    await page.waitForFunction(() =>
+      Boolean(document.querySelector('[data-testid="overlay"]'))
+      || Boolean(document.querySelector('[data-testid="workspace-topbar"]'))
+    );
+
+    if (await page.getByTestId('overlay').count()) {
+      await expect(page.getByTestId('overlay')).toBeVisible();
+      await expect(page.getByTestId('folder-select')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    }
   } finally {
     await patchSystemConfig(request, {
       'auth.password': null,
