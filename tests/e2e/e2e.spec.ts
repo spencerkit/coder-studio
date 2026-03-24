@@ -5,7 +5,6 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 const HOME_DIR = os.homedir();
-const HOME_LABEL = path.basename(HOME_DIR) || HOME_DIR;
 const TAB_STABILITY_DIRS = [
   path.join(HOME_DIR, 'coder-studio-e2e-tab-a'),
   path.join(HOME_DIR, 'coder-studio-e2e-tab-b'),
@@ -84,6 +83,8 @@ const gotoWorkspaceRoot = async (page: Page) => {
 
 const countWorkspaceTabs = async (page: Page) => page.locator('.workspace-top-tab').count();
 
+const workspaceLabelForPath = (workspacePath: string) => path.basename(workspacePath) || workspacePath;
+
 const openLaunchOverlay = async (page: Page) => {
   await gotoWorkspaceRoot(page);
   const overlay = page.getByTestId('overlay');
@@ -100,7 +101,8 @@ const openLaunchOverlay = async (page: Page) => {
 const launchLocalWorkspace = async (page: Page) => {
   await gotoWorkspaceRoot(page);
   if (await countWorkspaceTabs(page)) {
-    return;
+    const activeLabel = (await page.locator('.workspace-top-tab.active .session-top-label').textContent())?.trim();
+    return activeLabel ?? '';
   }
 
   await openLaunchOverlay(page);
@@ -108,10 +110,12 @@ const launchLocalWorkspace = async (page: Page) => {
   await expect(page.getByTestId('folder-select')).toBeVisible();
 
   await page.getByRole('button', { name: 'Home' }).click();
+  const selectedPath = ((await page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong').textContent()) ?? '').trim();
   await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+  return workspaceLabelForPath(selectedPath);
 };
 
 const invokeRpc = async <T>(page: Page, command: string, payload: Record<string, unknown> = {}) => {
@@ -183,6 +187,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   await installRuntimeCommandMock(page);
+  await closeAllOpenWorkspaces(page);
 });
 
 test.beforeAll(async () => {
@@ -194,8 +199,8 @@ test.afterAll(async () => {
 });
 
 test('local workspace flow opens the workspace shell', async ({ page }) => {
-  await launchLocalWorkspace(page);
-  await expect(page.getByTestId('workspace-topbar')).toContainText(HOME_LABEL);
+  const expectedLabel = await launchLocalWorkspace(page);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
   await expect(page.getByTestId('settings-open')).toBeVisible();
 });
 
@@ -257,11 +262,11 @@ test('settings persist across route changes and reloads', async ({ page }) => {
 });
 
 test('restores the last workspace after reload', async ({ page }) => {
-  await launchLocalWorkspace(page);
+  const expectedLabel = await launchLocalWorkspace(page);
   await page.reload();
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-topbar')).toContainText(HOME_LABEL);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
 });
 
 test('workspace tabs keep a stable order when switching between workspaces', async ({ page }) => {

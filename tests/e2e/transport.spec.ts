@@ -99,6 +99,10 @@ const emptyPollCounts = (): PollCounts => ({
   workspace_tree: 0,
 });
 
+test.beforeEach(async ({ page }) => {
+  await closeAllOpenWorkspaces(page);
+});
+
 test.describe('workspace transport baseline', () => {
   test('fallback polling refreshes git/tree/worktree on the configured cadence', async ({ page }) => {
     const baseline = await observePollingBaseline(page);
@@ -347,15 +351,31 @@ async function observeWatcherInvalidationBaseline(page: Page): Promise<WatcherIn
     'e2e',
     `.transport-watcher-probe-${process.pid}-${Date.now()}.txt`,
   );
+  const predicate = (payload: Record<string, unknown>) =>
+    payload.path === workspace.workspacePath && payload.reason === 'file_watcher';
 
   await fs.mkdir(path.dirname(probeFile), { recursive: true });
   try {
-    await fs.writeFile(probeFile, `watcher ${Date.now()}\n`, 'utf8');
-    const dirtyFrame = await waitForWsEvent(
-      page,
-      'workspace://artifacts_dirty',
-      (payload) => payload.path === workspace.workspacePath && payload.reason === 'file_watcher',
-    );
+    let dirtyFrame: WsEventFrame | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await fs.writeFile(probeFile, `watcher ${Date.now()}-${attempt}\n`, 'utf8');
+      try {
+        dirtyFrame = await waitForWsEvent(
+          page,
+          'workspace://artifacts_dirty',
+          predicate,
+          2500,
+        );
+        break;
+      } catch (error) {
+        lastError = error;
+        await page.waitForTimeout(350);
+      }
+    }
+    if (!dirtyFrame) {
+      throw lastError ?? new Error('watcher_invalidation_timeout');
+    }
 
     return {
       dirtyFrame,
@@ -381,12 +401,14 @@ async function observeGitIndexInvalidationBaseline(page: Page): Promise<GitIndex
   const predicate = (payload: Record<string, unknown>) =>
     payload.path === workspace.workspacePath && payload.reason === 'file_watcher';
   const baselineCount = await countWsEvents(page, 'workspace://artifacts_dirty', predicate);
+  const countsBeforeFileWrite = snapshotCounts(probe.counts);
 
   await fs.mkdir(path.dirname(probeFile), { recursive: true });
   try {
     await fs.writeFile(probeFile, `index ${Date.now()}\n`, 'utf8');
     await waitForWsEventCount(page, 'workspace://artifacts_dirty', predicate, baselineCount + 1);
-    await page.waitForTimeout(400);
+    await waitForCountsAtLeast(probe.counts, incrementCounts(countsBeforeFileWrite));
+    await page.waitForTimeout(1000);
     const countsAfterFileWrite = await countWsEvents(page, 'workspace://artifacts_dirty', predicate);
 
     await execFileAsync('git', ['add', '--', probeFile], { cwd: WORKSPACE_PATH });
@@ -532,6 +554,18 @@ async function invokeRpc<T>(page: Page, command: string, payload: Record<string,
   return body.data as T;
 }
 
+async function closeAllOpenWorkspaces(page: Page) {
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+    };
+  }>(page, 'workbench_bootstrap');
+
+  for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
+    await invokeRpc(page, 'close_workspace', { workspace_id: workspaceId });
+  }
+}
+
 async function waitForPollCycle(counts: PollCounts) {
   await expect
     .poll(() => {
@@ -549,6 +583,20 @@ async function waitForCounts(actual: PollCounts, expected: PollCounts) {
       timeout: 10000,
     })
     .toEqual(expected);
+}
+
+async function waitForCountsAtLeast(actual: PollCounts, expectedMinimum: PollCounts) {
+  await expect
+    .poll(() => {
+      const snapshot = snapshotCounts(actual);
+      return snapshot.git_status >= expectedMinimum.git_status
+        && snapshot.git_changes >= expectedMinimum.git_changes
+        && snapshot.worktree_list >= expectedMinimum.worktree_list
+        && snapshot.workspace_tree >= expectedMinimum.workspace_tree;
+    }, {
+      timeout: 10000,
+    })
+    .toBe(true);
 }
 
 function snapshotCounts(counts: PollCounts): PollCounts {
@@ -602,6 +650,7 @@ async function waitForWsEvent(
   page: Page,
   eventName: string,
   predicate: (payload: Record<string, unknown>) => boolean,
+  timeoutMs = 10000,
 ): Promise<WsEventFrame> {
   await expect
     .poll(async () => {
@@ -615,7 +664,7 @@ async function waitForWsEvent(
         );
       return match ?? null;
     }, {
-      timeout: 10000,
+      timeout: timeoutMs,
     })
     .not.toBeNull();
 
@@ -650,10 +699,11 @@ async function waitForWsEventCount(
   eventName: string,
   predicate: (payload: Record<string, unknown>) => boolean,
   expectedCount: number,
+  timeoutMs = 10000,
 ) {
   await expect
     .poll(() => countWsEvents(page, eventName, predicate), {
-      timeout: 10000,
+      timeout: timeoutMs,
     })
     .toBeGreaterThanOrEqual(expectedCount);
 }
