@@ -1,6 +1,6 @@
 {
   "name": "@spencer-kit/coder-studio-win32-x64",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Windows x64 runtime bundle for Coder Studio.",
   "os": [
     "win32"
