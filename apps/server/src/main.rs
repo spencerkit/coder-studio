@@ -97,19 +97,19 @@ pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
     terminal_close, terminal_create, terminal_resize, terminal_write,
 };
-pub(crate) use services::workspace_watch::{
-    begin_workspace_watch_suppression, end_workspace_watch_suppression, ensure_workspace_watch,
-    stop_workspace_watch,
-};
 pub(crate) use services::workspace::{
     activate_workspace, archive_session, close_workspace, create_session, launch_workspace,
     launch_workspace_internal, session_update, switch_session, update_idle_policy,
     update_workbench_layout, workbench_bootstrap, workspace_snapshot, workspace_view_update,
     worktree_inspect,
 };
+pub(crate) use services::workspace_watch::{
+    begin_workspace_watch_suppression, end_workspace_watch_suppression, ensure_workspace_watch,
+    stop_workspace_watch,
+};
 pub(crate) use ws::server::{
-    agent_key, emit_agent, emit_agent_lifecycle, emit_terminal,
-    emit_workspace_artifacts_dirty, terminal_key,
+    agent_key, emit_agent, emit_agent_lifecycle, emit_terminal, emit_workspace_artifacts_dirty,
+    terminal_key,
 };
 
 use runtime::RuntimeHandle;

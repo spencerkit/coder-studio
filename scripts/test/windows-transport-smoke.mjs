@@ -15,6 +15,9 @@ function parseArgs(argv) {
 
   while (args.length > 0) {
     const current = args.shift();
+    if (current === '--') {
+      continue;
+    }
     if (current === '--skip-wsl-preflight') {
       options.skipWslPreflight = true;
       continue;

@@ -128,10 +128,7 @@ fn watch_directory_tree(watcher: &mut RecommendedWatcher, root: &Path) {
                 if error.kind() == std::io::ErrorKind::NotFound {
                     continue;
                 }
-                eprintln!(
-                    "skipping workspace watch path {}: {error}",
-                    path.display()
-                );
+                eprintln!("skipping workspace watch path {}: {error}", path.display());
                 continue;
             }
         };
@@ -141,10 +138,7 @@ fn watch_directory_tree(watcher: &mut RecommendedWatcher, root: &Path) {
         }
         if !metadata.is_dir() {
             if let Err(error) = watch_single_path(watcher, &path) {
-                eprintln!(
-                    "failed to watch workspace path {}: {error}",
-                    path.display()
-                );
+                eprintln!("failed to watch workspace path {}: {error}", path.display());
             }
             continue;
         }
@@ -201,7 +195,10 @@ fn git_visible_directories(
     )
     .unwrap_or_default();
 
-    for relative_path in git_files.split('\0').filter(|value| !value.trim().is_empty()) {
+    for relative_path in git_files
+        .split('\0')
+        .filter(|value| !value.trim().is_empty())
+    {
         let mut current = PathBuf::new();
         if let Some(parent) = Path::new(relative_path).parent() {
             for component in parent.components() {
@@ -245,7 +242,10 @@ fn resolve_git_dir_watch_path(
 
 fn watch_git_metadata_paths(watcher: &mut RecommendedWatcher, git_dir_path: &Path) {
     if let Err(error) = watch_single_path(watcher, git_dir_path) {
-        eprintln!("failed to watch git directory {}: {error}", git_dir_path.display());
+        eprintln!(
+            "failed to watch git directory {}: {error}",
+            git_dir_path.display()
+        );
     }
 
     for relative in [
@@ -263,7 +263,10 @@ fn watch_git_metadata_paths(watcher: &mut RecommendedWatcher, git_dir_path: &Pat
         match std::fs::symlink_metadata(&path) {
             Ok(metadata) if !metadata.file_type().is_symlink() => {
                 if let Err(error) = watch_single_path(watcher, &path) {
-                    eprintln!("failed to watch git metadata path {}: {error}", path.display());
+                    eprintln!(
+                        "failed to watch git metadata path {}: {error}",
+                        path.display()
+                    );
                 }
             }
             Ok(_) => {}
@@ -383,8 +386,8 @@ fn spawn_workspace_watch(
         }
 
         if saw_relevant_event {
-            let suppressed_index_event = !saw_non_index_event
-                && is_workspace_watch_suppressed(&suppressions, &workspace_id);
+            let suppressed_index_event =
+                !saw_non_index_event && is_workspace_watch_suppressed(&suppressions, &workspace_id);
             if !suppressed_index_event {
                 emit_workspace_artifacts_dirty_event(
                     &transport_events,
@@ -475,10 +478,13 @@ pub(crate) fn begin_workspace_watch_suppression(
         let now = std::time::Instant::now();
         suppressions.retain(|_, state| state.active_requests > 0 || state.until > now);
         for workspace_id in &workspace_ids {
-            let entry = suppressions.entry(workspace_id.clone()).or_insert(WorkspaceWatchSuppression {
-                active_requests: 0,
-                until: now,
-            });
+            let entry =
+                suppressions
+                    .entry(workspace_id.clone())
+                    .or_insert(WorkspaceWatchSuppression {
+                        active_requests: 0,
+                        until: now,
+                    });
             entry.active_requests += 1;
         }
     }
@@ -518,6 +524,9 @@ mod tests {
     #[test]
     fn parse_wsl_watch_path_accepts_unc_output() {
         let parsed = parse_wsl_watch_path("\\\\wsl$\\Ubuntu\\home\\spencer\\repo\n").unwrap();
-        assert_eq!(parsed, PathBuf::from("\\\\wsl$\\Ubuntu\\home\\spencer\\repo"));
+        assert_eq!(
+            parsed,
+            PathBuf::from("\\\\wsl$\\Ubuntu\\home\\spencer\\repo")
+        );
     }
 }
