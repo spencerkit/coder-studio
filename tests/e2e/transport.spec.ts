@@ -22,6 +22,7 @@ type WsEventFrame = {
 };
 
 type WsTransportBaseline = {
+  agentProbeMode: 'startup' | 'stdin';
   controlPlaneCommands: string[];
   websocketUrls: string[];
   workspaceId: string;
@@ -123,13 +124,22 @@ test.describe('workspace transport baseline', () => {
   test('terminal and agent streams still arrive over /ws', async ({ page }) => {
     const baseline = await observeWsTransport(page);
 
-    expect(baseline.controlPlaneCommands).toEqual([
-      'terminal_create',
-      'terminal_write',
-      'create_session',
-      'agent_start',
-      'agent_send',
-    ]);
+    expect(baseline.controlPlaneCommands).toEqual(
+      baseline.agentProbeMode === 'stdin'
+        ? [
+          'terminal_create',
+          'terminal_write',
+          'create_session',
+          'agent_start',
+          'agent_send',
+        ]
+        : [
+          'terminal_create',
+          'terminal_write',
+          'create_session',
+          'agent_start',
+        ],
+    );
     expect(baseline.websocketUrls.some((url) => url.includes('/ws'))).toBe(true);
     expect(baseline.terminalFrame.event).toBe('terminal://event');
     expect(baseline.terminalFrame.payload.workspace_id).toBe(baseline.workspaceId);
@@ -200,6 +210,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await installTransportProbe(page);
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
+  const agentProbe = buildAgentProbe(workspace.target);
 
   const controlPlaneCommands: string[] = [];
 
@@ -230,19 +241,21 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     workspaceId: workspace.workspaceId,
     sessionId,
     provider: 'shell',
-    command: buildAgentProbeCommand(workspace.target),
+    command: agentProbe.command,
     cols: 120,
     rows: 30,
   });
   controlPlaneCommands.push('agent_start');
 
-  await invokeRpc(page, 'agent_send', {
-    workspaceId: workspace.workspaceId,
-    sessionId,
-    input: buildAgentProbeInput(workspace.target),
-    appendNewline: true,
-  });
-  controlPlaneCommands.push('agent_send');
+  if (agentProbe.input) {
+    await invokeRpc(page, 'agent_send', {
+      workspaceId: workspace.workspaceId,
+      sessionId,
+      input: agentProbe.input,
+      appendNewline: true,
+    });
+    controlPlaneCommands.push('agent_send');
+  }
 
   const terminalFrame = await waitForWsEvent(
     page,
@@ -254,11 +267,12 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     'agent://event',
     (payload) => payload.workspace_id === workspace.workspaceId
       && payload.session_id === sessionId
-      && String(payload.data ?? '').includes('transport-agent'),
+      && String(payload.data ?? '').includes(agentProbe.expectedText),
   );
   const tracker = await readTransportTracker(page);
 
   return {
+    agentProbeMode: agentProbe.mode,
     controlPlaneCommands,
     websocketUrls: tracker.urls,
     workspaceId: workspace.workspaceId,
@@ -656,6 +670,24 @@ function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
 function buildAgentProbeInput(target: WorkspaceHandle['target']) {
   void target;
   return 'transport-agent';
+}
+
+function buildAgentProbe(target: WorkspaceHandle['target']) {
+  if (isWindowsNativeTarget(target)) {
+    return {
+      mode: 'startup' as const,
+      command: 'cmd /Q /D /C echo transport-agent',
+      input: null,
+      expectedText: 'transport-agent',
+    };
+  }
+
+  return {
+    mode: 'stdin' as const,
+    command: buildAgentProbeCommand(target),
+    input: buildAgentProbeInput(target),
+    expectedText: 'transport-agent',
+  };
 }
 
 function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {
