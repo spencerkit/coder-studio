@@ -83,6 +83,7 @@ const BACKEND_WS_PATH = '/ws';
 const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
+const AGENT_STDIN_ECHO_SCRIPT = 'tests/e2e/fixtures/agent-stdin-echo.mjs';
 const execFileAsync = promisify(execFile);
 
 const incrementCounts = (counts: PollCounts) => ({
@@ -648,15 +649,13 @@ function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
 }
 
 function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
-  return isWindowsNativeTarget(target)
-    ? 'cmd /Q /D /K'
-    : 'cat';
+  void target;
+  return `node ${AGENT_STDIN_ECHO_SCRIPT}`;
 }
 
 function buildAgentProbeInput(target: WorkspaceHandle['target']) {
-  return isWindowsNativeTarget(target)
-    ? 'echo transport-agent'
-    : 'transport-agent';
+  void target;
+  return 'transport-agent';
 }
 
 function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {
