@@ -238,7 +238,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await invokeRpc(page, 'agent_send', {
     workspaceId: workspace.workspaceId,
     sessionId,
-    input: 'transport-agent',
+    input: buildAgentProbeInput(workspace.target),
     appendNewline: true,
   });
   controlPlaneCommands.push('agent_send');
@@ -548,7 +548,10 @@ async function openWorkspace(page: Page): Promise<WorkspaceHandle> {
 
 async function invokeRpc<T>(page: Page, command: string, payload: Record<string, unknown> = {}) {
   const response = await page.request.post(`/api/rpc/${command}`, { data: payload });
-  expect(response.ok()).toBeTruthy();
+  if (!response.ok()) {
+    const body = await response.text();
+    throw new Error(`RPC ${command} failed with ${response.status()}: ${body}`);
+  }
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
@@ -646,8 +649,14 @@ function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
 
 function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
   return isWindowsNativeTarget(target)
-    ? 'powershell -NoLogo -NoProfile -Command "$line = [Console]::In.ReadLine(); if ($null -ne $line) { Write-Output $line }"'
+    ? 'cmd /Q /D /K'
     : 'cat';
+}
+
+function buildAgentProbeInput(target: WorkspaceHandle['target']) {
+  return isWindowsNativeTarget(target)
+    ? 'echo transport-agent'
+    : 'transport-agent';
 }
 
 function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {
