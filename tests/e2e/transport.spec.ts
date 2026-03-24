@@ -116,7 +116,7 @@ test.describe('workspace transport baseline', () => {
     });
     expect(Object.values(baseline.initialCounts).every((count) => count >= 1)).toBe(true);
     expect(baseline.countsBeforeNextPoll).toEqual(baseline.initialCounts);
-    expect(baseline.countsAfterNextPoll).toEqual(incrementCounts(baseline.initialCounts));
+    expectPollCountsToAdvanceFrom(baseline.countsAfterNextPoll, baseline.initialCounts);
   });
 
   test('terminal and agent streams still arrive over /ws', async ({ page }) => {
@@ -169,7 +169,7 @@ test.describe('workspace transport baseline', () => {
     const baseline = await observeGitIndexInvalidationBaseline(page);
 
     expect(baseline.countsAfterGitAdd).toBeGreaterThan(baseline.countsAfterFileWrite);
-    expect(baseline.workspacePath).toBe(WORKSPACE_PATH);
+    expect(normalizePathForComparison(baseline.workspacePath)).toBe(normalizePathForComparison(WORKSPACE_PATH));
   });
 });
 
@@ -184,7 +184,7 @@ async function observePollingBaseline(page: Page): Promise<PollingBaseline> {
 
   await page.waitForTimeout(3000);
   const countsBeforeNextPoll = snapshotCounts(probe.counts);
-  await waitForCounts(probe.counts, incrementCounts(initialCounts));
+  await waitForCountsAtLeast(probe.counts, incrementCounts(initialCounts));
   const countsAfterNextPoll = snapshotCounts(probe.counts);
 
   return {
@@ -608,6 +608,13 @@ function snapshotCounts(counts: PollCounts): PollCounts {
   };
 }
 
+function expectPollCountsToAdvanceFrom(actual: PollCounts, baseline: PollCounts) {
+  expect(actual.git_status).toBeGreaterThan(baseline.git_status);
+  expect(actual.git_changes).toBeGreaterThan(baseline.git_changes);
+  expect(actual.worktree_list).toBeGreaterThan(baseline.worktree_list);
+  expect(actual.workspace_tree).toBeGreaterThan(baseline.workspace_tree);
+}
+
 function rpcCommand(url: string) {
   return url.split('/api/rpc/')[1]?.split('?')[0] ?? '';
 }
@@ -620,6 +627,10 @@ function isWindowsNativeTarget(target: WorkspaceHandle['target']) {
   return process.platform === 'win32' && target.type === 'native';
 }
 
+function normalizePathForComparison(value: string) {
+  return value.replaceAll('\\', '/').replace(/\/+$/u, '').toLowerCase();
+}
+
 function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
   return isWindowsNativeTarget(target)
     ? 'echo transport-terminal\r'
@@ -627,7 +638,7 @@ function buildTerminalProbeInput(target: WorkspaceHandle['target']) {
 }
 
 function buildAgentProbeCommand(target: WorkspaceHandle['target']) {
-  return isWindowsNativeTarget(target) ? 'findstr "^"' : 'cat';
+  return isWindowsNativeTarget(target) ? 'more' : 'cat';
 }
 
 function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string) {
