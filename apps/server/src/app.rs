@@ -7,7 +7,7 @@ use std::{
 };
 
 use notify::RecommendedWatcher;
-use portable_pty::{Child, MasterPty};
+use portable_pty::{Child, ChildKiller, MasterPty};
 use rusqlite::Connection;
 use tokio::sync::broadcast;
 
@@ -24,14 +24,20 @@ pub(crate) struct HttpServerState {
 
 pub(crate) struct AgentRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
+    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub process_id: Option<u32>,
+    pub process_group_leader: Option<i32>,
 }
 
 pub(crate) struct TerminalRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
+    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub process_id: Option<u32>,
+    pub process_group_leader: Option<i32>,
 }
 
 pub(crate) struct WorkspaceWatch {

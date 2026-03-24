@@ -184,13 +184,14 @@ dependencies = [
 
 [[package]]
 name = "coder-studio"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
  "futures-util",
  "getrandom",
+ "libc",
  "notify",
  "portable-pty",
  "rusqlite",

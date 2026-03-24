@@ -52,6 +52,88 @@ fn apply_windows_no_window(cmd: &mut Command) {
 #[cfg(not(target_os = "windows"))]
 fn apply_windows_no_window(_cmd: &mut Command) {}
 
+#[cfg(unix)]
+fn signal_unix_process_tree(
+    process_group_leader: Option<i32>,
+    process_id: Option<u32>,
+    signal: libc::c_int,
+) -> Result<(), String> {
+    if let Some(group_leader) = process_group_leader.filter(|value| *value > 0) {
+        let result = unsafe { libc::killpg(group_leader, signal) };
+        if result == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error.to_string());
+        }
+    }
+
+    if let Some(pid) = process_id {
+        let result = unsafe { libc::kill(pid as i32, signal) };
+        if result == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error.to_string());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn unix_process_exists(process_id: u32) -> bool {
+    let result = unsafe { libc::kill(process_id as i32, 0) };
+    if result == 0 {
+        return true;
+    }
+    matches!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::EPERM)
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn terminate_process_tree(
+    killer: &mut (dyn portable_pty::ChildKiller + Send + Sync),
+    process_id: Option<u32>,
+    process_group_leader: Option<i32>,
+) -> Result<(), String> {
+    signal_unix_process_tree(process_group_leader, process_id, libc::SIGTERM)?;
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    if process_id.is_some_and(unix_process_exists) {
+        signal_unix_process_tree(process_group_leader, process_id, libc::SIGKILL)?;
+    }
+    let _ = killer.kill();
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(crate) fn terminate_process_tree(
+    killer: &mut (dyn portable_pty::ChildKiller + Send + Sync),
+    process_id: Option<u32>,
+    _process_group_leader: Option<i32>,
+) -> Result<(), String> {
+    if let Some(pid) = process_id {
+        let output = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stderr(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                return Ok(());
+            }
+        }
+    }
+
+    let _ = killer.kill();
+    Ok(())
+}
+
 pub(crate) fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = if let ExecTarget::Wsl { distro } = target {
         let mut c = Command::new("wsl.exe");

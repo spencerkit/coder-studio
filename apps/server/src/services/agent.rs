@@ -12,6 +12,19 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     }
 }
 
+fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
+    if let Ok(mut writer) = runtime.writer.lock() {
+        *writer = None;
+    }
+    if let Ok(mut killer) = runtime.killer.lock() {
+        let _ = terminate_process_tree(
+            &mut **killer,
+            runtime.process_id,
+            runtime.process_group_leader,
+        );
+    }
+}
+
 pub(crate) fn agent_start(
     workspace_id: String,
     session_id: String,
@@ -82,14 +95,23 @@ pub(crate) fn agent_start(
         }
         format!("failed to start agent command: {} (command: `{}`)", raw, command)
     })?;
+    let process_id = child.process_id();
+    #[cfg(unix)]
+    let process_group_leader = pair.master.process_group_leader().map(|value| value as i32);
+    #[cfg(not(unix))]
+    let process_group_leader = None;
+    let killer = child.clone_killer();
     drop(pair.slave);
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     let runtime = Arc::new(AgentRuntime {
         child: Mutex::new(child),
+        killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
         master: Mutex::new(pair.master),
+        process_id,
+        process_group_leader,
     });
 
     {
@@ -204,17 +226,13 @@ pub(crate) fn agent_stop(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let key = agent_key(&workspace_id, &session_id);
-    let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
-    if let Some(runtime) = agents.remove(&key) {
-        if let Ok(mut child) = runtime.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        if let Ok(mut writer) = runtime.writer.lock() {
-            *writer = None;
-        }
+    let runtime = {
+        let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
+        agents.remove(&key)
+    };
+    if let Some(runtime) = runtime {
+        terminate_agent_runtime(runtime);
     }
-    drop(agents);
     if let Ok(session_id_num) = session_id.parse::<u64>() {
         let _ = set_session_status(
             state,
@@ -224,6 +242,39 @@ pub(crate) fn agent_stop(
         );
     }
     Ok(())
+}
+
+pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppState>) {
+    let prefix = format!("{workspace_id}:");
+    let runtimes = {
+        let Ok(mut agents) = state.agents.lock() else {
+            return;
+        };
+        let keys = agents
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.into_iter()
+            .filter_map(|key| {
+                let session_id = key.strip_prefix(&prefix)?.to_string();
+                let runtime = agents.remove(&key)?;
+                Some((session_id, runtime))
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for (session_id, runtime) in runtimes {
+        terminate_agent_runtime(runtime);
+        if let Ok(session_id_num) = session_id.parse::<u64>() {
+            let _ = set_session_status(
+                state,
+                workspace_id,
+                session_id_num,
+                SessionStatus::Interrupted,
+            );
+        }
+    }
 }
 
 pub(crate) fn agent_resize(

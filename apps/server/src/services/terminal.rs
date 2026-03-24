@@ -12,6 +12,19 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     }
 }
 
+fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
+    if let Ok(mut writer) = runtime.writer.lock() {
+        writer.take();
+    }
+    if let Ok(mut killer) = runtime.killer.lock() {
+        let _ = terminate_process_tree(
+            &mut **killer,
+            runtime.process_id,
+            runtime.process_group_leader,
+        );
+    }
+}
+
 pub(crate) fn terminal_create(
     workspace_id: String,
     cwd: String,
@@ -34,14 +47,23 @@ pub(crate) fn terminal_create(
         .map_err(|e| e.to_string())?;
     let cmd = build_terminal_pty_command(&target, &cwd);
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let process_id = child.process_id();
+    #[cfg(unix)]
+    let process_group_leader = pair.master.process_group_leader().map(|value| value as i32);
+    #[cfg(not(unix))]
+    let process_group_leader = None;
+    let killer = child.clone_killer();
     drop(pair.slave);
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     let runtime = Arc::new(TerminalRuntime {
         child: Mutex::new(child),
+        killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
         master: Mutex::new(pair.master),
+        process_id,
+        process_group_leader,
     });
 
     let key = terminal_key(&workspace_id, terminal_id);
@@ -148,13 +170,29 @@ pub(crate) fn terminal_close(
     };
 
     if let Some(runtime) = runtime {
-        if let Ok(mut writer) = runtime.writer.lock() {
-            writer.take();
-        }
-        if let Ok(mut child) = runtime.child.lock() {
-            let _ = child.kill();
-        }
+        terminate_terminal_runtime(runtime);
     }
 
     Ok(())
+}
+
+pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, AppState>) {
+    let prefix = format!("{workspace_id}:");
+    let runtimes = {
+        let Ok(mut terms) = state.terminals.lock() else {
+            return;
+        };
+        let keys = terms
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.into_iter()
+            .filter_map(|key| terms.remove(&key))
+            .collect::<Vec<_>>()
+    };
+
+    for runtime in runtimes {
+        terminate_terminal_runtime(runtime);
+    }
 }

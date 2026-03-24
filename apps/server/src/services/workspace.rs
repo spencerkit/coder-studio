@@ -96,6 +96,8 @@ pub(crate) fn close_workspace(
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
     let ui_state = close_workspace_ui(state, &workspace_id)?;
+    close_workspace_terminals(&workspace_id, state);
+    stop_workspace_agents(&workspace_id, state);
     stop_workspace_watch(state, &workspace_id);
     Ok(ui_state)
 }
@@ -146,17 +148,7 @@ pub(crate) fn archive_session(
     state: State<'_, AppState>,
 ) -> Result<ArchiveEntry, String> {
     let entry = archive_workspace_session(state, &workspace_id, session_id)?;
-    let key = agent_key(&workspace_id, &session_id.to_string());
-    if let Ok(mut agents) = state.agents.lock() {
-        if let Some(runtime) = agents.remove(&key) {
-            if let Ok(mut child) = runtime.child.lock() {
-                let _ = child.kill();
-            }
-            if let Ok(mut writer) = runtime.writer.lock() {
-                *writer = None;
-            }
-        }
-    }
+    let _ = agent_stop(workspace_id.clone(), session_id.to_string(), state);
     Ok(entry)
 }
 

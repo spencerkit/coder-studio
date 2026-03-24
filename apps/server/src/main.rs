@@ -60,7 +60,7 @@ pub(crate) use infra::db::{
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
     repo_name_from_url, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
-    summarize_status, temp_root, trim_branch_name,
+    summarize_status, temp_root, terminate_process_tree, trim_branch_name,
 };
 pub(crate) use infra::support::{
     build_changes_tree, build_tree, build_tree_from_paths, combine_git_diff_sections,
@@ -80,7 +80,9 @@ pub(crate) use models::{
     WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
-pub(crate) use services::agent::{agent_resize, agent_send, agent_start, agent_stop};
+pub(crate) use services::agent::{
+    agent_resize, agent_send, agent_start, agent_stop, stop_workspace_agents,
+};
 pub(crate) use services::claude::{
     current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
     run_claude_hook_helper, start_claude_hook_receiver,
@@ -95,7 +97,7 @@ pub(crate) use services::git::{
 };
 pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
-    terminal_close, terminal_create, terminal_resize, terminal_write,
+    close_workspace_terminals, terminal_close, terminal_create, terminal_resize, terminal_write,
 };
 pub(crate) use services::workspace::{
     activate_workspace, archive_session, close_workspace, create_session, launch_workspace,

@@ -9,6 +9,7 @@ axum = { version = "0.7", features = ["ws"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures-util = "0.3"
 getrandom = "0.2"
+libc = "0.2"
 notify = "8.2.0"
 portable-pty = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
