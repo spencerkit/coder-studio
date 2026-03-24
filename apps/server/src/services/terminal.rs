@@ -49,7 +49,7 @@ pub(crate) fn terminal_create(
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let process_id = child.process_id();
     #[cfg(unix)]
-    let process_group_leader = pair.master.process_group_leader().map(|value| value as i32);
+    let process_group_leader = pair.master.process_group_leader();
     #[cfg(not(unix))]
     let process_group_leader = None;
     let killer = child.clone_killer();

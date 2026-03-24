@@ -751,12 +751,14 @@ fn dispatch_rpc(
             require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
                 agent_start(
-                    req.workspace_id,
-                    req.session_id,
-                    req.provider,
-                    req.command,
-                    req.cols,
-                    req.rows,
+                    crate::services::agent::AgentStartParams {
+                        workspace_id: req.workspace_id,
+                        session_id: req.session_id,
+                        provider: req.provider,
+                        command: req.command,
+                        cols: req.cols,
+                        rows: req.rows,
+                    },
                     app.clone(),
                     app.state(),
                 )

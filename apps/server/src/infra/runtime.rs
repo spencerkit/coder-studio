@@ -447,7 +447,7 @@ pub(crate) fn apply_unix_pty_env_defaults(cmd: &mut CommandBuilder, shell_path: 
     }
 
     if let Some(shell) = shell_path.map(str::trim).filter(|value| !value.is_empty()) {
-        cmd.env("SHELL", shell.to_string());
+        cmd.env("SHELL", shell);
     }
 }
 

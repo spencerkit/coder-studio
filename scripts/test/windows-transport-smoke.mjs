@@ -40,12 +40,40 @@ function formatCommand(command, args) {
   return [command, ...args].join(' ');
 }
 
+function quoteForCmd(value) {
+  if (value.length === 0) {
+    return '""';
+  }
+  if (!/[\s"&^|<>()]/.test(value)) {
+    return value;
+  }
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function resolveSpawn(command, args) {
+  if (process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')) {
+    return {
+      command: process.env.ComSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')]
+    };
+  }
+
+  return { command, args };
+}
+
 function run(command, args, label) {
   return new Promise((resolve, reject) => {
     process.stdout.write(`\n[windows-transport-smoke] ${label}\n`);
     process.stdout.write(`[windows-transport-smoke] ${formatCommand(command, args)}\n`);
 
-    const child = spawn(command, args, {
+    const resolved = resolveSpawn(command, args);
+    if (resolved.command !== command || resolved.args !== args) {
+      process.stdout.write(
+        `[windows-transport-smoke] via ${formatCommand(resolved.command, resolved.args)}\n`
+      );
+    }
+
+    const child = spawn(resolved.command, resolved.args, {
       cwd: ROOT,
       stdio: 'inherit',
       windowsHide: true

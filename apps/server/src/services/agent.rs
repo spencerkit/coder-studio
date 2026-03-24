@@ -25,16 +25,28 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
     }
 }
 
+pub(crate) struct AgentStartParams {
+    pub(crate) workspace_id: String,
+    pub(crate) session_id: String,
+    pub(crate) provider: String,
+    pub(crate) command: String,
+    pub(crate) cols: Option<u16>,
+    pub(crate) rows: Option<u16>,
+}
+
 pub(crate) fn agent_start(
-    workspace_id: String,
-    session_id: String,
-    provider: String,
-    command: String,
-    cols: Option<u16>,
-    rows: Option<u16>,
+    params: AgentStartParams,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AgentStartResult, String> {
+    let AgentStartParams {
+        workspace_id,
+        session_id,
+        provider,
+        command,
+        cols,
+        rows,
+    } = params;
     let key = agent_key(&workspace_id, &session_id);
     {
         let agents = state.agents.lock().map_err(|e| e.to_string())?;
@@ -56,11 +68,8 @@ pub(crate) fn agent_start(
     };
 
     let (program, args) = build_agent_pty_command(&target, &cwd, &command);
-    let shell_env = if matches!(target, ExecTarget::Native) {
-        Some(program.clone())
-    } else {
-        None
-    };
+    #[cfg(not(target_os = "windows"))]
+    let shell_env = matches!(target, ExecTarget::Native).then(|| program.clone());
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))
@@ -97,7 +106,7 @@ pub(crate) fn agent_start(
     })?;
     let process_id = child.process_id();
     #[cfg(unix)]
-    let process_group_leader = pair.master.process_group_leader().map(|value| value as i32);
+    let process_group_leader = pair.master.process_group_leader();
     #[cfg(not(unix))]
     let process_group_leader = None;
     let killer = child.clone_killer();
