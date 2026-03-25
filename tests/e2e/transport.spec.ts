@@ -148,7 +148,9 @@ test.describe('workspace transport baseline', () => {
     expect(baseline.agentFrame.event).toBe('agent://event');
     expect(baseline.agentFrame.payload.workspace_id).toBe(baseline.workspaceId);
     expect(baseline.agentFrame.payload.session_id).toBe(baseline.sessionId);
-    expect(String(baseline.agentFrame.payload.data ?? '')).toContain('transport-agent');
+    expect(String(baseline.agentFrame.payload.data ?? '')).toContain(
+      baseline.agentProbeMode === 'stdin' ? 'transport-agent' : AGENT_START_SYSTEM_MESSAGE,
+    );
   });
 
   test('websocket reconnect does not self-heal resource state before polling', async ({ page }) => {
