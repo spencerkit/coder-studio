@@ -1,0 +1,53 @@
+name: Windows WSL Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      wsl_distro:
+        description: Optional WSL distro name to validate against
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-wsl-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  transport-windows-wsl-smoke:
+    name: Transport Windows WSL Smoke
+    runs-on:
+      - self-hosted
+      - windows
+      - x64
+      - wsl
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Windows GNU target
+        run: rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/server -> .build/server/target
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: npx playwright install chromium
+      - name: Run full WSL transport smoke
+        env:
+          WSL_DISTRO: ${{ inputs.wsl_distro }}
+        shell: pwsh
+        run: |
+          $pnpmArgs = @('test:smoke:windows:transport')
+          if ($env:WSL_DISTRO) {
+            $pnpmArgs += '--'
+            $pnpmArgs += '--wsl-distro'
+            $pnpmArgs += $env:WSL_DISTRO
+          }
+          & pnpm @pnpmArgs

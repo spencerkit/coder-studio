@@ -1,16 +1,19 @@
 use std::{
     collections::HashMap,
     io::Write,
+    path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
-use portable_pty::{Child, MasterPty};
+use notify::RecommendedWatcher;
+use portable_pty::{Child, ChildKiller, MasterPty};
 use rusqlite::Connection;
 use tokio::sync::broadcast;
 
 use crate::{
     auth::{ip_guard::IpGuardMap, AuthRuntime},
-    models::TransportEvent,
+    models::{ExecTarget, TransportEvent},
     AppHandle,
 };
 
@@ -21,14 +24,32 @@ pub(crate) struct HttpServerState {
 
 pub(crate) struct AgentRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
+    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub process_id: Option<u32>,
+    pub process_group_leader: Option<i32>,
 }
 
 pub(crate) struct TerminalRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
+    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub process_id: Option<u32>,
+    pub process_group_leader: Option<i32>,
+}
+
+pub(crate) struct WorkspaceWatch {
+    pub root_path: String,
+    pub target: ExecTarget,
+    pub watched_path: PathBuf,
+    pub _watcher: RecommendedWatcher,
+}
+
+pub(crate) struct WorkspaceWatchSuppression {
+    pub active_requests: usize,
+    pub until: Instant,
 }
 
 pub(crate) struct AppState {
@@ -36,6 +57,8 @@ pub(crate) struct AppState {
     pub auth: Mutex<AuthRuntime>,
     pub agents: Mutex<HashMap<String, Arc<AgentRuntime>>>,
     pub terminals: Mutex<HashMap<String, Arc<TerminalRuntime>>>,
+    pub workspace_watches: Mutex<HashMap<String, WorkspaceWatch>>,
+    pub workspace_watch_suppressions: Arc<Mutex<HashMap<String, WorkspaceWatchSuppression>>>,
     pub next_terminal_id: Mutex<u64>,
     pub ip_guard: Mutex<IpGuardMap>,
     pub hook_endpoint: Mutex<Option<String>>,
@@ -51,6 +74,8 @@ impl Default for AppState {
             auth: Mutex::new(AuthRuntime::default()),
             agents: Mutex::new(HashMap::new()),
             terminals: Mutex::new(HashMap::new()),
+            workspace_watches: Mutex::new(HashMap::new()),
+            workspace_watch_suppressions: Arc::new(Mutex::new(HashMap::new())),
             next_terminal_id: Mutex::new(1),
             ip_guard: Mutex::new(HashMap::new()),
             hook_endpoint: Mutex::new(None),

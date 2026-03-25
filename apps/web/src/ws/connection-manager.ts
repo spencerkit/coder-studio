@@ -4,13 +4,21 @@ import { WsHeartbeat } from "./heartbeat";
 import { parseWsEnvelope, type WsEventEnvelope } from "./protocol";
 
 type EventHandler<T = unknown> = (payload: T) => void;
+export type WsConnectionState = {
+  kind: "connected" | "reconnected" | "disconnected";
+  at: number;
+  url: string;
+};
+type ConnectionHandler = (state: WsConnectionState) => void;
 
 export class WsConnectionManager {
   private readonly listeners = new Map<string, Set<EventHandler<unknown>>>();
+  private readonly connectionListeners = new Set<ConnectionHandler>();
   private socket: WebSocket | null = null;
   private reconnectTimer: number | null = null;
   private activeSocketUrl = "";
   private healthProbe: Promise<boolean> | null = null;
+  private hasConnectedOnce = false;
   private readonly heartbeat = new WsHeartbeat({
     send: (message) => {
       if (this.socket?.readyState === WebSocket.OPEN) {
@@ -39,10 +47,21 @@ export class WsConnectionManager {
     };
   }
 
+  subscribeConnectionState(handler: ConnectionHandler) {
+    this.connectionListeners.add(handler);
+    return () => {
+      this.connectionListeners.delete(handler);
+    };
+  }
+
   private notify<T>(message: WsEventEnvelope) {
     const handlers = this.listeners.get(message.event);
     if (!handlers) return;
     handlers.forEach((handler) => handler(message.payload as T));
+  }
+
+  private notifyConnectionState(state: WsConnectionState) {
+    this.connectionListeners.forEach((handler) => handler(state));
   }
 
   private scheduleReconnect() {
@@ -111,7 +130,10 @@ export class WsConnectionManager {
 
     this.socket = new WebSocket(nextUrl);
     this.socket.addEventListener("open", () => {
+      const kind = this.hasConnectedOnce ? "reconnected" : "connected";
+      this.hasConnectedOnce = true;
       this.heartbeat.start();
+      this.notifyConnectionState({ kind, at: Date.now(), url: nextUrl });
     });
     this.socket.addEventListener("message", (event) => {
       const envelope = parseWsEnvelope(String(event.data));
@@ -131,6 +153,7 @@ export class WsConnectionManager {
     this.socket.addEventListener("close", () => {
       this.heartbeat.stop();
       this.socket = null;
+      this.notifyConnectionState({ kind: "disconnected", at: Date.now(), url: nextUrl });
       this.scheduleReconnect();
     });
     this.socket.addEventListener("error", () => {

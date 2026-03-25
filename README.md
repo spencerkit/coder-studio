@@ -34,6 +34,52 @@ Coder Studio 是一个本地优先的开发工作台，当前以本地 server + 
 - 国际化：中文 / English
 - Public Mode：单口令鉴权、会话 Cookie、IP 封禁、`root.path` 单根目录白名单
 
+## 界面预览
+
+以下截图使用的是一个专门准备的 demo 工作区和 mock 数据，目的是把真实工作流里的关键界面展示清楚。
+
+### 工作台总览
+
+![Coder Studio 工作台总览](docs/assets/readme/workspace-overview.png)
+
+- 左侧是并行 Agent Pane，可同时跑多个任务
+- 右侧是代码面板，支持文件搜索、Monaco 编辑与预览
+- 底部是内置终端，可以直接检查 `git status`、跑脚本、看命令输出
+
+### 多 Agent 并行
+
+![Coder Studio 多 Agent 并行](docs/assets/readme/multi-agent.png)
+
+- 一个工作区内可以把任务拆成多个 Pane 并行推进
+- 每个 Pane 都保留独立的命令流和上下文
+- 很适合把“主任务 / 验证 / 文档整理”拆开跑
+
+### 代码与变更审阅
+
+![Coder Studio 代码与变更审阅](docs/assets/readme/git-review.png)
+
+- 右侧 Source Control 面板可直接查看改动、填写提交信息
+- 代码区支持边看文件边做 Diff / Git 审阅
+- 适合在 Agent 输出、代码检查、提交动作之间快速切换
+
+## 3 分钟入门
+
+如果你想最快跑起来，按下面做：
+
+1. 准备环境：安装 `Node.js`、`pnpm`、`Rust`、`Git`，如果你要真正启动 Agent，再准备一个可执行的 `claude` 命令。
+2. 安装依赖：在仓库根目录执行 `pnpm install`。
+3. 启动应用：执行 `pnpm dev:stack`，然后打开 `http://127.0.0.1:5174`。
+4. 首次进入：如果启用了公网模式，先输入访问口令；进入后，在工作区选择之前，应用会先做运行环境校验，检查 `Claude Code` 和 `Git` 是否可用。
+5. 选择工作区：在浮层里选择 `Local Folder` 或 `Remote Git`，再选择 `Native` 或 `WSL`。
+6. 开始工作：进入工作区后，在 Agent Pane 输入第一条任务并回车；然后根据需要打开代码面板、Git 面板和终端面板。
+
+如果你使用已经发布的 npm CLI，也可以这样启动：
+
+```bash
+coder-studio start
+coder-studio open
+```
+
 ## 安装前提
 
 在本地运行前，请先准备：

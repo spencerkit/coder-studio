@@ -14,6 +14,8 @@ import type {
 
 export type Toast = { id: string; text: string; sessionId: string };
 
+export type TerminalCompatibilityMode = "standard" | "compatibility";
+
 export type WorkspaceSummary = {
   workspace_id: string;
   title: string;
@@ -161,6 +163,12 @@ export type TerminalEvent = {
   data: string;
 };
 
+export type ArtifactsDirtyEvent = {
+  path: string;
+  target: ExecTarget;
+  reason: string;
+};
+
 export type WorktreeDetail = {
   name: string;
   path: string;
@@ -286,6 +294,7 @@ export type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: IdlePolicy;
+  terminalCompatibilityMode: TerminalCompatibilityMode;
 };
 
 export type AgentCommandStatus = {

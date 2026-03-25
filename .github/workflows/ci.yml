@@ -48,6 +48,29 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test:cli
 
+  transport-windows-smoke:
+    name: Transport Windows Smoke
+    runs-on: windows-2022
+    needs: version-consistency
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Windows GNU target
+        run: rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/server -> .build/server/target
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: npx playwright install chromium
+      # Pin this smoke to windows-2022 because windows-latest currently tracks
+      # windows-2025 and GitHub-hosted windows-2025 does not reliably provide WSL.
+      - run: pnpm test:smoke:windows:transport -- --skip-wsl-preflight
+
   verify-linux:
     name: Verify Linux Runtime
     runs-on: ubuntu-22.04

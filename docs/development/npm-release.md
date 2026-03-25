@@ -203,7 +203,12 @@ pnpm test:cli
 pnpm test:smoke
 pnpm test:e2e
 pnpm test:e2e:release
+pnpm test:smoke:windows:transport
 ```
+
+如果当前 Windows 机器没有可用的 WSL，可以临时执行：`pnpm test:smoke:windows:transport -- --skip-wsl-preflight`；指定 distro 则用 `-- --wsl-distro Ubuntu`。
+
+CI 里默认的 GitHub-hosted Windows 烟测会跳过这一步 WSL 预检；如果你已经有带 WSL 的自托管 Windows runner，可以手动触发 `Windows WSL Smoke` workflow。这个 workflow 需要 runner 带有 `self-hosted`、`windows`、`x64`、`wsl` 标签，并且会执行完整的 WSL 预检；如果要固定 distro，可以在 workflow input 里填写 `wsl_distro`。
 
 覆盖范围：
 
@@ -212,3 +217,4 @@ pnpm test:e2e:release
 - `test:smoke`：本地打包后真实安装 tarball，再执行 `start/status/restart/stop`
 - `test:e2e`：开发态前后端联动验证
 - `test:e2e:release`：release 二进制和静态资源启动后的浏览器 E2E
+- `test:smoke:windows:transport`：Windows 真机烟测；默认会先做 WSL `wslpath -w` 预检，再跑 transport 相关 Rust / Web / E2E 校验

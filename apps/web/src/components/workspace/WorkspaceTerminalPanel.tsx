@@ -1,4 +1,4 @@
-import type { PointerEventHandler, ReactNode } from "react";
+import type { PointerEventHandler, ReactNode, RefObject } from "react";
 import type { Translator } from "../../i18n";
 import { HeaderAddIcon, HeaderCloseIcon } from "../icons";
 
@@ -12,6 +12,7 @@ type WorkspaceTerminalPanelProps = {
   progressTone: "live" | "steady" | "idle";
   activeTerminalId?: string;
   terminals: TerminalOption[];
+  terminalViewportRef: RefObject<HTMLDivElement | null>;
   terminalContent: ReactNode;
   onResizeStart: PointerEventHandler<HTMLDivElement>;
   onSelect: (terminalId: string) => void;
@@ -26,6 +27,7 @@ export const WorkspaceTerminalPanel = ({
   progressTone,
   activeTerminalId,
   terminals,
+  terminalViewportRef,
   terminalContent,
   onResizeStart,
   onSelect,
@@ -80,7 +82,7 @@ export const WorkspaceTerminalPanel = ({
             </button>
           </div>
         </div>
-        <div className="terminal-output">{terminalContent}</div>
+        <div ref={terminalViewportRef} className="terminal-output">{terminalContent}</div>
       </div>
     </section>
   </>

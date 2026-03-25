@@ -41,9 +41,103 @@ pub(crate) fn shell_escape_windows(value: &str) -> String {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn apply_windows_no_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_windows_no_window(_cmd: &mut Command) {}
+
+#[cfg(unix)]
+fn signal_unix_process_tree(
+    process_group_leader: Option<i32>,
+    process_id: Option<u32>,
+    signal: libc::c_int,
+) -> Result<(), String> {
+    if let Some(group_leader) = process_group_leader.filter(|value| *value > 0) {
+        let result = unsafe { libc::killpg(group_leader, signal) };
+        if result == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error.to_string());
+        }
+    }
+
+    if let Some(pid) = process_id {
+        let result = unsafe { libc::kill(pid as i32, signal) };
+        if result == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error.to_string());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn unix_process_exists(process_id: u32) -> bool {
+    let result = unsafe { libc::kill(process_id as i32, 0) };
+    if result == 0 {
+        return true;
+    }
+    matches!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::EPERM)
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn terminate_process_tree(
+    killer: &mut (dyn portable_pty::ChildKiller + Send + Sync),
+    process_id: Option<u32>,
+    process_group_leader: Option<i32>,
+) -> Result<(), String> {
+    signal_unix_process_tree(process_group_leader, process_id, libc::SIGTERM)?;
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    if process_id.is_some_and(unix_process_exists) {
+        signal_unix_process_tree(process_group_leader, process_id, libc::SIGKILL)?;
+    }
+    let _ = killer.kill();
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(crate) fn terminate_process_tree(
+    killer: &mut (dyn portable_pty::ChildKiller + Send + Sync),
+    process_id: Option<u32>,
+    _process_group_leader: Option<i32>,
+) -> Result<(), String> {
+    if let Some(pid) = process_id {
+        let output = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stderr(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                return Ok(());
+            }
+        }
+    }
+
+    let _ = killer.kill();
+    Ok(())
+}
+
 pub(crate) fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = if let ExecTarget::Wsl { distro } = target {
         let mut c = Command::new("wsl.exe");
+        apply_windows_no_window(&mut c);
         if let Some(d) = distro {
             c.args(["-d", d]);
         }
@@ -63,6 +157,7 @@ pub(crate) fn run_cmd(target: &ExecTarget, cwd: &str, args: &[&str]) -> Result<S
         c
     } else {
         let mut c = std::process::Command::new(args[0]);
+        apply_windows_no_window(&mut c);
         c.args(&args[1..]);
         if !cwd.is_empty() {
             c.current_dir(cwd);
@@ -120,6 +215,7 @@ pub(crate) fn run_wsl_shell_command(
     script: &str,
 ) -> Result<String, String> {
     let mut cmd = Command::new("wsl.exe");
+    apply_windows_no_window(&mut cmd);
     if let ExecTarget::Wsl {
         distro: Some(distro),
     } = target
@@ -210,6 +306,7 @@ pub(crate) fn probe_native_command(
     }
 
     let mut cmd = Command::new("cmd");
+    apply_windows_no_window(&mut cmd);
     cmd.args(["/C", "where", command_name]);
     if let Some(base) = cwd.filter(|value| !value.is_empty()) {
         cmd.current_dir(base);
@@ -283,12 +380,80 @@ pub(crate) fn build_agent_shell_command(cwd: &str, command: &str, windows: bool)
 }
 
 #[cfg(not(target_os = "windows"))]
+fn locale_uses_utf8(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.contains("utf-8") || normalized.contains("utf8")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn platform_utf8_locale_fallback() -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        return Some("C.UTF-8");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return Some("en_US.UTF-8");
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_utf8_locale() -> Option<String> {
+    for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() && locale_uses_utf8(trimmed) {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    platform_utf8_locale_fallback().map(str::to_string)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_unix_shell_path() -> String {
+    if let Ok(shell) = std::env::var("SHELL") {
+        let trimmed = shell.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let bash = Path::new("/bin/bash");
+    if bash.exists() {
+        return bash.to_string_lossy().to_string();
+    }
+
+    "/bin/sh".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn apply_unix_pty_env_defaults(cmd: &mut CommandBuilder, shell_path: Option<&str>) {
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+
+    if let Some(locale) = resolve_utf8_locale() {
+        cmd.env("LC_CTYPE", locale.clone());
+
+        let lang = std::env::var("LANG").unwrap_or_default();
+        if lang.trim().is_empty() || !locale_uses_utf8(&lang) {
+            cmd.env("LANG", locale);
+        }
+    }
+
+    if let Some(shell) = shell_path.map(str::trim).filter(|value| !value.is_empty()) {
+        cmd.env("SHELL", shell);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
 pub(crate) fn resolve_unix_agent_shell() -> (String, String) {
-    let shell = std::env::var("SHELL")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "/bin/sh".to_string());
+    let shell = resolve_unix_shell_path();
     let shell_name = Path::new(&shell)
         .file_name()
         .and_then(|name| name.to_str())
@@ -384,12 +549,12 @@ pub(crate) fn build_terminal_pty_command(target: &ExecTarget, cwd: &str) -> Comm
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-            let mut cmd = CommandBuilder::new(shell);
+            let shell = resolve_unix_shell_path();
+            let mut cmd = CommandBuilder::new(shell.clone());
             if !cwd.is_empty() {
                 cmd.cwd(cwd);
             }
-            cmd.env("TERM", "xterm-256color");
+            apply_unix_pty_env_defaults(&mut cmd, Some(&shell));
             cmd
         }
     }

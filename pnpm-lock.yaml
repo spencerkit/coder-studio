@@ -23,6 +23,9 @@ importers:
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
+      '@xterm/addon-unicode11':
+        specifier: 0.9.0
+        version: 0.9.0
       '@xterm/xterm':
         specifier: ^6.0.0
         version: 6.0.0
@@ -76,17 +79,17 @@ importers:
   packages/cli:
     optionalDependencies:
       '@spencer-kit/coder-studio-darwin-arm64':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.2.1
+        version: 0.2.1
       '@spencer-kit/coder-studio-darwin-x64':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.2.1
+        version: 0.2.1
       '@spencer-kit/coder-studio-linux-x64':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.2.1
+        version: 0.2.1
       '@spencer-kit/coder-studio-win32-x64':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.2.1
+        version: 0.2.1
 
 packages:
 
@@ -481,23 +484,23 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.9':
     resolution: {integrity: sha512-w6oiRWgEBl04QkFZgmW+jnU1EC9b57Oihi2ot3HNWIQRqgHp5PnYDia5iZ5FF7rpa4EQdiqMDXjlqKGXBhsoXw==}
 
-  '@spencer-kit/coder-studio-darwin-arm64@0.1.3':
-    resolution: {integrity: sha512-BdVNJQDqRvdRrkfJ7uVIN2mBZi9S00MBMginWAOdtIp9H6SaQK0dEiXvLOaw/0pm80SJY4G3Ynr1QX4wEshqZQ==}
+  '@spencer-kit/coder-studio-darwin-arm64@0.2.1':
+    resolution: {integrity: sha512-N/DdLurPjR0qPl29Mj5EBbS2d053zLEN8titJhnIWNu9CqytEeOlIDQstIElhsMTAv82/P0o42kySkJT/tcF1g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@spencer-kit/coder-studio-darwin-x64@0.1.3':
-    resolution: {integrity: sha512-FIB/NjK/OgDUM4jnFNnP4grBo8xSs/apExkyveneu3sTxxRj55bKqHHb+XRFwp17/wKSiYx8994obdQWp4I4lQ==}
+  '@spencer-kit/coder-studio-darwin-x64@0.2.1':
+    resolution: {integrity: sha512-Yt1la5GvHkYzoo+iVAMBVs5XaNTrfzRnphLKbj4WDhjDwjc6hQRU2JSO5WHwOi8RTHuzmECF3zxAV/2IJSY6LQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@spencer-kit/coder-studio-linux-x64@0.1.3':
-    resolution: {integrity: sha512-zJMP+/rqLbvOhME98j8UL67gYJmHO0eiY+fHsYgZB+HBrve7cn49uHR5gWTYkgDtD9CP2DBBk1lK5Lvp8KSmEw==}
+  '@spencer-kit/coder-studio-linux-x64@0.2.1':
+    resolution: {integrity: sha512-mVBs9lPIale7CzALFx47pBGDLniYk3JLU+i+QGM+9b7W1FqyPYDK8xNbvRIhC3Pk5sOOi7TyUg1DyxK37hc+Zw==}
     cpu: [x64]
     os: [linux]
 
-  '@spencer-kit/coder-studio-win32-x64@0.1.3':
-    resolution: {integrity: sha512-3SvzMOzy0iE3JK8Ul8uAyplLBTmSosH2soFfvtKB2xlxnU/X7NJcr1ouX9plQgoJ2tnOJo+HkgUMScGYprS82A==}
+  '@spencer-kit/coder-studio-win32-x64@0.2.1':
+    resolution: {integrity: sha512-gck8CZWvBDffXXPZom2/lTdd2qPjgzFaMS/65k1ItvboDoyqzceJ84p01acDdIA05RbVqLfAs/TPTPBFkRv+sg==}
     cpu: [x64]
     os: [win32]
 
@@ -536,6 +539,9 @@ packages:
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
+
+  '@xterm/addon-unicode11@0.9.0':
+    resolution: {integrity: sha512-FxDnYcyuXhNl+XSqGZL/t0U9eiNb/q3EWT5rYkQT/zuig8Gz/VagnQANKHdDWFM2lTMk9ly0EFQxxxtZUoRetw==}
 
   '@xterm/xterm@6.0.0':
     resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
@@ -1460,16 +1466,16 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.9': {}
 
-  '@spencer-kit/coder-studio-darwin-arm64@0.1.3':
+  '@spencer-kit/coder-studio-darwin-arm64@0.2.1':
     optional: true
 
-  '@spencer-kit/coder-studio-darwin-x64@0.1.3':
+  '@spencer-kit/coder-studio-darwin-x64@0.2.1':
     optional: true
 
-  '@spencer-kit/coder-studio-linux-x64@0.1.3':
+  '@spencer-kit/coder-studio-linux-x64@0.2.1':
     optional: true
 
-  '@spencer-kit/coder-studio-win32-x64@0.1.3':
+  '@spencer-kit/coder-studio-win32-x64@0.2.1':
     optional: true
 
   '@tybys/wasm-util@0.10.1':
@@ -1500,6 +1506,8 @@ snapshots:
       vite: 8.0.0(@types/node@24.12.0)
 
   '@xterm/addon-fit@0.11.0': {}
+
+  '@xterm/addon-unicode11@0.9.0': {}
 
   '@xterm/xterm@6.0.0': {}
 

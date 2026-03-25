@@ -5,7 +5,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ExecTarget,
   Session,
-  SessionStatus,
   Tab,
   TreeNode,
   WorkbenchState,
@@ -36,26 +35,27 @@ import {
   HeaderCloseIcon,
 } from "../../components/icons";
 import { CommandPalette } from "../../components/CommandPalette";
+import {
+  RuntimeValidationOverlay,
+  type RuntimeRequirementStatus,
+  type RuntimeValidationState,
+} from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay";
 import { TopBar } from "../../components/TopBar";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
 import { WorkspaceShell } from "../../components/workspace";
-import { subscribeAgentEvents, subscribeAgentLifecycleEvents, subscribeTerminalEvents } from "../../command";
 import {
   AgentWorkspaceFeature,
   armAgentStartupGate,
   buildSlashMenuItems,
   buildSlashMenuSections,
-  clearAgentRuntimeTracking,
   clearAgentStartupGate,
   commitAgentSessionTitle,
   focusAgentTerminal,
   fitAgentTerminals,
   isAgentRuntimeRunning,
   markAgentRuntimeStarted,
-  noteAgentStartupEvent,
-  noteAgentStartupLifecycle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
   syncAgentPaneSize,
@@ -89,6 +89,7 @@ import {
   writeWorkspaceTerminalData
 } from "./";
 import { createWorkspaceSessionActions } from "./session-actions";
+import { useWorkspaceArtifactsSync, useWorkspaceTransportSync } from "./workspace-sync-hooks";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
@@ -116,7 +117,6 @@ import {
   commitGitChanges,
   discardAllGitChanges,
   discardGitFile,
-  getGitChanges,
   stageAllGitChanges,
   stageGitFile,
   unstageAllGitChanges,
@@ -132,9 +132,6 @@ import {
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
-  getGitStatus,
-  getWorkspaceTree,
-  getWorktreeList,
   listClaudeSlashSkills,
   updateWorkbenchLayout,
   updateWorkspaceView
@@ -147,9 +144,6 @@ import {
 } from "../../shared/utils/workspace";
 import {
   AGENT_SPECIAL_KEY_MAP,
-  AGENT_START_SYSTEM_MESSAGE,
-  AGENT_STREAM_BUFFER_LIMIT,
-  TERMINAL_STREAM_BUFFER_LIMIT,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
 import {
@@ -157,6 +151,7 @@ import {
 } from "../../shared/app/settings";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
+import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -187,8 +182,6 @@ import {
 } from "../../shared/utils/session";
 import { sortTreeNodes } from "../../shared/utils/tree";
 import type {
-  AgentEvent,
-  AgentLifecycleEvent,
   AgentStartResult,
   AppSettings,
   AppTheme,
@@ -199,11 +192,9 @@ import type {
   FolderBrowserState,
   GitChangeAction,
   GitChangeEntry,
-  GitStatus,
   Toast,
   WorktreeModalState,
   WorktreeView,
-  WorkspaceTree
 } from "../../types/app";
 
 const withServiceFallback = async <T,>(operation: () => Promise<T>, fallback: T): Promise<T> => withFallback(operation, fallback);
@@ -220,6 +211,111 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
       ? `WSL (${target.distro.trim()})`
       : "WSL"
     : t("nativeTarget");
+
+const REQUIRED_RUNTIME_COMMANDS = [
+  { id: "git", command: "git" },
+] as const satisfies ReadonlyArray<{
+  id: RuntimeRequirementStatus["id"];
+  command: string;
+}>;
+
+type RuntimeRequirementSpec = {
+  id: RuntimeRequirementStatus["id"];
+  command: string;
+  deferred?: boolean;
+  detailText?: string;
+};
+
+const parseRuntimeCommandBinary = (command: string) => {
+  const trimmed = command.trim();
+  if (!trimmed) return "";
+
+  let token = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+
+  for (const ch of trimmed) {
+    if (escaped) {
+      token += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\" && !inSingle) {
+      escaped = true;
+      continue;
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (ch === "\"" && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (/\s/.test(ch) && !inSingle && !inDouble) {
+      if (token) break;
+      continue;
+    }
+    token += ch;
+  }
+
+  return token.trim();
+};
+
+const commandUsesWorkspaceRelativePath = (binary: string) => {
+  return binary.startsWith("./")
+    || binary.startsWith("../")
+    || binary.startsWith(".\\")
+    || binary.startsWith("..\\");
+};
+
+const buildRuntimeRequirementSpecs = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
+): RuntimeRequirementSpec[] => {
+  const trimmedAgentCommand = agentCommand.trim();
+  const commandBinary = parseRuntimeCommandBinary(trimmedAgentCommand);
+  const claudeRequirement: RuntimeRequirementSpec = {
+    id: "claude",
+    command: trimmedAgentCommand,
+  };
+
+  if (commandBinary.includes("{path}") || commandUsesWorkspaceRelativePath(commandBinary)) {
+    claudeRequirement.deferred = true;
+    claudeRequirement.detailText = t("runtimeCheckClaudeDeferredHint");
+  }
+
+  return [claudeRequirement, ...REQUIRED_RUNTIME_COMMANDS];
+};
+
+const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
+  target.type === "wsl"
+    ? `wsl:${target.distro?.trim() ?? ""}:${agentCommand.trim()}`
+    : `native:${agentCommand.trim()}`;
+
+const createRuntimeRequirementStatus = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
+): RuntimeRequirementStatus[] =>
+  buildRuntimeRequirementSpecs(agentCommand, t).map(({ id, command, deferred, detailText }) => ({
+    id,
+    command,
+    available: deferred ? true : null,
+    detailText,
+  }));
+
+const createRuntimeValidationState = (
+  agentCommand: string,
+  t: ReturnType<typeof createTranslator>,
+  targetKey = "",
+  status: RuntimeValidationState["status"] = "idle",
+): RuntimeValidationState => ({
+  status,
+  targetKey,
+  requirements: createRuntimeRequirementStatus(agentCommand, t),
+});
 
 const isTextInputTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
@@ -262,6 +358,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashMenuLoading, setSlashMenuLoading] = useState(false);
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
+  const t = useMemo(() => createTranslator(locale), [locale]);
+  const terminalCompatibilityMode = appSettings.terminalCompatibilityMode;
+  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
+    appSettings.agentCommand,
+    t,
+  ));
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
@@ -270,6 +372,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
@@ -287,6 +390,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const terminalSizeRef = useRef<{ id?: string; cols: number; rows: number }>({ cols: 0, rows: 0 });
   const runningAgentKeysRef = useRef(new Set<string>());
   const autoTerminalWorkspaceIdsRef = useRef(new Set<string>());
+  const validatedRuntimeTargetsRef = useRef(new Set<string>());
+  const runtimeValidationRequestIdRef = useRef(0);
   const persistedLayoutRef = useRef<string>("");
   const persistedWorkspaceViewsRef = useRef(new Map<string, string>());
   const agentStartupStateRef = useRef(new Map<string, {
@@ -298,7 +403,60 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
-  const t = useMemo(() => createTranslator(locale), [locale]);
+  const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
+    const targetKey = serializeRuntimeValidationKey(target, appSettings.agentCommand);
+    const requirementSpecs = buildRuntimeRequirementSpecs(appSettings.agentCommand, t);
+    const requestId = ++runtimeValidationRequestIdRef.current;
+    setRuntimeValidation(createRuntimeValidationState(appSettings.agentCommand, t, targetKey, "checking"));
+
+    const results = await Promise.all(
+      requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
+        if (deferred) {
+          return {
+            id,
+            command,
+            available: true,
+            detailText,
+          } satisfies RuntimeRequirementStatus;
+        }
+        try {
+          const result = await checkCommandAvailability(command, target);
+          return {
+            id,
+            command,
+            available: result.available,
+            resolvedPath: result.resolved_path ?? undefined,
+            error: result.error ?? undefined,
+            detailText,
+          } satisfies RuntimeRequirementStatus;
+        } catch (error) {
+          return {
+            id,
+            command,
+            available: false,
+            error: error instanceof Error ? error.message : String(error),
+            detailText,
+          } satisfies RuntimeRequirementStatus;
+        }
+      }),
+    );
+
+    if (runtimeValidationRequestIdRef.current !== requestId) return;
+
+    const nextStatus: RuntimeValidationState["status"] = results.every((item) => item.available)
+      ? "ready"
+      : "failed";
+
+    if (nextStatus === "ready") {
+      validatedRuntimeTargetsRef.current.add(targetKey);
+    }
+
+    setRuntimeValidation({
+      status: nextStatus,
+      targetKey,
+      requirements: results,
+    });
+  }, [appSettings.agentCommand, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -311,6 +469,35 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       terminalFontSize: Number.parseInt(styles.getPropertyValue("--terminal-font-size"), 10) || 12
     };
   }, [theme]);
+  const measureWorkspaceTerminalSize = useCallback(
+    () => estimateTerminalGrid(
+      shellTerminalViewportRef.current,
+      editorMetrics.terminalFontSize,
+      terminalCompatibilityMode,
+    ),
+    [editorMetrics.terminalFontSize, terminalCompatibilityMode],
+  );
+  const resolveAgentInitialSize = useCallback((paneId?: string | null): TerminalGridSize | null => {
+    if (!paneId) return null;
+
+    const liveSize = agentPaneSizeRef.current.get(paneId)
+      ?? agentTerminalRefs.current.get(paneId)?.size();
+    if (liveSize) {
+      return liveSize;
+    }
+
+    const draftInput = draftPromptInputRefs.current.get(paneId);
+    const draftPane = draftInput?.closest(".agent-pane-body");
+    if (!(draftPane instanceof HTMLElement)) {
+      return null;
+    }
+
+    return estimateTerminalGrid(
+      draftPane,
+      editorMetrics.terminalFontSize,
+      terminalCompatibilityMode,
+    );
+  }, [editorMetrics.terminalFontSize, terminalCompatibilityMode]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
     const next = updater(stateRef.current);
@@ -574,157 +761,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [state.overlay.mode, state.overlay.visible]);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data }) => {
-      noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
-      const cleaned = stripAnsi(data);
-      const isStream = kind === "stdout" || kind === "stderr";
-      const isSystem = kind === "system";
-      const isExit = kind === "exit";
-      updateState((current) => ({
-        ...current,
-        tabs: current.tabs.map((tab) => {
-          if (tab.id !== workspace_id) return tab;
-          return {
-            ...tab,
-            sessions: tab.sessions.map((session) => {
-              if (session.id !== session_id) return session;
-              const nextStatus = isStream
-                ? session.status
-                : isExit
-                  ? "idle"
-                  : session.status;
-              const streamChunk = isExit
-                ? "\n[agent exited]\n"
-                : isSystem
-                  ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
-                  : data;
-              const nextStream = `${session.stream}${streamChunk}`.slice(-AGENT_STREAM_BUFFER_LIMIT);
-              const message = isExit
-                ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
-                : isSystem
-                  ? { id: createId("msg"), role: "system" as const, content: cleaned, time: nowLabel() }
-                  : null;
-              const unread = tab.activeSessionId === session.id ? 0 : session.unread + (isSystem || isExit || isStream ? 1 : 0);
-              return {
-                ...session,
-                status: nextStatus,
-                unread,
-                stream: nextStream,
-                messages: message ? [...session.messages, message] : session.messages
-              };
-            })
-          };
-        })
-      }));
-      if (kind === "exit") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-        void settleSessionAfterExit(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [t]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }) => {
-      noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
-      let nextStatus: SessionStatus | null = null;
-      if (kind === "turn_waiting" || kind === "approval_required") {
-        nextStatus = "waiting";
-      } else if (kind === "tool_started" || kind === "tool_finished") {
-        nextStatus = "running";
-      } else if (kind === "turn_completed" || kind === "session_ended") {
-        nextStatus = "idle";
-      }
-
-      if (kind === "session_ended") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-      }
-
-      if (nextStatus) {
-        updateState((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === session_id
-                  ? {
-                      ...session,
-                      status: resolveVisibleStatus(tab, session, nextStatus)
-                    }
-                  : session
-              )
-            };
-          })
-        }));
-      }
-
-      const claudeSessionId = (() => {
-        try {
-          const payload = JSON.parse(data) as { session_id?: string };
-          return typeof payload.session_id === "string" && payload.session_id.trim()
-            ? payload.session_id.trim()
-            : null;
-        } catch {
-          return null;
-        }
-      })();
-
-      if (claudeSessionId) {
-        let changed = false;
-        updateState((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
-                  return session;
-                }
-                changed = true;
-                return {
-                  ...session,
-                  claudeSessionId
-                };
-              })
-            };
-          })
-        }));
-        if (changed) {
-          void syncSessionPatch(workspace_id, session_id, { claude_session_id: claudeSessionId });
-        }
-      }
-
-      if (kind === "turn_completed") {
-        void markSessionIdle(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [t]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
-      if (!data) return;
-      const termId = `term-${terminal_id}`;
-      updateState((current) => ({
-        ...current,
-        tabs: current.tabs.map((tab) => {
-          if (tab.id !== workspace_id) return tab;
-          return {
-            ...tab,
-            terminals: tab.terminals.map((term) => {
-              if (term.id !== termId) return term;
-              const nextOutput = `${term.output}${data}`.slice(-TERMINAL_STREAM_BUFFER_LIMIT);
-              return { ...term, output: nextOutput };
-            })
-          };
-        })
-      }));
-    });
-    return unsubscribe;
-  }, []);
+    if (!bootstrapReady || !state.overlay.visible) return;
+    const targetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
+    if (validatedRuntimeTargetsRef.current.has(targetKey)) {
+      return;
+    }
+    void runRuntimeValidation(state.overlay.target);
+  }, [
+    appSettings.agentCommand,
+    bootstrapReady,
+    runRuntimeValidation,
+    state.overlay.target.type,
+    state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
+    state.overlay.visible,
+  ]);
 
   const activeTab = useMemo(() => {
     const existing = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
@@ -743,6 +793,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
     return emptyTabRef.current;
   }, [appSettings.agentCommand, appSettings.agentProvider, appSettings.idlePolicy, locale, state.activeTabId, state.tabs]);
+  const overlayVisible = bootstrapReady && state.overlay.visible;
+  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
+  const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
+  const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
+    ? runtimeValidation
+    : createRuntimeValidationState(appSettings.agentCommand, t, runtimeValidationTargetKey, "checking");
+  const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;
+  const showWorkspaceLaunchOverlay = overlayVisible && runtimeValidatedForTarget;
   const hasOpenWorkspace = state.tabs.length > 0;
   const showCodePanel = state.layout.showCodePanel;
   const showTerminalPanel = state.layout.showTerminalPanel;
@@ -923,45 +981,38 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     addToast
   });
 
-  const refreshWorkspaceArtifacts = async (tabId: string) => {
-    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
-    const path = tab?.project?.path;
-    const target = tab?.project?.target;
-    if (!tab || !path || !target) return null;
+  useWorkspaceTransportSync({
+    agentRuntimeRefs,
+    bootstrapReady,
+    refreshTabFromBackend,
+    markSessionIdle,
+    settleSessionAfterExit,
+    syncSessionPatch,
+    stateRef,
+    t,
+    updateState,
+  });
 
-    const [git, gitChanges, worktrees, tree] = await Promise.all([
-      withServiceFallback<GitStatus>(() => getGitStatus(path, target), {
-        branch: tab.git.branch || "main",
-        changes: tab.git.changes ?? 0,
-        last_commit: tab.git.lastCommit || "—"
-      }),
-      withServiceFallback<GitChangeEntry[]>(() => getGitChanges(path, target), tab.gitChanges ?? []),
-      withServiceFallback<WorktreeInfo[]>(() => getWorktreeList(path, target), tab.worktrees),
-      withServiceFallback<WorkspaceTree>(() => getWorkspaceTree(path, target, 4), {
-        root: { name: ".", path, kind: "dir", children: [] },
-        changes: []
-      })
-    ]);
-
-    updateTab(tabId, (currentTab) => ({
-      ...currentTab,
-      git: {
-        branch: git.branch || currentTab.git.branch || "main",
-        changes: git.changes ?? currentTab.git.changes ?? 0,
-        lastCommit: git.last_commit || currentTab.git.lastCommit || "—"
-      },
-      gitChanges,
-      worktrees,
-      fileTree: tree.root.children ?? [],
-      changesTree: tree.changes ?? []
-    }));
-    return tree;
-  };
+  const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
+    activeTabId: activeTab.id,
+    activeProjectPath: activeTab.project?.path,
+    bootstrapReady,
+    codeSidebarView,
+    stateRef,
+    updateTab,
+    withServiceFallback,
+  });
 
   const ensureWorkspaceTerminal = useCallback(async (workspaceId: string) => {
     const tab = stateRef.current.tabs.find((item) => item.id === workspaceId);
     if (!tab?.project?.path || tab.terminals.length > 0) return;
     if (autoTerminalWorkspaceIdsRef.current.has(workspaceId)) return;
+    if (stateRef.current.activeTabId !== workspaceId) return;
+    if (!stateRef.current.layout.showTerminalPanel || isCodeExpanded) return;
+
+    const initialSize = measureWorkspaceTerminalSize();
+    if (!initialSize) return;
+
     autoTerminalWorkspaceIdsRef.current.add(workspaceId);
     const created = await addWorkspaceTerminal({
       tab,
@@ -972,11 +1023,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       activeSessionId: tab.activeSessionId,
       createToastId: () => createId("toast"),
       t,
+      initialSize,
     });
     if (!created) {
       autoTerminalWorkspaceIdsRef.current.delete(workspaceId);
     }
-  }, [locale, t]);
+  }, [isCodeExpanded, locale, measureWorkspaceTerminalSize, t]);
 
   const switchWorkspaceLocally = (workspaceId: string) => {
     updateState((current) => {
@@ -1242,11 +1294,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return tab.agent.command.replace("{path}", path);
   };
 
-  const agentStartMaybe = async (tab: Tab, session: Session) => {
+  const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
     const project = tab.project;
     if (!project?.path) return false;
     const command = buildAgentCommand(tab);
     const target = project.target;
+    const initialSize = resolveAgentInitialSize(paneId);
     const availability = await withServiceFallback<CommandAvailability | null>(
       () => checkCommandAvailability(command, target, project.path),
       null
@@ -1264,7 +1317,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       workspaceId: tab.id,
       sessionId: session.id,
       provider: tab.agent.provider,
-      command
+      command,
+      cols: initialSize?.cols,
+      rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));
     if (!result) {
       clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
@@ -1595,6 +1650,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const onAddTerminal = async () => {
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const initialSize = measureWorkspaceTerminalSize();
     await addWorkspaceTerminal({
       tab: currentTab,
       locale,
@@ -1604,6 +1660,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       activeSessionId: activeSession.id,
       createToastId: () => createId("toast"),
       t,
+      initialSize,
     });
   };
 
@@ -1731,7 +1788,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!tabSnapshot || !sessionSnapshot) return null;
 
     if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot);
+      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot, paneId);
       if (!started) return null;
       if (started.started) {
         syncAgentPaneSize(agentRuntimeRefs, paneId, tabSnapshot.id, sessionSnapshot.id);
@@ -1895,21 +1952,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!activeTab.project?.path) return;
-    void refreshWorkspaceArtifacts(activeTab.id);
-  }, [codeSidebarView, activeTab.id, activeTab.project?.path]);
-
-  useEffect(() => {
-    if (!activeTab.project?.path) return;
+    if (!showTerminalPanel || isCodeExpanded) return;
     void ensureWorkspaceTerminal(activeTab.id);
-  }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal]);
-
-  useEffect(() => {
-    if (!activeTab.project?.path) return;
-    const timer = window.setInterval(() => {
-      void refreshWorkspaceArtifacts(activeTab.id);
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [activeTab.id, activeTab.project?.path]);
+  }, [activeTab.id, activeTab.project?.path, ensureWorkspaceTerminal, isCodeExpanded, showTerminalPanel]);
 
   const onShellTerminalSize = useCallback((size: { cols: number; rows: number }) => {
     syncWorkspaceTerminalSize(
@@ -2048,6 +2093,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       showCodePanel={showCodePanel}
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
+      terminalCompatibilityMode={terminalCompatibilityMode}
       draftPromptInputs={draftPromptInputs}
       displaySessionTitle={displaySessionTitle}
       onExitArchive={onExitArchive}
@@ -2245,9 +2291,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         id: term.id,
         title: displayTerminalTitle(term.title)
       }))}
+      terminalViewportRef={shellTerminalViewportRef}
       shellTerminalRef={shellTerminalRef}
       theme={theme}
       fontSize={editorMetrics.terminalFontSize}
+      compatibilityMode={terminalCompatibilityMode}
       autoFocus={showTerminalPanel && !isCodeExpanded}
       onTerminalData={onShellTerminalData}
       onTerminalSize={onShellTerminalSize}
@@ -2346,9 +2394,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         />
       )}
 
+      <RuntimeValidationOverlay
+        visible={showRuntimeValidationOverlay}
+        target={state.overlay.target}
+        canUseWsl={overlayCanUseWsl}
+        runtimeLabel={formatExecTargetLabel(state.overlay.target, t)}
+        validation={runtimeValidationView}
+        onUpdateTarget={onOverlayUpdateTarget}
+        onRetry={() => {
+          void runRuntimeValidation(stateRef.current.overlay.target);
+        }}
+        t={t}
+      />
 
       <WorkspaceLaunchOverlay
-        visible={state.overlay.visible}
+        visible={showWorkspaceLaunchOverlay}
         target={state.overlay.target}
         input={state.overlay.input}
         canUseWsl={overlayCanUseWsl}

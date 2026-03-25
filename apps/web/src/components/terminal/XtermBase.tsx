@@ -1,7 +1,10 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
+import type { TerminalCompatibilityMode } from "../../types/app";
+import { resetTerminalMeasurementCache, resolveTerminalFontFamily, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
 
 type XtermBaseMode = "interactive" | "readonly";
 
@@ -17,6 +20,7 @@ export type XtermBaseProps = {
   themeIdentity?: string;
   theme: "dark";
   fontSize: number;
+  compatibilityMode?: TerminalCompatibilityMode;
   mode?: XtermBaseMode;
   className?: string;
   sanitizeOutput?: (value: string) => string;
@@ -93,8 +97,6 @@ const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => 
   if (next) term.write(next);
 };
 
-const XTERM_SCROLLBAR_WIDTH = 3;
-
 const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
   if (!mount) return null;
   return mount.closest(".agent-pane-card")
@@ -108,6 +110,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   themeIdentity,
   theme,
   fontSize,
+  compatibilityMode = "standard",
   mode = "interactive",
   className = "agent-pane-xterm",
   sanitizeOutput,
@@ -118,6 +121,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const unicodeRef = useRef<Unicode11Addon | null>(null);
   const outputSnapshotRef = useRef("");
   const identityRef = useRef<string | undefined>(undefined);
   const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -135,25 +139,38 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     fitRef.current?.fit();
     emitSize();
   }, [emitSize]);
+  const scheduleFit = useCallback(() => {
+    requestAnimationFrame(() => {
+      fitAndReport();
+    });
+  }, [fitAndReport]);
 
   useEffect(() => {
     const mount = mountRef.current;
+    const fontFamily = resolveTerminalFontFamily(compatibilityMode);
     if (!mount) return;
     if (!termRef.current) {
       const term = new XTerminal({
+        allowProposedApi: true,
         convertEol: true,
+        customGlyphs: true,
         disableStdin: mode === "readonly",
         cursorBlink: mode === "interactive",
-        fontFamily: "JetBrains Mono, Cascadia Mono, ui-monospace, SFMono-Regular, monospace",
+        fontFamily,
         fontSize,
+        rescaleOverlappingGlyphs: true,
         overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
         theme: readTerminalTheme(resolveTerminalThemeSource(mount))
       });
       const fitAddon = new FitAddon();
+      const unicodeAddon = new Unicode11Addon();
       term.loadAddon(fitAddon);
+      term.loadAddon(unicodeAddon);
+      term.unicode.activeVersion = "11";
       term.open(mount);
       termRef.current = term;
       fitRef.current = fitAddon;
+      unicodeRef.current = unicodeAddon;
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;
@@ -161,31 +178,103 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       return;
     }
     fitAndReport();
-  }, [fitAndReport, fontSize, mode]);
+  }, [compatibilityMode, fitAndReport, fontSize, mode]);
 
   useEffect(() => {
     const mount = mountRef.current;
     const term = termRef.current;
     if (!mount || !term) return;
+    const fontFamily = resolveTerminalFontFamily(compatibilityMode);
     term.options = {
+      allowProposedApi: true,
+      customGlyphs: true,
       disableStdin: mode === "readonly",
       cursorBlink: mode === "interactive",
+      fontFamily,
       fontSize,
+      rescaleOverlappingGlyphs: true,
       overviewRuler: { width: XTERM_SCROLLBAR_WIDTH },
       theme: readTerminalTheme(resolveTerminalThemeSource(mount))
     };
-    requestAnimationFrame(() => fitAndReport());
-  }, [fitAndReport, fontSize, mode, theme, themeIdentity]);
+    scheduleFit();
+  }, [compatibilityMode, fontSize, mode, scheduleFit, theme, themeIdentity]);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
     const observer = new ResizeObserver(() => {
-      fitAndReport();
+      scheduleFit();
     });
     observer.observe(mount);
     return () => observer.disconnect();
-  }, [fitAndReport]);
+  }, [scheduleFit]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    let dprMediaQuery: MediaQueryList | null = null;
+    let removeDprListener = () => {};
+
+    const registerDprListener = () => {
+      removeDprListener();
+      const dpr = window.devicePixelRatio || 1;
+      dprMediaQuery = window.matchMedia(`(resolution: ${dpr}dppx)`);
+      const onChange = () => {
+        scheduleFit();
+        registerDprListener();
+      };
+
+      if (typeof dprMediaQuery.addEventListener === "function") {
+        dprMediaQuery.addEventListener("change", onChange);
+        removeDprListener = () => dprMediaQuery?.removeEventListener("change", onChange);
+        return;
+      }
+
+      dprMediaQuery.addListener(onChange);
+      removeDprListener = () => dprMediaQuery?.removeListener(onChange);
+    };
+
+    const onWindowResize = () => scheduleFit();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleFit();
+      }
+    };
+
+    registerDprListener();
+    window.addEventListener("resize", onWindowResize);
+    window.addEventListener("pageshow", onWindowResize);
+    window.visualViewport?.addEventListener("resize", onWindowResize);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      removeDprListener();
+      window.removeEventListener("resize", onWindowResize);
+      window.removeEventListener("pageshow", onWindowResize);
+      window.visualViewport?.removeEventListener("resize", onWindowResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [scheduleFit]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !("fonts" in document)) return;
+    const fontSet = document.fonts;
+    let cancelled = false;
+
+    const refit = () => {
+      if (cancelled) return;
+      resetTerminalMeasurementCache();
+      scheduleFit();
+    };
+
+    void fontSet.ready.then(refit).catch(() => undefined);
+    fontSet.addEventListener?.("loadingdone", refit);
+
+    return () => {
+      cancelled = true;
+      fontSet.removeEventListener?.("loadingdone", refit);
+    };
+  }, [fontSize, scheduleFit]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -235,6 +324,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
+      unicodeRef.current = null;
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;

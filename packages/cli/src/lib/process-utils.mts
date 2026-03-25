@@ -4,6 +4,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const HIDE_WINDOWS_OPTIONS = process.platform === 'win32' ? { windowsHide: true } : {};
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,7 +26,7 @@ export async function terminateProcess(pid, { force = false } = {}) {
   if (process.platform === 'win32') {
     const args = ['/PID', String(pid), '/T'];
     if (force) args.push('/F');
-    await execFileAsync('taskkill', args);
+    await execFileAsync('taskkill', args, HIDE_WINDOWS_OPTIONS);
     return;
   }
 
@@ -63,21 +64,21 @@ export function spawnForeground(command, args, options = {}) {
 export async function openExternal(targetUrl, env = process.env) {
   if (env.CODER_STUDIO_OPEN_COMMAND) {
     const [command, ...extraArgs] = env.CODER_STUDIO_OPEN_COMMAND.split(' ');
-    await execFileAsync(command, [...extraArgs, targetUrl]);
+    await execFileAsync(command, [...extraArgs, targetUrl], HIDE_WINDOWS_OPTIONS);
     return;
   }
 
   if (process.platform === 'darwin') {
-    await execFileAsync('open', [targetUrl]);
+    await execFileAsync('open', [targetUrl], HIDE_WINDOWS_OPTIONS);
     return;
   }
 
   if (process.platform === 'win32') {
-    await execFileAsync('cmd', ['/c', 'start', '', targetUrl]);
+    await execFileAsync('cmd', ['/c', 'start', '', targetUrl], HIDE_WINDOWS_OPTIONS);
     return;
   }
 
-  await execFileAsync('xdg-open', [targetUrl]);
+  await execFileAsync('xdg-open', [targetUrl], HIDE_WINDOWS_OPTIONS);
 }
 
 export async function ensureFile(pathname) {

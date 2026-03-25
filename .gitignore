@@ -39,3 +39,4 @@ output
 .tmp
 .playwright-cli
 .artifacts/
+.worktrees/

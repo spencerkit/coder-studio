@@ -31,6 +31,52 @@ Its core job is to reduce context switching across the full workflow:
 - Bilingual UI: Chinese / English
 - Public mode auth with one passphrase, session cookie, IP blocking, and a single `root.path` access root
 
+## Preview
+
+The screenshots below use a purpose-built demo workspace with mock data so the core flow is easier to read at a glance.
+
+### Workspace Overview
+
+![Coder Studio workspace overview](docs/assets/readme/workspace-overview.png)
+
+- Parallel agent panes stay visible while you inspect code and shell output
+- The right-hand code panel gives you file search plus Monaco-based preview and editing
+- The bottom terminal keeps Git and one-off commands in the same workspace
+
+### Parallel Agent Work
+
+![Coder Studio parallel agent panes](docs/assets/readme/multi-agent.png)
+
+- Split one workspace into multiple focused agent lanes
+- Keep separate streams for implementation, verification, and follow-up tasks
+- Reduce context switching when several subtasks need to move together
+
+### Code And Review
+
+![Coder Studio code and source control review](docs/assets/readme/git-review.png)
+
+- Review code while the Source Control panel stays open on the same screen
+- Draft commit messages without leaving the workbench
+- Move quickly between agent output, file inspection, and Git review
+
+## 3-Minute Quick Start
+
+If you want the fastest path to a working local setup, do this:
+
+1. Prepare the runtime: install `Node.js`, `pnpm`, `Rust`, and `Git`. If you want to start real agents, also make sure `claude` is executable.
+2. Install dependencies: run `pnpm install` at the repo root.
+3. Start the app: run `pnpm dev:stack`, then open `http://127.0.0.1:5174`.
+4. First entry flow: if public mode is enabled, enter the passphrase first. After auth and before workspace selection, the app now runs an environment check for `Claude Code` and `Git`.
+5. Pick a workspace: choose `Local Folder` or `Remote Git`, then choose `Native` or `WSL`.
+6. Start working: enter the first task in the agent pane, press Enter, then open the code, Git, and terminal panels as needed.
+
+If you are using the published npm CLI, you can also start it like this:
+
+```bash
+coder-studio start
+coder-studio open
+```
+
 ## Prerequisites
 
 Before running locally, prepare:

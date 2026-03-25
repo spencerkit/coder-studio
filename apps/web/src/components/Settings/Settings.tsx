@@ -173,6 +173,33 @@ export const Settings = ({
 
               <div className="settings-row">
                 <div className="settings-row-copy">
+                  <strong>{t("terminalRendering")}</strong>
+                  <span>{t("terminalRenderingHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <div className="settings-pill-select">
+                    <button
+                      type="button"
+                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "standard" ? "active" : ""}`}
+                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "standard" })}
+                      data-testid="settings-terminal-standard"
+                    >
+                      {t("terminalRenderingStandard")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
+                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "compatibility" })}
+                      data-testid="settings-terminal-compatibility"
+                    >
+                      {t("terminalRenderingCompatibility")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
                   <strong>{t("languageLabel")}</strong>
                   <span>{t("languageHint")}</span>
                 </div>

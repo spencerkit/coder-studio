@@ -1,5 +1,6 @@
 import type { PointerEventHandler, RefObject } from "react";
 import type { Translator } from "../../i18n";
+import type { TerminalCompatibilityMode } from "../../types/app";
 import { ShellTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { WorkspaceTerminalPanel } from "../../components/workspace";
 
@@ -19,9 +20,11 @@ type WorkspaceTerminalFeatureProps = {
   progressTone: "live" | "steady" | "idle";
   activeTerminal?: ActiveTerminal;
   terminals: TerminalOption[];
+  terminalViewportRef: RefObject<HTMLDivElement | null>;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
   theme: "dark";
   fontSize: number;
+  compatibilityMode: TerminalCompatibilityMode;
   autoFocus: boolean;
   onTerminalData: (value: string) => void;
   onTerminalSize: (size: { cols: number; rows: number }) => void;
@@ -38,9 +41,11 @@ export const WorkspaceTerminalFeature = ({
   progressTone,
   activeTerminal,
   terminals,
+  terminalViewportRef,
   shellTerminalRef,
   theme,
   fontSize,
+  compatibilityMode,
   autoFocus,
   onTerminalData,
   onTerminalSize,
@@ -58,6 +63,7 @@ export const WorkspaceTerminalFeature = ({
       progressTone={progressTone}
       activeTerminalId={activeTerminal?.id}
       terminals={terminals}
+      terminalViewportRef={terminalViewportRef}
       terminalContent={activeTerminal ? (
         <ShellTerminal
           ref={shellTerminalRef}
@@ -65,6 +71,7 @@ export const WorkspaceTerminalFeature = ({
           output={activeTerminal.output ?? ""}
           theme={theme}
           fontSize={fontSize}
+          compatibilityMode={compatibilityMode}
           onData={onTerminalData}
           onSize={onTerminalSize}
           autoFocus={autoFocus}
