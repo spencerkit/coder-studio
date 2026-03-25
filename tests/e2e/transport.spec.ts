@@ -85,6 +85,7 @@ const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
 const AGENT_STDIN_ECHO_SCRIPT = 'tests/e2e/fixtures/agent-stdin-echo.mjs';
+const AGENT_START_SYSTEM_MESSAGE = 'Agent started / 智能体已启动';
 const execFileAsync = promisify(execFile);
 
 const incrementCounts = (counts: PollCounts) => ({
@@ -267,6 +268,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     'agent://event',
     (payload) => payload.workspace_id === workspace.workspaceId
       && payload.session_id === sessionId
+      && payload.kind === agentProbe.expectedKind
       && String(payload.data ?? '').includes(agentProbe.expectedText),
   );
   const tracker = await readTransportTracker(page);
@@ -676,9 +678,10 @@ function buildAgentProbe(target: WorkspaceHandle['target']) {
   if (isWindowsNativeTarget(target)) {
     return {
       mode: 'startup' as const,
-      command: 'cmd /Q /D /C echo transport-agent',
+      command: 'cmd /Q /D /C exit 0',
       input: null,
-      expectedText: 'transport-agent',
+      expectedKind: 'system',
+      expectedText: AGENT_START_SYSTEM_MESSAGE,
     };
   }
 
@@ -686,6 +689,7 @@ function buildAgentProbe(target: WorkspaceHandle['target']) {
     mode: 'stdin' as const,
     command: buildAgentProbeCommand(target),
     input: buildAgentProbeInput(target),
+    expectedKind: 'stdout',
     expectedText: 'transport-agent',
   };
 }
