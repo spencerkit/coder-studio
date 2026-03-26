@@ -8809,3 +8809,78 @@ pre.diff,
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   Agent Pane Polish Pass
+   ========================================================================== */
+
+.agent-pane-header {
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.agent-pane-header-copy {
+  min-width: 0;
+  gap: 6px;
+}
+
+.agent-pane-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.agent-pane-state-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-chip);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.agent-pane-state-tag.active {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, var(--border-subtle));
+}
+
+.agent-pane-state-tag.info {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+}
+
+.agent-pane-state-tag.queue {
+  color: var(--accent-3);
+  border-color: color-mix(in srgb, var(--accent-3) 28%, var(--border-subtle));
+}
+
+.agent-pane-state-tag.idle {
+  color: var(--text-secondary);
+}
+
+.agent-pane-state-tag.muted {
+  color: var(--text-tertiary);
+}
+
+.agent-pane-actions {
+  gap: 2px;
+}
+
+.pane-action {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.pane-action:hover {
+  background: var(--bg-hover);
+}

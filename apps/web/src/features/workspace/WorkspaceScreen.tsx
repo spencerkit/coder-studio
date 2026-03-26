@@ -2316,6 +2316,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const workspaceAgentPanel = (
     <AgentWorkspaceFeature
       visible={showAgentPanel}
+      locale={locale}
       activeTab={activeTab}
       activePaneSession={activePaneSession}
       viewedSession={viewedSession}

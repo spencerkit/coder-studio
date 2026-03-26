@@ -129,6 +129,31 @@ export const sessionTone = (status: SessionStatus) => {
   return "suspended";
 };
 
+export const sessionHeaderTag = (
+  status: SessionStatus,
+  locale: Locale,
+): {
+  label: string;
+  tone: "active" | "info" | "queue" | "idle" | "muted";
+} => {
+  const t = createTranslator(locale);
+
+  if (status === "running") {
+    return { label: t("running"), tone: "active" };
+  }
+  if (status === "background") {
+    return { label: t("background"), tone: "info" };
+  }
+  if (status === "waiting" || status === "queued") {
+    return { label: t("queued"), tone: "queue" };
+  }
+  if (status === "idle") {
+    return { label: t("ready"), tone: "idle" };
+  }
+
+  return { label: t("suspended"), tone: "muted" };
+};
+
 export const formatRelativeSessionTime = (value: number, locale: Locale) => {
   const diffMs = value - Date.now();
   const absMs = Math.abs(diffMs);
