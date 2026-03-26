@@ -6,8 +6,8 @@ import { TopBar } from "../../components/TopBar";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import { cloneAppSettings } from "../../shared/app/settings";
 import { workbenchState } from "../../state/workbench";
-import type { AppSettings, SettingsPanel } from "../../types/app";
-import { buildWorkspaceTabItems } from "../workspace";
+import type { AppSettings, BrowserNotificationSupport, SettingsPanel } from "../../types/app";
+import { buildWorkspaceTabItems, getBrowserNotificationPermissionState } from "../workspace";
 
 type SettingsScreenProps = {
   locale: Locale;
@@ -38,6 +38,9 @@ export const SettingsScreen = ({
     available: null,
     runtimeLabel: ""
   });
+  const [notificationPermissionState, setNotificationPermissionState] = useState<BrowserNotificationSupport>(() =>
+    getBrowserNotificationPermissionState()
+  );
   const t = useMemo(() => createTranslator(locale), [locale]);
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
@@ -96,7 +99,12 @@ export const SettingsScreen = ({
     const nextSettings: AppSettings = {
       ...settingsDraft,
       ...patch,
-      idlePolicy: patch.idlePolicy ? { ...patch.idlePolicy } : settingsDraft.idlePolicy
+      idlePolicy: patch.idlePolicy
+        ? { ...settingsDraft.idlePolicy, ...patch.idlePolicy }
+        : settingsDraft.idlePolicy,
+      completionNotifications: patch.completionNotifications
+        ? { ...settingsDraft.completionNotifications, ...patch.completionNotifications }
+        : settingsDraft.completionNotifications
     };
     commitSettings(nextSettings);
   };
@@ -134,6 +142,11 @@ export const SettingsScreen = ({
     : agentCommandStatus.available
       ? (agentCommandStatus.resolvedPath ? t("launchCommandResolvedPath", { path: agentCommandStatus.resolvedPath }) : "")
       : (agentCommandStatus.error ?? "");
+  const notificationPermissionText = notificationPermissionState === "allowed"
+    ? t("notificationPermissionAllowed")
+    : notificationPermissionState === "unsupported"
+      ? t("notificationPermissionUnsupported")
+      : t("notificationPermissionNotEnabled");
 
   return (
     <div className="app" data-theme="dark">
@@ -158,6 +171,7 @@ export const SettingsScreen = ({
           text: launchCommandStatusText,
           detailText: launchCommandDetailText
         }}
+        notificationPermissionText={notificationPermissionText}
         onSettingsPanelChange={setActiveSettingsPanel}
         onSettingsChange={onSettingsChange}
         onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}

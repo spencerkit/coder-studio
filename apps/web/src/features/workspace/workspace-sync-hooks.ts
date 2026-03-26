@@ -205,7 +205,7 @@ export const useWorkspaceTransportSync = ({
         nextStatus = "waiting";
       } else if (kind === "tool_started" || kind === "tool_finished") {
         nextStatus = "running";
-      } else if (kind === "turn_completed" || kind === "session_ended") {
+      } else if (kind === "session_ended") {
         nextStatus = "idle";
       }
 

@@ -11,6 +11,7 @@ type SettingsProps = {
     text: string;
     detailText: string;
   };
+  notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onSettingsChange: (patch: Partial<AppSettings>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["idlePolicy"]>) => void;
@@ -28,6 +29,7 @@ export const Settings = ({
   activeSettingsPanel,
   settingsDraft,
   launchCommandStatus,
+  notificationPermissionText,
   onSettingsPanelChange,
   onSettingsChange,
   onSettingsIdlePolicyChange,
@@ -137,6 +139,59 @@ export const Settings = ({
                     data-testid="settings-max-active"
                   />
                   <span>{t("sessionsWord")}</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("completionNotifications")}</strong>
+                  <span>{t("completionNotificationsHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.completionNotifications.enabled}
+                      onChange={() => onSettingsChange({
+                        completionNotifications: {
+                          enabled: !settingsDraft.completionNotifications.enabled
+                        }
+                      })}
+                      data-testid="settings-completion-notifications"
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("notifyOnlyInBackground")}</strong>
+                  <span>{t("notifyOnlyInBackgroundHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.completionNotifications.onlyWhenBackground}
+                      onChange={() => onSettingsChange({
+                        completionNotifications: {
+                          onlyWhenBackground: !settingsDraft.completionNotifications.onlyWhenBackground
+                        }
+                      })}
+                      data-testid="settings-notify-only-background"
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("notificationPermission")}</strong>
+                </div>
+                <div className="settings-row-control">
+                  <span data-testid="settings-notification-permission">{notificationPermissionText}</span>
                 </div>
               </div>
 

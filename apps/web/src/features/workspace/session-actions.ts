@@ -41,6 +41,8 @@ import {
 import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
 import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
 
+import type { CompletionReminderTarget } from "./completion-reminders";
+
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
 
@@ -52,6 +54,7 @@ type WorkspaceSessionActionDeps = {
   updateTab: UpdateTab;
   withServiceFallback: WithServiceFallback;
   addToast: (toast: Toast) => void;
+  onCompletionReminder?: (target: CompletionReminderTarget) => Promise<void> | void;
 };
 
 export const createWorkspaceSessionActions = ({
@@ -62,6 +65,7 @@ export const createWorkspaceSessionActions = ({
   updateTab,
   withServiceFallback,
   addToast,
+  onCompletionReminder,
 }: WorkspaceSessionActionDeps) => {
   const buildDraftSessionMessages = (tab: Tab) => createDraftSessionPlaceholder({
     locale,
@@ -433,6 +437,15 @@ export const createWorkspaceSessionActions = ({
     const updatedTab = stateRef.current.tabs.find((item) => item.id === tabId);
     const updatedSession = updatedTab?.sessions.find((item) => item.id === sessionId);
     if (!updatedTab || !updatedSession) return;
+
+    if (!note && session.status !== "idle") {
+      void onCompletionReminder?.({
+        workspaceId: updatedTab.id,
+        workspaceTitle: updatedTab.title,
+        sessionId,
+        sessionTitle: updatedSession.title,
+      });
+    }
 
     if (updatedTab.activeSessionId !== sessionId && session.status !== "idle") {
       addToast({

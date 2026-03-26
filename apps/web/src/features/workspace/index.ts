@@ -47,6 +47,12 @@ export {
 export { startWorkspaceLaunch } from "./workspace-launch-actions";
 export { createWorkspaceSessionActions } from "./session-actions";
 export {
+  getBrowserNotificationPermissionState,
+  isCompletionReminderBackgroundCase,
+  notifyCompletionReminder,
+  playCompletionReminderSound,
+} from "./completion-reminders";
+export {
   addWorkspaceTerminal,
   closeWorkspaceTerminal,
   selectWorkspaceTerminal,

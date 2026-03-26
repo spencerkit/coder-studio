@@ -1,3 +1,4 @@
+import taskCompleteSoundUrl from "../../assets/task-complete.wav";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -72,12 +73,15 @@ import {
   buildWorkspaceGitChangeGroups,
   closeWorkspaceTerminal,
   findPreviewGitChange,
+  isCompletionReminderBackgroundCase,
   loadWorkspaceFilePreview,
   loadWorkspaceGitChangePreview,
   loadWorkspaceRepositoryDiff,
+  notifyCompletionReminder,
   openWorkspacePreviewPath,
   openWorkspaceWorktree,
   performWorkspaceGitOperation,
+  playCompletionReminderSound,
   resolveWorkspacePreviewPathLabel,
   saveWorkspacePreview,
   selectWorkspaceTerminal,
@@ -358,6 +362,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashMenuLoading, setSlashMenuLoading] = useState(false);
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(() => (
+    typeof document !== "undefined" ? document.hasFocus() : true
+  ));
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
+    typeof document === "undefined" ? true : document.visibilityState === "visible"
+  ));
   const t = useMemo(() => createTranslator(locale), [locale]);
   const terminalCompatibilityMode = appSettings.terminalCompatibilityMode;
   const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
@@ -402,6 +412,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     sawReady: boolean;
     exited: boolean;
   }>());
+  const completionReminderAudioRef = useRef<HTMLAudioElement | null>(null);
   const agentStartupTokenRef = useRef(0);
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
     const targetKey = serializeRuntimeValidationKey(target, appSettings.agentCommand);
@@ -561,18 +572,49 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const syncGlobalSettings = (next: AppSettings) => {
     const normalized = cloneAppSettings(next);
-    updateState((current) => ({
-      ...current,
-      tabs: current.tabs.map((tab) => ({
-        ...tab,
-        agent: {
-          ...tab.agent,
-          provider: normalized.agentProvider,
-          command: normalized.agentCommand
-        },
-        idlePolicy: { ...normalized.idlePolicy }
-      }))
-    }));
+    const currentTab = stateRef.current.tabs[0];
+    const currentAgentProvider = currentTab?.agent.provider ?? emptyTabRef.current?.agent.provider ?? normalized.agentProvider;
+    const currentAgentCommand = currentTab?.agent.command ?? emptyTabRef.current?.agent.command ?? normalized.agentCommand;
+    const currentIdlePolicy = currentTab?.idlePolicy ?? emptyTabRef.current?.idlePolicy ?? normalized.idlePolicy;
+    const agentSettingsChanged = currentAgentProvider !== normalized.agentProvider
+      || currentAgentCommand !== normalized.agentCommand;
+    const idlePolicyChanged = JSON.stringify(currentIdlePolicy) !== JSON.stringify(normalized.idlePolicy);
+
+    if (emptyTabRef.current && (agentSettingsChanged || idlePolicyChanged)) {
+      emptyTabRef.current = {
+        ...emptyTabRef.current,
+        agent: agentSettingsChanged
+          ? {
+              ...emptyTabRef.current.agent,
+              provider: normalized.agentProvider,
+              command: normalized.agentCommand,
+            }
+          : emptyTabRef.current.agent,
+        idlePolicy: idlePolicyChanged ? { ...normalized.idlePolicy } : emptyTabRef.current.idlePolicy,
+      };
+    }
+
+    if (stateRef.current.tabs.length > 0 && (agentSettingsChanged || idlePolicyChanged)) {
+      updateState((current) => ({
+        ...current,
+        tabs: current.tabs.map((tab) => ({
+          ...tab,
+          agent: agentSettingsChanged
+            ? {
+                ...tab.agent,
+                provider: normalized.agentProvider,
+                command: normalized.agentCommand,
+              }
+            : tab.agent,
+          idlePolicy: idlePolicyChanged ? { ...normalized.idlePolicy } : tab.idlePolicy,
+        })),
+      }));
+    }
+
+    if (!idlePolicyChanged) {
+      return;
+    }
+
     stateRef.current.tabs.forEach((tab) => {
       void updateIdlePolicyRequest(tab.id, normalized.idlePolicy).catch(() => {
         // Best effort sync; in-memory settings remain source of truth if backend lags.
@@ -583,6 +625,36 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    const audio = new Audio(taskCompleteSoundUrl);
+    audio.preload = "auto";
+    completionReminderAudioRef.current = audio;
+    return () => {
+      completionReminderAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const syncVisibility = () => {
+      setIsWindowFocused(document.hasFocus());
+      setIsDocumentVisible(document.visibilityState === "visible");
+    };
+
+    syncVisibility();
+    window.addEventListener("focus", syncVisibility);
+    window.addEventListener("blur", syncVisibility);
+    document.addEventListener("visibilitychange", syncVisibility);
+    return () => {
+      window.removeEventListener("focus", syncVisibility);
+      window.removeEventListener("blur", syncVisibility);
+      document.removeEventListener("visibilitychange", syncVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -929,6 +1001,51 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }, 4000);
   };
 
+  const onCompletionReminder = useCallback(async ({
+    workspaceId,
+    workspaceTitle,
+    sessionId,
+    sessionTitle,
+  }: {
+    workspaceId: string;
+    workspaceTitle: string;
+    sessionId: string;
+    sessionTitle: string;
+  }) => {
+    if (!appSettings.completionNotifications.enabled) {
+      return;
+    }
+
+    const currentState = stateRef.current;
+    const isBackgroundCase = isCompletionReminderBackgroundCase(
+      {
+        workspaceId,
+        workspaceTitle,
+        sessionId,
+        sessionTitle,
+      },
+      {
+        activeWorkspaceId: currentState.activeTabId,
+        activeSessionId: currentState.tabs.find((tab) => tab.id === currentState.activeTabId)?.activeSessionId,
+        documentVisible: isDocumentVisible,
+        windowFocused: isWindowFocused,
+      },
+    );
+
+    if (appSettings.completionNotifications.onlyWhenBackground && !isBackgroundCase) {
+      return;
+    }
+
+    await playCompletionReminderSound(completionReminderAudioRef.current);
+    await notifyCompletionReminder({
+      title: sessionTitle,
+      body: t("completionNotificationBody", { workspaceTitle }),
+      onClick: () => {
+        onSwitchWorkspaceSession(workspaceId, sessionId);
+      },
+    });
+  }, [appSettings.completionNotifications, isDocumentVisible, isWindowFocused, t]);
+
   const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
     try {
       return await operation();
@@ -978,7 +1095,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     stateRef,
     updateTab,
     withServiceFallback,
-    addToast
+    addToast,
+    onCompletionReminder,
   });
 
   useWorkspaceTransportSync({
@@ -1772,7 +1890,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     action.run();
   };
 
-  const ensureAgentPaneSessionReady = async (paneId: string) => {
+  const ensureAgentPaneSessionReady = async (paneId: string, firstInput = "") => {
     if (isArchiveView) return null;
     const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     if (!activeTabSnapshot) return null;
@@ -1781,7 +1899,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!activeSessionSnapshot) return null;
 
     const materialized = isDraftSession(activeSessionSnapshot)
-      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
+      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, firstInput)
       : { tab: activeTabSnapshot, session: activeSessionSnapshot };
     const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
     const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
@@ -1815,11 +1933,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const pendingTitle = currentSessionSnapshot
       ? trackAgentInitialTitleInput(agentRuntimeRefs, paneId, currentSessionSnapshot, data)
       : null;
+    const initialDraftTitle = currentSessionSnapshot?.isDraft
+      ? sessionTitleFromInput(data)
+      : "";
     const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
     const nextQueue = currentQueue
       .catch(() => undefined)
       .then(async () => {
-        const ready = await ensureAgentPaneSessionReady(paneId);
+        const ready = await ensureAgentPaneSessionReady(paneId, pendingTitle ?? initialDraftTitle);
         if (!ready) return;
         if (pendingTitle) {
           commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, pendingTitle);

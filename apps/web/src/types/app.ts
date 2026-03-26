@@ -290,10 +290,16 @@ export type WorkspaceTabItem = {
   unread: number;
 };
 
+export type BrowserNotificationSupport = "allowed" | "not-enabled" | "unsupported";
+
 export type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: IdlePolicy;
+  completionNotifications: {
+    enabled: boolean;
+    onlyWhenBackground: boolean;
+  };
   terminalCompatibilityMode: TerminalCompatibilityMode;
 };
 
