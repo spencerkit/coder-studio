@@ -96,6 +96,8 @@ export const AgentWorkspaceFeature = ({
       <section
         key={node.id}
         className={`agent-pane-card ${isPaneActive ? "active" : ""}`}
+        data-session-id={session.id}
+        data-session-status={session.status}
         onMouseDown={() => onSetActivePane(node.id, session.id)}
       >
         <div className={`surface-progress ${tone}`} aria-hidden="true">
@@ -219,7 +221,11 @@ export const AgentWorkspaceFeature = ({
           )}
           <div className="agent-pane-workspace">
             {isArchiveView ? (
-              <section className="agent-pane-card archive-only">
+              <section
+                className="agent-pane-card archive-only"
+                data-session-id={viewedSession.id}
+                data-session-status={viewedSession.status}
+              >
                 <div className="agent-pane-header">
                   <div className="agent-pane-header-copy">
                     <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />

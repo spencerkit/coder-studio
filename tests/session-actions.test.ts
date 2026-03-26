@@ -41,6 +41,14 @@ const createState = (): WorkbenchState => ({
       id: 'ws-1',
       title: 'Workspace Alpha',
       status: 'ready',
+      controller: {
+        role: 'controller',
+        deviceId: 'device-a',
+        clientId: 'client-a',
+        fencingToken: 1,
+        takeoverPending: false,
+        takeoverRequestedBySelf: false,
+      },
       agent: {
         provider: 'claude',
         command: 'claude',

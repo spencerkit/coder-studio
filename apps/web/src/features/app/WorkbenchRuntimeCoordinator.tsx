@@ -12,6 +12,10 @@ import {
 } from "../../services/http/session.service.ts";
 import {
   activateWorkspace as activateWorkspaceRequest,
+  attachWorkspaceRuntime,
+  heartbeatWorkspaceController,
+  releaseWorkspaceControllerKeepalive,
+  requestWorkspaceTakeover,
 } from "../../services/http/workspace.service.ts";
 import { cloneAppSettings } from "../../shared/app/settings";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
@@ -23,6 +27,8 @@ import {
 } from "../../shared/utils/session";
 import {
   applyWorkbenchUiState,
+  applyWorkspaceControllerEvent,
+  applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
 import { workbenchState } from "../../state/workbench";
 import type {
@@ -38,6 +44,11 @@ import {
   notifyCompletionReminder,
   playCompletionReminderSound,
 } from "../workspace/completion-reminders";
+import {
+  collectControlledWorkspaceReleasePayloads,
+  getOrCreateClientId as getWorkspaceClientId,
+  getOrCreateDeviceId as getWorkspaceDeviceId,
+} from "../workspace/workspace-controller";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 import {
@@ -94,6 +105,8 @@ export const WorkbenchRuntimeCoordinator = ({
   }>());
   const agentStartupTokenRef = useRef(0);
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const deviceId = useMemo(() => getWorkspaceDeviceId(), []);
+  const clientId = useMemo(() => getWorkspaceClientId(), []);
 
   const agentRuntimeRefs = useMemo<AgentRuntimeRefs>(() => ({
     draftPromptInputRefs,
@@ -142,6 +155,30 @@ export const WorkbenchRuntimeCoordinator = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const releaseControllers = () => {
+      collectControlledWorkspaceReleasePayloads(stateRef.current.tabs).forEach((payload) => {
+        releaseWorkspaceControllerKeepalive(payload.workspaceId, {
+          role: "controller",
+          deviceId: payload.deviceId,
+          clientId: payload.clientId,
+          fencingToken: payload.fencingToken,
+          takeoverPending: false,
+          takeoverRequestedBySelf: false,
+        });
+      });
+    };
+
+    window.addEventListener("pagehide", releaseControllers);
+    return () => {
+      window.removeEventListener("pagehide", releaseControllers);
+    };
+  }, []);
+
   const updateState = useCallback((updater: (current: WorkbenchState) => WorkbenchState) => {
     const next = updater(stateRef.current);
     stateRef.current = next;
@@ -166,7 +203,12 @@ export const WorkbenchRuntimeCoordinator = ({
   ) => {
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;
-    await withServiceFallback(() => updateSessionRequest(tabId, backendSessionId, patch), null);
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    if (!tab || tab.controller.role !== "controller") return;
+    await withServiceFallback(
+      () => updateSessionRequest(tabId, backendSessionId, patch, tab.controller),
+      null,
+    );
   }, []);
 
   const switchWorkspaceSessionFromReminder = useCallback((tabId: string, sessionId: string) => {
@@ -176,6 +218,10 @@ export const WorkbenchRuntimeCoordinator = ({
     const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
     const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
     if (!targetTabSnapshot || !nextSession) {
+      return;
+    }
+    if (targetTabSnapshot.controller.role !== "controller") {
+      navigate(`/workspace/${tabId}`);
       return;
     }
 
@@ -235,13 +281,13 @@ export const WorkbenchRuntimeCoordinator = ({
 
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId !== null) {
-      void switchSessionRequest(tabId, backendSessionId).catch(() => {
+      void switchSessionRequest(tabId, backendSessionId, targetTabSnapshot.controller).catch(() => {
         // Frontend state already switched optimistically.
       });
     }
 
     if (currentState.activeTabId !== tabId) {
-      void withServiceFallback(() => activateWorkspaceRequest(tabId), null).then((uiState) => {
+      void withServiceFallback(() => activateWorkspaceRequest(tabId, deviceId, clientId), null).then((uiState) => {
         if (!uiState) return;
         updateState((current) => applyWorkbenchUiState(current, uiState));
       });
@@ -322,6 +368,8 @@ export const WorkbenchRuntimeCoordinator = ({
   useWorkspaceTransportSync({
     agentRuntimeRefs,
     bootstrapReady: state.tabs.length > 0,
+    clientId,
+    deviceId,
     refreshTabFromBackend,
     markSessionIdle,
     settleSessionAfterExit,
@@ -330,6 +378,190 @@ export const WorkbenchRuntimeCoordinator = ({
     t,
     updateState,
   });
+
+  const attachedWorkspaceFingerprint = useMemo(
+    () => state.tabs
+      .filter((tab) => tab.status === "ready")
+      .map((tab) => tab.id)
+      .join("|"),
+    [state.tabs],
+  );
+
+  useEffect(() => {
+    if (!attachedWorkspaceFingerprint) {
+      return;
+    }
+
+    let cancelled = false;
+    const workspaceIds = state.tabs
+      .filter((tab) => tab.status === "ready")
+      .map((tab) => tab.id);
+
+    void Promise.all(workspaceIds.map(async (workspaceId) => {
+      const runtimeSnapshot = await withServiceFallback(
+        () => attachWorkspaceRuntime(workspaceId, deviceId, clientId),
+        null,
+      );
+      if (!runtimeSnapshot || cancelled) return;
+      updateState((current) => applyWorkspaceRuntimeSnapshot(
+        current,
+        runtimeSnapshot,
+        locale,
+        appSettings,
+        deviceId,
+        clientId,
+      ));
+    }));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appSettings, attachedWorkspaceFingerprint, clientId, deviceId, locale, updateState]);
+
+  const controllerHeartbeatFingerprint = useMemo(
+    () => state.tabs
+      .filter((tab) => tab.status === "ready" && tab.controller.role === "controller")
+      .map((tab) => `${tab.id}:${tab.controller.fencingToken}`)
+      .join("|"),
+    [state.tabs],
+  );
+
+  useEffect(() => {
+    if (!controllerHeartbeatFingerprint) {
+      return;
+    }
+
+    const controllerWorkspaceIds = () => stateRef.current.tabs
+      .filter((tab) => tab.status === "ready" && tab.controller.role === "controller")
+      .map((tab) => tab.id);
+
+    const sendHeartbeat = () => {
+      controllerWorkspaceIds().forEach((workspaceId) => {
+        void heartbeatWorkspaceController(workspaceId, deviceId, clientId)
+          .then((controller) => {
+            updateState((current) => applyWorkspaceControllerEvent(current, {
+              workspace_id: workspaceId,
+              controller,
+            }, deviceId, clientId));
+          })
+          .catch(() => {
+            // The WS controller stream or next attach will converge the UI.
+          });
+      });
+    };
+
+    sendHeartbeat();
+    const timer = window.setInterval(sendHeartbeat, 10000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [clientId, controllerHeartbeatFingerprint, deviceId, updateState]);
+
+  const controllerRecoveryFingerprint = useMemo(
+    () => state.tabs
+      .filter((tab) =>
+        tab.status === "ready"
+        && tab.controller.role === "observer"
+        && !tab.controller.controllerDeviceId
+        && !tab.controller.controllerClientId
+        && !tab.controller.takeoverPending,
+      )
+      .map((tab) => tab.id)
+      .join("|"),
+    [state.tabs],
+  );
+
+  useEffect(() => {
+    if (!controllerRecoveryFingerprint) {
+      return;
+    }
+
+    let cancelled = false;
+    const recoverableWorkspaceIds = () => stateRef.current.tabs
+      .filter((tab) =>
+        tab.status === "ready"
+        && tab.controller.role === "observer"
+        && !tab.controller.controllerDeviceId
+        && !tab.controller.controllerClientId
+        && !tab.controller.takeoverPending,
+      )
+      .map((tab) => tab.id);
+
+    const recoverControllers = () => {
+      void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
+        const runtimeSnapshot = await withServiceFallback(
+          () => attachWorkspaceRuntime(workspaceId, deviceId, clientId),
+          null,
+        );
+        if (!runtimeSnapshot || cancelled) return;
+        updateState((current) => applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        ));
+      }));
+    };
+
+    recoverControllers();
+    const timer = window.setInterval(recoverControllers, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [appSettings, clientId, controllerRecoveryFingerprint, deviceId, locale, updateState]);
+
+  const takeoverPollingFingerprint = useMemo(
+    () => state.tabs
+      .filter((tab) =>
+        tab.status === "ready"
+        && tab.controller.role === "observer"
+        && tab.controller.takeoverPending
+        && tab.controller.takeoverRequestedBySelf,
+      )
+      .map((tab) => `${tab.id}:${tab.controller.takeoverDeadlineAt ?? 0}`)
+      .join("|"),
+    [state.tabs],
+  );
+
+  useEffect(() => {
+    if (!takeoverPollingFingerprint) {
+      return;
+    }
+
+    const takeoverWorkspaceIds = () => stateRef.current.tabs
+      .filter((tab) =>
+        tab.status === "ready"
+        && tab.controller.role === "observer"
+        && tab.controller.takeoverPending
+        && tab.controller.takeoverRequestedBySelf,
+      )
+      .map((tab) => tab.id);
+
+    const pollTakeover = () => {
+      takeoverWorkspaceIds().forEach((workspaceId) => {
+        void requestWorkspaceTakeover(workspaceId, deviceId, clientId)
+          .then((controller) => {
+            updateState((current) => applyWorkspaceControllerEvent(current, {
+              workspace_id: workspaceId,
+              controller,
+            }, deviceId, clientId));
+          })
+          .catch(() => {
+            // Keep waiting; the controller stream is the primary source of truth.
+          });
+      });
+    };
+
+    pollTakeover();
+    const timer = window.setInterval(pollTakeover, 2000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [clientId, deviceId, takeoverPollingFingerprint, updateState]);
 
   const settingsSyncFingerprint = useMemo(() => state.tabs.map((tab) => [
     tab.id,
@@ -358,7 +590,11 @@ export const WorkbenchRuntimeCoordinator = ({
     }));
 
     idlePolicyWorkspaceIds.forEach((workspaceId) => {
-      void updateIdlePolicyRequest(workspaceId, normalized.idlePolicy).catch(() => {
+      const tab = stateRef.current.tabs.find((item) => item.id === workspaceId);
+      if (!tab || tab.controller.role !== "controller") {
+        return;
+      }
+      void updateIdlePolicyRequest(workspaceId, normalized.idlePolicy, tab.controller).catch(() => {
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });

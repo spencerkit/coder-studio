@@ -1,8 +1,10 @@
 use crate::*;
 
-pub(crate) fn launch_workspace_internal(
+pub(crate) fn launch_workspace_internal_scoped(
     source: WorkspaceSource,
     clone_root_override: Option<String>,
+    device_id: Option<&str>,
+    client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceLaunchResult, String> {
     let project_path = match source.kind {
@@ -32,7 +34,14 @@ pub(crate) fn launch_workspace_internal(
         WorkspaceSourceKind::Local => resolve_git_repo_path(&source.path_or_url, &source.target)?,
     };
 
-    let result = launch_workspace_record(state, source, project_path, default_idle_policy())?;
+    let result = launch_workspace_record_scoped(
+        state,
+        source,
+        project_path,
+        default_idle_policy(),
+        device_id,
+        client_id,
+    )?;
     if let Err(error) = ensure_workspace_watch(
         state,
         &result.snapshot.workspace.workspace_id,
@@ -47,17 +56,21 @@ pub(crate) fn launch_workspace_internal(
     Ok(result)
 }
 
-pub(crate) fn launch_workspace(
+pub(crate) fn launch_workspace_scoped(
     source: WorkspaceSource,
+    device_id: Option<&str>,
+    client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceLaunchResult, String> {
-    launch_workspace_internal(source, None, state)
+    launch_workspace_internal_scoped(source, None, device_id, client_id, state)
 }
 
-pub(crate) fn workbench_bootstrap(
+pub(crate) fn workbench_bootstrap_scoped(
+    device_id: Option<&str>,
+    client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchBootstrap, String> {
-    load_workbench_bootstrap(state)
+    load_workbench_bootstrap(state, device_id, client_id)
 }
 
 pub(crate) fn workspace_snapshot(
@@ -79,8 +92,10 @@ pub(crate) fn workspace_snapshot(
     Ok(snapshot)
 }
 
-pub(crate) fn activate_workspace(
+pub(crate) fn activate_workspace_scoped(
     workspace_id: String,
+    device_id: Option<&str>,
+    client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
     if let Ok((project_path, target)) = workspace_access_context(state, &workspace_id) {
@@ -88,25 +103,38 @@ pub(crate) fn activate_workspace(
             eprintln!("failed to watch workspace {workspace_id} on activate: {error}");
         }
     }
-    activate_workspace_ui(state, &workspace_id)
+    activate_workspace_ui(state, &workspace_id, device_id, client_id)
 }
 
+#[cfg(test)]
 pub(crate) fn close_workspace(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    let ui_state = close_workspace_ui(state, &workspace_id)?;
+    close_workspace_scoped(workspace_id, None, None, state)
+}
+
+pub(crate) fn close_workspace_scoped(
+    workspace_id: String,
+    device_id: Option<&str>,
+    client_id: Option<&str>,
+    state: State<'_, AppState>,
+) -> Result<WorkbenchUiState, String> {
+    let ui_state = close_workspace_ui(state, &workspace_id, device_id, client_id)?;
+    release_workspace_controller(&workspace_id, state)?;
     close_workspace_terminals(&workspace_id, state);
     stop_workspace_agents(&workspace_id, state);
     stop_workspace_watch(state, &workspace_id);
     Ok(ui_state)
 }
 
-pub(crate) fn update_workbench_layout(
+pub(crate) fn update_workbench_layout_scoped(
     layout: WorkbenchLayout,
+    device_id: Option<&str>,
+    client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
-    persist_workbench_layout(state, layout)
+    persist_workbench_layout(state, layout, device_id, client_id)
 }
 
 pub(crate) fn workspace_view_update(
@@ -114,7 +142,16 @@ pub(crate) fn workspace_view_update(
     patch: WorkspaceViewPatch,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceViewState, String> {
-    patch_workspace_view_state(state, &workspace_id, patch)
+    let view_state = patch_workspace_view_state(state, &workspace_id, patch)?;
+    let _ = state.transport_events.send(TransportEvent {
+        event: "workspace://runtime_state".to_string(),
+        payload: serde_json::to_value(WorkspaceRuntimeStateEvent {
+            workspace_id,
+            view_state: view_state.clone(),
+        })
+        .map_err(|e| e.to_string())?,
+    });
+    Ok(view_state)
 }
 
 pub(crate) fn create_session(
@@ -187,4 +224,84 @@ pub(crate) fn worktree_inspect(
         root: tree.root,
         changes: tree.changes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeHandle;
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    fn launch_test_workspace(app: &AppHandle, root: &str) -> String {
+        let result = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: root.to_string(),
+                target: ExecTarget::Native,
+            },
+            root.to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        result.snapshot.workspace.workspace_id
+    }
+
+    #[test]
+    fn workspace_view_update_broadcasts_runtime_state() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-state-test");
+        let mut rx = app.state().transport_events.subscribe();
+
+        let view_state = workspace_view_update(
+            workspace_id.clone(),
+            WorkspaceViewPatch {
+                active_session_id: None,
+                active_pane_id: None,
+                active_terminal_id: Some("7".to_string()),
+                pane_layout: None,
+                file_preview: None,
+            },
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(view_state.active_terminal_id, "7");
+
+        let event = rx.try_recv().expect("expected runtime state event");
+        assert_eq!(event.event, "workspace://runtime_state");
+        let payload: WorkspaceRuntimeStateEvent = serde_json::from_value(event.payload).unwrap();
+        assert_eq!(payload.workspace_id, workspace_id);
+        assert_eq!(payload.view_state.active_terminal_id, "7");
+    }
+
+    #[test]
+    fn close_workspace_releases_controller_lease() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-close-release-test");
+
+        workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        close_workspace(workspace_id.clone(), app.state()).unwrap();
+
+        let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
+        assert_eq!(lease.controller_device_id, None);
+        assert_eq!(lease.controller_client_id, None);
+        assert_eq!(lease.lease_expires_at, 0);
+        assert_eq!(lease.takeover_request_id, None);
+    }
 }

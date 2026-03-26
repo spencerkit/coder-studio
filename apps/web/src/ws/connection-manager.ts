@@ -1,5 +1,9 @@
 import { healthUrl, websocketUrl } from "../shared/runtime/backend";
 import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service";
+import {
+  getOrCreateClientId,
+  getOrCreateDeviceId,
+} from "../features/workspace/workspace-controller";
 import { WsHeartbeat } from "./heartbeat";
 import { parseWsEnvelope, type WsEventEnvelope } from "./protocol";
 
@@ -79,7 +83,10 @@ export class WsConnectionManager {
     }
     let nextUrl = "";
     try {
-      nextUrl = websocketUrl();
+      const baseUrl = new URL(websocketUrl());
+      baseUrl.searchParams.set("device_id", getOrCreateDeviceId());
+      baseUrl.searchParams.set("client_id", getOrCreateClientId());
+      nextUrl = baseUrl.toString();
     } catch {
       this.scheduleReconnect();
       return;

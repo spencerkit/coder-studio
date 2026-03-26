@@ -7,34 +7,92 @@ import type {
   WorkbenchUiState,
   WorktreeDetail,
   WorkspaceLaunchResult,
+  WorkspaceRuntimeSnapshot,
   WorkspaceSnapshot,
   WorkspaceTree,
   WorkspaceViewPatch,
 } from "../../types/app.ts";
-import { invokeRpc } from "./client.ts";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
+import { fireAndForgetRpc, invokeRpc } from "./client.ts";
 
 export const launchWorkspace = (source: {
   kind: "remote" | "local";
   pathOrUrl: string;
   target: ExecTarget;
-}) => invokeRpc<WorkspaceLaunchResult>("launch_workspace", { source });
+}, deviceId?: string, clientId?: string) => invokeRpc<WorkspaceLaunchResult>("launch_workspace", {
+  source,
+  deviceId,
+  clientId,
+});
 
-export const getWorkbenchBootstrap = () => invokeRpc<WorkbenchBootstrap>("workbench_bootstrap", {});
+export const getWorkbenchBootstrap = (deviceId?: string, clientId?: string) =>
+  invokeRpc<WorkbenchBootstrap>("workbench_bootstrap", { deviceId, clientId });
 
 export const getWorkspaceSnapshot = (workspaceId: string) =>
   invokeRpc<WorkspaceSnapshot>("workspace_snapshot", { workspaceId });
 
-export const activateWorkspace = (workspaceId: string) =>
-  invokeRpc<WorkbenchUiState>("activate_workspace", { workspaceId });
+export const attachWorkspaceRuntime = (
+  workspaceId: string,
+  deviceId: string,
+  clientId: string,
+) => invokeRpc<WorkspaceRuntimeSnapshot>("workspace_runtime_attach", {
+  workspaceId,
+  deviceId,
+  clientId,
+});
 
-export const closeWorkspace = (workspaceId: string) =>
-  invokeRpc<WorkbenchUiState>("close_workspace", { workspaceId });
+export const heartbeatWorkspaceController = (
+  workspaceId: string,
+  deviceId: string,
+  clientId: string,
+) => invokeRpc("workspace_controller_heartbeat", {
+  workspaceId,
+  deviceId,
+  clientId,
+});
 
-export const updateWorkbenchLayout = (layout: WorkbenchLayout) =>
-  invokeRpc<WorkbenchUiState>("update_workbench_layout", { layout });
+export const requestWorkspaceTakeover = (
+  workspaceId: string,
+  deviceId: string,
+  clientId: string,
+) => invokeRpc("workspace_controller_takeover", {
+  workspaceId,
+  deviceId,
+  clientId,
+});
 
-export const updateWorkspaceView = (workspaceId: string, patch: WorkspaceViewPatch) =>
-  invokeRpc<void>("workspace_view_update", { workspaceId, patch });
+export const rejectWorkspaceTakeover = (
+  workspaceId: string,
+  deviceId: string,
+  clientId: string,
+) => invokeRpc("workspace_controller_reject_takeover", {
+  workspaceId,
+  deviceId,
+  clientId,
+});
+
+export const activateWorkspace = (workspaceId: string, deviceId?: string, clientId?: string) =>
+  invokeRpc<WorkbenchUiState>("activate_workspace", { workspaceId, deviceId, clientId });
+
+export const closeWorkspace = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+) => invokeRpc<WorkbenchUiState>("close_workspace", createWorkspaceControllerRpcPayload(workspaceId, controller));
+
+export const updateWorkbenchLayout = (layout: WorkbenchLayout, deviceId?: string, clientId?: string) =>
+  invokeRpc<WorkbenchUiState>("update_workbench_layout", { layout, deviceId, clientId });
+
+export const updateWorkspaceView = (
+  workspaceId: string,
+  patch: WorkspaceViewPatch,
+  controller: WorkspaceControllerState,
+) => invokeRpc<void>("workspace_view_update", createWorkspaceControllerRpcPayload(workspaceId, controller, { patch }));
+
+export const releaseWorkspaceControllerKeepalive = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+) => fireAndForgetRpc("workspace_controller_release", createWorkspaceControllerRpcPayload(workspaceId, controller));
 
 export const getWorkspaceTree = (path: string, target: ExecTarget, depth = 4) =>
   invokeRpc<WorkspaceTree>("workspace_tree", { path, target, depth });

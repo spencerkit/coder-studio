@@ -12,6 +12,8 @@ type StartWorkspaceLaunchArgs = {
   overlay: WorkbenchState["overlay"];
   locale: Locale;
   appSettings: AppSettings;
+  deviceId: string;
+  clientId: string;
   updateState: UpdateState;
   withServiceFallback: WithServiceFallback;
   refreshWorkspaceArtifacts: (workspaceId: string) => Promise<WorkspaceTree | null>;
@@ -28,6 +30,8 @@ export const startWorkspaceLaunch = async ({
   overlay,
   locale,
   appSettings,
+  deviceId,
+  clientId,
   updateState,
   withServiceFallback,
   refreshWorkspaceArtifacts,
@@ -40,7 +44,7 @@ export const startWorkspaceLaunch = async ({
       kind: overlay.mode,
       pathOrUrl: input,
       target: overlay.target,
-    }),
+    }, deviceId, clientId),
     null,
   );
   if (!result) return null;

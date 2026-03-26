@@ -200,6 +200,9 @@ const installTransportTracker = async (page: Page) => {
           socket.dispatchEvent(new MessageEvent('message', { data: frame }));
         });
       },
+      socketCount() {
+        return store.sockets.length;
+      },
     };
   });
 };
@@ -270,6 +273,26 @@ const createNotificationRecorder = async (page: Page) => {
   });
 };
 
+const seedDefaultAppSettings = async (page: Page) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('coder-studio.app-settings', JSON.stringify({
+      agentProvider: 'claude',
+      agentCommand: 'claude',
+      idlePolicy: {
+        enabled: true,
+        idleMinutes: 10,
+        maxActive: 3,
+        pressure: true,
+      },
+      completionNotifications: {
+        enabled: true,
+        onlyWhenBackground: true,
+      },
+      terminalCompatibilityMode: 'standard',
+    }));
+  });
+};
+
 const readNotificationEvents = async (page: Page) => page.evaluate(() => window.__completionReminderNotifications?.read() ?? []);
 const readAudioEvents = async (page: Page) => page.evaluate(() => window.__completionReminderAudio?.read() ?? []);
 
@@ -281,6 +304,131 @@ const waitForAudioEvent = async (page: Page, expectedPattern: RegExp) => {
   await expect.poll(() => readAudioEvents(page)).toContainEqual(expect.stringMatching(expectedPattern));
 };
 
+const waitForReminderSocket = async (page: Page) => {
+  await expect.poll(() => page.evaluate(() => window.__completionReminderTest?.socketCount() ?? 0)).toBeGreaterThan(0);
+};
+
+const ensureCompletionReminderSettingsEnabled = async (page: Page, stayOnSettings = false) => {
+  await page.getByTestId('settings-open').click();
+  await expect(page.getByTestId('settings-page')).toBeVisible();
+
+  const completionToggle = page.getByTestId('settings-completion-notifications');
+  const backgroundToggle = page.getByTestId('settings-notify-only-background');
+  if (!await completionToggle.isChecked()) {
+    await page.locator('label:has([data-testid="settings-completion-notifications"])').click();
+  }
+  if (!await backgroundToggle.isChecked()) {
+    await page.locator('label:has([data-testid="settings-notify-only-background"])').click();
+  }
+
+  await expect(completionToggle).toBeChecked();
+  await expect(backgroundToggle).toBeChecked();
+
+  if (!stayOnSettings) {
+    await page.getByRole('button', { name: 'Back to app' }).click();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+  }
+
+  await waitForReminderSocket(page);
+  await page.waitForTimeout(1000);
+};
+
+type ReminderWorkspaceSnapshot = {
+  workspace: { workspace_id: string; title: string; project_path: string };
+  sessions: Array<{ id: number; title: string }>;
+  view_state: { active_session_id: string };
+};
+
+const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      active_workspace_id?: string | null;
+    };
+    workspaces: ReminderWorkspaceSnapshot[];
+  }>(page, 'workbench_bootstrap');
+
+  return {
+    activeWorkspaceId: bootstrap.ui_state.active_workspace_id ?? null,
+    workspace: bootstrap.workspaces.find((item) => item.workspace.project_path === workspacePath) ?? null,
+  };
+};
+
+const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
+  const backgroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-background-`));
+  const foregroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-foreground-`));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, backgroundWorkspaceDir);
+    await launchWorkspaceByPath(page, foregroundWorkspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await waitForReminderSocket(page);
+
+    const background = await readWorkspaceByPath(page, backgroundWorkspaceDir);
+    const foreground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+    expect(background.workspace).toBeTruthy();
+    expect(foreground.workspace).toBeTruthy();
+    expect(foreground.activeWorkspaceId).toBe(foreground.workspace!.workspace.workspace_id);
+
+    return {
+      background: background.workspace as ReminderWorkspaceSnapshot,
+      foreground: foreground.workspace as ReminderWorkspaceSnapshot,
+      cleanup: async () => {
+        await Promise.all([
+          fs.rm(backgroundWorkspaceDir, { recursive: true, force: true }),
+          fs.rm(foregroundWorkspaceDir, { recursive: true, force: true }),
+        ]);
+      },
+    };
+  } catch (error) {
+    await Promise.all([
+      fs.rm(backgroundWorkspaceDir, { recursive: true, force: true }),
+      fs.rm(foregroundWorkspaceDir, { recursive: true, force: true }),
+    ]);
+    throw error;
+  }
+};
+
+const currentWorkspaceController = async (
+  page: Page,
+  workspaceId: string,
+  ids?: { deviceId: string; clientId: string },
+) => {
+  const controllerIds = ids ?? await page.evaluate(() => ({
+    deviceId: window.localStorage.getItem('coder-studio.workspace-device-id') ?? '',
+    clientId: window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '',
+  }));
+  let fencingToken = 0;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const runtime = await invokeRpc<{
+      controller: {
+        controller_device_id?: string | null;
+        controller_client_id?: string | null;
+        fencing_token: number;
+      };
+    }>(page, 'workspace_runtime_attach', {
+      workspaceId,
+      deviceId: controllerIds.deviceId,
+      clientId: controllerIds.clientId,
+    });
+    fencingToken = runtime.controller.fencing_token;
+    if (
+      runtime.controller.controller_device_id === controllerIds.deviceId
+      && runtime.controller.controller_client_id === controllerIds.clientId
+    ) {
+      return {
+        workspaceId,
+        deviceId: controllerIds.deviceId,
+        clientId: controllerIds.clientId,
+        fencingToken,
+      };
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`failed to acquire controller for workspace ${workspaceId}; last token=${fencingToken}`);
+};
+
 const closeAllOpenWorkspaces = async (page: Page) => {
   const bootstrap = await invokeRpc<{
     ui_state: {
@@ -289,7 +437,11 @@ const closeAllOpenWorkspaces = async (page: Page) => {
   }>(page, 'workbench_bootstrap');
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
-    await invokeRpc(page, 'close_workspace', { workspace_id: workspaceId });
+    const controller = await currentWorkspaceController(page, workspaceId, {
+      deviceId: 'cleanup-device',
+      clientId: 'cleanup-client',
+    });
+    await invokeRpc(page, 'close_workspace', controller);
   }
 };
 
@@ -391,123 +543,32 @@ test('completion reminder settings persist across route changes and reloads', as
 });
 
 test('background turn_completed sends a completion reminder notification', async ({ page }) => {
-  const reminderWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-reminder-'));
+  let cleanup = async () => {};
 
   try {
     await createNotificationRecorder(page);
-    await closeAllOpenWorkspaces(page);
-    await launchWorkspaceByPath(page, reminderWorkspaceDir);
-    await page.goto('/');
-    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-
-    const readReminderWorkspace = async () => {
-      const bootstrap = await invokeRpc<{
-        workspaces: Array<{
-          workspace: { workspace_id: string; title: string; project_path: string };
-          sessions: Array<{ id: number; title: string }>;
-          view_state: { active_session_id: string };
-        }>;
-      }>(page, 'workbench_bootstrap');
-      return bootstrap.workspaces.find((item) => item.workspace.project_path === reminderWorkspaceDir) ?? null;
-    };
-
-    const initialWorkspace = await readReminderWorkspace();
-    expect(initialWorkspace).toBeTruthy();
-    const initialSessionId = initialWorkspace!.view_state.active_session_id;
-
-    await page.getByRole('button', { name: 'Split Vertically' }).first().click();
-    const draftInputs = page.getByPlaceholder('Type to start a new task');
-    const backgroundTaskTitle = 'Background task';
-    await draftInputs.nth(1).fill(backgroundTaskTitle);
-    await draftInputs.nth(1).press('Enter');
-
-    await expect.poll(async () => (await readReminderWorkspace())?.sessions.length ?? 0).toBe(2);
-    const workspaceAfterMaterialize = await readReminderWorkspace();
-    expect(workspaceAfterMaterialize).toBeTruthy();
-    const backgroundCandidate = workspaceAfterMaterialize!.sessions.find(
-      (session) => session.id.toString() !== initialSessionId,
+    await seedDefaultAppSettings(page);
+    const pair = await launchReminderWorkspacePair(page, 'coder-studio-e2e-reminder');
+    cleanup = pair.cleanup;
+    await ensureCompletionReminderSettingsEnabled(page, false);
+    const backgroundSessionId = pair.background.view_state.active_session_id;
+    const backgroundSession = pair.background.sessions.find(
+      (session) => session.id.toString() === backgroundSessionId,
     );
-    expect(backgroundCandidate).toBeTruthy();
-
-    await page.locator('.agent-pane-card').first().click();
+    expect(backgroundSession).toBeTruthy();
 
     await emitLifecycleEvent(page, {
-      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
-      session_id: String(backgroundCandidate!.id),
+      workspace_id: pair.background.workspace.workspace_id,
+      session_id: backgroundSessionId,
       kind: 'tool_started',
       source_event: 'PreToolUse',
       data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
     });
+    await page.waitForTimeout(150);
 
     await emitLifecycleEvent(page, {
-      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
-      session_id: String(backgroundCandidate!.id),
-      kind: 'turn_completed',
-      source_event: 'Stop',
-      data: JSON.stringify({ hook_event_name: 'Stop' }),
-    });
-
-    await waitForNotificationEvent(page, `notify:${backgroundTaskTitle}:${workspaceAfterMaterialize!.workspace.title} · Task complete`);
-    await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
-  } finally {
-    await fs.rm(reminderWorkspaceDir, { recursive: true, force: true });
-  }
-});
-
-test('background turn_completed still sends a reminder while viewing settings', async ({ page }) => {
-  const reminderWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-reminder-settings-'));
-
-  try {
-    await createNotificationRecorder(page);
-    await closeAllOpenWorkspaces(page);
-    await launchWorkspaceByPath(page, reminderWorkspaceDir);
-    await page.goto('/');
-    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-
-    const readReminderWorkspace = async () => {
-      const bootstrap = await invokeRpc<{
-        workspaces: Array<{
-          workspace: { workspace_id: string; title: string; project_path: string };
-          sessions: Array<{ id: number; title: string }>;
-          view_state: { active_session_id: string };
-        }>;
-      }>(page, 'workbench_bootstrap');
-      return bootstrap.workspaces.find((item) => item.workspace.project_path === reminderWorkspaceDir) ?? null;
-    };
-
-    const initialWorkspace = await readReminderWorkspace();
-    expect(initialWorkspace).toBeTruthy();
-    const initialSessionId = initialWorkspace!.view_state.active_session_id;
-
-    await page.getByRole('button', { name: 'Split Vertically' }).first().click();
-    const draftInputs = page.getByPlaceholder('Type to start a new task');
-    const backgroundTaskTitle = 'Settings background task';
-    await draftInputs.nth(1).fill(backgroundTaskTitle);
-    await draftInputs.nth(1).press('Enter');
-
-    await expect.poll(async () => (await readReminderWorkspace())?.sessions.length ?? 0).toBe(2);
-    const workspaceAfterMaterialize = await readReminderWorkspace();
-    expect(workspaceAfterMaterialize).toBeTruthy();
-    const backgroundCandidate = workspaceAfterMaterialize!.sessions.find(
-      (session) => session.id.toString() !== initialSessionId,
-    );
-    expect(backgroundCandidate).toBeTruthy();
-
-    await page.locator('.agent-pane-card').first().click();
-    await page.getByTestId('settings-open').click();
-    await expect(page.getByTestId('settings-page')).toBeVisible();
-
-    await emitLifecycleEvent(page, {
-      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
-      session_id: String(backgroundCandidate!.id),
-      kind: 'tool_started',
-      source_event: 'PreToolUse',
-      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
-    });
-
-    await emitLifecycleEvent(page, {
-      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
-      session_id: String(backgroundCandidate!.id),
+      workspace_id: pair.background.workspace.workspace_id,
+      session_id: backgroundSessionId,
       kind: 'turn_completed',
       source_event: 'Stop',
       data: JSON.stringify({ hook_event_name: 'Stop' }),
@@ -515,11 +576,58 @@ test('background turn_completed still sends a reminder while viewing settings', 
 
     await waitForNotificationEvent(
       page,
-      `notify:${backgroundTaskTitle}:${workspaceAfterMaterialize!.workspace.title} · Task complete`,
+      `notify:${backgroundSession!.title}:${pair.background.workspace.title} · Task complete`,
     );
     await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
   } finally {
-    await fs.rm(reminderWorkspaceDir, { recursive: true, force: true });
+    await cleanup();
+  }
+});
+
+test('background turn_completed still sends a reminder while viewing settings', async ({ page }) => {
+  let cleanup = async () => {};
+
+  try {
+    await createNotificationRecorder(page);
+    await seedDefaultAppSettings(page);
+    const pair = await launchReminderWorkspacePair(page, 'coder-studio-e2e-reminder-settings');
+    cleanup = pair.cleanup;
+    await ensureCompletionReminderSettingsEnabled(page, false);
+    const backgroundSessionId = pair.background.view_state.active_session_id;
+    const backgroundSession = pair.background.sessions.find(
+      (session) => session.id.toString() === backgroundSessionId,
+    );
+    expect(backgroundSession).toBeTruthy();
+
+    await emitLifecycleEvent(page, {
+      workspace_id: pair.background.workspace.workspace_id,
+      session_id: backgroundSessionId,
+      kind: 'tool_started',
+      source_event: 'PreToolUse',
+      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
+    });
+    await page.waitForTimeout(150);
+
+    await page.getByTestId('settings-open').click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    await waitForReminderSocket(page);
+    await page.waitForTimeout(1000);
+
+    await emitLifecycleEvent(page, {
+      workspace_id: pair.background.workspace.workspace_id,
+      session_id: backgroundSessionId,
+      kind: 'turn_completed',
+      source_event: 'Stop',
+      data: JSON.stringify({ hook_event_name: 'Stop' }),
+    });
+
+    await waitForNotificationEvent(
+      page,
+      `notify:${backgroundSession!.title}:${pair.background.workspace.title} · Task complete`,
+    );
+    await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
+  } finally {
+    await cleanup();
   }
 });
 

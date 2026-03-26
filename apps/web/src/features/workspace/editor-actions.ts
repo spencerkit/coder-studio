@@ -146,7 +146,10 @@ export const saveWorkspacePreview = async ({
 }: SaveWorkspacePreviewArgs) => {
   const preview = tab.filePreview;
   if (!preview.path || !preview.dirty) return false;
-  const saved = await withServiceFallback<FilePreview | null>(() => saveFile(preview.path, preview.content), null);
+  const saved = await withServiceFallback<FilePreview | null>(
+    () => saveFile(tab.id, tab.controller, preview.path, preview.content),
+    null,
+  );
   if (!saved) return false;
 
   updateTab(tab.id, (currentTab) => ({

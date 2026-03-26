@@ -3083,6 +3083,81 @@ div.v-resizer[data-resize="right"]:hover {
   gap: var(--space-2);
 }
 
+.workspace-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-secondary) 78%, var(--bg) 22%);
+  flex-shrink: 0;
+}
+
+.workspace-status-banner.read-only {
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--bg-secondary) 42%);
+}
+
+.workspace-status-banner.takeover {
+  background: color-mix(in srgb, #e58f2a 22%, var(--bg-secondary) 78%);
+}
+
+.workspace-status-banner.recovery {
+  background: color-mix(in srgb, #d6b34b 18%, var(--bg-secondary) 82%);
+}
+
+.workspace-status-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workspace-status-banner-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workspace-status-banner-text {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.workspace-status-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.workspace-status-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-sm);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.workspace-status-banner-btn.primary {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border) 55%);
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+
+.workspace-status-banner-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.workspace-status-banner-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .workspace-panel-toggle {
   display: inline-flex;
   align-items: center;

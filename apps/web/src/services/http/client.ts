@@ -1,6 +1,11 @@
 import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend.ts";
 import { isPublicModeActive, markUnauthorized } from "./auth.service.ts";
 
+const rpcEndpoint = (command: string) => {
+  const base = backendBaseUrl();
+  return applyRuntimeQuery(new URL(`/api/rpc/${command}`, `${base}/`)).toString();
+};
+
 export const invokeRpc = async <T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T> => {
   const errors: string[] = [];
   const candidates = [backendBaseUrl()];
@@ -40,6 +45,21 @@ export const invokeRpc = async <T = unknown>(command: string, payload: Record<st
   }
 
   throw new Error(errors.join(" | "));
+};
+
+export const fireAndForgetRpc = (command: string, payload: Record<string, unknown> = {}) => {
+  const endpoint = rpcEndpoint(command);
+  void fetch(endpoint, {
+    method: "POST",
+    credentials: "include",
+    keepalive: true,
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  }).catch(() => {
+    // Keep unload/release best-effort and silent.
+  });
 };
 
 export const withFallback = async <T>(operation: () => Promise<T>, fallback: T): Promise<T> => {

@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import { subscribeAgentEvents, subscribeAgentLifecycleEvents, subscribeTerminalEvents, subscribeWorkspaceArtifactsDirty } from "../../command";
+import {
+  subscribeAgentEvents,
+  subscribeAgentLifecycleEvents,
+  subscribeTerminalEvents,
+  subscribeWorkspaceArtifactsDirty,
+  subscribeWorkspaceController,
+  subscribeWorkspaceRuntimeState,
+} from "../../command";
 import { createId, type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
+import {
+  applyWorkspaceControllerEvent,
+  applyWorkspaceRuntimeStateEvent,
+} from "../../shared/utils/workspace";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STREAM_BUFFER_LIMIT,
@@ -35,6 +46,8 @@ type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Prom
 type UseWorkspaceTransportSyncArgs = {
   agentRuntimeRefs: AgentRuntimeRefs;
   bootstrapReady: boolean;
+  clientId: string;
+  deviceId: string;
   refreshTabFromBackend: (tabId: string) => Promise<void>;
   markSessionIdle: (workspaceId: string, sessionId: string) => Promise<void>;
   settleSessionAfterExit: (workspaceId: string, sessionId: string) => Promise<void>;
@@ -108,6 +121,8 @@ const readClaudeSessionId = (data: string) => {
 export const useWorkspaceTransportSync = ({
   agentRuntimeRefs,
   bootstrapReady,
+  clientId,
+  deviceId,
   refreshTabFromBackend,
   markSessionIdle,
   settleSessionAfterExit,
@@ -285,6 +300,22 @@ export const useWorkspaceTransportSync = ({
           };
         }),
       }));
+    });
+    return unsubscribe;
+  }, [updateStateRef]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeWorkspaceController((payload) => {
+      updateStateRef.current((current) =>
+        applyWorkspaceControllerEvent(current, payload, deviceId, clientId),
+      );
+    });
+    return unsubscribe;
+  }, [clientId, deviceId, updateStateRef]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeWorkspaceRuntimeState((payload) => {
+      updateStateRef.current((current) => applyWorkspaceRuntimeStateEvent(current, payload));
     });
     return unsubscribe;
   }, [updateStateRef]);

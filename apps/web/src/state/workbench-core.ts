@@ -5,6 +5,7 @@ import {
   getPreferredLocale,
   type Locale,
 } from "../i18n.ts";
+import type { WorkspaceControllerState } from "../features/workspace/workspace-controller.ts";
 
 export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued" | "interrupted";
 export type SessionMode = "branch" | "git_tree";
@@ -103,6 +104,7 @@ export type Terminal = {
   id: string;
   title: string;
   output: string;
+  recoverable: boolean;
 };
 
 export type Project = {
@@ -141,6 +143,7 @@ export type Tab = {
   id: string;
   title: string;
   status: "init" | "ready";
+  controller: WorkspaceControllerState;
   project?: Project;
   agent: {
     provider: "claude";
@@ -250,6 +253,14 @@ export const createTab = (index: number, locale: Locale = getPreferredLocale()):
     id: createId("tab"),
     title: formatWorkspaceTitle(index, locale),
     status: "init",
+    controller: {
+      role: "observer",
+      deviceId: "",
+      clientId: "",
+      fencingToken: 0,
+      takeoverPending: false,
+      takeoverRequestedBySelf: false,
+    },
     agent: {
       provider: "claude",
       command: "claude",

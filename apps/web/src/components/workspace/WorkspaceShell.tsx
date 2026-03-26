@@ -19,6 +19,7 @@ type WorkspaceShellProps = {
   workspaceFolderName: string;
   branchName: string;
   changeCount: number;
+  statusBanner?: ReactNode;
   agentPanel: ReactNode;
   codePanel: ReactNode;
   terminalPanel: ReactNode;
@@ -37,6 +38,7 @@ export const WorkspaceShell = ({
   workspaceFolderName,
   branchName,
   changeCount,
+  statusBanner,
   agentPanel,
   codePanel,
   terminalPanel,
@@ -87,6 +89,8 @@ export const WorkspaceShell = ({
         </span>
       </div>
     </div>
+
+    {statusBanner}
 
     <div className={`workspace-stack ${isFocusMode ? "focus-mode" : ""} ${isCodeExpanded ? "code-expanded" : ""}`}>
       <div

@@ -80,10 +80,18 @@ export const createWorkspaceSessionActions = ({
     mode,
   });
 
+  const controllerForTab = (tabId: string) =>
+    stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
+
   const syncSessionPatch = async (tabId: string, sessionId: string, patch: SessionPatch) => {
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;
-    await withServiceFallback(() => updateSessionRequest(tabId, backendSessionId, patch), null);
+    const controller = controllerForTab(tabId);
+    if (!controller || controller.role !== "controller") return;
+    await withServiceFallback(
+      () => updateSessionRequest(tabId, backendSessionId, patch, controller),
+      null,
+    );
   };
 
   const touchSession = (tabId: string, sessionId: string) => {
@@ -107,7 +115,7 @@ export const createWorkspaceSessionActions = ({
 
     let nextSession: Session | null = null;
     const created = await withServiceFallback<BackendSession | null>(
-      () => createSessionRequest(tabId, currentSession.mode),
+      () => createSessionRequest(tabId, currentSession.mode, currentTab.controller),
       null,
     );
     if (created) {
@@ -229,7 +237,7 @@ export const createWorkspaceSessionActions = ({
 
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId !== null) {
-      void switchSessionRequest(tab.id, backendSessionId).catch(() => {
+      void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
         // The active session already changed locally.
       });
     }
@@ -286,7 +294,7 @@ export const createWorkspaceSessionActions = ({
     if (nextActiveSessionId) {
       const backendSessionId = parseNumericId(nextActiveSessionId);
       if (backendSessionId !== null) {
-        void switchSessionRequest(tab.id, backendSessionId).catch(() => {
+        void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
           // The pane switch already happened locally.
         });
       }
@@ -295,7 +303,7 @@ export const createWorkspaceSessionActions = ({
     if (!isDraftSession(session)) {
       const backendSessionId = parseNumericId(session.id);
       if (backendSessionId !== null) {
-        void archiveSessionRequest(tab.id, backendSessionId).catch(() => {
+        void archiveSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
           // Session has already been archived locally.
         });
       }
@@ -341,7 +349,10 @@ export const createWorkspaceSessionActions = ({
 
     const backendSessionId = parseNumericId(sessionId);
     const archived = backendSessionId !== null
-      ? await withServiceFallback<BackendArchiveEntry | null>(() => archiveSessionRequest(tabId, backendSessionId), null)
+      ? await withServiceFallback<BackendArchiveEntry | null>(
+        () => archiveSessionRequest(tabId, backendSessionId, currentTab.controller),
+        null,
+      )
       : null;
 
     const nextActiveAt = Date.now();
@@ -389,7 +400,7 @@ export const createWorkspaceSessionActions = ({
     if (wasActiveSession && nextActiveSessionId) {
       const nextBackendSessionId = parseNumericId(nextActiveSessionId);
       if (nextBackendSessionId !== null) {
-        void switchSessionRequest(tabId, nextBackendSessionId).catch(() => {
+        void switchSessionRequest(tabId, nextBackendSessionId, currentTab.controller).catch(() => {
           // Active session already updated locally.
         });
       }

@@ -274,7 +274,7 @@ fn watch_git_metadata_paths(watcher: &mut RecommendedWatcher, git_dir_path: &Pat
         }
     }
 
-    for relative in ["refs", "logs", "rebase-merge", "rebase-apply"] {
+    for relative in ["refs", "logs", "objects", "rebase-merge", "rebase-apply"] {
         let path = git_dir_path.join(relative);
         if path.exists() {
             watch_directory_tree(watcher, &path);

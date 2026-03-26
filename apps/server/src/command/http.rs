@@ -4,6 +4,8 @@ use crate::*;
 #[derive(Deserialize)]
 struct LaunchWorkspaceRequest {
     source: WorkspaceSource,
+    device_id: Option<String>,
+    client_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -12,45 +14,81 @@ struct WorkspaceIdRequest {
 }
 
 #[derive(Deserialize)]
-struct SessionCreateRequest {
+struct ScopedWorkspaceIdRequest {
     workspace_id: String,
+    device_id: Option<String>,
+    client_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WorkbenchBootstrapRequest {
+    device_id: Option<String>,
+    client_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceControllerRequest {
+    workspace_id: String,
+    device_id: String,
+    client_id: String,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceControllerMutationRequest {
+    workspace_id: String,
+    device_id: String,
+    client_id: String,
+    fencing_token: i64,
+}
+
+#[derive(Deserialize)]
+struct SessionCreateRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     mode: SessionMode,
 }
 
 #[derive(Deserialize)]
 struct SessionUpdateRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: u64,
     patch: SessionPatch,
 }
 
 #[derive(Deserialize)]
 struct SwitchSessionRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: u64,
 }
 
 #[derive(Deserialize)]
 struct ArchiveSessionRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: u64,
 }
 
 #[derive(Deserialize)]
 struct IdlePolicyRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     policy: IdlePolicy,
 }
 
 #[derive(Deserialize)]
 struct WorkspaceViewRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     patch: WorkspaceViewPatch,
 }
 
 #[derive(Deserialize)]
 struct WorkbenchLayoutRequest {
     layout: WorkbenchLayout,
+    device_id: Option<String>,
+    client_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -60,9 +98,17 @@ struct PathTargetRequest {
 }
 
 #[derive(Deserialize)]
-struct GitFileRequest {
+struct WorkspacePathControllerMutationRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     path: String,
     target: ExecTarget,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceGitFileMutationRequest {
+    #[serde(flatten)]
+    mutation: WorkspacePathControllerMutationRequest,
     file_path: String,
 }
 
@@ -83,17 +129,17 @@ struct GitDiffFileRequest {
 }
 
 #[derive(Deserialize)]
-struct GitDiscardFileRequest {
-    path: String,
-    target: ExecTarget,
+struct WorkspaceGitDiscardFileMutationRequest {
+    #[serde(flatten)]
+    mutation: WorkspacePathControllerMutationRequest,
     file_path: String,
     section: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct GitCommitRequest {
-    path: String,
-    target: ExecTarget,
+struct WorkspaceGitCommitMutationRequest {
+    #[serde(flatten)]
+    mutation: WorkspacePathControllerMutationRequest,
     message: String,
 }
 
@@ -117,7 +163,9 @@ struct FilePreviewRequest {
 }
 
 #[derive(Deserialize)]
-struct FileSaveRequest {
+struct WorkspaceFileSaveRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     path: String,
     content: String,
 }
@@ -141,16 +189,14 @@ struct CommandAvailabilityRequest {
 }
 
 #[derive(Deserialize)]
-struct EmptyRequest {}
-
-#[derive(Deserialize)]
 struct ClaudeSlashSkillsRequest {
     cwd: String,
 }
 
 #[derive(Deserialize)]
 struct TerminalCreateRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     cwd: String,
     target: ExecTarget,
     cols: Option<u16>,
@@ -159,14 +205,16 @@ struct TerminalCreateRequest {
 
 #[derive(Deserialize)]
 struct TerminalWriteRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     terminal_id: u64,
     input: String,
 }
 
 #[derive(Deserialize)]
 struct TerminalResizeRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     terminal_id: u64,
     cols: u16,
     rows: u16,
@@ -174,13 +222,15 @@ struct TerminalResizeRequest {
 
 #[derive(Deserialize)]
 struct TerminalCloseRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     terminal_id: u64,
 }
 
 #[derive(Deserialize)]
 struct AgentStartRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: String,
     provider: String,
     command: String,
@@ -190,7 +240,8 @@ struct AgentStartRequest {
 
 #[derive(Deserialize)]
 struct AgentSendRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: String,
     input: String,
     append_newline: Option<bool>,
@@ -198,13 +249,15 @@ struct AgentSendRequest {
 
 #[derive(Deserialize)]
 struct AgentStopRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: String,
 }
 
 #[derive(Deserialize)]
 struct AgentResizeRequest {
-    workspace_id: String,
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
     session_id: String,
     cols: u16,
     rows: u16,
@@ -226,6 +279,7 @@ struct SystemAuthIpUnblockRequest {
     all: Option<bool>,
 }
 
+#[derive(Debug)]
 struct RpcError {
     status: StatusCode,
     error: String,
@@ -351,6 +405,71 @@ fn require_workspace_access(
     Ok(context)
 }
 
+fn require_workspace_controller_mutation(
+    app: &AppHandle,
+    controller: &WorkspaceControllerMutationRequest,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    require_workspace_access(app, &controller.workspace_id, authorized)?;
+    assert_workspace_controller_can_mutate(
+        &controller.workspace_id,
+        &controller.device_id,
+        &controller.client_id,
+        controller.fencing_token,
+        app,
+        app.state(),
+    )
+    .map_err(rpc_forbidden)?;
+    Ok(())
+}
+
+fn require_workspace_path_controller_mutation(
+    app: &AppHandle,
+    controller: &WorkspaceControllerMutationRequest,
+    path: &str,
+    target: &ExecTarget,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    let (workspace_path, workspace_target) =
+        require_workspace_access(app, &controller.workspace_id, authorized)?;
+    if workspace_target != *target {
+        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+    }
+
+    let normalized_path = normalize_path_for_target(path, target).map_err(rpc_bad_request)?;
+    let normalized_workspace =
+        normalize_path_for_target(&workspace_path, &workspace_target).map_err(rpc_bad_request)?;
+    if !path_within_root(&normalized_path, &normalized_workspace, target) {
+        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+    }
+
+    assert_workspace_controller_can_mutate(
+        &controller.workspace_id,
+        &controller.device_id,
+        &controller.client_id,
+        controller.fencing_token,
+        app,
+        app.state(),
+    )
+    .map_err(rpc_forbidden)?;
+    Ok(())
+}
+
+fn require_workspace_native_file_mutation(
+    app: &AppHandle,
+    controller: &WorkspaceControllerMutationRequest,
+    path: &str,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    require_workspace_path_controller_mutation(
+        app,
+        controller,
+        path,
+        &ExecTarget::Native,
+        authorized,
+    )
+}
+
 fn filter_bootstrap_for_public_mode(
     bootstrap: WorkbenchBootstrap,
     authorized: &AuthorizedRequest,
@@ -415,20 +534,37 @@ fn dispatch_rpc(
                     None
                 };
                 serde_json::to_value(
-                    launch_workspace_internal(req.source, clone_root, app.state())
-                        .map_err(rpc_bad_request)?,
+                    launch_workspace_internal_scoped(
+                        req.source,
+                        clone_root,
+                        req.device_id.as_deref(),
+                        req.client_id.as_deref(),
+                        app.state(),
+                    )
+                    .map_err(rpc_bad_request)?,
                 )
                 .map_err(|e| rpc_bad_request(e.to_string()))
             } else {
                 serde_json::to_value(
-                    launch_workspace(req.source, app.state()).map_err(rpc_bad_request)?,
+                    launch_workspace_scoped(
+                        req.source,
+                        req.device_id.as_deref(),
+                        req.client_id.as_deref(),
+                        app.state(),
+                    )
+                    .map_err(rpc_bad_request)?,
                 )
                 .map_err(|e| rpc_bad_request(e.to_string()))
             }
         }
         "workbench_bootstrap" => {
-            let _req: EmptyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            let bootstrap = workbench_bootstrap(app.state()).map_err(rpc_bad_request)?;
+            let req: WorkbenchBootstrapRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let bootstrap = workbench_bootstrap_scoped(
+                req.device_id.as_deref(),
+                req.client_id.as_deref(),
+                app.state(),
+            )
+            .map_err(rpc_bad_request)?;
             serde_json::to_value(filter_bootstrap_for_public_mode(bootstrap, authorized))
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -441,77 +577,183 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
-        "activate_workspace" => {
-            let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+        "workspace_runtime_attach" => {
+            let req: WorkspaceControllerRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
             serde_json::to_value(
-                activate_workspace(req.workspace_id, app.state()).map_err(rpc_bad_request)?,
+                workspace_runtime_attach(
+                    req.workspace_id,
+                    req.device_id,
+                    req.client_id,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_controller_heartbeat" => {
+            let req: WorkspaceControllerRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                workspace_controller_heartbeat(
+                    req.workspace_id,
+                    req.device_id,
+                    req.client_id,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_controller_takeover" => {
+            let req: WorkspaceControllerRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                workspace_controller_takeover(
+                    req.workspace_id,
+                    req.device_id,
+                    req.client_id,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_controller_reject_takeover" => {
+            let req: WorkspaceControllerRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                workspace_controller_reject_takeover(
+                    req.workspace_id,
+                    req.device_id,
+                    req.client_id,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "workspace_controller_release" => {
+            let req: WorkspaceControllerMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                release_workspace_controller_for_client(
+                    req.workspace_id,
+                    req.device_id,
+                    req.client_id,
+                    req.fencing_token,
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_forbidden)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "activate_workspace" => {
+            let req: ScopedWorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_access(app, &req.workspace_id, authorized)?;
+            serde_json::to_value(
+                activate_workspace_scoped(
+                    req.workspace_id,
+                    req.device_id.as_deref(),
+                    req.client_id.as_deref(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "close_workspace" => {
-            let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            let req: WorkspaceControllerMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req, authorized)?;
             serde_json::to_value(
-                close_workspace(req.workspace_id, app.state()).map_err(rpc_bad_request)?,
+                close_workspace_scoped(
+                    req.workspace_id,
+                    Some(req.device_id.as_str()),
+                    Some(req.client_id.as_str()),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_workbench_layout" => {
             let req: WorkbenchLayoutRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             serde_json::to_value(
-                update_workbench_layout(req.layout, app.state()).map_err(rpc_bad_request)?,
+                update_workbench_layout_scoped(
+                    req.layout,
+                    req.device_id.as_deref(),
+                    req.client_id.as_deref(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "workspace_view_update" => {
             let req: WorkspaceViewRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                workspace_view_update(req.workspace_id, req.patch, app.state())
+                workspace_view_update(req.controller.workspace_id, req.patch, app.state())
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "create_session" => {
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                create_session(req.workspace_id, req.mode, app.state()).map_err(rpc_bad_request)?,
+                create_session(req.controller.workspace_id, req.mode, app.state())
+                    .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "session_update" => {
             let req: SessionUpdateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                session_update(req.workspace_id, req.session_id, req.patch, app.state())
+                session_update(
+                    req.controller.workspace_id,
+                    req.session_id,
+                    req.patch,
+                    app.state(),
+                )
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "switch_session" => {
             let req: SwitchSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                switch_session(req.workspace_id, req.session_id, app.state())
+                switch_session(req.controller.workspace_id, req.session_id, app.state())
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "archive_session" => {
             let req: ArchiveSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                archive_session(req.workspace_id, req.session_id, app.state())
+                archive_session(req.controller.workspace_id, req.session_id, app.state())
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
-            update_idle_policy(req.workspace_id, req.policy, app.state())
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            update_idle_policy(req.controller.workspace_id, req.policy, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
@@ -558,64 +800,145 @@ fn dispatch_rpc(
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
         "git_stage_all" => {
-            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
+            let req: WorkspacePathControllerMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.controller,
+                &req.path,
+                &req.target,
+                authorized,
+            )?;
             git_stage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_all");
             Ok(Value::Null)
         }
         "git_stage_file" => {
-            let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
-            git_stage_file(req.path.clone(), req.target.clone(), req.file_path)
+            let req: WorkspaceGitFileMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.mutation.controller,
+                &req.mutation.path,
+                &req.mutation.target,
+                authorized,
+            )?;
+            git_stage_file(
+                req.mutation.path.clone(),
+                req.mutation.target.clone(),
+                req.file_path,
+            )
                 .map_err(rpc_bad_request)?;
-            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_file");
+            emit_workspace_artifacts_dirty(
+                app,
+                &req.mutation.path,
+                &req.mutation.target,
+                "git_stage_file",
+            );
             Ok(Value::Null)
         }
         "git_unstage_all" => {
-            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
+            let req: WorkspacePathControllerMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.controller,
+                &req.path,
+                &req.target,
+                authorized,
+            )?;
             git_unstage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_all");
             Ok(Value::Null)
         }
         "git_unstage_file" => {
-            let req: GitFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
-            git_unstage_file(req.path.clone(), req.target.clone(), req.file_path)
+            let req: WorkspaceGitFileMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.mutation.controller,
+                &req.mutation.path,
+                &req.mutation.target,
+                authorized,
+            )?;
+            git_unstage_file(
+                req.mutation.path.clone(),
+                req.mutation.target.clone(),
+                req.file_path,
+            )
                 .map_err(rpc_bad_request)?;
-            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_file");
+            emit_workspace_artifacts_dirty(
+                app,
+                &req.mutation.path,
+                &req.mutation.target,
+                "git_unstage_file",
+            );
             Ok(Value::Null)
         }
         "git_discard_all" => {
-            let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
+            let req: WorkspacePathControllerMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.controller,
+                &req.path,
+                &req.target,
+                authorized,
+            )?;
             git_discard_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_all");
             Ok(Value::Null)
         }
         "git_discard_file" => {
-            let req: GitDiscardFileRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
+            let req: WorkspaceGitDiscardFileMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.mutation.controller,
+                &req.mutation.path,
+                &req.mutation.target,
+                authorized,
+            )?;
             git_discard_file(
-                req.path.clone(),
-                req.target.clone(),
+                req.mutation.path.clone(),
+                req.mutation.target.clone(),
                 req.file_path,
                 req.section,
             )
             .map_err(rpc_bad_request)?;
-            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_file");
+            emit_workspace_artifacts_dirty(
+                app,
+                &req.mutation.path,
+                &req.mutation.target,
+                "git_discard_file",
+            );
             Ok(Value::Null)
         }
         "git_commit" => {
-            let req: GitCommitRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &req.target, authorized)?;
+            let req: WorkspaceGitCommitMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.mutation.controller,
+                &req.mutation.path,
+                &req.mutation.target,
+                authorized,
+            )?;
             let result = serde_json::to_value(
-                git_commit(req.path.clone(), req.target.clone(), req.message)
+                git_commit(
+                    req.mutation.path.clone(),
+                    req.mutation.target.clone(),
+                    req.message,
+                )
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
-            emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_commit");
+            emit_workspace_artifacts_dirty(
+                app,
+                &req.mutation.path,
+                &req.mutation.target,
+                "git_commit",
+            );
             Ok(result)
         }
         "worktree_list" => {
@@ -657,8 +980,8 @@ fn dispatch_rpc(
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "file_save" => {
-            let req: FileSaveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.path, &ExecTarget::Native, authorized)?;
+            let req: WorkspaceFileSaveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_native_file_mutation(app, &req.controller, &req.path, authorized)?;
             let saved = serde_json::to_value(
                 file_save(req.path.clone(), req.content).map_err(rpc_bad_request)?,
             )
@@ -703,11 +1026,16 @@ fn dispatch_rpc(
         }
         "terminal_create" => {
             let req: TerminalCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
-            require_path_access(&req.cwd, &req.target, authorized)?;
+            require_workspace_path_controller_mutation(
+                app,
+                &req.controller,
+                &req.cwd,
+                &req.target,
+                authorized,
+            )?;
             serde_json::to_value(
                 terminal_create(
-                    req.workspace_id,
+                    req.controller.workspace_id,
                     req.cwd,
                     req.target,
                     req.cols,
@@ -721,16 +1049,21 @@ fn dispatch_rpc(
         }
         "terminal_write" => {
             let req: TerminalWriteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
-            terminal_write(req.workspace_id, req.terminal_id, req.input, app.state())
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            terminal_write(
+                req.controller.workspace_id,
+                req.terminal_id,
+                req.input,
+                app.state(),
+            )
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_resize" => {
             let req: TerminalResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             terminal_resize(
-                req.workspace_id,
+                req.controller.workspace_id,
                 req.terminal_id,
                 req.cols,
                 req.rows,
@@ -741,18 +1074,18 @@ fn dispatch_rpc(
         }
         "terminal_close" => {
             let req: TerminalCloseRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
-            terminal_close(req.workspace_id, req.terminal_id, app.state())
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            terminal_close(req.controller.workspace_id, req.terminal_id, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_start" => {
             let req: AgentStartRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
                 agent_start(
                     crate::services::agent::AgentStartParams {
-                        workspace_id: req.workspace_id,
+                        workspace_id: req.controller.workspace_id,
                         session_id: req.session_id,
                         provider: req.provider,
                         command: req.command,
@@ -768,9 +1101,9 @@ fn dispatch_rpc(
         }
         "agent_send" => {
             let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             agent_send(
-                req.workspace_id,
+                req.controller.workspace_id,
                 req.session_id,
                 req.input,
                 req.append_newline,
@@ -781,15 +1114,16 @@ fn dispatch_rpc(
         }
         "agent_stop" => {
             let req: AgentStopRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
-            agent_stop(req.workspace_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            agent_stop(req.controller.workspace_id, req.session_id, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "agent_resize" => {
             let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_access(app, &req.workspace_id, authorized)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
             agent_resize(
-                req.workspace_id,
+                req.controller.workspace_id,
                 req.session_id,
                 req.cols,
                 req.rows,
@@ -1163,4 +1497,440 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
         listener,
         router,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeHandle;
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    fn authorized_request() -> AuthorizedRequest {
+        AuthorizedRequest {
+            request: RequestContext {
+                ip: "127.0.0.1".to_string(),
+                user_agent: String::new(),
+                is_local_host: true,
+                is_secure_transport: false,
+                public_mode: false,
+            },
+            allowed_roots: Vec::new(),
+        }
+    }
+
+    fn launch_test_workspace(app: &AppHandle, root: &str) -> String {
+        let result = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: root.to_string(),
+                target: ExecTarget::Native,
+            },
+            root.to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        result.snapshot.workspace.workspace_id
+    }
+
+    #[test]
+    fn dispatches_workspace_runtime_attach_command() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-rpc-test");
+
+        let value = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .expect("attach rpc should be dispatched");
+
+        let snapshot: WorkspaceRuntimeSnapshot = serde_json::from_value(value).unwrap();
+        assert_eq!(snapshot.controller.controller_device_id.as_deref(), Some("device-a"));
+        assert_eq!(snapshot.controller.controller_client_id.as_deref(), Some("client-a"));
+    }
+
+    #[test]
+    fn rejects_workspace_view_update_from_stale_controller() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-stale-view-test");
+
+        dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "workspace_view_update",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-b",
+                "client_id": "client-b",
+                "fencing_token": 1,
+                "patch": {
+                    "active_session_id": "1",
+                    "active_pane_id": "pane-1",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-1",
+                        "session_id": "1",
+                    },
+                    "file_preview": {
+                        "path": "",
+                        "content": "",
+                        "mode": "preview",
+                        "original_content": "",
+                        "modified_content": "",
+                        "dirty": false,
+                    },
+                },
+            }),
+            &authorized,
+        )
+        .expect_err("observer write should be rejected");
+
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.error, "stale_fencing_token");
+    }
+
+    #[test]
+    fn rejects_git_stage_all_from_stale_controller() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-stale-git-test");
+
+        dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "git_stage_all",
+            json!({
+                "workspace_id": workspace_id,
+                "path": "/tmp/ws-runtime-stale-git-test",
+                "target": { "type": "native" },
+                "device_id": "device-b",
+                "client_id": "client-b",
+                "fencing_token": 1,
+            }),
+            &authorized,
+        )
+        .expect_err("observer git mutation should be rejected");
+
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.error, "stale_fencing_token");
+    }
+
+    #[test]
+    fn rejects_file_save_for_path_outside_workspace() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-file-save-test");
+        let outside_path = std::env::temp_dir()
+            .join("coder-studio-controller-mismatch.txt")
+            .to_string_lossy()
+            .to_string();
+
+        let attach = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "file_save",
+            json!({
+                "workspace_id": workspace_id,
+                "path": outside_path,
+                "content": "hello",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("file save outside workspace should be rejected");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "workspace_path_mismatch");
+    }
+
+    #[test]
+    fn rejects_terminal_create_for_cwd_outside_workspace() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-terminal-cwd-test");
+        let outside_cwd = std::env::temp_dir().to_string_lossy().to_string();
+
+        let attach = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "terminal_create",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "cwd": outside_cwd,
+                "target": { "type": "native" },
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .expect_err("terminal create outside workspace should be rejected");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "workspace_path_mismatch");
+    }
+
+    #[test]
+    fn workbench_bootstrap_isolates_open_workspaces_by_device() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let first = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": "/tmp/ws-ui-scope-device-a",
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let first_launch: WorkspaceLaunchResult = serde_json::from_value(first).unwrap();
+
+        let second = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": "/tmp/ws-ui-scope-device-b",
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-b",
+                "client_id": "client-b",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let second_launch: WorkspaceLaunchResult = serde_json::from_value(second).unwrap();
+
+        let bootstrap = dispatch_rpc(
+            &app,
+            "workbench_bootstrap",
+            json!({
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let scoped: WorkbenchBootstrap = serde_json::from_value(bootstrap).unwrap();
+
+        assert_eq!(
+            scoped.ui_state.open_workspace_ids,
+            vec![first_launch.snapshot.workspace.workspace_id.clone()]
+        );
+        assert_eq!(
+            scoped.ui_state.active_workspace_id.as_deref(),
+            Some(first_launch.snapshot.workspace.workspace_id.as_str())
+        );
+        assert!(
+            scoped
+                .workspaces
+                .iter()
+                .all(|snapshot| snapshot.workspace.workspace_id != second_launch.snapshot.workspace.workspace_id)
+        );
+    }
+
+    #[test]
+    fn workbench_bootstrap_scopes_active_workspace_by_client() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let first = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": "/tmp/ws-ui-scope-client-a",
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let first_launch: WorkspaceLaunchResult = serde_json::from_value(first).unwrap();
+
+        let second = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": "/tmp/ws-ui-scope-client-b",
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-a",
+                "client_id": "client-b",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let second_launch: WorkspaceLaunchResult = serde_json::from_value(second).unwrap();
+
+        let bootstrap_a = dispatch_rpc(
+            &app,
+            "workbench_bootstrap",
+            json!({
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let scoped_a: WorkbenchBootstrap = serde_json::from_value(bootstrap_a).unwrap();
+        assert_eq!(
+            scoped_a.ui_state.active_workspace_id.as_deref(),
+            Some(first_launch.snapshot.workspace.workspace_id.as_str())
+        );
+
+        let bootstrap_b = dispatch_rpc(
+            &app,
+            "workbench_bootstrap",
+            json!({
+                "device_id": "device-a",
+                "client_id": "client-b",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
+        assert_eq!(
+            scoped_b.ui_state.open_workspace_ids,
+            vec![
+                first_launch.snapshot.workspace.workspace_id.clone(),
+                second_launch.snapshot.workspace.workspace_id.clone(),
+            ]
+        );
+        assert_eq!(
+            scoped_b.ui_state.active_workspace_id.as_deref(),
+            Some(second_launch.snapshot.workspace.workspace_id.as_str())
+        );
+    }
+
+    #[test]
+    fn workbench_layout_isolated_by_device() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "update_workbench_layout",
+            json!({
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "layout": {
+                    "left_width": 444,
+                    "right_width": 555,
+                    "right_split": 70,
+                    "show_code_panel": true,
+                    "show_terminal_panel": true,
+                },
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let bootstrap_a = dispatch_rpc(
+            &app,
+            "workbench_bootstrap",
+            json!({
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let scoped_a: WorkbenchBootstrap = serde_json::from_value(bootstrap_a).unwrap();
+        assert_eq!(scoped_a.ui_state.layout.left_width, 444.0);
+        assert_eq!(scoped_a.ui_state.layout.show_code_panel, true);
+
+        let bootstrap_b = dispatch_rpc(
+            &app,
+            "workbench_bootstrap",
+            json!({
+                "device_id": "device-b",
+                "client_id": "client-z",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
+        assert_eq!(scoped_b.ui_state.layout.left_width, 320.0);
+        assert_eq!(scoped_b.ui_state.layout.show_code_panel, false);
+    }
 }

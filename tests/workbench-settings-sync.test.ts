@@ -30,6 +30,14 @@ const createTab = (
   id,
   title: id,
   status: "ready",
+  controller: {
+    role: "controller",
+    deviceId: "device-a",
+    clientId: "client-a",
+    fencingToken: 1,
+    takeoverPending: false,
+    takeoverRequestedBySelf: false,
+  },
   agent: {
     provider: "claude",
     command: "claude --print",

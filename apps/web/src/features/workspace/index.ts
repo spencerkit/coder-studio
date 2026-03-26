@@ -59,6 +59,16 @@ export {
   syncWorkspaceTerminalSize,
   writeWorkspaceTerminalData,
 } from "./terminal-actions";
+export {
+  canMutateWorkspace,
+  createWorkspaceControllerState,
+  createWorkspaceControllerStateFromLease,
+  getOrCreateClientId,
+  getOrCreateDeviceId,
+  type WorkspaceControllerRole,
+  type WorkspaceControllerState,
+  type WorkspaceMutationAction,
+} from "./workspace-controller";
 export { buildWorkspaceTabItems } from "./workspace-tabs";
 export type {
   FileSearchDropdownStyle,
