@@ -35,57 +35,64 @@ export const WorkspaceTerminalPanel = ({
   onAdd,
   hasActiveTerminal,
   t
-}: WorkspaceTerminalPanelProps) => (
-  <>
-    <div
-      className="h-resizer workspace-bottom-splitter"
-      data-resize="right-split"
-      onPointerDown={onResizeStart}
-    />
-    <section className="panel workspace-terminal-shell">
-      <div className="panel-inner terminal-card workspace-terminal-panel">
-        <div className={`surface-progress ${progressTone}`} aria-hidden="true">
-          <span className="surface-progress-bar" style={{ width: `${progressPercent}%` }} />
-        </div>
-        <div className="terminal-toolbar">
-          <div className="terminal-toolbar-title">{t("terminalPanel")}</div>
-          <div className="terminal-toolbar-actions">
-            <select
-              className="terminal-select"
-              value={activeTerminalId ?? ""}
-              onChange={(event) => onSelect(event.target.value)}
-            >
-              {terminals.map((term) => (
-                <option key={term.id} value={term.id}>
-                  {term.title}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="workspace-icon-button"
-              onClick={onClose}
-              disabled={!hasActiveTerminal}
-              title={t("close")}
-              aria-label={t("close")}
-            >
-              <HeaderCloseIcon />
-            </button>
-            <button
-              type="button"
-              className="workspace-icon-button"
-              onClick={onAdd}
-              title={t("new")}
-              aria-label={t("new")}
-            >
-              <HeaderAddIcon />
-            </button>
+}: WorkspaceTerminalPanelProps) => {
+  const activeTitle = terminals.find((term) => term.id === activeTerminalId)?.title ?? t("terminalPanel");
+
+  return (
+    <>
+      <div
+        className="h-resizer workspace-bottom-splitter"
+        data-resize="right-split"
+        onPointerDown={onResizeStart}
+      />
+      <section className="panel workspace-terminal-shell">
+        <div className="panel-inner terminal-card workspace-terminal-panel">
+          <div className={`surface-progress ${progressTone}`} aria-hidden="true">
+            <span className="surface-progress-bar" style={{ width: `${progressPercent}%` }} />
           </div>
+          <div className="terminal-toolbar">
+            <div className="terminal-toolbar-copy">
+              <span className="section-kicker">{t("terminalPanel")}</span>
+              <strong className="terminal-toolbar-title">{activeTitle}</strong>
+            </div>
+            <div className="terminal-toolbar-actions">
+              <select
+                className="terminal-select"
+                value={activeTerminalId ?? ""}
+                onChange={(event) => onSelect(event.target.value)}
+              >
+                {terminals.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="workspace-icon-button"
+                onClick={onClose}
+                disabled={!hasActiveTerminal}
+                title={t("close")}
+                aria-label={t("close")}
+              >
+                <HeaderCloseIcon />
+              </button>
+              <button
+                type="button"
+                className="workspace-icon-button"
+                onClick={onAdd}
+                title={t("new")}
+                aria-label={t("new")}
+              >
+                <HeaderAddIcon />
+              </button>
+            </div>
+          </div>
+          <div ref={terminalViewportRef} className="terminal-output">{terminalContent}</div>
         </div>
-        <div ref={terminalViewportRef} className="terminal-output">{terminalContent}</div>
-      </div>
-    </section>
-  </>
-);
+      </section>
+    </>
+  );
+};
 
 export default WorkspaceTerminalPanel;

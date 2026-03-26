@@ -35,32 +35,50 @@ export const Settings = ({
   onSettingsIdlePolicyChange,
   onSelectLocale,
   t
-}: SettingsProps) => (
-  <main className="settings-route" data-testid="settings-page">
-    <section className="settings-layout">
-      <aside className="settings-sidebar-v2">
-        <nav className="settings-nav-list" aria-label={t("settings")}>
-          {settingsNavItems(t).map((item) => {
-            const isActive = item.id === activeSettingsPanel;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`settings-nav-item ${isActive ? "active" : ""}`}
-                onClick={() => onSettingsPanelChange(item.id)}
-              >
-                <span className="settings-nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+}: SettingsProps) => {
+  const activePanelLabel = activeSettingsPanel === "general" ? t("settingsGeneral") : t("settingsAppearance");
+  const languageLabel = locale === "zh" ? "中文" : "English";
 
-      <section className="settings-content-v2">
-        <div className="settings-scroll-panel">
-          {activeSettingsPanel === "general" ? (
-            <div className="settings-group-card">
+  return (
+    <main className="settings-route" data-testid="settings-page">
+      <section className="settings-layout">
+        <aside className="settings-sidebar-v2">
+          <nav className="settings-nav-list" aria-label={t("settings")}>
+            {settingsNavItems(t).map((item) => {
+              const isActive = item.id === activeSettingsPanel;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`settings-nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => onSettingsPanelChange(item.id)}
+                >
+                  <span className="settings-nav-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        <section className="settings-content-v2">
+          <div className="settings-scroll-panel">
+            <div className="settings-summary" data-testid="settings-summary">
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("settings")}</span>
+                <strong>{activePanelLabel}</strong>
+              </div>
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("launchCommand")}</span>
+                <strong>{settingsDraft.agentCommand.trim() || t("launchCommandPlaceholder")}</strong>
+              </div>
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("languageLabel")}</span>
+                <strong>{languageLabel}</strong>
+              </div>
+            </div>
+            {activeSettingsPanel === "general" ? (
+              <div className="settings-group-card">
               <div className="settings-row">
                 <div className="settings-row-copy">
                   <strong>{t("launchCommand")}</strong>
@@ -279,16 +297,17 @@ export const Settings = ({
               </div>
             </div>
           )}
-        </div>
-
-        <div className="settings-footer-bar">
-          <div className="settings-page-status">
-            {t("settingsAutoSave")}
           </div>
-        </div>
+
+          <div className="settings-footer-bar">
+            <div className="settings-page-status">
+              {t("settingsAutoSave")}
+            </div>
+          </div>
+        </section>
       </section>
-    </section>
-  </main>
-);
+    </main>
+  );
+};
 
 export default Settings;

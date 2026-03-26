@@ -188,6 +188,7 @@ import {
   toBackgroundStatus
 } from "../../shared/utils/session";
 import { sortTreeNodes } from "../../shared/utils/tree";
+import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
 import type {
   AgentStartResult,
   AppSettings,
@@ -2179,7 +2180,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
   };
   const previewFileName = displayPathName(activeTab.filePreview.path);
-  const workspaceFolderName = displayPathName(activeTab.project?.path) || t("noWorkspace");
   const previewPathLabel = resolveWorkspacePreviewPathLabel(
     activeTab.filePreview.path,
     activeTab.project?.path,
@@ -2187,6 +2187,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   );
 
   const currentFileChangeCount = activeTab.git.changes;
+  const workspaceShellSummary = buildWorkspaceShellSummary({
+    branchName: activeTab.git.branch,
+    changeCount: currentFileChangeCount,
+    target: activeTab.project?.target,
+    sessions: activeTab.sessions,
+    locale,
+  });
   const hasStructuredDiffContent = Boolean(
     (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
     || (activeTab.filePreview.modifiedContent && activeTab.filePreview.modifiedContent.length > 0)
@@ -2552,16 +2559,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       />
 
       <WorkspaceShell
-        locale={locale}
         isFocusMode={isFocusMode}
         isCodeExpanded={isCodeExpanded}
         showAgentPanel={showAgentPanel}
         showCodePanel={showCodePanel}
         showTerminalPanel={showTerminalPanel}
         rightSplit={state.layout.rightSplit}
-        workspaceFolderName={workspaceFolderName}
-        branchName={activeTab.git.branch}
-        changeCount={currentFileChangeCount}
+        statusItems={workspaceShellSummary}
+        runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
         statusBanner={workspaceStatusBanner}
         agentPanel={workspaceAgentPanel}
         codePanel={workspaceCodePanel}

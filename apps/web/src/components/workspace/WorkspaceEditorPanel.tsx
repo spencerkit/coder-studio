@@ -53,6 +53,10 @@ export const WorkspaceEditorPanel = ({
   >
     <div className="panel-inner workspace-code-panel">
       <div className="workspace-code-header">
+        <div className="workspace-panel-title-block workspace-code-title-block">
+          <span className="section-kicker">{t("codePanel")}</span>
+          <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
+        </div>
         <div className="workspace-code-modes">
           {isExpanded ? (
             <>
@@ -78,12 +82,7 @@ export const WorkspaceEditorPanel = ({
                 </span>
               )}
             </>
-          ) : (
-            <div className="workspace-code-title-block">
-              <span className="section-kicker">{t("codePanel")}</span>
-              <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
-            </div>
-          )}
+          ) : null}
         </div>
         <div className="workspace-code-actions">
           <div className="workspace-search-shell" ref={searchShellRef}>

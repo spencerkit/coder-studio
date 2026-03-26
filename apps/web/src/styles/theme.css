@@ -294,3 +294,70 @@ a {
   white-space: nowrap;
   border: 0;
 }
+
+/* ==========================================================================
+   Flat Matte Finish
+   ========================================================================== */
+
+:root {
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 9px;
+  --header-h: 36px;
+}
+
+.app[data-theme="dark"] {
+  --bg: #0a1014;
+  --bg-elevated: #0f151b;
+  --bg-secondary: #0d141a;
+  --bg-tertiary: #131b23;
+  --bg-hover: rgba(156, 176, 188, 0.08);
+  --bg-active: rgba(108, 182, 255, 0.14);
+
+  --surface: #11181f;
+  --surface-elevated: #151f27;
+  --surface-overlay: rgba(10, 16, 20, 0.96);
+  --surface-glass: rgba(15, 21, 27, 0.92);
+  --surface-strip: #0f161d;
+  --surface-chip: #121b22;
+
+  --text: #e5edf3;
+  --text-secondary: #9fb0bc;
+  --text-tertiary: #728492;
+  --text-muted: #728492;
+
+  --border: rgba(148, 169, 183, 0.16);
+  --border-strong: rgba(148, 169, 183, 0.24);
+  --border-subtle: rgba(148, 169, 183, 0.16);
+  --border-muted: rgba(148, 169, 183, 0.12);
+
+  --accent: #6cb6ff;
+  --accent-soft: rgba(108, 182, 255, 0.14);
+  --accent-hover: rgba(108, 182, 255, 0.22);
+
+  --accent-2: #78d7b2;
+  --accent-2-soft: rgba(120, 215, 178, 0.14);
+
+  --accent-3: #f1b86a;
+  --accent-3-soft: rgba(241, 184, 106, 0.14);
+
+  --warning: #f1b86a;
+  --warning-soft: rgba(241, 184, 106, 0.16);
+  --success: #78d7b2;
+  --success-soft: rgba(120, 215, 178, 0.16);
+  --info: #6cb6ff;
+  --info-soft: rgba(108, 182, 255, 0.16);
+
+  --terminal-bg: #0b1218;
+  --terminal-fg: #d8e2ea;
+  --terminal-cursor: #78d7b2;
+  --terminal-selection: rgba(108, 182, 255, 0.24);
+  --terminal-selection-inactive: rgba(108, 182, 255, 0.16);
+
+  --shadow-xs: none;
+  --shadow-sm: 0 8px 20px rgba(3, 8, 12, 0.18);
+  --shadow-md: 0 14px 30px rgba(3, 8, 12, 0.22);
+  --shadow-lg: 0 20px 36px rgba(3, 8, 12, 0.24);
+  --shadow-xl: 0 24px 44px rgba(3, 8, 12, 0.28);
+}

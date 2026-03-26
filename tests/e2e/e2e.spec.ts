@@ -482,6 +482,26 @@ test('launch overlay shows the server-side folder picker shell', async ({ page }
   await expect(page.getByTestId('start-workspace')).toBeVisible();
 });
 
+test('flat matte UI exposes compact shell and supporting screen markers', async ({ page }) => {
+  await openLaunchOverlay(page);
+  await expect(page.getByTestId('launch-overlay-shell')).toBeVisible();
+
+  const expectedLabel = await launchLocalWorkspace(page);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
+  await expect(page.getByTestId('workspace-status-strip')).toBeVisible();
+  await expect(page.getByTestId('workspace-status-strip')).toContainText('Branch');
+  await expect(page.getByTestId('workspace-status-strip')).toContainText('Runtime');
+  await expect(page.getByTestId('workspace-status-strip')).toContainText('Changes');
+  await expect(page.getByTestId('workspace-status-strip')).toContainText('Queue');
+
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.getByTestId('command-palette-shell')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByTestId('settings-open').click();
+  await expect(page.getByTestId('settings-summary')).toBeVisible();
+});
+
 test('runtime validation blocks workspace selection until required tools are installed', async ({ page }) => {
   const runtime = runtimeCommandMockState(page);
   runtime.claude = false;

@@ -35,10 +35,24 @@ export const WorkspaceLaunchOverlay = ({
 
   return (
     <div className="overlay" data-testid="overlay">
-      <div className="modal onboarding-modal">
+      <div className="modal onboarding-modal launch-overlay-shell" data-testid="launch-overlay-shell">
         <div className="onboarding-form">
-          <div className="onboarding-header">
-            <h2>{t("localFolder")}</h2>
+          <div className="onboarding-header launch-overlay-header">
+            <div className="launch-overlay-copy">
+              <span className="section-kicker">{t("startWorkspace")}</span>
+              <h2>{t("localFolder")}</h2>
+              <p>{t("localFolderHint")}</p>
+            </div>
+            <div className="launch-overlay-meta">
+              <div className="launch-overlay-meta-item">
+                <span className="section-kicker">{t("selected")}</span>
+                <strong>{selectedPath || folderBrowser.currentPath || t("loading")}</strong>
+              </div>
+              <div className="launch-overlay-meta-item">
+                <span className="section-kicker">{target.type === "wsl" ? "WSL" : t("nativeTarget")}</span>
+                <strong>{target.type === "wsl" ? (target.distro?.trim() || (t("nativeTarget") === "Native" ? "Default distro" : "默认发行版")) : t("nativeTarget")}</strong>
+              </div>
+            </div>
           </div>
           <div className="choice-grid">
             <div className="choice active" data-testid="choice-local-only">
@@ -47,7 +61,7 @@ export const WorkspaceLaunchOverlay = ({
             </div>
           </div>
           {canUseWsl && (
-            <div className="choice-grid small">
+            <div className="choice-grid small launch-overlay-runtime">
               <div className={`choice ${target.type === "native" ? "active" : ""}`} onClick={() => onUpdateTarget({ type: "native" })}>
                 <strong>{t("nativeTarget")}</strong>
                 <div className="hint">{t("nativeTargetHint")}</div>
