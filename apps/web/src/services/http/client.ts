@@ -1,5 +1,5 @@
-import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend";
-import { isPublicModeActive, markUnauthorized } from "./auth.service";
+import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend.ts";
+import { isPublicModeActive, markUnauthorized } from "./auth.service.ts";
 
 export const invokeRpc = async <T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T> => {
   const errors: string[] = [];

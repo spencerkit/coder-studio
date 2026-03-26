@@ -1,6 +1,6 @@
-import type { SessionMode } from "../../state/workbench";
-import type { BackendArchiveEntry, BackendSession, SessionPatch } from "../../types/app";
-import { invokeRpc } from "./client";
+import type { SessionMode } from "../../state/workbench.ts";
+import type { BackendArchiveEntry, BackendSession, SessionPatch } from "../../types/app.ts";
+import { invokeRpc } from "./client.ts";
 
 export const createSession = (workspaceId: string, mode: SessionMode) =>
   invokeRpc<BackendSession>("create_session", { workspaceId, mode });

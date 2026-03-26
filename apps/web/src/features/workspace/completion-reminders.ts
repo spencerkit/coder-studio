@@ -1,6 +1,6 @@
 import type {
   BrowserNotificationSupport,
-} from "../../types/app";
+} from "../../types/app.ts";
 
 export type CompletionReminderTarget = {
   workspaceId: string;

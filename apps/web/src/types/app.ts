@@ -10,7 +10,7 @@ import type {
   Tab,
   Terminal,
   TreeNode,
-} from "../state/workbench";
+} from "../state/workbench.ts";
 
 export type Toast = { id: string; text: string; sessionId: string };
 

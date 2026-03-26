@@ -1,4 +1,4 @@
-import { formatTerminalTitle, type Locale } from "../../i18n";
+import { formatTerminalTitle, type Locale } from "../../i18n.ts";
 import {
   createDefaultWorkbenchState,
   createEmptyPreview,
@@ -9,7 +9,7 @@ import {
   type Tab,
   type Terminal,
   type WorkbenchState,
-} from "../../state/workbench";
+} from "../../state/workbench-core.ts";
 import type {
   AppSettings,
   BackendArchiveEntry,
@@ -18,8 +18,8 @@ import type {
   WorkbenchLayout,
   WorkbenchUiState,
   WorkspaceSnapshot,
-} from "../../types/app";
-import { createDraftSessionPlaceholder, createSessionFromBackend, isDraftSession } from "./session";
+} from "../../types/app.ts";
+import { createDraftSessionPlaceholder, createSessionFromBackend, isDraftSession } from "./session.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 

@@ -9,15 +9,15 @@ import {
   createId,
   createPaneLeaf,
   createSession,
-} from "../../state/workbench";
-import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
+} from "../../state/workbench-core.ts";
+import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n.ts";
 import {
   archiveSession as archiveSessionRequest,
   createSession as createSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
-} from "../../services/http/session.service";
-import { getWorkspaceSnapshot } from "../../services/http/workspace.service";
+} from "../../services/http/session.service.ts";
+import { getWorkspaceSnapshot } from "../../services/http/workspace.service.ts";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -25,7 +25,7 @@ import {
   remapPaneSession,
   removePaneNode,
   replacePaneNode,
-} from "../../shared/utils/panes";
+} from "../../shared/utils/panes.ts";
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
@@ -37,11 +37,11 @@ import {
   restoreVisibleStatus,
   sessionTitleFromInput,
   toBackgroundStatus,
-} from "../../shared/utils/session";
-import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
-import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
+} from "../../shared/utils/session.ts";
+import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace.ts";
+import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app.ts";
 
-import type { CompletionReminderTarget } from "./completion-reminders";
+import type { CompletionReminderTarget } from "./completion-reminders.ts";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;

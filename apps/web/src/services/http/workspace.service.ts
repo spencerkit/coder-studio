@@ -1,4 +1,4 @@
-import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
+import type { ExecTarget, WorktreeInfo } from "../../state/workbench.ts";
 import type {
   ClaudeSlashSkillEntry,
   GitStatus,
@@ -10,8 +10,8 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTree,
   WorkspaceViewPatch,
-} from "../../types/app";
-import { invokeRpc } from "./client";
+} from "../../types/app.ts";
+import { invokeRpc } from "./client.ts";
 
 export const launchWorkspace = (source: {
   kind: "remote" | "local";
