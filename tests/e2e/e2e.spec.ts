@@ -500,6 +500,16 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('command-palette-shell')).toBeVisible();
   await page.keyboard.press('Escape');
 
+  await page.getByRole('button', { name: 'Code' }).click();
+  await page.getByRole('button', { name: 'Expand code area' }).click();
+  await expect(page.getByTestId('workspace-review-dock')).toBeVisible();
+  await expect(page.getByTestId('workspace-review-dock-tabs')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Git Diff' }).click();
+  await expect(page.getByTestId('workspace-review-dock')).toHaveAttribute('data-view', 'git');
+  await expect(page.getByTestId('workspace-review-dock-toolbar')).toBeVisible();
+  await expect(page.getByTestId('git-commit-message')).toBeVisible();
+
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-summary')).toBeVisible();
 });

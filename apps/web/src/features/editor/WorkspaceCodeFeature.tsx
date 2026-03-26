@@ -39,6 +39,7 @@ type SidebarViewModel = {
   view: "files" | "git";
   fileTree: TreeNode[];
   rootPath?: string;
+  branchName?: string;
   selectedPath?: string;
   repoCollapsedPaths: Set<string>;
   gitChangeGroups: ChangeGroup[];
@@ -95,6 +96,7 @@ export const WorkspaceCodeFeature = ({
       view={sidebar.view}
       fileTree={sidebar.fileTree}
       rootPath={sidebar.rootPath}
+      branchName={sidebar.branchName}
       selectedPath={sidebar.selectedPath}
       repoCollapsedPaths={sidebar.repoCollapsedPaths}
       gitChangeGroups={sidebar.gitChangeGroups}
@@ -110,6 +112,7 @@ export const WorkspaceCodeFeature = ({
       onCommit={sidebar.onCommit}
       onGitChangeSelect={sidebar.onGitChangeSelect}
       onGitChangeAction={sidebar.onGitChangeAction}
+      onSetView={onSetSidebarView}
       t={t}
     />
   );
@@ -130,7 +133,6 @@ export const WorkspaceCodeFeature = ({
         fileSearchInputRef={fileSearch.inputRef}
         editorContent={editorContent}
         sidebarContent={sidebarContent}
-        onSetSidebarView={onSetSidebarView}
         onFileSearchChange={fileSearch.onChange}
         onFileSearchFocus={fileSearch.onFocus}
         onFileSearchBlur={fileSearch.onBlur}

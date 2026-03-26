@@ -7519,9 +7519,9 @@ pre.diff,
 .workspace-code-header,
 .terminal-toolbar {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-muted);
 }
@@ -7535,7 +7535,7 @@ pre.diff,
 }
 
 .workspace-panel-title-block {
-  flex: 0 0 170px;
+  flex: 1 1 auto;
 }
 
 .workspace-panel-title-block strong,
@@ -7556,18 +7556,209 @@ pre.diff,
   color: var(--text-tertiary);
 }
 
-.workspace-code-modes {
-  gap: 6px;
-  align-items: center;
-}
-
 .workspace-code-current-path {
+  max-width: min(56ch, 100%);
   padding-left: 0;
   font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .workspace-code-actions {
+  flex: 0 1 420px;
+  justify-content: flex-end;
   gap: 6px;
+}
+
+.workspace-search-shell {
+  width: min(360px, 100%);
+  max-width: 360px;
+}
+
+.workspace-code-sidebar.workspace-review-dock {
+  gap: 8px;
+  padding: 8px;
+  background: var(--surface);
+  border-color: var(--border-subtle);
+}
+
+.workspace-review-dock-section,
+.workspace-review-dock-section-files,
+.workspace-review-dock-section-git {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace-review-dock-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.workspace-review-dock-topline,
+.workspace-review-dock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-review-dock-topline {
+  flex-wrap: wrap;
+}
+
+.workspace-review-dock-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-chip);
+}
+
+.workspace-review-dock-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.workspace-review-dock-tab:hover {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  color: var(--text);
+}
+
+.workspace-review-dock-tab.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--accent-2-soft));
+  color: var(--text);
+}
+
+.workspace-review-dock-tab svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.workspace-review-dock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-chip);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.workspace-review-dock-chip svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.workspace-review-dock-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-review-dock .tree {
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -4px;
+}
+
+.workspace-review-dock .tree-line {
+  min-height: 24px;
+  gap: 6px;
+  padding: 3px 4px 3px 2px;
+  border-left: 2px solid transparent;
+}
+
+.workspace-review-dock .tree-line:hover {
+  border-left-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+
+.workspace-review-dock .tree-line.selected {
+  border-left-color: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.workspace-review-dock .tree-label {
+  font-size: 12px;
+}
+
+.workspace-git-compose {
+  gap: 4px;
+  padding-top: 0;
+}
+
+.workspace-git-commit-input {
+  min-height: 30px;
+  padding: 0 10px;
+  line-height: 30px;
+  font-size: 12px;
+}
+
+.workspace-git-sidebar .source-control-list {
+  gap: 8px;
+}
+
+.workspace-git-sidebar .source-group {
+  gap: 2px;
+}
+
+.workspace-git-sidebar .source-group-head {
+  padding: 4px 0 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
+  background: var(--surface);
+}
+
+.workspace-git-sidebar .source-change-row {
+  min-height: 28px;
+  padding: 4px 4px 4px 2px;
+}
+
+.workspace-git-sidebar .source-change-name {
+  font-size: 12px;
+}
+
+.workspace-git-sidebar .source-change-parent {
+  font-size: 10px;
+}
+
+.workspace-git-sidebar .source-status-badge {
+  font-size: 10px;
+}
+
+.workspace-git-sidebar .source-action-btn {
+  width: 18px;
+  height: 18px;
 }
 
 .workspace-search-field,
@@ -8723,6 +8914,20 @@ pre.diff,
 
   .workspace-code-actions {
     width: 100%;
+  }
+
+  .workspace-review-dock-topline,
+  .workspace-review-dock-bar {
+    flex-wrap: wrap;
+  }
+
+  .workspace-review-dock-tabs {
+    width: 100%;
+  }
+
+  .git-toolbar-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .auth-preview-panel-right {

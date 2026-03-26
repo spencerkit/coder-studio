@@ -1,7 +1,18 @@
 import type { Locale, Translator } from "../../i18n";
+import { displayPathName } from "../../shared/utils/path";
 import type { TreeNode } from "../../state/workbench";
 import type { GitChangeAction, GitChangeEntry } from "../../types/app";
-import { AgentSendIcon, GitDiscardIcon, GitStageIcon, GitUnstageIcon, RefreshIcon, getFileIcon } from "../icons";
+import {
+  AgentSendIcon,
+  GitDiscardIcon,
+  GitStageIcon,
+  GitUnstageIcon,
+  RefreshIcon,
+  WorkspaceBranchIcon,
+  WorkspaceChangesIcon,
+  WorkspaceFolderIcon,
+  getFileIcon,
+} from "../icons";
 import { TreeView } from "../TreeView";
 
 type ChangeGroup = {
@@ -15,6 +26,7 @@ type WorkspaceSidebarProps = {
   view: "files" | "git";
   fileTree: TreeNode[];
   rootPath?: string;
+  branchName?: string;
   selectedPath?: string;
   repoCollapsedPaths: Set<string>;
   gitChangeGroups: ChangeGroup[];
@@ -30,6 +42,7 @@ type WorkspaceSidebarProps = {
   onCommit: () => void;
   onGitChangeSelect: (change: GitChangeEntry) => void;
   onGitChangeAction: (change: GitChangeEntry, action: GitChangeAction) => void;
+  onSetView: (view: "files" | "git") => void;
   t: Translator;
 };
 
@@ -38,6 +51,7 @@ export const WorkspaceSidebar = ({
   view,
   fileTree,
   rootPath,
+  branchName,
   selectedPath,
   repoCollapsedPaths,
   gitChangeGroups,
@@ -53,17 +67,79 @@ export const WorkspaceSidebar = ({
   onCommit,
   onGitChangeSelect,
   onGitChangeAction,
+  onSetView,
   t
 }: WorkspaceSidebarProps) => {
-  if (view === "files") {
-    return (
-      <>
-        <div className="workspace-code-sidebar-head">
-          <span className="section-kicker">{t("repositoryNavigator")}</span>
-          <button className="workspace-icon-button bare" type="button" onClick={onRefresh} title={t("refresh")} aria-label={t("refresh")}>
-            <RefreshIcon />
+  const rootLabel = displayPathName(rootPath) || rootPath || "";
+  const dockMeta = view === "git"
+    ? (branchName && branchName !== "—" ? branchName : "")
+    : rootLabel;
+
+  const dockActions = view === "git" ? (
+    <div className="git-toolbar-actions">
+      <button className="workspace-icon-button bare" type="button" onClick={onRefresh} title={t("refresh")} aria-label={t("refresh")}>
+        <RefreshIcon />
+      </button>
+      <button className="workspace-icon-button bare" type="button" onClick={onStageAll} title={t("stageAll")} aria-label={t("stageAll")}>
+        <GitStageIcon />
+      </button>
+      <button className="workspace-icon-button bare" type="button" onClick={onUnstageAll} title={t("unstageAll")} aria-label={t("unstageAll")}>
+        <GitUnstageIcon />
+      </button>
+      <button className="workspace-icon-button bare" type="button" onClick={onDiscardAll} title={t("discardAll")} aria-label={t("discardAll")}>
+        <GitDiscardIcon />
+      </button>
+      <button className="workspace-icon-button bare" type="button" onClick={onCommit} disabled={!commitMessage.trim()} title={t("commit")} aria-label={t("commit")}>
+        <AgentSendIcon />
+      </button>
+    </div>
+  ) : (
+    <button className="workspace-icon-button bare" type="button" onClick={onRefresh} title={t("refresh")} aria-label={t("refresh")}>
+      <RefreshIcon />
+    </button>
+  );
+
+  const dockHeader = (
+    <div className="workspace-review-dock-header" data-testid="workspace-review-dock-toolbar">
+      <div className="workspace-review-dock-topline">
+        <span className="section-kicker">{view === "files" ? t("repositoryNavigator") : t("sourceControl")}</span>
+        {dockMeta ? (
+          <span className="workspace-review-dock-chip" title={dockMeta}>
+            {view === "git" ? <WorkspaceBranchIcon /> : <WorkspaceFolderIcon />}
+            <span>{dockMeta}</span>
+          </span>
+        ) : null}
+      </div>
+      <div className="workspace-review-dock-bar">
+        <div className="workspace-review-dock-tabs" data-testid="workspace-review-dock-tabs">
+          <button
+            type="button"
+            className={`workspace-review-dock-tab ${view === "files" ? "active" : ""}`}
+            onClick={() => onSetView("files")}
+            aria-pressed={view === "files"}
+          >
+            <WorkspaceFolderIcon />
+            <span>{t("files")}</span>
+          </button>
+          <button
+            type="button"
+            className={`workspace-review-dock-tab ${view === "git" ? "active" : ""}`}
+            onClick={() => onSetView("git")}
+            aria-pressed={view === "git"}
+          >
+            <WorkspaceChangesIcon />
+            <span>Git Diff</span>
           </button>
         </div>
+        {dockActions}
+      </div>
+    </div>
+  );
+
+  if (view === "files") {
+    return (
+      <div className="workspace-review-dock-section workspace-review-dock-section-files">
+        {dockHeader}
         {fileTree.length === 0 ? (
           <div className="tree-empty">{t("selectProjectToLoadFiles")}</div>
         ) : (
@@ -77,32 +153,13 @@ export const WorkspaceSidebar = ({
             onToggleCollapse={onToggleRepoCollapse}
           />
         )}
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="workspace-git-sidebar">
-      <div className="workspace-code-sidebar-head git-sidebar-head">
-        <span className="section-kicker">{t("sourceControl")}</span>
-        <div className="git-toolbar-actions">
-          <button className="workspace-icon-button bare" type="button" onClick={onRefresh} title={t("refresh")} aria-label={t("refresh")}>
-            <RefreshIcon />
-          </button>
-          <button className="workspace-icon-button bare" type="button" onClick={onStageAll} title={t("stageAll")} aria-label={t("stageAll")}>
-            <GitStageIcon />
-          </button>
-          <button className="workspace-icon-button bare" type="button" onClick={onUnstageAll} title={t("unstageAll")} aria-label={t("unstageAll")}>
-            <GitUnstageIcon />
-          </button>
-          <button className="workspace-icon-button bare" type="button" onClick={onDiscardAll} title={t("discardAll")} aria-label={t("discardAll")}>
-            <GitDiscardIcon />
-          </button>
-          <button className="workspace-icon-button bare" type="button" onClick={onCommit} disabled={!commitMessage.trim()} title={t("commit")} aria-label={t("commit")}>
-            <AgentSendIcon />
-          </button>
-        </div>
-      </div>
+    <div className="workspace-git-sidebar workspace-review-dock-section workspace-review-dock-section-git">
+      {dockHeader}
       <div className="workspace-git-compose">
         <div className="form-row">
           <input

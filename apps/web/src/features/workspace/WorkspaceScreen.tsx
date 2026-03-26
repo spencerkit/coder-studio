@@ -2437,6 +2437,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         view: codeSidebarView,
         fileTree: activeTab.fileTree,
         rootPath: activeTab.project?.path,
+        branchName: activeTab.git.branch,
         selectedPath: activeTab.filePreview.path,
         repoCollapsedPaths,
         gitChangeGroups,
