@@ -35,7 +35,7 @@ export const WorkspaceLaunchOverlay = ({
 
   return (
     <div className="overlay" data-testid="overlay">
-      <div className="modal onboarding-modal launch-overlay-shell" data-testid="launch-overlay-shell">
+      <div className="modal onboarding-modal launch-overlay-shell" data-testid="launch-overlay-shell" data-density="compact">
         <div className="onboarding-form">
           <div className="onboarding-header launch-overlay-header">
             <div className="launch-overlay-copy">

@@ -40,7 +40,7 @@ export const Settings = ({
   const languageLabel = locale === "zh" ? "中文" : "English";
 
   return (
-    <main className="settings-route" data-testid="settings-page">
+    <main className="settings-route" data-testid="settings-page" data-density="compact">
       <section className="settings-layout">
         <aside className="settings-sidebar-v2">
           <nav className="settings-nav-list" aria-label={t("settings")}>

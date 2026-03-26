@@ -27,7 +27,7 @@ export const WorktreeModal = ({
   t
 }: WorktreeModalProps) => (
   <div className="modal-overlay">
-    <div className="modal-card worktree-modal-card" role="dialog" aria-modal="true" data-testid="worktree-modal">
+    <div className="modal-card worktree-modal-card" role="dialog" aria-modal="true" data-testid="worktree-modal" data-density="compact">
       <div className="modal-header worktree-modal-header">
         <div className="worktree-modal-copy">
           <span className="section-kicker">{locale === "zh" ? "工作树检查" : "Worktree Inspect"}</span>

@@ -485,6 +485,7 @@ test('launch overlay shows the server-side folder picker shell', async ({ page }
 test('flat matte UI exposes compact shell and supporting screen markers', async ({ page }) => {
   await openLaunchOverlay(page);
   await expect(page.getByTestId('launch-overlay-shell')).toBeVisible();
+  await expect(page.getByTestId('launch-overlay-shell')).toHaveAttribute('data-density', 'compact');
 
   const expectedLabel = await launchLocalWorkspace(page);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
@@ -498,6 +499,7 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
 
   await page.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByTestId('command-palette-shell')).toBeVisible();
+  await expect(page.getByTestId('command-palette-shell')).toHaveAttribute('data-density', 'compact');
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Code' }).click();
@@ -511,6 +513,7 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('git-commit-message')).toBeVisible();
 
   await page.getByTestId('settings-open').click();
+  await expect(page.getByTestId('settings-page')).toHaveAttribute('data-density', 'compact');
   await expect(page.getByTestId('settings-summary')).toBeVisible();
 });
 
@@ -522,6 +525,7 @@ test('runtime validation blocks workspace selection until required tools are ins
   await page.goto('/');
 
   await expect(page.getByTestId('runtime-validation-overlay')).toBeVisible();
+  await expect(page.getByTestId('runtime-validation-overlay')).toHaveAttribute('data-density', 'compact');
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByText('Required tools are missing. Install them first before entering workspace selection.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry Check' })).toBeEnabled();

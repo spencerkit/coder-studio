@@ -39,6 +39,7 @@ export const CommandPalette = ({
     <div
       className="command-palette"
       data-testid="command-palette-shell"
+      data-density="compact"
       role="dialog"
       aria-modal="true"
       aria-label={locale === "zh" ? "快速操作面板" : "Quick actions palette"}
