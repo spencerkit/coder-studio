@@ -1,4 +1,3 @@
-import taskCompleteSoundUrl from "../../assets/task-complete.wav";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -73,15 +72,12 @@ import {
   buildWorkspaceGitChangeGroups,
   closeWorkspaceTerminal,
   findPreviewGitChange,
-  isCompletionReminderBackgroundCase,
   loadWorkspaceFilePreview,
   loadWorkspaceGitChangePreview,
   loadWorkspaceRepositoryDiff,
-  notifyCompletionReminder,
   openWorkspacePreviewPath,
   openWorkspaceWorktree,
   performWorkspaceGitOperation,
-  playCompletionReminderSound,
   resolveWorkspacePreviewPathLabel,
   saveWorkspacePreview,
   selectWorkspaceTerminal,
@@ -93,7 +89,7 @@ import {
   writeWorkspaceTerminalData
 } from "./";
 import { createWorkspaceSessionActions } from "./session-actions";
-import { useWorkspaceArtifactsSync, useWorkspaceTransportSync } from "./workspace-sync-hooks";
+import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
@@ -127,8 +123,6 @@ import {
   unstageGitFile
 } from "../../services/http/git.service";
 import {
-  switchSession as switchSessionRequest,
-  updateIdlePolicy as updateIdlePolicyRequest
 } from "../../services/http/session.service";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import {
@@ -150,9 +144,6 @@ import {
   AGENT_SPECIAL_KEY_MAP,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
-import {
-  cloneAppSettings,
-} from "../../shared/app/settings";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
@@ -362,12 +353,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashMenuLoading, setSlashMenuLoading] = useState(false);
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
-  const [isWindowFocused, setIsWindowFocused] = useState(() => (
-    typeof document !== "undefined" ? document.hasFocus() : true
-  ));
-  const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
-    typeof document === "undefined" ? true : document.visibilityState === "visible"
-  ));
   const t = useMemo(() => createTranslator(locale), [locale]);
   const terminalCompatibilityMode = appSettings.terminalCompatibilityMode;
   const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
@@ -412,7 +397,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     sawReady: boolean;
     exited: boolean;
   }>());
-  const completionReminderAudioRef = useRef<HTMLAudioElement | null>(null);
   const agentStartupTokenRef = useRef(0);
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
     const targetKey = serializeRuntimeValidationKey(target, appSettings.agentCommand);
@@ -570,91 +554,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setCommandPaletteActiveIndex(0);
   };
 
-  const syncGlobalSettings = (next: AppSettings) => {
-    const normalized = cloneAppSettings(next);
-    const currentTab = stateRef.current.tabs[0];
-    const currentAgentProvider = currentTab?.agent.provider ?? emptyTabRef.current?.agent.provider ?? normalized.agentProvider;
-    const currentAgentCommand = currentTab?.agent.command ?? emptyTabRef.current?.agent.command ?? normalized.agentCommand;
-    const currentIdlePolicy = currentTab?.idlePolicy ?? emptyTabRef.current?.idlePolicy ?? normalized.idlePolicy;
-    const agentSettingsChanged = currentAgentProvider !== normalized.agentProvider
-      || currentAgentCommand !== normalized.agentCommand;
-    const idlePolicyChanged = JSON.stringify(currentIdlePolicy) !== JSON.stringify(normalized.idlePolicy);
-
-    if (emptyTabRef.current && (agentSettingsChanged || idlePolicyChanged)) {
-      emptyTabRef.current = {
-        ...emptyTabRef.current,
-        agent: agentSettingsChanged
-          ? {
-              ...emptyTabRef.current.agent,
-              provider: normalized.agentProvider,
-              command: normalized.agentCommand,
-            }
-          : emptyTabRef.current.agent,
-        idlePolicy: idlePolicyChanged ? { ...normalized.idlePolicy } : emptyTabRef.current.idlePolicy,
-      };
-    }
-
-    if (stateRef.current.tabs.length > 0 && (agentSettingsChanged || idlePolicyChanged)) {
-      updateState((current) => ({
-        ...current,
-        tabs: current.tabs.map((tab) => ({
-          ...tab,
-          agent: agentSettingsChanged
-            ? {
-                ...tab.agent,
-                provider: normalized.agentProvider,
-                command: normalized.agentCommand,
-              }
-            : tab.agent,
-          idlePolicy: idlePolicyChanged ? { ...normalized.idlePolicy } : tab.idlePolicy,
-        })),
-      }));
-    }
-
-    if (!idlePolicyChanged) {
-      return;
-    }
-
-    stateRef.current.tabs.forEach((tab) => {
-      void updateIdlePolicyRequest(tab.id, normalized.idlePolicy).catch(() => {
-        // Best effort sync; in-memory settings remain source of truth if backend lags.
-      });
-    });
-  };
-
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
-  useEffect(() => {
-    const audio = new Audio(taskCompleteSoundUrl);
-    audio.preload = "auto";
-    completionReminderAudioRef.current = audio;
-    return () => {
-      completionReminderAudioRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      return;
-    }
-
-    const syncVisibility = () => {
-      setIsWindowFocused(document.hasFocus());
-      setIsDocumentVisible(document.visibilityState === "visible");
-    };
-
-    syncVisibility();
-    window.addEventListener("focus", syncVisibility);
-    window.addEventListener("blur", syncVisibility);
-    document.addEventListener("visibilitychange", syncVisibility);
-    return () => {
-      window.removeEventListener("focus", syncVisibility);
-      window.removeEventListener("blur", syncVisibility);
-      document.removeEventListener("visibilitychange", syncVisibility);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -806,10 +708,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       document.documentElement.dataset.theme = "dark";
     }
   }, []);
-
-  useEffect(() => {
-    syncGlobalSettings(appSettings);
-  }, [appSettings]);
 
   useEffect(() => {
     if (!overlayCanUseWsl && stateRef.current.overlay.target.type === "wsl") {
@@ -1001,51 +899,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }, 4000);
   };
 
-  const onCompletionReminder = useCallback(async ({
-    workspaceId,
-    workspaceTitle,
-    sessionId,
-    sessionTitle,
-  }: {
-    workspaceId: string;
-    workspaceTitle: string;
-    sessionId: string;
-    sessionTitle: string;
-  }) => {
-    if (!appSettings.completionNotifications.enabled) {
-      return;
-    }
-
-    const currentState = stateRef.current;
-    const isBackgroundCase = isCompletionReminderBackgroundCase(
-      {
-        workspaceId,
-        workspaceTitle,
-        sessionId,
-        sessionTitle,
-      },
-      {
-        activeWorkspaceId: currentState.activeTabId,
-        activeSessionId: currentState.tabs.find((tab) => tab.id === currentState.activeTabId)?.activeSessionId,
-        documentVisible: isDocumentVisible,
-        windowFocused: isWindowFocused,
-      },
-    );
-
-    if (appSettings.completionNotifications.onlyWhenBackground && !isBackgroundCase) {
-      return;
-    }
-
-    await playCompletionReminderSound(completionReminderAudioRef.current);
-    await notifyCompletionReminder({
-      title: sessionTitle,
-      body: t("completionNotificationBody", { workspaceTitle }),
-      onClick: () => {
-        onSwitchWorkspaceSession(workspaceId, sessionId);
-      },
-    });
-  }, [appSettings.completionNotifications, isDocumentVisible, isWindowFocused, t]);
-
   const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
     try {
       return await operation();
@@ -1079,13 +932,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const {
     archiveSessionForTab,
     createDraftSessionForTab,
-    markSessionIdle,
     materializeSession,
     onCloseAgentPane: closeAgentPaneSession,
     onNewSession,
     onSwitchSession: switchSessionInActiveTab,
-    refreshTabFromBackend,
-    settleSessionAfterExit,
     syncSessionPatch,
     touchSession
   } = createWorkspaceSessionActions({
@@ -1096,19 +946,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateTab,
     withServiceFallback,
     addToast,
-    onCompletionReminder,
-  });
-
-  useWorkspaceTransportSync({
-    agentRuntimeRefs,
-    bootstrapReady,
-    refreshTabFromBackend,
-    markSessionIdle,
-    settleSessionAfterExit,
-    syncSessionPatch,
-    stateRef,
-    t,
-    updateState,
   });
 
   const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
@@ -1260,96 +1097,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const delta = direction >= 0 ? 1 : -1;
     const nextIndex = (activeIndex + delta + tabs.length) % tabs.length;
     onSwitchWorkspace(tabs[nextIndex].id);
-  };
-
-  const onSwitchWorkspaceSession = (tabId: string, sessionId: string) => {
-    const currentState = stateRef.current;
-    const targetTabSnapshot = currentState.tabs.find((tab) => tab.id === tabId);
-    const previousTabSnapshot = currentState.tabs.find((tab) => tab.id === currentState.activeTabId);
-    const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
-    const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
-    const nextActiveAt = Date.now();
-    updateState((current) => {
-      const targetTab = current.tabs.find((tab) => tab.id === tabId);
-      if (!targetTab) return current;
-      const previousActiveTabId = current.activeTabId;
-
-      return {
-        ...current,
-        activeTabId: tabId,
-        overlay: {
-          ...current.overlay,
-          visible: false,
-        },
-        tabs: current.tabs.map((tab) => {
-          if (tab.id === tabId) {
-            return {
-              ...tab,
-              activeSessionId: sessionId,
-              paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
-                ...leaf,
-                sessionId
-              })),
-              viewingArchiveId: undefined,
-              sessions: tab.sessions.map((session) => {
-                if (session.id === sessionId) {
-                  return {
-                    ...session,
-                    unread: 0,
-                    status: restoreVisibleStatus(session),
-                    lastActiveAt: nextActiveAt
-                  };
-                }
-                if (session.id === tab.activeSessionId) {
-                  return { ...session, status: toBackgroundStatus(session.status) };
-                }
-                return session;
-              })
-            };
-          }
-
-          if (tab.id === previousActiveTabId) {
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === tab.activeSessionId
-                  ? { ...session, status: toBackgroundStatus(session.status) }
-                  : session
-              )
-            };
-          }
-
-          return tab;
-        })
-      };
-    });
-
-    const backendSessionId = parseNumericId(sessionId);
-    if (backendSessionId !== null) {
-      void switchSessionRequest(tabId, backendSessionId).catch(() => {
-        // The frontend state already switched optimistically.
-      });
-    }
-    if (currentState.activeTabId !== tabId) {
-      void withServiceFallback(() => activateWorkspaceRequest(tabId), null).then((uiState) => {
-        if (!uiState) return;
-        updateState((current) => applyWorkbenchUiState(current, uiState));
-      });
-      navigate(`/workspace/${tabId}`);
-      void ensureWorkspaceTerminal(tabId);
-    }
-
-    if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
-      void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
-    }
-
-    if (nextSession) {
-      const nextStatus = restoreVisibleStatus(nextSession);
-      void syncSessionPatch(tabId, sessionId, {
-        status: nextStatus,
-        last_active_at: nextActiveAt
-      });
-    }
   };
 
   const onOverlayUpdateTarget = (target: ExecTarget) => {

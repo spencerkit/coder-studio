@@ -454,6 +454,75 @@ test('background turn_completed sends a completion reminder notification', async
   }
 });
 
+test('background turn_completed still sends a reminder while viewing settings', async ({ page }) => {
+  const reminderWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-reminder-settings-'));
+
+  try {
+    await createNotificationRecorder(page);
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, reminderWorkspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const readReminderWorkspace = async () => {
+      const bootstrap = await invokeRpc<{
+        workspaces: Array<{
+          workspace: { workspace_id: string; title: string; project_path: string };
+          sessions: Array<{ id: number; title: string }>;
+          view_state: { active_session_id: string };
+        }>;
+      }>(page, 'workbench_bootstrap');
+      return bootstrap.workspaces.find((item) => item.workspace.project_path === reminderWorkspaceDir) ?? null;
+    };
+
+    const initialWorkspace = await readReminderWorkspace();
+    expect(initialWorkspace).toBeTruthy();
+    const initialSessionId = initialWorkspace!.view_state.active_session_id;
+
+    await page.getByRole('button', { name: 'Split Vertically' }).first().click();
+    const draftInputs = page.getByPlaceholder('Type to start a new task');
+    const backgroundTaskTitle = 'Settings background task';
+    await draftInputs.nth(1).fill(backgroundTaskTitle);
+    await draftInputs.nth(1).press('Enter');
+
+    await expect.poll(async () => (await readReminderWorkspace())?.sessions.length ?? 0).toBe(2);
+    const workspaceAfterMaterialize = await readReminderWorkspace();
+    expect(workspaceAfterMaterialize).toBeTruthy();
+    const backgroundCandidate = workspaceAfterMaterialize!.sessions.find(
+      (session) => session.id.toString() !== initialSessionId,
+    );
+    expect(backgroundCandidate).toBeTruthy();
+
+    await page.locator('.agent-pane-card').first().click();
+    await page.getByTestId('settings-open').click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+
+    await emitLifecycleEvent(page, {
+      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
+      session_id: String(backgroundCandidate!.id),
+      kind: 'tool_started',
+      source_event: 'PreToolUse',
+      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
+    });
+
+    await emitLifecycleEvent(page, {
+      workspace_id: workspaceAfterMaterialize!.workspace.workspace_id,
+      session_id: String(backgroundCandidate!.id),
+      kind: 'turn_completed',
+      source_event: 'Stop',
+      data: JSON.stringify({ hook_event_name: 'Stop' }),
+    });
+
+    await waitForNotificationEvent(
+      page,
+      `notify:${backgroundTaskTitle}:${workspaceAfterMaterialize!.workspace.title} · Task complete`,
+    );
+    await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
+  } finally {
+    await fs.rm(reminderWorkspaceDir, { recursive: true, force: true });
+  }
+});
+
 test('settings persist across route changes and reloads', async ({ page }) => {
   await launchLocalWorkspace(page);
   await page.getByTestId('settings-open').click();
