@@ -1,6 +1,6 @@
 import type { KeyboardEventHandler, ReactNode, RefObject } from "react";
 import type { Locale, Translator } from "../../i18n";
-import { MaximizeIcon, MinimizeIcon, SearchIcon, WorkspaceChangesIcon, WorkspaceFolderIcon } from "../icons";
+import { MaximizeIcon, MinimizeIcon, SearchIcon } from "../icons";
 
 type WorkspaceEditorPanelProps = {
   locale: Locale;
@@ -16,7 +16,6 @@ type WorkspaceEditorPanelProps = {
   fileSearchInputRef: RefObject<HTMLInputElement | null>;
   editorContent: ReactNode;
   sidebarContent: ReactNode;
-  onSetSidebarView: (view: "files" | "git") => void;
   onFileSearchChange: (value: string) => void;
   onFileSearchFocus: (currentValue: string) => void;
   onFileSearchBlur: () => void;
@@ -39,7 +38,6 @@ export const WorkspaceEditorPanel = ({
   fileSearchInputRef,
   editorContent,
   sidebarContent,
-  onSetSidebarView,
   onFileSearchChange,
   onFileSearchFocus,
   onFileSearchBlur,
@@ -53,37 +51,14 @@ export const WorkspaceEditorPanel = ({
   >
     <div className="panel-inner workspace-code-panel">
       <div className="workspace-code-header">
-        <div className="workspace-code-modes">
-          {isExpanded ? (
-            <>
-              <button
-                type="button"
-                className={`workspace-panel-toggle ${codeSidebarView === "files" ? "active" : ""}`}
-                onClick={() => onSetSidebarView("files")}
-              >
-                <WorkspaceFolderIcon />
-                <span>{t("files")}</span>
-              </button>
-              <button
-                type="button"
-                className={`workspace-panel-toggle ${codeSidebarView === "git" ? "active" : ""}`}
-                onClick={() => onSetSidebarView("git")}
-              >
-                <WorkspaceChangesIcon />
-                <span>Git Diff</span>
-              </button>
-              {previewPathLabel && (
-                <span className="workspace-code-current-path" title={previewPathLabel}>
-                  {previewPathLabel}
-                </span>
-              )}
-            </>
-          ) : (
-            <div className="workspace-code-title-block">
-              <span className="section-kicker">{t("codePanel")}</span>
-              <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
-            </div>
-          )}
+        <div className="workspace-panel-title-block workspace-code-title-block">
+          <span className="section-kicker">{t("codePanel")}</span>
+          <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
+          {isExpanded && previewPathLabel ? (
+            <span className="workspace-code-current-path" title={previewPathLabel}>
+              {previewPathLabel}
+            </span>
+          ) : null}
         </div>
         <div className="workspace-code-actions">
           <div className="workspace-search-shell" ref={searchShellRef}>
@@ -119,7 +94,15 @@ export const WorkspaceEditorPanel = ({
 
       <div className={`workspace-code-body ${isExpanded ? "expanded" : "collapsed"}`}>
         <div className="workspace-code-editor">{editorContent}</div>
-        {isExpanded && <aside className="workspace-code-sidebar">{sidebarContent}</aside>}
+        {isExpanded && (
+          <aside
+            className="workspace-code-sidebar workspace-review-dock"
+            data-testid="workspace-review-dock"
+            data-view={codeSidebarView}
+          >
+            {sidebarContent}
+          </aside>
+        )}
       </div>
     </div>
   </section>

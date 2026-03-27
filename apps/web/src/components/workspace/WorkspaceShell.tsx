@@ -1,24 +1,18 @@
 import type { ReactNode } from "react";
-import type { Locale, Translator } from "../../i18n";
-import {
-  WorkspaceBranchIcon,
-  WorkspaceChangesIcon,
-  WorkspaceCodeIcon,
-  WorkspaceFolderIcon,
-  WorkspaceTerminalIcon
-} from "../icons";
+import type { Translator } from "../../i18n";
+import type { WorkspaceShellSummaryItem } from "../../features/workspace/workspace-shell-summary";
+import { WorkspaceCodeIcon, WorkspaceTerminalIcon } from "../icons";
 
 type WorkspaceShellProps = {
-  locale: Locale;
   isFocusMode: boolean;
   isCodeExpanded: boolean;
   showAgentPanel: boolean;
   showCodePanel: boolean;
   showTerminalPanel: boolean;
   rightSplit: number;
-  workspaceFolderName: string;
-  branchName: string;
-  changeCount: number;
+  statusItems: WorkspaceShellSummaryItem[];
+  runtimeHint: string;
+  statusBanner?: ReactNode;
   agentPanel: ReactNode;
   codePanel: ReactNode;
   terminalPanel: ReactNode;
@@ -27,16 +21,15 @@ type WorkspaceShellProps = {
 };
 
 export const WorkspaceShell = ({
-  locale,
   isFocusMode,
   isCodeExpanded,
   showAgentPanel,
   showCodePanel,
   showTerminalPanel,
   rightSplit,
-  workspaceFolderName,
-  branchName,
-  changeCount,
+  statusItems,
+  runtimeHint,
+  statusBanner,
   agentPanel,
   codePanel,
   terminalPanel,
@@ -44,49 +37,41 @@ export const WorkspaceShell = ({
   t
 }: WorkspaceShellProps) => (
   <main className="workspace-shell">
-    <div className="workspace-main-header workspace-shell-header">
-      <div className="workspace-main-header-copy">
-        <div className="workspace-main-meta">
-          <span className="workspace-main-chip">
-            <WorkspaceFolderIcon />
-            <span>{workspaceFolderName}</span>
-          </span>
-          <span className="workspace-main-chip">
-            <WorkspaceBranchIcon />
-            <span>{branchName || "—"}</span>
-          </span>
-          <span className="workspace-main-chip">
-            <WorkspaceChangesIcon />
-            <span>{t("changesCount", { count: changeCount })}</span>
-          </span>
-        </div>
+    <div className="workspace-status-strip" data-testid="workspace-status-strip">
+      <div className="workspace-status-strip-items">
+        {statusItems.map((item) => (
+          <div key={item.key} className={`workspace-status-item tone-${item.tone ?? "neutral"}`}>
+            <span className="workspace-status-label">{item.label}</span>
+            <strong className="workspace-status-value">{item.value}</strong>
+          </div>
+        ))}
       </div>
-      <div className="workspace-main-actions">
+      <div className="workspace-status-strip-actions">
         <button
           type="button"
-          className={`workspace-panel-toggle ${showCodePanel ? "active" : ""}`}
+          className={`workspace-panel-toggle icon-only ${showCodePanel ? "active" : ""}`}
           onClick={() => onToggleRightPane("code")}
           title={t("codePanel")}
           aria-pressed={showCodePanel}
+          aria-label={t("codePanel")}
         >
           <WorkspaceCodeIcon />
-          <span>{t("codePanel")}</span>
         </button>
         <button
           type="button"
-          className={`workspace-panel-toggle ${showTerminalPanel ? "active" : ""}`}
+          className={`workspace-panel-toggle icon-only ${showTerminalPanel ? "active" : ""}`}
           onClick={() => onToggleRightPane("terminal")}
           title={t("terminalPanel")}
           aria-pressed={showTerminalPanel}
+          aria-label={t("terminalPanel")}
         >
           <WorkspaceTerminalIcon />
-          <span>{t("terminalPanel")}</span>
         </button>
-        <span className="workspace-shortcut-hint">
-          {locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
-        </span>
+        <span className="workspace-shortcut-hint">{runtimeHint}</span>
       </div>
     </div>
+
+    {statusBanner}
 
     <div className={`workspace-stack ${isFocusMode ? "focus-mode" : ""} ${isCodeExpanded ? "code-expanded" : ""}`}>
       <div

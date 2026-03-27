@@ -5,6 +5,7 @@ import { applyLocale, getPreferredLocale, persistLocale, type Locale } from "../
 import { SettingsScreen } from "../../features/settings";
 import WorkspaceScreen from "../../features/workspace/WorkspaceScreen";
 import type { AppRoute, AppSettings } from "../../types/app";
+import { WorkbenchRuntimeCoordinator } from "./WorkbenchRuntimeCoordinator";
 import {
   cloneAppSettings,
   persistStoredAppSettings,
@@ -53,6 +54,10 @@ export default function AppController() {
 
   return (
     <AuthGate locale={locale} onSelectLocale={onSelectLocale}>
+      <WorkbenchRuntimeCoordinator
+        locale={locale}
+        appSettings={appSettings}
+      />
       <Routes>
         <Route path="/" element={<Navigate to="/workspace" replace />} />
         <Route

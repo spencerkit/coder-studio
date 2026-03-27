@@ -1270,7 +1270,7 @@ fn normalized_allowed_roots(
     Ok(roots)
 }
 
-fn normalize_path_for_target(path: &str, target: &ExecTarget) -> Result<String, String> {
+pub(crate) fn normalize_path_for_target(path: &str, target: &ExecTarget) -> Result<String, String> {
     match target {
         ExecTarget::Native => normalize_native_path(path),
         ExecTarget::Wsl { .. } => normalize_wsl_path(path, target),
@@ -1316,7 +1316,7 @@ fn normalize_wsl_path(path: &str, target: &ExecTarget) -> Result<String, String>
     run_cmd(target, "", &["realpath", "-m", &resolved]).map(|value| value.trim().to_string())
 }
 
-fn path_within_root(path: &str, root: &str, target: &ExecTarget) -> bool {
+pub(crate) fn path_within_root(path: &str, root: &str, target: &ExecTarget) -> bool {
     let normalize = |value: &str| {
         let value = value.replace('\\', "/");
         let trimmed = value.trim_end_matches('/').to_string();

@@ -1,4 +1,8 @@
-import { formatTerminalTitle, type Locale } from "../../i18n";
+import { formatTerminalTitle, type Locale } from "../../i18n.ts";
+import {
+  createWorkspaceControllerState,
+  createWorkspaceControllerStateFromLease,
+} from "../../features/workspace/workspace-controller.ts";
 import {
   createDefaultWorkbenchState,
   createEmptyPreview,
@@ -9,19 +13,77 @@ import {
   type Tab,
   type Terminal,
   type WorkbenchState,
-} from "../../state/workbench";
+} from "../../state/workbench-core.ts";
 import type {
+  AgentLifecycleHistoryEntry,
   AppSettings,
   BackendArchiveEntry,
   BackendSession,
   WorkbenchBootstrap,
   WorkbenchLayout,
   WorkbenchUiState,
+  WorkspaceRuntimeControllerEvent,
+  WorkspaceRuntimeSnapshot,
+  WorkspaceRuntimeStateEvent,
   WorkspaceSnapshot,
-} from "../../types/app";
-import { createDraftSessionPlaceholder, createSessionFromBackend, isDraftSession } from "./session";
+} from "../../types/app.ts";
+import {
+  createDraftSessionPlaceholder,
+  createSessionFromBackend,
+  isDraftSession,
+  resolveVisibleStatus,
+} from "./session.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const readClaudeSessionId = (data: string) => {
+  try {
+    const payload = JSON.parse(data) as { session_id?: string };
+    return typeof payload.session_id === "string" && payload.session_id.trim()
+      ? payload.session_id.trim()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const lifecycleStatusForReplay = (
+  kind: AgentLifecycleHistoryEntry["kind"],
+) => {
+  if (kind === "turn_waiting" || kind === "approval_required") {
+    return "waiting" as const;
+  }
+  if (kind === "tool_started" || kind === "tool_finished") {
+    return "running" as const;
+  }
+  if (kind === "turn_completed" || kind === "session_ended") {
+    return "idle" as const;
+  }
+  return null;
+};
+
+const applyLifecycleReplayToState = (
+  current: WorkbenchState,
+  lifecycleEvents: AgentLifecycleHistoryEntry[],
+): WorkbenchState => lifecycleEvents.reduce((state, event) => ({
+  ...state,
+  tabs: state.tabs.map((tab) => {
+    if (tab.id !== event.workspace_id) return tab;
+    return {
+      ...tab,
+      sessions: tab.sessions.map((session) => {
+        if (session.id !== event.session_id) return session;
+        const nextStatus = lifecycleStatusForReplay(event.kind);
+        const claudeSessionId = readClaudeSessionId(event.data);
+        return {
+          ...session,
+          status: nextStatus ? resolveVisibleStatus(tab, session, nextStatus) : session.status,
+          claudeSessionId: claudeSessionId ?? session.claudeSessionId,
+        };
+      }),
+    };
+  }),
+}), current);
 
 const normalizeFilePreview = (
   value: unknown,
@@ -60,12 +122,15 @@ const mapArchiveEntry = (
 const mapTerminals = (
   terminals: WorkspaceSnapshot["terminals"],
   locale: Locale,
+  requestedActiveTerminalId: string | undefined,
   existing?: Tab,
 ): { terminals: Terminal[]; activeTerminalId: string } => {
   if (!terminals.length) {
     const nextTerminals = existing?.terminals ?? [];
-    const nextActiveTerminalId = nextTerminals.some((terminal) => terminal.id === existing?.activeTerminalId)
-      ? existing?.activeTerminalId ?? ""
+    const nextActiveTerminalId = nextTerminals.some((terminal) => terminal.id === requestedActiveTerminalId)
+      ? requestedActiveTerminalId ?? ""
+      : nextTerminals.some((terminal) => terminal.id === existing?.activeTerminalId)
+        ? existing?.activeTerminalId ?? ""
       : (nextTerminals[0]?.id ?? "");
     return { terminals: nextTerminals, activeTerminalId: nextActiveTerminalId };
   }
@@ -77,12 +142,51 @@ const mapTerminals = (
       id,
       title: existingTerminal?.title ?? formatTerminalTitle(index + 1, locale),
       output: terminal.output ?? existingTerminal?.output ?? "",
+      recoverable: terminal.recoverable ?? existingTerminal?.recoverable ?? false,
     };
   });
-  const nextActiveTerminalId = nextTerminals.some((terminal) => terminal.id === existing?.activeTerminalId)
-    ? existing?.activeTerminalId ?? ""
+  const nextActiveTerminalId = nextTerminals.some((terminal) => terminal.id === requestedActiveTerminalId)
+    ? requestedActiveTerminalId ?? ""
+    : nextTerminals.some((terminal) => terminal.id === existing?.activeTerminalId)
+      ? existing?.activeTerminalId ?? ""
     : (nextTerminals[0]?.id ?? "");
   return { terminals: nextTerminals, activeTerminalId: nextActiveTerminalId };
+};
+
+const normalizePaneLayout = (
+  value: unknown,
+  fallbackSessionId: string,
+): Tab["paneLayout"] => {
+  const candidate = value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
+  if (!candidate) {
+    return createPaneLeaf(fallbackSessionId);
+  }
+
+  if (candidate.type === "leaf") {
+    const sessionId = typeof candidate.sessionId === "string"
+      ? candidate.sessionId
+      : (typeof candidate.session_id === "string" ? candidate.session_id : fallbackSessionId);
+    return {
+      type: "leaf",
+      id: typeof candidate.id === "string" ? candidate.id : `pane-${sessionId}`,
+      sessionId,
+    };
+  }
+
+  if (candidate.type === "split") {
+    return {
+      type: "split",
+      id: typeof candidate.id === "string" ? candidate.id : "split",
+      axis: candidate.axis === "horizontal" ? "horizontal" : "vertical",
+      ratio: typeof candidate.ratio === "number" ? candidate.ratio : 0.5,
+      first: normalizePaneLayout(candidate.first, fallbackSessionId),
+      second: normalizePaneLayout(candidate.second, fallbackSessionId),
+    };
+  }
+
+  return createPaneLeaf(fallbackSessionId);
 };
 
 export const workbenchLayoutFromBackend = (layout: WorkbenchLayout): LayoutState => ({
@@ -133,11 +237,17 @@ export const createTabFromWorkspaceSnapshot = (
     : sessions.some((session) => session.id === existing?.activeSessionId)
       ? existing?.activeSessionId ?? fallbackSessionId
     : fallbackSessionId;
-  const terminalState = mapTerminals(snapshot.terminals, locale, existing);
+  const terminalState = mapTerminals(
+    snapshot.terminals,
+    locale,
+    snapshot.view_state.active_terminal_id,
+    existing,
+  );
   const candidate: Tab = {
     id: snapshot.workspace.workspace_id,
     title: snapshot.workspace.title,
     status: "ready",
+    controller: existing?.controller ?? createWorkspaceControllerState({ role: "observer" }),
     project: {
       kind: snapshot.workspace.source_kind,
       path: snapshot.workspace.project_path,
@@ -161,7 +271,7 @@ export const createTabFromWorkspaceSnapshot = (
     fileTree: existing?.fileTree ?? [],
     changesTree: existing?.changesTree ?? [],
     filePreview: normalizeFilePreview(snapshot.view_state.file_preview, existing?.filePreview),
-    paneLayout: (snapshot.view_state.pane_layout as Tab["paneLayout"]) ?? createPaneLeaf(nextActiveSessionId),
+    paneLayout: normalizePaneLayout(snapshot.view_state.pane_layout, nextActiveSessionId),
     activePaneId: snapshot.view_state.active_pane_id || existing?.activePaneId || "",
     idlePolicy: {
       enabled: snapshot.workspace.idle_policy.enabled,
@@ -262,6 +372,78 @@ export const upsertWorkspaceSnapshot = (
     },
   };
 };
+
+export const applyWorkspaceRuntimeSnapshot = (
+  current: WorkbenchState,
+  runtimeSnapshot: WorkspaceRuntimeSnapshot,
+  locale: Locale,
+  appSettings: AppSettings,
+  deviceId: string,
+  clientId: string,
+  uiState?: WorkbenchUiState | null,
+): WorkbenchState => {
+  const next = applyLifecycleReplayToState(
+    upsertWorkspaceSnapshot(current, runtimeSnapshot.snapshot, locale, appSettings, uiState),
+    runtimeSnapshot.lifecycle_events ?? [],
+  );
+  return {
+    ...next,
+    tabs: next.tabs.map((tab) => (
+      tab.id === runtimeSnapshot.snapshot.workspace.workspace_id
+        ? {
+            ...tab,
+            controller: createWorkspaceControllerStateFromLease(
+              runtimeSnapshot.controller,
+              deviceId,
+              clientId,
+            ),
+          }
+        : tab
+    )),
+  };
+};
+
+export const applyWorkspaceControllerEvent = (
+  current: WorkbenchState,
+  payload: WorkspaceRuntimeControllerEvent,
+  deviceId: string,
+  clientId: string,
+): WorkbenchState => ({
+  ...current,
+  tabs: current.tabs.map((tab) => (
+    tab.id === payload.workspace_id
+      ? {
+          ...tab,
+          controller: createWorkspaceControllerStateFromLease(payload.controller, deviceId, clientId),
+        }
+      : tab
+  )),
+});
+
+export const applyWorkspaceRuntimeStateEvent = (
+  current: WorkbenchState,
+  payload: WorkspaceRuntimeStateEvent,
+): WorkbenchState => ({
+  ...current,
+  tabs: current.tabs.map((tab) => {
+    if (tab.id !== payload.workspace_id) return tab;
+    const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
+      ? payload.view_state.active_session_id
+      : tab.activeSessionId;
+    const nextActiveTerminalId = tab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
+      ? payload.view_state.active_terminal_id
+      : tab.activeTerminalId;
+    return {
+      ...tab,
+      activeSessionId: nextActiveSessionId,
+      activePaneId: payload.view_state.active_pane_id || tab.activePaneId,
+      activeTerminalId: nextActiveTerminalId,
+      paneLayout: normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId),
+      filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
+      viewingArchiveId: undefined,
+    };
+  }),
+});
 
 export const applyWorkbenchUiState = (
   current: WorkbenchState,

@@ -10,7 +10,7 @@ import type {
   Tab,
   Terminal,
   TreeNode,
-} from "../state/workbench";
+} from "../state/workbench.ts";
 
 export type Toast = { id: string; text: string; sessionId: string };
 
@@ -84,8 +84,21 @@ export type BackendArchiveEntry = {
 export type BackendWorkspaceViewState = {
   active_session_id: string;
   active_pane_id: string;
+  active_terminal_id: string;
   pane_layout: Tab["paneLayout"];
   file_preview: FilePreview;
+};
+
+export type WorkspaceControllerLease = {
+  workspace_id: string;
+  controller_device_id?: string | null;
+  controller_client_id?: string | null;
+  lease_expires_at: number;
+  fencing_token: number;
+  takeover_request_id?: string | null;
+  takeover_requested_by_device_id?: string | null;
+  takeover_requested_by_client_id?: string | null;
+  takeover_deadline_at?: number | null;
 };
 
 export type WorkspaceSnapshot = {
@@ -93,7 +106,23 @@ export type WorkspaceSnapshot = {
   sessions: BackendSession[];
   archive: Array<BackendArchiveEntry & { snapshot: BackendSession }>;
   view_state: BackendWorkspaceViewState;
-  terminals: { id: number; output: string }[];
+  terminals: { id: number; output: string; recoverable: boolean }[];
+};
+
+export type WorkspaceRuntimeSnapshot = {
+  snapshot: WorkspaceSnapshot;
+  controller: WorkspaceControllerLease;
+  lifecycle_events?: AgentLifecycleHistoryEntry[];
+};
+
+export type WorkspaceRuntimeControllerEvent = {
+  workspace_id: string;
+  controller: WorkspaceControllerLease;
+};
+
+export type WorkspaceRuntimeStateEvent = {
+  workspace_id: string;
+  view_state: BackendWorkspaceViewState;
 };
 
 export type WorkbenchLayout = {
@@ -138,6 +167,7 @@ export type SessionPatch = {
 export type WorkspaceViewPatch = {
   active_session_id?: string;
   active_pane_id?: string;
+  active_terminal_id?: string;
   pane_layout?: BackendWorkspaceViewState["pane_layout"];
   file_preview?: BackendWorkspaceViewState["file_preview"];
 };
@@ -155,6 +185,10 @@ export type AgentLifecycleEvent = {
   kind: "session_started" | "turn_waiting" | "tool_started" | "tool_finished" | "approval_required" | "turn_completed" | "session_ended";
   source_event: string;
   data: string;
+};
+
+export type AgentLifecycleHistoryEntry = AgentLifecycleEvent & {
+  seq: number;
 };
 
 export type TerminalEvent = {
@@ -290,10 +324,16 @@ export type WorkspaceTabItem = {
   unread: number;
 };
 
+export type BrowserNotificationSupport = "allowed" | "not-enabled" | "unsupported";
+
 export type AppSettings = {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: IdlePolicy;
+  completionNotifications: {
+    enabled: boolean;
+    onlyWhenBackground: boolean;
+  };
   terminalCompatibilityMode: TerminalCompatibilityMode;
 };
 

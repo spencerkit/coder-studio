@@ -66,6 +66,11 @@ pub(crate) fn terminal_create(
         process_group_leader,
     });
 
+    if let Err(error) = persist_workspace_terminal(state, &workspace_id, terminal_id, "", true) {
+        terminate_terminal_runtime(runtime);
+        return Err(error);
+    }
+
     let key = terminal_key(&workspace_id, terminal_id);
     {
         let mut terms = state.terminals.lock().map_err(|e| e.to_string())?;
@@ -73,6 +78,7 @@ pub(crate) fn terminal_create(
     }
 
     let app_handle = app.clone();
+    let state_handle = app.clone();
     let workspace_id_out = workspace_id.clone();
     std::thread::spawn(move || {
         let mut reader = reader;
@@ -86,6 +92,13 @@ pub(crate) fn terminal_create(
                         continue;
                     }
                     emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
+                    let state: State<AppState> = state_handle.state();
+                    let _ = append_workspace_terminal_output(
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
                 }
                 Err(_) => break,
             }
@@ -105,6 +118,13 @@ pub(crate) fn terminal_create(
             "\n[terminal exited]\n",
         );
         let state: State<AppState> = state_handle.state();
+        let _ = append_workspace_terminal_output(
+            state,
+            &workspace_id,
+            terminal_id,
+            "\n[terminal exited]\n",
+        );
+        let _ = set_workspace_terminal_recoverable(state, &workspace_id, terminal_id, false);
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);
         };
@@ -113,6 +133,7 @@ pub(crate) fn terminal_create(
     Ok(TerminalInfo {
         id: terminal_id,
         output: String::new(),
+        recoverable: true,
     })
 }
 
@@ -172,6 +193,7 @@ pub(crate) fn terminal_close(
     if let Some(runtime) = runtime {
         terminate_terminal_runtime(runtime);
     }
+    let _ = delete_workspace_terminal(state, &workspace_id, terminal_id);
 
     Ok(())
 }
@@ -188,11 +210,16 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
             .cloned()
             .collect::<Vec<_>>();
         keys.into_iter()
-            .filter_map(|key| terms.remove(&key))
+            .filter_map(|key| {
+                let terminal_id = key.strip_prefix(&prefix)?.parse::<u64>().ok()?;
+                let runtime = terms.remove(&key)?;
+                Some((terminal_id, runtime))
+            })
             .collect::<Vec<_>>()
     };
 
-    for runtime in runtimes {
+    for (terminal_id, runtime) in runtimes {
         terminate_terminal_runtime(runtime);
+        let _ = delete_workspace_terminal(state, workspace_id, terminal_id);
     }
 }

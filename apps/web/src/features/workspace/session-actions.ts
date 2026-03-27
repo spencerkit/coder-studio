@@ -9,15 +9,15 @@ import {
   createId,
   createPaneLeaf,
   createSession,
-} from "../../state/workbench";
-import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
+} from "../../state/workbench-core.ts";
+import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n.ts";
 import {
   archiveSession as archiveSessionRequest,
   createSession as createSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
-} from "../../services/http/session.service";
-import { getWorkspaceSnapshot } from "../../services/http/workspace.service";
+} from "../../services/http/session.service.ts";
+import { getWorkspaceSnapshot } from "../../services/http/workspace.service.ts";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -25,7 +25,7 @@ import {
   remapPaneSession,
   removePaneNode,
   replacePaneNode,
-} from "../../shared/utils/panes";
+} from "../../shared/utils/panes.ts";
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
@@ -37,9 +37,11 @@ import {
   restoreVisibleStatus,
   sessionTitleFromInput,
   toBackgroundStatus,
-} from "../../shared/utils/session";
-import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
-import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
+} from "../../shared/utils/session.ts";
+import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace.ts";
+import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app.ts";
+
+import type { CompletionReminderTarget } from "./completion-reminders.ts";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
@@ -52,6 +54,7 @@ type WorkspaceSessionActionDeps = {
   updateTab: UpdateTab;
   withServiceFallback: WithServiceFallback;
   addToast: (toast: Toast) => void;
+  onCompletionReminder?: (target: CompletionReminderTarget) => Promise<void> | void;
 };
 
 export const createWorkspaceSessionActions = ({
@@ -62,6 +65,7 @@ export const createWorkspaceSessionActions = ({
   updateTab,
   withServiceFallback,
   addToast,
+  onCompletionReminder,
 }: WorkspaceSessionActionDeps) => {
   const buildDraftSessionMessages = (tab: Tab) => createDraftSessionPlaceholder({
     locale,
@@ -76,10 +80,18 @@ export const createWorkspaceSessionActions = ({
     mode,
   });
 
+  const controllerForTab = (tabId: string) =>
+    stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
+
   const syncSessionPatch = async (tabId: string, sessionId: string, patch: SessionPatch) => {
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;
-    await withServiceFallback(() => updateSessionRequest(tabId, backendSessionId, patch), null);
+    const controller = controllerForTab(tabId);
+    if (!controller || controller.role !== "controller") return;
+    await withServiceFallback(
+      () => updateSessionRequest(tabId, backendSessionId, patch, controller),
+      null,
+    );
   };
 
   const touchSession = (tabId: string, sessionId: string) => {
@@ -103,7 +115,7 @@ export const createWorkspaceSessionActions = ({
 
     let nextSession: Session | null = null;
     const created = await withServiceFallback<BackendSession | null>(
-      () => createSessionRequest(tabId, currentSession.mode),
+      () => createSessionRequest(tabId, currentSession.mode, currentTab.controller),
       null,
     );
     if (created) {
@@ -225,7 +237,7 @@ export const createWorkspaceSessionActions = ({
 
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId !== null) {
-      void switchSessionRequest(tab.id, backendSessionId).catch(() => {
+      void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
         // The active session already changed locally.
       });
     }
@@ -282,7 +294,7 @@ export const createWorkspaceSessionActions = ({
     if (nextActiveSessionId) {
       const backendSessionId = parseNumericId(nextActiveSessionId);
       if (backendSessionId !== null) {
-        void switchSessionRequest(tab.id, backendSessionId).catch(() => {
+        void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
           // The pane switch already happened locally.
         });
       }
@@ -291,7 +303,7 @@ export const createWorkspaceSessionActions = ({
     if (!isDraftSession(session)) {
       const backendSessionId = parseNumericId(session.id);
       if (backendSessionId !== null) {
-        void archiveSessionRequest(tab.id, backendSessionId).catch(() => {
+        void archiveSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
           // Session has already been archived locally.
         });
       }
@@ -337,7 +349,10 @@ export const createWorkspaceSessionActions = ({
 
     const backendSessionId = parseNumericId(sessionId);
     const archived = backendSessionId !== null
-      ? await withServiceFallback<BackendArchiveEntry | null>(() => archiveSessionRequest(tabId, backendSessionId), null)
+      ? await withServiceFallback<BackendArchiveEntry | null>(
+        () => archiveSessionRequest(tabId, backendSessionId, currentTab.controller),
+        null,
+      )
       : null;
 
     const nextActiveAt = Date.now();
@@ -385,7 +400,7 @@ export const createWorkspaceSessionActions = ({
     if (wasActiveSession && nextActiveSessionId) {
       const nextBackendSessionId = parseNumericId(nextActiveSessionId);
       if (nextBackendSessionId !== null) {
-        void switchSessionRequest(tabId, nextBackendSessionId).catch(() => {
+        void switchSessionRequest(tabId, nextBackendSessionId, currentTab.controller).catch(() => {
           // Active session already updated locally.
         });
       }
@@ -433,6 +448,15 @@ export const createWorkspaceSessionActions = ({
     const updatedTab = stateRef.current.tabs.find((item) => item.id === tabId);
     const updatedSession = updatedTab?.sessions.find((item) => item.id === sessionId);
     if (!updatedTab || !updatedSession) return;
+
+    if (!note && session.status !== "idle") {
+      void onCompletionReminder?.({
+        workspaceId: updatedTab.id,
+        workspaceTitle: updatedTab.title,
+        sessionId,
+        sessionTitle: updatedSession.title,
+      });
+    }
 
     if (updatedTab.activeSessionId !== sessionId && session.status !== "idle") {
       addToast({

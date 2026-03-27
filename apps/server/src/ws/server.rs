@@ -10,6 +10,19 @@ fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
         .unwrap_or(false)
 }
 
+fn workspace_client_from_uri(uri: &axum::http::Uri) -> Option<(String, String)> {
+    let mut device_id = None;
+    let mut client_id = None;
+    for (key, value) in url::form_urlencoded::parse(uri.query()?.as_bytes()) {
+        if key == "device_id" && !value.is_empty() {
+            device_id = Some(value.to_string());
+        } else if key == "client_id" && !value.is_empty() {
+            client_id = Some(value.to_string());
+        }
+    }
+    Some((device_id?, client_id?))
+}
+
 pub(crate) async fn ws_handler(
     ws: WebSocketUpgrade,
     OriginalUri(uri): OriginalUri,
@@ -31,11 +44,19 @@ pub(crate) async fn ws_handler(
             public_mode: true,
         });
     }
-    ws.on_upgrade(move |socket| ws_session(socket, state.app))
+    let workspace_client = workspace_client_from_uri(&uri);
+    ws.on_upgrade(move |socket| ws_session(socket, state.app, workspace_client))
 }
 
-pub(crate) async fn ws_session(mut socket: WebSocket, app: AppHandle) {
+pub(crate) async fn ws_session(
+    mut socket: WebSocket,
+    app: AppHandle,
+    workspace_client: Option<(String, String)>,
+) {
     let state: State<AppState> = app.state();
+    if let Some((device_id, client_id)) = workspace_client.as_ref() {
+        let _ = register_workspace_client_connection(device_id, client_id, state);
+    }
     let mut rx = state.transport_events.subscribe();
 
     loop {
@@ -82,6 +103,10 @@ pub(crate) async fn ws_session(mut socket: WebSocket, app: AppHandle) {
                 }
             }
         }
+    }
+
+    if let Some((device_id, client_id)) = workspace_client {
+        let _ = unregister_workspace_client_connection(&device_id, &client_id, &app, app.state());
     }
 }
 
@@ -157,6 +182,8 @@ pub(crate) fn emit_agent_lifecycle(
     source_event: &str,
     data: &str,
 ) {
+    let state: State<AppState> = app.state();
+    let _ = append_agent_lifecycle_event(state, workspace_id, session_id, kind, source_event, data);
     emit_transport_event(
         app,
         "agent://lifecycle",

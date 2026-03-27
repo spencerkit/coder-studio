@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import type { WorkspaceControllerState } from "../workspace/workspace-controller";
 import { formatSessionTitle, type Locale, type Translator } from "../../i18n";
 import type { Session, Tab } from "../../state/workbench";
 import { resizeAgent } from "../../services/http/agent.service";
@@ -67,6 +68,7 @@ export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
 
 const flushAgentRuntimeSize = (
   refs: AgentRuntimeRefs,
+  controller: WorkspaceControllerState,
   tabId: string,
   sessionId: string,
 ) => {
@@ -83,7 +85,7 @@ const flushAgentRuntimeSize = (
   }
 
   current.inflight = true;
-  void resizeAgent(tabId, sessionId, nextSize.cols, nextSize.rows)
+  void resizeAgent(tabId, controller, sessionId, nextSize.cols, nextSize.rows)
     .then(() => {
       refs.agentRuntimeSizeRef.current.set(key, nextSize);
     })
@@ -95,7 +97,7 @@ const flushAgentRuntimeSize = (
       if (!latest) return;
       latest.inflight = false;
       if (latest.pending) {
-        flushAgentRuntimeSize(refs, tabId, sessionId);
+        flushAgentRuntimeSize(refs, controller, tabId, sessionId);
         return;
       }
       if (!refs.runningAgentKeysRef.current.has(key)) {
@@ -106,6 +108,7 @@ const flushAgentRuntimeSize = (
 
 export const syncAgentRuntimeSize = (
   refs: AgentRuntimeRefs,
+  controller: WorkspaceControllerState,
   tabId: string,
   sessionId: string,
   size: AgentSize,
@@ -117,19 +120,20 @@ export const syncAgentRuntimeSize = (
   if (current.pending?.cols === size.cols && current.pending?.rows === size.rows) return;
   current.pending = size;
   refs.agentResizeStateRef.current.set(key, current);
-  flushAgentRuntimeSize(refs, tabId, sessionId);
+  flushAgentRuntimeSize(refs, controller, tabId, sessionId);
 };
 
 export const syncAgentPaneSize = (
   refs: AgentRuntimeRefs,
   paneId: string,
+  controller: WorkspaceControllerState,
   tabId: string,
   sessionId: string,
 ) => {
   const size = refs.agentPaneSizeRef.current.get(paneId)
     ?? refs.agentTerminalRefs.current.get(paneId)?.size();
   if (!size) return;
-  syncAgentRuntimeSize(refs, tabId, sessionId, size);
+  syncAgentRuntimeSize(refs, controller, tabId, sessionId, size);
 };
 
 export const armAgentStartupGate = (

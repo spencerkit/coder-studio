@@ -11,6 +11,7 @@ type SettingsProps = {
     text: string;
     detailText: string;
   };
+  notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onSettingsChange: (patch: Partial<AppSettings>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["idlePolicy"]>) => void;
@@ -28,37 +29,56 @@ export const Settings = ({
   activeSettingsPanel,
   settingsDraft,
   launchCommandStatus,
+  notificationPermissionText,
   onSettingsPanelChange,
   onSettingsChange,
   onSettingsIdlePolicyChange,
   onSelectLocale,
   t
-}: SettingsProps) => (
-  <main className="settings-route" data-testid="settings-page">
-    <section className="settings-layout">
-      <aside className="settings-sidebar-v2">
-        <nav className="settings-nav-list" aria-label={t("settings")}>
-          {settingsNavItems(t).map((item) => {
-            const isActive = item.id === activeSettingsPanel;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`settings-nav-item ${isActive ? "active" : ""}`}
-                onClick={() => onSettingsPanelChange(item.id)}
-              >
-                <span className="settings-nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+}: SettingsProps) => {
+  const activePanelLabel = activeSettingsPanel === "general" ? t("settingsGeneral") : t("settingsAppearance");
+  const languageLabel = locale === "zh" ? "中文" : "English";
 
-      <section className="settings-content-v2">
-        <div className="settings-scroll-panel">
-          {activeSettingsPanel === "general" ? (
-            <div className="settings-group-card">
+  return (
+    <main className="settings-route" data-testid="settings-page" data-density="compact">
+      <section className="settings-layout">
+        <aside className="settings-sidebar-v2">
+          <nav className="settings-nav-list" aria-label={t("settings")}>
+            {settingsNavItems(t).map((item) => {
+              const isActive = item.id === activeSettingsPanel;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`settings-nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => onSettingsPanelChange(item.id)}
+                >
+                  <span className="settings-nav-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        <section className="settings-content-v2">
+          <div className="settings-scroll-panel">
+            <div className="settings-summary" data-testid="settings-summary">
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("settings")}</span>
+                <strong>{activePanelLabel}</strong>
+              </div>
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("launchCommand")}</span>
+                <strong>{settingsDraft.agentCommand.trim() || t("launchCommandPlaceholder")}</strong>
+              </div>
+              <div className="settings-summary-item">
+                <span className="section-kicker">{t("languageLabel")}</span>
+                <strong>{languageLabel}</strong>
+              </div>
+            </div>
+            {activeSettingsPanel === "general" ? (
+              <div className="settings-group-card">
               <div className="settings-row">
                 <div className="settings-row-copy">
                   <strong>{t("launchCommand")}</strong>
@@ -137,6 +157,59 @@ export const Settings = ({
                     data-testid="settings-max-active"
                   />
                   <span>{t("sessionsWord")}</span>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("completionNotifications")}</strong>
+                  <span>{t("completionNotificationsHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.completionNotifications.enabled}
+                      onChange={() => onSettingsChange({
+                        completionNotifications: {
+                          enabled: !settingsDraft.completionNotifications.enabled
+                        }
+                      })}
+                      data-testid="settings-completion-notifications"
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("notifyOnlyInBackground")}</strong>
+                  <span>{t("notifyOnlyInBackgroundHint")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.completionNotifications.onlyWhenBackground}
+                      onChange={() => onSettingsChange({
+                        completionNotifications: {
+                          onlyWhenBackground: !settingsDraft.completionNotifications.onlyWhenBackground
+                        }
+                      })}
+                      data-testid="settings-notify-only-background"
+                    />
+                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{t("notificationPermission")}</strong>
+                </div>
+                <div className="settings-row-control">
+                  <span data-testid="settings-notification-permission">{notificationPermissionText}</span>
                 </div>
               </div>
 
@@ -224,16 +297,17 @@ export const Settings = ({
               </div>
             </div>
           )}
-        </div>
-
-        <div className="settings-footer-bar">
-          <div className="settings-page-status">
-            {t("settingsAutoSave")}
           </div>
-        </div>
+
+          <div className="settings-footer-bar">
+            <div className="settings-page-status">
+              {t("settingsAutoSave")}
+            </div>
+          </div>
+        </section>
       </section>
-    </section>
-  </main>
-);
+    </main>
+  );
+};
 
 export default Settings;

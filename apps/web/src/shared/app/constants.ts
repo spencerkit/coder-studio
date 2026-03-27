@@ -16,8 +16,10 @@ export const AGENT_START_SYSTEM_MESSAGE = "Agent started / 智能体已启动";
 export const AGENT_STARTUP_DISCOVERY_MS = 1200;
 export const AGENT_STARTUP_QUIET_MS = 240;
 export const AGENT_STARTUP_MAX_WAIT_MS = 5000;
-export const AGENT_STREAM_BUFFER_LIMIT = 1_000_000;
-export const TERMINAL_STREAM_BUFFER_LIMIT = 1_000_000;
+export const AGENT_STREAM_BUFFER_LIMIT = 200_000;
+export const TERMINAL_STREAM_BUFFER_LIMIT = 200_000;
+export const SESSION_MESSAGE_LIMIT = 200;
+export const WS_STREAM_FLUSH_INTERVAL_MS = 48;
 export const AGENT_TITLE_TRACK_LIMIT = 240;
 
 export const BUILTIN_SLASH_COMMANDS: Array<{ command: string; description: { en: string; zh: string } }> = [

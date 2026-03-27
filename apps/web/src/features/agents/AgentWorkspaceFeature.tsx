@@ -1,14 +1,30 @@
 import type { PointerEventHandler, ReactNode } from "react";
-import type { Translator } from "../../i18n";
+import type { Locale, Translator } from "../../i18n";
 import type { AppTheme, TerminalCompatibilityMode } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
 import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
-import { isHiddenDraftPlaceholder, sessionCompletionRatio, sessionTone } from "../../shared/utils/session";
+import { isHiddenDraftPlaceholder, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
+
+const PANE_PREVIEW_LINE_LIMIT = 16;
+const PANE_PREVIEW_CHAR_LIMIT = 1_200;
+
+const buildPanePreview = (stream: string) => {
+  const normalized = stripAnsi(stream).replaceAll("\r", "");
+  if (!normalized.trim()) {
+    return "";
+  }
+  const tail = normalized.split("\n").slice(-PANE_PREVIEW_LINE_LIMIT).join("\n").trimStart();
+  if (tail.length <= PANE_PREVIEW_CHAR_LIMIT) {
+    return tail;
+  }
+  return tail.slice(-PANE_PREVIEW_CHAR_LIMIT).trimStart();
+};
 
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
+  locale: Locale;
   activeTab: Tab;
   activePaneSession: Session;
   viewedSession: Session;
@@ -36,6 +52,7 @@ type AgentWorkspaceFeatureProps = {
 
 export const AgentWorkspaceFeature = ({
   visible,
+  locale,
   activeTab,
   activePaneSession,
   viewedSession,
@@ -63,6 +80,7 @@ export const AgentWorkspaceFeature = ({
   if (!visible) return null;
 
   const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
+  const viewedHeaderTag = sessionHeaderTag(viewedSession.status, locale);
 
   const renderAgentPane = (node: SessionPaneNode): ReactNode => {
     if (node.type === "split") {
@@ -90,49 +108,59 @@ export const AgentWorkspaceFeature = ({
         ? "queued"
         : "idle";
     const statusTone = sessionTone(session.status);
+    const headerTag = sessionHeaderTag(session.status, locale);
     const showDraftPromptInput = isHiddenDraftPlaceholder(session);
+    const showLiveTerminal = isPaneActive;
+    const preview = showLiveTerminal ? "" : buildPanePreview(session.stream);
 
     return (
       <section
         key={node.id}
         className={`agent-pane-card ${isPaneActive ? "active" : ""}`}
+        data-session-id={session.id}
+        data-session-status={session.status}
         onMouseDown={() => onSetActivePane(node.id, session.id)}
       >
         <div className={`surface-progress ${tone}`} aria-hidden="true">
           <span className="surface-progress-bar" style={{ width: `${progress}%` }} />
         </div>
-        <div className="agent-pane-header">
+        <div className="agent-pane-header" data-density="compact" data-active={isPaneActive ? "true" : "false"}>
           <div className="agent-pane-header-copy">
             <span className={`session-top-dot ${statusTone} ${statusTone === "active" ? "pulse" : ""}`} />
             <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
           </div>
-          <div className="agent-pane-actions">
-            <button
-              type="button"
-              className="pane-action split"
-              onClick={() => onSplitPane(node.id, "vertical")}
-              title={t("splitVertical")}
-              aria-label={t("splitVertical")}
-            >
-              <AgentSplitHorizontalIcon />
-            </button>
-            <button
-              type="button"
-              className="pane-action split"
-              onClick={() => onSplitPane(node.id, "horizontal")}
-              title={t("splitHorizontal")}
-              aria-label={t("splitHorizontal")}
-            >
-              <AgentSplitVerticalIcon />
-            </button>
-            <button
-              type="button"
-              className="pane-action close"
-              onClick={() => onCloseAgentPane(node.id, session.id)}
-              title={t("close")}
-            >
-              <HeaderCloseIcon />
-            </button>
+          <div className="agent-pane-meta">
+            <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
+              {headerTag.label}
+            </span>
+            <div className="agent-pane-actions">
+              <button
+                type="button"
+                className="pane-action split"
+                onClick={() => onSplitPane(node.id, "vertical")}
+                title={t("splitVertical")}
+                aria-label={t("splitVertical")}
+              >
+                <AgentSplitHorizontalIcon />
+              </button>
+              <button
+                type="button"
+                className="pane-action split"
+                onClick={() => onSplitPane(node.id, "horizontal")}
+                title={t("splitHorizontal")}
+                aria-label={t("splitHorizontal")}
+              >
+                <AgentSplitVerticalIcon />
+              </button>
+              <button
+                type="button"
+                className="pane-action close"
+                onClick={() => onCloseAgentPane(node.id, session.id)}
+                title={t("close")}
+              >
+                <HeaderCloseIcon />
+              </button>
+            </div>
           </div>
         </div>
         <div className="agent-pane-body" data-testid={`agent-pane-${node.id}`}>
@@ -180,21 +208,31 @@ export const AgentWorkspaceFeature = ({
               </div>
             </div>
           ) : (
-            <AgentStreamTerminal
-              ref={(handle) => setAgentTerminalRef(node.id, handle)}
-              streamId={session.id}
-              stream={session.stream}
-              toneKey={isPaneActive ? "active" : "inactive"}
-              theme={theme}
-              fontSize={terminalFontSize}
-              compatibilityMode={terminalCompatibilityMode}
-              mode="interactive"
-              autoFocus={isPaneActive}
-              onData={(data) => {
-                onAgentTerminalData(node.id, data);
-              }}
-              onSize={(size) => onAgentTerminalSize(node.id, activeTab.id, session.id, size)}
-            />
+            showLiveTerminal ? (
+              <AgentStreamTerminal
+                ref={(handle) => setAgentTerminalRef(node.id, handle)}
+                streamId={session.id}
+                stream={session.stream}
+                toneKey={isPaneActive ? "active" : "inactive"}
+                theme={theme}
+                fontSize={terminalFontSize}
+                compatibilityMode={terminalCompatibilityMode}
+                mode="interactive"
+                autoFocus={isPaneActive}
+                onData={(data) => {
+                  onAgentTerminalData(node.id, data);
+                }}
+                onSize={(size) => onAgentTerminalSize(node.id, activeTab.id, session.id, size)}
+              />
+            ) : (
+              <div className={`agent-pane-preview ${preview ? "" : "empty"}`}>
+                {preview ? (
+                  <pre>{preview}</pre>
+                ) : (
+                  <div className="terminal-empty">{t("noAgentOutputYet")}</div>
+                )}
+              </div>
+            )
           )}
         </div>
       </section>
@@ -219,11 +257,20 @@ export const AgentWorkspaceFeature = ({
           )}
           <div className="agent-pane-workspace">
             {isArchiveView ? (
-              <section className="agent-pane-card archive-only">
-                <div className="agent-pane-header">
+              <section
+                className="agent-pane-card archive-only"
+                data-session-id={viewedSession.id}
+                data-session-status={viewedSession.status}
+              >
+                <div className="agent-pane-header" data-density="compact" data-active="true">
                   <div className="agent-pane-header-copy">
                     <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />
                     <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
+                  </div>
+                  <div className="agent-pane-meta">
+                    <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
+                      {viewedHeaderTag.label}
+                    </span>
                   </div>
                 </div>
                 <div className="agent-pane-body">

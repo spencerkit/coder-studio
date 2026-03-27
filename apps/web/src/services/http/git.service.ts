@@ -1,3 +1,5 @@
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
 import type { ExecTarget } from "../../state/workbench";
 import type { GitChangeEntry, GitFileDiffPayload } from "../../types/app";
 import { invokeRpc } from "./client";
@@ -14,23 +16,77 @@ export const getGitDiffFile = (path: string, target: ExecTarget, filePath: strin
 export const getGitFileDiffPayload = (path: string, target: ExecTarget, filePath: string, section: string) =>
   invokeRpc<GitFileDiffPayload>("git_file_diff_payload", { path, target, filePath, section });
 
-export const stageGitFile = (path: string, target: ExecTarget, filePath: string) =>
-  invokeRpc<void>("git_stage_file", { path, target, filePath });
+export const stageGitFile = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+  filePath: string,
+) => invokeRpc<void>(
+  "git_stage_file",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target, filePath }),
+);
 
-export const unstageGitFile = (path: string, target: ExecTarget, filePath: string) =>
-  invokeRpc<void>("git_unstage_file", { path, target, filePath });
+export const unstageGitFile = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+  filePath: string,
+) => invokeRpc<void>(
+  "git_unstage_file",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target, filePath }),
+);
 
-export const discardGitFile = (path: string, target: ExecTarget, filePath: string, section: string) =>
-  invokeRpc<void>("git_discard_file", { path, target, filePath, section });
+export const discardGitFile = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+  filePath: string,
+  section: string,
+) => invokeRpc<void>(
+  "git_discard_file",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target, filePath, section }),
+);
 
-export const stageAllGitChanges = (path: string, target: ExecTarget) =>
-  invokeRpc<void>("git_stage_all", { path, target });
+export const stageAllGitChanges = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+) => invokeRpc<void>(
+  "git_stage_all",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target }),
+);
 
-export const unstageAllGitChanges = (path: string, target: ExecTarget) =>
-  invokeRpc<void>("git_unstage_all", { path, target });
+export const unstageAllGitChanges = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+) => invokeRpc<void>(
+  "git_unstage_all",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target }),
+);
 
-export const discardAllGitChanges = (path: string, target: ExecTarget) =>
-  invokeRpc<void>("git_discard_all", { path, target });
+export const discardAllGitChanges = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+) => invokeRpc<void>(
+  "git_discard_all",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target }),
+);
 
-export const commitGitChanges = (path: string, target: ExecTarget, message: string) =>
-  invokeRpc<string>("git_commit", { path, target, message });
+export const commitGitChanges = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  path: string,
+  target: ExecTarget,
+  message: string,
+) => invokeRpc<string>(
+  "git_commit",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { path, target, message }),
+);

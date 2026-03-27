@@ -38,11 +38,19 @@ export const CommandPalette = ({
   >
     <div
       className="command-palette"
+      data-testid="command-palette-shell"
+      data-density="compact"
       role="dialog"
       aria-modal="true"
       aria-label={locale === "zh" ? "快速操作面板" : "Quick actions palette"}
       onMouseDown={(event) => event.stopPropagation()}
     >
+      <div className="command-palette-header">
+        <span className="section-kicker">{locale === "zh" ? "命令面板" : "Command Palette"}</span>
+        <span className="command-palette-meta">
+          {locale === "zh" ? `${actions.length} 项` : `${actions.length} items`}
+        </span>
+      </div>
       <div className="command-palette-search-row">
         <SearchIcon />
         <input

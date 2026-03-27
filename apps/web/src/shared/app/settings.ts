@@ -1,6 +1,10 @@
 import type { AppSettings } from "../../types/app";
 
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
+const readBoolean = (value: unknown, fallback: boolean) => (
+  typeof value === "boolean" ? value : fallback
+);
+
 export const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
   agentCommand: "claude",
@@ -10,6 +14,10 @@ export const defaultAppSettings = (): AppSettings => ({
     maxActive: 3,
     pressure: true
   },
+  completionNotifications: {
+    enabled: true,
+    onlyWhenBackground: true
+  },
   terminalCompatibilityMode: "standard"
 });
 
@@ -17,6 +25,7 @@ export const cloneAppSettings = (settings: AppSettings): AppSettings => ({
   agentProvider: settings.agentProvider,
   agentCommand: settings.agentCommand,
   idlePolicy: { ...settings.idlePolicy },
+  completionNotifications: { ...settings.completionNotifications },
   terminalCompatibilityMode: settings.terminalCompatibilityMode
 });
 
@@ -35,6 +44,10 @@ export const readStoredAppSettings = (): AppSettings => {
         idleMinutes: Number.isFinite(parsed.idlePolicy?.idleMinutes) ? Math.max(1, Number(parsed.idlePolicy?.idleMinutes)) : fallback.idlePolicy.idleMinutes,
         maxActive: Number.isFinite(parsed.idlePolicy?.maxActive) ? Math.max(1, Number(parsed.idlePolicy?.maxActive)) : fallback.idlePolicy.maxActive,
         pressure: parsed.idlePolicy?.pressure ?? fallback.idlePolicy.pressure
+      },
+      completionNotifications: {
+        enabled: readBoolean(parsed.completionNotifications?.enabled, fallback.completionNotifications.enabled),
+        onlyWhenBackground: readBoolean(parsed.completionNotifications?.onlyWhenBackground, fallback.completionNotifications.onlyWhenBackground)
       },
       terminalCompatibilityMode: parsed.terminalCompatibilityMode === "compatibility"
         ? "compatibility"

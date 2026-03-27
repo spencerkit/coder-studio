@@ -2,6 +2,7 @@ import type { MutableRefObject } from "react";
 import { formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import type { TerminalGridSize } from "../../shared/utils/terminal";
 import type { Tab } from "../../state/workbench";
+import type { WorkspaceControllerState } from "./workspace-controller";
 import {
   closeTerminal as closeTerminalRequest,
   createTerminal as createTerminalRequest,
@@ -18,6 +19,7 @@ type TerminalSizeRef = MutableRefObject<{ id?: string; cols: number; rows: numbe
 export const syncWorkspaceTerminalSize = (
   terminalSizeRef: TerminalSizeRef,
   tabId: string,
+  controller: WorkspaceControllerState,
   terminalId: string | undefined,
   cols: number,
   rows: number,
@@ -29,20 +31,21 @@ export const syncWorkspaceTerminalSize = (
   const last = terminalSizeRef.current;
   if (last.id === terminalId && last.cols === cols && last.rows === rows) return;
   terminalSizeRef.current = { id: terminalId, cols, rows };
-  void resizeTerminalRequest(tabId, numericId, cols, rows).catch(() => {
+  void resizeTerminalRequest(tabId, controller, numericId, cols, rows).catch(() => {
     // Keep UI state stable even if backend resize lags or fails.
   });
 };
 
 export const writeWorkspaceTerminalData = (
   tabId: string,
+  controller: WorkspaceControllerState,
   terminalId: string | undefined,
   data: string,
 ) => {
   if (!terminalId) return;
   const numericId = Number(terminalId.replace("term-", ""));
   if (!Number.isFinite(numericId)) return;
-  void writeTerminalRequest(tabId, numericId, data).catch(() => {
+  void writeTerminalRequest(tabId, controller, numericId, data).catch(() => {
     // Keep the terminal interactive even if a single write fails.
   });
 };
@@ -77,7 +80,7 @@ export const addWorkspaceTerminal = async ({
   }
 
   const info = await withServiceFallback<{ id: number; output: string }>(
-    () => createTerminalRequest(tab.id, activeProject.path, activeProject.target, initialSize),
+    () => createTerminalRequest(tab.id, tab.controller, activeProject.path, activeProject.target, initialSize),
     { id: Date.now(), output: "" },
   );
 
@@ -86,6 +89,7 @@ export const addWorkspaceTerminal = async ({
       id: `term-${info.id}`,
       title: formatTerminalTitle(currentTab.terminals.length + 1, locale),
       output: info.output ?? "",
+      recoverable: true,
     };
     return {
       ...currentTab,
@@ -112,7 +116,7 @@ export const closeWorkspaceTerminal = async (
 ) => {
   const numericId = Number(terminalId.replace("term-", ""));
   if (Number.isFinite(numericId)) {
-    await withServiceFallback(() => closeTerminalRequest(tab.id, numericId), null);
+    await withServiceFallback(() => closeTerminalRequest(tab.id, tab.controller, numericId), null);
   }
 
   updateTab(tab.id, (currentTab) => {

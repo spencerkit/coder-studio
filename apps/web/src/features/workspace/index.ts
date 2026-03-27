@@ -47,12 +47,28 @@ export {
 export { startWorkspaceLaunch } from "./workspace-launch-actions";
 export { createWorkspaceSessionActions } from "./session-actions";
 export {
+  getBrowserNotificationPermissionState,
+  isCompletionReminderBackgroundCase,
+  notifyCompletionReminder,
+  playCompletionReminderSound,
+} from "./completion-reminders";
+export {
   addWorkspaceTerminal,
   closeWorkspaceTerminal,
   selectWorkspaceTerminal,
   syncWorkspaceTerminalSize,
   writeWorkspaceTerminalData,
 } from "./terminal-actions";
+export {
+  canMutateWorkspace,
+  createWorkspaceControllerState,
+  createWorkspaceControllerStateFromLease,
+  getOrCreateClientId,
+  getOrCreateDeviceId,
+  type WorkspaceControllerRole,
+  type WorkspaceControllerState,
+  type WorkspaceMutationAction,
+} from "./workspace-controller";
 export { buildWorkspaceTabItems } from "./workspace-tabs";
 export type {
   FileSearchDropdownStyle,

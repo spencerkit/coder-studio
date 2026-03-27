@@ -79,6 +79,11 @@ pub(crate) fn agent_start(
         cmd.arg(arg);
     }
 
+    #[cfg(target_os = "windows")]
+    if matches!(target, ExecTarget::Native) && !cwd.is_empty() {
+        cmd.cwd(&cwd);
+    }
+
     #[cfg(not(target_os = "windows"))]
     if matches!(target, ExecTarget::Native) {
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());

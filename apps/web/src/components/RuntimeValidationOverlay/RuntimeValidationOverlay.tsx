@@ -61,7 +61,7 @@ export const RuntimeValidationOverlay = ({
   const retryDisabled = validation.status !== "failed";
 
   return (
-    <div className="overlay" data-testid="runtime-validation-overlay">
+    <div className="overlay" data-testid="runtime-validation-overlay" data-density="compact">
       <div className="modal onboarding-modal">
         <div className="onboarding-form runtime-check-shell">
           <div className="onboarding-header">

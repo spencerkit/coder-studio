@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecTarget {
     Native,
@@ -171,6 +171,7 @@ pub struct WorktreeDetail {
 pub struct TerminalInfo {
     pub id: u64,
     pub output: String,
+    pub recoverable: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -185,6 +186,16 @@ pub struct AgentEvent {
 pub struct AgentLifecycleEvent {
     pub workspace_id: String,
     pub session_id: String,
+    pub kind: String,
+    pub source_event: String,
+    pub data: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AgentLifecycleHistoryEntry {
+    pub workspace_id: String,
+    pub session_id: String,
+    pub seq: i64,
     pub kind: String,
     pub source_event: String,
     pub data: String,
@@ -272,8 +283,37 @@ pub struct WorkspaceSummary {
 pub struct WorkspaceViewState {
     pub active_session_id: String,
     pub active_pane_id: String,
+    #[serde(default)]
+    pub active_terminal_id: String,
     pub pane_layout: Value,
     pub file_preview: Value,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct WorkspaceControllerLease {
+    pub workspace_id: String,
+    pub controller_device_id: Option<String>,
+    pub controller_client_id: Option<String>,
+    pub lease_expires_at: i64,
+    pub fencing_token: i64,
+    pub takeover_request_id: Option<String>,
+    pub takeover_requested_by_device_id: Option<String>,
+    pub takeover_requested_by_client_id: Option<String>,
+    pub takeover_deadline_at: Option<i64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceRuntimeSnapshot {
+    pub snapshot: WorkspaceSnapshot,
+    pub controller: WorkspaceControllerLease,
+    #[serde(default)]
+    pub lifecycle_events: Vec<AgentLifecycleHistoryEntry>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceRuntimeStateEvent {
+    pub workspace_id: String,
+    pub view_state: WorkspaceViewState,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -324,6 +364,7 @@ pub struct SessionPatch {
 pub struct WorkspaceViewPatch {
     pub active_session_id: Option<String>,
     pub active_pane_id: Option<String>,
+    pub active_terminal_id: Option<String>,
     pub pane_layout: Option<Value>,
     pub file_preview: Option<Value>,
 }
