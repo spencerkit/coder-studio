@@ -1922,7 +1922,7 @@ mod tests {
         .unwrap();
         let scoped_a: WorkbenchBootstrap = serde_json::from_value(bootstrap_a).unwrap();
         assert_eq!(scoped_a.ui_state.layout.left_width, 444.0);
-        assert_eq!(scoped_a.ui_state.layout.show_code_panel, true);
+        assert!(scoped_a.ui_state.layout.show_code_panel);
 
         let bootstrap_b = dispatch_rpc(
             &app,
@@ -1936,6 +1936,6 @@ mod tests {
         .unwrap();
         let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
         assert_eq!(scoped_b.ui_state.layout.left_width, 320.0);
-        assert_eq!(scoped_b.ui_state.layout.show_code_panel, false);
+        assert!(!scoped_b.ui_state.layout.show_code_panel);
     }
 }
