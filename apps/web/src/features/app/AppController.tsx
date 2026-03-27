@@ -15,15 +15,17 @@ import {
   defaultAppSettings,
 } from "../../shared/app/claude-settings.ts";
 import {
+  createSequencedAppSettingsSaver,
   hydrateConfirmedAppSettings,
-  persistConfirmedAppSettings,
 } from "../../services/http/settings.service.ts";
 
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
   const [appSettings, setAppSettings] = useState<AppSettings>(() => defaultAppSettings());
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [lastWorkspacePath, setLastWorkspacePath] = useState("/workspace");
   const appSettingsRef = useRef(appSettings);
+  const saveCoordinatorRef = useRef(createSequencedAppSettingsSaver());
   const navigate = useNavigate();
   const location = useLocation();
   const route: AppRoute = location.pathname === "/settings" ? "settings" : "workspace";
@@ -59,6 +61,7 @@ export default function AppController() {
       setAppSettings(hydrated.settings);
       setLocale(hydrated.settings.general.locale);
       persistLocale(hydrated.settings.general.locale);
+      setSettingsHydrated(true);
     };
 
     void hydrateAppSettings();
@@ -77,24 +80,38 @@ export default function AppController() {
     navigate(nextRoute === "settings" ? "/settings" : lastWorkspacePath);
   };
 
+  const applyConfirmedSettings = (saved: AppSettings) => {
+    setAppSettings(saved);
+    setLocale(saved.general.locale);
+    persistLocale(saved.general.locale);
+  };
+
   const onSelectLocale = (nextLocale: Locale) => {
     const nextSettings = cloneAppSettings(appSettingsRef.current);
     nextSettings.general.locale = nextLocale;
-    void persistConfirmedAppSettings(appSettingsRef.current, nextSettings)
-      .then((saved) => {
-        setAppSettings(saved);
-        setLocale(saved.general.locale);
-        persistLocale(saved.general.locale);
+    void saveCoordinatorRef.current.save(
+      appSettingsRef.current,
+      nextSettings,
+    )
+      .then((result) => {
+        if (!result.shouldApply) {
+          return;
+        }
+        applyConfirmedSettings(result.settings);
       });
   };
 
   const onCommitSettings = (nextSettings: AppSettings) => {
     const normalized = cloneAppSettings(nextSettings);
-    void persistConfirmedAppSettings(appSettingsRef.current, normalized)
-      .then((saved) => {
-        setAppSettings(saved);
-        setLocale(saved.general.locale);
-        persistLocale(saved.general.locale);
+    void saveCoordinatorRef.current.save(
+      appSettingsRef.current,
+      normalized,
+    )
+      .then((result) => {
+        if (!result.shouldApply) {
+          return;
+        }
+        applyConfirmedSettings(result.settings);
       });
   };
 
@@ -103,6 +120,7 @@ export default function AppController() {
       <WorkbenchRuntimeCoordinator
         locale={locale}
         appSettings={appSettings}
+        settingsHydrated={settingsHydrated}
       />
       <Routes>
         <Route path="/" element={<Navigate to="/workspace" replace />} />

@@ -28,6 +28,9 @@ import {
   applyWorkspaceControllerEvent,
   applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
+import {
+  getIdlePolicySyncWorkspaceIds,
+} from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
@@ -63,24 +66,16 @@ const HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS = 5_000;
 const TAKEOVER_POLL_INTERVAL_MS = 2_000;
 const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
 
-const matchesIdlePolicy = (
-  left: Tab["idlePolicy"],
-  right: AppSettings["idlePolicy"],
-) => (
-  left.enabled === right.enabled
-  && left.idleMinutes === right.idleMinutes
-  && left.maxActive === right.maxActive
-  && left.pressure === right.pressure
-);
-
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
   locale: Locale;
+  settingsHydrated: boolean;
 };
 
 export const WorkbenchRuntimeCoordinator = ({
   appSettings,
   locale,
+  settingsHydrated,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
   const [state, setState] = useRelaxState(workbenchState);
@@ -631,9 +626,11 @@ export const WorkbenchRuntimeCoordinator = ({
   ].join(":")).join("|"), [state.tabs]);
 
   useEffect(() => {
-    const idlePolicyWorkspaceIds = stateRef.current.tabs
-      .filter((tab) => !matchesIdlePolicy(tab.idlePolicy, appSettings.idlePolicy))
-      .map((tab) => tab.id);
+    const idlePolicyWorkspaceIds = getIdlePolicySyncWorkspaceIds(
+      stateRef.current.tabs,
+      appSettings.idlePolicy,
+      settingsHydrated,
+    );
 
     if (idlePolicyWorkspaceIds.length === 0) {
       return;
@@ -660,7 +657,7 @@ export const WorkbenchRuntimeCoordinator = ({
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });
-  }, [appSettings.idlePolicy, idlePolicyFingerprint, updateState]);
+  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsHydrated, updateState]);
 
   return null;
 };

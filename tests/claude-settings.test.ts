@@ -4,6 +4,7 @@ import {
   applyGeneralSettingsPatch,
   cloneAppSettings,
   defaultAppSettings,
+  getIdlePolicySyncWorkspaceIds,
   mergeLegacySettingsIntoAppSettings,
   resolveClaudeRuntimeProfile,
 } from '../apps/web/src/shared/app/claude-settings.ts';
@@ -16,6 +17,20 @@ test('mergeLegacySettingsIntoAppSettings migrates launch command into claude glo
 
   assert.equal(merged.claude.global.executable, 'claude-nightly');
   assert.deepEqual(merged.claude.global.startupArgs, ['--verbose']);
+});
+
+test('mergeLegacySettingsIntoAppSettings preserves quoted executable paths and args', () => {
+  const merged = mergeLegacySettingsIntoAppSettings(defaultAppSettings(), {
+    agentCommand: '"C:\\Program Files\\Claude\\claude.exe" --model "claude 3.7 sonnet" --append \'nightly build\'',
+  });
+
+  assert.equal(merged.claude.global.executable, 'C:\\Program Files\\Claude\\claude.exe');
+  assert.deepEqual(merged.claude.global.startupArgs, [
+    '--model',
+    'claude 3.7 sonnet',
+    '--append',
+    'nightly build',
+  ]);
 });
 
 test('resolveClaudeRuntimeProfile only uses target override when enabled', () => {
@@ -85,4 +100,20 @@ test('resolveClaudeRuntimeProfile inherits global startup args for enabled targe
 
   assert.equal(resolved.executable, 'claude-native');
   assert.deepEqual(resolved.startupArgs, ['--verbose']);
+});
+
+test('getIdlePolicySyncWorkspaceIds waits for confirmed settings hydration', () => {
+  const settings = defaultAppSettings();
+  settings.general.idlePolicy.idleMinutes = 25;
+  settings.idlePolicy.idleMinutes = 25;
+
+  const tabs = [
+    {
+      id: 'ws-1',
+      idlePolicy: defaultAppSettings().idlePolicy,
+    },
+  ];
+
+  assert.deepEqual(getIdlePolicySyncWorkspaceIds(tabs, settings.idlePolicy, false), []);
+  assert.deepEqual(getIdlePolicySyncWorkspaceIds(tabs, settings.idlePolicy, true), ['ws-1']);
 });

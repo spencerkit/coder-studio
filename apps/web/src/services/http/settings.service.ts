@@ -89,3 +89,85 @@ export const persistConfirmedAppSettings = async (
     return cloneAppSettings(confirmedSettings);
   }
 };
+
+type SequencedSaveState = {
+  settings: AppSettings;
+  success: boolean;
+};
+
+const findLatestVisibleSave = (
+  latestRequestId: number,
+  pendingRequestIds: ReadonlySet<number>,
+  settledRequests: ReadonlyMap<number, SequencedSaveState>,
+): { requestId: number; settings: AppSettings } | null => {
+  for (let requestId = latestRequestId; requestId >= 1; requestId -= 1) {
+    if (pendingRequestIds.has(requestId)) {
+      return null;
+    }
+
+    const settled = settledRequests.get(requestId);
+    if (!settled) {
+      continue;
+    }
+    if (settled.success) {
+      return {
+        requestId,
+        settings: cloneAppSettings(settled.settings),
+      };
+    }
+  }
+
+  return null;
+};
+
+export const createSequencedAppSettingsSaver = () => {
+  let latestRequestId = 0;
+  let lastAppliedRequestId = 0;
+  const pendingRequestIds = new Set<number>();
+  const settledRequests = new Map<number, SequencedSaveState>();
+
+  return {
+    save: async (
+      confirmedSettings: AppSettings,
+      draftSettings: AppSettings,
+      persist: (settings: AppSettings) => Promise<AppSettings> = updateAppSettings,
+    ): Promise<{
+      settings: AppSettings;
+      shouldApply: boolean;
+    }> => {
+      latestRequestId += 1;
+      const requestId = latestRequestId;
+      pendingRequestIds.add(requestId);
+
+      try {
+        settledRequests.set(requestId, {
+          settings: cloneAppSettings(await persist(cloneAppSettings(draftSettings))),
+          success: true,
+        });
+      } catch {
+        settledRequests.set(requestId, {
+          settings: cloneAppSettings(confirmedSettings),
+          success: false,
+        });
+      } finally {
+        pendingRequestIds.delete(requestId);
+      }
+
+      const visibleSave = findLatestVisibleSave(latestRequestId, pendingRequestIds, settledRequests);
+      if (!visibleSave || visibleSave.requestId === lastAppliedRequestId) {
+        return {
+          settings: visibleSave
+            ? cloneAppSettings(visibleSave.settings)
+            : cloneAppSettings(confirmedSettings),
+          shouldApply: false,
+        };
+      }
+
+      lastAppliedRequestId = visibleSave.requestId;
+      return {
+        settings: cloneAppSettings(visibleSave.settings),
+        shouldApply: true,
+      };
+    },
+  };
+};

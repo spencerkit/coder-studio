@@ -234,8 +234,71 @@ const normalizeClaudeTargetOverride = (
   };
 };
 
+const tokenizeLegacyCommand = (command: string): string[] => {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+
+    if (quote === null) {
+      if (/\s/.test(char)) {
+        if (current) {
+          tokens.push(current);
+          current = "";
+        }
+        continue;
+      }
+      if (char === "'" || char === "\"") {
+        quote = char;
+        continue;
+      }
+      if (char === "\\") {
+        const next = command[index + 1];
+        if (next) {
+          current += next;
+          index += 1;
+          continue;
+        }
+      }
+      current += char;
+      continue;
+    }
+
+    if (quote === "'") {
+      if (char === "'") {
+        quote = null;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (char === "\"") {
+      quote = null;
+      continue;
+    }
+    if (char === "\\") {
+      const next = command[index + 1];
+      if (next === "\"" || next === "\\" || next === "$" || next === "`") {
+        current += next;
+        index += 1;
+        continue;
+      }
+    }
+    current += char;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens;
+};
+
 const splitLegacyCommand = (command: string): { executable: string; startupArgs: string[] } => {
-  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  const tokens = tokenizeLegacyCommand(command.trim());
   const [executable = "claude", ...startupArgs] = tokens;
   return {
     executable,
@@ -418,6 +481,25 @@ export const resolveClaudeRuntimeProfile = (
   }
 
   return mergeClaudeRuntimeProfiles(settings.claude.global, override.profile);
+};
+
+export const getIdlePolicySyncWorkspaceIds = (
+  tabs: ReadonlyArray<{ id: string; idlePolicy: AppSettings["idlePolicy"] }>,
+  idlePolicy: AppSettings["idlePolicy"],
+  settingsHydrated: boolean,
+): string[] => {
+  if (!settingsHydrated) {
+    return [];
+  }
+
+  return tabs
+    .filter((tab) => (
+      tab.idlePolicy.enabled !== idlePolicy.enabled
+      || tab.idlePolicy.idleMinutes !== idlePolicy.idleMinutes
+      || tab.idlePolicy.maxActive !== idlePolicy.maxActive
+      || tab.idlePolicy.pressure !== idlePolicy.pressure
+    ))
+    .map((tab) => tab.id);
 };
 
 export const appSettingsPayloadEquals = (
