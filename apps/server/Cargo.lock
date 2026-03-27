@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "coder-studio"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "axum",
