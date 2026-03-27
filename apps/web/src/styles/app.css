@@ -6084,6 +6084,28 @@ pre.diff,
   background: var(--agent-pane-bg) !important;
 }
 
+.agent-pane-preview {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 14px;
+  color: color-mix(in srgb, var(--terminal-fg) 78%, var(--text-secondary) 22%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-pane-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-pane-preview.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .surface-progress {
   height: 2px;
   background: transparent;

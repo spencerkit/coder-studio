@@ -225,4 +225,8 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
   const session = next.tabs[0]?.sessions[0];
   assert.equal(session?.status, "running");
   assert.equal(session?.claudeSessionId, "claude-replay");
+  assert.equal(next.tabs[0]?.paneLayout.type, "leaf");
+  if (next.tabs[0]?.paneLayout.type === "leaf") {
+    assert.equal(next.tabs[0].paneLayout.sessionId, "1");
+  }
 });

@@ -153,6 +153,42 @@ const mapTerminals = (
   return { terminals: nextTerminals, activeTerminalId: nextActiveTerminalId };
 };
 
+const normalizePaneLayout = (
+  value: unknown,
+  fallbackSessionId: string,
+): Tab["paneLayout"] => {
+  const candidate = value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
+  if (!candidate) {
+    return createPaneLeaf(fallbackSessionId);
+  }
+
+  if (candidate.type === "leaf") {
+    const sessionId = typeof candidate.sessionId === "string"
+      ? candidate.sessionId
+      : (typeof candidate.session_id === "string" ? candidate.session_id : fallbackSessionId);
+    return {
+      type: "leaf",
+      id: typeof candidate.id === "string" ? candidate.id : `pane-${sessionId}`,
+      sessionId,
+    };
+  }
+
+  if (candidate.type === "split") {
+    return {
+      type: "split",
+      id: typeof candidate.id === "string" ? candidate.id : "split",
+      axis: candidate.axis === "horizontal" ? "horizontal" : "vertical",
+      ratio: typeof candidate.ratio === "number" ? candidate.ratio : 0.5,
+      first: normalizePaneLayout(candidate.first, fallbackSessionId),
+      second: normalizePaneLayout(candidate.second, fallbackSessionId),
+    };
+  }
+
+  return createPaneLeaf(fallbackSessionId);
+};
+
 export const workbenchLayoutFromBackend = (layout: WorkbenchLayout): LayoutState => ({
   leftWidth: layout.left_width,
   rightWidth: layout.right_width,
@@ -235,7 +271,7 @@ export const createTabFromWorkspaceSnapshot = (
     fileTree: existing?.fileTree ?? [],
     changesTree: existing?.changesTree ?? [],
     filePreview: normalizeFilePreview(snapshot.view_state.file_preview, existing?.filePreview),
-    paneLayout: (snapshot.view_state.pane_layout as Tab["paneLayout"]) ?? createPaneLeaf(nextActiveSessionId),
+    paneLayout: normalizePaneLayout(snapshot.view_state.pane_layout, nextActiveSessionId),
     activePaneId: snapshot.view_state.active_pane_id || existing?.activePaneId || "",
     idlePolicy: {
       enabled: snapshot.workspace.idle_policy.enabled,
@@ -402,7 +438,7 @@ export const applyWorkspaceRuntimeStateEvent = (
       activeSessionId: nextActiveSessionId,
       activePaneId: payload.view_state.active_pane_id || tab.activePaneId,
       activeTerminalId: nextActiveTerminalId,
-      paneLayout: (payload.view_state.pane_layout as Tab["paneLayout"]) ?? tab.paneLayout,
+      paneLayout: normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId),
       filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
       viewingArchiveId: undefined,
     };

@@ -95,6 +95,7 @@ import {
   resolveAgentRecoveryAction,
   resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
+import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
@@ -134,7 +135,6 @@ import {
 import { checkCommandAvailability } from "../../services/http/system.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
-  attachWorkspaceRuntime,
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
@@ -609,9 +609,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           null,
         );
         const runtimeSnapshot = uiState
-          ? await withServiceFallback(
-            () => attachWorkspaceRuntime(routeWorkspaceId, deviceId, clientId),
-            null,
+          ? await attachWorkspaceRuntimeWithRetry(
+            routeWorkspaceId,
+            deviceId,
+            clientId,
+            withServiceFallback,
           )
           : null;
 
@@ -649,6 +651,26 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (routeWorkspaceId) {
       const existing = stateRef.current.tabs.find((tab) => tab.id === routeWorkspaceId);
       if (existing) {
+        let cancelled = false;
+        const attachRouteRuntime = () => {
+          void attachWorkspaceRuntimeWithRetry(
+            routeWorkspaceId,
+            deviceId,
+            clientId,
+            withServiceFallback,
+          ).then((runtimeSnapshot) => {
+            if (cancelled || !runtimeSnapshot) return;
+            updateState((current) => applyWorkspaceRuntimeSnapshot(
+              current,
+              runtimeSnapshot,
+              locale,
+              appSettings,
+              deviceId,
+              clientId,
+            ));
+          });
+        };
+
         if (stateRef.current.activeTabId !== routeWorkspaceId) {
           switchWorkspaceLocally(routeWorkspaceId);
           void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null).then((uiState) => {
@@ -656,8 +678,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             updateState((current) => applyWorkbenchUiState(current, uiState));
           });
         }
+        attachRouteRuntime();
+        const timer = window.setTimeout(attachRouteRuntime, 1000);
         void ensureWorkspaceTerminal(routeWorkspaceId);
-        return;
+        return () => {
+          cancelled = true;
+          window.clearTimeout(timer);
+        };
       }
 
       let cancelled = false;
@@ -669,9 +696,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           }
           return;
         }
-        const runtimeSnapshot = await withServiceFallback(
-          () => attachWorkspaceRuntime(routeWorkspaceId, deviceId, clientId),
-          null,
+        const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+          routeWorkspaceId,
+          deviceId,
+          clientId,
+          withServiceFallback,
         );
         if (!runtimeSnapshot || cancelled) {
           if (!cancelled) {
@@ -1302,9 +1331,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       refreshWorkspaceArtifacts,
     });
     if (!launched) return;
-    const runtimeSnapshot = await withServiceFallback(
-      () => attachWorkspaceRuntime(launched.workspaceId, deviceId, clientId),
-      null,
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      launched.workspaceId,
+      deviceId,
+      clientId,
+      withServiceFallback,
     );
     if (runtimeSnapshot) {
       updateState((current) => applyWorkspaceRuntimeSnapshot(

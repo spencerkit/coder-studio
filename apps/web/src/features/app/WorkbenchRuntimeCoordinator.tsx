@@ -12,7 +12,6 @@ import {
 } from "../../services/http/session.service.ts";
 import {
   activateWorkspace as activateWorkspaceRequest,
-  attachWorkspaceRuntime,
   heartbeatWorkspaceController,
   releaseWorkspaceControllerKeepalive,
   requestWorkspaceTakeover,
@@ -49,6 +48,7 @@ import {
   getOrCreateClientId as getWorkspaceClientId,
   getOrCreateDeviceId as getWorkspaceDeviceId,
 } from "../workspace/workspace-controller";
+import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 import {
@@ -60,6 +60,13 @@ const withServiceFallback = async <T,>(
   operation: () => Promise<T>,
   fallback: T,
 ): Promise<T> => withFallback(operation, fallback);
+
+const CONTROLLER_HEARTBEAT_INTERVAL_MS = 10_000;
+const HIDDEN_CONTROLLER_HEARTBEAT_INTERVAL_MS = 20_000;
+const CONTROLLER_RECOVERY_INTERVAL_MS = 1_000;
+const HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS = 5_000;
+const TAKEOVER_POLL_INTERVAL_MS = 2_000;
+const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
 
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
@@ -73,6 +80,9 @@ export const WorkbenchRuntimeCoordinator = ({
   const navigate = useNavigate();
   const [state, setState] = useRelaxState(workbenchState);
   const stateRef = useRef(state);
+  const [isOnline, setIsOnline] = useState(() => (
+    typeof navigator === "undefined" ? true : navigator.onLine !== false
+  ));
   const [isWindowFocused, setIsWindowFocused] = useState(() => (
     typeof document === "undefined" ? true : document.hasFocus()
   ));
@@ -104,6 +114,9 @@ export const WorkbenchRuntimeCoordinator = ({
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
+  const runtimeAttachInflightRef = useRef(new Map<string, Promise<void>>());
+  const heartbeatInflightRef = useRef(new Set<string>());
+  const takeoverPollingInflightRef = useRef(new Set<string>());
   const t = useMemo(() => createTranslator(locale), [locale]);
   const deviceId = useMemo(() => getWorkspaceDeviceId(), []);
   const clientId = useMemo(() => getWorkspaceClientId(), []);
@@ -144,7 +157,6 @@ export const WorkbenchRuntimeCoordinator = ({
       setIsDocumentVisible(document.visibilityState === "visible");
     };
 
-    syncVisibility();
     window.addEventListener("focus", syncVisibility);
     window.addEventListener("blur", syncVisibility);
     document.addEventListener("visibilitychange", syncVisibility);
@@ -152,6 +164,24 @@ export const WorkbenchRuntimeCoordinator = ({
       window.removeEventListener("focus", syncVisibility);
       window.removeEventListener("blur", syncVisibility);
       document.removeEventListener("visibilitychange", syncVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncOnlineState = () => {
+      setIsOnline(typeof navigator === "undefined" ? true : navigator.onLine !== false);
+    };
+
+    syncOnlineState();
+    window.addEventListener("online", syncOnlineState);
+    window.addEventListener("offline", syncOnlineState);
+    return () => {
+      window.removeEventListener("online", syncOnlineState);
+      window.removeEventListener("offline", syncOnlineState);
     };
   }, []);
 
@@ -352,7 +382,6 @@ export const WorkbenchRuntimeCoordinator = ({
 
   const {
     markSessionIdle,
-    refreshTabFromBackend,
     settleSessionAfterExit,
   } = createWorkspaceSessionActions({
     appSettings,
@@ -365,13 +394,46 @@ export const WorkbenchRuntimeCoordinator = ({
     onCompletionReminder,
   });
 
+  const reattachWorkspaceRuntime = useCallback(async (workspaceId: string) => {
+    const inflight = runtimeAttachInflightRef.current.get(workspaceId);
+    if (inflight) {
+      await inflight;
+      return;
+    }
+
+    const task = (async () => {
+      const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+        workspaceId,
+        deviceId,
+        clientId,
+        withServiceFallback,
+      );
+      if (!runtimeSnapshot) {
+        return;
+      }
+      updateState((current) => applyWorkspaceRuntimeSnapshot(
+        current,
+        runtimeSnapshot,
+        locale,
+        appSettings,
+        deviceId,
+        clientId,
+      ));
+    })().finally(() => {
+      runtimeAttachInflightRef.current.delete(workspaceId);
+    });
+
+    runtimeAttachInflightRef.current.set(workspaceId, task);
+    await task;
+  }, [appSettings, clientId, deviceId, locale, updateState]);
+
   useWorkspaceTransportSync({
     agentRuntimeRefs,
     bootstrapReady: state.tabs.length > 0,
     clientId,
     deviceId,
-    refreshTabFromBackend,
     markSessionIdle,
+    reattachWorkspaceRuntime,
     settleSessionAfterExit,
     syncSessionPatch,
     stateRef,
@@ -392,31 +454,14 @@ export const WorkbenchRuntimeCoordinator = ({
       return;
     }
 
-    let cancelled = false;
     const workspaceIds = state.tabs
       .filter((tab) => tab.status === "ready")
       .map((tab) => tab.id);
 
     void Promise.all(workspaceIds.map(async (workspaceId) => {
-      const runtimeSnapshot = await withServiceFallback(
-        () => attachWorkspaceRuntime(workspaceId, deviceId, clientId),
-        null,
-      );
-      if (!runtimeSnapshot || cancelled) return;
-      updateState((current) => applyWorkspaceRuntimeSnapshot(
-        current,
-        runtimeSnapshot,
-        locale,
-        appSettings,
-        deviceId,
-        clientId,
-      ));
+      await reattachWorkspaceRuntime(workspaceId);
     }));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [appSettings, attachedWorkspaceFingerprint, clientId, deviceId, locale, updateState]);
+  }, [attachedWorkspaceFingerprint, reattachWorkspaceRuntime]);
 
   const controllerHeartbeatFingerprint = useMemo(
     () => state.tabs
@@ -427,7 +472,7 @@ export const WorkbenchRuntimeCoordinator = ({
   );
 
   useEffect(() => {
-    if (!controllerHeartbeatFingerprint) {
+    if (!controllerHeartbeatFingerprint || !isOnline) {
       return;
     }
 
@@ -437,6 +482,10 @@ export const WorkbenchRuntimeCoordinator = ({
 
     const sendHeartbeat = () => {
       controllerWorkspaceIds().forEach((workspaceId) => {
+        if (heartbeatInflightRef.current.has(workspaceId)) {
+          return;
+        }
+        heartbeatInflightRef.current.add(workspaceId);
         void heartbeatWorkspaceController(workspaceId, deviceId, clientId)
           .then((controller) => {
             updateState((current) => applyWorkspaceControllerEvent(current, {
@@ -446,16 +495,22 @@ export const WorkbenchRuntimeCoordinator = ({
           })
           .catch(() => {
             // The WS controller stream or next attach will converge the UI.
+          })
+          .finally(() => {
+            heartbeatInflightRef.current.delete(workspaceId);
           });
       });
     };
 
     sendHeartbeat();
-    const timer = window.setInterval(sendHeartbeat, 10000);
+    const timer = window.setInterval(
+      sendHeartbeat,
+      isDocumentVisible ? CONTROLLER_HEARTBEAT_INTERVAL_MS : HIDDEN_CONTROLLER_HEARTBEAT_INTERVAL_MS,
+    );
     return () => {
       window.clearInterval(timer);
     };
-  }, [clientId, controllerHeartbeatFingerprint, deviceId, updateState]);
+  }, [clientId, controllerHeartbeatFingerprint, deviceId, isDocumentVisible, isOnline, updateState]);
 
   const controllerRecoveryFingerprint = useMemo(
     () => state.tabs
@@ -472,11 +527,10 @@ export const WorkbenchRuntimeCoordinator = ({
   );
 
   useEffect(() => {
-    if (!controllerRecoveryFingerprint) {
+    if (!controllerRecoveryFingerprint || !isOnline) {
       return;
     }
 
-    let cancelled = false;
     const recoverableWorkspaceIds = () => stateRef.current.tabs
       .filter((tab) =>
         tab.status === "ready"
@@ -489,30 +543,20 @@ export const WorkbenchRuntimeCoordinator = ({
 
     const recoverControllers = () => {
       void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
-        const runtimeSnapshot = await withServiceFallback(
-          () => attachWorkspaceRuntime(workspaceId, deviceId, clientId),
-          null,
-        );
-        if (!runtimeSnapshot || cancelled) return;
-        updateState((current) => applyWorkspaceRuntimeSnapshot(
-          current,
-          runtimeSnapshot,
-          locale,
-          appSettings,
-          deviceId,
-          clientId,
-        ));
+        await reattachWorkspaceRuntime(workspaceId);
       }));
     };
 
     recoverControllers();
-    const timer = window.setInterval(recoverControllers, 1000);
+    const timer = window.setInterval(
+      recoverControllers,
+      isDocumentVisible ? CONTROLLER_RECOVERY_INTERVAL_MS : HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS,
+    );
 
     return () => {
-      cancelled = true;
       window.clearInterval(timer);
     };
-  }, [appSettings, clientId, controllerRecoveryFingerprint, deviceId, locale, updateState]);
+  }, [controllerRecoveryFingerprint, isDocumentVisible, isOnline, reattachWorkspaceRuntime]);
 
   const takeoverPollingFingerprint = useMemo(
     () => state.tabs
@@ -528,7 +572,7 @@ export const WorkbenchRuntimeCoordinator = ({
   );
 
   useEffect(() => {
-    if (!takeoverPollingFingerprint) {
+    if (!takeoverPollingFingerprint || !isOnline) {
       return;
     }
 
@@ -543,6 +587,10 @@ export const WorkbenchRuntimeCoordinator = ({
 
     const pollTakeover = () => {
       takeoverWorkspaceIds().forEach((workspaceId) => {
+        if (takeoverPollingInflightRef.current.has(workspaceId)) {
+          return;
+        }
+        takeoverPollingInflightRef.current.add(workspaceId);
         void requestWorkspaceTakeover(workspaceId, deviceId, clientId)
           .then((controller) => {
             updateState((current) => applyWorkspaceControllerEvent(current, {
@@ -552,16 +600,22 @@ export const WorkbenchRuntimeCoordinator = ({
           })
           .catch(() => {
             // Keep waiting; the controller stream is the primary source of truth.
+          })
+          .finally(() => {
+            takeoverPollingInflightRef.current.delete(workspaceId);
           });
       });
     };
 
     pollTakeover();
-    const timer = window.setInterval(pollTakeover, 2000);
+    const timer = window.setInterval(
+      pollTakeover,
+      isDocumentVisible ? TAKEOVER_POLL_INTERVAL_MS : HIDDEN_TAKEOVER_POLL_INTERVAL_MS,
+    );
     return () => {
       window.clearInterval(timer);
     };
-  }, [clientId, deviceId, takeoverPollingFingerprint, updateState]);
+  }, [clientId, deviceId, isDocumentVisible, isOnline, takeoverPollingFingerprint, updateState]);
 
   const settingsSyncFingerprint = useMemo(() => state.tabs.map((tab) => [
     tab.id,

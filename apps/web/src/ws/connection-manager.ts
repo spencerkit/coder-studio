@@ -6,6 +6,7 @@ import {
 } from "../features/workspace/workspace-controller";
 import { WsHeartbeat } from "./heartbeat";
 import { parseWsEnvelope, type WsEventEnvelope } from "./protocol";
+import { getReconnectDelayMs } from "./reconnect-policy";
 
 type EventHandler<T = unknown> = (payload: T) => void;
 export type WsConnectionState = {
@@ -18,8 +19,12 @@ type ConnectionHandler = (state: WsConnectionState) => void;
 export class WsConnectionManager {
   private readonly listeners = new Map<string, Set<EventHandler<unknown>>>();
   private readonly connectionListeners = new Set<ConnectionHandler>();
+  private lastConnectionState: WsConnectionState | null = null;
   private socket: WebSocket | null = null;
   private reconnectTimer: number | null = null;
+  private reconnectAttempt = 0;
+  private isOnline = typeof navigator === "undefined" ? true : navigator.onLine !== false;
+  private onlineListenerBound = false;
   private activeSocketUrl = "";
   private healthProbe: Promise<boolean> | null = null;
   private hasConnectedOnce = false;
@@ -38,6 +43,7 @@ export class WsConnectionManager {
     const existing = this.listeners.get(event) ?? new Set<EventHandler<unknown>>();
     existing.add(handler as EventHandler<unknown>);
     this.listeners.set(event, existing);
+    this.bindOnlineListeners();
     this.connect();
 
     return () => {
@@ -53,10 +59,42 @@ export class WsConnectionManager {
 
   subscribeConnectionState(handler: ConnectionHandler) {
     this.connectionListeners.add(handler);
+    this.bindOnlineListeners();
+    if (this.lastConnectionState) {
+      handler(this.lastConnectionState);
+    }
     return () => {
       this.connectionListeners.delete(handler);
     };
   }
+
+  private bindOnlineListeners() {
+    if (typeof window === "undefined" || this.onlineListenerBound) {
+      return;
+    }
+
+    this.onlineListenerBound = true;
+    window.addEventListener("online", this.handleOnline);
+    window.addEventListener("offline", this.handleOffline);
+  }
+
+  private handleOnline = () => {
+    this.isOnline = true;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.connect();
+  };
+
+  private handleOffline = () => {
+    this.isOnline = false;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.socket?.close();
+  };
 
   private notify<T>(message: WsEventEnvelope) {
     const handlers = this.listeners.get(message.event);
@@ -65,19 +103,23 @@ export class WsConnectionManager {
   }
 
   private notifyConnectionState(state: WsConnectionState) {
+    this.lastConnectionState = state;
     this.connectionListeners.forEach((handler) => handler(state));
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer !== null || this.listeners.size === 0) return;
+    if (!this.isOnline || this.reconnectTimer !== null || this.listeners.size === 0) return;
+    const delay = getReconnectDelayMs(this.reconnectAttempt);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
+      this.reconnectAttempt += 1;
       this.connect();
-    }, 800);
+    }, delay);
   }
 
   private connect() {
     if (typeof window === "undefined") return;
+    if (!this.isOnline) return;
     if (isPublicModeActive() && !isAuthenticated()) {
       return;
     }
@@ -139,6 +181,7 @@ export class WsConnectionManager {
     this.socket.addEventListener("open", () => {
       const kind = this.hasConnectedOnce ? "reconnected" : "connected";
       this.hasConnectedOnce = true;
+      this.reconnectAttempt = 0;
       this.heartbeat.start();
       this.notifyConnectionState({ kind, at: Date.now(), url: nextUrl });
     });

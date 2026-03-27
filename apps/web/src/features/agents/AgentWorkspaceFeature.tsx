@@ -7,6 +7,21 @@ import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/term
 import { isHiddenDraftPlaceholder, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
 
+const PANE_PREVIEW_LINE_LIMIT = 16;
+const PANE_PREVIEW_CHAR_LIMIT = 1_200;
+
+const buildPanePreview = (stream: string) => {
+  const normalized = stripAnsi(stream).replaceAll("\r", "");
+  if (!normalized.trim()) {
+    return "";
+  }
+  const tail = normalized.split("\n").slice(-PANE_PREVIEW_LINE_LIMIT).join("\n").trimStart();
+  if (tail.length <= PANE_PREVIEW_CHAR_LIMIT) {
+    return tail;
+  }
+  return tail.slice(-PANE_PREVIEW_CHAR_LIMIT).trimStart();
+};
+
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
   locale: Locale;
@@ -95,6 +110,8 @@ export const AgentWorkspaceFeature = ({
     const statusTone = sessionTone(session.status);
     const headerTag = sessionHeaderTag(session.status, locale);
     const showDraftPromptInput = isHiddenDraftPlaceholder(session);
+    const showLiveTerminal = isPaneActive;
+    const preview = showLiveTerminal ? "" : buildPanePreview(session.stream);
 
     return (
       <section
@@ -191,21 +208,31 @@ export const AgentWorkspaceFeature = ({
               </div>
             </div>
           ) : (
-            <AgentStreamTerminal
-              ref={(handle) => setAgentTerminalRef(node.id, handle)}
-              streamId={session.id}
-              stream={session.stream}
-              toneKey={isPaneActive ? "active" : "inactive"}
-              theme={theme}
-              fontSize={terminalFontSize}
-              compatibilityMode={terminalCompatibilityMode}
-              mode="interactive"
-              autoFocus={isPaneActive}
-              onData={(data) => {
-                onAgentTerminalData(node.id, data);
-              }}
-              onSize={(size) => onAgentTerminalSize(node.id, activeTab.id, session.id, size)}
-            />
+            showLiveTerminal ? (
+              <AgentStreamTerminal
+                ref={(handle) => setAgentTerminalRef(node.id, handle)}
+                streamId={session.id}
+                stream={session.stream}
+                toneKey={isPaneActive ? "active" : "inactive"}
+                theme={theme}
+                fontSize={terminalFontSize}
+                compatibilityMode={terminalCompatibilityMode}
+                mode="interactive"
+                autoFocus={isPaneActive}
+                onData={(data) => {
+                  onAgentTerminalData(node.id, data);
+                }}
+                onSize={(size) => onAgentTerminalSize(node.id, activeTab.id, session.id, size)}
+              />
+            ) : (
+              <div className={`agent-pane-preview ${preview ? "" : "empty"}`}>
+                {preview ? (
+                  <pre>{preview}</pre>
+                ) : (
+                  <div className="terminal-empty">{t("noAgentOutputYet")}</div>
+                )}
+              </div>
+            )
           )}
         </div>
       </section>
