@@ -2147,6 +2147,82 @@ mod tests {
     }
 
     #[test]
+    fn app_settings_update_normalizes_camel_case_payloads_before_merge() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "completion_notifications": {
+                            "enabled": true,
+                            "only_when_background": false
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "startup_args": ["--existing"],
+                            "settings_json": {
+                                "model": "opus"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "completionNotifications": {
+                            "enabled": false
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "startupArgs": ["--verbose"],
+                            "settingsJson": {
+                                "permissionMode": "acceptEdits"
+                            },
+                            "globalConfigJson": {
+                                "theme": "dark"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("camelCase settings update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert!(!updated.general.completion_notifications.enabled);
+        assert!(!updated.general.completion_notifications.only_when_background);
+        assert_eq!(updated.claude.global.startup_args, vec!["--verbose"]);
+        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+        assert_eq!(
+            updated.claude.global.settings_json["permissionMode"],
+            "acceptEdits"
+        );
+        assert_eq!(updated.claude.global.global_config_json["theme"], "dark");
+        assert_eq!(
+            updated.claude.global.global_config_json["showTurnDuration"],
+            true
+        );
+    }
+
+    #[test]
     fn agent_start_uses_server_resolved_settings_from_storage() {
         let app = test_app();
         let authorized = authorized_request();

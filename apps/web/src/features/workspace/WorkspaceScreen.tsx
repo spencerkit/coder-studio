@@ -156,6 +156,10 @@ import {
   AGENT_SPECIAL_KEY_MAP,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
+import {
+  formatClaudeRuntimeCommand,
+  resolveClaudeRuntimeProfile,
+} from "../../shared/app/claude-settings.ts";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
@@ -219,6 +223,11 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
       ? `WSL (${target.distro.trim()})`
       : "WSL"
     : t("nativeTarget");
+
+const resolveTargetClaudeCommand = (
+  settings: AppSettings,
+  target: ExecTarget,
+) => formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target));
 
 const REQUIRED_RUNTIME_COMMANDS = [
   { id: "git", command: "git" },
@@ -387,9 +396,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const t = useMemo(() => createTranslator(locale), [locale]);
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
-  const terminalCompatibilityMode = appSettings.terminalCompatibilityMode;
+  const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
   const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
-    appSettings.agentCommand,
+    resolveTargetClaudeCommand(appSettings, { type: "native" }),
     t,
   ));
   const stateRef = useRef(state);
@@ -431,11 +440,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
+  const getTargetClaudeCommand = useCallback(
+    (target: ExecTarget) => resolveTargetClaudeCommand(appSettings, target),
+    [appSettings],
+  );
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
-    const targetKey = serializeRuntimeValidationKey(target, appSettings.agentCommand);
-    const requirementSpecs = buildRuntimeRequirementSpecs(appSettings.agentCommand, t);
+    const command = getTargetClaudeCommand(target);
+    const targetKey = serializeRuntimeValidationKey(target, command);
+    const requirementSpecs = buildRuntimeRequirementSpecs(command, t);
     const requestId = ++runtimeValidationRequestIdRef.current;
-    setRuntimeValidation(createRuntimeValidationState(appSettings.agentCommand, t, targetKey, "checking"));
+    setRuntimeValidation(createRuntimeValidationState(command, t, targetKey, "checking"));
 
     const results = await Promise.all(
       requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
@@ -484,7 +498,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       targetKey,
       requirements: results,
     });
-  }, [appSettings.agentCommand, t]);
+  }, [getTargetClaudeCommand, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -840,14 +854,15 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!bootstrapReady || !state.overlay.visible) return;
-    const targetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
+    const command = getTargetClaudeCommand(state.overlay.target);
+    const targetKey = serializeRuntimeValidationKey(state.overlay.target, command);
     if (validatedRuntimeTargetsRef.current.has(targetKey)) {
       return;
     }
     void runRuntimeValidation(state.overlay.target);
   }, [
-    appSettings.agentCommand,
     bootstrapReady,
+    getTargetClaudeCommand,
     runRuntimeValidation,
     state.overlay.target.type,
     state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
@@ -864,19 +879,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         agent: {
           ...fallback.agent,
           provider: appSettings.agentProvider,
-          command: appSettings.agentCommand,
+          command: resolveTargetClaudeCommand(appSettings, { type: "native" }),
         },
         idlePolicy: { ...appSettings.idlePolicy },
       };
     }
     return emptyTabRef.current;
-  }, [appSettings.agentCommand, appSettings.agentProvider, appSettings.idlePolicy, locale, state.activeTabId, state.tabs]);
+  }, [appSettings, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
-  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, appSettings.agentCommand);
+  const overlayCommand = getTargetClaudeCommand(state.overlay.target);
+  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, overlayCommand);
   const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
   const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
     ? runtimeValidation
-    : createRuntimeValidationState(appSettings.agentCommand, t, runtimeValidationTargetKey, "checking");
+    : createRuntimeValidationState(overlayCommand, t, runtimeValidationTargetKey, "checking");
   const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;
   const showWorkspaceLaunchOverlay = overlayVisible && runtimeValidatedForTarget;
   const hasOpenWorkspace = state.tabs.length > 0;
@@ -1354,10 +1370,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
   };
 
-  const buildAgentCommand = (tab: Tab) => {
-    const path = tab.project?.path ?? "";
-    return tab.agent.command.replace("{path}", path);
-  };
+  const buildAgentCommand = (tab: Tab) => (
+    resolveTargetClaudeCommand(appSettings, tab.project?.target ?? { type: "native" })
+  );
 
   const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;

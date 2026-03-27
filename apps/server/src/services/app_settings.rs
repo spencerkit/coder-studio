@@ -38,6 +38,54 @@ fn merge_settings_value(current: &mut Value, patch: Value) {
     }
 }
 
+fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
+    let path = path.iter().map(String::as_str).collect::<Vec<_>>();
+    match path.as_slice() {
+        ["general"] => match key {
+            "terminalCompatibilityMode" => "terminal_compatibility_mode".to_string(),
+            "completionNotifications" => "completion_notifications".to_string(),
+            "idlePolicy" => "idle_policy".to_string(),
+            _ => key.to_string(),
+        },
+        ["general", "completion_notifications"] => match key {
+            "onlyWhenBackground" => "only_when_background".to_string(),
+            _ => key.to_string(),
+        },
+        ["general", "idle_policy"] => match key {
+            "idleMinutes" => "idle_minutes".to_string(),
+            "maxActive" => "max_active".to_string(),
+            _ => key.to_string(),
+        },
+        ["claude", "global"]
+        | ["claude", "overrides", "native", "profile"]
+        | ["claude", "overrides", "wsl", "profile"] => match key {
+            "startupArgs" => "startup_args".to_string(),
+            "settingsJson" => "settings_json".to_string(),
+            "globalConfigJson" => "global_config_json".to_string(),
+            _ => key.to_string(),
+        },
+        _ => key.to_string(),
+    }
+}
+
+fn normalize_settings_patch_value(value: Value, path: &[String]) -> Value {
+    match value {
+        Value::Object(object) => {
+            let normalized = object
+                .into_iter()
+                .map(|(key, value)| {
+                    let normalized_key = normalize_settings_patch_key(path, &key);
+                    let mut next_path = path.to_vec();
+                    next_path.push(normalized_key.clone());
+                    (normalized_key, normalize_settings_patch_value(value, &next_path))
+                })
+                .collect();
+            Value::Object(normalized)
+        }
+        other => other,
+    }
+}
+
 pub(crate) fn load_or_default_app_settings(
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
@@ -85,7 +133,10 @@ pub(crate) fn app_settings_update(
 ) -> Result<AppSettingsPayload, String> {
     let mut current =
         serde_json::to_value(load_or_default_app_settings(state)?).map_err(|e| e.to_string())?;
-    merge_settings_value(&mut current, patch);
+    merge_settings_value(
+        &mut current,
+        normalize_settings_patch_value(patch, &Vec::<String>::new()),
+    );
     let merged: AppSettingsPayload = serde_json::from_value(current).map_err(|e| e.to_string())?;
     save_app_settings(state, &merged)
 }
