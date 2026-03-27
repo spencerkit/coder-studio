@@ -93,8 +93,12 @@ pub(crate) fn terminal_create(
                     }
                     emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
                     let state: State<AppState> = state_handle.state();
-                    let _ =
-                        append_workspace_terminal_output(state, &workspace_id_out, terminal_id, &text);
+                    let _ = append_workspace_terminal_output(
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
                 }
                 Err(_) => break,
             }

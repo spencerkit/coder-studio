@@ -288,7 +288,10 @@ fn load_legacy_ui_state_from_conn(conn: &Connection) -> Result<WorkbenchUiState,
     parse_json(&payload)
 }
 
-fn save_legacy_ui_state_to_conn(conn: &Connection, ui_state: &WorkbenchUiState) -> Result<(), String> {
+fn save_legacy_ui_state_to_conn(
+    conn: &Connection,
+    ui_state: &WorkbenchUiState,
+) -> Result<(), String> {
     let payload = json_string(ui_state)?;
     conn.execute(
         "INSERT INTO app_ui_state (id, payload, updated_at)
@@ -332,7 +335,8 @@ fn load_device_ui_state_from_conn(
     match payload {
         Ok(value) => parse_json(&value),
         Err(rusqlite::Error::QueryReturnedNoRows) => {
-            let legacy = load_legacy_ui_state_from_conn(conn).unwrap_or_else(|_| default_ui_state());
+            let legacy =
+                load_legacy_ui_state_from_conn(conn).unwrap_or_else(|_| default_ui_state());
             Ok(DeviceWorkbenchUiState {
                 open_workspace_ids: legacy.open_workspace_ids,
                 layout: legacy.layout,
@@ -391,7 +395,8 @@ fn load_client_ui_state_from_conn(
     match payload {
         Ok(value) => parse_json(&value),
         Err(rusqlite::Error::QueryReturnedNoRows) => {
-            let legacy = load_legacy_ui_state_from_conn(conn).unwrap_or_else(|_| default_ui_state());
+            let legacy =
+                load_legacy_ui_state_from_conn(conn).unwrap_or_else(|_| default_ui_state());
             Ok(ClientWorkbenchUiState {
                 active_workspace_id: legacy.active_workspace_id,
             })
@@ -436,15 +441,16 @@ fn compose_workbench_ui_state(
     mut device_state: DeviceWorkbenchUiState,
     mut client_state: ClientWorkbenchUiState,
 ) -> WorkbenchUiState {
-    device_state.open_workspace_ids = device_state
-        .open_workspace_ids
-        .into_iter()
-        .fold(Vec::new(), |mut items, workspace_id| {
-            if !items.iter().any(|item| item == &workspace_id) {
-                items.push(workspace_id);
-            }
-            items
-        });
+    device_state.open_workspace_ids =
+        device_state
+            .open_workspace_ids
+            .into_iter()
+            .fold(Vec::new(), |mut items, workspace_id| {
+                if !items.iter().any(|item| item == &workspace_id) {
+                    items.push(workspace_id);
+                }
+                items
+            });
     if let Some(active) = client_state.active_workspace_id.as_deref() {
         if !device_state
             .open_workspace_ids
@@ -612,7 +618,12 @@ fn set_terminal_recoverable(
         "UPDATE workspace_terminals
          SET recoverable = ?3, updated_at = ?4
          WHERE workspace_id = ?1 AND terminal_id = ?2",
-        params![workspace_id, terminal_id as i64, if recoverable { 1 } else { 0 }, now_ts()],
+        params![
+            workspace_id,
+            terminal_id as i64,
+            if recoverable { 1 } else { 0 },
+            now_ts()
+        ],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -774,7 +785,9 @@ fn load_workspace_controller_lease_from_conn(
 
     match payload {
         Ok(value) => parse_json(&value),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(default_workspace_controller_lease(workspace_id)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            Ok(default_workspace_controller_lease(workspace_id))
+        }
         Err(error) => Err(error.to_string()),
     }
 }
@@ -1043,7 +1056,9 @@ fn remove_workspace_from_all_ui_state_scopes(
             let (device_id_row, payload) = row.map_err(|e| e.to_string())?;
             let mut ui_state: DeviceWorkbenchUiState = parse_json(&payload)?;
             let before = ui_state.open_workspace_ids.clone();
-            ui_state.open_workspace_ids.retain(|item| item != workspace_id);
+            ui_state
+                .open_workspace_ids
+                .retain(|item| item != workspace_id);
             if ui_state.open_workspace_ids != before {
                 save_device_ui_state_to_conn(conn, Some(device_id_row.as_str()), &ui_state)?;
             }
@@ -1225,7 +1240,9 @@ pub(crate) fn workbench_bootstrap(
     device_id: Option<&str>,
     client_id: Option<&str>,
 ) -> Result<WorkbenchBootstrap, String> {
-    with_db(state, |conn| build_bootstrap_from_conn(conn, device_id, client_id))
+    with_db(state, |conn| {
+        build_bootstrap_from_conn(conn, device_id, client_id)
+    })
 }
 
 pub(crate) fn workspace_snapshot(
@@ -1538,7 +1555,9 @@ pub(crate) fn patch_workspace_view_state(
         let next = WorkspaceViewState {
             active_session_id: patch.active_session_id.unwrap_or(current.active_session_id),
             active_pane_id: patch.active_pane_id.unwrap_or(current.active_pane_id),
-            active_terminal_id: patch.active_terminal_id.unwrap_or(current.active_terminal_id),
+            active_terminal_id: patch
+                .active_terminal_id
+                .unwrap_or(current.active_terminal_id),
             pane_layout: patch.pane_layout.unwrap_or(current.pane_layout),
             file_preview: patch.file_preview.unwrap_or(current.file_preview),
         };
@@ -1551,14 +1570,18 @@ pub(crate) fn load_workspace_controller_lease(
     state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkspaceControllerLease, String> {
-    with_db(state, |conn| load_workspace_controller_lease_from_conn(conn, workspace_id))
+    with_db(state, |conn| {
+        load_workspace_controller_lease_from_conn(conn, workspace_id)
+    })
 }
 
 pub(crate) fn save_workspace_controller_lease(
     state: State<'_, AppState>,
     lease: &WorkspaceControllerLease,
 ) -> Result<(), String> {
-    with_db(state, |conn| save_workspace_controller_lease_to_conn(conn, lease))
+    with_db(state, |conn| {
+        save_workspace_controller_lease_to_conn(conn, lease)
+    })
 }
 
 pub(crate) fn upsert_workspace_attachment(
@@ -1582,7 +1605,14 @@ pub(crate) fn append_agent_lifecycle_event(
     data: &str,
 ) -> Result<AgentLifecycleHistoryEntry, String> {
     with_db(state, |conn| {
-        append_agent_lifecycle_event_to_conn(conn, workspace_id, session_id, kind, source_event, data)
+        append_agent_lifecycle_event_to_conn(
+            conn,
+            workspace_id,
+            session_id,
+            kind,
+            source_event,
+            data,
+        )
     })
 }
 
@@ -1591,7 +1621,9 @@ pub(crate) fn load_agent_lifecycle_events(
     workspace_id: &str,
     limit: usize,
 ) -> Result<Vec<AgentLifecycleHistoryEntry>, String> {
-    with_db(state, |conn| load_agent_lifecycle_events_from_conn(conn, workspace_id, limit))
+    with_db(state, |conn| {
+        load_agent_lifecycle_events_from_conn(conn, workspace_id, limit)
+    })
 }
 
 pub(crate) fn list_workspace_ids_for_workspace_client(
@@ -1609,7 +1641,9 @@ pub(crate) fn mark_workspace_client_detached(
     device_id: &str,
     client_id: &str,
 ) -> Result<(), String> {
-    with_db(state, |conn| mark_workspace_client_detached_from_conn(conn, device_id, client_id))
+    with_db(state, |conn| {
+        mark_workspace_client_detached_from_conn(conn, device_id, client_id)
+    })
 }
 
 pub(crate) fn persist_workspace_terminal(
@@ -1619,7 +1653,9 @@ pub(crate) fn persist_workspace_terminal(
     output: &str,
     recoverable: bool,
 ) -> Result<(), String> {
-    with_db(state, |conn| persist_terminal_row(conn, workspace_id, terminal_id, output, recoverable))
+    with_db(state, |conn| {
+        persist_terminal_row(conn, workspace_id, terminal_id, output, recoverable)
+    })
 }
 
 pub(crate) fn append_workspace_terminal_output(
@@ -1628,7 +1664,9 @@ pub(crate) fn append_workspace_terminal_output(
     terminal_id: u64,
     chunk: &str,
 ) -> Result<(), String> {
-    with_db(state, |conn| append_terminal_output(conn, workspace_id, terminal_id, chunk))
+    with_db(state, |conn| {
+        append_terminal_output(conn, workspace_id, terminal_id, chunk)
+    })
 }
 
 pub(crate) fn set_workspace_terminal_recoverable(
@@ -1637,7 +1675,9 @@ pub(crate) fn set_workspace_terminal_recoverable(
     terminal_id: u64,
     recoverable: bool,
 ) -> Result<(), String> {
-    with_db(state, |conn| set_terminal_recoverable(conn, workspace_id, terminal_id, recoverable))
+    with_db(state, |conn| {
+        set_terminal_recoverable(conn, workspace_id, terminal_id, recoverable)
+    })
 }
 
 pub(crate) fn delete_workspace_terminal(
@@ -1645,7 +1685,9 @@ pub(crate) fn delete_workspace_terminal(
     workspace_id: &str,
     terminal_id: u64,
 ) -> Result<(), String> {
-    with_db(state, |conn| delete_persisted_terminal(conn, workspace_id, terminal_id))
+    with_db(state, |conn| {
+        delete_persisted_terminal(conn, workspace_id, terminal_id)
+    })
 }
 
 pub(crate) fn append_session_stream(

@@ -39,14 +39,22 @@ fn transfer_controller(
 }
 
 fn finalize_takeover_if_due(lease: &mut WorkspaceControllerLease, now: i64) -> bool {
-    let takeover_due = lease.takeover_deadline_at.is_some_and(|deadline| deadline <= now);
+    let takeover_due = lease
+        .takeover_deadline_at
+        .is_some_and(|deadline| deadline <= now);
     let controller_expired = !lease_alive(lease, now);
     if (takeover_due || controller_expired)
         && lease.takeover_requested_by_device_id.is_some()
         && lease.takeover_requested_by_client_id.is_some()
     {
-        let next_device = lease.takeover_requested_by_device_id.clone().unwrap_or_default();
-        let next_client = lease.takeover_requested_by_client_id.clone().unwrap_or_default();
+        let next_device = lease
+            .takeover_requested_by_device_id
+            .clone()
+            .unwrap_or_default();
+        let next_client = lease
+            .takeover_requested_by_client_id
+            .clone()
+            .unwrap_or_default();
         transfer_controller(lease, &next_device, &next_client, now);
         return true;
     }
@@ -349,7 +357,10 @@ pub(crate) fn workspace_controller_takeover(
     } else if !lease_alive(&lease, now) {
         transfer_controller(&mut lease, &device_id, &client_id, now);
     } else if lease.takeover_requested_by_device_id.as_deref() == Some(device_id.as_str()) {
-        if lease.takeover_deadline_at.is_some_and(|deadline| deadline <= now) {
+        if lease
+            .takeover_deadline_at
+            .is_some_and(|deadline| deadline <= now)
+        {
             transfer_controller(&mut lease, &device_id, &client_id, now);
         }
     } else {
@@ -457,10 +468,19 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(controller.controller.controller_device_id.as_deref(), Some("device-a"));
-        assert_eq!(controller.controller.controller_client_id.as_deref(), Some("client-a"));
+        assert_eq!(
+            controller.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
+        assert_eq!(
+            controller.controller.controller_client_id.as_deref(),
+            Some("client-a")
+        );
         assert_eq!(controller.controller.fencing_token, 1);
-        assert_eq!(observer.controller.controller_device_id.as_deref(), Some("device-a"));
+        assert_eq!(
+            observer.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
         assert_eq!(observer.controller.takeover_requested_by_device_id, None);
     }
 
@@ -486,7 +506,10 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        assert_eq!(lease.takeover_requested_by_device_id.as_deref(), Some("device-b"));
+        assert_eq!(
+            lease.takeover_requested_by_device_id.as_deref(),
+            Some("device-b")
+        );
 
         let mut expired = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
         expired.lease_expires_at = now_ts() - 1;
@@ -502,8 +525,14 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(transferred.controller_device_id.as_deref(), Some("device-b"));
-        assert_eq!(transferred.controller_client_id.as_deref(), Some("client-b"));
+        assert_eq!(
+            transferred.controller_device_id.as_deref(),
+            Some("device-b")
+        );
+        assert_eq!(
+            transferred.controller_client_id.as_deref(),
+            Some("client-b")
+        );
         assert_eq!(transferred.fencing_token, 2);
     }
 
@@ -529,9 +558,18 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(controller.controller.controller_client_id.as_deref(), Some("client-a"));
-        assert_eq!(observer.controller.controller_client_id.as_deref(), Some("client-a"));
-        assert_eq!(observer.controller.controller_device_id.as_deref(), Some("device-a"));
+        assert_eq!(
+            controller.controller.controller_client_id.as_deref(),
+            Some("client-a")
+        );
+        assert_eq!(
+            observer.controller.controller_client_id.as_deref(),
+            Some("client-a")
+        );
+        assert_eq!(
+            observer.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
     }
 
     #[test]
@@ -567,8 +605,14 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(reattached.controller.controller_device_id.as_deref(), Some("device-a"));
-        assert_eq!(reattached.controller.controller_client_id.as_deref(), Some("client-b"));
+        assert_eq!(
+            reattached.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
+        assert_eq!(
+            reattached.controller.controller_client_id.as_deref(),
+            Some("client-b")
+        );
         assert_eq!(reattached.controller.fencing_token, 2);
     }
 
@@ -586,13 +630,7 @@ mod tests {
         )
         .unwrap();
 
-        handle_workspace_client_disconnect(
-            "device-a",
-            "client-a",
-            &app,
-            app.state(),
-        )
-        .unwrap();
+        handle_workspace_client_disconnect("device-a", "client-a", &app, app.state()).unwrap();
 
         let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
         assert_eq!(lease.controller_device_id, None);
@@ -622,13 +660,7 @@ mod tests {
         )
         .unwrap();
 
-        handle_workspace_client_disconnect(
-            "device-a",
-            "client-a",
-            &app,
-            app.state(),
-        )
-        .unwrap();
+        handle_workspace_client_disconnect("device-a", "client-a", &app, app.state()).unwrap();
 
         let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
         assert_eq!(lease.controller_device_id.as_deref(), Some("device-b"));
@@ -653,13 +685,9 @@ mod tests {
 
         register_workspace_client_connection("device-a", "client-a", app.state()).unwrap();
 
-        let released = unregister_workspace_client_connection(
-            "device-a",
-            "client-a",
-            &app,
-            app.state(),
-        )
-        .unwrap();
+        let released =
+            unregister_workspace_client_connection("device-a", "client-a", &app, app.state())
+                .unwrap();
         assert!(!released);
 
         let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
@@ -667,13 +695,9 @@ mod tests {
         assert_eq!(lease.controller_client_id.as_deref(), Some("client-a"));
         assert!(lease.lease_expires_at > 0);
 
-        let released = unregister_workspace_client_connection(
-            "device-a",
-            "client-a",
-            &app,
-            app.state(),
-        )
-        .unwrap();
+        let released =
+            unregister_workspace_client_connection("device-a", "client-a", &app, app.state())
+                .unwrap();
         assert!(released);
 
         let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
@@ -708,7 +732,10 @@ mod tests {
         .expect("runtime attach should succeed");
 
         assert_eq!(runtime.lifecycle_events.len(), 1);
-        assert_eq!(runtime.lifecycle_events[0].session_id, session.id.to_string());
+        assert_eq!(
+            runtime.lifecycle_events[0].session_id,
+            session.id.to_string()
+        );
         assert_eq!(runtime.lifecycle_events[0].kind, "tool_started");
         assert_eq!(runtime.lifecycle_events[0].source_event, "PreToolUse");
         assert_eq!(runtime.lifecycle_events[0].seq, 1);

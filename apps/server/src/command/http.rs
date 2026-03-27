@@ -728,7 +728,7 @@ fn dispatch_rpc(
                     req.patch,
                     app.state(),
                 )
-                    .map_err(rpc_bad_request)?,
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -828,7 +828,7 @@ fn dispatch_rpc(
                 req.mutation.target.clone(),
                 req.file_path,
             )
-                .map_err(rpc_bad_request)?;
+            .map_err(rpc_bad_request)?;
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -866,7 +866,7 @@ fn dispatch_rpc(
                 req.mutation.target.clone(),
                 req.file_path,
             )
-                .map_err(rpc_bad_request)?;
+            .map_err(rpc_bad_request)?;
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -930,7 +930,7 @@ fn dispatch_rpc(
                     req.mutation.target.clone(),
                     req.message,
                 )
-                    .map_err(rpc_bad_request)?,
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
             emit_workspace_artifacts_dirty(
@@ -1056,7 +1056,7 @@ fn dispatch_rpc(
                 req.input,
                 app.state(),
             )
-                .map_err(rpc_bad_request)?;
+            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "terminal_resize" => {
@@ -1559,8 +1559,14 @@ mod tests {
         .expect("attach rpc should be dispatched");
 
         let snapshot: WorkspaceRuntimeSnapshot = serde_json::from_value(value).unwrap();
-        assert_eq!(snapshot.controller.controller_device_id.as_deref(), Some("device-a"));
-        assert_eq!(snapshot.controller.controller_client_id.as_deref(), Some("client-a"));
+        assert_eq!(
+            snapshot.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
+        assert_eq!(
+            snapshot.controller.controller_client_id.as_deref(),
+            Some("client-a")
+        );
     }
 
     #[test]
@@ -1795,12 +1801,11 @@ mod tests {
             scoped.ui_state.active_workspace_id.as_deref(),
             Some(first_launch.snapshot.workspace.workspace_id.as_str())
         );
-        assert!(
-            scoped
-                .workspaces
-                .iter()
-                .all(|snapshot| snapshot.workspace.workspace_id != second_launch.snapshot.workspace.workspace_id)
-        );
+        assert!(scoped
+            .workspaces
+            .iter()
+            .all(|snapshot| snapshot.workspace.workspace_id
+                != second_launch.snapshot.workspace.workspace_id));
     }
 
     #[test]
