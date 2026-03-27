@@ -1384,7 +1384,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       controller: tab.controller,
       sessionId: session.id,
       provider: tab.agent.provider,
-      command,
       cols: initialSize?.cols,
       rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));

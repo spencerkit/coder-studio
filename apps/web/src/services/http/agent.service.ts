@@ -2,14 +2,13 @@ import type { WorkspaceControllerState } from "../../features/workspace/workspac
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
 import type { AgentStartResult } from "../../types/app";
 import type { TerminalGridSize } from "../../shared/utils/terminal";
-import { invokeRpc } from "./client";
+import { invokeRpc } from "./client.ts";
 
 export const startAgent = (args: {
   workspaceId: string;
   controller: WorkspaceControllerState;
   sessionId: string;
   provider: "claude";
-  command: string;
   cols?: TerminalGridSize["cols"];
   rows?: TerminalGridSize["rows"];
 }) => invokeRpc<AgentStartResult>(
@@ -17,7 +16,6 @@ export const startAgent = (args: {
   createWorkspaceControllerRpcPayload(args.workspaceId, args.controller, {
     sessionId: args.sessionId,
     provider: args.provider,
-    command: args.command,
     cols: args.cols,
     rows: args.rows,
   }),

@@ -93,7 +93,7 @@ struct WorkbenchLayoutRequest {
 
 #[derive(Deserialize)]
 struct AppSettingsUpdateRequest {
-    settings: AppSettingsPayload,
+    settings: Value,
 }
 
 #[derive(Deserialize)]
@@ -1519,6 +1519,7 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::time::Duration;
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -1554,6 +1555,63 @@ mod tests {
         )
         .unwrap();
         result.snapshot.workspace.workspace_id
+    }
+
+    fn create_temp_workspace_root(name: &str) -> String {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coder-studio-{name}-{unique}"));
+        std::fs::create_dir_all(&root).unwrap();
+        root.to_string_lossy().to_string()
+    }
+
+    fn test_agent_launch_profile() -> (String, Vec<String>) {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "cmd".to_string(),
+                vec![
+                    "/D".to_string(),
+                    "/S".to_string(),
+                    "/C".to_string(),
+                    "echo %TEST_MARKER%".to_string(),
+                ],
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (
+                "sh".to_string(),
+                vec!["-lc".to_string(), "printf %s \"$TEST_MARKER\"".to_string()],
+            )
+        }
+    }
+
+    fn test_agent_marker_profile(marker_file: &str) -> (String, Vec<String>) {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "cmd".to_string(),
+                vec![
+                    "/D".to_string(),
+                    "/S".to_string(),
+                    "/C".to_string(),
+                    format!("echo %TEST_MARKER%> {marker_file}"),
+                ],
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (
+                "sh".to_string(),
+                vec![
+                    "-lc".to_string(),
+                    format!("printf %s \"$TEST_MARKER\" > {marker_file}"),
+                ],
+            )
+        }
     }
 
     #[test]
@@ -2021,6 +2079,172 @@ mod tests {
                 .get("ANTHROPIC_BASE_URL")
                 .map(String::as_str),
             Some("https://anthropic.example")
+        );
+    }
+
+    #[test]
+    fn app_settings_update_merges_partial_payload_without_resetting_other_fields() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let (executable, startup_args) = test_agent_launch_profile();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh"
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": [],
+                            "env": {
+                                "TEST_MARKER": "persisted-value"
+                            },
+                            "settings_json": {
+                                "model": "opus"
+                            },
+                            "global_config_json": {}
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": executable,
+                            "startup_args": startup_args
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("partial settings update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert_eq!(updated.general.locale, "zh");
+        assert_eq!(
+            updated
+                .claude
+                .global
+                .env
+                .get("TEST_MARKER")
+                .map(String::as_str),
+            Some("persisted-value")
+        );
+        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+    }
+
+    #[test]
+    fn agent_start_uses_server_resolved_settings_from_storage() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("agent-start-settings");
+        let workspace_id = launch_test_workspace(&app, &root);
+        let marker_path = PathBuf::from(&root).join(".agent-start-marker");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh"
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": [],
+                            "env": {
+                                "TEST_MARKER": "server-resolved"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let (executable, startup_args) = test_agent_marker_profile(".agent-start-marker");
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": executable,
+                            "startup_args": startup_args
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let attach = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
+        let session_id = load_workspace_snapshot(app.state(), &workspace_id)
+            .unwrap()
+            .sessions
+            .first()
+            .unwrap()
+            .id;
+
+        let started = dispatch_rpc(
+            &app,
+            "agent_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": session_id.to_string(),
+                "provider": "claude",
+                "cols": 80,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .expect("agent_start should succeed with server-resolved settings");
+        let started: AgentStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        let mut marker_value = String::new();
+        for _ in 0..100 {
+            if let Ok(value) = std::fs::read_to_string(&marker_path) {
+                marker_value = value;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            marker_value.contains("server-resolved"),
+            "expected marker file to contain server value, got: {marker_value:?}"
         );
     }
 

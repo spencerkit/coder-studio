@@ -21,6 +21,23 @@ fn ensure_app_settings_row(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn merge_settings_value(current: &mut Value, patch: Value) {
+    match (current, patch) {
+        (Value::Object(current_map), Value::Object(patch_map)) => {
+            for (key, value) in patch_map {
+                if let Some(existing) = current_map.get_mut(&key) {
+                    merge_settings_value(existing, value);
+                } else {
+                    current_map.insert(key, value);
+                }
+            }
+        }
+        (current, patch) => {
+            *current = patch;
+        }
+    }
+}
+
 pub(crate) fn load_or_default_app_settings(
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
@@ -63,8 +80,12 @@ pub(crate) fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettings
 }
 
 pub(crate) fn app_settings_update(
-    settings: AppSettingsPayload,
+    patch: Value,
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
-    save_app_settings(state, &settings)
+    let mut current =
+        serde_json::to_value(load_or_default_app_settings(state)?).map_err(|e| e.to_string())?;
+    merge_settings_value(&mut current, patch);
+    let merged: AppSettingsPayload = serde_json::from_value(current).map_err(|e| e.to_string())?;
+    save_app_settings(state, &merged)
 }
