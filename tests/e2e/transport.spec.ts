@@ -590,27 +590,20 @@ test.describe('workspace transport baseline', () => {
       await expect(observer.getByTestId('runtime-validation-overlay')).toHaveCount(0);
 
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
-      await invokeRpc(observer, 'workspace_controller_takeover', {
+      const takeoverLease = await invokeRpc<WorkspaceControllerLeaseSnapshot>(observer, 'workspace_controller_takeover', {
         workspaceId: workspace.workspaceId,
         deviceId: observerIds.deviceId,
         clientId: observerIds.clientId,
       });
-
-      await waitForWorkspaceControllerState(
-        observer,
-        workspace.workspaceId,
-        observerIds,
-        (lease) =>
-          Boolean(lease.takeover_request_id)
-          && lease.takeover_requested_by_device_id === observerIds.deviceId
-          && lease.takeover_requested_by_client_id === observerIds.clientId,
-        30000,
-      );
+      expect(takeoverLease.takeover_request_id).toBeTruthy();
+      expect(takeoverLease.takeover_requested_by_device_id).toBe(observerIds.deviceId);
+      expect(takeoverLease.takeover_requested_by_client_id).toBe(observerIds.clientId);
       await expect(controller.getByTestId('workspace-takeover-request-banner')).toBeVisible({
         timeout: 30000,
       });
 
       await controllerContext.close();
+      await currentWorkspaceController(observer, workspace.workspaceId, observerIds);
 
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeHidden({
         timeout: 15000,
