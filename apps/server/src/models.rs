@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -27,12 +29,157 @@ pub enum SessionStatus {
     Interrupted,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IdlePolicy {
     pub enabled: bool,
+    #[serde(alias = "idleMinutes")]
     pub idle_minutes: u32,
+    #[serde(alias = "maxActive")]
     pub max_active: u32,
     pub pressure: bool,
+}
+
+fn default_settings_locale() -> String {
+    "en".to_string()
+}
+
+fn default_terminal_compatibility_mode() -> String {
+    "standard".to_string()
+}
+
+fn default_completion_notifications_only_when_background() -> bool {
+    true
+}
+
+fn default_completion_notifications_enabled() -> bool {
+    true
+}
+
+fn default_idle_policy_settings() -> IdlePolicy {
+    IdlePolicy {
+        enabled: true,
+        idle_minutes: 10,
+        max_active: 3,
+        pressure: true,
+    }
+}
+
+fn default_claude_executable() -> String {
+    "claude".to_string()
+}
+
+fn default_json_object() -> Value {
+    Value::Object(Default::default())
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct CompletionNotificationSettings {
+    #[serde(default = "default_completion_notifications_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_completion_notifications_only_when_background")]
+    #[serde(alias = "onlyWhenBackground")]
+    pub only_when_background: bool,
+}
+
+impl Default for CompletionNotificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_completion_notifications_enabled(),
+            only_when_background: default_completion_notifications_only_when_background(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct GeneralSettingsPayload {
+    #[serde(default = "default_settings_locale")]
+    pub locale: String,
+    #[serde(default = "default_terminal_compatibility_mode")]
+    #[serde(alias = "terminalCompatibilityMode")]
+    pub terminal_compatibility_mode: String,
+    #[serde(alias = "completionNotifications")]
+    pub completion_notifications: CompletionNotificationSettings,
+    #[serde(default = "default_idle_policy_settings")]
+    #[serde(alias = "idlePolicy")]
+    pub idle_policy: IdlePolicy,
+}
+
+impl Default for GeneralSettingsPayload {
+    fn default() -> Self {
+        Self {
+            locale: default_settings_locale(),
+            terminal_compatibility_mode: default_terminal_compatibility_mode(),
+            completion_notifications: CompletionNotificationSettings::default(),
+            idle_policy: default_idle_policy_settings(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct ClaudeRuntimeProfile {
+    #[serde(default = "default_claude_executable")]
+    pub executable: String,
+    #[serde(alias = "startupArgs")]
+    pub startup_args: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    #[serde(default = "default_json_object")]
+    #[serde(alias = "settingsJson")]
+    pub settings_json: Value,
+    #[serde(default = "default_json_object")]
+    #[serde(alias = "globalConfigJson")]
+    pub global_config_json: Value,
+}
+
+impl Default for ClaudeRuntimeProfile {
+    fn default() -> Self {
+        Self {
+            executable: default_claude_executable(),
+            startup_args: Vec::new(),
+            env: BTreeMap::new(),
+            settings_json: default_json_object(),
+            global_config_json: default_json_object(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct TargetClaudeOverride {
+    pub enabled: bool,
+    pub profile: ClaudeRuntimeProfile,
+}
+
+impl Default for TargetClaudeOverride {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            profile: ClaudeRuntimeProfile::default(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct ClaudeTargetOverrides {
+    pub native: Option<TargetClaudeOverride>,
+    pub wsl: Option<TargetClaudeOverride>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct ClaudeSettingsPayload {
+    pub global: ClaudeRuntimeProfile,
+    pub overrides: ClaudeTargetOverrides,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct AppSettingsPayload {
+    pub general: GeneralSettingsPayload,
+    pub claude: ClaudeSettingsPayload,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

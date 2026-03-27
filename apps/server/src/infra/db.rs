@@ -6,6 +6,7 @@ const SESSION_STREAM_LIMIT: usize = 200_000;
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
+const APP_SETTINGS_ROW_ID: i64 = 1;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -1175,6 +1176,11 @@ pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
             payload TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS app_device_ui_state (
             device_id TEXT PRIMARY KEY,
             payload TEXT NOT NULL,
@@ -1192,6 +1198,12 @@ pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute(
         "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
         params![APP_UI_STATE_ROW_ID, payload, now_ts()],
+    )?;
+    let app_settings_payload =
+        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
     )?;
     conn.execute(
         "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",

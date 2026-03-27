@@ -92,6 +92,11 @@ struct WorkbenchLayoutRequest {
 }
 
 #[derive(Deserialize)]
+struct AppSettingsUpdateRequest {
+    settings: AppSettingsPayload,
+}
+
+#[derive(Deserialize)]
 struct PathTargetRequest {
     path: String,
     target: ExecTarget,
@@ -228,12 +233,12 @@ struct TerminalCloseRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct AgentStartRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
     provider: String,
-    command: String,
     cols: Option<u16>,
     rows: Option<u16>,
 }
@@ -519,6 +524,18 @@ fn dispatch_rpc(
     authorized: &AuthorizedRequest,
 ) -> Result<Value, RpcError> {
     match command {
+        "app_settings_get" => {
+            serde_json::to_value(app_settings_get(app.state()).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "app_settings_update" => {
+            let req: AppSettingsUpdateRequest =
+                serde_json::from_value(payload).map_err(|e| rpc_bad_request(e.to_string()))?;
+            serde_json::to_value(
+                app_settings_update(req.settings, app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "launch_workspace" => {
             let req: LaunchWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             if authorized.request.public_mode {
@@ -1088,7 +1105,6 @@ fn dispatch_rpc(
                         workspace_id: req.controller.workspace_id,
                         session_id: req.session_id,
                         provider: req.provider,
-                        command: req.command,
                         cols: req.cols,
                         rows: req.rows,
                     },
@@ -1937,5 +1953,98 @@ mod tests {
         let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
         assert_eq!(scoped_b.ui_state.layout.left_width, 320.0);
         assert!(!scoped_b.ui_state.layout.show_code_panel);
+    }
+
+    #[test]
+    fn app_settings_rpc_round_trips_defaults_and_updates() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let initial = dispatch_rpc(&app, "app_settings_get", json!({}), &authorized)
+            .expect("default settings should load");
+        let initial: AppSettingsPayload = serde_json::from_value(initial).unwrap();
+        assert_eq!(initial.general.terminal_compatibility_mode, "standard");
+        assert_eq!(initial.claude.global.executable, "claude");
+
+        let saved = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh",
+                        "terminal_compatibility_mode": "compatibility",
+                        "completion_notifications": {
+                            "enabled": true,
+                            "only_when_background": false
+                        },
+                        "idle_policy": {
+                            "enabled": true,
+                            "idle_minutes": 12,
+                            "max_active": 4,
+                            "pressure": true
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": ["--dangerously-skip-permissions"],
+                            "env": {
+                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                            },
+                            "settings_json": {
+                                "model": "sonnet"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        },
+                        "overrides": {
+                            "native": null,
+                            "wsl": null
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("settings update should succeed");
+
+        let saved: AppSettingsPayload = serde_json::from_value(saved).unwrap();
+        assert_eq!(saved.general.locale, "zh");
+        assert_eq!(saved.claude.global.executable, "claude-nightly");
+        assert_eq!(
+            saved
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_BASE_URL")
+                .map(String::as_str),
+            Some("https://anthropic.example")
+        );
+    }
+
+    #[test]
+    fn agent_start_rejects_client_supplied_command() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let error = dispatch_rpc(
+            &app,
+            "agent_start",
+            json!({
+                "workspace_id": "ws_test",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": 1,
+                "session_id": "1",
+                "provider": "claude",
+                "command": "claude"
+            }),
+            &authorized,
+        )
+        .expect_err("agent_start should reject legacy command payloads");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
     }
 }

@@ -78,23 +78,29 @@ pub(crate) use infra::support::{
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
-    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult, ArchiveEntry,
-    ClaudeSlashSkillEntry, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
-    SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
-    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
-    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource,
-    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
-    WorktreeDetail, WorktreeInfo,
+    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSettingsPayload,
+    ClaudeSlashSkillEntry, ClaudeTargetOverrides, CommandAvailability,
+    CompletionNotificationSettings, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    FilesystemListResponse, FilesystemRoot, GeneralSettingsPayload, GitChangeEntry,
+    GitFileDiffPayload, GitStatus, IdlePolicy, SessionInfo, SessionMessage, SessionMessageRole,
+    SessionMode, SessionPatch, SessionStatus, TargetClaudeOverride, TerminalEvent, TerminalInfo,
+    TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
+    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot,
+    WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
+    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
+    WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
     agent_resize, agent_send, agent_start, agent_stop, stop_workspace_agents,
 };
+pub(crate) use services::app_settings::{
+    app_settings_get, app_settings_update, load_or_default_app_settings,
+};
 pub(crate) use services::claude::{
     current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
-    run_claude_hook_helper, start_claude_hook_receiver,
+    resolve_claude_runtime_profile, run_claude_hook_helper, start_claude_hook_receiver,
 };
 pub(crate) use services::filesystem::{
     file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
