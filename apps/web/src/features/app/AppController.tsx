@@ -12,14 +12,11 @@ import {
   readStoredAppSettings,
 } from "../../shared/app/settings";
 import {
-  appSettingsPayloadEquals,
   defaultAppSettings,
-  mergeLegacySettingsIntoAppSettings,
 } from "../../shared/app/claude-settings.ts";
 import {
-  getAppSettings,
+  hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
-  updateAppSettings,
 } from "../../services/http/settings.service.ts";
 
 export default function AppController() {
@@ -46,45 +43,22 @@ export default function AppController() {
       const legacySettings = readStoredAppSettings();
       const preferredLocale = getPreferredLocale();
       const fallbackDefaults = defaultAppSettings();
+      const hydrated = await hydrateConfirmedAppSettings({
+        fallbackSettings: fallbackDefaults,
+        legacySettings,
+        preferredLocale,
+      });
 
-      try {
-        const serverSettings = await getAppSettings();
-        const shouldMigrateLegacy = legacySettings !== null
-          && appSettingsPayloadEquals(serverSettings, fallbackDefaults);
-        const shouldSyncLocale = appSettingsPayloadEquals(serverSettings, fallbackDefaults)
-          && preferredLocale !== serverSettings.general.locale;
-
-        let resolvedSettings = serverSettings;
-        if (shouldMigrateLegacy || shouldSyncLocale) {
-          const draft = shouldMigrateLegacy
-            ? mergeLegacySettingsIntoAppSettings(serverSettings, legacySettings)
-            : cloneAppSettings(serverSettings);
-          draft.general.locale = shouldMigrateLegacy && legacySettings?.locale
-            ? legacySettings.locale
-            : preferredLocale;
-          resolvedSettings = await updateAppSettings(draft);
-        }
-
+      if (hydrated.clearLegacyStorage) {
         clearStoredAppSettings();
-        if (cancelled) {
-          return;
-        }
-
-        const normalized = cloneAppSettings(resolvedSettings);
-        setAppSettings(normalized);
-        setLocale(normalized.general.locale);
-        persistLocale(normalized.general.locale);
-      } catch {
-        if (cancelled) {
-          return;
-        }
-
-        const fallback = legacySettings ?? fallbackDefaults;
-        const normalized = cloneAppSettings(fallback);
-        setAppSettings(normalized);
-        setLocale(normalized.general.locale);
-        persistLocale(normalized.general.locale);
       }
+      if (cancelled) {
+        return;
+      }
+
+      setAppSettings(hydrated.settings);
+      setLocale(hydrated.settings.general.locale);
+      persistLocale(hydrated.settings.general.locale);
     };
 
     void hydrateAppSettings();
