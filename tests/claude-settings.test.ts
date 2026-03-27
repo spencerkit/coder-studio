@@ -33,6 +33,15 @@ test('mergeLegacySettingsIntoAppSettings preserves quoted executable paths and a
   ]);
 });
 
+test('mergeLegacySettingsIntoAppSettings preserves unquoted windows paths with backslashes', () => {
+  const merged = mergeLegacySettingsIntoAppSettings(defaultAppSettings(), {
+    agentCommand: 'C:\\tools\\claude.exe --verbose',
+  });
+
+  assert.equal(merged.claude.global.executable, 'C:\\tools\\claude.exe');
+  assert.deepEqual(merged.claude.global.startupArgs, ['--verbose']);
+});
+
 test('resolveClaudeRuntimeProfile only uses target override when enabled', () => {
   const settings = defaultAppSettings();
   settings.claude.overrides.native = {

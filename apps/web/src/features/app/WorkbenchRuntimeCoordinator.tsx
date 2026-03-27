@@ -69,13 +69,13 @@ const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
   locale: Locale;
-  settingsHydrated: boolean;
+  settingsConfirmed: boolean;
 };
 
 export const WorkbenchRuntimeCoordinator = ({
   appSettings,
   locale,
-  settingsHydrated,
+  settingsConfirmed,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
   const [state, setState] = useRelaxState(workbenchState);
@@ -629,7 +629,7 @@ export const WorkbenchRuntimeCoordinator = ({
     const idlePolicyWorkspaceIds = getIdlePolicySyncWorkspaceIds(
       stateRef.current.tabs,
       appSettings.idlePolicy,
-      settingsHydrated,
+      settingsConfirmed,
     );
 
     if (idlePolicyWorkspaceIds.length === 0) {
@@ -657,7 +657,7 @@ export const WorkbenchRuntimeCoordinator = ({
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });
-  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsHydrated, updateState]);
+  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsConfirmed, updateState]);
 
   return null;
 };

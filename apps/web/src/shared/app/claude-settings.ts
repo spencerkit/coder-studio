@@ -256,11 +256,13 @@ const tokenizeLegacyCommand = (command: string): string[] => {
       }
       if (char === "\\") {
         const next = command[index + 1];
-        if (next) {
+        if (next && (/\s/.test(next) || next === "'" || next === "\"" || next === "\\")) {
           current += next;
           index += 1;
           continue;
         }
+        current += char;
+        continue;
       }
       current += char;
       continue;

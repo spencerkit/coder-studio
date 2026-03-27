@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
 import {
+  createAppSettingsDraftStore,
   createSequencedAppSettingsSaver,
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
@@ -38,6 +39,21 @@ test('persistConfirmedAppSettings keeps the last confirmed settings when save fa
 
   assert.equal(saved.general.locale, confirmed.general.locale);
   assert.equal(saved.general.idlePolicy.idleMinutes, confirmed.general.idlePolicy.idleMinutes);
+});
+
+test('createAppSettingsDraftStore composes new saves from the latest in-memory draft', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  const localeDraft = store.update((draft) => {
+    draft.general.locale = 'zh';
+  });
+  const mixedDraft = store.update((draft) => {
+    draft.general.idlePolicy.idleMinutes = 25;
+  });
+
+  assert.equal(localeDraft.general.locale, 'zh');
+  assert.equal(mixedDraft.general.locale, 'zh');
+  assert.equal(mixedDraft.general.idlePolicy.idleMinutes, 25);
 });
 
 test('createSequencedAppSettingsSaver ignores stale save responses', async () => {
@@ -133,6 +149,7 @@ test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy m
   });
 
   assert.equal(hydrated.settings.general.locale, 'en');
+  assert.equal(hydrated.backendConfirmed, true);
   assert.equal(hydrated.clearLegacyStorage, false);
 });
 
@@ -152,5 +169,6 @@ test('hydrateConfirmedAppSettings ignores legacy local settings when backend hyd
 
   assert.equal(hydrated.settings.general.locale, 'en');
   assert.equal(hydrated.settings.general.idlePolicy.idleMinutes, 10);
+  assert.equal(hydrated.backendConfirmed, false);
   assert.equal(hydrated.clearLegacyStorage, false);
 });

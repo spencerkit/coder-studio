@@ -15,6 +15,7 @@ import {
   defaultAppSettings,
 } from "../../shared/app/claude-settings.ts";
 import {
+  createAppSettingsDraftStore,
   createSequencedAppSettingsSaver,
   hydrateConfirmedAppSettings,
 } from "../../services/http/settings.service.ts";
@@ -22,17 +23,15 @@ import {
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
   const [appSettings, setAppSettings] = useState<AppSettings>(() => defaultAppSettings());
-  const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [backendSettingsConfirmed, setBackendSettingsConfirmed] = useState(false);
   const [lastWorkspacePath, setLastWorkspacePath] = useState("/workspace");
-  const appSettingsRef = useRef(appSettings);
+  const confirmedSettingsRef = useRef(appSettings);
+  const backendSettingsConfirmedRef = useRef(false);
+  const draftSettingsRef = useRef(createAppSettingsDraftStore(appSettings));
   const saveCoordinatorRef = useRef(createSequencedAppSettingsSaver());
   const navigate = useNavigate();
   const location = useLocation();
   const route: AppRoute = location.pathname === "/settings" ? "settings" : "workspace";
-
-  useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
 
   useEffect(() => {
     applyLocale(locale);
@@ -58,10 +57,13 @@ export default function AppController() {
         return;
       }
 
+      draftSettingsRef.current.replace(hydrated.settings);
+      confirmedSettingsRef.current = cloneAppSettings(hydrated.settings);
+      backendSettingsConfirmedRef.current = hydrated.backendConfirmed;
       setAppSettings(hydrated.settings);
       setLocale(hydrated.settings.general.locale);
       persistLocale(hydrated.settings.general.locale);
-      setSettingsHydrated(true);
+      setBackendSettingsConfirmed(hydrated.backendConfirmed);
     };
 
     void hydrateAppSettings();
@@ -80,38 +82,47 @@ export default function AppController() {
     navigate(nextRoute === "settings" ? "/settings" : lastWorkspacePath);
   };
 
-  const applyConfirmedSettings = (saved: AppSettings) => {
+  const applyRuntimeSettings = (saved: AppSettings, confirmedByBackend: boolean) => {
+    draftSettingsRef.current.replace(saved);
+    confirmedSettingsRef.current = cloneAppSettings(saved);
+    backendSettingsConfirmedRef.current = confirmedByBackend;
     setAppSettings(saved);
     setLocale(saved.general.locale);
     persistLocale(saved.general.locale);
+    setBackendSettingsConfirmed(confirmedByBackend);
   };
 
   const onSelectLocale = (nextLocale: Locale) => {
-    const nextSettings = cloneAppSettings(appSettingsRef.current);
-    nextSettings.general.locale = nextLocale;
+    const nextSettings = draftSettingsRef.current.update((draft) => {
+      draft.general.locale = nextLocale;
+    });
     void saveCoordinatorRef.current.save(
-      appSettingsRef.current,
+      confirmedSettingsRef.current,
       nextSettings,
+      undefined,
+      backendSettingsConfirmedRef.current,
     )
       .then((result) => {
         if (!result.shouldApply) {
           return;
         }
-        applyConfirmedSettings(result.settings);
+        applyRuntimeSettings(result.settings, result.backendConfirmed);
       });
   };
 
   const onCommitSettings = (nextSettings: AppSettings) => {
-    const normalized = cloneAppSettings(nextSettings);
+    const normalized = draftSettingsRef.current.replace(cloneAppSettings(nextSettings));
     void saveCoordinatorRef.current.save(
-      appSettingsRef.current,
+      confirmedSettingsRef.current,
       normalized,
+      undefined,
+      backendSettingsConfirmedRef.current,
     )
       .then((result) => {
         if (!result.shouldApply) {
           return;
         }
-        applyConfirmedSettings(result.settings);
+        applyRuntimeSettings(result.settings, result.backendConfirmed);
       });
   };
 
@@ -120,7 +131,7 @@ export default function AppController() {
       <WorkbenchRuntimeCoordinator
         locale={locale}
         appSettings={appSettings}
-        settingsHydrated={settingsHydrated}
+        settingsConfirmed={backendSettingsConfirmed}
       />
       <Routes>
         <Route path="/" element={<Navigate to="/workspace" replace />} />
