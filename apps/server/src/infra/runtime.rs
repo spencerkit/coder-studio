@@ -485,6 +485,19 @@ pub(crate) fn build_claude_resume_command(
     format!("{command} --resume {claude_session_id}")
 }
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn build_windows_native_agent_shell_invocation(command: &str) -> (String, Vec<String>) {
+    (
+        "cmd".to_string(),
+        vec![
+            "/D".to_string(),
+            "/S".to_string(),
+            "/C".to_string(),
+            command.to_string(),
+        ],
+    )
+}
+
 pub(crate) fn build_agent_pty_command(
     target: &ExecTarget,
     cwd: &str,
@@ -505,8 +518,8 @@ pub(crate) fn build_agent_pty_command(
     } else {
         #[cfg(target_os = "windows")]
         {
-            let shell_cmd = build_agent_shell_command(cwd, command, true);
-            ("cmd".to_string(), vec!["/C".to_string(), shell_cmd])
+            let _ = cwd;
+            build_windows_native_agent_shell_invocation(command)
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -590,4 +603,28 @@ pub(crate) fn repo_name_from_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
     let name = trimmed.split('/').next_back().unwrap_or("repo");
     name.trim_end_matches(".git").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_windows_native_agent_shell_invocation_avoids_cd_wrapper() {
+        let command = r#"node D:\a\coder-studio\coder-studio\tests\e2e\fixtures\claude-lifecycle-agent.mjs --running-delay-ms 150"#;
+
+        let (program, args) = build_windows_native_agent_shell_invocation(command);
+
+        assert_eq!(program, "cmd");
+        assert_eq!(
+            args,
+            vec![
+                "/D".to_string(),
+                "/S".to_string(),
+                "/C".to_string(),
+                command.to_string()
+            ]
+        );
+        assert!(!args[3].contains("cd /d"));
+    }
 }
