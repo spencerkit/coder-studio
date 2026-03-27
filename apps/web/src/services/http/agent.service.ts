@@ -4,14 +4,18 @@ import type { AgentStartResult } from "../../types/app";
 import type { TerminalGridSize } from "../../shared/utils/terminal";
 import { invokeRpc } from "./client.ts";
 
-export const startAgent = (args: {
+export type AgentStartRequest = {
   workspaceId: string;
   controller: WorkspaceControllerState;
   sessionId: string;
   provider: "claude";
   cols?: TerminalGridSize["cols"];
   rows?: TerminalGridSize["rows"];
-}) => invokeRpc<AgentStartResult>(
+};
+
+// Claude launch settings are resolved on the server from persisted app settings.
+// The frontend intentionally never sends a launch command here.
+export const startAgent = (args: AgentStartRequest) => invokeRpc<AgentStartResult>(
   "agent_start",
   createWorkspaceControllerRpcPayload(args.workspaceId, args.controller, {
     sessionId: args.sessionId,

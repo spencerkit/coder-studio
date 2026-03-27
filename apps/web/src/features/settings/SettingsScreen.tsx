@@ -5,6 +5,11 @@ import { Settings } from "../../components/Settings";
 import { TopBar } from "../../components/TopBar";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import { cloneAppSettings } from "../../shared/app/settings";
+import {
+  applyGeneralSettingsPatch,
+  resolveClaudeCommandForTarget,
+  updateClaudeCommandForTarget,
+} from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
 import type { AppSettings, BrowserNotificationSupport, SettingsPanel } from "../../types/app";
 import { buildWorkspaceTabItems, getBrowserNotificationPermissionState } from "../workspace";
@@ -43,14 +48,16 @@ export const SettingsScreen = ({
   );
   const t = useMemo(() => createTranslator(locale), [locale]);
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? state.tabs[0];
+  const activeTarget = activeTab?.project?.target ?? { type: "native" as const };
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
+  const launchCommandValue = resolveClaudeCommandForTarget(settingsDraft, activeTarget);
 
   useEffect(() => {
     setSettingsDraft(cloneAppSettings(appSettings));
   }, [appSettings]);
 
   useEffect(() => {
-    const command = settingsDraft.agentCommand.trim();
+    const command = launchCommandValue.trim();
     if (!command) {
       setAgentCommandStatus({ loading: false, available: null, runtimeLabel: "" });
       return;
@@ -60,13 +67,13 @@ export const SettingsScreen = ({
     const timer = window.setTimeout(async () => {
       setAgentCommandStatus((current) => ({ ...current, loading: true, error: undefined }));
       try {
-        const result = await checkCommandAvailability(command, activeTab?.project?.target ?? { type: "native" }, activeTab?.project?.path);
+        const result = await checkCommandAvailability(command, activeTarget, activeTab?.project?.path);
         if (cancelled) return;
         setAgentCommandStatus({
           loading: false,
           available: result.available,
-          runtimeLabel: activeTab?.project?.target?.type === "wsl"
-            ? (activeTab.project?.target.distro?.trim() ? `WSL (${activeTab.project.target.distro.trim()})` : "WSL")
+          runtimeLabel: activeTarget.type === "wsl"
+            ? (activeTarget.distro?.trim() ? `WSL (${activeTarget.distro.trim()})` : "WSL")
             : t("nativeTarget"),
           resolvedPath: result.resolved_path ?? undefined,
           error: result.error ?? undefined
@@ -76,8 +83,8 @@ export const SettingsScreen = ({
         setAgentCommandStatus({
           loading: false,
           available: false,
-          runtimeLabel: activeTab?.project?.target?.type === "wsl"
-            ? (activeTab.project?.target.distro?.trim() ? `WSL (${activeTab.project.target.distro.trim()})` : "WSL")
+          runtimeLabel: activeTarget.type === "wsl"
+            ? (activeTarget.distro?.trim() ? `WSL (${activeTarget.distro.trim()})` : "WSL")
             : t("nativeTarget"),
           error: error instanceof Error ? error.message : String(error)
         });
@@ -88,41 +95,32 @@ export const SettingsScreen = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [settingsDraft.agentCommand, activeTab?.project?.path, activeTab?.project?.target?.type, activeTab?.project?.target?.type === "wsl" ? activeTab?.project?.target.distro : "", t]);
+  }, [
+    activeTab?.project?.path,
+    activeTarget.type,
+    activeTarget.type === "wsl" ? activeTarget.distro : "",
+    launchCommandValue,
+    t,
+  ]);
 
   const commitSettings = (nextSettings: AppSettings) => {
     setSettingsDraft(cloneAppSettings(nextSettings));
     onCommitSettings(nextSettings);
   };
 
-  const onSettingsChange = (patch: Partial<AppSettings>) => {
-    const nextSettings: AppSettings = {
-      ...settingsDraft,
-      ...patch,
-      idlePolicy: patch.idlePolicy
-        ? { ...settingsDraft.idlePolicy, ...patch.idlePolicy }
-        : settingsDraft.idlePolicy,
-      completionNotifications: patch.completionNotifications
-        ? { ...settingsDraft.completionNotifications, ...patch.completionNotifications }
-        : settingsDraft.completionNotifications
-    };
-    commitSettings(nextSettings);
+  const onLaunchCommandChange = (command: string) => {
+    commitSettings(updateClaudeCommandForTarget(settingsDraft, activeTarget, command));
   };
 
-  const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["idlePolicy"]>) => {
-    const nextSettings: AppSettings = {
-      ...settingsDraft,
-      idlePolicy: {
-        enabled: patch.enabled ?? settingsDraft.idlePolicy.enabled,
-        idleMinutes: Math.max(1, Number(patch.idleMinutes ?? settingsDraft.idlePolicy.idleMinutes) || 1),
-        maxActive: Math.max(1, Number(patch.maxActive ?? settingsDraft.idlePolicy.maxActive) || 1),
-        pressure: patch.pressure ?? settingsDraft.idlePolicy.pressure
-      }
-    };
-    commitSettings(nextSettings);
+  const onGeneralSettingsChange = (patch: Partial<AppSettings["general"]>) => {
+    commitSettings(applyGeneralSettingsPatch(settingsDraft, patch));
   };
 
-  const trimmedLaunchCommand = settingsDraft.agentCommand.trim();
+  const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
+    commitSettings(applyGeneralSettingsPatch(settingsDraft, { idlePolicy: patch }));
+  };
+
+  const trimmedLaunchCommand = launchCommandValue.trim();
   const launchCommandStateClass = agentCommandStatus.loading
     ? "checking"
     : !trimmedLaunchCommand
@@ -166,6 +164,7 @@ export const SettingsScreen = ({
         locale={locale}
         activeSettingsPanel={activeSettingsPanel}
         settingsDraft={settingsDraft}
+        launchCommandValue={launchCommandValue}
         launchCommandStatus={{
           stateClass: launchCommandStateClass,
           text: launchCommandStatusText,
@@ -173,7 +172,8 @@ export const SettingsScreen = ({
         }}
         notificationPermissionText={notificationPermissionText}
         onSettingsPanelChange={setActiveSettingsPanel}
-        onSettingsChange={onSettingsChange}
+        onGeneralSettingsChange={onGeneralSettingsChange}
+        onLaunchCommandChange={onLaunchCommandChange}
         onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
         onSelectLocale={onSelectLocale}
         t={t}

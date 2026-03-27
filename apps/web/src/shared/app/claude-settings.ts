@@ -368,6 +368,43 @@ export const mergeLegacySettingsIntoAppSettings = (
   return syncCompatibilityFields(toAppSettingsPayload(next));
 };
 
+export const applyGeneralSettingsPatch = (
+  settings: AppSettings,
+  patch: Partial<AppSettings["general"]>,
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+
+  if (patch.locale) {
+    next.general.locale = readLocale(patch.locale, next.general.locale);
+  }
+  if (patch.terminalCompatibilityMode) {
+    next.general.terminalCompatibilityMode = readTerminalCompatibilityMode(
+      patch.terminalCompatibilityMode,
+      next.general.terminalCompatibilityMode,
+    );
+  }
+  if (patch.completionNotifications) {
+    next.general.completionNotifications = {
+      ...next.general.completionNotifications,
+      ...patch.completionNotifications,
+    };
+  }
+  if (patch.idlePolicy) {
+    next.general.idlePolicy = {
+      ...next.general.idlePolicy,
+      ...patch.idlePolicy,
+      idleMinutes: Number.isFinite(patch.idlePolicy.idleMinutes)
+        ? Math.max(1, Number(patch.idlePolicy.idleMinutes))
+        : next.general.idlePolicy.idleMinutes,
+      maxActive: Number.isFinite(patch.idlePolicy.maxActive)
+        ? Math.max(1, Number(patch.idlePolicy.maxActive))
+        : next.general.idlePolicy.maxActive,
+    };
+  }
+
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
 export const resolveClaudeRuntimeProfile = (
   settings: AppSettings,
   target: ExecTarget,
@@ -381,6 +418,31 @@ export const resolveClaudeRuntimeProfile = (
   }
 
   return mergeClaudeRuntimeProfiles(settings.claude.global, override.profile);
+};
+
+export const resolveClaudeCommandForTarget = (
+  settings: AppSettings,
+  target: ExecTarget,
+): string => formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target));
+
+export const updateClaudeCommandForTarget = (
+  settings: AppSettings,
+  target: ExecTarget,
+  command: string,
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const { executable, startupArgs } = splitLegacyCommand(command);
+  const targetOverride = target.type === "native"
+    ? next.claude.overrides.native
+    : next.claude.overrides.wsl;
+  const profile = targetOverride?.enabled
+    ? targetOverride.profile
+    : next.claude.global;
+
+  profile.executable = executable;
+  profile.startupArgs = startupArgs;
+
+  return syncCompatibilityFields(toAppSettingsPayload(next));
 };
 
 export const appSettingsPayloadEquals = (

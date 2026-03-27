@@ -6,6 +6,7 @@ type SettingsProps = {
   locale: Locale;
   activeSettingsPanel: SettingsPanel;
   settingsDraft: AppSettings;
+  launchCommandValue: string;
   launchCommandStatus: {
     stateClass: string;
     text: string;
@@ -13,8 +14,9 @@ type SettingsProps = {
   };
   notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
-  onSettingsChange: (patch: Partial<AppSettings>) => void;
-  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["idlePolicy"]>) => void;
+  onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
+  onLaunchCommandChange: (command: string) => void;
+  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
@@ -28,10 +30,12 @@ export const Settings = ({
   locale,
   activeSettingsPanel,
   settingsDraft,
+  launchCommandValue,
   launchCommandStatus,
   notificationPermissionText,
   onSettingsPanelChange,
-  onSettingsChange,
+  onGeneralSettingsChange,
+  onLaunchCommandChange,
   onSettingsIdlePolicyChange,
   onSelectLocale,
   t
@@ -70,7 +74,7 @@ export const Settings = ({
               </div>
               <div className="settings-summary-item">
                 <span className="section-kicker">{t("launchCommand")}</span>
-                <strong>{settingsDraft.agentCommand.trim() || t("launchCommandPlaceholder")}</strong>
+                <strong>{launchCommandValue.trim() || t("launchCommandPlaceholder")}</strong>
               </div>
               <div className="settings-summary-item">
                 <span className="section-kicker">{t("languageLabel")}</span>
@@ -88,8 +92,8 @@ export const Settings = ({
                   <div className="settings-command-field">
                     <input
                       className="settings-inline-input"
-                      value={settingsDraft.agentCommand}
-                      onChange={(event) => onSettingsChange({ agentCommand: event.target.value })}
+                      value={launchCommandValue}
+                      onChange={(event) => onLaunchCommandChange(event.target.value)}
                       placeholder={t("launchCommandPlaceholder")}
                       data-testid="settings-agent-command"
                     />
@@ -116,8 +120,8 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.idlePolicy.enabled}
-                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.idlePolicy.enabled })}
+                      checked={settingsDraft.general.idlePolicy.enabled}
+                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.general.idlePolicy.enabled })}
                     />
                     <span className="toggle-track"><span className="toggle-thumb" /></span>
                   </label>
@@ -134,7 +138,7 @@ export const Settings = ({
                     className="settings-inline-number"
                     type="number"
                     min={1}
-                    value={settingsDraft.idlePolicy.idleMinutes}
+                    value={settingsDraft.general.idlePolicy.idleMinutes}
                     onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
                     data-testid="settings-idle-minutes"
                   />
@@ -152,7 +156,7 @@ export const Settings = ({
                     className="settings-inline-number"
                     type="number"
                     min={1}
-                    value={settingsDraft.idlePolicy.maxActive}
+                    value={settingsDraft.general.idlePolicy.maxActive}
                     onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
                     data-testid="settings-max-active"
                   />
@@ -169,10 +173,10 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.completionNotifications.enabled}
-                      onChange={() => onSettingsChange({
+                      checked={settingsDraft.general.completionNotifications.enabled}
+                      onChange={() => onGeneralSettingsChange({
                         completionNotifications: {
-                          enabled: !settingsDraft.completionNotifications.enabled
+                          enabled: !settingsDraft.general.completionNotifications.enabled
                         }
                       })}
                       data-testid="settings-completion-notifications"
@@ -191,10 +195,10 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.completionNotifications.onlyWhenBackground}
-                      onChange={() => onSettingsChange({
+                      checked={settingsDraft.general.completionNotifications.onlyWhenBackground}
+                      onChange={() => onGeneralSettingsChange({
                         completionNotifications: {
-                          onlyWhenBackground: !settingsDraft.completionNotifications.onlyWhenBackground
+                          onlyWhenBackground: !settingsDraft.general.completionNotifications.onlyWhenBackground
                         }
                       })}
                       data-testid="settings-notify-only-background"
@@ -222,8 +226,8 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.idlePolicy.pressure}
-                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.idlePolicy.pressure })}
+                      checked={settingsDraft.general.idlePolicy.pressure}
+                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.general.idlePolicy.pressure })}
                     />
                     <span className="toggle-track"><span className="toggle-thumb" /></span>
                   </label>
@@ -253,16 +257,16 @@ export const Settings = ({
                   <div className="settings-pill-select">
                     <button
                       type="button"
-                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "standard" ? "active" : ""}`}
-                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "standard" })}
+                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "standard" ? "active" : ""}`}
+                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "standard" })}
                       data-testid="settings-terminal-standard"
                     >
                       {t("terminalRenderingStandard")}
                     </button>
                     <button
                       type="button"
-                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
-                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "compatibility" })}
+                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
+                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "compatibility" })}
                       data-testid="settings-terminal-compatibility"
                     >
                       {t("terminalRenderingCompatibility")}
