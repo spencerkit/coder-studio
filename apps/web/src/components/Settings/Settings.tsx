@@ -6,16 +6,9 @@ type SettingsProps = {
   locale: Locale;
   activeSettingsPanel: SettingsPanel;
   settingsDraft: AppSettings;
-  launchCommandValue: string;
-  launchCommandStatus: {
-    stateClass: string;
-    text: string;
-    detailText: string;
-  };
   notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
-  onLaunchCommandChange: (command: string) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
@@ -30,12 +23,9 @@ export const Settings = ({
   locale,
   activeSettingsPanel,
   settingsDraft,
-  launchCommandValue,
-  launchCommandStatus,
   notificationPermissionText,
   onSettingsPanelChange,
   onGeneralSettingsChange,
-  onLaunchCommandChange,
   onSettingsIdlePolicyChange,
   onSelectLocale,
   t
@@ -73,44 +63,12 @@ export const Settings = ({
                 <strong>{activePanelLabel}</strong>
               </div>
               <div className="settings-summary-item">
-                <span className="section-kicker">{t("launchCommand")}</span>
-                <strong>{launchCommandValue.trim() || t("launchCommandPlaceholder")}</strong>
-              </div>
-              <div className="settings-summary-item">
                 <span className="section-kicker">{t("languageLabel")}</span>
                 <strong>{languageLabel}</strong>
               </div>
             </div>
             {activeSettingsPanel === "general" ? (
               <div className="settings-group-card">
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("launchCommand")}</strong>
-                  <span>{t("launchCommandHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <div className="settings-command-field">
-                    <input
-                      className="settings-inline-input"
-                      value={launchCommandValue}
-                      onChange={(event) => onLaunchCommandChange(event.target.value)}
-                      placeholder={t("launchCommandPlaceholder")}
-                      data-testid="settings-agent-command"
-                    />
-                    <div
-                      className={`settings-inline-status ${launchCommandStatus.stateClass}`}
-                      data-testid="settings-agent-command-status"
-                    >
-                      <span className="settings-inline-status-dot" aria-hidden="true" />
-                      <div className="settings-inline-status-copy">
-                        <span>{launchCommandStatus.text}</span>
-                        {launchCommandStatus.detailText && <small>{launchCommandStatus.detailText}</small>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="settings-row">
                 <div className="settings-row-copy">
                   <strong>{t("autoSuspend")}</strong>

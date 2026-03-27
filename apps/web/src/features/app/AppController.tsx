@@ -18,6 +18,7 @@ import {
 } from "../../shared/app/claude-settings.ts";
 import {
   getAppSettings,
+  persistConfirmedAppSettings,
   updateAppSettings,
 } from "../../services/http/settings.service.ts";
 
@@ -103,30 +104,23 @@ export default function AppController() {
   };
 
   const onSelectLocale = (nextLocale: Locale) => {
-    setLocale(nextLocale);
-    persistLocale(nextLocale);
-
     const nextSettings = cloneAppSettings(appSettingsRef.current);
     nextSettings.general.locale = nextLocale;
-    setAppSettings(nextSettings);
-    void updateAppSettings(nextSettings)
+    void persistConfirmedAppSettings(appSettingsRef.current, nextSettings)
       .then((saved) => {
-        setAppSettings(cloneAppSettings(saved));
-      })
-      .catch(() => {
-        // Keep the in-memory locale if persistence fails.
+        setAppSettings(saved);
+        setLocale(saved.general.locale);
+        persistLocale(saved.general.locale);
       });
   };
 
   const onCommitSettings = (nextSettings: AppSettings) => {
     const normalized = cloneAppSettings(nextSettings);
-    setAppSettings(normalized);
-    void updateAppSettings(normalized)
+    void persistConfirmedAppSettings(appSettingsRef.current, normalized)
       .then((saved) => {
-        setAppSettings(cloneAppSettings(saved));
-      })
-      .catch(() => {
-        // Keep the optimistic draft if persistence fails.
+        setAppSettings(saved);
+        setLocale(saved.general.locale);
+        persistLocale(saved.general.locale);
       });
   };
 

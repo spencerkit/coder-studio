@@ -420,31 +420,6 @@ export const resolveClaudeRuntimeProfile = (
   return mergeClaudeRuntimeProfiles(settings.claude.global, override.profile);
 };
 
-export const resolveClaudeCommandForTarget = (
-  settings: AppSettings,
-  target: ExecTarget,
-): string => formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target));
-
-export const updateClaudeCommandForTarget = (
-  settings: AppSettings,
-  target: ExecTarget,
-  command: string,
-): AppSettings => {
-  const next = cloneAppSettings(settings);
-  const { executable, startupArgs } = splitLegacyCommand(command);
-  const targetOverride = target.type === "native"
-    ? next.claude.overrides.native
-    : next.claude.overrides.wsl;
-  const profile = targetOverride?.enabled
-    ? targetOverride.profile
-    : next.claude.global;
-
-  profile.executable = executable;
-  profile.startupArgs = startupArgs;
-
-  return syncCompatibilityFields(toAppSettingsPayload(next));
-};
-
 export const appSettingsPayloadEquals = (
   left: AppSettings,
   right: AppSettings,

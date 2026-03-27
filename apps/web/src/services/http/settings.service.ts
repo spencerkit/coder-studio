@@ -1,5 +1,6 @@
 import type { AppSettings } from "../../types/app.ts";
 import {
+  cloneAppSettings,
   normalizeAppSettings,
   toAppSettingsPayload,
 } from "../../shared/app/claude-settings.ts";
@@ -16,3 +17,15 @@ export const updateAppSettings = async (settings: AppSettings): Promise<AppSetti
     }),
   )
 );
+
+export const persistConfirmedAppSettings = async (
+  confirmedSettings: AppSettings,
+  draftSettings: AppSettings,
+  persist: (settings: AppSettings) => Promise<AppSettings> = updateAppSettings,
+): Promise<AppSettings> => {
+  try {
+    return cloneAppSettings(await persist(cloneAppSettings(draftSettings)));
+  } catch {
+    return cloneAppSettings(confirmedSettings);
+  }
+};

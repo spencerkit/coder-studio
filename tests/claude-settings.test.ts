@@ -5,9 +5,7 @@ import {
   cloneAppSettings,
   defaultAppSettings,
   mergeLegacySettingsIntoAppSettings,
-  resolveClaudeCommandForTarget,
   resolveClaudeRuntimeProfile,
-  updateClaudeCommandForTarget,
 } from '../apps/web/src/shared/app/claude-settings.ts';
 
 test('mergeLegacySettingsIntoAppSettings migrates launch command into claude global executable', () => {
@@ -59,7 +57,7 @@ test('applyGeneralSettingsPatch updates nested general settings and compatibilit
   assert.equal(next.terminalCompatibilityMode, 'compatibility');
 });
 
-test('target command helpers prefer the effective override profile over the global compatibility command', () => {
+test('resolveClaudeRuntimeProfile inherits global startup args for enabled target overrides', () => {
   const settings = cloneAppSettings({
     ...defaultAppSettings(),
     claude: {
@@ -67,6 +65,7 @@ test('target command helpers prefer the effective override profile over the glob
       global: {
         ...defaultAppSettings().claude.global,
         executable: 'claude-global',
+        startupArgs: ['--verbose'],
       },
       overrides: {
         ...defaultAppSettings().claude.overrides,
@@ -78,31 +77,12 @@ test('target command helpers prefer the effective override profile over the glob
     profile: {
       ...settings.claude.global,
       executable: 'claude-native',
-      startupArgs: ['--verbose'],
+      startupArgs: [],
     },
   };
 
-  assert.equal(settings.agentCommand, 'claude-global');
-  assert.equal(
-    resolveClaudeCommandForTarget(settings, { type: 'native' }),
-    'claude-native --verbose',
-  );
+  const resolved = resolveClaudeRuntimeProfile(settings, { type: 'native' });
 
-  const next = updateClaudeCommandForTarget(
-    settings,
-    { type: 'native' },
-    'claude-review --dangerously-skip-permissions',
-  );
-
-  assert.equal(next.claude.global.executable, 'claude-global');
-  assert.equal(next.claude.overrides.native?.profile.executable, 'claude-review');
-  assert.deepEqual(
-    next.claude.overrides.native?.profile.startupArgs,
-    ['--dangerously-skip-permissions'],
-  );
-  assert.equal(next.agentCommand, 'claude-global');
-  assert.equal(
-    resolveClaudeCommandForTarget(next, { type: 'native' }),
-    'claude-review --dangerously-skip-permissions',
-  );
+  assert.equal(resolved.executable, 'claude-native');
+  assert.deepEqual(resolved.startupArgs, ['--verbose']);
 });
