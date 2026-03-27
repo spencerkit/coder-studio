@@ -494,7 +494,9 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Runtime');
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Changes');
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Queue');
+  await expect(page.locator('.agent-pane-header').first()).toHaveAttribute('data-density', 'compact');
   await expect(page.locator('.agent-pane-state-tag').first()).toBeVisible();
+  await expect(page.locator('.agent-pane-state-tag').first()).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
   await expect(page.locator('.agent-pane-state-tag').first()).toHaveText(/Ready|Queued|Suspended|Running|Background/);
 
   await page.getByRole('button', { name: 'Actions' }).click();

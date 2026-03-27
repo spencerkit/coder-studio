@@ -107,13 +107,15 @@ export const AgentWorkspaceFeature = ({
         <div className={`surface-progress ${tone}`} aria-hidden="true">
           <span className="surface-progress-bar" style={{ width: `${progress}%` }} />
         </div>
-        <div className="agent-pane-header">
+        <div className="agent-pane-header" data-density="compact" data-active={isPaneActive ? "true" : "false"}>
           <div className="agent-pane-header-copy">
             <span className={`session-top-dot ${statusTone} ${statusTone === "active" ? "pulse" : ""}`} />
             <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
           </div>
           <div className="agent-pane-meta">
-            <span className={`agent-pane-state-tag ${headerTag.tone}`}>{headerTag.label}</span>
+            <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
+              {headerTag.label}
+            </span>
             <div className="agent-pane-actions">
               <button
                 type="button"
@@ -233,13 +235,15 @@ export const AgentWorkspaceFeature = ({
                 data-session-id={viewedSession.id}
                 data-session-status={viewedSession.status}
               >
-                <div className="agent-pane-header">
+                <div className="agent-pane-header" data-density="compact" data-active="true">
                   <div className="agent-pane-header-copy">
                     <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />
                     <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
                   </div>
                   <div className="agent-pane-meta">
-                    <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`}>{viewedHeaderTag.label}</span>
+                    <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
+                      {viewedHeaderTag.label}
+                    </span>
                   </div>
                 </div>
                 <div className="agent-pane-body">
