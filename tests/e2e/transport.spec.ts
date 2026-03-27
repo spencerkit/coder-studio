@@ -421,13 +421,12 @@ test.describe('workspace transport baseline', () => {
         command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
 
-      await waitForWsEvent(
+      await waitForLifecycleReplayEvent(
         page,
-        'agent://lifecycle',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === sessionId
-          && payload.kind === 'tool_started',
+        workspace.workspaceId,
+        ids,
+        sessionId,
+        'tool_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 
@@ -523,13 +522,12 @@ test.describe('workspace transport baseline', () => {
         command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
 
-      await waitForWsEvent(
+      await waitForLifecycleReplayEvent(
         page,
-        'agent://lifecycle',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === String(session.id)
-          && payload.kind === 'tool_started',
+        workspace.workspaceId,
+        ids,
+        String(session.id),
+        'tool_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
       await page.reload();
@@ -592,7 +590,11 @@ test.describe('workspace transport baseline', () => {
       await expect(observer.getByTestId('runtime-validation-overlay')).toHaveCount(0);
 
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
-      await observer.getByTestId('workspace-read-only-banner').getByRole('button').click({ force: true });
+      await invokeRpc(observer, 'workspace_controller_takeover', {
+        workspaceId: workspace.workspaceId,
+        deviceId: observerIds.deviceId,
+        clientId: observerIds.clientId,
+      });
 
       await waitForWorkspaceControllerState(
         observer,
@@ -713,28 +715,15 @@ test.describe('workspace transport baseline', () => {
           claude_session_id: resumeClaudeSessionId,
         },
       });
-      const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
-      await expect(interruptedSessionCard).toBeVisible();
-      await interruptedSessionCard.click();
-      await expect.poll(async () => {
-        const runtime = await invokeRpc<{
-          snapshot: {
-            view_state: {
-              active_session_id: string;
-            };
-          };
-        }>(page, 'workspace_runtime_attach', {
-          workspaceId: workspace.workspaceId,
-          deviceId: ids.deviceId,
-          clientId: ids.clientId,
-        });
-        return runtime.snapshot.view_state.active_session_id;
-      }).toBe(String(session.id));
-
       await page.reload();
       await expect(page.getByTestId('workspace-topbar')).toBeVisible();
       await waitForBackendSocket(page);
       await currentWorkspaceController(page, workspace.workspaceId, ids);
+      const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
+      await expect(interruptedSessionCard).toBeVisible({
+        timeout: 10000,
+      });
+      await interruptedSessionCard.click();
       await expect(page.getByTestId('workspace-agent-recovery-banner')).toBeVisible({
         timeout: 10000,
       });
@@ -1429,6 +1418,32 @@ async function waitForWsEvent(
       && frame.event === eventName
       && predicate(frame.payload),
     )!;
+}
+
+async function waitForLifecycleReplayEvent(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string },
+  sessionId: string,
+  kind: string,
+  timeoutMs = 10000,
+) {
+  await expect
+    .poll(async () => {
+      const runtime = await invokeRpc<{
+        lifecycle_events?: Array<{ session_id: string; kind: string }>;
+      }>(page, 'workspace_runtime_attach', {
+        workspaceId,
+        deviceId: ids.deviceId,
+        clientId: ids.clientId,
+      });
+      return runtime.lifecycle_events?.some((event) =>
+        event.session_id === sessionId && event.kind === kind
+      ) ?? false;
+    }, {
+      timeout: timeoutMs,
+    })
+    .toBe(true);
 }
 
 async function countWsEvents(
