@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import { createTranslator, type Locale } from "../../i18n";
 import { Settings } from "../../components/Settings";
 import { TopBar } from "../../components/TopBar";
-import { cloneAppSettings } from "../../shared/app/settings";
 import {
   applyGeneralSettingsPatch,
 } from "../../shared/app/claude-settings.ts";
@@ -13,7 +12,7 @@ import { buildWorkspaceTabItems, getBrowserNotificationPermissionState } from ".
 
 type SettingsScreenProps = {
   locale: Locale;
-  appSettings: AppSettings;
+  settingsDraft: AppSettings;
   onSelectLocale: (locale: Locale) => void;
   onCommitSettings: (nextSettings: AppSettings) => void;
   onCloseSettings: () => void;
@@ -21,13 +20,12 @@ type SettingsScreenProps = {
 
 export const SettingsScreen = ({
   locale,
-  appSettings,
+  settingsDraft,
   onSelectLocale,
   onCommitSettings,
   onCloseSettings,
 }: SettingsScreenProps) => {
   const [state] = useRelaxState(workbenchState);
-  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => cloneAppSettings(appSettings));
   const [activeSettingsPanel, setActiveSettingsPanel] = useState<SettingsPanel>("general");
   const [notificationPermissionState, setNotificationPermissionState] = useState<BrowserNotificationSupport>(() =>
     getBrowserNotificationPermissionState()
@@ -35,12 +33,7 @@ export const SettingsScreen = ({
   const t = useMemo(() => createTranslator(locale), [locale]);
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
 
-  useEffect(() => {
-    setSettingsDraft(cloneAppSettings(appSettings));
-  }, [appSettings]);
-
   const commitSettings = (nextSettings: AppSettings) => {
-    setSettingsDraft(cloneAppSettings(nextSettings));
     onCommitSettings(nextSettings);
   };
 

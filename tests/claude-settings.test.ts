@@ -5,6 +5,7 @@ import {
   cloneAppSettings,
   defaultAppSettings,
   getIdlePolicySyncWorkspaceIds,
+  getSettingsDraftLocale,
   mergeLegacySettingsIntoAppSettings,
   resolveClaudeRuntimeProfile,
 } from '../apps/web/src/shared/app/claude-settings.ts';
@@ -125,4 +126,11 @@ test('getIdlePolicySyncWorkspaceIds waits for confirmed settings hydration', () 
 
   assert.deepEqual(getIdlePolicySyncWorkspaceIds(tabs, settings.idlePolicy, false), []);
   assert.deepEqual(getIdlePolicySyncWorkspaceIds(tabs, settings.idlePolicy, true), ['ws-1']);
+});
+
+test('getSettingsDraftLocale follows the shared draft locale', () => {
+  const settings = defaultAppSettings();
+  settings.general.locale = 'zh';
+
+  assert.equal(getSettingsDraftLocale(settings), 'zh');
 });

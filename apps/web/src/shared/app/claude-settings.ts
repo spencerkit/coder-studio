@@ -504,6 +504,8 @@ export const getIdlePolicySyncWorkspaceIds = (
     .map((tab) => tab.id);
 };
 
+export const getSettingsDraftLocale = (settings: AppSettings): Locale => settings.general.locale;
+
 export const appSettingsPayloadEquals = (
   left: AppSettings,
   right: AppSettings,

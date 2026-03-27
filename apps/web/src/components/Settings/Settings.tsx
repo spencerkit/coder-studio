@@ -1,5 +1,6 @@
 import type { Locale, Translator } from "../../i18n";
 import type { AppSettings, SettingsPanel } from "../../types/app";
+import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
 import { SettingsAppearanceIcon, SettingsGeneralIcon } from "../icons";
 
 type SettingsProps = {
@@ -31,7 +32,8 @@ export const Settings = ({
   t
 }: SettingsProps) => {
   const activePanelLabel = activeSettingsPanel === "general" ? t("settingsGeneral") : t("settingsAppearance");
-  const languageLabel = locale === "zh" ? "中文" : "English";
+  const selectedLocale = getSettingsDraftLocale(settingsDraft);
+  const languageLabel = selectedLocale === "zh" ? "中文" : "English";
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
@@ -242,14 +244,14 @@ export const Settings = ({
                   <div className="settings-pill-select">
                     <button
                       type="button"
-                      className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
+                      className={`settings-pill-option ${selectedLocale === "zh" ? "active" : ""}`}
                       onClick={() => onSelectLocale("zh")}
                     >
                       中文
                     </button>
                     <button
                       type="button"
-                      className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
+                      className={`settings-pill-option ${selectedLocale === "en" ? "active" : ""}`}
                       onClick={() => onSelectLocale("en")}
                     >
                       English

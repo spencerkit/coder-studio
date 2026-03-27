@@ -23,6 +23,7 @@ import {
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
   const [appSettings, setAppSettings] = useState<AppSettings>(() => defaultAppSettings());
+  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => defaultAppSettings());
   const [backendSettingsConfirmed, setBackendSettingsConfirmed] = useState(false);
   const [lastWorkspacePath, setLastWorkspacePath] = useState("/workspace");
   const confirmedSettingsRef = useRef(appSettings);
@@ -61,6 +62,7 @@ export default function AppController() {
       confirmedSettingsRef.current = cloneAppSettings(hydrated.settings);
       backendSettingsConfirmedRef.current = hydrated.backendConfirmed;
       setAppSettings(hydrated.settings);
+      setSettingsDraft(hydrated.settings);
       setLocale(hydrated.settings.general.locale);
       persistLocale(hydrated.settings.general.locale);
       setBackendSettingsConfirmed(hydrated.backendConfirmed);
@@ -87,6 +89,7 @@ export default function AppController() {
     confirmedSettingsRef.current = cloneAppSettings(saved);
     backendSettingsConfirmedRef.current = confirmedByBackend;
     setAppSettings(saved);
+    setSettingsDraft(saved);
     setLocale(saved.general.locale);
     persistLocale(saved.general.locale);
     setBackendSettingsConfirmed(confirmedByBackend);
@@ -96,6 +99,7 @@ export default function AppController() {
     const nextSettings = draftSettingsRef.current.update((draft) => {
       draft.general.locale = nextLocale;
     });
+    setSettingsDraft(nextSettings);
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
       nextSettings,
@@ -112,6 +116,7 @@ export default function AppController() {
 
   const onCommitSettings = (nextSettings: AppSettings) => {
     const normalized = draftSettingsRef.current.replace(cloneAppSettings(nextSettings));
+    setSettingsDraft(normalized);
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
       normalized,
@@ -160,7 +165,7 @@ export default function AppController() {
           element={
             <SettingsScreen
               locale={locale}
-              appSettings={appSettings}
+              settingsDraft={settingsDraft}
               onSelectLocale={onSelectLocale}
               onCommitSettings={onCommitSettings}
               onCloseSettings={() => navigate(lastWorkspacePath)}
