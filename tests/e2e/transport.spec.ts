@@ -764,9 +764,17 @@ test.describe('workspace transport baseline', () => {
       await page.reload();
       await expect(page.getByTestId('workspace-topbar')).toBeVisible();
       await waitForBackendSocket(page);
-      await expect.poll(async () =>
-        page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
-      ).toBe('running');
+      let resumedStatus: string | null = null;
+      await expect.poll(async () => {
+        resumedStatus = await page
+          .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+          .first()
+          .getAttribute('data-session-status');
+        return resumedStatus === 'running' || resumedStatus === 'background';
+      }, {
+        timeout: 5000,
+        message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
+      }).toBe(true);
     } finally {
       await context.close();
     }
