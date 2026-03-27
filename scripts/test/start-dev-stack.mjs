@@ -1,10 +1,13 @@
+import fs from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { buildDevStackRuntimeEnv, resetDevStackRuntimeState } from './dev-stack-runtime.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 let frontend = null;
+const runtime = buildDevStackRuntimeEnv(ROOT, process.env);
 
 let shuttingDown = false;
 
@@ -34,9 +37,13 @@ function spawnPnpm(args) {
   return spawn(resolved.command, resolved.args, {
     cwd: ROOT,
     stdio: 'inherit',
-    windowsHide: true
+    windowsHide: true,
+    env: runtime.env,
   });
 }
+
+await fs.mkdir(path.join(ROOT, '.tmp'), { recursive: true });
+await resetDevStackRuntimeState(runtime.stateDir);
 
 const server = spawnPnpm(['dev:server']);
 

@@ -11,6 +11,10 @@ import {
 import { assertReleaseAssets } from '../../scripts/release/check-assets.mjs';
 import { assertVersionConsistency, collectReleaseVersionState } from '../../scripts/release/check-version.mjs';
 import { createReleaseManifest } from '../../scripts/release/write-release-manifest.mjs';
+import {
+  buildDevStackRuntimeEnv,
+  resetDevStackRuntimeState,
+} from '../../scripts/test/dev-stack-runtime.mjs';
 
 test('release assets required for packaging are present', async () => {
   await assertReleaseAssets();
@@ -72,6 +76,31 @@ test('release manifest writer emits checksums for tarballs', async () => {
     const checksums = await fs.readFile(result.checksumsPath, 'utf8');
     assert.match(checksums, /spencer-kit-coder-studio-0.1.0.tgz/);
     assert.match(checksums, /spencer-kit-coder-studio-linux-x64-0.1.0.tgz/);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('dev stack runtime defaults to an isolated repo-local state dir', () => {
+  const root = '/tmp/coder-studio-root';
+  const result = buildDevStackRuntimeEnv(root, {});
+
+  assert.equal(result.stateDir, path.join(root, '.tmp', 'dev-stack-runtime'));
+  assert.equal(result.env.CODER_STUDIO_HOME, path.join(root, '.tmp', 'dev-stack-runtime'));
+});
+
+test('dev stack runtime reset clears prior state contents', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-dev-stack-'));
+  const stateDir = path.join(tempRoot, 'state');
+
+  try {
+    await fs.mkdir(path.join(stateDir, 'nested'), { recursive: true });
+    await fs.writeFile(path.join(stateDir, 'nested', 'stale.txt'), 'stale', 'utf8');
+
+    await resetDevStackRuntimeState(stateDir);
+
+    const entries = await fs.readdir(stateDir);
+    assert.deepEqual(entries, []);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
