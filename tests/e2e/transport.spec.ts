@@ -80,6 +80,7 @@ type WorkspaceControllerLeaseSnapshot = {
 type TransportTrackerSnapshot = {
   urls: string[];
   connectTimes: number[];
+  openTimes: number[];
   closeTimes: number[];
   scheduledTimeouts: number[];
   frames: string[];
@@ -704,18 +705,6 @@ test.describe('workspace transport baseline', () => {
         mode: 'branch',
       });
 
-      await invokeRpc(page, 'workspace_view_update', {
-        ...controller,
-        patch: {
-          active_session_id: String(session.id),
-          active_pane_id: `pane-${session.id}`,
-          pane_layout: {
-            type: 'leaf',
-            id: `pane-${session.id}`,
-            sessionId: String(session.id),
-          },
-        },
-      });
       await invokeRpc(page, 'session_update', {
         ...controller,
         sessionId: session.id,
@@ -724,6 +713,23 @@ test.describe('workspace transport baseline', () => {
           claude_session_id: resumeClaudeSessionId,
         },
       });
+      const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
+      await expect(interruptedSessionCard).toBeVisible();
+      await interruptedSessionCard.click();
+      await expect.poll(async () => {
+        const runtime = await invokeRpc<{
+          snapshot: {
+            view_state: {
+              active_session_id: string;
+            };
+          };
+        }>(page, 'workspace_runtime_attach', {
+          workspaceId: workspace.workspaceId,
+          deviceId: ids.deviceId,
+          clientId: ids.clientId,
+        });
+        return runtime.snapshot.view_state.active_session_id;
+      }).toBe(String(session.id));
 
       await page.reload();
       await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -1048,6 +1054,7 @@ async function installTransportProbe(
     const store = {
       urls: [] as string[],
       connectTimes: [] as number[],
+      openTimes: [] as number[],
       closeTimes: [] as number[],
       scheduledTimeouts: [] as number[],
       frames: [] as string[],
@@ -1066,6 +1073,9 @@ async function installTransportProbe(
       store.urls.push(String(url));
       store.connectTimes.push(Date.now());
       store.sockets.push(socket);
+      socket.addEventListener('open', () => {
+        store.openTimes.push(Date.now());
+      });
       socket.addEventListener('message', (event) => {
         store.frames.push(String(event.data));
       });
@@ -1088,6 +1098,7 @@ async function installTransportProbe(
         return {
           urls: [...store.urls],
           connectTimes: [...store.connectTimes],
+          openTimes: [...store.openTimes],
           closeTimes: [...store.closeTimes],
           scheduledTimeouts: [...store.scheduledTimeouts],
           frames: [...store.frames],
@@ -1375,7 +1386,10 @@ function countTrackedSockets(tracker: TransportTrackerSnapshot, fragment: string
 
 async function waitForBackendSocket(page: Page) {
   await expect
-    .poll(async () => countTrackedSockets(await readTransportTracker(page), BACKEND_WS_PATH), {
+    .poll(async () => {
+      const tracker = await readTransportTracker(page);
+      return tracker.openTimes.length - tracker.closeTimes.length;
+    }, {
       timeout: 10000,
     })
     .toBeGreaterThan(0);

@@ -16,6 +16,9 @@ const TAB_STABILITY_DIRS = [
   path.join(HOME_DIR, 'coder-studio-e2e-tab-b'),
 ];
 const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir));
+const COMPLETION_AUDIO_EVENT_PATTERN = /play:.*task-complete(?:-[A-Za-z0-9_-]+)?\.(wav|mp3|ogg)/;
+const REMOTE_HTTP_HOST = 'remote.example.test';
+const REMOTE_HTTP_PASSWORD = 'coder-studio-remote-e2e';
 
 type RuntimeCommandMockState = {
   claude: boolean;
@@ -616,7 +619,7 @@ test('background turn_completed sends a completion reminder notification', async
       page,
       `notify:${backgroundSession!.title}:${pair.background.workspace.title} · Task complete`,
     );
-    await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
+    await waitForAudioEvent(page, COMPLETION_AUDIO_EVENT_PATTERN);
   } finally {
     await cleanup();
   }
@@ -663,7 +666,7 @@ test('background turn_completed still sends a reminder while viewing settings', 
       page,
       `notify:${backgroundSession!.title}:${pair.background.workspace.title} · Task complete`,
     );
-    await waitForAudioEvent(page, /play:.*task-complete\.(wav|mp3|ogg)/);
+    await waitForAudioEvent(page, COMPLETION_AUDIO_EVENT_PATTERN);
   } finally {
     await cleanup();
   }
