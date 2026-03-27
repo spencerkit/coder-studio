@@ -718,12 +718,24 @@ test.describe('workspace transport baseline', () => {
       await page.reload();
       await expect(page.getByTestId('workspace-topbar')).toBeVisible();
       await waitForBackendSocket(page);
-      await currentWorkspaceController(page, workspace.workspaceId, ids);
+      const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
       await expect(interruptedSessionCard).toBeVisible({
         timeout: 10000,
       });
       await interruptedSessionCard.click();
+      await invokeRpc(page, 'workspace_view_update', {
+        ...controllerAfterReload,
+        patch: {
+          active_session_id: String(session.id),
+          active_pane_id: `pane-${session.id}`,
+          pane_layout: {
+            type: 'leaf',
+            id: `pane-${session.id}`,
+            sessionId: String(session.id),
+          },
+        },
+      });
       await expect(page.getByTestId('workspace-agent-recovery-banner')).toBeVisible({
         timeout: 10000,
       });
