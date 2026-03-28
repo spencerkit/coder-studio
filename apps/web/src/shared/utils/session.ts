@@ -9,9 +9,28 @@ export const parseNumericId = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const extractGeneratedSessionTitleIndex = (value: string) => {
+  const match = value.trim().match(/^(?:Session|会话) (\d+)$/);
+  return match?.[1] ? Number(match[1]) : null;
+};
+
+export const isGeneratedSessionTitleForId = (value: string | undefined, id: string | number) => {
+  if (!value) return false;
+  const index = extractGeneratedSessionTitleIndex(value);
+  const numericId = typeof id === "number" ? id : parseNumericId(id);
+  return index !== null && numericId !== null && index === numericId;
+};
+
 export const createSessionFromBackend = (source: BackendSession, locale: Locale, existing?: Session): Session => ({
   id: String(source.id),
-  title: source.title || existing?.title || formatSessionTitle(source.id, locale),
+  title: (
+    source.title
+      && existing?.title
+      && isGeneratedSessionTitleForId(source.title, source.id)
+      && !isGeneratedSessionTitleForId(existing.title, source.id)
+  )
+    ? existing.title
+    : (source.title || existing?.title || formatSessionTitle(source.id, locale)),
   status: source.status,
   mode: source.mode,
   autoFeed: source.auto_feed,
@@ -108,18 +127,25 @@ export const sessionTitleFromInput = (value: string) => {
 const isForegroundActiveStatus = (status: SessionStatus) => status === "running" || status === "waiting";
 export { isForegroundActiveStatus };
 
-export const toBackgroundStatus = (status: SessionStatus): SessionStatus => (isForegroundActiveStatus(status) ? "background" : status);
+// `background` is treated as a display-only compatibility status for older persisted data.
+// New state updates keep the underlying runtime status (`running` / `waiting`) intact.
+export const toBackgroundStatus = (status: SessionStatus): SessionStatus => status;
 
 export const restoreVisibleStatus = (session: Session): SessionStatus => {
   if (session.status !== "background") return session.status;
   return "waiting";
 };
 
-export const resolveVisibleStatus = (tab: Tab, session: Session, nextStatus: SessionStatus): SessionStatus => {
-  if (nextStatus === "running" || nextStatus === "waiting") {
-    return tab.activeSessionId === session.id ? nextStatus : "background";
-  }
+export const resolveVisibleStatus = (_tab: Tab, _session: Session, nextStatus: SessionStatus): SessionStatus => {
   return nextStatus;
+};
+
+export const displaySessionStatus = (tab: Pick<Tab, "activeSessionId">, session: Session): SessionStatus => {
+  if (session.status === "background") return "background";
+  if (session.id !== tab.activeSessionId && isForegroundActiveStatus(session.status)) {
+    return "background";
+  }
+  return session.status;
 };
 
 export const sessionTone = (status: SessionStatus) => {
@@ -144,7 +170,10 @@ export const sessionHeaderTag = (
   if (status === "background") {
     return { label: t("background"), tone: "info" };
   }
-  if (status === "waiting" || status === "queued") {
+  if (status === "waiting") {
+    return { label: t("waiting"), tone: "active" };
+  }
+  if (status === "queued") {
     return { label: t("queued"), tone: "queue" };
   }
   if (status === "idle") {

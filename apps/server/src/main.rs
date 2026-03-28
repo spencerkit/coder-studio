@@ -51,14 +51,18 @@ pub(crate) use auth::{
 pub(crate) use command::http::start_transport_server;
 #[cfg(test)]
 pub(crate) use infra::db::launch_workspace_record;
+#[cfg(test)]
+pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
     activate_workspace_ui, append_agent_lifecycle_event, append_session_stream,
-    append_workspace_terminal_output, archive_workspace_session, close_workspace_ui,
-    create_workspace_session, delete_workspace_terminal, init_db, launch_workspace_record_scoped,
+    append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
+    close_workspace_ui, create_workspace_session, delete_workspace_session,
+    delete_workspace_terminal, init_db, launch_workspace_record_scoped,
     list_workspace_ids_for_workspace_client, load_agent_lifecycle_events, load_session,
-    load_workspace_controller_lease, mark_active_sessions_interrupted_on_boot,
-    mark_workspace_client_detached, patch_workspace_view_state, persist_workspace_terminal,
-    save_workspace_controller_lease, set_session_claude_id, set_session_status,
+    load_session_history_records, load_workspace_controller_lease,
+    mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
+    patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
+    save_workspace_controller_lease, set_session_claude_id, set_session_status_if_not_archived,
     set_workspace_terminal_recoverable, switch_workspace_session,
     update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
     update_workspace_session, upsert_workspace_attachment,
@@ -78,23 +82,33 @@ pub(crate) use infra::support::{
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
-    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult, ArchiveEntry,
-    ClaudeSlashSkillEntry, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
+    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
-    SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
-    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
-    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource,
-    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
-    WorktreeDetail, WorktreeInfo,
+    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
+    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
+    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
+    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+};
+#[cfg(test)]
+pub(crate) use models::{
+    ClaudeSettingsPayload, ClaudeTargetOverrides, CompletionNotificationSettings,
+    GeneralSettingsPayload, TargetClaudeOverride,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
-    agent_resize, agent_send, agent_start, agent_stop, stop_workspace_agents,
+    agent_resize, agent_send, agent_start, agent_stop, stop_agent_runtime_without_status_update,
+    stop_workspace_agents,
+};
+pub(crate) use services::app_settings::{
+    app_settings_get, app_settings_update, load_or_default_app_settings,
 };
 pub(crate) use services::claude::{
     current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
-    run_claude_hook_helper, start_claude_hook_receiver,
+    resolve_claude_runtime_profile, run_claude_hook_helper, start_claude_hook_receiver,
 };
 pub(crate) use services::filesystem::{
     file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
@@ -110,9 +124,10 @@ pub(crate) use services::terminal::{
 };
 pub(crate) use services::workspace::{
     activate_workspace_scoped, archive_session, close_workspace_scoped, create_session,
-    launch_workspace_internal_scoped, launch_workspace_scoped, session_update, switch_session,
-    update_idle_policy, update_workbench_layout_scoped, workbench_bootstrap_scoped,
-    workspace_snapshot, workspace_view_update, worktree_inspect,
+    delete_session, launch_workspace_internal_scoped, launch_workspace_scoped,
+    list_session_history, restore_session, session_update, switch_session, update_idle_policy,
+    update_workbench_layout_scoped, workbench_bootstrap_scoped, workspace_snapshot,
+    workspace_view_update, worktree_inspect,
 };
 pub(crate) use services::workspace_runtime::{
     assert_workspace_controller_can_mutate, register_workspace_client_connection,

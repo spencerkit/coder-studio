@@ -39,26 +39,53 @@ const withMockWindow = (localStorage: LocalStorageMock, run: () => void) => {
 test('defaultAppSettings enables background-only completion notifications', () => {
   const settings = defaultAppSettings();
 
-  assert.equal(settings.completionNotifications.enabled, true);
-  assert.equal(settings.completionNotifications.onlyWhenBackground, true);
+  assert.equal(settings.general.locale, 'en');
+  assert.equal(settings.general.completionNotifications.enabled, true);
+  assert.equal(settings.general.completionNotifications.onlyWhenBackground, true);
+  assert.equal(settings.claude.global.executable, 'claude');
+  assert.equal(settings.agentCommand, 'claude');
 });
 
 test('cloneAppSettings creates independent nested settings objects', () => {
   const original = defaultAppSettings();
+  original.claude.global.env.ANTHROPIC_BASE_URL = 'https://anthropic.example';
+  original.claude.global.settingsJson = { model: 'sonnet' };
+  original.claude.global.globalConfigJson = { showTurnDuration: true };
+  original.claude.overrides.native = {
+    enabled: true,
+    profile: {
+      ...original.claude.global,
+      executable: 'claude-native',
+      startupArgs: ['--verbose'],
+    },
+  };
   const cloned = cloneAppSettings(original);
 
   assert.notStrictEqual(cloned, original);
-  assert.notStrictEqual(cloned.idlePolicy, original.idlePolicy);
-  assert.notStrictEqual(cloned.completionNotifications, original.completionNotifications);
+  assert.notStrictEqual(cloned.general, original.general);
+  assert.notStrictEqual(cloned.general.idlePolicy, original.general.idlePolicy);
+  assert.notStrictEqual(
+    cloned.general.completionNotifications,
+    original.general.completionNotifications,
+  );
+  assert.notStrictEqual(cloned.claude, original.claude);
+  assert.notStrictEqual(cloned.claude.global, original.claude.global);
+  assert.notStrictEqual(cloned.claude.global.env, original.claude.global.env);
+  assert.notStrictEqual(cloned.claude.global.settingsJson, original.claude.global.settingsJson);
+  assert.notStrictEqual(
+    cloned.claude.global.globalConfigJson,
+    original.claude.global.globalConfigJson,
+  );
+  assert.notStrictEqual(cloned.claude.overrides.native, original.claude.overrides.native);
   assert.deepEqual(cloned, original);
 });
 
-test('readStoredAppSettings returns defaults without browser storage', () => {
+test('readStoredAppSettings returns null without browser storage', () => {
   const originalWindow = globalThis.window;
   Reflect.deleteProperty(globalThis, 'window');
 
   try {
-    assert.deepEqual(readStoredAppSettings(), defaultAppSettings());
+    assert.equal(readStoredAppSettings(), null);
   } finally {
     if (typeof originalWindow !== 'undefined') {
       Object.defineProperty(globalThis, 'window', {
@@ -77,25 +104,102 @@ test('readStoredAppSettings falls back cleanly for malformed JSON', () => {
       setItem: () => {},
     },
     () => {
-      assert.deepEqual(readStoredAppSettings(), defaultAppSettings());
+      assert.equal(readStoredAppSettings(), null);
     },
   );
 });
 
-test('readStoredAppSettings hydrates legacy settings with completion notification defaults', () => {
+test('readStoredAppSettings hydrates backend-shaped settings and derived compatibility fields', () => {
   withMockWindow(
     {
-      getItem: () => JSON.stringify({ agentCommand: 'custom-claude' }),
+      getItem: () =>
+        JSON.stringify({
+          general: {
+            locale: 'zh',
+            terminalCompatibilityMode: 'compatibility',
+            completionNotifications: {
+              enabled: false,
+              onlyWhenBackground: false,
+            },
+            idlePolicy: {
+              enabled: false,
+              idleMinutes: 4,
+              maxActive: 2,
+              pressure: false,
+            },
+          },
+          claude: {
+            global: {
+              executable: 'claude-nightly',
+              startupArgs: ['--verbose'],
+              env: {
+                ANTHROPIC_BASE_URL: 'https://anthropic.example',
+              },
+              settingsJson: {
+                model: 'sonnet',
+              },
+              globalConfigJson: {
+                showTurnDuration: true,
+              },
+            },
+            overrides: {
+              native: {
+                enabled: true,
+                profile: {
+                  executable: 'claude-native',
+                  startupArgs: ['--dangerously-skip-permissions'],
+                  env: {},
+                  settingsJson: {},
+                  globalConfigJson: {},
+                },
+              },
+            },
+          },
+        }),
       setItem: () => {},
     },
     () => {
       const settings = readStoredAppSettings();
 
-      assert.equal(settings.agentCommand, 'custom-claude');
+      assert.ok(settings);
+      assert.equal(settings.general.locale, 'zh');
+      assert.equal(settings.general.terminalCompatibilityMode, 'compatibility');
+      assert.equal(settings.claude.global.executable, 'claude-nightly');
+      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
+      assert.equal(settings.agentCommand, 'claude-nightly --verbose');
       assert.deepEqual(settings.completionNotifications, {
-        enabled: true,
-        onlyWhenBackground: true,
+        enabled: false,
+        onlyWhenBackground: false,
       });
+    },
+  );
+});
+
+test('readStoredAppSettings migrates legacy launch command into backend-backed shape', () => {
+  withMockWindow(
+    {
+      getItem: () =>
+        JSON.stringify({
+          agentCommand: 'custom-claude --verbose',
+          completionNotifications: {
+            enabled: false,
+            onlyWhenBackground: false,
+          },
+          terminalCompatibilityMode: 'compatibility',
+        }),
+      setItem: () => {},
+    },
+    () => {
+      const settings = readStoredAppSettings();
+
+      assert.ok(settings);
+      assert.equal(settings.claude.global.executable, 'custom-claude');
+      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
+      assert.deepEqual(settings.general.completionNotifications, {
+        enabled: false,
+        onlyWhenBackground: false,
+      });
+      assert.equal(settings.general.terminalCompatibilityMode, 'compatibility');
     },
   );
 });
@@ -105,9 +209,11 @@ test('readStoredAppSettings preserves valid values and falls back for missing or
     {
       getItem: () =>
         JSON.stringify({
-          completionNotifications: {
-            enabled: false,
-            onlyWhenBackground: 'nope',
+          general: {
+            completionNotifications: {
+              enabled: false,
+              onlyWhenBackground: 'nope',
+            },
           },
         }),
       setItem: () => {},
@@ -115,31 +221,10 @@ test('readStoredAppSettings preserves valid values and falls back for missing or
     () => {
       const settings = readStoredAppSettings();
 
-      assert.deepEqual(settings.completionNotifications, {
-        enabled: false,
-        onlyWhenBackground: true,
-      });
-    },
-  );
-});
-
-test('readStoredAppSettings falls back missing enabled field', () => {
-  withMockWindow(
-    {
-      getItem: () =>
-        JSON.stringify({
-          completionNotifications: {
-            onlyWhenBackground: false,
-          },
-        }),
-      setItem: () => {},
-    },
-    () => {
-      const settings = readStoredAppSettings();
-
-      assert.deepEqual(settings.completionNotifications, {
+      assert.ok(settings);
+      assert.deepEqual(settings.general.completionNotifications, {
         enabled: true,
-        onlyWhenBackground: false,
+        onlyWhenBackground: true,
       });
     },
   );

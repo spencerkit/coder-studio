@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { Locale } from "../i18n.ts";
 import type {
   AgentMessage,
   ExecTarget,
@@ -80,6 +81,45 @@ export type BackendArchiveEntry = {
   mode: SessionMode;
   time: string;
 };
+
+export type BackendSessionHistoryRecord = {
+  workspace_id: string;
+  workspace_title: string;
+  workspace_path: string;
+  session_id: number;
+  title: string;
+  status: SessionStatus;
+  archived: boolean;
+  mounted: boolean;
+  recoverable: boolean;
+  last_active_at: number;
+  archived_at?: number | null;
+  claude_session_id?: string | null;
+};
+
+export type SessionHistoryRecord = {
+  workspaceId: string;
+  workspaceTitle: string;
+  workspacePath: string;
+  sessionId: string;
+  title: string;
+  status: SessionStatus;
+  archived: boolean;
+  mounted: boolean;
+  recoverable: boolean;
+  lastActiveAt: number;
+  archivedAt?: number | null;
+  claudeSessionId?: string | null;
+};
+
+export type SessionHistoryGroup = {
+  workspaceId: string;
+  workspaceTitle: string;
+  workspacePath: string;
+  records: SessionHistoryRecord[];
+};
+
+export type SessionHistoryExpansionState = Record<string, boolean>;
 
 export type BackendWorkspaceViewState = {
   active_session_id: string;
@@ -258,6 +298,16 @@ export type AgentStartResult = {
   started: boolean;
 };
 
+export type BackendSessionRestoreResult = {
+  session: BackendSession;
+  already_active: boolean;
+};
+
+export type SessionRestoreResult = {
+  session: BackendSession;
+  alreadyActive: boolean;
+};
+
 export type AuthStatus = {
   public_mode: boolean;
   authenticated: boolean;
@@ -326,14 +376,53 @@ export type WorkspaceTabItem = {
 
 export type BrowserNotificationSupport = "allowed" | "not-enabled" | "unsupported";
 
-export type AppSettings = {
+export type CompletionNotificationSettings = {
+  enabled: boolean;
+  onlyWhenBackground: boolean;
+};
+
+export type ClaudeRuntimeProfile = {
+  executable: string;
+  startupArgs: string[];
+  env: Record<string, string>;
+  settingsJson: Record<string, unknown>;
+  globalConfigJson: Record<string, unknown>;
+};
+
+export type ClaudeTargetOverride = {
+  enabled: boolean;
+  profile: ClaudeRuntimeProfile;
+};
+
+export type AppSettingsPayload = {
+  general: {
+    locale: Locale;
+    terminalCompatibilityMode: TerminalCompatibilityMode;
+    completionNotifications: CompletionNotificationSettings;
+    idlePolicy: IdlePolicy;
+  };
+  claude: {
+    global: ClaudeRuntimeProfile;
+    overrides: {
+      native: ClaudeTargetOverride | null;
+      wsl: ClaudeTargetOverride | null;
+    };
+  };
+};
+
+export type LegacyAppSettings = {
+  locale?: Locale;
+  agentCommand?: string;
+  idlePolicy?: Partial<IdlePolicy>;
+  completionNotifications?: Partial<CompletionNotificationSettings>;
+  terminalCompatibilityMode?: TerminalCompatibilityMode;
+};
+
+export type AppSettings = AppSettingsPayload & {
   agentProvider: Tab["agent"]["provider"];
   agentCommand: string;
   idlePolicy: IdlePolicy;
-  completionNotifications: {
-    enabled: boolean;
-    onlyWhenBackground: boolean;
-  };
+  completionNotifications: CompletionNotificationSettings;
   terminalCompatibilityMode: TerminalCompatibilityMode;
 };
 
@@ -347,7 +436,8 @@ export type AgentCommandStatus = {
 
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
-export type SettingsPanel = "general" | "appearance";
+export type SettingsPanel = "general" | "claude" | "appearance";
+export type ClaudeSettingsScope = "global" | "native" | "wsl";
 
 export type SettingsNavItem = {
   id: SettingsPanel;

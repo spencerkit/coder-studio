@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -102,15 +103,20 @@ const BACKEND_WS_PATH = '/ws';
 const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
-const AGENT_STDIN_ECHO_SCRIPT = 'tests/e2e/fixtures/agent-stdin-echo.mjs';
+const AGENT_STDIN_ECHO_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-stdin-echo.mjs');
 const AGENT_CLAUDE_LIFECYCLE_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/claude-lifecycle-agent.mjs');
 const AGENT_CLAUDE_REPLAY_DELAY_MS = 5000;
 const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
 const AGENT_START_SYSTEM_MESSAGE = 'Agent started / 智能体已启动';
 const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
 const execFileAsync = promisify(execFile);
+const DEFAULT_TRANSPORT_IDS = {
+  deviceId: 'transport-default-device',
+  clientId: 'transport-default-client',
+};
 
 const commandBinary = (command: string | undefined) => command?.trim().split(/\s+/, 1)[0] ?? '';
+const splitCommandTokens = (command: string | undefined) => (command ?? '').trim().split(/\s+/).filter(Boolean);
 
 async function prepareTransportPage(page: Page) {
   await page.addInitScript(() => {
@@ -139,6 +145,8 @@ async function prepareTransportPage(page: Page) {
       }),
     });
   });
+
+  await seedAppSettings(page, {});
 }
 
 async function seedAppSettings(
@@ -159,24 +167,38 @@ async function seedAppSettings(
     terminalCompatibilityMode: 'standard' | 'compatibility';
   }>,
 ) {
-  await page.addInitScript((value) => {
-    window.localStorage.setItem('coder-studio.app-settings', JSON.stringify({
-      agentProvider: 'claude',
-      agentCommand: 'claude',
-      idlePolicy: {
-        enabled: true,
-        idleMinutes: 10,
-        maxActive: 3,
-        pressure: true,
+  const [executable = 'claude', ...startupArgs] = splitCommandTokens(overrides.agentCommand ?? 'claude');
+  await invokeRpc(page, 'app_settings_update', {
+    settings: {
+      general: {
+        locale: 'en',
+        terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
+        completionNotifications: overrides.completionNotifications ?? {
+          enabled: true,
+          onlyWhenBackground: true,
+        },
+        idlePolicy: overrides.idlePolicy ?? {
+          enabled: true,
+          idleMinutes: 10,
+          maxActive: 3,
+          pressure: true,
+        },
       },
-      completionNotifications: {
-        enabled: true,
-        onlyWhenBackground: true,
+      claude: {
+        global: {
+          executable,
+          startupArgs,
+          env: {},
+          settingsJson: {},
+          globalConfigJson: {},
+        },
+        overrides: {
+          native: null,
+          wsl: null,
+        },
       },
-      terminalCompatibilityMode: 'standard',
-      ...value,
-    }));
-  }, overrides);
+    },
+  });
 }
 
 const incrementCounts = (counts: PollCounts) => ({
@@ -304,7 +326,7 @@ test.describe('workspace transport baseline', () => {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      const workspace = await openWorkspace(page, ids);
       await waitForBackendSocket(page);
 
       const initialRuntime = await invokeRpc<{
@@ -344,7 +366,7 @@ test.describe('workspace transport baseline', () => {
       );
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       await expect(page.getByTestId('workspace-read-only-banner')).toBeHidden();
 
@@ -375,15 +397,17 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-runtime-reconnect', clientId: 'client-runtime-reconnect' };
     const replayClaudeSessionId = `claude-reconnect-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reconnect-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedAppSettings(page, {
-        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000`,
+        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -418,7 +442,6 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId,
         provider: 'claude',
-        command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
 
       await waitForLifecycleReplayEvent(
@@ -464,7 +487,11 @@ test.describe('workspace transport baseline', () => {
         timeout: 4000,
       }).toBe('idle');
     } finally {
-      await context.close();
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -474,15 +501,17 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-lifecycle', clientId: 'client-lifecycle' };
     const replayClaudeSessionId = `claude-replay-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-lifecycle-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedAppSettings(page, {
-        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS}`,
+        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -511,15 +540,13 @@ test.describe('workspace transport baseline', () => {
       });
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
-      const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
       await invokeRpc(page, 'agent_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
         provider: 'claude',
-        command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
 
       await waitForLifecycleReplayEvent(
@@ -531,37 +558,70 @@ test.describe('workspace transport baseline', () => {
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const runtimeAfterReload = await invokeRpc<{
+        snapshot: {
+          sessions: Array<{ id: number }>;
+          view_state: {
+            active_session_id: string;
+            active_pane_id: string;
+          };
+        };
         lifecycle_events?: Array<{ session_id: string; kind: string }>;
       }>(page, 'workspace_runtime_attach', {
         workspaceId: workspace.workspaceId,
         deviceId: ids.deviceId,
         clientId: ids.clientId,
       });
+      expect(runtimeAfterReload.snapshot.sessions.some((candidate) => candidate.id === session.id)).toBe(true);
+      expect(runtimeAfterReload.snapshot.view_state.active_session_id).toBe(String(session.id));
+      expect(runtimeAfterReload.snapshot.view_state.active_pane_id).toBe(`pane-${session.id}`);
       expect(runtimeAfterReload.lifecycle_events?.some((event) =>
         event.session_id === String(session.id) && event.kind === 'tool_started'
       )).toBe(true);
       let lastReloadStatus: string | null = null;
-      await expect.poll(async () => {
-        lastReloadStatus = await sessionCard.getAttribute('data-session-status');
-        return lastReloadStatus === 'running' || lastReloadStatus === 'background';
-      }, {
-        timeout: 20000,
-        message: `session status after reload: ${lastReloadStatus ?? 'null'}`,
-      }).toBe(true);
+      try {
+        await expect.poll(async () => {
+          lastReloadStatus = await page
+            .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+            .first()
+            .getAttribute('data-session-status');
+          return lastReloadStatus === 'running'
+            || lastReloadStatus === 'background'
+            || lastReloadStatus === 'idle';
+        }, {
+          timeout: 20000,
+          message: `session status after reload: ${lastReloadStatus ?? 'null'}`,
+        }).toBe(true);
+      } catch {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        throw new Error([
+          `session status after reload: ${lastReloadStatus ?? 'null'}`,
+          JSON.stringify(debug),
+        ].join('\n'));
+      }
+      if (lastReloadStatus === 'idle') {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        expect(debug.lifecycleTail.some((event) =>
+          event.session_id === String(session.id) && event.kind === 'turn_completed'
+        )).toBe(true);
+      }
 
       await page.goto('about:blank');
       await page.waitForTimeout(2200);
       await page.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       await expect.poll(async () =>
         page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
       ).toBe('idle');
     } finally {
-      await context.close();
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -573,6 +633,8 @@ test.describe('workspace transport baseline', () => {
     const observer = await observerContext.newPage();
     const controllerIds = { deviceId: 'device-a', clientId: 'client-a' };
     const observerIds = { deviceId: 'device-b', clientId: 'client-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-follow-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -581,11 +643,11 @@ test.describe('workspace transport baseline', () => {
       await installTransportProbe(observer);
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(observer);
       await waitForBackendSocket(observer);
       await expect(observer.getByTestId('runtime-validation-overlay')).toHaveCount(0);
 
@@ -609,10 +671,159 @@ test.describe('workspace transport baseline', () => {
         timeout: 15000,
       });
     } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
       await Promise.allSettled([
         observerContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('observer takeover button requests takeover and reflects pending state', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-click-a', clientId: 'client-click-a' };
+    const observerIds = { deviceId: 'device-click-b', clientId: 'client-click-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-request-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
+      await waitForBackendSocket(controller);
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await waitForWorkspaceTopbar(observer);
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+      await observer.bringToFront();
+      await expect.poll(() => observer.evaluate(() => document.visibilityState)).toBe('visible');
+
+      await observer.getByTestId('workspace-read-only-banner').getByRole('button', { name: 'Request takeover' }).click();
+
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'If the current controller does not respond within 10 seconds',
+      );
+      await expect(controller.getByTestId('workspace-takeover-request-banner')).toBeVisible({
+        timeout: 30000,
+      });
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeHidden({
+        timeout: 15000,
+      });
+    } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('observer takeover button surfaces loading and error feedback when takeover request fails', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-click-fail-a', clientId: 'client-click-fail-a' };
+    const observerIds = { deviceId: 'device-click-fail-b', clientId: 'client-click-fail-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-error-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await observer.route('**/api/rpc/workspace_controller_takeover', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: false,
+            error: 'takeover_failed',
+          }),
+        });
+      });
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
+      await waitForBackendSocket(controller);
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await waitForWorkspaceTopbar(observer);
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+
+      await observer.getByTestId('workspace-read-only-banner').getByRole('button', { name: 'Request takeover' }).click();
+
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'Requesting takeover',
+      );
+      await expect(observer.locator('.toast')).toContainText(
+        'Takeover request failed',
+      );
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'This workspace is following the current controller.',
+      );
+    } finally {
+      if (workspace && !controller.isClosed()) {
+        await closeWorkspaceBestEffort(controller, workspace.workspaceId, controllerIds);
+      }
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('first draft prompt becomes the session title', async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const titleWorkspacePath = await createExternalTempWorkspace('coder-studio-transport-title-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(page);
+      await installTransportProbe(page);
+      workspace = await openWorkspace(page, DEFAULT_TRANSPORT_IDS, titleWorkspacePath);
+      await waitForBackendSocket(page);
+      await seedAppSettings(page, {
+        agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
+      });
+
+      const firstPrompt = 'title derived from first prompt';
+      const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
+      await expect(draftInput).toBeVisible();
+
+      await draftInput.fill(firstPrompt);
+      await draftInput.press('Enter');
+
+      await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
+        timeout: 10000,
+      });
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(titleWorkspacePath);
     }
   });
 
@@ -623,6 +834,8 @@ test.describe('workspace transport baseline', () => {
     const reopened = await reopenedContext.newPage();
     const controllerIds = { deviceId: 'device-reopen', clientId: 'client-a' };
     const reopenedIds = { deviceId: 'device-reopen', clientId: 'client-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-same-device-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -632,11 +845,11 @@ test.describe('workspace transport baseline', () => {
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(reopened, reopenedIds);
 
-      const workspace = await openWorkspace(controller);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await reopened.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(reopened.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(reopened);
       await waitForBackendSocket(reopened);
       await expect(reopened.getByTestId('runtime-validation-overlay')).toHaveCount(0);
       await expect(reopened.getByTestId('workspace-read-only-banner')).toBeVisible();
@@ -671,10 +884,14 @@ test.describe('workspace transport baseline', () => {
       expect(runtime.controller.controller_device_id).toBe(reopenedIds.deviceId);
       expect(runtime.controller.controller_client_id).toBe(reopenedIds.clientId);
     } finally {
+      if (workspace && !reopened.isClosed()) {
+        await closeWorkspaceBestEffort(reopened, workspace.workspaceId, reopenedIds);
+      }
       await Promise.allSettled([
         reopenedContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -684,6 +901,8 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-recovery', clientId: 'client-recovery' };
     const resumeClaudeSessionId = `claude-e2e-resume-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-recovery-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
@@ -692,7 +911,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_RECOVERY_DELAY_MS}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -709,7 +928,7 @@ test.describe('workspace transport baseline', () => {
         },
       });
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
@@ -732,47 +951,64 @@ test.describe('workspace transport baseline', () => {
       await expect(page.getByTestId('workspace-agent-recovery-banner')).toBeVisible({
         timeout: 10000,
       });
+      await expect(page.getByTestId('workspace-agent-recovery-action')).toHaveText('Resume agent');
       await page.getByTestId('workspace-agent-recovery-action').click();
 
-      await waitForWsEvent(
+      await waitForLifecycleReplayEntry(
         page,
-        'agent://event',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === String(session.id)
-          && typeof payload.data === 'string'
-          && payload.data.includes(`--resume ${resumeClaudeSessionId}`),
-        TRANSPORT_EVENT_TIMEOUT_MS,
-      );
-      await waitForWsEvent(
-        page,
-        'agent://lifecycle',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === String(session.id)
-          && payload.kind === 'tool_started',
+        workspace.workspaceId,
+        ids,
+        (event) =>
+          event.session_id === String(session.id)
+          && event.kind === 'tool_started'
+          && typeof event.data === 'string'
+          && event.data.includes(resumeClaudeSessionId),
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       let resumedStatus: string | null = null;
-      await expect.poll(async () => {
-        resumedStatus = await page
-          .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
-          .first()
-          .getAttribute('data-session-status');
-        return resumedStatus === 'running' || resumedStatus === 'background';
-      }, {
-        timeout: 5000,
-        message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
-      }).toBe(true);
+      try {
+        await expect.poll(async () => {
+          resumedStatus = await page
+            .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+            .first()
+            .getAttribute('data-session-status');
+          return resumedStatus === 'running'
+            || resumedStatus === 'background'
+            || resumedStatus === 'idle';
+        }, {
+          timeout: 5000,
+          message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
+        }).toBe(true);
+      } catch {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        throw new Error([
+          `resumed session status after reload: ${resumedStatus ?? 'null'}`,
+          JSON.stringify(debug),
+        ].join('\n'));
+      }
+      if (resumedStatus === 'idle') {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        expect(debug.lifecycleTail.some((event) =>
+          event.session_id === String(session.id) && event.kind === 'turn_completed'
+        )).toBe(true);
+      }
     } finally {
-      await context.close();
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 });
+
+async function createExternalTempWorkspace(prefix: string) {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
 
 async function observePollingBaseline(page: Page): Promise<PollingBaseline> {
   const probe = await installTransportProbe(page);
@@ -801,6 +1037,9 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
   const agentProbe = buildAgentProbe(workspace.target);
+  await seedAppSettings(page, {
+    agentCommand: agentProbe.command,
+  });
 
   const controlPlaneCommands: string[] = [];
   const controller = await currentWorkspaceController(page, workspace.workspaceId);
@@ -831,8 +1070,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await invokeRpc(page, 'agent_start', {
     ...controller,
     sessionId,
-    provider: 'shell',
-    command: agentProbe.command,
+    provider: 'claude',
     cols: 120,
     rows: 30,
   });
@@ -1131,7 +1369,12 @@ async function installTransportProbe(
   };
 }
 
-async function openWorkspace(page: Page): Promise<WorkspaceHandle> {
+async function openWorkspace(
+  page: Page,
+  ids: { deviceId: string; clientId: string } = DEFAULT_TRANSPORT_IDS,
+  workspacePath = WORKSPACE_PATH,
+): Promise<WorkspaceHandle> {
+  await seedWorkspaceControllerIds(page, ids);
   const launch = await invokeRpc<{
     snapshot: {
       workspace: {
@@ -1143,19 +1386,22 @@ async function openWorkspace(page: Page): Promise<WorkspaceHandle> {
   }>(page, 'launch_workspace', {
     source: {
       kind: 'local',
-      pathOrUrl: WORKSPACE_PATH,
+      pathOrUrl: workspacePath,
       target: { type: 'native' },
     },
+    deviceId: ids.deviceId,
+    clientId: ids.clientId,
   });
 
   const workspaceId = launch.snapshot.workspace.workspace_id;
-  await Promise.all([
-    page.waitForResponse((response) =>
-      response.request().method() === 'POST' && response.url().includes('/api/rpc/workbench_bootstrap'),
-    ),
-    page.goto(`/workspace/${workspaceId}`),
-  ]);
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+  const bootstrapRequest = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && response.url().includes('/api/rpc/workbench_bootstrap'),
+  {
+    timeout: 15000,
+  }).catch(() => null);
+  await page.goto(`/workspace/${workspaceId}`);
+  await bootstrapRequest;
+  await waitForWorkspaceTopbar(page);
 
   return {
     workspaceId,
@@ -1258,19 +1504,48 @@ async function invokeRpc<T>(page: Page, command: string, payload: Record<string,
   return body.data as T;
 }
 
+async function waitForWorkspaceTopbar(page: Page, timeout = 15000) {
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible({ timeout });
+}
+
 async function closeAllOpenWorkspaces(page: Page) {
   const bootstrap = await invokeRpc<{
     ui_state: {
       open_workspace_ids: string[];
     };
-  }>(page, 'workbench_bootstrap');
+  }>(page, 'workbench_bootstrap', DEFAULT_TRANSPORT_IDS);
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
-    const controller = await currentWorkspaceController(page, workspaceId, {
-      deviceId: 'cleanup-device',
-      clientId: 'cleanup-client',
-    });
+    const controller = await currentWorkspaceController(page, workspaceId, DEFAULT_TRANSPORT_IDS);
     await invokeRpc(page, 'close_workspace', controller);
+  }
+}
+
+async function closeWorkspaceBestEffort(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string } = DEFAULT_TRANSPORT_IDS,
+) {
+  try {
+    const controller = await currentWorkspaceController(page, workspaceId, ids);
+    await invokeRpc(page, 'close_workspace', controller);
+  } catch {
+    // Best-effort cleanup for flaky transport cases.
+  }
+}
+
+async function removeExternalWorkspace(workspacePath: string) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(workspacePath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt === 4) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
   }
 }
 
@@ -1457,6 +1732,79 @@ async function waitForLifecycleReplayEvent(
       timeout: timeoutMs,
     })
     .toBe(true);
+}
+
+async function waitForLifecycleReplayEntry(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string },
+  predicate: (event: { session_id: string; kind: string; data?: string }) => boolean,
+  timeoutMs = 10000,
+) {
+  await expect
+    .poll(async () => {
+      const runtime = await invokeRpc<{
+        lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
+      }>(page, 'workspace_runtime_attach', {
+        workspaceId,
+        deviceId: ids.deviceId,
+        clientId: ids.clientId,
+      });
+      return runtime.lifecycle_events?.some(predicate) ?? false;
+    }, {
+      timeout: timeoutMs,
+    })
+    .toBe(true);
+}
+
+async function readWorkspaceReloadDebug(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string },
+) {
+  const [cards, focusState, runtime] = await Promise.all([
+    page.locator('.agent-pane-card').evaluateAll((nodes) => nodes.map((node) => ({
+      sessionId: node.getAttribute('data-session-id'),
+      status: node.getAttribute('data-session-status'),
+      title: node.querySelector('.agent-pane-title')?.textContent?.trim() ?? null,
+    }))),
+    page.evaluate(() => ({
+      visibilityState: document.visibilityState,
+      hasFocus: document.hasFocus(),
+    })),
+    invokeRpc<{
+      snapshot: {
+        sessions: Array<{ id: number }>;
+        view_state: {
+          active_session_id: string;
+          active_pane_id: string;
+        };
+      };
+      controller: {
+        controller_device_id?: string | null;
+        controller_client_id?: string | null;
+        fencing_token?: number;
+      };
+      lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
+    }>(page, 'workspace_runtime_attach', {
+      workspaceId,
+      deviceId: ids.deviceId,
+      clientId: ids.clientId,
+    }),
+  ]);
+
+  return {
+    url: page.url(),
+    focusState,
+    cards,
+    snapshot: {
+      sessionIds: runtime.snapshot.sessions.map((session) => session.id),
+      activeSessionId: runtime.snapshot.view_state.active_session_id,
+      activePaneId: runtime.snapshot.view_state.active_pane_id,
+    },
+    controller: runtime.controller,
+    lifecycleTail: (runtime.lifecycle_events ?? []).slice(-6),
+  };
 }
 
 async function countWsEvents(

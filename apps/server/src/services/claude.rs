@@ -27,6 +27,68 @@ fn respond_http(mut stream: TcpStream, status: &str, body: &str) {
     let _ = stream.flush();
 }
 
+fn merge_json_objects(base: &Value, override_: &Value) -> Value {
+    match (base, override_) {
+        (Value::Object(base_map), Value::Object(override_map)) => {
+            let mut merged = base_map.clone();
+            for (key, value) in override_map {
+                let next = merged
+                    .get(key)
+                    .map(|existing| merge_json_objects(existing, value))
+                    .unwrap_or_else(|| value.clone());
+                merged.insert(key.clone(), next);
+            }
+            Value::Object(merged)
+        }
+        (_, Value::Null) => base.clone(),
+        _ => override_.clone(),
+    }
+}
+
+fn merge_claude_runtime_profile(
+    base: &ClaudeRuntimeProfile,
+    override_: &ClaudeRuntimeProfile,
+) -> ClaudeRuntimeProfile {
+    ClaudeRuntimeProfile {
+        executable: if override_.executable.trim().is_empty() {
+            base.executable.clone()
+        } else {
+            override_.executable.clone()
+        },
+        startup_args: if override_.startup_args.is_empty() {
+            base.startup_args.clone()
+        } else {
+            override_.startup_args.clone()
+        },
+        env: base
+            .env
+            .iter()
+            .chain(override_.env.iter())
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+        settings_json: merge_json_objects(&base.settings_json, &override_.settings_json),
+        global_config_json: merge_json_objects(
+            &base.global_config_json,
+            &override_.global_config_json,
+        ),
+    }
+}
+
+pub(crate) fn resolve_claude_runtime_profile(
+    settings: &AppSettingsPayload,
+    target: &ExecTarget,
+) -> ClaudeRuntimeProfile {
+    let override_ = match target {
+        ExecTarget::Native => settings.claude.overrides.native.as_ref(),
+        ExecTarget::Wsl { .. } => settings.claude.overrides.wsl.as_ref(),
+    };
+
+    override_
+        .filter(|override_| override_.enabled)
+        .map(|override_| merge_claude_runtime_profile(&settings.claude.global, &override_.profile))
+        .unwrap_or_else(|| settings.claude.global.clone())
+}
+
 fn parse_http_json(stream: &TcpStream) -> Result<Value, String> {
     let cloned = stream.try_clone().map_err(|e| e.to_string())?;
     let mut reader = BufReader::new(cloned);
@@ -321,4 +383,91 @@ pub(crate) fn run_claude_hook_helper() {
         stream.flush().map_err(|e| e.to_string())?;
         Ok(())
     })();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn resolve_claude_runtime_profile_prefers_enabled_target_override() {
+        let settings = AppSettingsPayload {
+            general: GeneralSettingsPayload {
+                locale: "en".into(),
+                terminal_compatibility_mode: "standard".into(),
+                completion_notifications: CompletionNotificationSettings {
+                    enabled: true,
+                    only_when_background: true,
+                },
+                idle_policy: default_idle_policy(),
+            },
+            claude: ClaudeSettingsPayload {
+                global: ClaudeRuntimeProfile {
+                    executable: "claude".into(),
+                    startup_args: vec!["--verbose".into()],
+                    env: BTreeMap::new(),
+                    settings_json: json!({ "model": "sonnet" }),
+                    global_config_json: json!({}),
+                },
+                overrides: ClaudeTargetOverrides {
+                    native: Some(TargetClaudeOverride {
+                        enabled: true,
+                        profile: ClaudeRuntimeProfile {
+                            executable: "claude-native".into(),
+                            startup_args: vec!["--dangerously-skip-permissions".into()],
+                            env: BTreeMap::new(),
+                            settings_json: json!({ "model": "opus" }),
+                            global_config_json: json!({}),
+                        },
+                    }),
+                    wsl: None,
+                },
+            },
+        };
+
+        let resolved = resolve_claude_runtime_profile(&settings, &ExecTarget::Native);
+        assert_eq!(resolved.executable, "claude-native");
+        assert_eq!(
+            resolved.startup_args,
+            vec!["--dangerously-skip-permissions"]
+        );
+        assert_eq!(resolved.settings_json["model"], "opus");
+    }
+
+    #[test]
+    fn resolve_claude_runtime_profile_keeps_global_when_override_is_disabled() {
+        let settings = AppSettingsPayload {
+            general: GeneralSettingsPayload {
+                locale: "en".into(),
+                terminal_compatibility_mode: "standard".into(),
+                completion_notifications: CompletionNotificationSettings {
+                    enabled: true,
+                    only_when_background: true,
+                },
+                idle_policy: default_idle_policy(),
+            },
+            claude: ClaudeSettingsPayload {
+                global: ClaudeRuntimeProfile {
+                    executable: "claude".into(),
+                    startup_args: vec![],
+                    env: BTreeMap::new(),
+                    settings_json: json!({}),
+                    global_config_json: json!({}),
+                },
+                overrides: ClaudeTargetOverrides {
+                    native: None,
+                    wsl: None,
+                },
+            },
+        };
+
+        let resolved = resolve_claude_runtime_profile(
+            &settings,
+            &ExecTarget::Wsl {
+                distro: Some("Ubuntu".into()),
+            },
+        );
+        assert_eq!(resolved.executable, "claude");
+    }
 }

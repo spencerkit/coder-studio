@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import type { Translator } from "../../i18n";
 import type { ExecTarget } from "../../state/workbench";
+import { HeaderCloseIcon } from "../icons";
 
 export type RuntimeRequirementId = "claude" | "git";
 
@@ -25,6 +27,7 @@ type RuntimeValidationOverlayProps = {
   runtimeLabel: string;
   validation: RuntimeValidationState;
   onUpdateTarget: (target: ExecTarget) => void;
+  onClose: () => void;
   onRetry: () => void;
   t: Translator;
 };
@@ -50,9 +53,25 @@ export const RuntimeValidationOverlay = ({
   runtimeLabel,
   validation,
   onUpdateTarget,
+  onClose,
   onRetry,
   t,
 }: RuntimeValidationOverlayProps) => {
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [visible, onClose]);
+
   if (!visible) return null;
 
   const summaryDescription = validation.status === "failed"
@@ -61,12 +80,24 @@ export const RuntimeValidationOverlay = ({
   const retryDisabled = validation.status !== "failed";
 
   return (
-    <div className="overlay" data-testid="runtime-validation-overlay" data-density="compact">
-      <div className="modal onboarding-modal">
+    <div className="overlay" data-testid="runtime-validation-overlay" data-density="compact" onClick={onClose}>
+      <div className="modal onboarding-modal" onClick={(event) => event.stopPropagation()}>
         <div className="onboarding-form runtime-check-shell">
-          <div className="onboarding-header">
-            <h2>{t("runtimeCheckTitle")}</h2>
-            <p>{t("runtimeCheckDescription")}</p>
+          <div className="onboarding-header runtime-check-header">
+            <div className="runtime-check-header-copy">
+              <h2>{t("runtimeCheckTitle")}</h2>
+              <p>{t("runtimeCheckDescription")}</p>
+            </div>
+            <button
+              type="button"
+              className="runtime-check-close"
+              onClick={onClose}
+              aria-label={t("close")}
+              title={t("close")}
+              data-testid="runtime-validation-close"
+            >
+              <HeaderCloseIcon />
+            </button>
           </div>
 
           {canUseWsl && (

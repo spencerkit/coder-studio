@@ -2,6 +2,7 @@ import { formatTerminalTitle, type Locale } from "../../i18n.ts";
 import {
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
+  type WorkspaceControllerState,
 } from "../../features/workspace/workspace-controller.ts";
 import {
   createDefaultWorkbenchState,
@@ -33,8 +34,68 @@ import {
   isDraftSession,
   resolveVisibleStatus,
 } from "./session.ts";
+import {
+  rememberWorkspaceViewBaseline,
+  rememberWorkspaceViewBaselines,
+} from "../../features/workspace/workspace-view-persistence.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const controllerIdentityKey = (controller: WorkspaceControllerState) => [
+  controller.controllerDeviceId ?? "",
+  controller.controllerClientId ?? "",
+].join(":");
+
+const mergeWorkspaceControllerState = (
+  current: WorkspaceControllerState | undefined,
+  incoming: WorkspaceControllerState,
+): WorkspaceControllerState => {
+  if (!current) {
+    return incoming;
+  }
+
+  if (incoming.fencingToken !== current.fencingToken) {
+    return incoming.fencingToken > current.fencingToken ? incoming : current;
+  }
+
+  if (current.takeoverPending && !incoming.takeoverPending) {
+    return {
+      ...incoming,
+      takeoverPending: true,
+      takeoverRequestedBySelf: current.takeoverRequestedBySelf,
+      takeoverRequestId: current.takeoverRequestId,
+      takeoverDeadlineAt: current.takeoverDeadlineAt,
+    };
+  }
+
+  const incomingLeaseExpiresAt = incoming.leaseExpiresAt ?? 0;
+  const currentLeaseExpiresAt = current.leaseExpiresAt ?? 0;
+  if (incomingLeaseExpiresAt !== currentLeaseExpiresAt) {
+    return incomingLeaseExpiresAt > currentLeaseExpiresAt ? incoming : current;
+  }
+
+  if (controllerIdentityKey(incoming) !== controllerIdentityKey(current)) {
+    return incoming;
+  }
+
+  if (incoming.takeoverPending !== current.takeoverPending) {
+    return incoming.takeoverPending ? incoming : current;
+  }
+
+  const incomingDeadlineAt = incoming.takeoverDeadlineAt ?? 0;
+  const currentDeadlineAt = current.takeoverDeadlineAt ?? 0;
+  if (incomingDeadlineAt !== currentDeadlineAt) {
+    return incomingDeadlineAt > currentDeadlineAt ? incoming : current;
+  }
+
+  const incomingRequestId = incoming.takeoverRequestId ?? "";
+  const currentRequestId = current.takeoverRequestId ?? "";
+  if (incomingRequestId !== currentRequestId) {
+    return incomingRequestId ? incoming : current;
+  }
+
+  return incoming;
+};
 
 const readClaudeSessionId = (data: string) => {
   try {
@@ -331,16 +392,18 @@ export const buildWorkbenchStateFromBootstrap = (
     })
     .filter((tab): tab is Tab => Boolean(tab));
 
-  return {
+  const nextState = {
     tabs,
     activeTabId: resolveActiveWorkspaceId(tabs, bootstrap.ui_state.active_workspace_id),
     layout: workbenchLayoutFromBackend(bootstrap.ui_state.layout),
     overlay: {
       ...current.overlay,
-      visible: tabs.length === 0,
+      visible: false,
       input: tabs.length === 0 ? current.overlay.input : "",
     },
   };
+  rememberWorkspaceViewBaselines(nextState.tabs);
+  return nextState;
 };
 
 export const upsertWorkspaceSnapshot = (
@@ -360,7 +423,7 @@ export const upsertWorkspaceSnapshot = (
   }
   const tabs = orderTabsByUiState(Array.from(tabMap.values()), openWorkspaceIds);
 
-  return {
+  const nextState = {
     ...current,
     tabs,
     activeTabId: resolveActiveWorkspaceId(tabs, uiState?.active_workspace_id ?? nextTab.id),
@@ -371,6 +434,8 @@ export const upsertWorkspaceSnapshot = (
       input: "",
     },
   };
+  rememberWorkspaceViewBaseline(nextTab);
+  return nextState;
 };
 
 export const applyWorkspaceRuntimeSnapshot = (
@@ -386,17 +451,18 @@ export const applyWorkspaceRuntimeSnapshot = (
     upsertWorkspaceSnapshot(current, runtimeSnapshot.snapshot, locale, appSettings, uiState),
     runtimeSnapshot.lifecycle_events ?? [],
   );
+  const incomingController = createWorkspaceControllerStateFromLease(
+    runtimeSnapshot.controller,
+    deviceId,
+    clientId,
+  );
   return {
     ...next,
     tabs: next.tabs.map((tab) => (
       tab.id === runtimeSnapshot.snapshot.workspace.workspace_id
         ? {
             ...tab,
-            controller: createWorkspaceControllerStateFromLease(
-              runtimeSnapshot.controller,
-              deviceId,
-              clientId,
-            ),
+            controller: mergeWorkspaceControllerState(tab.controller, incomingController),
           }
         : tab
     )),
@@ -423,9 +489,10 @@ export const applyWorkspaceControllerEvent = (
 export const applyWorkspaceRuntimeStateEvent = (
   current: WorkbenchState,
   payload: WorkspaceRuntimeStateEvent,
-): WorkbenchState => ({
-  ...current,
-  tabs: current.tabs.map((tab) => {
+): WorkbenchState => {
+  const nextState = {
+    ...current,
+    tabs: current.tabs.map((tab) => {
     if (tab.id !== payload.workspace_id) return tab;
     const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
       ? payload.view_state.active_session_id
@@ -442,8 +509,14 @@ export const applyWorkspaceRuntimeStateEvent = (
       filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
       viewingArchiveId: undefined,
     };
-  }),
-});
+    }),
+  };
+  const nextTab = nextState.tabs.find((tab) => tab.id === payload.workspace_id);
+  if (nextTab) {
+    rememberWorkspaceViewBaseline(nextTab);
+  }
+  return nextState;
+};
 
 export const applyWorkbenchUiState = (
   current: WorkbenchState,
@@ -457,7 +530,7 @@ export const applyWorkbenchUiState = (
     layout: workbenchLayoutFromBackend(uiState.layout),
     overlay: {
       ...current.overlay,
-      visible: tabs.length === 0,
+      visible: false,
     },
   };
 };

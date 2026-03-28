@@ -1,7 +1,9 @@
 import type { ExecTarget, WorktreeInfo } from "../../state/workbench.ts";
 import type {
+  BackendSessionHistoryRecord,
   ClaudeSlashSkillEntry,
   GitStatus,
+  SessionHistoryRecord,
   WorkbenchBootstrap,
   WorkbenchLayout,
   WorkbenchUiState,
@@ -10,10 +12,12 @@ import type {
   WorkspaceRuntimeSnapshot,
   WorkspaceSnapshot,
   WorkspaceTree,
+  WorkspaceControllerLease,
   WorkspaceViewPatch,
 } from "../../types/app.ts";
 import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
+import { mapSessionHistoryRecord } from "../../features/workspace/session-history.ts";
 import { fireAndForgetRpc, invokeRpc } from "./client.ts";
 
 export const launchWorkspace = (source: {
@@ -28,6 +32,10 @@ export const launchWorkspace = (source: {
 
 export const getWorkbenchBootstrap = (deviceId?: string, clientId?: string) =>
   invokeRpc<WorkbenchBootstrap>("workbench_bootstrap", { deviceId, clientId });
+
+export const listSessionHistory = async () => (
+  (await invokeRpc<BackendSessionHistoryRecord[]>("list_session_history", {})).map(mapSessionHistoryRecord)
+) as SessionHistoryRecord[];
 
 export const getWorkspaceSnapshot = (workspaceId: string) =>
   invokeRpc<WorkspaceSnapshot>("workspace_snapshot", { workspaceId });
@@ -56,7 +64,7 @@ export const requestWorkspaceTakeover = (
   workspaceId: string,
   deviceId: string,
   clientId: string,
-) => invokeRpc("workspace_controller_takeover", {
+) => invokeRpc<WorkspaceControllerLease>("workspace_controller_takeover", {
   workspaceId,
   deviceId,
   clientId,
@@ -66,7 +74,7 @@ export const rejectWorkspaceTakeover = (
   workspaceId: string,
   deviceId: string,
   clientId: string,
-) => invokeRpc("workspace_controller_reject_takeover", {
+) => invokeRpc<WorkspaceControllerLease>("workspace_controller_reject_takeover", {
   workspaceId,
   deviceId,
   clientId,

@@ -5,6 +5,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalCompatibilityMode } from "../../types/app";
 import { resetTerminalMeasurementCache, resolveTerminalFontFamily, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
+import { shouldRefreshTerminalAfterFit } from "./xterm-fit-refresh";
 
 type XtermBaseMode = "interactive" | "readonly";
 
@@ -104,6 +105,14 @@ const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
     ?? mount.closest(".app");
 };
 
+const readTerminalGeometry = (mount: HTMLElement | null) => {
+  if (!mount) return null;
+  return {
+    width: mount.clientWidth,
+    height: mount.clientHeight,
+  };
+};
+
 export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   output,
   outputIdentity,
@@ -125,25 +134,77 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   const outputSnapshotRef = useRef("");
   const identityRef = useRef<string | undefined>(undefined);
   const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const geometryRef = useRef<{ width: number; height: number } | null>(null);
+  const fitFrameRef = useRef<number | null>(null);
+  const onDataRef = useRef(onData);
+  const onSizeRef = useRef(onSize);
+
+  useEffect(() => {
+    onDataRef.current = onData;
+  }, [onData]);
+
+  useEffect(() => {
+    onSizeRef.current = onSize;
+  }, [onSize]);
 
   const emitSize = useCallback(() => {
     const term = termRef.current;
-    if (!term || !onSize) return;
+    const reportSize = onSizeRef.current;
+    if (!term || !reportSize) return;
     const next = { cols: term.cols, rows: term.rows };
     if (sizeRef.current?.cols === next.cols && sizeRef.current?.rows === next.rows) return;
     sizeRef.current = next;
-    onSize(next);
-  }, [onSize]);
+    reportSize(next);
+  }, []);
 
   const fitAndReport = useCallback(() => {
+    const mount = mountRef.current;
+    const term = termRef.current;
+    const previousGeometry = geometryRef.current;
+    const nextGeometry = readTerminalGeometry(mount);
+    const previousSize = term ? { cols: term.cols, rows: term.rows } : null;
+
     fitRef.current?.fit();
+
+    const nextSize = term ? { cols: term.cols, rows: term.rows } : null;
+    geometryRef.current = nextGeometry;
+    if (term && shouldRefreshTerminalAfterFit({
+      previousGeometry,
+      nextGeometry,
+      previousSize,
+      nextSize,
+    })) {
+      term.refresh(0, Math.max(term.rows - 1, 0));
+    }
     emitSize();
   }, [emitSize]);
+
+  const cancelScheduledFit = useCallback(() => {
+    if (fitFrameRef.current === null || typeof window === "undefined") return;
+    window.cancelAnimationFrame(fitFrameRef.current);
+    fitFrameRef.current = null;
+  }, []);
+
+  const flushFit = useCallback(() => {
+    cancelScheduledFit();
+    fitAndReport();
+  }, [cancelScheduledFit, fitAndReport]);
+
   const scheduleFit = useCallback(() => {
-    requestAnimationFrame(() => {
+    if (fitFrameRef.current !== null) return;
+    if (typeof window === "undefined") {
+      fitAndReport();
+      return;
+    }
+    fitFrameRef.current = window.requestAnimationFrame(() => {
+      fitFrameRef.current = null;
       fitAndReport();
     });
   }, [fitAndReport]);
+
+  useEffect(() => () => {
+    cancelScheduledFit();
+  }, [cancelScheduledFit]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -174,6 +235,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;
+      geometryRef.current = readTerminalGeometry(mount);
       fitAndReport();
       return;
     }
@@ -297,10 +359,12 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
 
   useEffect(() => {
     const term = termRef.current;
-    if (!term || mode !== "interactive" || !onData) return;
-    const disposable = term.onData(onData);
+    if (!term || mode !== "interactive") return;
+    const disposable = term.onData((value) => {
+      onDataRef.current?.(value);
+    });
     return () => disposable.dispose();
-  }, [mode, onData]);
+  }, [mode]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -308,7 +372,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   }, [autoFocus, outputIdentity]);
 
   useImperativeHandle(ref, () => ({
-    fit: fitAndReport,
+    fit: flushFit,
     focus: () => {
       termRef.current?.focus();
     },
@@ -317,10 +381,11 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       if (!term) return null;
       return { cols: term.cols, rows: term.rows };
     }
-  }), [fitAndReport]);
+  }), [flushFit]);
 
   useEffect(() => {
     return () => {
+      cancelScheduledFit();
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -328,8 +393,9 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
       sizeRef.current = null;
+      geometryRef.current = null;
     };
-  }, []);
+  }, [cancelScheduledFit]);
 
   return (
     <div

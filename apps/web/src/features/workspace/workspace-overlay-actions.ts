@@ -1,9 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type { ExecTarget, WorkbenchState } from "../../state/workbench";
-import { listFilesystem } from "../../services/http/system.service";
-import { looksLikeWindowsPath } from "../../shared/utils/path";
-import type { FolderBrowserState } from "../../types/app";
+import { listFilesystem } from "../../services/http/system.service.ts";
+import { looksLikeWindowsPath } from "../../shared/utils/path.ts";
+import type { FilesystemListResponse, FolderBrowserState } from "../../types/app";
 
 export const selectWorkspaceOverlayMode = (
   current: WorkbenchState,
@@ -43,6 +43,8 @@ type BrowseWorkspaceOverlayDirectoryArgs = {
   setFolderBrowser: Dispatch<SetStateAction<FolderBrowserState>>;
   setOverlayCanUseWsl: Dispatch<SetStateAction<boolean>>;
   updateOverlayInput: (value: string) => void;
+  shouldApplyResult?: () => boolean;
+  listFilesystemImpl?: (target: ExecTarget, path?: string) => Promise<FilesystemListResponse>;
 };
 
 export const browseWorkspaceOverlayDirectory = async ({
@@ -54,6 +56,8 @@ export const browseWorkspaceOverlayDirectory = async ({
   setFolderBrowser,
   setOverlayCanUseWsl,
   updateOverlayInput,
+  shouldApplyResult,
+  listFilesystemImpl = listFilesystem,
 }: BrowseWorkspaceOverlayDirectoryArgs) => {
   setFolderBrowser((current) => ({
     ...current,
@@ -63,7 +67,11 @@ export const browseWorkspaceOverlayDirectory = async ({
   }));
 
   try {
-    const listing = await listFilesystem(target, path);
+    const listing = await listFilesystemImpl(target, path);
+    if (shouldApplyResult && !shouldApplyResult()) {
+      return;
+    }
+
     const recoveredPath = Boolean(path && listing.fallback_reason);
     if (target.type === "native") {
       setOverlayCanUseWsl(listing.roots.some((root) => looksLikeWindowsPath(root.path)));
@@ -83,6 +91,10 @@ export const browseWorkspaceOverlayDirectory = async ({
       updateOverlayInput(listing.current_path);
     }
   } catch (error) {
+    if (shouldApplyResult && !shouldApplyResult()) {
+      return;
+    }
+
     const reason = error instanceof Error ? error.message : String(error);
     setFolderBrowser((current) => ({
       ...current,

@@ -300,7 +300,7 @@ export const createDefaultWorkbenchState = (): WorkbenchState => {
       showTerminalPanel: false
     },
     overlay: {
-      visible: true,
+      visible: false,
       mode: "local",
       input: "",
       target: { type: "native" }
@@ -430,11 +430,29 @@ const sanitizeTabSessions = (tab: Tab, locale: Locale): Tab => {
 
 export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | undefined): WorkbenchState => {
   const fallback = createDefaultWorkbenchState();
-  if (!input?.tabs?.length) return fallback;
+  if (!input?.tabs?.length) {
+    return {
+      ...fallback,
+      overlay: {
+        ...fallback.overlay,
+        ...input?.overlay,
+        visible: false,
+      },
+    };
+  }
 
   const locale = getPreferredLocale();
   const tabs = input.tabs.filter(Boolean).map((tab) => sanitizeTabSessions(tab, locale));
-  if (!tabs.length) return fallback;
+  if (!tabs.length) {
+    return {
+      ...fallback,
+      overlay: {
+        ...fallback.overlay,
+        ...input.overlay,
+        visible: false,
+      },
+    };
+  }
 
   const activeTabId = tabs.some((tab) => tab.id === input.activeTabId) ? input.activeTabId ?? tabs[0].id : tabs[0].id;
   const hasHistory = tabs.some((tab) =>

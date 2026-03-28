@@ -16,10 +16,8 @@ import {
   releaseWorkspaceControllerKeepalive,
   requestWorkspaceTakeover,
 } from "../../services/http/workspace.service.ts";
-import { cloneAppSettings } from "../../shared/app/settings";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
-  isForegroundActiveStatus,
   parseNumericId,
   restoreVisibleStatus,
   toBackgroundStatus,
@@ -29,6 +27,9 @@ import {
   applyWorkspaceControllerEvent,
   applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
+import {
+  getIdlePolicySyncWorkspaceIds,
+} from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
@@ -47,14 +48,15 @@ import {
   collectControlledWorkspaceReleasePayloads,
   getOrCreateClientId as getWorkspaceClientId,
   getOrCreateDeviceId as getWorkspaceDeviceId,
+  shouldRecoverWorkspaceController,
 } from "../workspace/workspace-controller";
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
-import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 import {
-  applyAppSettingsToTabs,
-  summarizeWorkbenchSettingsSync,
-} from "./workbench-settings-sync";
+  isWorkspaceSyncVersionCurrent,
+  readWorkspaceSyncVersion,
+} from "../workspace/workspace-sync-version.ts";
+import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 
 const withServiceFallback = async <T,>(
   operation: () => Promise<T>,
@@ -67,15 +69,20 @@ const CONTROLLER_RECOVERY_INTERVAL_MS = 1_000;
 const HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS = 5_000;
 const TAKEOVER_POLL_INTERVAL_MS = 2_000;
 const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
+// Reloads can briefly land on a stale bootstrap snapshot before runtime replay settles,
+// especially on slower CI runners. Reattaching ready tabs a few times closes that gap.
+const READY_TAB_RUNTIME_RECOVERY_DELAYS_MS = [0, 1_000, 3_000, 7_000] as const;
 
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
   locale: Locale;
+  settingsConfirmed: boolean;
 };
 
 export const WorkbenchRuntimeCoordinator = ({
   appSettings,
   locale,
+  settingsConfirmed,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
   const [state, setState] = useRelaxState(workbenchState);
@@ -215,6 +222,10 @@ export const WorkbenchRuntimeCoordinator = ({
     setState(next);
   }, [setState]);
 
+  const hasLiveWorkspaceTab = useCallback((workspaceId: string) => (
+    stateRef.current.tabs.some((tab) => tab.id === workspaceId)
+  ), []);
+
   const updateTab = useCallback((tabId: string, updater: (tab: Tab) => Tab) => {
     updateState((current) => ({
       ...current,
@@ -244,8 +255,6 @@ export const WorkbenchRuntimeCoordinator = ({
   const switchWorkspaceSessionFromReminder = useCallback((tabId: string, sessionId: string) => {
     const currentState = stateRef.current;
     const targetTabSnapshot = currentState.tabs.find((tab) => tab.id === tabId);
-    const previousTabSnapshot = currentState.tabs.find((tab) => tab.id === currentState.activeTabId);
-    const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
     const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
     if (!targetTabSnapshot || !nextSession) {
       return;
@@ -323,10 +332,6 @@ export const WorkbenchRuntimeCoordinator = ({
       });
     }
 
-    if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
-      void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
-    }
-
     void syncSessionPatch(tabId, sessionId, {
       status: restoreVisibleStatus(nextSession),
       last_active_at: nextActiveAt,
@@ -402,30 +407,43 @@ export const WorkbenchRuntimeCoordinator = ({
     }
 
     const task = (async () => {
+      const syncVersion = readWorkspaceSyncVersion(workspaceId);
       const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
         workspaceId,
         deviceId,
         clientId,
         withServiceFallback,
       );
-      if (!runtimeSnapshot) {
+      if (
+        !runtimeSnapshot
+        || !hasLiveWorkspaceTab(workspaceId)
+        || !isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)
+      ) {
         return;
       }
-      updateState((current) => applyWorkspaceRuntimeSnapshot(
-        current,
-        runtimeSnapshot,
-        locale,
-        appSettings,
-        deviceId,
-        clientId,
-      ));
+      updateState((current) => {
+        if (
+          !current.tabs.some((tab) => tab.id === workspaceId)
+          || !isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)
+        ) {
+          return current;
+        }
+        return applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        );
+      });
     })().finally(() => {
       runtimeAttachInflightRef.current.delete(workspaceId);
     });
 
     runtimeAttachInflightRef.current.set(workspaceId, task);
     await task;
-  }, [appSettings, clientId, deviceId, locale, updateState]);
+  }, [appSettings, clientId, deviceId, hasLiveWorkspaceTab, locale, updateState]);
 
   useWorkspaceTransportSync({
     agentRuntimeRefs,
@@ -450,18 +468,35 @@ export const WorkbenchRuntimeCoordinator = ({
   );
 
   useEffect(() => {
-    if (!attachedWorkspaceFingerprint) {
+    if (!attachedWorkspaceFingerprint || !isOnline) {
       return;
     }
 
-    const workspaceIds = state.tabs
-      .filter((tab) => tab.status === "ready")
-      .map((tab) => tab.id);
+    let cancelled = false;
+    const recoverReadyTabs = () => {
+      if (cancelled) {
+        return;
+      }
+      const workspaceIds = stateRef.current.tabs
+        .filter((tab) => tab.status === "ready")
+        .map((tab) => tab.id);
+      void Promise.all(workspaceIds.map(async (workspaceId) => {
+        await reattachWorkspaceRuntime(workspaceId);
+      }));
+    };
 
-    void Promise.all(workspaceIds.map(async (workspaceId) => {
-      await reattachWorkspaceRuntime(workspaceId);
-    }));
-  }, [attachedWorkspaceFingerprint, reattachWorkspaceRuntime]);
+    recoverReadyTabs();
+    const timers = READY_TAB_RUNTIME_RECOVERY_DELAYS_MS
+      .filter((delayMs) => delayMs > 0)
+      .map((delayMs) => window.setTimeout(recoverReadyTabs, delayMs));
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => {
+        window.clearTimeout(timer);
+      });
+    };
+  }, [attachedWorkspaceFingerprint, isOnline, reattachWorkspaceRuntime]);
 
   const controllerHeartbeatFingerprint = useMemo(
     () => state.tabs
@@ -516,10 +551,7 @@ export const WorkbenchRuntimeCoordinator = ({
     () => state.tabs
       .filter((tab) =>
         tab.status === "ready"
-        && tab.controller.role === "observer"
-        && !tab.controller.controllerDeviceId
-        && !tab.controller.controllerClientId
-        && !tab.controller.takeoverPending,
+        && shouldRecoverWorkspaceController(tab.controller),
       )
       .map((tab) => tab.id)
       .join("|"),
@@ -534,14 +566,13 @@ export const WorkbenchRuntimeCoordinator = ({
     const recoverableWorkspaceIds = () => stateRef.current.tabs
       .filter((tab) =>
         tab.status === "ready"
-        && tab.controller.role === "observer"
-        && !tab.controller.controllerDeviceId
-        && !tab.controller.controllerClientId
-        && !tab.controller.takeoverPending,
+        && shouldRecoverWorkspaceController(tab.controller),
       )
       .map((tab) => tab.id);
 
     const recoverControllers = () => {
+      // Observer tabs can miss an initial runtime attach/controller event during reloads.
+      // Reattaching until the tab converges keeps recovery/replay flows stable across slower environments.
       void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
         await reattachWorkspaceRuntime(workspaceId);
       }));
@@ -617,10 +648,8 @@ export const WorkbenchRuntimeCoordinator = ({
     };
   }, [clientId, deviceId, isDocumentVisible, isOnline, takeoverPollingFingerprint, updateState]);
 
-  const settingsSyncFingerprint = useMemo(() => state.tabs.map((tab) => [
+  const idlePolicyFingerprint = useMemo(() => state.tabs.map((tab) => [
     tab.id,
-    tab.agent.provider,
-    tab.agent.command,
     tab.idlePolicy.enabled ? "1" : "0",
     String(tab.idlePolicy.idleMinutes),
     String(tab.idlePolicy.maxActive),
@@ -628,19 +657,26 @@ export const WorkbenchRuntimeCoordinator = ({
   ].join(":")).join("|"), [state.tabs]);
 
   useEffect(() => {
-    const normalized = cloneAppSettings(appSettings);
-    const { agentWorkspaceIds, idlePolicyWorkspaceIds } = summarizeWorkbenchSettingsSync(
+    const idlePolicyWorkspaceIds = getIdlePolicySyncWorkspaceIds(
       stateRef.current.tabs,
-      normalized,
+      appSettings.idlePolicy,
+      settingsConfirmed,
     );
 
-    if (agentWorkspaceIds.length === 0 && idlePolicyWorkspaceIds.length === 0) {
+    if (idlePolicyWorkspaceIds.length === 0) {
       return;
     }
 
     updateState((current) => ({
       ...current,
-      tabs: applyAppSettingsToTabs(current.tabs, normalized),
+      tabs: current.tabs.map((tab) => (
+        idlePolicyWorkspaceIds.includes(tab.id)
+          ? {
+              ...tab,
+              idlePolicy: { ...appSettings.idlePolicy },
+            }
+          : tab
+      )),
     }));
 
     idlePolicyWorkspaceIds.forEach((workspaceId) => {
@@ -648,11 +684,11 @@ export const WorkbenchRuntimeCoordinator = ({
       if (!tab || tab.controller.role !== "controller") {
         return;
       }
-      void updateIdlePolicyRequest(workspaceId, normalized.idlePolicy, tab.controller).catch(() => {
+      void updateIdlePolicyRequest(workspaceId, appSettings.idlePolicy, tab.controller).catch(() => {
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });
-  }, [appSettings, settingsSyncFingerprint, updateState]);
+  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsConfirmed, updateState]);
 
   return null;
 };

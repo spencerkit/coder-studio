@@ -84,13 +84,19 @@ const gotoWorkspaceRoot = async (page: Page) => {
   ]);
   await page.waitForFunction(() =>
     Boolean(document.querySelector('[data-testid="overlay"]'))
-    || document.querySelectorAll('.workspace-top-tab').length > 0
+    || Boolean(document.querySelector('[data-testid="workspace-topbar"]'))
   );
 };
 
 const countWorkspaceTabs = async (page: Page) => page.locator('.workspace-top-tab').count();
 
 const workspaceLabelForPath = (workspacePath: string) => path.basename(workspacePath) || workspacePath;
+
+const expectWelcomeScreenVisible = async (page: Page) => {
+  await expect(page.getByTestId('workspace-welcome-screen')).toBeVisible();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-validation-overlay')).toHaveCount(0);
+};
 
 const openLaunchOverlay = async (page: Page) => {
   await gotoWorkspaceRoot(page);
@@ -100,8 +106,29 @@ const openLaunchOverlay = async (page: Page) => {
     return;
   }
 
-  await expect.poll(() => countWorkspaceTabs(page)).toBeGreaterThan(0);
-  await page.getByRole('button', { name: 'Add workspace' }).click();
+  if (await page.getByTestId('workspace-welcome-screen').isVisible()) {
+    await page.getByRole('button', { name: 'Open workspace' }).click();
+  } else {
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    try {
+      await page.getByRole('button', { name: 'Add workspace' }).click();
+    } catch (error) {
+      if (await overlay.isVisible()) {
+        await expect(overlay).toBeVisible();
+        return;
+      }
+      throw error;
+    }
+  }
+
+  await page.waitForFunction(() =>
+    Boolean(document.querySelector('[data-testid="overlay"]'))
+    || Boolean(document.querySelector('[data-testid="runtime-validation-overlay"]'))
+  );
+  const runtimeValidation = page.getByTestId('runtime-validation-overlay');
+  if (await runtimeValidation.count()) {
+    throw new Error('openLaunchOverlay expected the workspace launch overlay, but runtime validation is visible');
+  }
   await expect(overlay).toBeVisible();
 };
 
@@ -125,12 +152,53 @@ const launchLocalWorkspace = async (page: Page) => {
   return workspaceLabelForPath(selectedPath);
 };
 
+const closeActiveWorkspaceFromTopBar = async (page: Page) => {
+  const activeWorkspaceTab = page.locator('.workspace-top-tab.active');
+  await expect(activeWorkspaceTab).toBeVisible();
+  await activeWorkspaceTab.hover();
+  await activeWorkspaceTab.locator('.session-top-close').click();
+};
+
 const invokeRpc = async <T>(page: Page, command: string, payload: Record<string, unknown> = {}) => {
   const response = await page.request.post(`/api/rpc/${command}`, { data: payload });
   expect(response.ok()).toBeTruthy();
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+};
+
+const resetAppSettings = async (page: Page) => {
+  await invokeRpc(page, 'app_settings_update', {
+    settings: {
+      general: {
+        locale: 'en',
+        terminalCompatibilityMode: 'standard',
+        completionNotifications: {
+          enabled: true,
+          onlyWhenBackground: true,
+        },
+        idlePolicy: {
+          enabled: true,
+          idleMinutes: 10,
+          maxActive: 3,
+          pressure: true,
+        },
+      },
+      claude: {
+        global: {
+          executable: 'claude',
+          startupArgs: [],
+          env: {},
+          settingsJson: {},
+          globalConfigJson: {},
+        },
+        overrides: {
+          native: null,
+          wsl: null,
+        },
+      },
+    },
+  });
 };
 
 const patchSystemConfig = async (request: APIRequestContext, updates: Record<string, unknown>) => {
@@ -440,12 +508,34 @@ const closeAllOpenWorkspaces = async (page: Page) => {
   }>(page, 'workbench_bootstrap');
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
-    const controller = await currentWorkspaceController(page, workspaceId, {
-      deviceId: 'cleanup-device',
-      clientId: 'cleanup-client',
-    });
+    const controller = await currentWorkspaceController(page, workspaceId);
     await invokeRpc(page, 'close_workspace', controller);
   }
+};
+
+const createArchivedSessionForWorkspace = async (
+  page: Page,
+  workspaceId: string,
+  title: string,
+) => {
+  const controller = await currentWorkspaceController(page, workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+  });
+  await invokeRpc(page, 'session_update', {
+    ...controller,
+    sessionId: session.id,
+    patch: {
+      title,
+      status: 'idle',
+    },
+  });
+  await invokeRpc(page, 'archive_session', {
+    ...controller,
+    sessionId: session.id,
+  });
+  return String(session.id);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -459,7 +549,19 @@ test.beforeEach(async ({ page }) => {
   });
   await installTransportTracker(page);
   await installRuntimeCommandMock(page);
-  await closeAllOpenWorkspaces(page);
+  await resetAppSettings(page);
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+    };
+  }>(page, 'workbench_bootstrap');
+  for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
+    const controller = await currentWorkspaceController(page, workspaceId, {
+      deviceId: 'cleanup-device',
+      clientId: 'cleanup-client',
+    });
+    await invokeRpc(page, 'close_workspace', controller);
+  }
 });
 
 test.beforeAll(async () => {
@@ -468,6 +570,25 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await Promise.all(TAB_STABILITY_DIRS.map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
+
+test('empty startup shows the welcome screen and does not auto-open the launch overlay', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expectWelcomeScreenVisible(page);
+});
+
+test('welcome screen can open and close the launch flow', async ({ page }) => {
+  await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('folder-select')).toBeVisible();
+
+  await page.getByTestId('launch-overlay-close').click();
+  await expectWelcomeScreenVisible(page);
 });
 
 test('local workspace flow opens the workspace shell', async ({ page }) => {
@@ -519,15 +640,18 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
 
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-page')).toHaveAttribute('data-density', 'compact');
-  await expect(page.getByTestId('settings-summary')).toBeVisible();
+  await expect(page.getByTestId('settings-page')).toBeVisible();
 });
 
-test('runtime validation blocks workspace selection until required tools are installed', async ({ page }) => {
+test('runtime validation only appears after opening the launch flow from the welcome screen', async ({ page }) => {
   const runtime = runtimeCommandMockState(page);
   runtime.claude = false;
   await closeAllOpenWorkspaces(page);
 
   await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
 
   await expect(page.getByTestId('runtime-validation-overlay')).toBeVisible();
   await expect(page.getByTestId('runtime-validation-overlay')).toHaveAttribute('data-density', 'compact');
@@ -672,13 +796,23 @@ test('background turn_completed still sends a reminder while viewing settings', 
   }
 });
 
-test('settings persist across route changes and reloads', async ({ page }) => {
+test('claude settings persist across route changes and reloads', async ({ page }) => {
   await launchLocalWorkspace(page);
   await page.getByTestId('settings-open').click();
 
   await expect(page.getByTestId('settings-page')).toBeVisible();
-  await page.getByTestId('settings-agent-command').fill('claude --print');
   await page.getByTestId('settings-max-active').fill('5');
+  await page.getByTestId('settings-nav-claude').click();
+  await expect(page.getByTestId('claude-command-preview')).toContainText('claude');
+  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
+  await page.getByTestId('claude-flag-dangerously-skip-permissions').check();
+  await page.getByTestId('claude-flag-verbose').check();
+  await page.getByTestId('claude-startup-permission-mode').click();
+  await page.getByTestId('claude-startup-permission-mode-option-auto').click();
+  await page.getByTestId('claude-startup-args').fill('--debug');
+  await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
+  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
+  await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: 'Back to app' }).click();
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -686,8 +820,100 @@ test('settings persist across route changes and reloads', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await page.getByTestId('settings-open').click();
-  await expect(page.getByTestId('settings-agent-command')).toHaveValue('claude --print');
   await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
+  await page.getByTestId('settings-nav-claude').click();
+  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
+  await expect(page.getByTestId('claude-flag-dangerously-skip-permissions')).toBeChecked();
+  await expect(page.getByTestId('claude-flag-verbose')).toBeChecked();
+  await expect(page.getByTestId('claude-startup-permission-mode')).toContainText('auto');
+  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
+  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--debug');
+  await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
+});
+
+test('history drawer restores archived sessions and deletes records permanently', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-history-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const current = await readWorkspaceByPath(page, workspaceDir);
+    expect(current.workspace).toBeTruthy();
+    const workspaceId = current.workspace!.workspace.workspace_id;
+
+    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Restore Session');
+    const deleteSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Delete Session');
+
+    await page.getByTestId('history-toggle').click();
+    await expect(page.getByTestId('history-drawer')).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`)).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByTestId(`history-delete-${workspaceId}-${deleteSessionId}`).click();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toHaveCount(0);
+
+    await page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`).click();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await expect(page.locator('.agent-pane-title', { hasText: 'History Restore Session' })).toBeVisible();
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
+test('draft pane restore only shows current workspace history and restores into the new pane', async ({ page }) => {
+  const workspaceADir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-a-'));
+  const workspaceBDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-b-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceADir);
+    await launchWorkspaceByPath(page, workspaceBDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const workspaceA = await readWorkspaceByPath(page, workspaceADir);
+    const workspaceB = await readWorkspaceByPath(page, workspaceBDir);
+    expect(workspaceA.workspace).toBeTruthy();
+    expect(workspaceB.workspace).toBeTruthy();
+
+    const workspaceAId = workspaceA.workspace!.workspace.workspace_id;
+    const workspaceBId = workspaceB.workspace!.workspace.workspace_id;
+    const workspaceALabel = path.basename(workspaceADir);
+
+    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceAId, 'Draft Restore Alpha');
+    await createArchivedSessionForWorkspace(page, workspaceBId, 'Draft Restore Beta');
+
+    await page.reload();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    await page.locator('.workspace-top-tab').filter({ hasText: workspaceALabel }).first().click();
+    await expect(page.locator('.workspace-top-tab.active')).toContainText(workspaceALabel);
+
+    const paneCard = page.locator('.agent-pane-card').first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Split Vertically').click();
+
+    const draftLauncher = page.locator('.agent-draft-launcher').last();
+    await expect(draftLauncher).toBeVisible();
+    await draftLauncher.locator('[data-testid^="draft-mode-restore-"]').click();
+
+    await expect(draftLauncher.getByText('Draft Restore Alpha')).toBeVisible();
+    await expect(draftLauncher.getByText('Draft Restore Beta')).toHaveCount(0);
+    await draftLauncher.getByTestId(`restore-candidate-${restoreSessionId}`).click();
+
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await expect(page.locator('.agent-pane-title', { hasText: 'Draft Restore Alpha' })).toBeVisible();
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await Promise.all([
+      fs.rm(workspaceADir, { recursive: true, force: true }),
+      fs.rm(workspaceBDir, { recursive: true, force: true }),
+    ]);
+  }
 });
 
 test('restores the last workspace after reload', async ({ page }) => {
@@ -696,6 +922,19 @@ test('restores the last workspace after reload', async ({ page }) => {
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
+});
+
+test('closing the last workspace returns to the welcome screen', async ({ page }) => {
+  const expectedLabel = await launchLocalWorkspace(page);
+
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(1);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
+  await expect(page.getByTestId('workspace-welcome-screen')).toHaveCount(0);
+  await closeActiveWorkspaceFromTopBar(page);
+
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(0);
+  await expect(page).toHaveURL(/workspace$/);
+  await expectWelcomeScreenVisible(page);
 });
 
 test('workspace tabs keep a stable order when switching between workspaces', async ({ page }) => {

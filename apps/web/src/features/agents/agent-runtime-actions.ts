@@ -1,19 +1,20 @@
 import type { MutableRefObject } from "react";
-import type { WorkspaceControllerState } from "../workspace/workspace-controller";
-import { formatSessionTitle, type Locale, type Translator } from "../../i18n";
-import type { Session, Tab } from "../../state/workbench";
-import { resizeAgent } from "../../services/http/agent.service";
+import type { WorkspaceControllerState } from "../workspace/workspace-controller.ts";
+import type { Locale, Translator } from "../../i18n.ts";
+import type { Session, Tab } from "../../state/workbench.ts";
+import { resizeAgent } from "../../services/http/agent.service.ts";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STARTUP_DISCOVERY_MS,
   AGENT_STARTUP_MAX_WAIT_MS,
   AGENT_STARTUP_QUIET_MS,
   AGENT_TITLE_TRACK_LIMIT,
-} from "../../shared/app/constants";
-import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi";
-import { parseNumericId, sessionTitleFromInput } from "../../shared/utils/session";
-import type { AgentEvent, AgentLifecycleEvent } from "../../types/app";
-import type { XtermBaseHandle } from "../../components/terminal";
+} from "../../shared/app/constants.ts";
+import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi.ts";
+import { isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session.ts";
+import type { AgentEvent, AgentLifecycleEvent } from "../../types/app.ts";
+import type { XtermBaseHandle } from "../../components/terminal/XtermBase.tsx";
+import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
 
 type AgentSize = { cols: number; rows: number };
 
@@ -61,9 +62,7 @@ export const isAgentRuntimeRunning = (
 ) => refs.runningAgentKeysRef.current.has(agentRuntimeKey(tabId, sessionId));
 
 export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
-  requestAnimationFrame(() => {
-    refs.agentTerminalRefs.current.forEach((handle) => handle?.fit());
-  });
+  fitAgentTerminalHandles(refs.agentTerminalRefs.current);
 };
 
 const flushAgentRuntimeSize = (
@@ -256,7 +255,10 @@ export const trackAgentInitialTitleInput = (
 
   if (tracker.locked) {
     refs.agentTitleTrackerRef.current.set(paneId, tracker);
-    return null;
+    return {
+      committedTitle: null,
+      materializeTitle: "",
+    };
   }
 
   const normalized = stripTerminalInputEscapes(data);
@@ -287,7 +289,10 @@ export const trackAgentInitialTitleInput = (
 
   tracker.buffer = buffer;
   refs.agentTitleTrackerRef.current.set(paneId, tracker);
-  return committed;
+  return {
+    committedTitle: committed,
+    materializeTitle: committed ?? "",
+  };
 };
 
 type CommitAgentSessionTitleArgs = {
@@ -310,26 +315,24 @@ export const commitAgentSessionTitle = ({
   locale,
   t,
   updateTab,
-}: CommitAgentSessionTitleArgs) => {
+}: CommitAgentSessionTitleArgs): string | null => {
   const title = sessionTitleFromInput(rawInput);
-  if (!title) return;
+  if (!title) return null;
 
   let applied = false;
   updateTab(tabId, (tab) => ({
     ...tab,
     sessions: tab.sessions.map((session) => {
       if (session.id !== sessionId) return session;
-      const numericId = parseNumericId(session.id);
-      const genericTitle = numericId === null ? null : formatSessionTitle(numericId, locale);
       const canReplace = session.isDraft
         || session.title === t("draftSessionTitle")
-        || (genericTitle !== null && session.title === genericTitle);
+        || isGeneratedSessionTitleForId(session.title, session.id);
       if (!canReplace) return session;
       applied = true;
       return { ...session, title };
     }),
   }));
-  if (!applied) return;
+  if (!applied) return null;
 
   const tracker = refs.agentTitleTrackerRef.current.get(paneId);
   if (tracker) {
@@ -337,6 +340,45 @@ export const commitAgentSessionTitle = ({
     tracker.buffer = "";
     refs.agentTitleTrackerRef.current.set(paneId, tracker);
   }
+
+  return title;
+};
+
+type PreviewAgentSessionTitleArgs = {
+  tabId: string;
+  sessionId: string;
+  rawInput: string;
+  locale: Locale;
+  t: Translator;
+  updateTab: UpdateTab;
+};
+
+export const previewAgentSessionTitle = ({
+  tabId,
+  sessionId,
+  rawInput,
+  locale,
+  t,
+  updateTab,
+}: PreviewAgentSessionTitleArgs): string | null => {
+  const title = sessionTitleFromInput(rawInput);
+  if (!title) return null;
+
+  let applied = false;
+  updateTab(tabId, (tab) => ({
+    ...tab,
+    sessions: tab.sessions.map((session) => {
+      if (session.id !== sessionId) return session;
+      const canReplace = session.isDraft
+        || session.title === t("draftSessionTitle")
+        || isGeneratedSessionTitleForId(session.title, session.id);
+      if (!canReplace) return session;
+      applied = true;
+      return { ...session, title };
+    }),
+  }));
+
+  return applied ? title : null;
 };
 
 export const noteAgentStartupEvent = (

@@ -1,21 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AuthGate from "../../components/AuthGate";
-import { applyLocale, getPreferredLocale, persistLocale, type Locale } from "../../i18n";
+import {
+  applyLocale,
+  clearLocalePreference,
+  getPreferredLocale,
+  getSystemLocale,
+  persistLocale,
+  readStoredLocalePreference,
+  type Locale,
+} from "../../i18n";
 import { SettingsScreen } from "../../features/settings";
 import WorkspaceScreen from "../../features/workspace/WorkspaceScreen";
 import type { AppRoute, AppSettings } from "../../types/app";
 import { WorkbenchRuntimeCoordinator } from "./WorkbenchRuntimeCoordinator";
 import {
+  clearStoredAppSettings,
   cloneAppSettings,
-  persistStoredAppSettings,
   readStoredAppSettings,
 } from "../../shared/app/settings";
+import {
+  defaultAppSettings,
+} from "../../shared/app/claude-settings.ts";
+import {
+  createAppSettingsDraftStore,
+  createSequencedAppSettingsSaver,
+  createPersistableAppSettings,
+  deriveRuntimeAppSettings,
+  hydrateConfirmedAppSettings,
+} from "../../services/http/settings.service.ts";
 
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
-  const [appSettings, setAppSettings] = useState<AppSettings>(() => readStoredAppSettings());
+  const [appSettings, setAppSettings] = useState<AppSettings>(() => defaultAppSettings());
+  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(() => defaultAppSettings());
+  const [backendSettingsConfirmed, setBackendSettingsConfirmed] = useState(false);
   const [lastWorkspacePath, setLastWorkspacePath] = useState("/workspace");
+  const confirmedSettingsRef = useRef(appSettings);
+  const backendSettingsConfirmedRef = useRef(false);
+  const draftSettingsRef = useRef(createAppSettingsDraftStore(appSettings));
+  const saveCoordinatorRef = useRef(createSequencedAppSettingsSaver());
+  const localePreferenceExplicitRef = useRef(readStoredLocalePreference() !== null);
   const navigate = useNavigate();
   const location = useLocation();
   const route: AppRoute = location.pathname === "/settings" ? "settings" : "workspace";
@@ -25,12 +50,35 @@ export default function AppController() {
   }, [locale]);
 
   useEffect(() => {
-    try {
-      persistStoredAppSettings(appSettings);
-    } catch {
-      // Keep in-memory settings if persistence fails.
-    }
-  }, [appSettings]);
+    let cancelled = false;
+
+    const hydrateAppSettings = async () => {
+      const legacySettings = readStoredAppSettings();
+      const explicitLocale = readStoredLocalePreference();
+      const preferredLocale = explicitLocale ?? getSystemLocale();
+      const fallbackDefaults = defaultAppSettings();
+      const hydrated = await hydrateConfirmedAppSettings({
+        fallbackSettings: fallbackDefaults,
+        legacySettings,
+        preferredLocale,
+        preferredLocaleIsExplicit: explicitLocale !== null,
+      });
+
+      if (hydrated.clearLegacyStorage) {
+        clearStoredAppSettings();
+      }
+      if (cancelled) {
+        return;
+      }
+
+      applyRuntimeSettings(hydrated.settings, hydrated.backendConfirmed, hydrated.localeExplicit);
+    };
+
+    void hydrateAppSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (location.pathname.startsWith("/workspace")) {
@@ -42,14 +90,80 @@ export default function AppController() {
     navigate(nextRoute === "settings" ? "/settings" : lastWorkspacePath);
   };
 
+  const applyRuntimeSettings = (
+    saved: AppSettings,
+    confirmedByBackend: boolean,
+    localeExplicit = localePreferenceExplicitRef.current,
+  ) => {
+    const runtimeSettings = deriveRuntimeAppSettings({
+      settings: saved,
+      localeExplicit,
+      systemLocale: getSystemLocale(),
+      explicitLocale: readStoredLocalePreference(),
+    });
+
+    draftSettingsRef.current.replace(runtimeSettings);
+    confirmedSettingsRef.current = cloneAppSettings(saved);
+    backendSettingsConfirmedRef.current = confirmedByBackend;
+    localePreferenceExplicitRef.current = localeExplicit;
+    setAppSettings(runtimeSettings);
+    setSettingsDraft(runtimeSettings);
+    setLocale(runtimeSettings.general.locale);
+    if (localeExplicit) {
+      applyLocale(runtimeSettings.general.locale);
+    } else {
+      clearLocalePreference();
+      applyLocale(runtimeSettings.general.locale);
+    }
+    setBackendSettingsConfirmed(confirmedByBackend);
+  };
+
   const onSelectLocale = (nextLocale: Locale) => {
-    setLocale(nextLocale);
     persistLocale(nextLocale);
+    localePreferenceExplicitRef.current = true;
+    const nextSettings = draftSettingsRef.current.update((draft) => {
+      draft.general.locale = nextLocale;
+    });
+    setAppSettings(nextSettings);
+    setSettingsDraft(nextSettings);
+    setLocale(nextLocale);
+    void saveCoordinatorRef.current.save(
+      confirmedSettingsRef.current,
+      createPersistableAppSettings(nextSettings, confirmedSettingsRef.current, true),
+      undefined,
+      backendSettingsConfirmedRef.current,
+    )
+      .then((result) => {
+        if (!result.shouldApply) {
+          return;
+        }
+        applyRuntimeSettings(result.settings, result.backendConfirmed, true);
+      });
   };
 
   const onCommitSettings = (nextSettings: AppSettings) => {
-    const normalized = cloneAppSettings(nextSettings);
-    setAppSettings(normalized);
+    const normalized = draftSettingsRef.current.replace(cloneAppSettings(nextSettings));
+    setSettingsDraft(normalized);
+    void saveCoordinatorRef.current.save(
+      confirmedSettingsRef.current,
+      createPersistableAppSettings(
+        normalized,
+        confirmedSettingsRef.current,
+        localePreferenceExplicitRef.current,
+      ),
+      undefined,
+      backendSettingsConfirmedRef.current,
+    )
+      .then((result) => {
+        if (!result.shouldApply) {
+          return;
+        }
+        applyRuntimeSettings(
+          result.settings,
+          result.backendConfirmed,
+          localePreferenceExplicitRef.current,
+        );
+      });
   };
 
   return (
@@ -57,6 +171,7 @@ export default function AppController() {
       <WorkbenchRuntimeCoordinator
         locale={locale}
         appSettings={appSettings}
+        settingsConfirmed={backendSettingsConfirmed}
       />
       <Routes>
         <Route path="/" element={<Navigate to="/workspace" replace />} />
@@ -85,7 +200,7 @@ export default function AppController() {
           element={
             <SettingsScreen
               locale={locale}
-              appSettings={appSettings}
+              settingsDraft={settingsDraft}
               onSelectLocale={onSelectLocale}
               onCommitSettings={onCommitSettings}
               onCloseSettings={() => navigate(lastWorkspacePath)}
