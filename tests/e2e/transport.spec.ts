@@ -542,7 +542,6 @@ test.describe('workspace transport baseline', () => {
       await page.reload();
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
-      const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
       await invokeRpc(page, 'agent_start', {
         ...controllerAfterReload,
@@ -562,18 +561,31 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const runtimeAfterReload = await invokeRpc<{
+        snapshot: {
+          sessions: Array<{ id: number }>;
+          view_state: {
+            active_session_id: string;
+            active_pane_id: string;
+          };
+        };
         lifecycle_events?: Array<{ session_id: string; kind: string }>;
       }>(page, 'workspace_runtime_attach', {
         workspaceId: workspace.workspaceId,
         deviceId: ids.deviceId,
         clientId: ids.clientId,
       });
+      expect(runtimeAfterReload.snapshot.sessions.some((candidate) => candidate.id === session.id)).toBe(true);
+      expect(runtimeAfterReload.snapshot.view_state.active_session_id).toBe(String(session.id));
+      expect(runtimeAfterReload.snapshot.view_state.active_pane_id).toBe(`pane-${session.id}`);
       expect(runtimeAfterReload.lifecycle_events?.some((event) =>
         event.session_id === String(session.id) && event.kind === 'tool_started'
       )).toBe(true);
       let lastReloadStatus: string | null = null;
       await expect.poll(async () => {
-        lastReloadStatus = await sessionCard.getAttribute('data-session-status');
+        lastReloadStatus = await page
+          .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+          .first()
+          .getAttribute('data-session-status');
         return lastReloadStatus === 'running' || lastReloadStatus === 'background';
       }, {
         timeout: 20000,
@@ -923,25 +935,18 @@ test.describe('workspace transport baseline', () => {
       await expect(page.getByTestId('workspace-agent-recovery-banner')).toBeVisible({
         timeout: 10000,
       });
+      await expect(page.getByTestId('workspace-agent-recovery-action')).toHaveText('Resume agent');
       await page.getByTestId('workspace-agent-recovery-action').click();
 
-      await waitForWsEvent(
-        page,
-        'agent://event',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === String(session.id)
-          && typeof payload.data === 'string'
-          && payload.data.includes(`--resume ${resumeClaudeSessionId}`),
-        TRANSPORT_EVENT_TIMEOUT_MS,
-      );
       await waitForWsEvent(
         page,
         'agent://lifecycle',
         (payload) =>
           payload.workspace_id === workspace.workspaceId
           && payload.session_id === String(session.id)
-          && payload.kind === 'tool_started',
+          && payload.kind === 'tool_started'
+          && typeof payload.data === 'string'
+          && payload.data.includes(resumeClaudeSessionId),
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 

@@ -813,4 +813,80 @@ mod tests {
         assert_eq!(runtime.lifecycle_events[0].source_event, "PreToolUse");
         assert_eq!(runtime.lifecycle_events[0].seq, 1);
     }
+
+    #[test]
+    fn workspace_runtime_attach_keeps_created_session_view_and_claude_id() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-view-test");
+        let session = create_workspace_session(app.state(), &workspace_id, SessionMode::Branch)
+            .expect("session should be created");
+
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                active_session_id: Some(session.id.to_string()),
+                active_pane_id: Some(format!("pane-{}", session.id)),
+                active_terminal_id: None,
+                pane_layout: Some(json!({
+                    "type": "leaf",
+                    "id": format!("pane-{}", session.id),
+                    "sessionId": session.id.to_string(),
+                })),
+                file_preview: None,
+            },
+        )
+        .expect("view state should be updated");
+        update_workspace_session(
+            app.state(),
+            &workspace_id,
+            session.id,
+            SessionPatch {
+                title: None,
+                status: Some(SessionStatus::Interrupted),
+                mode: None,
+                auto_feed: None,
+                queue: None,
+                messages: None,
+                stream: None,
+                unread: None,
+                last_active_at: None,
+                claude_session_id: Some("claude-runtime-attach".to_string()),
+            },
+        )
+        .expect("session should be updated");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id,
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .expect("runtime attach should succeed");
+
+        let restored = runtime
+            .snapshot
+            .sessions
+            .iter()
+            .find(|candidate| candidate.id == session.id)
+            .expect("created session should be present");
+        assert_eq!(restored.status, SessionStatus::Interrupted);
+        assert_eq!(
+            restored.claude_session_id.as_deref(),
+            Some("claude-runtime-attach")
+        );
+        assert_eq!(
+            runtime.snapshot.view_state.active_session_id,
+            session.id.to_string()
+        );
+        assert_eq!(
+            runtime.snapshot.view_state.active_pane_id,
+            format!("pane-{}", session.id)
+        );
+        assert_eq!(
+            runtime.snapshot.view_state.pane_layout["sessionId"].as_str(),
+            Some(session.id.to_string().as_str())
+        );
+    }
 }
