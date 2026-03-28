@@ -119,6 +119,8 @@ export type SessionHistoryGroup = {
   records: SessionHistoryRecord[];
 };
 
+export type SessionHistoryExpansionState = Record<string, boolean>;
+
 export type BackendWorkspaceViewState = {
   active_session_id: string;
   active_pane_id: string;

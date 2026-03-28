@@ -1,5 +1,6 @@
 import type {
   BackendSessionHistoryRecord,
+  SessionHistoryExpansionState,
   SessionHistoryGroup,
   SessionHistoryRecord,
 } from "../../types/app.ts";
@@ -23,6 +24,7 @@ export const mapSessionHistoryRecord = (
 
 export const groupSessionHistory = (
   records: SessionHistoryRecord[],
+  currentWorkspaceId?: string | null,
 ): SessionHistoryGroup[] => {
   const groups = new Map<string, SessionHistoryGroup>();
 
@@ -44,11 +46,20 @@ export const groupSessionHistory = (
     }))
     .filter((group) => group.records.length > 0)
     .sort((left, right) => {
+      if (currentWorkspaceId && left.workspaceId === currentWorkspaceId) return -1;
+      if (currentWorkspaceId && right.workspaceId === currentWorkspaceId) return 1;
       const leftTime = left.records[0]?.lastActiveAt ?? 0;
       const rightTime = right.records[0]?.lastActiveAt ?? 0;
       return rightTime - leftTime;
     });
 };
+
+export const createInitialHistoryExpansion = (
+  groups: SessionHistoryGroup[],
+  currentWorkspaceId?: string | null,
+): SessionHistoryExpansionState => Object.fromEntries(
+  groups.map((group) => [group.workspaceId, group.workspaceId === currentWorkspaceId]),
+);
 
 export const selectHistoryPrimaryAction = (
   record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable">,

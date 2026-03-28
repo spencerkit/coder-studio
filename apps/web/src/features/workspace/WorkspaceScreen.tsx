@@ -98,7 +98,11 @@ import {
   resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
-import { groupSessionHistory, selectHistoryPrimaryAction } from "./session-history";
+import {
+  createInitialHistoryExpansion,
+  groupSessionHistory,
+  selectHistoryPrimaryAction,
+} from "./session-history";
 import { listRestoreCandidatesForWorkspace } from "./session-restore-chooser";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
@@ -393,6 +397,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyRecords, setHistoryRecords] = useState<SessionHistoryRecord[]>([]);
+  const [historyExpandedGroups, setHistoryExpandedGroups] = useState<Record<string, boolean>>({});
   const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
@@ -980,8 +985,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     [activeTab.paneLayout]
   );
   const historyGroups = useMemo(
-    () => groupSessionHistory(historyRecords),
-    [historyRecords]
+    () => groupSessionHistory(historyRecords, activeTab.id),
+    [activeTab.id, historyRecords]
   );
   const restoreCandidates = useMemo(
     () => listRestoreCandidatesForWorkspace({
@@ -1418,8 +1423,32 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const onToggleHistory = () => {
+    if (!historyOpen) {
+      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
+    }
     setHistoryOpen((open) => !open);
   };
+
+  useEffect(() => {
+    if (!historyOpen) return;
+
+    setHistoryExpandedGroups((current) => {
+      const defaults = createInitialHistoryExpansion(historyGroups, activeTab.id);
+      const next = historyGroups.reduce<Record<string, boolean>>((expansion, group) => {
+        expansion[group.workspaceId] = Object.prototype.hasOwnProperty.call(current, group.workspaceId)
+          ? current[group.workspaceId]
+          : defaults[group.workspaceId];
+        return expansion;
+      }, {});
+
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(next);
+      const changed = currentKeys.length !== nextKeys.length
+        || nextKeys.some((workspaceId) => current[workspaceId] !== next[workspaceId]);
+
+      return changed ? next : current;
+    });
+  }, [activeTab.id, historyGroups, historyOpen]);
 
   const handleHistoryRecordSelect = async (record: SessionHistoryRecord) => {
     const targetTab = await ensureWorkspaceReady(record.workspaceId);
@@ -2799,7 +2828,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         open={historyOpen}
         loading={historyLoading}
         groups={historyGroups}
+        expandedGroups={historyExpandedGroups}
         onClose={() => setHistoryOpen(false)}
+        onToggleGroup={(workspaceId) => {
+          setHistoryExpandedGroups((current) => ({
+            ...current,
+            [workspaceId]: !current[workspaceId],
+          }));
+        }}
         onSelectRecord={(record) => {
           void handleHistoryRecordSelect(record);
         }}

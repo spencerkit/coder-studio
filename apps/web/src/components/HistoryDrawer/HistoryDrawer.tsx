@@ -1,13 +1,19 @@
 import type { Translator } from "../../i18n.ts";
-import type { SessionHistoryGroup, SessionHistoryRecord } from "../../types/app.ts";
-import { HeaderCloseIcon } from "../icons.tsx";
+import type {
+  SessionHistoryExpansionState,
+  SessionHistoryGroup,
+  SessionHistoryRecord,
+} from "../../types/app.ts";
+import { ChevronDownIcon, ChevronRightIcon, HeaderCloseIcon } from "../icons.tsx";
 import { selectHistoryPrimaryAction } from "../../features/workspace/session-history.ts";
 
 type HistoryDrawerProps = {
   open: boolean;
   loading?: boolean;
   groups: SessionHistoryGroup[];
+  expandedGroups: SessionHistoryExpansionState;
   onClose: () => void;
+  onToggleGroup: (workspaceId: string) => void;
   onSelectRecord: (record: SessionHistoryRecord) => void;
   onDeleteRecord: (record: SessionHistoryRecord) => void;
   t: Translator;
@@ -36,7 +42,9 @@ export const HistoryDrawer = ({
   open,
   loading = false,
   groups,
+  expandedGroups,
   onClose,
+  onToggleGroup,
   onSelectRecord,
   onDeleteRecord,
   t,
@@ -66,49 +74,70 @@ export const HistoryDrawer = ({
         ) : groups.length === 0 ? (
           <div className="history-empty-state">{t("historyEmpty")}</div>
         ) : (
-          groups.map((group) => (
-            <section key={group.workspaceId} className="history-group">
-              <header className="history-group-header">
-                <div>
-                  <strong>{group.workspaceTitle}</strong>
-                  <span>{group.workspacePath}</span>
-                </div>
-                <span>{t("historyCount", { count: group.records.length })}</span>
-              </header>
-              <div className="history-record-list">
-                {group.records.map((record) => (
-                  <div key={`${record.workspaceId}:${record.sessionId}`} className="history-record-row">
-                    <button
-                      type="button"
-                      className="history-record-main"
-                      onClick={() => onSelectRecord(record)}
-                      data-testid={`history-record-${record.workspaceId}-${record.sessionId}`}
-                    >
-                      <div className="history-record-title-row">
-                        <strong>{record.title}</strong>
-                        <span className={`history-record-state ${recordStateClassName(record)}`}>
-                          {primaryActionLabel(record, t)}
-                        </span>
-                      </div>
-                      <div className="history-record-meta">
-                        <span>{recordMetaLabel(record, t)}</span>
-                        <span>{record.status}</span>
-                        <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="history-record-delete"
-                      onClick={() => onDeleteRecord(record)}
-                      data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
-                    >
-                      {t("historyDelete")}
-                    </button>
+          groups.map((group) => {
+            const expanded = expandedGroups[group.workspaceId] ?? false;
+
+            return (
+              <section
+                key={group.workspaceId}
+                className={`history-group ${expanded ? "expanded" : ""}`}
+                data-testid={`history-group-${group.workspaceId}`}
+              >
+                <button
+                  type="button"
+                  className="history-group-header"
+                  aria-expanded={expanded}
+                  onClick={() => onToggleGroup(group.workspaceId)}
+                  data-testid={`history-group-toggle-${group.workspaceId}`}
+                >
+                  <div className="history-group-heading">
+                    <span className="history-group-chevron" aria-hidden="true">
+                      {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                    </span>
+                    <div className="history-group-copy">
+                      <strong>{group.workspaceTitle}</strong>
+                      <span>{group.workspacePath}</span>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </section>
-          ))
+                  <span className="history-group-count">{t("historyCount", { count: group.records.length })}</span>
+                </button>
+                {expanded ? (
+                  <div className="history-record-list" role="region" aria-label={group.workspaceTitle}>
+                    {group.records.map((record) => (
+                      <div key={`${record.workspaceId}:${record.sessionId}`} className="history-record-row">
+                        <button
+                          type="button"
+                          className="history-record-main"
+                          onClick={() => onSelectRecord(record)}
+                          data-testid={`history-record-${record.workspaceId}-${record.sessionId}`}
+                        >
+                          <div className="history-record-title-row">
+                            <strong>{record.title}</strong>
+                            <span className={`history-record-state ${recordStateClassName(record)}`}>
+                              {primaryActionLabel(record, t)}
+                            </span>
+                          </div>
+                          <div className="history-record-meta">
+                            <span>{recordMetaLabel(record, t)}</span>
+                            <span>{record.status}</span>
+                            <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          className="history-record-delete"
+                          onClick={() => onDeleteRecord(record)}
+                          data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
+                        >
+                          {t("historyDelete")}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })
         )}
       </div>
     </aside>
