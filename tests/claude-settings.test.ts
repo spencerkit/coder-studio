@@ -5,6 +5,8 @@ import {
   applyGeneralSettingsPatch,
   cloneAppSettings,
   defaultAppSettings,
+  forceClaudeExecutableDefaults,
+  formatClaudeLaunchPreview,
   getIdlePolicySyncWorkspaceIds,
   getClaudeScopeProfile,
   getSettingsDraftLocale,
@@ -14,6 +16,38 @@ import {
   resolveClaudeRuntimeProfile,
   setClaudeScopeOverrideEnabled,
 } from '../apps/web/src/shared/app/claude-settings.ts';
+
+test('formatClaudeLaunchPreview always starts with claude and omits blank args', () => {
+  assert.equal(
+    formatClaudeLaunchPreview({
+      executable: 'claude-nightly',
+      startupArgs: ['--verbose', '   ', '--dangerously-skip-permissions'],
+      env: {},
+      settingsJson: {},
+      globalConfigJson: {},
+    }),
+    'claude --verbose --dangerously-skip-permissions',
+  );
+});
+
+test('forceClaudeExecutableDefaults resets hidden executable overrides back to claude', () => {
+  const settings = cloneAppSettings(defaultAppSettings());
+  settings.claude.global.executable = 'claude-nightly';
+  settings.claude.overrides.native = {
+    enabled: true,
+    profile: {
+      ...settings.claude.global,
+      executable: 'claude-native',
+      startupArgs: ['--verbose'],
+    },
+  };
+
+  const next = forceClaudeExecutableDefaults(settings);
+
+  assert.equal(next.claude.global.executable, 'claude');
+  assert.equal(next.claude.overrides.native?.profile.executable, 'claude');
+  assert.deepEqual(next.claude.overrides.native?.profile.startupArgs, ['--verbose']);
+});
 
 test('mergeLegacySettingsIntoAppSettings migrates launch command into claude global executable', () => {
   const merged = mergeLegacySettingsIntoAppSettings(defaultAppSettings(), {
@@ -201,6 +235,7 @@ test('translator exposes the new history and Claude settings keys', () => {
   assert.equal(en('historyCount', { count: 3 }), '3 sessions');
   assert.match(en('historyDeleteConfirm', { title: 'Session 7' }), /Session 7/);
   assert.equal(en('claudeSettingsTitle'), 'Claude');
-  assert.equal(zh('claudeLaunchSection'), '启动与鉴权');
+  assert.equal(zh('claudeStartupSection'), '启动');
+  assert.equal(en('claudeAuthSection'), 'Authentication');
   assert.equal(en('claudeJsonInvalid'), 'JSON must be an object.');
 });

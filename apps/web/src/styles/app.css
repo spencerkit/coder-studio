@@ -9899,6 +9899,19 @@ pre.diff,
   color: var(--text);
 }
 
+.claude-command-preview-code {
+  display: block;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-elevated) 90%, var(--bg) 10%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
 .claude-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -9929,6 +9942,34 @@ pre.diff,
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.claude-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.claude-help-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--bg) 12%);
+  cursor: help;
+}
+
+.claude-inline-toggle-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
 }
 
 .claude-field-wide {

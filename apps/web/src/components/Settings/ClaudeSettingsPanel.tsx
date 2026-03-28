@@ -6,7 +6,8 @@ import type {
   ClaudeSettingsScope,
 } from "../../types/app.ts";
 import {
-  formatClaudeRuntimeCommand,
+  forceClaudeExecutableDefaults,
+  formatClaudeLaunchPreview,
   getClaudeScopeProfile,
   isClaudeScopeOverrideEnabled,
   patchClaudeStructuredSettings,
@@ -20,6 +21,23 @@ const RESERVED_ENV_KEYS = [
   "ANTHROPIC_BASE_URL",
   "ANTHROPIC_CUSTOM_HEADERS",
 ] as const;
+
+const STARTUP_BOOLEAN_OPTIONS = [
+  {
+    flag: "--dangerously-skip-permissions",
+    labelKey: "claudeDangerouslySkipPermissions",
+    helpKey: "claudeDangerouslySkipPermissionsHelp",
+    testId: "claude-flag-dangerously-skip-permissions",
+  },
+  {
+    flag: "--allow-dangerously-skip-permissions",
+    labelKey: "claudeAllowDangerouslySkipPermissions",
+    helpKey: "claudeAllowDangerouslySkipPermissionsHelp",
+    testId: "claude-flag-allow-dangerously-skip-permissions",
+  },
+] as const;
+
+const STARTUP_BOOLEAN_FLAGS = STARTUP_BOOLEAN_OPTIONS.map((option) => option.flag);
 
 const readJsonPath = (source: Record<string, unknown>, path: string[]): unknown => {
   let current: unknown = source;
@@ -80,11 +98,6 @@ const setJsonPath = (
 const readString = (value: unknown) => (typeof value === "string" ? value : "");
 const readBoolean = (value: unknown) => value === true;
 const readNumber = (value: unknown) => (typeof value === "number" ? value : "");
-const readStringList = (value: unknown) => (
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : []
-);
 
 const linesToList = (value: string) => value
   .split("\n")
@@ -138,38 +151,6 @@ const stripFlags = (
 
 const readStandaloneFlag = (startupArgs: string[], flag: string) => startupArgs.includes(flag);
 
-const setStandaloneFlag = (startupArgs: string[], flag: string, enabled: boolean) => {
-  const next = startupArgs.filter((entry) => entry !== flag);
-  return enabled ? [...next, flag] : next;
-};
-
-const readFlagValues = (startupArgs: string[], flag: string) => {
-  const values: string[] = [];
-  for (let index = 0; index < startupArgs.length; index += 1) {
-    if (startupArgs[index] !== flag) continue;
-    const next = startupArgs[index + 1];
-    if (typeof next === "string" && !next.startsWith("--")) {
-      values.push(next);
-      index += 1;
-    }
-  }
-  return values;
-};
-
-const setFlagValues = (startupArgs: string[], flag: string, values: string[]) => {
-  const next = stripFlags(startupArgs, [flag]);
-  return [
-    ...next,
-    ...values.flatMap((value) => [flag, value]),
-  ];
-};
-
-const readSingleFlagValue = (startupArgs: string[], flag: string) => readFlagValues(startupArgs, flag)[0] ?? "";
-
-const setSingleFlagValue = (startupArgs: string[], flag: string, value: string) => (
-  setFlagValues(startupArgs, flag, value.trim() ? [value.trim()] : [])
-);
-
 const formatJson = (value: Record<string, unknown>) => JSON.stringify(value, null, 2);
 
 const parseJsonObject = (value: string): { data?: Record<string, unknown>; error?: string } => {
@@ -191,8 +172,25 @@ type ClaudeSettingsPanelProps = {
   t: Translator;
 };
 
+const ClaudeFieldLabel = ({
+  label,
+  help,
+}: {
+  label: string;
+  help?: string;
+}) => (
+  <span className="claude-field-label">
+    <span>{label}</span>
+    {help ? (
+      <span className="claude-help-dot" title={help} aria-label={help}>
+        ?
+      </span>
+    ) : null}
+  </span>
+);
+
 export const ClaudeSettingsPanel = ({
-  locale,
+  locale: _locale,
   settings,
   onChange,
   t,
@@ -202,14 +200,21 @@ export const ClaudeSettingsPanel = ({
   const [globalConfigJsonDraft, setGlobalConfigJsonDraft] = useState("");
   const [settingsJsonError, setSettingsJsonError] = useState("");
   const [globalConfigJsonError, setGlobalConfigJsonError] = useState("");
+  const normalizedSettings = useMemo(
+    () => forceClaudeExecutableDefaults(settings),
+    [settings],
+  );
+  const commitSettings = (nextSettings: AppSettings) => {
+    onChange(forceClaudeExecutableDefaults(nextSettings));
+  };
 
   const scopeProfile = useMemo(
-    () => getClaudeScopeProfile(settings, activeScope),
-    [activeScope, settings],
+    () => getClaudeScopeProfile(normalizedSettings, activeScope),
+    [activeScope, normalizedSettings],
   );
   const scopeOverrideEnabled = activeScope === "global"
     ? true
-    : isClaudeScopeOverrideEnabled(settings, activeScope);
+    : isClaudeScopeOverrideEnabled(normalizedSettings, activeScope);
   const settingsJson = scopeProfile.settingsJson;
   const globalConfigJson = scopeProfile.globalConfigJson;
 
@@ -221,21 +226,21 @@ export const ClaudeSettingsPanel = ({
   }, [activeScope, settingsJson, globalConfigJson]);
 
   const updateEnv = (updater: (env: Record<string, string>) => Record<string, string>) => {
-    onChange(patchClaudeStructuredSettings(settings, {
+    commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
       scope: activeScope,
       env: updater(scopeProfile.env),
     }));
   };
 
   const updateStartupArgs = (updater: (startupArgs: string[]) => string[]) => {
-    onChange(patchClaudeStructuredSettings(settings, {
+    commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
       scope: activeScope,
       startupArgs: updater(scopeProfile.startupArgs),
     }));
   };
 
   const updateSettingsJson = (path: string[], value: unknown) => {
-    onChange(replaceClaudeAdvancedJson(settings, {
+    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
       scope: activeScope,
       field: "settingsJson",
       value: setJsonPath(settingsJson, path, value),
@@ -243,7 +248,7 @@ export const ClaudeSettingsPanel = ({
   };
 
   const updateGlobalConfigJson = (path: string[], value: unknown) => {
-    onChange(replaceClaudeAdvancedJson(settings, {
+    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
       scope: activeScope,
       field: "globalConfigJson",
       value: setJsonPath(globalConfigJson, path, value),
@@ -257,7 +262,7 @@ export const ClaudeSettingsPanel = ({
       return;
     }
     setSettingsJsonError("");
-    onChange(replaceClaudeAdvancedJson(settings, {
+    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
       scope: activeScope,
       field: "settingsJson",
       value: parsed.data,
@@ -271,7 +276,7 @@ export const ClaudeSettingsPanel = ({
       return;
     }
     setGlobalConfigJsonError("");
-    onChange(replaceClaudeAdvancedJson(settings, {
+    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
       scope: activeScope,
       field: "globalConfigJson",
       value: parsed.data,
@@ -279,7 +284,25 @@ export const ClaudeSettingsPanel = ({
   };
 
   const extraEnvText = envToText(scopeProfile.env);
-  const commandPreview = formatClaudeRuntimeCommand(scopeProfile);
+  const commandPreview = formatClaudeLaunchPreview(scopeProfile);
+  const extraStartupArgs = stripFlags(scopeProfile.startupArgs, STARTUP_BOOLEAN_FLAGS);
+  const updateStartupBooleanFlag = (flag: string, enabled: boolean) => {
+    updateStartupArgs((current) => {
+      const remainingArgs = stripFlags(current, STARTUP_BOOLEAN_FLAGS);
+      const nextFlags = STARTUP_BOOLEAN_OPTIONS
+        .filter((option) => option.flag === flag ? enabled : readStandaloneFlag(current, option.flag))
+        .map((option) => option.flag);
+      return [...nextFlags, ...remainingArgs];
+    });
+  };
+  const updateExtraStartupArgs = (value: string) => {
+    updateStartupArgs((current) => {
+      const nextFlags = STARTUP_BOOLEAN_OPTIONS
+        .filter((option) => readStandaloneFlag(current, option.flag))
+        .map((option) => option.flag);
+      return [...nextFlags, ...linesToList(value)];
+    });
+  };
 
   return (
     <div className="claude-settings-panel">
@@ -308,56 +331,66 @@ export const ClaudeSettingsPanel = ({
               <input
                 type="checkbox"
                 checked={scopeOverrideEnabled}
-                onChange={(event) => onChange(setClaudeScopeOverrideEnabled(settings, activeScope, event.target.checked))}
+                onChange={(event) => commitSettings(setClaudeScopeOverrideEnabled(normalizedSettings, activeScope, event.target.checked))}
               />
               <span className="toggle-track"><span className="toggle-thumb" /></span>
             </label>
             <span>{scopeOverrideEnabled ? t("claudeOverrideEnabled") : t("claudeOverrideInherited")}</span>
           </div>
         )}
-        <div className="claude-command-preview">
-          <span>{t("claudeCommandPreview")}</span>
-          <code>{commandPreview || "claude"}</code>
+      </div>
+
+      <div className="settings-group-card">
+        <div className="settings-section-heading">
+          <strong>{t("claudeStartupSection")}</strong>
+          <span>{t("claudeStartupSectionHint")}</span>
+        </div>
+        <div className="claude-settings-grid">
+          <div className="claude-field claude-field-wide">
+            <ClaudeFieldLabel label={t("claudeCommandPreview")} help={t("claudeStartupExecutableFixed")} />
+            <code className="claude-command-preview-code" data-testid="claude-command-preview">{commandPreview || "claude"}</code>
+          </div>
+          {STARTUP_BOOLEAN_OPTIONS.map((option) => (
+            <label key={option.flag} className="claude-inline-toggle">
+              <div className="claude-inline-toggle-copy">
+                <ClaudeFieldLabel
+                  label={t(option.labelKey)}
+                  help={t(option.helpKey)}
+                />
+              </div>
+              <input
+                type="checkbox"
+                checked={readStandaloneFlag(scopeProfile.startupArgs, option.flag)}
+                onChange={(event) => updateStartupBooleanFlag(option.flag, event.target.checked)}
+                data-testid={option.testId}
+              />
+            </label>
+          ))}
+          <label className="claude-field claude-field-wide">
+            <ClaudeFieldLabel label={t("claudeExtraStartupArgs")} help={t("claudeExtraStartupArgsHint")} />
+            <textarea
+              className="claude-textarea"
+              value={listToLines(extraStartupArgs)}
+              onChange={(event) => updateExtraStartupArgs(event.target.value)}
+              placeholder="--verbose"
+              rows={4}
+              data-testid="claude-startup-args"
+            />
+          </label>
         </div>
       </div>
 
       <div className="settings-group-card">
         <div className="settings-section-heading">
-          <strong>{t("claudeLaunchSection")}</strong>
-          <span>{t("claudeLaunchSectionHint")}</span>
+          <strong>{t("claudeAuthSection")}</strong>
+          <span>{t("claudeAuthSectionHint")}</span>
         </div>
         <div className="claude-settings-grid">
           <label className="claude-field">
-            <span>{t("claudeExecutable")}</span>
+            <ClaudeFieldLabel label={t("claudeApiKey")} />
             <input
               className="settings-command-field"
-              value={scopeProfile.executable}
-              onChange={(event) => onChange(patchClaudeStructuredSettings(settings, {
-                scope: activeScope,
-                executable: event.target.value,
-              }))}
-              placeholder="claude"
-              data-testid="claude-executable-input"
-            />
-          </label>
-          <label className="claude-field">
-            <span>{t("claudeStartupArgs")}</span>
-            <textarea
-              className="claude-textarea"
-              value={listToLines(scopeProfile.startupArgs)}
-              onChange={(event) => onChange(patchClaudeStructuredSettings(settings, {
-                scope: activeScope,
-                startupArgs: linesToList(event.target.value),
-              }))}
-              placeholder="--dangerously-skip-permissions"
-              rows={4}
-              data-testid="claude-startup-args"
-            />
-          </label>
-          <label className="claude-field">
-            <span>{t("claudeApiKey")}</span>
-            <input
-              className="settings-command-field"
+              type="password"
               value={scopeProfile.env.ANTHROPIC_API_KEY ?? ""}
               onChange={(event) => updateEnv((env) => ({
                 ...env,
@@ -366,9 +399,10 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <span>{t("claudeAuthToken")}</span>
+            <ClaudeFieldLabel label={t("claudeAuthToken")} />
             <input
               className="settings-command-field"
+              type="password"
               value={scopeProfile.env.ANTHROPIC_AUTH_TOKEN ?? ""}
               onChange={(event) => updateEnv((env) => ({
                 ...env,
@@ -377,7 +411,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <span>{t("claudeBaseUrl")}</span>
+            <ClaudeFieldLabel label={t("claudeBaseUrl")} />
             <input
               className="settings-command-field"
               value={scopeProfile.env.ANTHROPIC_BASE_URL ?? ""}
@@ -388,7 +422,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <span>{t("claudeCustomHeaders")}</span>
+            <ClaudeFieldLabel label={t("claudeCustomHeaders")} />
             <textarea
               className="claude-textarea"
               value={scopeProfile.env.ANTHROPIC_CUSTOM_HEADERS ?? ""}
@@ -400,7 +434,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <span>{t("claudeApiKeyHelper")}</span>
+            <ClaudeFieldLabel label={t("claudeApiKeyHelper")} />
             <input
               className="settings-command-field"
               value={readString(readJsonPath(settingsJson, ["apiKeyHelper"]))}
@@ -408,7 +442,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field claude-field-wide">
-            <span>{t("claudeExtraEnv")}</span>
+            <ClaudeFieldLabel label={t("claudeExtraEnv")} />
             <textarea
               className="claude-textarea"
               value={extraEnvText}
@@ -436,87 +470,13 @@ export const ClaudeSettingsPanel = ({
           <span>{t("claudeBehaviorSectionHint")}</span>
         </div>
         <div className="claude-settings-grid">
-          <label className="claude-field"><span>{t("claudeModel")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["model"]))} onChange={(event) => updateSettingsJson(["model"], event.target.value.trim())} data-testid="claude-model-input" /></label>
-          <label className="claude-field"><span>{t("claudeFallbackModel")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["fallbackModel"]))} onChange={(event) => updateSettingsJson(["fallbackModel"], event.target.value.trim())} /></label>
-          <label className="claude-field"><span>{t("claudePermissionMode")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["permissionMode"]))} onChange={(event) => updateSettingsJson(["permissionMode"], event.target.value.trim())} /></label>
-          <label className="claude-field"><span>{t("claudeEffort")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["effort"]))} onChange={(event) => updateSettingsJson(["effort"], event.target.value.trim())} /></label>
-          <label className="claude-field"><span>{t("languageLabel")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["language"]))} onChange={(event) => updateSettingsJson(["language"], event.target.value.trim())} /></label>
-          <label className="claude-field"><span>{t("claudeCleanupDays")}</span><input className="settings-command-field" type="number" value={readNumber(readJsonPath(settingsJson, ["cleanupPeriodDays"]))} onChange={(event) => updateSettingsJson(["cleanupPeriodDays"], event.target.value ? Number(event.target.value) : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeIncludeGitInstructions")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["includeGitInstructions"]))} onChange={(event) => updateSettingsJson(["includeGitInstructions"], event.target.checked ? true : undefined)} /></label>
-        </div>
-      </div>
-
-      <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudePermissionsSection")}</strong>
-          <span>{t("claudePermissionsSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
-          <label className="claude-field"><span>{t("claudePermissionsAllow")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["permissions", "allow"])))} onChange={(event) => updateSettingsJson(["permissions", "allow"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudePermissionsAsk")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["permissions", "ask"])))} onChange={(event) => updateSettingsJson(["permissions", "ask"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudePermissionsDeny")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["permissions", "deny"])))} onChange={(event) => updateSettingsJson(["permissions", "deny"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeAdditionalDirectories")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["additionalDirectories"])))} onChange={(event) => updateSettingsJson(["additionalDirectories"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeDefaultMode")}</span><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["defaultMode"]))} onChange={(event) => updateSettingsJson(["defaultMode"], event.target.value.trim())} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeDisableBypassPermissionsMode")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["disableBypassPermissionsMode"]))} onChange={(event) => updateSettingsJson(["disableBypassPermissionsMode"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-field"><span>{t("claudeAllowedToolsFlag")}</span><textarea className="claude-textarea" rows={3} value={listToLines(readFlagValues(scopeProfile.startupArgs, "--allowedTools"))} onChange={(event) => updateStartupArgs((current) => setFlagValues(current, "--allowedTools", linesToList(event.target.value)))} /></label>
-          <label className="claude-field"><span>{t("claudeDisallowedToolsFlag")}</span><textarea className="claude-textarea" rows={3} value={listToLines(readFlagValues(scopeProfile.startupArgs, "--disallowedTools"))} onChange={(event) => updateStartupArgs((current) => setFlagValues(current, "--disallowedTools", linesToList(event.target.value)))} /></label>
-          <label className="claude-field"><span>{t("claudeToolsFlag")}</span><textarea className="claude-textarea" rows={3} value={listToLines(readFlagValues(scopeProfile.startupArgs, "--tools"))} onChange={(event) => updateStartupArgs((current) => setFlagValues(current, "--tools", linesToList(event.target.value)))} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeDangerouslySkipPermissions")}</span><input type="checkbox" checked={readStandaloneFlag(scopeProfile.startupArgs, "--dangerously-skip-permissions")} onChange={(event) => updateStartupArgs((current) => setStandaloneFlag(current, "--dangerously-skip-permissions", event.target.checked))} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeAllowDangerouslySkipPermissions")}</span><input type="checkbox" checked={readStandaloneFlag(scopeProfile.startupArgs, "--allow-dangerously-skip-permissions")} onChange={(event) => updateStartupArgs((current) => setStandaloneFlag(current, "--allow-dangerously-skip-permissions", event.target.checked))} /></label>
-        </div>
-      </div>
-
-      <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeSandboxSection")}</strong>
-          <span>{t("claudeSandboxSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
-          <label className="claude-inline-toggle"><span>{t("claudeSandboxEnabled")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["sandbox", "enabled"]))} onChange={(event) => updateSettingsJson(["sandbox", "enabled"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeSandboxFailIfUnavailable")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["sandbox", "failIfUnavailable"]))} onChange={(event) => updateSettingsJson(["sandbox", "failIfUnavailable"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeSandboxAutoAllowBash")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["sandbox", "autoAllowBashIfSandboxed"]))} onChange={(event) => updateSettingsJson(["sandbox", "autoAllowBashIfSandboxed"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-field"><span>{t("claudeSandboxExcludedCommands")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["sandbox", "excludedCommands"])))} onChange={(event) => updateSettingsJson(["sandbox", "excludedCommands"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeSandboxAllowUnsandboxed")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["sandbox", "allowUnsandboxedCommands"])))} onChange={(event) => updateSettingsJson(["sandbox", "allowUnsandboxedCommands"], linesToList(event.target.value))} /></label>
-        </div>
-      </div>
-
-      <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeHooksSection")}</strong>
-          <span>{t("claudeHooksSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
-          <label className="claude-inline-toggle"><span>{t("claudeDisableAllHooks")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["disableAllHooks"]))} onChange={(event) => updateSettingsJson(["disableAllHooks"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeDisableDeepLinks")}</span><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["disableDeepLinkRegistration"]))} onChange={(event) => updateSettingsJson(["disableDeepLinkRegistration"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-field"><span>{t("claudeAllowedHttpHookUrls")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["allowedHttpHookUrls"])))} onChange={(event) => updateSettingsJson(["allowedHttpHookUrls"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeHttpHookEnvVars")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["httpHookAllowedEnvVars"])))} onChange={(event) => updateSettingsJson(["httpHookAllowedEnvVars"], linesToList(event.target.value))} /></label>
-        </div>
-      </div>
-
-      <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeWorktreeSection")}</strong>
-          <span>{t("claudeWorktreeSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
-          <label className="claude-field"><span>{t("claudeWorktreeSymlinkDirs")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["worktree", "symlinkDirectories"])))} onChange={(event) => updateSettingsJson(["worktree", "symlinkDirectories"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeWorktreeSparsePaths")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["worktree", "sparsePaths"])))} onChange={(event) => updateSettingsJson(["worktree", "sparsePaths"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeAddDirFlag")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readFlagValues(scopeProfile.startupArgs, "--add-dir"))} onChange={(event) => updateStartupArgs((current) => setFlagValues(current, "--add-dir", linesToList(event.target.value)))} /></label>
-        </div>
-      </div>
-
-      <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudePluginsSection")}</strong>
-          <span>{t("claudePluginsSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
-          <label className="claude-field"><span>{t("claudeEnabledPlugins")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["enabledPlugins"])))} onChange={(event) => updateSettingsJson(["enabledPlugins"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeExtraKnownMarketplaces")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readStringList(readJsonPath(settingsJson, ["extraKnownMarketplaces"])))} onChange={(event) => updateSettingsJson(["extraKnownMarketplaces"], linesToList(event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudePluginDir")}</span><input className="settings-command-field" value={readSingleFlagValue(scopeProfile.startupArgs, "--plugin-dir")} onChange={(event) => updateStartupArgs((current) => setSingleFlagValue(current, "--plugin-dir", event.target.value))} /></label>
-          <label className="claude-field"><span>{t("claudeMcpConfig")}</span><input className="settings-command-field" value={readSingleFlagValue(scopeProfile.startupArgs, "--mcp-config")} onChange={(event) => updateStartupArgs((current) => setSingleFlagValue(current, "--mcp-config", event.target.value))} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeStrictMcpConfig")}</span><input type="checkbox" checked={readStandaloneFlag(scopeProfile.startupArgs, "--strict-mcp-config")} onChange={(event) => updateStartupArgs((current) => setStandaloneFlag(current, "--strict-mcp-config", event.target.checked))} /></label>
-          <label className="claude-field"><span>{t("claudeSettingSources")}</span><textarea className="claude-textarea" rows={4} value={listToLines(readFlagValues(scopeProfile.startupArgs, "--setting-sources"))} onChange={(event) => updateStartupArgs((current) => setFlagValues(current, "--setting-sources", linesToList(event.target.value)))} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudeModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["model"]))} onChange={(event) => updateSettingsJson(["model"], event.target.value.trim())} data-testid="claude-model-input" /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudeFallbackModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["fallbackModel"]))} onChange={(event) => updateSettingsJson(["fallbackModel"], event.target.value.trim())} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudePermissionMode")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["permissionMode"]))} onChange={(event) => updateSettingsJson(["permissionMode"], event.target.value.trim())} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudeEffort")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["effort"]))} onChange={(event) => updateSettingsJson(["effort"], event.target.value.trim())} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("languageLabel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["language"]))} onChange={(event) => updateSettingsJson(["language"], event.target.value.trim())} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudeCleanupDays")} /><input className="settings-command-field" type="number" value={readNumber(readJsonPath(settingsJson, ["cleanupPeriodDays"]))} onChange={(event) => updateSettingsJson(["cleanupPeriodDays"], event.target.value ? Number(event.target.value) : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeIncludeGitInstructions")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["includeGitInstructions"]))} onChange={(event) => updateSettingsJson(["includeGitInstructions"], event.target.checked ? true : undefined)} /></label>
         </div>
       </div>
 
@@ -526,11 +486,11 @@ export const ClaudeSettingsPanel = ({
           <span>{t("claudePreferencesSectionHint")}</span>
         </div>
         <div className="claude-settings-grid">
-          <label className="claude-inline-toggle"><span>{t("claudeAutoConnectIde")}</span><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoConnectIde"]))} onChange={(event) => updateGlobalConfigJson(["autoConnectIde"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeAutoInstallIdeExtension")}</span><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-field"><span>{t("claudeEditorMode")}</span><input className="settings-command-field" value={readString(readJsonPath(globalConfigJson, ["editorMode"]))} onChange={(event) => updateGlobalConfigJson(["editorMode"], event.target.value.trim())} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeShowTurnDuration")}</span><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["showTurnDuration"]))} onChange={(event) => updateGlobalConfigJson(["showTurnDuration"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><span>{t("claudeTerminalProgressBarEnabled")}</span><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["terminalProgressBarEnabled"]))} onChange={(event) => updateGlobalConfigJson(["terminalProgressBarEnabled"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoConnectIde")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoConnectIde"]))} onChange={(event) => updateGlobalConfigJson(["autoConnectIde"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoInstallIdeExtension")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-field"><ClaudeFieldLabel label={t("claudeEditorMode")} /><input className="settings-command-field" value={readString(readJsonPath(globalConfigJson, ["editorMode"]))} onChange={(event) => updateGlobalConfigJson(["editorMode"], event.target.value.trim())} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeShowTurnDuration")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["showTurnDuration"]))} onChange={(event) => updateGlobalConfigJson(["showTurnDuration"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeTerminalProgressBarEnabled")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["terminalProgressBarEnabled"]))} onChange={(event) => updateGlobalConfigJson(["terminalProgressBarEnabled"], event.target.checked ? true : undefined)} /></label>
         </div>
       </div>
 
@@ -541,7 +501,7 @@ export const ClaudeSettingsPanel = ({
         </div>
         <div className="claude-settings-grid">
           <label className="claude-field claude-field-wide">
-            <span>{t("claudeSettingsJsonAdvanced")}</span>
+            <ClaudeFieldLabel label={t("claudeSettingsJsonAdvanced")} />
             <textarea
               className="claude-json-editor"
               rows={12}
@@ -552,7 +512,7 @@ export const ClaudeSettingsPanel = ({
             {settingsJsonError && <span className="claude-json-error">{settingsJsonError}</span>}
           </label>
           <label className="claude-field claude-field-wide">
-            <span>{t("claudeGlobalConfigAdvanced")}</span>
+            <ClaudeFieldLabel label={t("claudeGlobalConfigAdvanced")} />
             <textarea
               className="claude-json-editor"
               rows={12}

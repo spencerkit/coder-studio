@@ -13,6 +13,7 @@ import type {
 
 const DEFAULT_LOCALE: Locale = "en";
 const DEFAULT_TERMINAL_COMPATIBILITY_MODE: TerminalCompatibilityMode = "standard";
+const DEFAULT_CLAUDE_EXECUTABLE = "claude";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -151,7 +152,7 @@ const defaultCompletionNotifications = (): CompletionNotificationSettings => ({
 });
 
 const defaultClaudeRuntimeProfile = (): ClaudeRuntimeProfile => ({
-  executable: "claude",
+  executable: DEFAULT_CLAUDE_EXECUTABLE,
   startupArgs: [],
   env: {},
   settingsJson: {},
@@ -314,6 +315,25 @@ export const formatClaudeRuntimeCommand = (profile: ClaudeRuntimeProfile): strin
     .filter(Boolean)
     .join(" ")
 );
+
+export const formatClaudeLaunchPreview = (
+  profile: Pick<ClaudeRuntimeProfile, "startupArgs">,
+): string => (
+  [DEFAULT_CLAUDE_EXECUTABLE, ...profile.startupArgs.map((arg) => arg.trim()).filter(Boolean)]
+    .join(" ")
+);
+
+export const forceClaudeExecutableDefaults = (settings: AppSettings): AppSettings => {
+  const next = cloneAppSettings(settings);
+  next.claude.global.executable = DEFAULT_CLAUDE_EXECUTABLE;
+  if (next.claude.overrides.native) {
+    next.claude.overrides.native.profile.executable = DEFAULT_CLAUDE_EXECUTABLE;
+  }
+  if (next.claude.overrides.wsl) {
+    next.claude.overrides.wsl.profile.executable = DEFAULT_CLAUDE_EXECUTABLE;
+  }
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
 
 export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
   general: {
