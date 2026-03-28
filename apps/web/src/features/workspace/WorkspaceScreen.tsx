@@ -101,6 +101,11 @@ import {
 } from "./workspace-recovery";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
+  pruneWorkspaceViewBaselines,
+  rememberWorkspaceViewBaseline,
+  shouldPersistWorkspaceView,
+} from "./workspace-view-persistence";
+import {
   createInitialHistoryExpansion,
   groupSessionHistory,
   selectHistoryPrimaryAction,
@@ -453,7 +458,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const validatedRuntimeTargetsRef = useRef(new Set<string>());
   const runtimeValidationRequestIdRef = useRef(0);
   const persistedLayoutRef = useRef<string>("");
-  const persistedWorkspaceViewsRef = useRef(new Map<string, string>());
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
@@ -841,6 +845,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.tabs.forEach((tab) => {
       if (tab.status !== "ready" || !tab.project?.path) return;
       if (!canMutateWorkspace(tab.controller, "switch_pane")) return;
+      if (!shouldPersistWorkspaceView(tab)) return;
       const patch = {
         active_session_id: tab.activeSessionId,
         active_pane_id: tab.activePaneId,
@@ -848,19 +853,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         pane_layout: tab.paneLayout,
         file_preview: tab.filePreview,
       };
-      const serialized = JSON.stringify(patch);
-      if (persistedWorkspaceViewsRef.current.get(tab.id) === serialized) return;
-      persistedWorkspaceViewsRef.current.set(tab.id, serialized);
+      rememberWorkspaceViewBaseline(tab);
       void withServiceFallback(
         () => updateWorkspaceView(tab.id, patch, tab.controller),
         null,
       );
     });
-    Array.from(persistedWorkspaceViewsRef.current.keys()).forEach((workspaceId) => {
-      if (!liveWorkspaceIds.has(workspaceId)) {
-        persistedWorkspaceViewsRef.current.delete(workspaceId);
-      }
-    });
+    pruneWorkspaceViewBaselines(liveWorkspaceIds);
   }, [bootstrapReady, state.tabs]);
 
   useEffect(() => {

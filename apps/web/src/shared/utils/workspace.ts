@@ -34,6 +34,10 @@ import {
   isDraftSession,
   resolveVisibleStatus,
 } from "./session.ts";
+import {
+  rememberWorkspaceViewBaseline,
+  rememberWorkspaceViewBaselines,
+} from "../../features/workspace/workspace-view-persistence.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 
@@ -388,7 +392,7 @@ export const buildWorkbenchStateFromBootstrap = (
     })
     .filter((tab): tab is Tab => Boolean(tab));
 
-  return {
+  const nextState = {
     tabs,
     activeTabId: resolveActiveWorkspaceId(tabs, bootstrap.ui_state.active_workspace_id),
     layout: workbenchLayoutFromBackend(bootstrap.ui_state.layout),
@@ -398,6 +402,8 @@ export const buildWorkbenchStateFromBootstrap = (
       input: tabs.length === 0 ? current.overlay.input : "",
     },
   };
+  rememberWorkspaceViewBaselines(nextState.tabs);
+  return nextState;
 };
 
 export const upsertWorkspaceSnapshot = (
@@ -417,7 +423,7 @@ export const upsertWorkspaceSnapshot = (
   }
   const tabs = orderTabsByUiState(Array.from(tabMap.values()), openWorkspaceIds);
 
-  return {
+  const nextState = {
     ...current,
     tabs,
     activeTabId: resolveActiveWorkspaceId(tabs, uiState?.active_workspace_id ?? nextTab.id),
@@ -428,6 +434,8 @@ export const upsertWorkspaceSnapshot = (
       input: "",
     },
   };
+  rememberWorkspaceViewBaseline(nextTab);
+  return nextState;
 };
 
 export const applyWorkspaceRuntimeSnapshot = (
@@ -481,9 +489,10 @@ export const applyWorkspaceControllerEvent = (
 export const applyWorkspaceRuntimeStateEvent = (
   current: WorkbenchState,
   payload: WorkspaceRuntimeStateEvent,
-): WorkbenchState => ({
-  ...current,
-  tabs: current.tabs.map((tab) => {
+): WorkbenchState => {
+  const nextState = {
+    ...current,
+    tabs: current.tabs.map((tab) => {
     if (tab.id !== payload.workspace_id) return tab;
     const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
       ? payload.view_state.active_session_id
@@ -500,8 +509,14 @@ export const applyWorkspaceRuntimeStateEvent = (
       filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
       viewingArchiveId: undefined,
     };
-  }),
-});
+    }),
+  };
+  const nextTab = nextState.tabs.find((tab) => tab.id === payload.workspace_id);
+  if (nextTab) {
+    rememberWorkspaceViewBaseline(nextTab);
+  }
+  return nextState;
+};
 
 export const applyWorkbenchUiState = (
   current: WorkbenchState,
