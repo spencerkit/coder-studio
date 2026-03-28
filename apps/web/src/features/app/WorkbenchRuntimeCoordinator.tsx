@@ -215,6 +215,10 @@ export const WorkbenchRuntimeCoordinator = ({
     setState(next);
   }, [setState]);
 
+  const hasLiveWorkspaceTab = useCallback((workspaceId: string) => (
+    stateRef.current.tabs.some((tab) => tab.id === workspaceId)
+  ), []);
+
   const updateTab = useCallback((tabId: string, updater: (tab: Tab) => Tab) => {
     updateState((current) => ({
       ...current,
@@ -402,24 +406,29 @@ export const WorkbenchRuntimeCoordinator = ({
         clientId,
         withServiceFallback,
       );
-      if (!runtimeSnapshot) {
+      if (!runtimeSnapshot || !hasLiveWorkspaceTab(workspaceId)) {
         return;
       }
-      updateState((current) => applyWorkspaceRuntimeSnapshot(
-        current,
-        runtimeSnapshot,
-        locale,
-        appSettings,
-        deviceId,
-        clientId,
-      ));
+      updateState((current) => {
+        if (!current.tabs.some((tab) => tab.id === workspaceId)) {
+          return current;
+        }
+        return applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        );
+      });
     })().finally(() => {
       runtimeAttachInflightRef.current.delete(workspaceId);
     });
 
     runtimeAttachInflightRef.current.set(workspaceId, task);
     await task;
-  }, [appSettings, clientId, deviceId, locale, updateState]);
+  }, [appSettings, clientId, deviceId, hasLiveWorkspaceTab, locale, updateState]);
 
   useWorkspaceTransportSync({
     agentRuntimeRefs,

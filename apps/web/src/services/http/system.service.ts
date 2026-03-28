@@ -1,6 +1,6 @@
 import type { ExecTarget } from "../../state/workbench";
 import type { CommandAvailability, FilesystemListResponse } from "../../types/app";
-import { invokeRpc } from "./client";
+import { invokeRpc } from "./client.ts";
 
 export const listFilesystem = (target: ExecTarget, path?: string) =>
   invokeRpc<FilesystemListResponse>("filesystem_list", { target, path });

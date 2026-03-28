@@ -92,6 +92,12 @@ const countWorkspaceTabs = async (page: Page) => page.locator('.workspace-top-ta
 
 const workspaceLabelForPath = (workspacePath: string) => path.basename(workspacePath) || workspacePath;
 
+const expectWelcomeScreenVisible = async (page: Page) => {
+  await expect(page.getByTestId('workspace-welcome-screen')).toBeVisible();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-validation-overlay')).toHaveCount(0);
+};
+
 const openLaunchOverlay = async (page: Page) => {
   await gotoWorkspaceRoot(page);
   const overlay = page.getByTestId('overlay');
@@ -100,15 +106,28 @@ const openLaunchOverlay = async (page: Page) => {
     return;
   }
 
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-  try {
-    await page.getByRole('button', { name: 'Add workspace' }).click();
-  } catch (error) {
-    if (await overlay.isVisible()) {
-      await expect(overlay).toBeVisible();
-      return;
+  if (await page.getByTestId('workspace-welcome-screen').isVisible()) {
+    await page.getByRole('button', { name: 'Open workspace' }).click();
+  } else {
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    try {
+      await page.getByRole('button', { name: 'Add workspace' }).click();
+    } catch (error) {
+      if (await overlay.isVisible()) {
+        await expect(overlay).toBeVisible();
+        return;
+      }
+      throw error;
     }
-    throw error;
+  }
+
+  await page.waitForFunction(() =>
+    Boolean(document.querySelector('[data-testid="overlay"]'))
+    || Boolean(document.querySelector('[data-testid="runtime-validation-overlay"]'))
+  );
+  const runtimeValidation = page.getByTestId('runtime-validation-overlay');
+  if (await runtimeValidation.count()) {
+    throw new Error('openLaunchOverlay expected the workspace launch overlay, but runtime validation is visible');
   }
   await expect(overlay).toBeVisible();
 };
@@ -131,6 +150,13 @@ const launchLocalWorkspace = async (page: Page) => {
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
   return workspaceLabelForPath(selectedPath);
+};
+
+const closeActiveWorkspaceFromTopBar = async (page: Page) => {
+  const activeWorkspaceTab = page.locator('.workspace-top-tab.active');
+  await expect(activeWorkspaceTab).toBeVisible();
+  await activeWorkspaceTab.hover();
+  await activeWorkspaceTab.locator('.session-top-close').click();
 };
 
 const invokeRpc = async <T>(page: Page, command: string, payload: Record<string, unknown> = {}) => {
@@ -546,6 +572,25 @@ test.afterAll(async () => {
   await Promise.all(TAB_STABILITY_DIRS.map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
+test('empty startup shows the welcome screen and does not auto-open the launch overlay', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expectWelcomeScreenVisible(page);
+});
+
+test('welcome screen can open and close the launch flow', async ({ page }) => {
+  await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('folder-select')).toBeVisible();
+
+  await page.getByTestId('launch-overlay-close').click();
+  await expectWelcomeScreenVisible(page);
+});
+
 test('local workspace flow opens the workspace shell', async ({ page }) => {
   const expectedLabel = await launchLocalWorkspace(page);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
@@ -598,12 +643,15 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('settings-page')).toBeVisible();
 });
 
-test('runtime validation blocks workspace selection until required tools are installed', async ({ page }) => {
+test('runtime validation only appears after opening the launch flow from the welcome screen', async ({ page }) => {
   const runtime = runtimeCommandMockState(page);
   runtime.claude = false;
   await closeAllOpenWorkspaces(page);
 
   await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
 
   await expect(page.getByTestId('runtime-validation-overlay')).toBeVisible();
   await expect(page.getByTestId('runtime-validation-overlay')).toHaveAttribute('data-density', 'compact');
@@ -874,6 +922,19 @@ test('restores the last workspace after reload', async ({ page }) => {
 
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
+});
+
+test('closing the last workspace returns to the welcome screen', async ({ page }) => {
+  const expectedLabel = await launchLocalWorkspace(page);
+
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(1);
+  await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
+  await expect(page.getByTestId('workspace-welcome-screen')).toHaveCount(0);
+  await closeActiveWorkspaceFromTopBar(page);
+
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(0);
+  await expect(page).toHaveURL(/workspace$/);
+  await expectWelcomeScreenVisible(page);
 });
 
 test('workspace tabs keep a stable order when switching between workspaces', async ({ page }) => {

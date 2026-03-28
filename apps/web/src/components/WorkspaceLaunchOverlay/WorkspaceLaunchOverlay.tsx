@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import type { Translator } from "../../i18n";
 import type { ExecTarget } from "../../state/workbench";
 import type { FolderBrowserState } from "../../types/app";
-import { ChevronRightIcon, WorkspaceFolderIcon } from "../icons";
+import { ChevronRightIcon, HeaderCloseIcon, WorkspaceFolderIcon } from "../icons";
 
 type WorkspaceLaunchOverlayProps = {
   visible: boolean;
@@ -11,6 +12,7 @@ type WorkspaceLaunchOverlayProps = {
   folderBrowser: FolderBrowserState;
   onUpdateTarget: (target: ExecTarget) => void;
   onBrowseDirectory: (path?: string, selectCurrent?: boolean) => void;
+  onClose: () => void;
   onStartWorkspace: () => void;
   t: Translator;
 };
@@ -23,9 +25,25 @@ export const WorkspaceLaunchOverlay = ({
   folderBrowser,
   onUpdateTarget,
   onBrowseDirectory,
+  onClose,
   onStartWorkspace,
   t
 }: WorkspaceLaunchOverlayProps) => {
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [visible, onClose]);
+
   if (!visible) return null;
 
   const selectedPath = input.trim();
@@ -34,8 +52,13 @@ export const WorkspaceLaunchOverlay = ({
   );
 
   return (
-    <div className="overlay" data-testid="overlay">
-      <div className="modal onboarding-modal launch-overlay-shell" data-testid="launch-overlay-shell" data-density="compact">
+    <div className="overlay" data-testid="overlay" onClick={onClose}>
+      <div
+        className="modal onboarding-modal launch-overlay-shell"
+        data-testid="launch-overlay-shell"
+        data-density="compact"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="onboarding-form">
           <div className="onboarding-header launch-overlay-header">
             <div className="launch-overlay-copy">
@@ -43,14 +66,26 @@ export const WorkspaceLaunchOverlay = ({
               <h2>{t("localFolder")}</h2>
               <p>{t("localFolderHint")}</p>
             </div>
-            <div className="launch-overlay-meta">
-              <div className="launch-overlay-meta-item">
-                <span className="section-kicker">{t("selected")}</span>
-                <strong>{selectedPath || folderBrowser.currentPath || t("loading")}</strong>
-              </div>
-              <div className="launch-overlay-meta-item">
-                <span className="section-kicker">{target.type === "wsl" ? "WSL" : t("nativeTarget")}</span>
-                <strong>{target.type === "wsl" ? (target.distro?.trim() || (t("nativeTarget") === "Native" ? "Default distro" : "默认发行版")) : t("nativeTarget")}</strong>
+            <div className="launch-overlay-header-actions">
+              <button
+                type="button"
+                className="launch-overlay-close"
+                onClick={onClose}
+                aria-label={t("close")}
+                title={t("close")}
+                data-testid="launch-overlay-close"
+              >
+                <HeaderCloseIcon />
+              </button>
+              <div className="launch-overlay-meta">
+                <div className="launch-overlay-meta-item">
+                  <span className="section-kicker">{t("selected")}</span>
+                  <strong>{selectedPath || folderBrowser.currentPath || t("loading")}</strong>
+                </div>
+                <div className="launch-overlay-meta-item">
+                  <span className="section-kicker">{target.type === "wsl" ? "WSL" : t("nativeTarget")}</span>
+                  <strong>{target.type === "wsl" ? (target.distro?.trim() || (t("nativeTarget") === "Native" ? "Default distro" : "默认发行版")) : t("nativeTarget")}</strong>
+                </div>
               </div>
             </div>
           </div>

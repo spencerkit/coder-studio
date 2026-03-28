@@ -45,6 +45,7 @@ import { HistoryDrawer } from "../../components/HistoryDrawer";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
+import { WorkspaceWelcomeScreen } from "../../components/WorkspaceWelcomeScreen";
 import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
@@ -234,6 +235,14 @@ type WorkspaceScreenProps = {
   onOpenSettings: () => void;
 };
 
+const createInitialFolderBrowserState = (): FolderBrowserState => ({
+  loading: false,
+  currentPath: "",
+  homePath: "",
+  roots: [],
+  entries: []
+});
+
 const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTranslator>) =>
   target.type === "wsl"
     ? target.distro?.trim()
@@ -387,13 +396,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [codeSidebarView, setCodeSidebarView] = useState<"files" | "git">("files");
   const [isCodeExpanded, setIsCodeExpanded] = useState(false);
   const [overlayCanUseWsl, setOverlayCanUseWsl] = useState(false);
-  const [folderBrowser, setFolderBrowser] = useState<FolderBrowserState>({
-    loading: false,
-    currentPath: "",
-    homePath: "",
-    roots: [],
-    entries: []
-  });
+  const [folderBrowser, setFolderBrowser] = useState<FolderBrowserState>(createInitialFolderBrowserState);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
@@ -457,6 +460,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const autoTerminalWorkspaceIdsRef = useRef(new Set<string>());
   const validatedRuntimeTargetsRef = useRef(new Set<string>());
   const runtimeValidationRequestIdRef = useRef(0);
+  const overlayBrowseRequestIdRef = useRef(0);
+  const workspaceSyncVersionRef = useRef(new Map<string, number>());
   const persistedLayoutRef = useRef<string>("");
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
@@ -574,6 +579,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setState(next);
   };
 
+  const advanceWorkspaceSyncVersion = useCallback((workspaceId: string) => {
+    const nextVersion = (workspaceSyncVersionRef.current.get(workspaceId) ?? 0) + 1;
+    workspaceSyncVersionRef.current.set(workspaceId, nextVersion);
+    return nextVersion;
+  }, []);
+
+  const isWorkspaceSyncVersionCurrent = useCallback((workspaceId: string, version: number) => (
+    (workspaceSyncVersionRef.current.get(workspaceId) ?? 0) === version
+  ), []);
+
   const agentRuntimeRefs = useMemo(() => ({
     draftPromptInputRefs,
     agentTerminalRefs,
@@ -677,6 +692,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       const nextState = buildWorkbenchStateFromBootstrap(stateRef.current, bootstrap, locale, appSettings);
 
       if (routeWorkspaceId) {
+        const syncVersion = advanceWorkspaceSyncVersion(routeWorkspaceId);
         const uiState = await withServiceFallback(
           () => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId),
           null,
@@ -690,7 +706,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           )
           : null;
 
-        if (cancelled) {
+        if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
           return;
         }
 
@@ -722,6 +738,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   useEffect(() => {
     if (!bootstrapReady) return;
     if (routeWorkspaceId) {
+      const syncVersion = advanceWorkspaceSyncVersion(routeWorkspaceId);
       const existing = stateRef.current.tabs.find((tab) => tab.id === routeWorkspaceId);
       if (existing) {
         let cancelled = false;
@@ -732,7 +749,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             clientId,
             withServiceFallback,
           ).then((runtimeSnapshot) => {
-            if (cancelled || !runtimeSnapshot) return;
+            if (
+              cancelled
+              || !runtimeSnapshot
+              || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)
+            ) {
+              return;
+            }
             updateState((current) => applyWorkspaceRuntimeSnapshot(
               current,
               runtimeSnapshot,
@@ -747,7 +770,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         if (stateRef.current.activeTabId !== routeWorkspaceId) {
           switchWorkspaceLocally(routeWorkspaceId);
           void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null).then((uiState) => {
-            if (!uiState) return;
+            if (!uiState || cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) return;
             updateState((current) => applyWorkbenchUiState(current, uiState));
           });
         }
@@ -763,10 +786,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       let cancelled = false;
       void (async () => {
         const uiState = await withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null);
-        if (!uiState || cancelled) {
-          if (!cancelled) {
-            navigate("/workspace", { replace: true });
-          }
+        if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
+          return;
+        }
+        if (!uiState) {
+          navigate("/workspace", { replace: true });
           return;
         }
         const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
@@ -775,10 +799,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           clientId,
           withServiceFallback,
         );
-        if (!runtimeSnapshot || cancelled) {
-          if (!cancelled) {
-            navigate("/workspace", { replace: true });
-          }
+        if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
+          return;
+        }
+        if (!runtimeSnapshot) {
+          navigate("/workspace", { replace: true });
           return;
         }
         updateState((current) => applyWorkspaceRuntimeSnapshot(
@@ -800,7 +825,17 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (stateRef.current.activeTabId) {
       navigate(`/workspace/${stateRef.current.activeTabId}`, { replace: true });
     }
-  }, [appSettings, bootstrapReady, clientId, deviceId, locale, navigate, routeWorkspaceId]);
+  }, [
+    advanceWorkspaceSyncVersion,
+    appSettings,
+    bootstrapReady,
+    clientId,
+    deviceId,
+    isWorkspaceSyncVersionCurrent,
+    locale,
+    navigate,
+    routeWorkspaceId,
+  ]);
 
   useEffect(() => {
     if (!bootstrapReady) return;
@@ -960,6 +995,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return emptyTabRef.current;
   }, [appSettings, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
+  const showWelcomeScreen = bootstrapReady && state.tabs.length === 0 && !state.overlay.visible;
   const overlayCommand = getTargetClaudeCommand(state.overlay.target);
   const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, overlayCommand);
   const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
@@ -1352,11 +1388,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
   };
 
+  const onOpenWorkspacePicker = () => {
+    onAddTab();
+  };
+
   const onRemoveTab = async (tabId: string) => {
     const currentTabs = stateRef.current.tabs;
     const currentIndex = currentTabs.findIndex((tab) => tab.id === tabId);
     if (currentIndex === -1) return;
     if (!guardWorkspaceMutation("close_workspace", tabId)) return;
+    advanceWorkspaceSyncVersion(tabId);
     const remainingIds = currentTabs.filter((tab) => tab.id !== tabId).map((tab) => tab.id);
     const fallbackActiveId = stateRef.current.activeTabId === tabId
       ? (remainingIds[Math.max(0, currentIndex - 1)] ?? remainingIds[0] ?? null)
@@ -1377,7 +1418,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         ...next,
         overlay: {
           ...next.overlay,
-          visible: next.tabs.length === 0,
+          visible: false,
         },
       };
     });
@@ -1408,11 +1449,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const ensureWorkspaceReady = async (workspaceId: string) => {
     let nextTab: Tab | null = null;
+    const syncVersion = advanceWorkspaceSyncVersion(workspaceId);
     const uiState = await withServiceFallback(
       () => activateWorkspaceRequest(workspaceId, deviceId, clientId),
       null,
     );
-    if (!uiState) return null;
+    if (!uiState || !isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
 
     const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
       workspaceId,
@@ -1420,6 +1462,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       clientId,
       withServiceFallback,
     );
+    if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
 
     if (runtimeSnapshot) {
       updateState((current) => {
@@ -1437,6 +1480,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       });
     } else {
       const snapshot = await withServiceFallback(() => getWorkspaceSnapshot(workspaceId), null);
+      if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
       if (snapshot) {
         updateState((current) => {
           const next = upsertWorkspaceSnapshot(current, snapshot, locale, appSettings, uiState);
@@ -1452,6 +1496,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }
     }
 
+    if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
     navigate(`/workspace/${workspaceId}`, { replace: true });
     return nextTab ?? stateRef.current.tabs.find((tab) => tab.id === workspaceId) ?? null;
   };
@@ -1461,6 +1506,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
     }
     setHistoryOpen((open) => !open);
+  };
+
+  const onOpenHistory = () => {
+    if (!historyOpen) {
+      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
+    }
+    setHistoryOpen(true);
   };
 
   useEffect(() => {
@@ -1528,7 +1580,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateState((current) => updateWorkspaceOverlayTarget(current, target));
   };
 
+  const onCloseWorkspaceOverlay = useCallback(() => {
+    overlayBrowseRequestIdRef.current += 1;
+    setFolderBrowser(createInitialFolderBrowserState());
+    updateState((current) => ({
+      ...current,
+      overlay: {
+        ...current.overlay,
+        visible: false,
+        input: "",
+      },
+    }));
+  }, []);
+
   const browseOverlayDirectory = useCallback(async (target: ExecTarget, path?: string, selectCurrent = false) => {
+    const requestId = ++overlayBrowseRequestIdRef.current;
     await browseWorkspaceOverlayDirectory({
       target,
       path,
@@ -1539,7 +1605,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       setOverlayCanUseWsl,
       updateOverlayInput: (value) => {
         updateState((current) => updateWorkspaceOverlayInput(current, value));
-      }
+      },
+      shouldApplyResult: () => overlayBrowseRequestIdRef.current === requestId,
     });
   }, [locale, t]);
 
@@ -1574,13 +1641,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       refreshWorkspaceArtifacts,
     });
     if (!launched) return;
+    const syncVersion = advanceWorkspaceSyncVersion(launched.workspaceId);
     const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
       launched.workspaceId,
       deviceId,
       clientId,
       withServiceFallback,
     );
-    if (runtimeSnapshot) {
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(launched.workspaceId, syncVersion)) {
       updateState((current) => applyWorkspaceRuntimeSnapshot(
         current,
         runtimeSnapshot,
@@ -1590,6 +1658,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         clientId,
       ));
     }
+    if (!isWorkspaceSyncVersionCurrent(launched.workspaceId, syncVersion)) return;
     navigate(`/workspace/${launched.workspaceId}`);
     void ensureWorkspaceTerminal(launched.workspaceId);
     if (launched.firstFile) {
@@ -1701,13 +1770,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onRecoverActiveSession = async () => {
     let currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
     let session = currentTab.sessions.find((item) => item.id === activePaneSession.id) ?? activePaneSession;
+    const syncVersion = advanceWorkspaceSyncVersion(currentTab.id);
     const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
       currentTab.id,
       deviceId,
       clientId,
       withServiceFallback,
     );
-    if (runtimeSnapshot) {
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(currentTab.id, syncVersion)) {
       let nextTab: Tab | null = null;
       updateState((current) => {
         const next = applyWorkspaceRuntimeSnapshot(
@@ -1726,6 +1796,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         session = nextTab.sessions.find((item) => item.id === session.id) ?? session;
       }
     }
+    if (!isWorkspaceSyncVersionCurrent(currentTab.id, syncVersion)) return;
     const recoveryAction = resolveAgentRecoveryAction(currentTab.controller, session);
     if (!recoveryAction) return;
     setAgentRecoveryBusy({
@@ -2466,7 +2537,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     ["--right-w" as string]: `${state.layout.rightWidth}px`,
     ["--right-split" as string]: `${state.layout.rightSplit}%`
   };
-  const workspaceUiReady = bootstrapReady && (state.tabs.length > 0 || state.overlay.visible);
+  const workspaceUiReady = bootstrapReady && (state.tabs.length > 0 || state.overlay.visible || showWelcomeScreen);
 
   const workspaceTabs = state.tabs.map((tab) => {
     const sessions = [...tab.sessions].sort((left, right) => {
@@ -2916,7 +2987,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             historyOpen={historyOpen}
             onSwitchWorkspace={onSwitchWorkspace}
             onToggleHistory={onToggleHistory}
-            onAddTab={onAddTab}
+            onAddTab={onOpenWorkspacePicker}
             onRemoveTab={onRemoveTab}
             onOpenSettings={onOpenSettings}
             onCloseSettings={() => {}}
@@ -2945,22 +3016,32 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             t={t}
           />
 
-          <WorkspaceShell
-            isFocusMode={isFocusMode}
-            isCodeExpanded={isCodeExpanded}
-            showAgentPanel={showAgentPanel}
-            showCodePanel={showCodePanel}
-            showTerminalPanel={showTerminalPanel}
-            rightSplit={state.layout.rightSplit}
-            statusItems={workspaceShellSummary}
-            runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
-            statusBanner={workspaceStatusBanner}
-            agentPanel={workspaceAgentPanel}
-            codePanel={workspaceCodePanel}
-            terminalPanel={workspaceTerminalPanel}
-            onToggleRightPane={toggleRightPane}
-            t={t}
-          />
+          {showWelcomeScreen ? (
+            <WorkspaceWelcomeScreen
+              hasHistory={historyRecords.length > 0}
+              onOpenWorkspacePicker={onOpenWorkspacePicker}
+              onOpenHistory={onOpenHistory}
+              onOpenSettings={onOpenSettings}
+              t={t}
+            />
+          ) : (
+            <WorkspaceShell
+              isFocusMode={isFocusMode}
+              isCodeExpanded={isCodeExpanded}
+              showAgentPanel={showAgentPanel}
+              showCodePanel={showCodePanel}
+              showTerminalPanel={showTerminalPanel}
+              rightSplit={state.layout.rightSplit}
+              statusItems={workspaceShellSummary}
+              runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
+              statusBanner={workspaceStatusBanner}
+              agentPanel={workspaceAgentPanel}
+              codePanel={workspaceCodePanel}
+              terminalPanel={workspaceTerminalPanel}
+              onToggleRightPane={toggleRightPane}
+              t={t}
+            />
+          )}
 
           {commandPaletteOpen && (
             <CommandPalette
@@ -3016,6 +3097,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             runtimeLabel={formatExecTargetLabel(state.overlay.target, t)}
             validation={runtimeValidationView}
             onUpdateTarget={onOverlayUpdateTarget}
+            onClose={onCloseWorkspaceOverlay}
             onRetry={() => {
               void runRuntimeValidation(stateRef.current.overlay.target);
             }}
@@ -3030,6 +3112,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             folderBrowser={folderBrowser}
             onUpdateTarget={onOverlayUpdateTarget}
             onBrowseDirectory={onBrowseOverlayDirectory}
+            onClose={onCloseWorkspaceOverlay}
             onStartWorkspace={onStartWorkspace}
             t={t}
           />
