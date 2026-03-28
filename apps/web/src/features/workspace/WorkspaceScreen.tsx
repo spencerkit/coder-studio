@@ -265,6 +265,7 @@ const REQUIRED_RUNTIME_COMMANDS = [
   id: RuntimeRequirementStatus["id"];
   command: string;
 }>;
+const ROUTE_RUNTIME_ATTACH_RECOVERY_DELAYS_MS = [0, 1_000, 3_000, 7_000] as const;
 
 type RuntimeRequirementSpec = {
   id: RuntimeRequirementStatus["id"];
@@ -768,11 +769,15 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           });
         }
         attachRouteRuntime();
-        const timer = window.setTimeout(attachRouteRuntime, 1000);
+        const timers = ROUTE_RUNTIME_ATTACH_RECOVERY_DELAYS_MS
+          .filter((delayMs) => delayMs > 0)
+          .map((delayMs) => window.setTimeout(attachRouteRuntime, delayMs));
         void ensureWorkspaceTerminal(routeWorkspaceId);
         return () => {
           cancelled = true;
-          window.clearTimeout(timer);
+          timers.forEach((timer) => {
+            window.clearTimeout(timer);
+          });
         };
       }
 
@@ -796,6 +801,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           return;
         }
         if (!runtimeSnapshot) {
+          const snapshot = await withServiceFallback(() => getWorkspaceSnapshot(routeWorkspaceId), null);
+          if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
+            return;
+          }
+          if (snapshot) {
+            updateState((current) => upsertWorkspaceSnapshot(
+              current,
+              snapshot,
+              locale,
+              appSettings,
+              uiState,
+            ));
+            void ensureWorkspaceTerminal(routeWorkspaceId);
+            return;
+          }
           navigate("/workspace", { replace: true });
           return;
         }

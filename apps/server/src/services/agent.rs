@@ -7,6 +7,7 @@ const DEFAULT_PTY_ROWS: u16 = 30;
 struct AgentLifecycleFallbackState {
     emitted_tool_started: bool,
     emitted_turn_completed: bool,
+    claude_session_id: Option<String>,
 }
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
@@ -21,21 +22,32 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
 fn fallback_agent_lifecycle_from_output(
     state: &mut AgentLifecycleFallbackState,
     text: &str,
-) -> Option<(&'static str, &'static str, &'static str)> {
+) -> Option<(&'static str, &'static str, String)> {
     if state.emitted_tool_started || text.trim().is_empty() {
         return None;
     }
     state.emitted_tool_started = true;
-    Some((
-        "tool_started",
-        "AgentProcessOutput",
-        r#"{"source":"agent_process_output"}"#,
-    ))
+    let data = state
+        .claude_session_id
+        .as_deref()
+        .map(|session_id| {
+            json!({
+                "source": "agent_process_output",
+                "session_id": session_id,
+            })
+        })
+        .unwrap_or_else(|| {
+            json!({
+                "source": "agent_process_output",
+            })
+        })
+        .to_string();
+    Some(("tool_started", "AgentProcessOutput", data))
 }
 
 fn fallback_agent_lifecycle_from_exit(
     state: &mut AgentLifecycleFallbackState,
-) -> Option<(&'static str, &'static str, &'static str)> {
+) -> Option<(&'static str, &'static str, String)> {
     if state.emitted_turn_completed || !state.emitted_tool_started {
         return None;
     }
@@ -43,7 +55,7 @@ fn fallback_agent_lifecycle_from_exit(
     Some((
         "turn_completed",
         "AgentProcessExit",
-        r#"{"source":"agent_process_exit"}"#,
+        r#"{"source":"agent_process_exit"}"#.to_string(),
     ))
 }
 
@@ -237,7 +249,10 @@ pub(crate) fn agent_start(
     let workspace_id_out = workspace_id.clone();
     let session_out = session_id.clone();
     let session_out_num = session_id_num;
-    let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState::default()));
+    let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState {
+        claude_session_id: effective_claude_session_id.clone(),
+        ..Default::default()
+    }));
     let app_handle = app.clone();
     let state_handle = app.clone();
     let lifecycle_fallback_state_out = lifecycle_fallback_state.clone();
@@ -262,7 +277,7 @@ pub(crate) fn agent_start(
                                 &session_out,
                                 kind,
                                 source_event,
-                                data,
+                                &data,
                             );
                         }
                     }
@@ -298,7 +313,7 @@ pub(crate) fn agent_start(
                     &session_id,
                     kind,
                     source_event,
-                    data,
+                    &data,
                 );
             }
         }
@@ -451,12 +466,30 @@ mod tests {
             Some((
                 "tool_started",
                 "AgentProcessOutput",
-                r#"{"source":"agent_process_output"}"#,
+                r#"{"source":"agent_process_output"}"#.to_string(),
             )),
         );
         assert_eq!(
             fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"),
             None
+        );
+    }
+
+    #[test]
+    fn fallback_agent_lifecycle_carries_known_claude_session_id() {
+        let mut state = AgentLifecycleFallbackState {
+            claude_session_id: Some("claude-resume-known".to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
+            Some((
+                "tool_started",
+                "AgentProcessOutput",
+                r#"{"session_id":"claude-resume-known","source":"agent_process_output"}"#
+                    .to_string(),
+            )),
         );
     }
 
@@ -471,7 +504,7 @@ mod tests {
             Some((
                 "turn_completed",
                 "AgentProcessExit",
-                r#"{"source":"agent_process_exit"}"#,
+                r#"{"source":"agent_process_exit"}"#.to_string(),
             )),
         );
         assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
