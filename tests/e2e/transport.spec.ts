@@ -397,6 +397,8 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-runtime-reconnect', clientId: 'client-runtime-reconnect' };
     const replayClaudeSessionId = `claude-reconnect-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reconnect-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
@@ -405,7 +407,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -485,7 +487,11 @@ test.describe('workspace transport baseline', () => {
         timeout: 4000,
       }).toBe('idle');
     } finally {
-      await context.close();
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -495,6 +501,8 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-lifecycle', clientId: 'client-lifecycle' };
     const replayClaudeSessionId = `claude-replay-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-lifecycle-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
@@ -503,7 +511,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -581,7 +589,11 @@ test.describe('workspace transport baseline', () => {
         page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
       ).toBe('idle');
     } finally {
-      await context.close();
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -593,6 +605,8 @@ test.describe('workspace transport baseline', () => {
     const observer = await observerContext.newPage();
     const controllerIds = { deviceId: 'device-a', clientId: 'client-a' };
     const observerIds = { deviceId: 'device-b', clientId: 'client-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-follow-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -601,7 +615,7 @@ test.describe('workspace transport baseline', () => {
       await installTransportProbe(observer);
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller, controllerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -629,10 +643,14 @@ test.describe('workspace transport baseline', () => {
         timeout: 15000,
       });
     } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
       await Promise.allSettled([
         observerContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -644,6 +662,8 @@ test.describe('workspace transport baseline', () => {
     const observer = await observerContext.newPage();
     const controllerIds = { deviceId: 'device-click-a', clientId: 'client-click-a' };
     const observerIds = { deviceId: 'device-click-b', clientId: 'client-click-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-request-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -652,7 +672,7 @@ test.describe('workspace transport baseline', () => {
       await installTransportProbe(observer);
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller, controllerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -674,10 +694,14 @@ test.describe('workspace transport baseline', () => {
         timeout: 15000,
       });
     } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
       await Promise.allSettled([
         observerContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -689,6 +713,8 @@ test.describe('workspace transport baseline', () => {
     const observer = await observerContext.newPage();
     const controllerIds = { deviceId: 'device-click-fail-a', clientId: 'client-click-fail-a' };
     const observerIds = { deviceId: 'device-click-fail-b', clientId: 'client-click-fail-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-takeover-error-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -708,7 +734,7 @@ test.describe('workspace transport baseline', () => {
       });
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller, controllerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -728,10 +754,14 @@ test.describe('workspace transport baseline', () => {
         'This workspace is following the current controller.',
       );
     } finally {
+      if (workspace && !controller.isClosed()) {
+        await closeWorkspaceBestEffort(controller, workspace.workspaceId, controllerIds);
+      }
       await Promise.allSettled([
         observerContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -739,11 +769,12 @@ test.describe('workspace transport baseline', () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     const titleWorkspacePath = await createExternalTempWorkspace('coder-studio-transport-title-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
       await installTransportProbe(page);
-      await openWorkspace(page, DEFAULT_TRANSPORT_IDS, titleWorkspacePath);
+      workspace = await openWorkspace(page, DEFAULT_TRANSPORT_IDS, titleWorkspacePath);
       await waitForBackendSocket(page);
       await seedAppSettings(page, {
         agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
@@ -760,8 +791,11 @@ test.describe('workspace transport baseline', () => {
         timeout: 10000,
       });
     } finally {
-      await context.close();
-      await fs.rm(titleWorkspacePath, { recursive: true, force: true });
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(titleWorkspacePath);
     }
   });
 
@@ -772,6 +806,8 @@ test.describe('workspace transport baseline', () => {
     const reopened = await reopenedContext.newPage();
     const controllerIds = { deviceId: 'device-reopen', clientId: 'client-a' };
     const reopenedIds = { deviceId: 'device-reopen', clientId: 'client-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-same-device-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(controller);
@@ -781,7 +817,7 @@ test.describe('workspace transport baseline', () => {
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(reopened, reopenedIds);
 
-      const workspace = await openWorkspace(controller, controllerIds);
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
       await waitForBackendSocket(controller);
 
       await reopened.goto(`/workspace/${workspace.workspaceId}`);
@@ -820,10 +856,14 @@ test.describe('workspace transport baseline', () => {
       expect(runtime.controller.controller_device_id).toBe(reopenedIds.deviceId);
       expect(runtime.controller.controller_client_id).toBe(reopenedIds.clientId);
     } finally {
+      if (workspace && !reopened.isClosed()) {
+        await closeWorkspaceBestEffort(reopened, workspace.workspaceId, reopenedIds);
+      }
       await Promise.allSettled([
         reopenedContext.close(),
         controllerContext.close(),
       ]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 
@@ -834,6 +874,7 @@ test.describe('workspace transport baseline', () => {
     const ids = { deviceId: 'device-recovery', clientId: 'client-recovery' };
     const resumeClaudeSessionId = `claude-e2e-resume-${Date.now()}`;
     const workspacePath = await createExternalTempWorkspace('coder-studio-transport-recovery-');
+    let workspace: WorkspaceHandle | null = null;
 
     try {
       await prepareTransportPage(page);
@@ -842,7 +883,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_RECOVERY_DELAY_MS}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page, ids, workspacePath);
+      workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -919,8 +960,11 @@ test.describe('workspace transport baseline', () => {
         message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
       }).toBe(true);
     } finally {
-      await context.close();
-      await fs.rm(workspacePath, { recursive: true, force: true });
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
     }
   });
 });
@@ -1432,6 +1476,34 @@ async function closeAllOpenWorkspaces(page: Page) {
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId, DEFAULT_TRANSPORT_IDS);
     await invokeRpc(page, 'close_workspace', controller);
+  }
+}
+
+async function closeWorkspaceBestEffort(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string } = DEFAULT_TRANSPORT_IDS,
+) {
+  try {
+    const controller = await currentWorkspaceController(page, workspaceId, ids);
+    await invokeRpc(page, 'close_workspace', controller);
+  } catch {
+    // Best-effort cleanup for flaky transport cases.
+  }
+}
+
+async function removeExternalWorkspace(workspacePath: string) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(workspacePath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt === 4) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
   }
 }
 

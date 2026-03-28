@@ -2224,10 +2224,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await nextQueue;
   };
 
-  const onSubmitDraftPrompt = async (paneId: string) => {
+  const onSubmitDraftPrompt = async (paneId: string, submittedValue?: string) => {
     if (!guardWorkspaceMutation("agent_input")) return;
     const content = (
-      draftPromptInputRefs.current.get(paneId)?.value
+      submittedValue
+      ?? draftPromptInputRefs.current.get(paneId)?.value
       ?? draftPromptInputs[paneId]
       ?? ""
     ).trim();

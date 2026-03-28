@@ -33,7 +33,7 @@ type AgentWorkspaceFeatureProps = {
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string) => void;
+  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
   onDraftPromptChange: (paneId: string, value: string) => void;
   setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
@@ -63,7 +63,7 @@ type AgentPaneLeafProps = {
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string) => void;
+  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
   onDraftPromptChange: (paneId: string, value: string) => void;
   setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
@@ -146,7 +146,9 @@ const AgentPaneLeaf = memo(({
 
   const handleSubmitDraftPrompt = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmitDraftPrompt(paneId);
+    const field = event.currentTarget.elements.namedItem("draftPrompt");
+    const value = field instanceof HTMLInputElement ? field.value : undefined;
+    onSubmitDraftPrompt(paneId, value);
   }, [onSubmitDraftPrompt, paneId]);
 
   const handleDraftPromptRef = useCallback((element: HTMLInputElement | null) => {
@@ -248,6 +250,7 @@ const AgentPaneLeaf = memo(({
                   <div className="agent-compose">
                     <input
                       ref={handleDraftPromptRef}
+                      name="draftPrompt"
                       className="agent-compose-field agent-draft-launcher-field"
                       value={draftPromptValue}
                       onChange={(event) => onDraftPromptChange(paneId, event.target.value)}
