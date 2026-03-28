@@ -38,11 +38,7 @@ fn transfer_controller(
     clear_takeover_request(lease);
 }
 
-fn refresh_controller_lease(
-    lease: &mut WorkspaceControllerLease,
-    client_id: &str,
-    now: i64,
-) {
+fn refresh_controller_lease(lease: &mut WorkspaceControllerLease, client_id: &str, now: i64) {
     if lease.fencing_token == 0 && lease.controller_device_id.is_some() {
         lease.fencing_token = 1;
     }

@@ -1956,6 +1956,7 @@ pub(crate) fn append_session_stream(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn set_session_status(
     state: State<'_, AppState>,
     workspace_id: &str,

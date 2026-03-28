@@ -235,7 +235,8 @@ fn hydrate_settings_from_claude_sources(
     if let Some(sources) = wsl_sources {
         let existing_override = hydrated.claude.overrides.wsl.clone();
         let mut wsl_override = existing_override.clone().unwrap_or_default();
-        let next_profile = hydrate_runtime_profile_from_claude_sources(&wsl_override.profile, sources);
+        let next_profile =
+            hydrate_runtime_profile_from_claude_sources(&wsl_override.profile, sources);
         if existing_override.is_some() || next_profile != wsl_override.profile {
             wsl_override.profile = next_profile;
             hydrated.claude.overrides.wsl = Some(wsl_override);
@@ -260,7 +261,8 @@ fn hydrate_settings_from_claude_home(
 fn load_or_default_app_settings_from_conn_hydrated(
     conn: &Connection,
 ) -> Result<AppSettingsPayload, String> {
-    let settings = hydrate_settings_from_claude_home(&load_or_default_app_settings_from_conn(conn)?, None);
+    let settings =
+        hydrate_settings_from_claude_home(&load_or_default_app_settings_from_conn(conn)?, None);
     let wsl_target = ExecTarget::Wsl { distro: None };
     let wsl_sources = load_wsl_claude_json_sources(&wsl_target);
     Ok(hydrate_settings_from_claude_sources(
@@ -298,10 +300,22 @@ fn should_replace_object_patch(path: &[String]) -> bool {
             | ["claude", "global", "global_config_json"]
             | ["claude", "overrides", "native", "profile", "env"]
             | ["claude", "overrides", "native", "profile", "settings_json"]
-            | ["claude", "overrides", "native", "profile", "global_config_json"]
+            | [
+                "claude",
+                "overrides",
+                "native",
+                "profile",
+                "global_config_json"
+            ]
             | ["claude", "overrides", "wsl", "profile", "env"]
             | ["claude", "overrides", "wsl", "profile", "settings_json"]
-            | ["claude", "overrides", "wsl", "profile", "global_config_json"]
+            | [
+                "claude",
+                "overrides",
+                "wsl",
+                "profile",
+                "global_config_json"
+            ]
     )
 }
 
@@ -399,8 +413,9 @@ fn app_settings_update_with_before_save_hook(
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
     with_db(state, |conn| {
-        let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
-            .map_err(|e| e.to_string())?;
+        let mut current =
+            serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
+                .map_err(|e| e.to_string())?;
         merge_settings_value(&mut current, normalized_patch, &[]);
         before_save()?;
         let merged: AppSettingsPayload =
@@ -422,9 +437,9 @@ mod tests {
     use crate::runtime::RuntimeHandle;
     use std::fs;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -508,8 +523,14 @@ mod tests {
             Some("https://anthropic.example")
         );
         assert_eq!(hydrated.claude.global.settings_json["model"], "sonnet");
-        assert_eq!(hydrated.claude.global.settings_json["permissionMode"], "auto");
-        assert_eq!(hydrated.claude.global.global_config_json["showTurnDuration"], true);
+        assert_eq!(
+            hydrated.claude.global.settings_json["permissionMode"],
+            "auto"
+        );
+        assert_eq!(
+            hydrated.claude.global.global_config_json["showTurnDuration"],
+            true
+        );
 
         let _ = fs::remove_dir_all(root);
     }
@@ -541,11 +562,10 @@ mod tests {
             .global
             .env
             .insert("ANTHROPIC_API_KEY".into(), "api-key-from-backend".into());
-        settings
-            .claude
-            .global
-            .env
-            .insert("ANTHROPIC_AUTH_TOKEN".into(), "auth-token-from-backend".into());
+        settings.claude.global.env.insert(
+            "ANTHROPIC_AUTH_TOKEN".into(),
+            "auth-token-from-backend".into(),
+        );
         settings.claude.global.settings_json = json!({
             "model": "backend-model"
         });
@@ -570,7 +590,10 @@ mod tests {
                 .map(String::as_str),
             Some("auth-token-from-backend")
         );
-        assert_eq!(hydrated.claude.global.settings_json["model"], "backend-model");
+        assert_eq!(
+            hydrated.claude.global.settings_json["model"],
+            "backend-model"
+        );
 
         let _ = fs::remove_dir_all(root);
     }
@@ -581,29 +604,39 @@ mod tests {
             &AppSettingsPayload::default(),
             None,
             Some(&ClaudeJsonSources {
-                settings_json: Some(serde_json::from_value(json!({
-                    "env": {
-                        "ANTHROPIC_AUTH_TOKEN": "wsl-auth-token",
-                        "ANTHROPIC_BASE_URL": "https://wsl.example"
-                    },
-                    "model": "wsl-sonnet"
-                })).unwrap()),
-                config_json: Some(serde_json::from_value(json!({
-                    "primaryApiKey": "wsl-primary-api-key"
-                })).unwrap()),
-                global_config_json: Some(serde_json::from_value(json!({
-                    "showTurnDuration": true
-                })).unwrap()),
+                settings_json: Some(
+                    serde_json::from_value(json!({
+                        "env": {
+                            "ANTHROPIC_AUTH_TOKEN": "wsl-auth-token",
+                            "ANTHROPIC_BASE_URL": "https://wsl.example"
+                        },
+                        "model": "wsl-sonnet"
+                    }))
+                    .unwrap(),
+                ),
+                config_json: Some(
+                    serde_json::from_value(json!({
+                        "primaryApiKey": "wsl-primary-api-key"
+                    }))
+                    .unwrap(),
+                ),
+                global_config_json: Some(
+                    serde_json::from_value(json!({
+                        "showTurnDuration": true
+                    }))
+                    .unwrap(),
+                ),
             }),
         );
 
-        let wsl = hydrated.claude.overrides.wsl.expect("wsl override should be created");
+        let wsl = hydrated
+            .claude
+            .overrides
+            .wsl
+            .expect("wsl override should be created");
         assert!(!wsl.enabled);
         assert_eq!(
-            wsl.profile
-                .env
-                .get("ANTHROPIC_API_KEY")
-                .map(String::as_str),
+            wsl.profile.env.get("ANTHROPIC_API_KEY").map(String::as_str),
             Some("wsl-primary-api-key")
         );
         assert_eq!(

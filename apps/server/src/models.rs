@@ -145,20 +145,11 @@ impl Default for ClaudeRuntimeProfile {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
 pub struct TargetClaudeOverride {
     pub enabled: bool,
     pub profile: ClaudeRuntimeProfile,
-}
-
-impl Default for TargetClaudeOverride {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            profile: ClaudeRuntimeProfile::default(),
-        }
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]

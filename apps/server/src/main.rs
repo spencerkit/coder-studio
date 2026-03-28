@@ -51,6 +51,8 @@ pub(crate) use auth::{
 pub(crate) use command::http::start_transport_server;
 #[cfg(test)]
 pub(crate) use infra::db::launch_workspace_record;
+#[cfg(test)]
+pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
     activate_workspace_ui, append_agent_lifecycle_event, append_session_stream,
     append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
@@ -60,10 +62,10 @@ pub(crate) use infra::db::{
     load_session_history_records, load_workspace_controller_lease,
     mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
     patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_claude_id, set_session_status,
-    set_session_status_if_not_archived, set_workspace_terminal_recoverable,
-    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
-    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
+    save_workspace_controller_lease, set_session_claude_id, set_session_status_if_not_archived,
+    set_workspace_terminal_recoverable, switch_workspace_session,
+    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
+    update_workspace_session, upsert_workspace_attachment,
     workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
     workspace_snapshot as load_workspace_snapshot,
 };
@@ -81,17 +83,20 @@ pub(crate) use infra::support::{
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult,
-    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSettingsPayload,
-    ClaudeSlashSkillEntry, ClaudeTargetOverrides, CommandAvailability,
-    CompletionNotificationSettings, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GeneralSettingsPayload, GitChangeEntry,
-    GitFileDiffPayload, GitStatus, IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage,
-    SessionMessageRole, SessionMode, SessionPatch, SessionRestoreResult, SessionStatus,
-    TargetClaudeOverride, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
-    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
-    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource,
-    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
-    WorktreeDetail, WorktreeInfo,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
+    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
+    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
+    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
+    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
+    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+};
+#[cfg(test)]
+pub(crate) use models::{
+    ClaudeSettingsPayload, ClaudeTargetOverrides, CompletionNotificationSettings,
+    GeneralSettingsPayload, TargetClaudeOverride,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
