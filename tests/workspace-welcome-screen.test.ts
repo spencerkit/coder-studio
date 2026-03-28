@@ -28,7 +28,7 @@ test("empty workbench state does not auto-open the launch overlay", () => {
   assert.deepEqual(normalized.overlay.target, { type: "wsl", distro: "Ubuntu" });
 });
 
-test("bootstrap with zero open workspaces keeps the launch overlay hidden", () => {
+test("bootstrap with zero open workspaces keeps the launch overlay visible", () => {
   const next = buildWorkbenchStateFromBootstrap(
     {
       tabs: [],
@@ -66,13 +66,13 @@ test("bootstrap with zero open workspaces keeps the launch overlay hidden", () =
   );
 
   assert.equal(next.tabs.length, 0);
-  assert.equal(next.overlay.visible, false);
+  assert.equal(next.overlay.visible, true);
   assert.equal(next.overlay.mode, "remote");
   assert.equal(next.overlay.input, "ssh://demo");
   assert.deepEqual(next.overlay.target, { type: "wsl", distro: "Ubuntu" });
 });
 
-test("ui state with zero open workspaces keeps the launch overlay hidden", () => {
+test("ui state with zero open workspaces keeps the launch overlay visible", () => {
   const next = applyWorkbenchUiState(
     {
       tabs: [],
@@ -105,7 +105,7 @@ test("ui state with zero open workspaces keeps the launch overlay hidden", () =>
   );
 
   assert.equal(next.tabs.length, 0);
-  assert.equal(next.overlay.visible, false);
+  assert.equal(next.overlay.visible, true);
   assert.equal(next.overlay.mode, "remote");
   assert.equal(next.overlay.input, "ssh://demo");
   assert.deepEqual(next.overlay.target, { type: "wsl", distro: "Ubuntu" });

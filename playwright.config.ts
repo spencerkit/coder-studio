@@ -11,7 +11,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   workers: 1,
   use: {
-    baseURL: `http://localhost:${frontendPort}`
+    baseURL: `http://127.0.0.1:${frontendPort}`
   },
   webServer: {
     command: 'node scripts/test/start-dev-stack.mjs',
