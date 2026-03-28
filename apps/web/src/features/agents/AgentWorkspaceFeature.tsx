@@ -8,7 +8,7 @@ import type {
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
 import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
-import { sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
+import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { resolveAgentPaneRenderState } from "./agent-pane-render";
 
@@ -47,6 +47,7 @@ type AgentWorkspaceFeatureProps = {
 type AgentPaneLeafProps = {
   paneId: string;
   session: Session;
+  activeSessionId: string;
   tabId: string;
   locale: Locale;
   isPaneActive: boolean;
@@ -74,6 +75,7 @@ type AgentPaneLeafProps = {
 const AgentPaneLeaf = memo(({
   paneId,
   session,
+  activeSessionId,
   tabId,
   locale,
   isPaneActive,
@@ -97,20 +99,21 @@ const AgentPaneLeaf = memo(({
   onAgentTerminalSize,
   t,
 }: AgentPaneLeafProps) => {
+  const visibleStatus = displaySessionStatus({ activeSessionId }, session);
   const progress = (() => {
     const ratio = sessionCompletionRatio(session);
     if (ratio > 0) return Math.max(14, ratio);
-    if (session.status === "running" || session.status === "background") return 34;
-    if (session.status === "waiting") return 22;
+    if (visibleStatus === "running" || visibleStatus === "background") return 34;
+    if (visibleStatus === "waiting") return 22;
     return 6;
   })();
-  const tone = session.status === "running" || session.status === "background"
+  const tone = visibleStatus === "running" || visibleStatus === "background"
     ? "live"
-    : session.status === "waiting"
+    : visibleStatus === "waiting"
       ? "queued"
       : "idle";
-  const statusTone = sessionTone(session.status);
-  const headerTag = sessionHeaderTag(session.status, locale);
+  const statusTone = sessionTone(visibleStatus);
+  const headerTag = sessionHeaderTag(visibleStatus, locale);
   const renderState = resolveAgentPaneRenderState(session, isPaneActive);
 
   const handleSetActivePane = useCallback(() => {
@@ -166,7 +169,7 @@ const AgentPaneLeaf = memo(({
     <section
       className={`agent-pane-card ${isPaneActive ? "active" : ""}`}
       data-session-id={session.id}
-      data-session-status={session.status}
+      data-session-status={visibleStatus}
       onMouseDown={handleSetActivePane}
     >
       <div className={`surface-progress ${tone}`} aria-hidden="true">
@@ -382,6 +385,7 @@ export const AgentWorkspaceFeature = ({
         key={node.id}
         paneId={node.id}
         session={session}
+        activeSessionId={activeTab.activeSessionId}
         tabId={activeTab.id}
         locale={locale}
         isPaneActive={isPaneActive}

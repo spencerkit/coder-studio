@@ -631,6 +631,125 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
+  test('observer takeover button requests takeover and reflects pending state', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-click-a', clientId: 'client-click-a' };
+    const observerIds = { deviceId: 'device-click-b', clientId: 'client-click-b' };
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+      const workspace = await openWorkspace(controller);
+      await waitForBackendSocket(controller);
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+      await observer.bringToFront();
+      await expect.poll(() => observer.evaluate(() => document.visibilityState)).toBe('visible');
+
+      await observer.getByTestId('workspace-read-only-banner').getByRole('button', { name: 'Request takeover' }).click();
+
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'If the current controller does not respond within 10 seconds',
+      );
+      await expect(controller.getByTestId('workspace-takeover-request-banner')).toBeVisible({
+        timeout: 30000,
+      });
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeHidden({
+        timeout: 15000,
+      });
+    } finally {
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+    }
+  });
+
+  test('observer takeover button surfaces loading and error feedback when takeover request fails', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-click-fail-a', clientId: 'client-click-fail-a' };
+    const observerIds = { deviceId: 'device-click-fail-b', clientId: 'client-click-fail-b' };
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await observer.route('**/api/rpc/workspace_controller_takeover', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: false,
+            error: 'takeover_failed',
+          }),
+        });
+      });
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+      const workspace = await openWorkspace(controller);
+      await waitForBackendSocket(controller);
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+
+      await observer.getByTestId('workspace-read-only-banner').getByRole('button', { name: 'Request takeover' }).click();
+
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'Requesting takeover',
+      );
+      await expect(observer.locator('.toast')).toContainText(
+        'Takeover request failed',
+      );
+      await expect(observer.getByTestId('workspace-read-only-banner')).toContainText(
+        'This workspace is following the current controller.',
+      );
+    } finally {
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+    }
+  });
+
+  test('first draft prompt becomes the session title', async ({ page }) => {
+    await installTransportProbe(page);
+    const workspace = await openWorkspace(page);
+    await waitForBackendSocket(page);
+    await seedAppSettings(page, {
+      agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
+    });
+
+    const firstPrompt = 'title derived from first prompt';
+    const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
+    await expect(draftInput).toBeVisible();
+
+    await draftInput.fill(firstPrompt);
+    await draftInput.press('Enter');
+
+    await expect(page.locator('.agent-pane-title').first()).toContainText(firstPrompt, {
+      timeout: 10000,
+    });
+  });
+
   test('same-device new client takes over immediately after controller disconnects', async ({ browser }) => {
     const controllerContext = await browser.newContext();
     const reopenedContext = await browser.newContext();

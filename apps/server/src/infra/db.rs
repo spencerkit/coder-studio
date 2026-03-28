@@ -988,7 +988,8 @@ fn session_row_to_history_record(
     let session = session_from_payload(&row.payload)?;
     let archived = row.archived_at.is_some();
     let mounted = !archived
-        && (mounted_session_ids.is_empty() || mounted_session_ids.contains(&session.id.to_string()));
+        && (mounted_session_ids.is_empty()
+            || mounted_session_ids.contains(&session.id.to_string()));
     Ok(SessionHistoryRecord {
         workspace_id: workspace.id.clone(),
         workspace_title: workspace.title.clone(),
@@ -1612,7 +1613,13 @@ pub(crate) fn archive_workspace_session(
         let archived_at = row.archived_at.unwrap_or_else(now_ts);
         session.status = SessionStatus::Suspended;
         session.last_active_at = now_ts();
-        persist_session_row(conn, workspace_id, &session, Some(archived_at), row.sort_order)?;
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            Some(archived_at),
+            row.sort_order,
+        )?;
         Ok(ArchiveEntry {
             id: archive_entry_id(session.id, archived_at),
             session_id: session.id,
@@ -1634,7 +1641,13 @@ pub(crate) fn archive_workspace_sessions(
             let archived_at = now_ts();
             session.status = SessionStatus::Suspended;
             session.last_active_at = archived_at;
-            persist_session_row(conn, workspace_id, &session, Some(archived_at), row.sort_order)?;
+            persist_session_row(
+                conn,
+                workspace_id,
+                &session,
+                Some(archived_at),
+                row.sort_order,
+            )?;
             entries.push(ArchiveEntry {
                 id: archive_entry_id(session.id, archived_at),
                 session_id: session.id,

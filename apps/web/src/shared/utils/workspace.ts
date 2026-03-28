@@ -2,6 +2,7 @@ import { formatTerminalTitle, type Locale } from "../../i18n.ts";
 import {
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
+  type WorkspaceControllerState,
 } from "../../features/workspace/workspace-controller.ts";
 import {
   createDefaultWorkbenchState,
@@ -35,6 +36,52 @@ import {
 } from "./session.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const controllerIdentityKey = (controller: WorkspaceControllerState) => [
+  controller.controllerDeviceId ?? "",
+  controller.controllerClientId ?? "",
+].join(":");
+
+const mergeWorkspaceControllerState = (
+  current: WorkspaceControllerState | undefined,
+  incoming: WorkspaceControllerState,
+): WorkspaceControllerState => {
+  if (!current) {
+    return incoming;
+  }
+
+  if (incoming.fencingToken !== current.fencingToken) {
+    return incoming.fencingToken > current.fencingToken ? incoming : current;
+  }
+
+  const incomingLeaseExpiresAt = incoming.leaseExpiresAt ?? 0;
+  const currentLeaseExpiresAt = current.leaseExpiresAt ?? 0;
+  if (incomingLeaseExpiresAt !== currentLeaseExpiresAt) {
+    return incomingLeaseExpiresAt > currentLeaseExpiresAt ? incoming : current;
+  }
+
+  if (controllerIdentityKey(incoming) !== controllerIdentityKey(current)) {
+    return incoming;
+  }
+
+  if (incoming.takeoverPending !== current.takeoverPending) {
+    return incoming.takeoverPending ? incoming : current;
+  }
+
+  const incomingDeadlineAt = incoming.takeoverDeadlineAt ?? 0;
+  const currentDeadlineAt = current.takeoverDeadlineAt ?? 0;
+  if (incomingDeadlineAt !== currentDeadlineAt) {
+    return incomingDeadlineAt > currentDeadlineAt ? incoming : current;
+  }
+
+  const incomingRequestId = incoming.takeoverRequestId ?? "";
+  const currentRequestId = current.takeoverRequestId ?? "";
+  if (incomingRequestId !== currentRequestId) {
+    return incomingRequestId ? incoming : current;
+  }
+
+  return incoming;
+};
 
 const readClaudeSessionId = (data: string) => {
   try {
@@ -386,17 +433,18 @@ export const applyWorkspaceRuntimeSnapshot = (
     upsertWorkspaceSnapshot(current, runtimeSnapshot.snapshot, locale, appSettings, uiState),
     runtimeSnapshot.lifecycle_events ?? [],
   );
+  const incomingController = createWorkspaceControllerStateFromLease(
+    runtimeSnapshot.controller,
+    deviceId,
+    clientId,
+  );
   return {
     ...next,
     tabs: next.tabs.map((tab) => (
       tab.id === runtimeSnapshot.snapshot.workspace.workspace_id
         ? {
             ...tab,
-            controller: createWorkspaceControllerStateFromLease(
-              runtimeSnapshot.controller,
-              deviceId,
-              clientId,
-            ),
+            controller: mergeWorkspaceControllerState(tab.controller, incomingController),
           }
         : tab
     )),

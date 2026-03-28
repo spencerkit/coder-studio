@@ -12,6 +12,7 @@ import type {
   WorkspaceRuntimeSnapshot,
   WorkspaceSnapshot,
   WorkspaceTree,
+  WorkspaceControllerLease,
   WorkspaceViewPatch,
 } from "../../types/app.ts";
 import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
@@ -63,7 +64,7 @@ export const requestWorkspaceTakeover = (
   workspaceId: string,
   deviceId: string,
   clientId: string,
-) => invokeRpc("workspace_controller_takeover", {
+) => invokeRpc<WorkspaceControllerLease>("workspace_controller_takeover", {
   workspaceId,
   deviceId,
   clientId,
@@ -73,7 +74,7 @@ export const rejectWorkspaceTakeover = (
   workspaceId: string,
   deviceId: string,
   clientId: string,
-) => invokeRpc("workspace_controller_reject_takeover", {
+) => invokeRpc<WorkspaceControllerLease>("workspace_controller_reject_takeover", {
   workspaceId,
   deviceId,
   clientId,

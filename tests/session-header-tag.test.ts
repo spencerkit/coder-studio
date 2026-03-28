@@ -11,8 +11,8 @@ test("sessionHeaderTag returns a running badge for active sessions", () => {
 
 test("sessionHeaderTag returns a queued badge for waiting sessions", () => {
   assert.deepEqual(sessionHeaderTag("waiting", "en"), {
-    label: "Queued",
-    tone: "queue",
+    label: "Waiting",
+    tone: "active",
   });
 });
 

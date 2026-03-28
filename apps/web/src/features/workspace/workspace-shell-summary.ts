@@ -19,7 +19,7 @@ const formatRuntimeLabel = (target: ExecTarget | undefined, locale: Locale) => {
 const countQueuedWork = (sessions: Array<Pick<Session, "status" | "queue">>) =>
   sessions.reduce((total, session) => {
     const queuedTasks = session.queue.filter((task) => task.status === "queued").length;
-    const queuedSession = session.status === "waiting" ? 1 : 0;
+    const queuedSession = session.status === "queued" ? 1 : 0;
     return total + queuedTasks + queuedSession;
   }, 0);
 

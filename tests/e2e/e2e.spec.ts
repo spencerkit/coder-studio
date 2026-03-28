@@ -587,7 +587,7 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
 
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-page')).toHaveAttribute('data-density', 'compact');
-  await expect(page.getByTestId('settings-summary')).toBeVisible();
+  await expect(page.getByTestId('settings-page')).toBeVisible();
 });
 
 test('runtime validation blocks workspace selection until required tools are installed', async ({ page }) => {
@@ -750,9 +750,11 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('claude-command-preview')).toContainText('claude');
   await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
   await page.getByTestId('claude-flag-dangerously-skip-permissions').check();
-  await page.getByTestId('claude-startup-args').fill('--verbose');
+  await page.getByTestId('claude-flag-verbose').check();
+  await page.getByTestId('claude-startup-permission-mode').selectOption('auto');
+  await page.getByTestId('claude-startup-args').fill('--debug');
   await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose');
+  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
   await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: 'Back to app' }).click();
@@ -765,8 +767,10 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await page.getByTestId('settings-nav-claude').click();
   await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
   await expect(page.getByTestId('claude-flag-dangerously-skip-permissions')).toBeChecked();
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose');
-  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--verbose');
+  await expect(page.getByTestId('claude-flag-verbose')).toBeChecked();
+  await expect(page.getByTestId('claude-startup-permission-mode')).toHaveValue('auto');
+  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
+  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--debug');
   await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
 });
 

@@ -244,8 +244,12 @@ pub(crate) fn agent_start(
             false
         };
         if should_mark_idle {
-            let _ =
-                set_session_status_if_not_archived(state, &workspace_id, session_id_num, SessionStatus::Idle);
+            let _ = set_session_status_if_not_archived(
+                state,
+                &workspace_id,
+                session_id_num,
+                SessionStatus::Idle,
+            );
         }
     });
 

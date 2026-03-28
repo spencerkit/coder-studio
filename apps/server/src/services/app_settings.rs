@@ -1,5 +1,6 @@
 use crate::infra::db::with_db;
 use crate::*;
+use std::fs;
 
 const APP_SETTINGS_ROW_ID: i64 = 1;
 
@@ -31,6 +32,242 @@ fn load_or_default_app_settings_from_conn(conn: &Connection) -> Result<AppSettin
         )
         .map_err(|e| e.to_string())?;
     serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+fn resolve_claude_home_root(root_override: Option<&Path>) -> Option<PathBuf> {
+    if let Some(root) = root_override {
+        return Some(root.to_path_buf());
+    }
+
+    if let Some(root) = std::env::var_os("CODER_STUDIO_CLAUDE_HOME") {
+        return Some(PathBuf::from(root));
+    }
+
+    #[cfg(test)]
+    {
+        None
+    }
+
+    #[cfg(not(test))]
+    {
+        home_dir()
+    }
+}
+
+#[derive(Default)]
+struct ClaudeJsonSources {
+    settings_json: Option<Map<String, Value>>,
+    config_json: Option<Map<String, Value>>,
+    global_config_json: Option<Map<String, Value>>,
+}
+
+impl ClaudeJsonSources {
+    fn is_empty(&self) -> bool {
+        self.settings_json.is_none()
+            && self.config_json.is_none()
+            && self.global_config_json.is_none()
+    }
+}
+
+fn parse_json_object_text(raw: &str) -> Option<Map<String, Value>> {
+    match serde_json::from_str::<Value>(raw).ok()? {
+        Value::Object(value) => Some(value),
+        _ => None,
+    }
+}
+
+fn read_json_object_file(path: &Path) -> Option<Map<String, Value>> {
+    let raw = fs::read_to_string(path).ok()?;
+    parse_json_object_text(&raw)
+}
+
+fn read_target_json_object_file(target: &ExecTarget, path: &str) -> Option<Map<String, Value>> {
+    let raw = run_cmd(target, "", &["cat", path]).ok()?;
+    parse_json_object_text(&raw)
+}
+
+fn load_native_claude_json_sources(root: &Path) -> ClaudeJsonSources {
+    ClaudeJsonSources {
+        settings_json: read_json_object_file(&root.join(".claude/settings.json")),
+        config_json: read_json_object_file(&root.join(".claude/config.json")),
+        global_config_json: read_json_object_file(&root.join(".claude.json")),
+    }
+}
+
+fn load_wsl_claude_json_sources(target: &ExecTarget) -> Option<ClaudeJsonSources> {
+    let home = filesystem_home_for_target(target).ok()?;
+    let home = home.trim_end_matches('/');
+    let render = |relative: &str| {
+        if home.is_empty() || home == "/" {
+            format!("/{}", relative.trim_start_matches('/'))
+        } else {
+            format!("{home}/{}", relative.trim_start_matches('/'))
+        }
+    };
+
+    let sources = ClaudeJsonSources {
+        settings_json: read_target_json_object_file(target, &render(".claude/settings.json")),
+        config_json: read_target_json_object_file(target, &render(".claude/config.json")),
+        global_config_json: read_target_json_object_file(target, &render(".claude.json")),
+    };
+
+    if sources.is_empty() {
+        None
+    } else {
+        Some(sources)
+    }
+}
+
+fn merge_missing_env_value(
+    env: &mut std::collections::BTreeMap<String, String>,
+    key: &str,
+    value: &str,
+) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+
+    match env.get(key) {
+        Some(existing) if !existing.trim().is_empty() => {}
+        _ => {
+            env.insert(key.to_string(), trimmed.to_string());
+        }
+    }
+}
+
+fn merge_missing_env_map(
+    env: &mut std::collections::BTreeMap<String, String>,
+    source: &Map<String, Value>,
+) {
+    for (key, value) in source {
+        if let Some(text) = value.as_str() {
+            merge_missing_env_value(env, key, text);
+        }
+    }
+}
+
+fn merge_missing_json(target: &mut Value, source: &Value) {
+    match source {
+        Value::Object(source_map) => {
+            let Value::Object(target_map) = target else {
+                if target.is_null() {
+                    *target = source.clone();
+                }
+                return;
+            };
+            for (key, source_value) in source_map {
+                match target_map.get_mut(key) {
+                    Some(target_value) => merge_missing_json(target_value, source_value),
+                    None => {
+                        target_map.insert(key.clone(), source_value.clone());
+                    }
+                }
+            }
+        }
+        Value::Array(source_values) => {
+            if let Value::Array(target_values) = target {
+                if target_values.is_empty() {
+                    *target_values = source_values.clone();
+                }
+            } else if target.is_null() {
+                *target = source.clone();
+            }
+        }
+        Value::String(source_value) => {
+            if let Value::String(target_value) = target {
+                if target_value.trim().is_empty() {
+                    *target_value = source_value.clone();
+                }
+            } else if target.is_null() {
+                *target = source.clone();
+            }
+        }
+        _ => {
+            if target.is_null() {
+                *target = source.clone();
+            }
+        }
+    }
+}
+
+fn hydrate_runtime_profile_from_claude_sources(
+    profile: &ClaudeRuntimeProfile,
+    sources: &ClaudeJsonSources,
+) -> ClaudeRuntimeProfile {
+    let mut hydrated = profile.clone();
+
+    if let Some(mut settings_json) = sources.settings_json.clone() {
+        if let Some(Value::Object(env_map)) = settings_json.remove("env") {
+            merge_missing_env_map(&mut hydrated.env, &env_map);
+        }
+        merge_missing_json(&mut hydrated.settings_json, &Value::Object(settings_json));
+    }
+
+    if let Some(config_json) = &sources.config_json {
+        if let Some(primary_api_key) = config_json.get("primaryApiKey").and_then(Value::as_str) {
+            merge_missing_env_value(&mut hydrated.env, "ANTHROPIC_API_KEY", primary_api_key);
+        }
+    }
+
+    if let Some(global_config_json) = &sources.global_config_json {
+        merge_missing_json(
+            &mut hydrated.global_config_json,
+            &Value::Object(global_config_json.clone()),
+        );
+    }
+
+    hydrated
+}
+
+fn hydrate_settings_from_claude_sources(
+    settings: &AppSettingsPayload,
+    native_sources: Option<&ClaudeJsonSources>,
+    wsl_sources: Option<&ClaudeJsonSources>,
+) -> AppSettingsPayload {
+    let mut hydrated = settings.clone();
+
+    if let Some(sources) = native_sources {
+        hydrated.claude.global =
+            hydrate_runtime_profile_from_claude_sources(&hydrated.claude.global, sources);
+    }
+
+    if let Some(sources) = wsl_sources {
+        let existing_override = hydrated.claude.overrides.wsl.clone();
+        let mut wsl_override = existing_override.clone().unwrap_or_default();
+        let next_profile = hydrate_runtime_profile_from_claude_sources(&wsl_override.profile, sources);
+        if existing_override.is_some() || next_profile != wsl_override.profile {
+            wsl_override.profile = next_profile;
+            hydrated.claude.overrides.wsl = Some(wsl_override);
+        }
+    }
+
+    hydrated
+}
+
+fn hydrate_settings_from_claude_home(
+    settings: &AppSettingsPayload,
+    root_override: Option<&Path>,
+) -> AppSettingsPayload {
+    let Some(root) = resolve_claude_home_root(root_override) else {
+        return settings.clone();
+    };
+
+    let sources = load_native_claude_json_sources(&root);
+    hydrate_settings_from_claude_sources(settings, Some(&sources), None)
+}
+
+fn load_or_default_app_settings_from_conn_hydrated(
+    conn: &Connection,
+) -> Result<AppSettingsPayload, String> {
+    let settings = hydrate_settings_from_claude_home(&load_or_default_app_settings_from_conn(conn)?, None);
+    let wsl_target = ExecTarget::Wsl { distro: None };
+    let wsl_sources = load_wsl_claude_json_sources(&wsl_target);
+    Ok(hydrate_settings_from_claude_sources(
+        &settings,
+        None,
+        wsl_sources.as_ref(),
+    ))
 }
 
 fn save_app_settings_to_conn(
@@ -148,7 +385,7 @@ fn normalize_settings_patch_value(value: Value, path: &[String]) -> Value {
 pub(crate) fn load_or_default_app_settings(
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
-    with_db(state, load_or_default_app_settings_from_conn)
+    with_db(state, load_or_default_app_settings_from_conn_hydrated)
 }
 
 pub(crate) fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettingsPayload, String> {
@@ -162,7 +399,7 @@ fn app_settings_update_with_before_save_hook(
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
     with_db(state, |conn| {
-        let mut current = serde_json::to_value(load_or_default_app_settings_from_conn(conn)?)
+        let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
             .map_err(|e| e.to_string())?;
         merge_settings_value(&mut current, normalized_patch, &[]);
         before_save()?;
@@ -183,6 +420,9 @@ pub(crate) fn app_settings_update(
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -192,6 +432,197 @@ mod tests {
         init_db(&conn).unwrap();
         *app.state().db.lock().unwrap() = Some(conn);
         app
+    }
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("coder-studio-{name}-{ts}"))
+    }
+
+    fn write_json(path: &Path, value: Value) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn hydrate_settings_from_claude_home_imports_auth_and_existing_file_values() {
+        let root = unique_temp_dir("claude-settings-import");
+
+        write_json(
+            &root.join(".claude/settings.json"),
+            json!({
+                "env": {
+                    "ANTHROPIC_AUTH_TOKEN": "auth-token-12345",
+                    "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                },
+                "model": "sonnet",
+                "permissionMode": "auto"
+            }),
+        );
+        write_json(
+            &root.join(".claude/config.json"),
+            json!({
+                "primaryApiKey": "primary-api-key-12345"
+            }),
+        );
+        write_json(
+            &root.join(".claude.json"),
+            json!({
+                "showTurnDuration": true
+            }),
+        );
+
+        let hydrated =
+            hydrate_settings_from_claude_home(&AppSettingsPayload::default(), Some(root.as_path()));
+
+        assert_eq!(
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_API_KEY")
+                .map(String::as_str),
+            Some("primary-api-key-12345")
+        );
+        assert_eq!(
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_AUTH_TOKEN")
+                .map(String::as_str),
+            Some("auth-token-12345")
+        );
+        assert_eq!(
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_BASE_URL")
+                .map(String::as_str),
+            Some("https://anthropic.example")
+        );
+        assert_eq!(hydrated.claude.global.settings_json["model"], "sonnet");
+        assert_eq!(hydrated.claude.global.settings_json["permissionMode"], "auto");
+        assert_eq!(hydrated.claude.global.global_config_json["showTurnDuration"], true);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_settings_from_claude_home_preserves_backend_values_over_local_files() {
+        let root = unique_temp_dir("claude-settings-precedence");
+
+        write_json(
+            &root.join(".claude/settings.json"),
+            json!({
+                "env": {
+                    "ANTHROPIC_AUTH_TOKEN": "auth-token-from-file",
+                    "ANTHROPIC_BASE_URL": "https://file.example"
+                },
+                "model": "file-model"
+            }),
+        );
+        write_json(
+            &root.join(".claude/config.json"),
+            json!({
+                "primaryApiKey": "api-key-from-file"
+            }),
+        );
+
+        let mut settings = AppSettingsPayload::default();
+        settings
+            .claude
+            .global
+            .env
+            .insert("ANTHROPIC_API_KEY".into(), "api-key-from-backend".into());
+        settings
+            .claude
+            .global
+            .env
+            .insert("ANTHROPIC_AUTH_TOKEN".into(), "auth-token-from-backend".into());
+        settings.claude.global.settings_json = json!({
+            "model": "backend-model"
+        });
+
+        let hydrated = hydrate_settings_from_claude_home(&settings, Some(root.as_path()));
+
+        assert_eq!(
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_API_KEY")
+                .map(String::as_str),
+            Some("api-key-from-backend")
+        );
+        assert_eq!(
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_AUTH_TOKEN")
+                .map(String::as_str),
+            Some("auth-token-from-backend")
+        );
+        assert_eq!(hydrated.claude.global.settings_json["model"], "backend-model");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_settings_from_claude_sources_imports_wsl_values_into_wsl_override_profile() {
+        let hydrated = hydrate_settings_from_claude_sources(
+            &AppSettingsPayload::default(),
+            None,
+            Some(&ClaudeJsonSources {
+                settings_json: Some(serde_json::from_value(json!({
+                    "env": {
+                        "ANTHROPIC_AUTH_TOKEN": "wsl-auth-token",
+                        "ANTHROPIC_BASE_URL": "https://wsl.example"
+                    },
+                    "model": "wsl-sonnet"
+                })).unwrap()),
+                config_json: Some(serde_json::from_value(json!({
+                    "primaryApiKey": "wsl-primary-api-key"
+                })).unwrap()),
+                global_config_json: Some(serde_json::from_value(json!({
+                    "showTurnDuration": true
+                })).unwrap()),
+            }),
+        );
+
+        let wsl = hydrated.claude.overrides.wsl.expect("wsl override should be created");
+        assert!(!wsl.enabled);
+        assert_eq!(
+            wsl.profile
+                .env
+                .get("ANTHROPIC_API_KEY")
+                .map(String::as_str),
+            Some("wsl-primary-api-key")
+        );
+        assert_eq!(
+            wsl.profile
+                .env
+                .get("ANTHROPIC_AUTH_TOKEN")
+                .map(String::as_str),
+            Some("wsl-auth-token")
+        );
+        assert_eq!(
+            wsl.profile
+                .env
+                .get("ANTHROPIC_BASE_URL")
+                .map(String::as_str),
+            Some("https://wsl.example")
+        );
+        assert_eq!(wsl.profile.settings_json["model"], "wsl-sonnet");
+        assert_eq!(wsl.profile.global_config_json["showTurnDuration"], true);
+        assert_eq!(hydrated.claude.global.env.get("ANTHROPIC_API_KEY"), None);
     }
 
     #[test]

@@ -35,9 +35,53 @@ const STARTUP_BOOLEAN_OPTIONS = [
     helpKey: "claudeAllowDangerouslySkipPermissionsHelp",
     testId: "claude-flag-allow-dangerously-skip-permissions",
   },
+  {
+    flag: "--verbose",
+    labelKey: "claudeVerbose",
+    helpKey: "claudeVerboseHelp",
+    testId: "claude-flag-verbose",
+  },
+  {
+    flag: "--ide",
+    labelKey: "claudeIdeFlag",
+    helpKey: "claudeIdeHelp",
+    testId: "claude-flag-ide",
+  },
+  {
+    flag: "--brief",
+    labelKey: "claudeBrief",
+    helpKey: "claudeBriefHelp",
+    testId: "claude-flag-brief",
+  },
+  {
+    flag: "--bare",
+    labelKey: "claudeBare",
+    helpKey: "claudeBareHelp",
+    testId: "claude-flag-bare",
+  },
+] as const;
+
+const STARTUP_VALUE_OPTIONS = [
+  {
+    flag: "--permission-mode",
+    labelKey: "claudePermissionModeFlag",
+    helpKey: "claudePermissionModeHelp",
+    testId: "claude-startup-permission-mode",
+    values: [
+      { value: "", labelKey: "claudePermissionModeInherit" },
+      { value: "default", labelKey: "claudePermissionModeDefaultOption" },
+      { value: "plan", labelKey: "claudePermissionModePlanOption" },
+      { value: "auto", labelKey: "claudePermissionModeAutoOption" },
+      { value: "acceptEdits", labelKey: "claudePermissionModeAcceptEditsOption" },
+      { value: "dontAsk", labelKey: "claudePermissionModeDontAskOption" },
+      { value: "bypassPermissions", labelKey: "claudePermissionModeBypassPermissionsOption" },
+    ],
+  },
 ] as const;
 
 const STARTUP_BOOLEAN_FLAGS = STARTUP_BOOLEAN_OPTIONS.map((option) => option.flag);
+const STARTUP_VALUE_FLAGS = STARTUP_VALUE_OPTIONS.map((option) => option.flag);
+const STARTUP_STRUCTURED_FLAGS = [...STARTUP_BOOLEAN_FLAGS, ...STARTUP_VALUE_FLAGS];
 
 const readJsonPath = (source: Record<string, unknown>, path: string[]): unknown => {
   let current: unknown = source;
@@ -129,6 +173,7 @@ const textToEnv = (value: string) => Object.fromEntries(
 const stripFlags = (
   startupArgs: string[],
   flags: string[],
+  valueFlags: string[] = [],
 ): string[] => {
   const next: string[] = [];
   for (let index = 0; index < startupArgs.length; index += 1) {
@@ -137,12 +182,12 @@ const stripFlags = (
       next.push(current);
       continue;
     }
-    const takesValue = ![
-      "--dangerously-skip-permissions",
-      "--allow-dangerously-skip-permissions",
-      "--strict-mcp-config",
-    ].includes(current);
-    if (takesValue) {
+    const takesValue = valueFlags.includes(current);
+    if (
+      takesValue
+      && typeof startupArgs[index + 1] === "string"
+      && !startupArgs[index + 1].startsWith("--")
+    ) {
       index += 1;
     }
   }
@@ -150,6 +195,21 @@ const stripFlags = (
 };
 
 const readStandaloneFlag = (startupArgs: string[], flag: string) => startupArgs.includes(flag);
+
+const readFlagValues = (startupArgs: string[], flag: string) => {
+  const values: string[] = [];
+  for (let index = 0; index < startupArgs.length; index += 1) {
+    if (startupArgs[index] !== flag) continue;
+    const next = startupArgs[index + 1];
+    if (typeof next === "string" && !next.startsWith("--")) {
+      values.push(next);
+      index += 1;
+    }
+  }
+  return values;
+};
+
+const readSingleFlagValue = (startupArgs: string[], flag: string) => readFlagValues(startupArgs, flag)[0] ?? "";
 
 const formatJson = (value: Record<string, unknown>) => JSON.stringify(value, null, 2);
 
@@ -172,6 +232,15 @@ type ClaudeSettingsPanelProps = {
   t: Translator;
 };
 
+const ClaudeHelpTip = ({ help }: { help: string }) => (
+  <span className="claude-help-tip">
+    <span className="claude-help-dot" tabIndex={0} aria-label={help}>
+      i
+    </span>
+    <span className="claude-help-tooltip" role="tooltip">{help}</span>
+  </span>
+);
+
 const ClaudeFieldLabel = ({
   label,
   help,
@@ -181,11 +250,7 @@ const ClaudeFieldLabel = ({
 }) => (
   <span className="claude-field-label">
     <span>{label}</span>
-    {help ? (
-      <span className="claude-help-dot" title={help} aria-label={help}>
-        ?
-      </span>
-    ) : null}
+    {help ? <ClaudeHelpTip help={help} /> : null}
   </span>
 );
 
@@ -285,33 +350,59 @@ export const ClaudeSettingsPanel = ({
 
   const extraEnvText = envToText(scopeProfile.env);
   const commandPreview = formatClaudeLaunchPreview(scopeProfile);
-  const extraStartupArgs = stripFlags(scopeProfile.startupArgs, STARTUP_BOOLEAN_FLAGS);
+  const extraStartupArgs = stripFlags(
+    scopeProfile.startupArgs,
+    STARTUP_STRUCTURED_FLAGS,
+    STARTUP_VALUE_FLAGS,
+  );
+  const collectStructuredStartupArgs = (startupArgs: string[]) => {
+    const nextBooleanFlags = STARTUP_BOOLEAN_OPTIONS
+      .filter((option) => readStandaloneFlag(startupArgs, option.flag))
+      .map((option) => option.flag);
+    const nextValueFlags = STARTUP_VALUE_OPTIONS.flatMap((option) => {
+      const value = readSingleFlagValue(startupArgs, option.flag).trim();
+      return value ? [option.flag, value] : [];
+    });
+    return [...nextBooleanFlags, ...nextValueFlags];
+  };
   const updateStartupBooleanFlag = (flag: string, enabled: boolean) => {
     updateStartupArgs((current) => {
-      const remainingArgs = stripFlags(current, STARTUP_BOOLEAN_FLAGS);
+      const remainingArgs = stripFlags(current, STARTUP_STRUCTURED_FLAGS, STARTUP_VALUE_FLAGS);
       const nextFlags = STARTUP_BOOLEAN_OPTIONS
         .filter((option) => option.flag === flag ? enabled : readStandaloneFlag(current, option.flag))
         .map((option) => option.flag);
-      return [...nextFlags, ...remainingArgs];
+      const nextValueFlags = STARTUP_VALUE_OPTIONS.flatMap((option) => {
+        const value = readSingleFlagValue(current, option.flag).trim();
+        return value ? [option.flag, value] : [];
+      });
+      return [...nextFlags, ...nextValueFlags, ...remainingArgs];
+    });
+  };
+  const updateStartupValueFlag = (flag: string, value: string) => {
+    updateStartupArgs((current) => {
+      const remainingArgs = stripFlags(current, STARTUP_STRUCTURED_FLAGS, STARTUP_VALUE_FLAGS);
+      const nextBooleanFlags = STARTUP_BOOLEAN_OPTIONS
+        .filter((option) => readStandaloneFlag(current, option.flag))
+        .map((option) => option.flag);
+      const nextValueFlags = STARTUP_VALUE_OPTIONS.flatMap((option) => {
+        const nextValue = option.flag === flag
+          ? value.trim()
+          : readSingleFlagValue(current, option.flag).trim();
+        return nextValue ? [option.flag, nextValue] : [];
+      });
+      return [...nextBooleanFlags, ...nextValueFlags, ...remainingArgs];
     });
   };
   const updateExtraStartupArgs = (value: string) => {
     updateStartupArgs((current) => {
-      const nextFlags = STARTUP_BOOLEAN_OPTIONS
-        .filter((option) => readStandaloneFlag(current, option.flag))
-        .map((option) => option.flag);
+      const nextFlags = collectStructuredStartupArgs(current);
       return [...nextFlags, ...linesToList(value)];
     });
   };
 
   return (
     <div className="claude-settings-panel">
-      <div className="settings-group-card claude-settings-hero">
-        <div className="claude-settings-hero-copy">
-          <span className="section-kicker">{t("claudeSettingsTitle")}</span>
-          <strong>{activeScope === "global" ? t("claudeScopeGlobal") : activeScope === "native" ? t("claudeScopeNative") : t("claudeScopeWsl")}</strong>
-          <span>{t("claudeSettingsHint")}</span>
-        </div>
+      <div className="claude-settings-toolbar">
         <div className="claude-scope-switcher">
           {(["global", "native", "wsl"] as ClaudeSettingsScope[]).map((scope) => (
             <button
@@ -341,15 +432,31 @@ export const ClaudeSettingsPanel = ({
       </div>
 
       <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeStartupSection")}</strong>
-          <span>{t("claudeStartupSectionHint")}</span>
-        </div>
-        <div className="claude-settings-grid">
+        <div className="claude-settings-grid claude-settings-grid--startup">
           <div className="claude-field claude-field-wide">
             <ClaudeFieldLabel label={t("claudeCommandPreview")} help={t("claudeStartupExecutableFixed")} />
             <code className="claude-command-preview-code" data-testid="claude-command-preview">{commandPreview || "claude"}</code>
           </div>
+          {STARTUP_VALUE_OPTIONS.map((option) => (
+            <label key={option.flag} className="claude-field claude-field-compact">
+              <ClaudeFieldLabel
+                label={t(option.labelKey)}
+                help={t(option.helpKey)}
+              />
+              <select
+                className="settings-command-field"
+                value={readSingleFlagValue(scopeProfile.startupArgs, option.flag)}
+                onChange={(event) => updateStartupValueFlag(option.flag, event.target.value)}
+                data-testid={option.testId}
+              >
+                {option.values.map((entry) => (
+                  <option key={entry.value || "inherit"} value={entry.value}>
+                    {t(entry.labelKey)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
           {STARTUP_BOOLEAN_OPTIONS.map((option) => (
             <label key={option.flag} className="claude-inline-toggle">
               <div className="claude-inline-toggle-copy">
@@ -372,7 +479,7 @@ export const ClaudeSettingsPanel = ({
               className="claude-textarea"
               value={listToLines(extraStartupArgs)}
               onChange={(event) => updateExtraStartupArgs(event.target.value)}
-              placeholder="--verbose"
+              placeholder="--debug"
               rows={4}
               data-testid="claude-startup-args"
             />
@@ -381,13 +488,9 @@ export const ClaudeSettingsPanel = ({
       </div>
 
       <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeAuthSection")}</strong>
-          <span>{t("claudeAuthSectionHint")}</span>
-        </div>
         <div className="claude-settings-grid">
           <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeApiKey")} />
+            <ClaudeFieldLabel label={t("claudeApiKey")} help={t("claudeApiKeyHelp")} />
             <input
               className="settings-command-field"
               type="password"
@@ -399,7 +502,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeAuthToken")} />
+            <ClaudeFieldLabel label={t("claudeAuthToken")} help={t("claudeAuthTokenHelp")} />
             <input
               className="settings-command-field"
               type="password"
@@ -411,7 +514,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeBaseUrl")} />
+            <ClaudeFieldLabel label={t("claudeBaseUrl")} help={t("claudeBaseUrlHelp")} />
             <input
               className="settings-command-field"
               value={scopeProfile.env.ANTHROPIC_BASE_URL ?? ""}
@@ -422,7 +525,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeCustomHeaders")} />
+            <ClaudeFieldLabel label={t("claudeCustomHeaders")} help={t("claudeCustomHeadersHelp")} />
             <textarea
               className="claude-textarea"
               value={scopeProfile.env.ANTHROPIC_CUSTOM_HEADERS ?? ""}
@@ -434,7 +537,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeApiKeyHelper")} />
+            <ClaudeFieldLabel label={t("claudeApiKeyHelper")} help={t("claudeApiKeyHelperHelp")} />
             <input
               className="settings-command-field"
               value={readString(readJsonPath(settingsJson, ["apiKeyHelper"]))}
@@ -442,7 +545,7 @@ export const ClaudeSettingsPanel = ({
             />
           </label>
           <label className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeExtraEnv")} />
+            <ClaudeFieldLabel label={t("claudeExtraEnv")} help={t("claudeExtraEnvHelp")} />
             <textarea
               className="claude-textarea"
               value={extraEnvText}
@@ -465,10 +568,6 @@ export const ClaudeSettingsPanel = ({
       </div>
 
       <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeBehaviorSection")}</strong>
-          <span>{t("claudeBehaviorSectionHint")}</span>
-        </div>
         <div className="claude-settings-grid">
           <label className="claude-field"><ClaudeFieldLabel label={t("claudeModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["model"]))} onChange={(event) => updateSettingsJson(["model"], event.target.value.trim())} data-testid="claude-model-input" /></label>
           <label className="claude-field"><ClaudeFieldLabel label={t("claudeFallbackModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["fallbackModel"]))} onChange={(event) => updateSettingsJson(["fallbackModel"], event.target.value.trim())} /></label>
@@ -481,10 +580,6 @@ export const ClaudeSettingsPanel = ({
       </div>
 
       <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudePreferencesSection")}</strong>
-          <span>{t("claudePreferencesSectionHint")}</span>
-        </div>
         <div className="claude-settings-grid">
           <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoConnectIde")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoConnectIde"]))} onChange={(event) => updateGlobalConfigJson(["autoConnectIde"], event.target.checked ? true : undefined)} /></label>
           <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoInstallIdeExtension")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
@@ -495,10 +590,6 @@ export const ClaudeSettingsPanel = ({
       </div>
 
       <div className="settings-group-card">
-        <div className="settings-section-heading">
-          <strong>{t("claudeAdvancedSection")}</strong>
-          <span>{t("claudeAdvancedSectionHint")}</span>
-        </div>
         <div className="claude-settings-grid">
           <label className="claude-field claude-field-wide">
             <ClaudeFieldLabel label={t("claudeSettingsJsonAdvanced")} />

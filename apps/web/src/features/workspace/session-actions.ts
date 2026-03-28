@@ -31,7 +31,6 @@ import {
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
-  isForegroundActiveStatus,
   isDraftSession,
   nowLabel,
   parseNumericId,
@@ -126,6 +125,7 @@ export const createWorkspaceSessionActions = ({
 
     let tabSnapshot: Tab | null = null;
     let sessionSnapshot: Session | null = null;
+    let titlePatch: { sessionId: string; title: string } | null = null;
     updateTab(tabId, (tab) => {
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
@@ -156,11 +156,20 @@ export const createWorkspaceSessionActions = ({
         })),
         viewingArchiveId: undefined,
       };
+      if (title !== baseSession.title && parseNumericId(preparedSession.id) !== null) {
+        titlePatch = {
+          sessionId: preparedSession.id,
+          title,
+        };
+      }
       sessionSnapshot = preparedSession;
       return tabSnapshot;
     });
 
     if (!tabSnapshot || !sessionSnapshot) return null;
+    if (titlePatch) {
+      await syncSessionPatch(tabId, titlePatch.sessionId, { title: titlePatch.title });
+    }
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
 
@@ -268,17 +277,11 @@ export const createWorkspaceSessionActions = ({
         viewingArchiveId: undefined,
       };
     });
-
-    const previousSession = currentTab.sessions.find((session) => session.id === currentTab.activeSessionId);
-    if (previousSession && isForegroundActiveStatus(previousSession.status)) {
-      void syncSessionPatch(currentTab.id, previousSession.id, { status: "background" });
-    }
   };
 
   const onSwitchSession = (tab: Tab, sessionId: string) => {
     const nextActiveAt = Date.now();
     const previousActiveId = tab.activeSessionId;
-    const previousSession = tab.sessions.find((session) => session.id === previousActiveId);
     const nextSession = tab.sessions.find((session) => session.id === sessionId);
     const targetPaneId = findPaneIdBySessionId(tab.paneLayout, sessionId);
     if (!targetPaneId || !nextSession) return;
@@ -311,9 +314,6 @@ export const createWorkspaceSessionActions = ({
       void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
         // The active session already changed locally.
       });
-    }
-    if (previousActiveId !== sessionId && previousSession && isForegroundActiveStatus(previousSession.status)) {
-      void syncSessionPatch(tab.id, previousActiveId, { status: "background" });
     }
     const nextStatus = restoreVisibleStatus(nextSession);
     void syncSessionPatch(tab.id, sessionId, {

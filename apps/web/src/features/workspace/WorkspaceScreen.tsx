@@ -74,6 +74,7 @@ import {
   canMutateWorkspace,
   buildWorkspaceGitChangeGroups,
   closeWorkspaceTerminal,
+  createWorkspaceControllerStateFromLease,
   findPreviewGitChange,
   getOrCreateClientId,
   getOrCreateDeviceId,
@@ -196,7 +197,6 @@ import {
   resolveVisibleStatus,
   restoreVisibleStatus,
   sessionCompletionRatio,
-  sessionTitleFromInput,
   sessionTone,
   toBackgroundStatus
 } from "../../shared/utils/session";
@@ -215,6 +215,7 @@ import type {
   GitChangeEntry,
   SessionHistoryRecord,
   Toast,
+  WorkspaceControllerLease,
   WorktreeModalState,
   WorktreeView,
 } from "../../types/app";
@@ -619,7 +620,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const commitTrackedAgentSessionTitle = (paneId: string, tabId: string, sessionId: string, rawInput: string) => {
-    commitAgentSessionTitle({
+    const appliedTitle = commitAgentSessionTitle({
       refs: agentRuntimeRefs,
       paneId,
       tabId,
@@ -629,6 +630,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       t,
       updateTab
     });
+    if (!appliedTitle) return;
+    void syncSessionPatch(tabId, sessionId, { title: appliedTitle });
   };
 
   const openCommandPalette = () => {
@@ -1006,27 +1009,47 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   );
   const showFileSearchDropdown = shouldShowWorkspaceFileSearchDropdown(fileSearchState);
   const isObserverMode = activeTab.controller.role === "observer";
+  const hasSelfTakeoverPending = activeTab.controller.takeoverPending && activeTab.controller.takeoverRequestedBySelf;
+  const isTakeoverRequesting = isObserverMode && controllerActionBusy === "takeover" && !hasSelfTakeoverPending;
   const hasIncomingTakeoverRequest = activeTab.controller.role === "controller"
     && activeTab.controller.takeoverPending
     && !activeTab.controller.takeoverRequestedBySelf;
+
+  const addToast = useCallback((toast: Toast) => {
+    setToasts((prev) => [...prev, toast]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+    }, 4000);
+  }, []);
 
   const onRequestWorkspaceTakeover = useCallback(async () => {
     if (!activeTab.id || controllerActionBusy) return;
     setControllerActionBusy("takeover");
     try {
-      const controller = await withServiceFallback(
-        () => requestWorkspaceTakeover(activeTab.id, deviceId, clientId),
-        null,
-      );
-      if (!controller) return;
+      const controller = await requestWorkspaceTakeover(activeTab.id, deviceId, clientId);
       updateState((current) => applyWorkspaceControllerEvent(current, {
         workspace_id: activeTab.id,
         controller,
       }, deviceId, clientId));
+      const nextController = createWorkspaceControllerStateFromLease(controller, deviceId, clientId);
+      if (nextController.role !== "controller" && !(nextController.takeoverPending && nextController.takeoverRequestedBySelf)) {
+        addToast({
+          id: createId("toast"),
+          text: t("workspaceTakeoverRequestFailed"),
+          sessionId: activeSession.id,
+        });
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      addToast({
+        id: createId("toast"),
+        text: `${t("workspaceTakeoverRequestFailed")}: ${detail}`,
+        sessionId: activeSession.id,
+      });
     } finally {
       setControllerActionBusy(null);
     }
-  }, [activeTab.id, clientId, controllerActionBusy, deviceId, updateState]);
+  }, [activeSession.id, activeTab.id, addToast, clientId, controllerActionBusy, deviceId, t, updateState]);
 
   const onRejectWorkspaceTakeover = useCallback(async () => {
     if (!activeTab.id || controllerActionBusy) return;
@@ -1136,13 +1159,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       };
     });
   }, [activeTab.id, activeTabSessionIdsKey]);
-
-  const addToast = (toast: Toast) => {
-    setToasts((prev) => [...prev, toast]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-    }, 4000);
-  };
 
   const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
     try {
@@ -2176,20 +2192,17 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const currentSessionSnapshot = paneSessionId && activeTabSnapshot
       ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
       : null;
-    const pendingTitle = currentSessionSnapshot
+    const titleTracking = currentSessionSnapshot
       ? trackAgentInitialTitleInput(agentRuntimeRefs, paneId, currentSessionSnapshot, data)
-      : null;
-    const initialDraftTitle = currentSessionSnapshot?.isDraft
-      ? sessionTitleFromInput(data)
-      : "";
+      : { committedTitle: null, materializeTitle: "" };
     const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
     const nextQueue = currentQueue
       .catch(() => undefined)
       .then(async () => {
-        const ready = await ensureAgentPaneSessionReady(paneId, pendingTitle ?? initialDraftTitle);
+        const ready = await ensureAgentPaneSessionReady(paneId, titleTracking.materializeTitle);
         if (!ready) return;
-        if (pendingTitle) {
-          commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, pendingTitle);
+        if (titleTracking.committedTitle) {
+          commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, titleTracking.committedTitle);
         }
         await sendAgentRawChunk(ready.tab, ready.session, data);
       });
@@ -2473,9 +2486,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       <div className="workspace-status-banner-copy">
         <span className="workspace-status-banner-title">{t("workspaceReadOnlyTitle")}</span>
         <span className="workspace-status-banner-text">
-          {activeTab.controller.takeoverPending && activeTab.controller.takeoverRequestedBySelf
+          {hasSelfTakeoverPending
             ? t("workspaceTakeoverPending")
-            : t("workspaceReadOnlyBody")}
+            : (
+              isTakeoverRequesting
+                ? t("workspaceTakeoverRequesting")
+                : t("workspaceReadOnlyBody")
+            )}
         </span>
       </div>
       <div className="workspace-status-banner-actions">
@@ -2485,7 +2502,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           onClick={() => {
             void onRequestWorkspaceTakeover();
           }}
-          disabled={controllerActionBusy !== null || (activeTab.controller.takeoverPending && activeTab.controller.takeoverRequestedBySelf)}
+          disabled={controllerActionBusy !== null || hasSelfTakeoverPending}
         >
           {t("workspaceTakeoverAction")}
         </button>

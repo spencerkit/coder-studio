@@ -20,7 +20,7 @@ type SettingsProps = {
 const settingsNavItems = (t: Translator) => [
   { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
   { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
-  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> }
+  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> },
 ];
 
 export const Settings = ({
@@ -33,19 +33,13 @@ export const Settings = ({
   onSettingsIdlePolicyChange,
   onClaudeSettingsChange,
   onSelectLocale,
-  t
+  t,
 }: SettingsProps) => {
-  const activePanelLabel = activeSettingsPanel === "general"
-    ? t("settingsGeneral")
-    : activeSettingsPanel === "claude"
-      ? t("claudeSettingsTitle")
-      : t("settingsAppearance");
   const selectedLocale = getSettingsDraftLocale(settingsDraft);
-  const languageLabel = selectedLocale === "zh" ? "中文" : "English";
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
-      <section className="settings-layout">
+      <section className="settings-layout settings-document-shell">
         <aside className="settings-sidebar-v2">
           <nav className="settings-nav-list" aria-label={t("settings")}>
             {settingsNavItems(t).map((item) => {
@@ -68,215 +62,211 @@ export const Settings = ({
 
         <section className="settings-content-v2">
           <div className="settings-scroll-panel">
-            <div className="settings-summary" data-testid="settings-summary">
-              <div className="settings-summary-item">
-                <span className="section-kicker">{t("settings")}</span>
-                <strong>{activePanelLabel}</strong>
-              </div>
-              <div className="settings-summary-item">
-                <span className="section-kicker">{t("languageLabel")}</span>
-                <strong>{languageLabel}</strong>
-              </div>
-            </div>
-            {activeSettingsPanel === "general" ? (
-              <div className="settings-group-card">
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("autoSuspend")}</strong>
-                  <span>{t("autoSuspendHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={settingsDraft.general.idlePolicy.enabled}
-                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.general.idlePolicy.enabled })}
-                    />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  </label>
-                </div>
-              </div>
+            <div className="settings-section-stack">
+              {activeSettingsPanel === "general" ? (
+                <>
+                  <div className="settings-group-card settings-group-card--document">
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("autoSuspend")}</strong>
+                        <span>{t("autoSuspendHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={settingsDraft.general.idlePolicy.enabled}
+                            onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.general.idlePolicy.enabled })}
+                          />
+                          <span className="toggle-track"><span className="toggle-thumb" /></span>
+                        </label>
+                      </div>
+                    </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("idleAfter")}</strong>
-                  <span>{t("idleAfterHint")}</span>
-                </div>
-                <div className="settings-row-control settings-number-control">
-                  <input
-                    className="settings-inline-number"
-                    type="number"
-                    min={1}
-                    value={settingsDraft.general.idlePolicy.idleMinutes}
-                    onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
-                    data-testid="settings-idle-minutes"
-                  />
-                  <span>{t("minutesShort")}</span>
-                </div>
-              </div>
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("idleAfter")}</strong>
+                        <span>{t("idleAfterHint")}</span>
+                      </div>
+                      <div className="settings-row-control settings-number-control">
+                        <input
+                          className="settings-inline-number"
+                          type="number"
+                          min={1}
+                          value={settingsDraft.general.idlePolicy.idleMinutes}
+                          onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
+                          data-testid="settings-idle-minutes"
+                        />
+                        <span>{t("minutesShort")}</span>
+                      </div>
+                    </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("maxActive")}</strong>
-                  <span>{t("maxActiveHint")}</span>
-                </div>
-                <div className="settings-row-control settings-number-control">
-                  <input
-                    className="settings-inline-number"
-                    type="number"
-                    min={1}
-                    value={settingsDraft.general.idlePolicy.maxActive}
-                    onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
-                    data-testid="settings-max-active"
-                  />
-                  <span>{t("sessionsWord")}</span>
-                </div>
-              </div>
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("maxActive")}</strong>
+                        <span>{t("maxActiveHint")}</span>
+                      </div>
+                      <div className="settings-row-control settings-number-control">
+                        <input
+                          className="settings-inline-number"
+                          type="number"
+                          min={1}
+                          value={settingsDraft.general.idlePolicy.maxActive}
+                          onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
+                          data-testid="settings-max-active"
+                        />
+                        <span>{t("sessionsWord")}</span>
+                      </div>
+                    </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("completionNotifications")}</strong>
-                  <span>{t("completionNotificationsHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={settingsDraft.general.completionNotifications.enabled}
-                      onChange={() => onGeneralSettingsChange({
-                        completionNotifications: {
-                          enabled: !settingsDraft.general.completionNotifications.enabled
-                        }
-                      })}
-                      data-testid="settings-completion-notifications"
-                    />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  </label>
-                </div>
-              </div>
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("memoryPressure")}</strong>
+                        <span>{t("memoryPressureHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={settingsDraft.general.idlePolicy.pressure}
+                            onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.general.idlePolicy.pressure })}
+                          />
+                          <span className="toggle-track"><span className="toggle-thumb" /></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("notifyOnlyInBackground")}</strong>
-                  <span>{t("notifyOnlyInBackgroundHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={settingsDraft.general.completionNotifications.onlyWhenBackground}
-                      onChange={() => onGeneralSettingsChange({
-                        completionNotifications: {
-                          onlyWhenBackground: !settingsDraft.general.completionNotifications.onlyWhenBackground
-                        }
-                      })}
-                      data-testid="settings-notify-only-background"
-                    />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  </label>
-                </div>
-              </div>
+                  <div className="settings-group-card settings-group-card--document">
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("completionNotifications")}</strong>
+                        <span>{t("completionNotificationsHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={settingsDraft.general.completionNotifications.enabled}
+                            onChange={() => onGeneralSettingsChange({
+                              completionNotifications: {
+                                enabled: !settingsDraft.general.completionNotifications.enabled,
+                              },
+                            })}
+                            data-testid="settings-completion-notifications"
+                          />
+                          <span className="toggle-track"><span className="toggle-thumb" /></span>
+                        </label>
+                      </div>
+                    </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("notificationPermission")}</strong>
-                </div>
-                <div className="settings-row-control">
-                  <span data-testid="settings-notification-permission">{notificationPermissionText}</span>
-                </div>
-              </div>
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("notifyOnlyInBackground")}</strong>
+                        <span>{t("notifyOnlyInBackgroundHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={settingsDraft.general.completionNotifications.onlyWhenBackground}
+                            onChange={() => onGeneralSettingsChange({
+                              completionNotifications: {
+                                onlyWhenBackground: !settingsDraft.general.completionNotifications.onlyWhenBackground,
+                              },
+                            })}
+                            data-testid="settings-notify-only-background"
+                          />
+                          <span className="toggle-track"><span className="toggle-thumb" /></span>
+                        </label>
+                      </div>
+                    </div>
 
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("memoryPressure")}</strong>
-                  <span>{t("memoryPressureHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={settingsDraft.general.idlePolicy.pressure}
-                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.general.idlePolicy.pressure })}
-                    />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          ) : activeSettingsPanel === "claude" ? (
-            <ClaudeSettingsPanel
-              locale={locale}
-              settings={settingsDraft}
-              onChange={onClaudeSettingsChange}
-              t={t}
-            />
-          ) : (
-            <div className="settings-group-card">
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("theme")}</strong>
-                  <span>{locale === "zh" ? "当前版本仅保留深色主题。" : "This version uses a dark-only theme."}</span>
-                </div>
-                <div className="settings-row-control">
-                  <div className="settings-pill-select single">
-                    <span className="settings-pill-option active">{t("themeDark")}</span>
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("notificationPermission")}</strong>
+                      </div>
+                      <div className="settings-row-control">
+                        <span data-testid="settings-notification-permission">{notificationPermissionText}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : activeSettingsPanel === "claude" ? (
+                <ClaudeSettingsPanel
+                  locale={locale}
+                  settings={settingsDraft}
+                  onChange={onClaudeSettingsChange}
+                  t={t}
+                />
+              ) : (
+                <div className="settings-group-card settings-group-card--document">
+                  <div className="settings-row">
+                    <div className="settings-row-copy">
+                      <strong>{t("theme")}</strong>
+                      <span>{locale === "zh" ? "当前版本仅保留深色主题。" : "This version uses a dark-only theme."}</span>
+                    </div>
+                    <div className="settings-row-control">
+                      <div className="settings-pill-select single">
+                        <span className="settings-pill-option active">{t("themeDark")}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="settings-row-copy">
+                      <strong>{t("terminalRendering")}</strong>
+                      <span>{t("terminalRenderingHint")}</span>
+                    </div>
+                    <div className="settings-row-control">
+                      <div className="settings-pill-select">
+                        <button
+                          type="button"
+                          className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "standard" ? "active" : ""}`}
+                          onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "standard" })}
+                          data-testid="settings-terminal-standard"
+                        >
+                          {t("terminalRenderingStandard")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
+                          onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "compatibility" })}
+                          data-testid="settings-terminal-compatibility"
+                        >
+                          {t("terminalRenderingCompatibility")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="settings-row-copy">
+                      <strong>{t("languageLabel")}</strong>
+                      <span>{t("languageHint")}</span>
+                    </div>
+                    <div className="settings-row-control">
+                      <div className="settings-pill-select">
+                        <button
+                          type="button"
+                          className={`settings-pill-option ${selectedLocale === "zh" ? "active" : ""}`}
+                          onClick={() => onSelectLocale("zh")}
+                        >
+                          中文
+                        </button>
+                        <button
+                          type="button"
+                          className={`settings-pill-option ${selectedLocale === "en" ? "active" : ""}`}
+                          onClick={() => onSelectLocale("en")}
+                        >
+                          English
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("terminalRendering")}</strong>
-                  <span>{t("terminalRenderingHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <div className="settings-pill-select">
-                    <button
-                      type="button"
-                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "standard" ? "active" : ""}`}
-                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "standard" })}
-                      data-testid="settings-terminal-standard"
-                    >
-                      {t("terminalRenderingStandard")}
-                    </button>
-                    <button
-                      type="button"
-                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
-                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "compatibility" })}
-                      data-testid="settings-terminal-compatibility"
-                    >
-                      {t("terminalRenderingCompatibility")}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("languageLabel")}</strong>
-                  <span>{t("languageHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <div className="settings-pill-select">
-                    <button
-                      type="button"
-                      className={`settings-pill-option ${selectedLocale === "zh" ? "active" : ""}`}
-                      onClick={() => onSelectLocale("zh")}
-                    >
-                      中文
-                    </button>
-                    <button
-                      type="button"
-                      className={`settings-pill-option ${selectedLocale === "en" ? "active" : ""}`}
-                      onClick={() => onSelectLocale("en")}
-                    >
-                      English
-                    </button>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
-          )}
           </div>
 
           <div className="settings-footer-bar">

@@ -38,6 +38,18 @@ fn transfer_controller(
     clear_takeover_request(lease);
 }
 
+fn refresh_controller_lease(
+    lease: &mut WorkspaceControllerLease,
+    client_id: &str,
+    now: i64,
+) {
+    if lease.fencing_token == 0 && lease.controller_device_id.is_some() {
+        lease.fencing_token = 1;
+    }
+    lease.controller_client_id = Some(client_id.to_string());
+    lease.lease_expires_at = now + WORKSPACE_CONTROLLER_LEASE_SECS;
+}
+
 fn finalize_takeover_if_due(lease: &mut WorkspaceControllerLease, now: i64) -> bool {
     let takeover_due = lease
         .takeover_deadline_at
@@ -282,7 +294,9 @@ pub(crate) fn workspace_runtime_attach(
     let before = lease.clone();
     finalize_takeover_if_due(&mut lease, now);
 
-    if !lease_alive(&lease, now) || same_controller(&lease, &device_id, &client_id) {
+    if same_controller(&lease, &device_id, &client_id) {
+        refresh_controller_lease(&mut lease, &client_id, now);
+    } else if !lease_alive(&lease, now) {
         transfer_controller(&mut lease, &device_id, &client_id, now);
     }
 
@@ -317,8 +331,7 @@ pub(crate) fn workspace_controller_heartbeat(
     finalize_takeover_if_due(&mut lease, now);
 
     if same_controller(&lease, &device_id, &client_id) {
-        lease.controller_client_id = Some(client_id.clone());
-        lease.lease_expires_at = now + WORKSPACE_CONTROLLER_LEASE_SECS;
+        refresh_controller_lease(&mut lease, &client_id, now);
     } else if !lease_alive(&lease, now) {
         transfer_controller(&mut lease, &device_id, &client_id, now);
     }
@@ -352,8 +365,7 @@ pub(crate) fn workspace_controller_takeover(
     finalize_takeover_if_due(&mut lease, now);
 
     if same_controller(&lease, &device_id, &client_id) {
-        lease.lease_expires_at = now + WORKSPACE_CONTROLLER_LEASE_SECS;
-        lease.controller_client_id = Some(client_id.clone());
+        refresh_controller_lease(&mut lease, &client_id, now);
     } else if !lease_alive(&lease, now) {
         transfer_controller(&mut lease, &device_id, &client_id, now);
     } else if lease.takeover_requested_by_device_id.as_deref() == Some(device_id.as_str()) {
@@ -398,8 +410,7 @@ pub(crate) fn workspace_controller_reject_takeover(
     finalize_takeover_if_due(&mut lease, now);
 
     if same_controller(&lease, &device_id, &client_id) {
-        lease.controller_client_id = Some(client_id.clone());
-        lease.lease_expires_at = now + WORKSPACE_CONTROLLER_LEASE_SECS;
+        refresh_controller_lease(&mut lease, &client_id, now);
         clear_takeover_request(&mut lease);
     }
     save_workspace_controller_lease(state, &lease)?;
@@ -534,6 +545,72 @@ mod tests {
             Some("client-b")
         );
         assert_eq!(transferred.fencing_token, 2);
+    }
+
+    #[test]
+    fn controller_reattach_keeps_pending_takeover_request() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-reattach-takeover-test");
+
+        workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        workspace_controller_takeover(
+            workspace_id.clone(),
+            "device-b".to_string(),
+            "client-b".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        let reattached = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            reattached.controller.controller_device_id.as_deref(),
+            Some("device-a")
+        );
+        assert_eq!(
+            reattached
+                .controller
+                .takeover_requested_by_device_id
+                .as_deref(),
+            Some("device-b")
+        );
+        assert_eq!(
+            reattached
+                .controller
+                .takeover_requested_by_client_id
+                .as_deref(),
+            Some("client-b")
+        );
+        assert!(reattached.controller.takeover_request_id.is_some());
+        assert!(reattached.controller.takeover_deadline_at.is_some());
+
+        let lease = load_workspace_controller_lease(app.state(), &workspace_id).unwrap();
+        assert_eq!(
+            lease.takeover_requested_by_device_id.as_deref(),
+            Some("device-b")
+        );
+        assert_eq!(
+            lease.takeover_requested_by_client_id.as_deref(),
+            Some("client-b")
+        );
+        assert!(lease.takeover_request_id.is_some());
+        assert!(lease.takeover_deadline_at.is_some());
     }
 
     #[test]

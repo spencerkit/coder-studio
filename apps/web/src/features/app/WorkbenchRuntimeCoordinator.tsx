@@ -18,7 +18,6 @@ import {
 } from "../../services/http/workspace.service.ts";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
-  isForegroundActiveStatus,
   parseNumericId,
   restoreVisibleStatus,
   toBackgroundStatus,
@@ -244,8 +243,6 @@ export const WorkbenchRuntimeCoordinator = ({
   const switchWorkspaceSessionFromReminder = useCallback((tabId: string, sessionId: string) => {
     const currentState = stateRef.current;
     const targetTabSnapshot = currentState.tabs.find((tab) => tab.id === tabId);
-    const previousTabSnapshot = currentState.tabs.find((tab) => tab.id === currentState.activeTabId);
-    const previousSession = previousTabSnapshot?.sessions.find((session) => session.id === previousTabSnapshot.activeSessionId);
     const nextSession = targetTabSnapshot?.sessions.find((session) => session.id === sessionId);
     if (!targetTabSnapshot || !nextSession) {
       return;
@@ -321,10 +318,6 @@ export const WorkbenchRuntimeCoordinator = ({
         if (!uiState) return;
         updateState((current) => applyWorkbenchUiState(current, uiState));
       });
-    }
-
-    if (previousTabSnapshot && previousSession && isForegroundActiveStatus(previousSession.status)) {
-      void syncSessionPatch(previousTabSnapshot.id, previousSession.id, { status: "background" });
     }
 
     void syncSessionPatch(tabId, sessionId, {

@@ -333,8 +333,15 @@ mod tests {
     fn archive_session_keeps_suspended_status_after_runtime_stop() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-archive-test");
-        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
-        set_session_status(app.state(), &workspace_id, created.id, SessionStatus::Running).unwrap();
+        let created =
+            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        set_session_status(
+            app.state(),
+            &workspace_id,
+            created.id,
+            SessionStatus::Running,
+        )
+        .unwrap();
 
         let _entry = archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
         let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
@@ -351,15 +358,14 @@ mod tests {
     fn restore_and_delete_session_round_trip_history_records() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-restore-test");
-        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let created =
+            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
         archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
 
         let history_before = list_session_history(app.state()).unwrap();
-        assert!(
-            history_before
-                .iter()
-                .any(|record| record.session_id == created.id && record.archived)
-        );
+        assert!(history_before
+            .iter()
+            .any(|record| record.session_id == created.id && record.archived));
 
         let restored = restore_session(workspace_id.clone(), created.id, app.state()).unwrap();
         assert_eq!(restored.session.id, created.id);
@@ -367,7 +373,9 @@ mod tests {
 
         delete_session(workspace_id.clone(), created.id, app.state()).unwrap();
         let history_after = list_session_history(app.state()).unwrap();
-        assert!(!history_after.iter().any(|record| record.session_id == created.id));
+        assert!(!history_after
+            .iter()
+            .any(|record| record.session_id == created.id));
     }
 
     #[test]

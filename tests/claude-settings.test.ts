@@ -237,5 +237,10 @@ test('translator exposes the new history and Claude settings keys', () => {
   assert.equal(en('claudeSettingsTitle'), 'Claude');
   assert.equal(zh('claudeStartupSection'), '启动');
   assert.equal(en('claudeAuthSection'), 'Authentication');
+  assert.match(en('claudePermissionModeHelp'), /auto/i);
+  assert.match(en('claudeApiKeyHelp'), /primaryApiKey/);
+  assert.match(en('claudeApiKeyHelperHelp'), /priority/i);
+  assert.match(zh('claudeAuthSectionHint'), /Claude 配置/);
+  assert.equal(zh('claudeVerbose'), '--verbose');
   assert.equal(en('claudeJsonInvalid'), 'JSON must be an object.');
 });

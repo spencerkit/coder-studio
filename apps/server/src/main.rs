@@ -56,15 +56,14 @@ pub(crate) use infra::db::{
     append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
     close_workspace_ui, create_workspace_session, delete_workspace_session,
     delete_workspace_terminal, init_db, launch_workspace_record_scoped,
-    list_workspace_ids_for_workspace_client, load_agent_lifecycle_events,
-    load_session, load_session_history_records, load_workspace_controller_lease,
+    list_workspace_ids_for_workspace_client, load_agent_lifecycle_events, load_session,
+    load_session_history_records, load_workspace_controller_lease,
     mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
     patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
     save_workspace_controller_lease, set_session_claude_id, set_session_status,
     set_session_status_if_not_archived, set_workspace_terminal_recoverable,
-    switch_workspace_session,
-    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session, upsert_workspace_attachment,
+    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
+    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
     workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
     workspace_snapshot as load_workspace_snapshot,
 };
@@ -86,18 +85,18 @@ pub(crate) use models::{
     ClaudeSlashSkillEntry, ClaudeTargetOverrides, CommandAvailability,
     CompletionNotificationSettings, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GeneralSettingsPayload, GitChangeEntry,
-    GitFileDiffPayload, GitStatus, IdlePolicy, SessionHistoryRecord, SessionInfo,
-    SessionMessage, SessionMessageRole, SessionMode, SessionPatch, SessionRestoreResult,
-    SessionStatus, TargetClaudeOverride, TerminalEvent, TerminalInfo, TransportEvent,
-    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
-    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
-    WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary,
-    WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    GitFileDiffPayload, GitStatus, IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage,
+    SessionMessageRole, SessionMode, SessionPatch, SessionRestoreResult, SessionStatus,
+    TargetClaudeOverride, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
+    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
+    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource,
+    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState,
+    WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
-    agent_resize, agent_send, agent_start, agent_stop,
-    stop_agent_runtime_without_status_update, stop_workspace_agents,
+    agent_resize, agent_send, agent_start, agent_stop, stop_agent_runtime_without_status_update,
+    stop_workspace_agents,
 };
 pub(crate) use services::app_settings::{
     app_settings_get, app_settings_update, load_or_default_app_settings,
@@ -121,9 +120,9 @@ pub(crate) use services::terminal::{
 pub(crate) use services::workspace::{
     activate_workspace_scoped, archive_session, close_workspace_scoped, create_session,
     delete_session, launch_workspace_internal_scoped, launch_workspace_scoped,
-    list_session_history, restore_session, session_update, switch_session,
-    update_idle_policy, update_workbench_layout_scoped, workbench_bootstrap_scoped,
-    workspace_snapshot, workspace_view_update, worktree_inspect,
+    list_session_history, restore_session, session_update, switch_session, update_idle_policy,
+    update_workbench_layout_scoped, workbench_bootstrap_scoped, workspace_snapshot,
+    workspace_view_update, worktree_inspect,
 };
 pub(crate) use services::workspace_runtime::{
     assert_workspace_controller_can_mutate, register_workspace_client_connection,
