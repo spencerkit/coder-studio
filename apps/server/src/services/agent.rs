@@ -322,46 +322,6 @@ pub(crate) fn agent_start(
     Ok(AgentStartResult { started: true })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
-        let mut state = AgentLifecycleFallbackState::default();
-
-        assert_eq!(
-            fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
-            Some((
-                "tool_started",
-                "AgentProcessOutput",
-                r#"{"source":"agent_process_output"}"#,
-            )),
-        );
-        assert_eq!(
-            fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"),
-            None
-        );
-    }
-
-    #[test]
-    fn fallback_agent_lifecycle_only_emits_completion_after_output_started() {
-        let mut state = AgentLifecycleFallbackState::default();
-        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
-
-        let _ = fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n");
-        assert_eq!(
-            fallback_agent_lifecycle_from_exit(&mut state),
-            Some((
-                "turn_completed",
-                "AgentProcessExit",
-                r#"{"source":"agent_process_exit"}"#,
-            )),
-        );
-        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
-    }
-}
-
 pub(crate) fn agent_send(
     workspace_id: String,
     session_id: String,
@@ -476,4 +436,44 @@ pub(crate) fn agent_resize(
             pixel_height: 0,
         })
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
+        let mut state = AgentLifecycleFallbackState::default();
+
+        assert_eq!(
+            fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
+            Some((
+                "tool_started",
+                "AgentProcessOutput",
+                r#"{"source":"agent_process_output"}"#,
+            )),
+        );
+        assert_eq!(
+            fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn fallback_agent_lifecycle_only_emits_completion_after_output_started() {
+        let mut state = AgentLifecycleFallbackState::default();
+        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
+
+        let _ = fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n");
+        assert_eq!(
+            fallback_agent_lifecycle_from_exit(&mut state),
+            Some((
+                "turn_completed",
+                "AgentProcessExit",
+                r#"{"source":"agent_process_exit"}"#,
+            )),
+        );
+        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
+    }
 }
