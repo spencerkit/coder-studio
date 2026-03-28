@@ -21,6 +21,37 @@ fn ensure_app_settings_row(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn load_or_default_app_settings_from_conn(conn: &Connection) -> Result<AppSettingsPayload, String> {
+    ensure_app_settings_row(conn)?;
+    let raw: String = conn
+        .query_row(
+            "SELECT payload FROM app_settings WHERE id = ?1",
+            params![APP_SETTINGS_ROW_ID],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+fn save_app_settings_to_conn(
+    conn: &Connection,
+    settings: &AppSettingsPayload,
+) -> Result<AppSettingsPayload, String> {
+    ensure_app_settings_row(conn)?;
+    conn.execute(
+        "INSERT INTO app_settings (id, payload, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+        params![
+            APP_SETTINGS_ROW_ID,
+            serde_json::to_string(settings).map_err(|e| e.to_string())?,
+            now_ts(),
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(settings.clone())
+}
+
 fn merge_settings_value(current: &mut Value, patch: Value) {
     match (current, patch) {
         (Value::Object(current_map), Value::Object(patch_map)) => {
@@ -77,7 +108,10 @@ fn normalize_settings_patch_value(value: Value, path: &[String]) -> Value {
                     let normalized_key = normalize_settings_patch_key(path, &key);
                     let mut next_path = path.to_vec();
                     next_path.push(normalized_key.clone());
-                    (normalized_key, normalize_settings_patch_value(value, &next_path))
+                    (
+                        normalized_key,
+                        normalize_settings_patch_value(value, &next_path),
+                    )
                 })
                 .collect();
             Value::Object(normalized)
@@ -89,54 +123,103 @@ fn normalize_settings_patch_value(value: Value, path: &[String]) -> Value {
 pub(crate) fn load_or_default_app_settings(
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
-    with_db(state, |conn| {
-        ensure_app_settings_row(conn)?;
-        let raw: String = conn
-            .query_row(
-                "SELECT payload FROM app_settings WHERE id = ?1",
-                params![APP_SETTINGS_ROW_ID],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).map_err(|e| e.to_string())
-    })
-}
-
-pub(crate) fn save_app_settings(
-    state: State<'_, AppState>,
-    settings: &AppSettingsPayload,
-) -> Result<AppSettingsPayload, String> {
-    with_db(state, |conn| {
-        ensure_app_settings_row(conn)?;
-        conn.execute(
-            "INSERT INTO app_settings (id, payload, updated_at)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
-            params![
-                APP_SETTINGS_ROW_ID,
-                serde_json::to_string(settings).map_err(|e| e.to_string())?,
-                now_ts(),
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(settings.clone())
-    })
+    with_db(state, load_or_default_app_settings_from_conn)
 }
 
 pub(crate) fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettingsPayload, String> {
     load_or_default_app_settings(state)
 }
 
+fn app_settings_update_with_before_save_hook(
+    patch: Value,
+    state: State<'_, AppState>,
+    before_save: impl FnOnce() -> Result<(), String>,
+) -> Result<AppSettingsPayload, String> {
+    let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
+    with_db(state, |conn| {
+        let mut current = serde_json::to_value(load_or_default_app_settings_from_conn(conn)?)
+            .map_err(|e| e.to_string())?;
+        merge_settings_value(&mut current, normalized_patch);
+        before_save()?;
+        let merged: AppSettingsPayload =
+            serde_json::from_value(current).map_err(|e| e.to_string())?;
+        save_app_settings_to_conn(conn, &merged)
+    })
+}
+
 pub(crate) fn app_settings_update(
     patch: Value,
     state: State<'_, AppState>,
 ) -> Result<AppSettingsPayload, String> {
-    let mut current =
-        serde_json::to_value(load_or_default_app_settings(state)?).map_err(|e| e.to_string())?;
-    merge_settings_value(
-        &mut current,
-        normalize_settings_patch_value(patch, &Vec::<String>::new()),
-    );
-    let merged: AppSettingsPayload = serde_json::from_value(current).map_err(|e| e.to_string())?;
-    save_app_settings(state, &merged)
+    app_settings_update_with_before_save_hook(patch, state, || Ok(()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeHandle;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    #[test]
+    fn app_settings_update_keeps_partial_updates_atomic() {
+        let app = test_app();
+        let interleaved = Arc::new(AtomicBool::new(false));
+        let env_patch = json!({
+            "claude": {
+                "global": {
+                    "env": {
+                        "TEST_MARKER": "persisted-value"
+                    }
+                }
+            }
+        });
+
+        app_settings_update_with_before_save_hook(
+            json!({
+                "general": {
+                    "locale": "zh"
+                }
+            }),
+            app.state(),
+            {
+                let app = app.clone();
+                let interleaved = interleaved.clone();
+                let env_patch = env_patch.clone();
+                move || {
+                    if let Ok(guard) = app.state().db.try_lock() {
+                        drop(guard);
+                        interleaved.store(true, Ordering::SeqCst);
+                        app_settings_update(env_patch, app.state()).map(|_| ())?;
+                    }
+                    Ok(())
+                }
+            },
+        )
+        .unwrap();
+
+        if !interleaved.load(Ordering::SeqCst) {
+            app_settings_update(env_patch, app.state()).unwrap();
+        }
+
+        let saved = load_or_default_app_settings(app.state()).unwrap();
+        assert_eq!(saved.general.locale, "zh");
+        assert_eq!(
+            saved
+                .claude
+                .global
+                .env
+                .get("TEST_MARKER")
+                .map(String::as_str),
+            Some("persisted-value")
+        );
+    }
 }
