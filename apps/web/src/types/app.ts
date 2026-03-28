@@ -82,6 +82,43 @@ export type BackendArchiveEntry = {
   time: string;
 };
 
+export type BackendSessionHistoryRecord = {
+  workspace_id: string;
+  workspace_title: string;
+  workspace_path: string;
+  session_id: number;
+  title: string;
+  status: SessionStatus;
+  archived: boolean;
+  mounted: boolean;
+  recoverable: boolean;
+  last_active_at: number;
+  archived_at?: number | null;
+  claude_session_id?: string | null;
+};
+
+export type SessionHistoryRecord = {
+  workspaceId: string;
+  workspaceTitle: string;
+  workspacePath: string;
+  sessionId: string;
+  title: string;
+  status: SessionStatus;
+  archived: boolean;
+  mounted: boolean;
+  recoverable: boolean;
+  lastActiveAt: number;
+  archivedAt?: number | null;
+  claudeSessionId?: string | null;
+};
+
+export type SessionHistoryGroup = {
+  workspaceId: string;
+  workspaceTitle: string;
+  workspacePath: string;
+  records: SessionHistoryRecord[];
+};
+
 export type BackendWorkspaceViewState = {
   active_session_id: string;
   active_pane_id: string;
@@ -259,6 +296,16 @@ export type AgentStartResult = {
   started: boolean;
 };
 
+export type BackendSessionRestoreResult = {
+  session: BackendSession;
+  already_active: boolean;
+};
+
+export type SessionRestoreResult = {
+  session: BackendSession;
+  alreadyActive: boolean;
+};
+
 export type AuthStatus = {
   public_mode: boolean;
   authenticated: boolean;
@@ -387,7 +434,8 @@ export type AgentCommandStatus = {
 
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
-export type SettingsPanel = "general" | "appearance";
+export type SettingsPanel = "general" | "claude" | "appearance";
+export type ClaudeSettingsScope = "global" | "native" | "wsl";
 
 export type SettingsNavItem = {
   id: SettingsPanel;

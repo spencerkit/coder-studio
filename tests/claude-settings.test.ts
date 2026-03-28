@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createTranslator } from '../apps/web/src/i18n.ts';
 import {
   applyGeneralSettingsPatch,
   cloneAppSettings,
   defaultAppSettings,
   getIdlePolicySyncWorkspaceIds,
+  getClaudeScopeProfile,
   getSettingsDraftLocale,
+  patchClaudeStructuredSettings,
+  replaceClaudeAdvancedJson,
   mergeLegacySettingsIntoAppSettings,
   resolveClaudeRuntimeProfile,
+  setClaudeScopeOverrideEnabled,
 } from '../apps/web/src/shared/app/claude-settings.ts';
 
 test('mergeLegacySettingsIntoAppSettings migrates launch command into claude global executable', () => {
@@ -133,4 +138,69 @@ test('getSettingsDraftLocale follows the shared draft locale', () => {
   settings.general.locale = 'zh';
 
   assert.equal(getSettingsDraftLocale(settings), 'zh');
+});
+
+test('setClaudeScopeOverrideEnabled materializes a target override from global defaults', () => {
+  const settings = defaultAppSettings();
+  settings.claude.global.executable = 'claude-global';
+  settings.claude.global.startupArgs = ['--verbose'];
+
+  const next = setClaudeScopeOverrideEnabled(settings, 'native', true);
+  const nativeOverride = next.claude.overrides.native;
+
+  assert.equal(nativeOverride?.enabled, true);
+  assert.equal(nativeOverride?.profile.executable, 'claude-global');
+  assert.deepEqual(nativeOverride?.profile.startupArgs, ['--verbose']);
+});
+
+test('patchClaudeStructuredSettings only updates the requested target scope', () => {
+  const settings = defaultAppSettings();
+
+  const next = patchClaudeStructuredSettings(settings, {
+    scope: 'native',
+    executable: 'claude-native',
+    startupArgs: ['--dangerously-skip-permissions'],
+    env: { ANTHROPIC_API_KEY: 'secret' },
+  });
+
+  assert.equal(next.claude.global.executable, 'claude');
+  assert.equal(next.claude.overrides.native?.profile.executable, 'claude-native');
+  assert.deepEqual(next.claude.overrides.native?.profile.startupArgs, ['--dangerously-skip-permissions']);
+  assert.deepEqual(next.claude.overrides.native?.profile.env, { ANTHROPIC_API_KEY: 'secret' });
+});
+
+test('replaceClaudeAdvancedJson updates nested advanced json for a single scope', () => {
+  const settings = defaultAppSettings();
+
+  const next = replaceClaudeAdvancedJson(settings, {
+    scope: 'wsl',
+    field: 'settingsJson',
+    value: {
+      model: 'claude-opus',
+      sandbox: {
+        enabled: true,
+      },
+    },
+  });
+
+  assert.deepEqual(getClaudeScopeProfile(next, 'wsl').settingsJson, {
+    model: 'claude-opus',
+    sandbox: {
+      enabled: true,
+    },
+  });
+  assert.deepEqual(next.claude.global.settingsJson, {});
+});
+
+test('translator exposes the new history and Claude settings keys', () => {
+  const en = createTranslator('en') as (key: string, params?: Record<string, string | number>) => string;
+  const zh = createTranslator('zh') as (key: string, params?: Record<string, string | number>) => string;
+
+  assert.equal(en('draftModeNew'), 'New session');
+  assert.equal(zh('draftModeRestore'), '从历史恢复');
+  assert.equal(en('historyCount', { count: 3 }), '3 sessions');
+  assert.match(en('historyDeleteConfirm', { title: 'Session 7' }), /Session 7/);
+  assert.equal(en('claudeSettingsTitle'), 'Claude');
+  assert.equal(zh('claudeLaunchSection'), '启动与鉴权');
+  assert.equal(en('claudeJsonInvalid'), 'JSON must be an object.');
 });

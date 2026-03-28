@@ -111,6 +111,7 @@ const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
 const execFileAsync = promisify(execFile);
 
 const commandBinary = (command: string | undefined) => command?.trim().split(/\s+/, 1)[0] ?? '';
+const splitCommandTokens = (command: string | undefined) => (command ?? '').trim().split(/\s+/).filter(Boolean);
 
 async function prepareTransportPage(page: Page) {
   await page.addInitScript(() => {
@@ -139,6 +140,8 @@ async function prepareTransportPage(page: Page) {
       }),
     });
   });
+
+  await seedAppSettings(page, {});
 }
 
 async function seedAppSettings(
@@ -159,24 +162,38 @@ async function seedAppSettings(
     terminalCompatibilityMode: 'standard' | 'compatibility';
   }>,
 ) {
-  await page.addInitScript((value) => {
-    window.localStorage.setItem('coder-studio.app-settings', JSON.stringify({
-      agentProvider: 'claude',
-      agentCommand: 'claude',
-      idlePolicy: {
-        enabled: true,
-        idleMinutes: 10,
-        maxActive: 3,
-        pressure: true,
+  const [executable = 'claude', ...startupArgs] = splitCommandTokens(overrides.agentCommand ?? 'claude');
+  await invokeRpc(page, 'app_settings_update', {
+    settings: {
+      general: {
+        locale: 'en',
+        terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
+        completionNotifications: overrides.completionNotifications ?? {
+          enabled: true,
+          onlyWhenBackground: true,
+        },
+        idlePolicy: overrides.idlePolicy ?? {
+          enabled: true,
+          idleMinutes: 10,
+          maxActive: 3,
+          pressure: true,
+        },
       },
-      completionNotifications: {
-        enabled: true,
-        onlyWhenBackground: true,
+      claude: {
+        global: {
+          executable,
+          startupArgs,
+          env: {},
+          settingsJson: {},
+          globalConfigJson: {},
+        },
+        overrides: {
+          native: null,
+          wsl: null,
+        },
       },
-      terminalCompatibilityMode: 'standard',
-      ...value,
-    }));
-  }, overrides);
+    },
+  });
 }
 
 const incrementCounts = (counts: PollCounts) => ({
@@ -380,7 +397,7 @@ test.describe('workspace transport baseline', () => {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedAppSettings(page, {
-        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000`,
+        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
       const workspace = await openWorkspace(page);
@@ -418,7 +435,6 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId,
         provider: 'claude',
-        command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
 
       await waitForLifecycleReplayEvent(
@@ -479,7 +495,7 @@ test.describe('workspace transport baseline', () => {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedAppSettings(page, {
-        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS}`,
+        agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
       const workspace = await openWorkspace(page);
@@ -519,7 +535,6 @@ test.describe('workspace transport baseline', () => {
         ...controllerAfterReload,
         sessionId: String(session.id),
         provider: 'claude',
-        command: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
 
       await waitForLifecycleReplayEvent(
@@ -801,6 +816,9 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
   const agentProbe = buildAgentProbe(workspace.target);
+  await seedAppSettings(page, {
+    agentCommand: agentProbe.command,
+  });
 
   const controlPlaneCommands: string[] = [];
   const controller = await currentWorkspaceController(page, workspace.workspaceId);
@@ -831,8 +849,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await invokeRpc(page, 'agent_start', {
     ...controller,
     sessionId,
-    provider: 'shell',
-    command: agentProbe.command,
+    provider: 'claude',
     cols: 120,
     rows: 30,
   });

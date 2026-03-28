@@ -71,6 +71,15 @@ struct ArchiveSessionRequest {
 }
 
 #[derive(Deserialize)]
+struct SessionHistoryMutationRequest {
+    workspace_id: String,
+    session_id: u64,
+    device_id: Option<String>,
+    client_id: Option<String>,
+    fencing_token: Option<i64>,
+}
+
+#[derive(Deserialize)]
 struct IdlePolicyRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
@@ -428,6 +437,34 @@ fn require_workspace_controller_mutation(
     Ok(())
 }
 
+fn require_optional_workspace_history_mutation(
+    app: &AppHandle,
+    request: &SessionHistoryMutationRequest,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    require_workspace_access(app, &request.workspace_id, authorized)?;
+    match (
+        request.device_id.as_deref(),
+        request.client_id.as_deref(),
+        request.fencing_token,
+    ) {
+        (Some(device_id), Some(client_id), Some(fencing_token)) => {
+            assert_workspace_controller_can_mutate(
+                &request.workspace_id,
+                device_id,
+                client_id,
+                fencing_token,
+                app,
+                app.state(),
+            )
+            .map_err(rpc_forbidden)?;
+            Ok(())
+        }
+        (None, None, None) => Ok(()),
+        _ => Err(rpc_bad_request("incomplete_workspace_controller".to_string())),
+    }
+}
+
 fn require_workspace_path_controller_mutation(
     app: &AppHandle,
     controller: &WorkspaceControllerMutationRequest,
@@ -517,6 +554,28 @@ fn filter_bootstrap_for_public_mode(
     }
 }
 
+fn filter_session_history_for_public_mode(
+    app: &AppHandle,
+    records: Vec<SessionHistoryRecord>,
+    authorized: &AuthorizedRequest,
+) -> Vec<SessionHistoryRecord> {
+    if !authorized.request.public_mode {
+        return records;
+    }
+
+    records
+        .into_iter()
+        .filter(|record| {
+            workspace_access_context(app.state(), &record.workspace_id)
+                .and_then(|(path, target)| {
+                    ensure_path_allowed(&path, &target, &authorized.allowed_roots)
+                        .map_err(|e| e.to_string())
+                })
+                .is_ok()
+        })
+        .collect()
+}
+
 fn dispatch_rpc(
     app: &AppHandle,
     command: &str,
@@ -585,6 +644,12 @@ fn dispatch_rpc(
             serde_json::to_value(filter_bootstrap_for_public_mode(bootstrap, authorized))
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "list_session_history" => serde_json::to_value(filter_session_history_for_public_mode(
+            app,
+            list_session_history(app.state()).map_err(rpc_bad_request)?,
+            authorized,
+        ))
+        .map_err(|e| rpc_bad_request(e.to_string())),
         "workspace_snapshot" => {
             let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
@@ -766,6 +831,23 @@ fn dispatch_rpc(
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "restore_session" => {
+            let req: SessionHistoryMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_optional_workspace_history_mutation(app, &req, authorized)?;
+            serde_json::to_value(
+                restore_session(req.workspace_id, req.session_id, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "delete_session" => {
+            let req: SessionHistoryMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_optional_workspace_history_mutation(app, &req, authorized)?;
+            delete_session(req.workspace_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
+            Ok(Value::Null)
         }
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -1491,8 +1573,13 @@ pub(crate) fn build_transport_router(app: &AppHandle) -> Router {
 }
 
 pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer, String> {
+    let dev_backend_port = std::env::var("CODER_STUDIO_DEV_BACKEND_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEV_BACKEND_PORT);
     let (bind_host, bind_port) = if cfg!(debug_assertions) {
-        ("127.0.0.1".to_string(), DEV_BACKEND_PORT)
+        ("127.0.0.1".to_string(), dev_backend_port)
     } else {
         transport_bind_config(app)?
     };
@@ -2011,6 +2098,56 @@ mod tests {
         let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
         assert_eq!(scoped_b.ui_state.layout.left_width, 320.0);
         assert!(!scoped_b.ui_state.layout.show_code_panel);
+    }
+
+    #[test]
+    fn session_history_rpc_lists_restores_and_deletes_records() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-rpc-test");
+        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+
+        let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
+            .expect("history rpc should load");
+        let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
+        assert!(
+            history
+                .iter()
+                .any(|record| record.workspace_id == workspace_id
+                    && record.session_id == created.id
+                    && record.archived)
+        );
+
+        let restored = dispatch_rpc(
+            &app,
+            "restore_session",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": created.id,
+            }),
+            &authorized,
+        )
+        .expect("restore rpc should succeed");
+        let restored: SessionRestoreResult = serde_json::from_value(restored).unwrap();
+        assert_eq!(restored.session.id, created.id);
+        assert!(!restored.already_active);
+
+        dispatch_rpc(
+            &app,
+            "delete_session",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": created.id,
+            }),
+            &authorized,
+        )
+        .expect("delete rpc should succeed");
+
+        let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
+            .expect("history rpc should reload");
+        let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
+        assert!(!history.iter().any(|record| record.session_id == created.id));
     }
 
     #[test]

@@ -1,7 +1,8 @@
 import type { Locale, Translator } from "../../i18n";
 import type { AppSettings, SettingsPanel } from "../../types/app";
 import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
-import { SettingsAppearanceIcon, SettingsGeneralIcon } from "../icons";
+import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
+import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
 
 type SettingsProps = {
   locale: Locale;
@@ -11,12 +12,14 @@ type SettingsProps = {
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
+  onClaudeSettingsChange: (settings: AppSettings) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
 
 const settingsNavItems = (t: Translator) => [
   { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
+  { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
   { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> }
 ];
 
@@ -28,10 +31,15 @@ export const Settings = ({
   onSettingsPanelChange,
   onGeneralSettingsChange,
   onSettingsIdlePolicyChange,
+  onClaudeSettingsChange,
   onSelectLocale,
   t
 }: SettingsProps) => {
-  const activePanelLabel = activeSettingsPanel === "general" ? t("settingsGeneral") : t("settingsAppearance");
+  const activePanelLabel = activeSettingsPanel === "general"
+    ? t("settingsGeneral")
+    : activeSettingsPanel === "claude"
+      ? t("claudeSettingsTitle")
+      : t("settingsAppearance");
   const selectedLocale = getSettingsDraftLocale(settingsDraft);
   const languageLabel = selectedLocale === "zh" ? "中文" : "English";
 
@@ -48,6 +56,7 @@ export const Settings = ({
                   type="button"
                   className={`settings-nav-item ${isActive ? "active" : ""}`}
                   onClick={() => onSettingsPanelChange(item.id)}
+                  data-testid={`settings-nav-${item.id}`}
                 >
                   <span className="settings-nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
@@ -194,6 +203,13 @@ export const Settings = ({
                 </div>
               </div>
             </div>
+          ) : activeSettingsPanel === "claude" ? (
+            <ClaudeSettingsPanel
+              locale={locale}
+              settings={settingsDraft}
+              onChange={onClaudeSettingsChange}
+              t={t}
+            />
           ) : (
             <div className="settings-group-card">
               <div className="settings-row">

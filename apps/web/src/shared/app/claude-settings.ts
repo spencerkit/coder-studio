@@ -3,6 +3,7 @@ import type { ExecTarget } from "../../state/workbench.ts";
 import type {
   AppSettings,
   AppSettingsPayload,
+  ClaudeSettingsScope,
   ClaudeRuntimeProfile,
   ClaudeTargetOverride,
   CompletionNotificationSettings,
@@ -512,3 +513,100 @@ export const appSettingsPayloadEquals = (
 ): boolean => (
   JSON.stringify(toAppSettingsPayload(left)) === JSON.stringify(toAppSettingsPayload(right))
 );
+
+const getScopeOverrideKey = (scope: Exclude<ClaudeSettingsScope, "global">) => (
+  scope === "native" ? "native" : "wsl"
+);
+
+const ensureClaudeScopeOverride = (
+  settings: AppSettings,
+  scope: Exclude<ClaudeSettingsScope, "global">,
+): ClaudeTargetOverride => {
+  const key = getScopeOverrideKey(scope);
+  const existing = settings.claude.overrides[key];
+  if (existing) {
+    return existing;
+  }
+
+  const created: ClaudeTargetOverride = {
+    enabled: false,
+    profile: cloneClaudeRuntimeProfile(settings.claude.global),
+  };
+  settings.claude.overrides[key] = created;
+  return created;
+};
+
+export const getClaudeScopeProfile = (
+  settings: AppSettings,
+  scope: ClaudeSettingsScope,
+): ClaudeRuntimeProfile => (
+  scope === "global"
+    ? cloneClaudeRuntimeProfile(settings.claude.global)
+    : cloneClaudeRuntimeProfile(
+        settings.claude.overrides[getScopeOverrideKey(scope)]?.profile
+        ?? settings.claude.global,
+      )
+);
+
+export const isClaudeScopeOverrideEnabled = (
+  settings: AppSettings,
+  scope: ClaudeSettingsScope,
+): boolean => (
+  scope === "global"
+    ? true
+    : Boolean(settings.claude.overrides[getScopeOverrideKey(scope)]?.enabled)
+);
+
+export const setClaudeScopeOverrideEnabled = (
+  settings: AppSettings,
+  scope: Exclude<ClaudeSettingsScope, "global">,
+  enabled: boolean,
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const override = ensureClaudeScopeOverride(next, scope);
+  override.enabled = enabled;
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
+export const patchClaudeStructuredSettings = (
+  settings: AppSettings,
+  patch: {
+    scope: ClaudeSettingsScope;
+    executable?: string;
+    startupArgs?: string[];
+    env?: Record<string, string>;
+  },
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const profile = patch.scope === "global"
+    ? next.claude.global
+    : ensureClaudeScopeOverride(next, patch.scope).profile;
+
+  if (typeof patch.executable === "string") {
+    profile.executable = patch.executable.trim() || profile.executable;
+  }
+  if (patch.startupArgs) {
+    profile.startupArgs = [...patch.startupArgs];
+  }
+  if (patch.env) {
+    profile.env = { ...patch.env };
+  }
+
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
+export const replaceClaudeAdvancedJson = (
+  settings: AppSettings,
+  patch: {
+    scope: ClaudeSettingsScope;
+    field: "settingsJson" | "globalConfigJson";
+    value: Record<string, unknown>;
+  },
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const profile = patch.scope === "global"
+    ? next.claude.global
+    : ensureClaudeScopeOverride(next, patch.scope).profile;
+  profile[patch.field] = cloneJsonRecord(patch.value);
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};

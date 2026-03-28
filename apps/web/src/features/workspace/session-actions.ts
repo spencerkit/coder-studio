@@ -14,6 +14,8 @@ import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator }
 import {
   archiveSession as archiveSessionRequest,
   createSession as createSessionRequest,
+  deleteSession as deleteSessionRequest,
+  restoreSession as restoreSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
 } from "../../services/http/session.service.ts";
@@ -167,6 +169,75 @@ export const createWorkspaceSessionActions = ({
     if (!snapshot) return;
 
     updateTab(tabId, (tab) => createTabFromWorkspaceSnapshot(snapshot, locale, appSettings, tab));
+  };
+
+  const ensureRestorePane = (
+    tabId: string,
+    preferredPaneId?: string,
+  ): { paneId: string; replacedSessionId: string } | null => {
+    let target: { paneId: string; replacedSessionId: string } | null = null;
+
+    updateTab(tabId, (tab) => {
+      const preferredSessionId = preferredPaneId
+        ? findPaneSessionId(tab.paneLayout, preferredPaneId)
+        : null;
+      if (preferredPaneId && preferredSessionId) {
+        const preferredSession = tab.sessions.find((session) => session.id === preferredSessionId);
+        if (isDraftSession(preferredSession)) {
+          target = {
+            paneId: preferredPaneId,
+            replacedSessionId: preferredSessionId,
+          };
+          return tab;
+        }
+      }
+
+      const draftSession = tab.sessions.find((session) => isDraftSession(session));
+      const draftPaneId = draftSession
+        ? findPaneIdBySessionId(tab.paneLayout, draftSession.id)
+        : undefined;
+      if (draftSession && draftPaneId) {
+        target = {
+          paneId: draftPaneId,
+          replacedSessionId: draftSession.id,
+        };
+        return tab;
+      }
+
+      const sourcePaneId = preferredPaneId
+        ? (findPaneSessionId(tab.paneLayout, preferredPaneId) ? preferredPaneId : undefined)
+        : undefined;
+      const targetPaneId = sourcePaneId
+        ?? findPaneIdBySessionId(tab.paneLayout, tab.activeSessionId)
+        ?? collectPaneLeaves(tab.paneLayout)[0]?.id;
+      if (!targetPaneId) {
+        return tab;
+      }
+
+      const nextDraft = createDraftSessionForTab(tab, "branch");
+      const nextLeaf = createPaneLeaf(nextDraft.id);
+      target = {
+        paneId: nextLeaf.id,
+        replacedSessionId: nextDraft.id,
+      };
+      return {
+        ...tab,
+        sessions: [nextDraft, ...tab.sessions.filter((session) => session.id !== nextDraft.id)],
+        activeSessionId: nextDraft.id,
+        activePaneId: nextLeaf.id,
+        paneLayout: replacePaneNode(tab.paneLayout, targetPaneId, (leaf) => ({
+          type: "split",
+          id: createId("split"),
+          axis: "vertical",
+          ratio: 0.5,
+          first: leaf,
+          second: nextLeaf,
+        })),
+        viewingArchiveId: undefined,
+      };
+    });
+
+    return target;
   };
 
   const onNewSession = async () => {
@@ -413,6 +484,92 @@ export const createWorkspaceSessionActions = ({
     }
   };
 
+  const restoreSessionIntoPane = async (
+    tabId: string,
+    sessionId: string,
+    preferredPaneId?: string,
+  ) => {
+    const numericSessionId = parseNumericId(sessionId);
+    if (numericSessionId === null) return null;
+
+    const target = ensureRestorePane(tabId, preferredPaneId);
+    if (!target) return null;
+
+    const restored = await withServiceFallback(
+      () => restoreSessionRequest(tabId, numericSessionId, controllerForTab(tabId)),
+      null,
+    );
+    if (!restored) return null;
+
+    if (restored.alreadyActive) {
+      await refreshTabFromBackend(tabId);
+      const nextTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
+      if (nextTab) {
+        onSwitchSession(nextTab, sessionId);
+      }
+      return restored.session;
+    }
+
+    const nextActiveAt = Date.now();
+    updateTab(tabId, (tab) => {
+      const existingSession = tab.sessions.find((session) => session.id === sessionId);
+      const nextSession = {
+        ...createSessionFromBackend(restored.session, locale, existingSession),
+        unread: 0,
+        lastActiveAt: nextActiveAt,
+      };
+      const remainingSessions = tab.sessions
+        .filter((session) => (
+          session.id !== target.replacedSessionId
+          && session.id !== nextSession.id
+        ))
+        .map((session) => (
+          session.id === tab.activeSessionId
+            ? { ...session, status: toBackgroundStatus(session.status) }
+            : session
+        ));
+      return {
+        ...tab,
+        sessions: [
+          { ...nextSession, status: restoreVisibleStatus(nextSession) },
+          ...remainingSessions,
+        ],
+        paneLayout: replacePaneNode(tab.paneLayout, target.paneId, (leaf) => ({
+          ...leaf,
+          sessionId: nextSession.id,
+        })),
+        activePaneId: target.paneId,
+        activeSessionId: nextSession.id,
+        viewingArchiveId: undefined,
+      };
+    });
+
+    return restored.session;
+  };
+
+  const deleteSessionFromHistory = async (workspaceId: string, sessionId: string) => {
+    const numericSessionId = parseNumericId(sessionId);
+    if (numericSessionId === null) return false;
+
+    const controller = controllerForTab(workspaceId);
+    const deleted = await withServiceFallback(
+      async () => {
+        await deleteSessionRequest(workspaceId, numericSessionId, controller);
+        return true;
+      },
+      false,
+    );
+    if (!deleted) {
+      return false;
+    }
+
+    if (stateRef.current.tabs.some((tab) => tab.id === workspaceId)) {
+      await refreshTabFromBackend(workspaceId);
+    }
+
+    return true;
+  };
+
   const markSessionIdle = async (tabId: string, sessionId: string, note?: string) => {
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const session = tab?.sessions.find((item) => item.id === sessionId);
@@ -488,6 +645,8 @@ export const createWorkspaceSessionActions = ({
     onSwitchSession,
     onCloseAgentPane,
     archiveSessionForTab,
+    restoreSessionIntoPane,
+    deleteSessionFromHistory,
     markSessionIdle,
     settleSessionAfterExit,
   };

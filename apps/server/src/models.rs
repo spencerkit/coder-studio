@@ -269,6 +269,28 @@ pub struct ArchiveEntry {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SessionHistoryRecord {
+    pub workspace_id: String,
+    pub workspace_title: String,
+    pub workspace_path: String,
+    pub session_id: u64,
+    pub title: String,
+    pub status: SessionStatus,
+    pub archived: bool,
+    pub mounted: bool,
+    pub recoverable: bool,
+    pub last_active_at: i64,
+    pub archived_at: Option<i64>,
+    pub claude_session_id: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SessionRestoreResult {
+    pub session: SessionInfo,
+    pub already_active: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceSourceKind {
     Remote,

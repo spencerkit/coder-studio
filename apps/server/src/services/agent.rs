@@ -57,6 +57,27 @@ fn build_claude_launch_command(
     build_claude_resume_command(&parts.join(" "), claude_session_id)
 }
 
+fn take_agent_runtime(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Option<Arc<AgentRuntime>>, String> {
+    let key = agent_key(workspace_id, session_id);
+    let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
+    Ok(agents.remove(&key))
+}
+
+pub(crate) fn stop_agent_runtime_without_status_update(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if let Some(runtime) = take_agent_runtime(workspace_id, session_id, state)? {
+        terminate_agent_runtime(runtime);
+    }
+    Ok(())
+}
+
 pub(crate) struct AgentStartParams {
     pub(crate) workspace_id: String,
     pub(crate) session_id: String,
@@ -217,10 +238,15 @@ pub(crate) fn agent_start(
         }
         emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
         let state: State<AppState> = state_handle.state();
-        let _ = set_session_status(state, &workspace_id, session_id_num, SessionStatus::Idle);
-        if let Ok(mut agents) = state.agents.lock() {
-            agents.remove(&key);
+        let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
+            agents.remove(&key).is_some()
+        } else {
+            false
         };
+        if should_mark_idle {
+            let _ =
+                set_session_status_if_not_archived(state, &workspace_id, session_id_num, SessionStatus::Idle);
+        }
     });
 
     Ok(AgentStartResult { started: true })
@@ -276,16 +302,9 @@ pub(crate) fn agent_stop(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let key = agent_key(&workspace_id, &session_id);
-    let runtime = {
-        let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
-        agents.remove(&key)
-    };
-    if let Some(runtime) = runtime {
-        terminate_agent_runtime(runtime);
-    }
+    stop_agent_runtime_without_status_update(&workspace_id, &session_id, state)?;
     if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = set_session_status(
+        let _ = set_session_status_if_not_archived(
             state,
             &workspace_id,
             session_id_num,
@@ -318,7 +337,7 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
     for (session_id, runtime) in runtimes {
         terminate_agent_runtime(runtime);
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = set_session_status(
+            let _ = set_session_status_if_not_archived(
                 state,
                 workspace_id,
                 session_id_num,

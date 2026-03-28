@@ -44,6 +44,7 @@ export const SettingsScreen = ({
   const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
     commitSettings(applyGeneralSettingsPatch(settingsDraft, { idlePolicy: patch }));
   };
+
   const notificationPermissionText = notificationPermissionState === "allowed"
     ? t("notificationPermissionAllowed")
     : notificationPermissionState === "unsupported"
@@ -56,7 +57,9 @@ export const SettingsScreen = ({
         isSettingsRoute
         locale={locale}
         workspaceTabs={workspaceTabs}
+        historyOpen={false}
         onSwitchWorkspace={() => {}}
+        onToggleHistory={() => {}}
         onAddTab={() => {}}
         onRemoveTab={() => {}}
         onOpenSettings={() => {}}
@@ -72,6 +75,7 @@ export const SettingsScreen = ({
         onSettingsPanelChange={setActiveSettingsPanel}
         onGeneralSettingsChange={onGeneralSettingsChange}
         onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
+        onClaudeSettingsChange={commitSettings}
         onSelectLocale={onSelectLocale}
         t={t}
       />
