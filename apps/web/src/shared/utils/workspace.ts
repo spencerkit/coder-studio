@@ -394,7 +394,7 @@ export const buildWorkbenchStateFromBootstrap = (
     layout: workbenchLayoutFromBackend(bootstrap.ui_state.layout),
     overlay: {
       ...current.overlay,
-      visible: tabs.length === 0 ? current.overlay.visible : false,
+      visible: false,
       input: tabs.length === 0 ? current.overlay.input : "",
     },
   };
@@ -515,7 +515,7 @@ export const applyWorkbenchUiState = (
     layout: workbenchLayoutFromBackend(uiState.layout),
     overlay: {
       ...current.overlay,
-      visible: tabs.length === 0 ? current.overlay.visible : false,
+      visible: false,
     },
   };
 };
