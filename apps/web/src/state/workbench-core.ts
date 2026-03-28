@@ -300,7 +300,7 @@ export const createDefaultWorkbenchState = (): WorkbenchState => {
       showTerminalPanel: false
     },
     overlay: {
-      visible: true,
+      visible: false,
       mode: "local",
       input: "",
       target: { type: "native" }
