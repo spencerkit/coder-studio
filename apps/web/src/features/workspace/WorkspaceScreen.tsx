@@ -409,6 +409,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
   const [controllerActionBusy, setControllerActionBusy] = useState<"takeover" | "reject" | null>(null);
+  const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
   const t = useMemo(() => createTranslator(locale), [locale]);
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
@@ -1008,8 +1009,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     [activeTab.fileTree, activeTab.project?.path, fileSearchState.query]
   );
   const showFileSearchDropdown = shouldShowWorkspaceFileSearchDropdown(fileSearchState);
+  const controllerWorkspaceId = routeWorkspaceId ?? activeTab.id;
   const isObserverMode = activeTab.controller.role === "observer";
-  const hasSelfTakeoverPending = activeTab.controller.takeoverPending && activeTab.controller.takeoverRequestedBySelf;
+  const hasControllerTakeoverPending = activeTab.controller.takeoverPending && activeTab.controller.takeoverRequestedBySelf;
+  const hasOptimisticTakeoverPending = optimisticTakeoverWorkspaceId === controllerWorkspaceId
+    && isObserverMode
+    && !hasControllerTakeoverPending;
+  const hasSelfTakeoverPending = hasControllerTakeoverPending || hasOptimisticTakeoverPending;
   const isTakeoverRequesting = isObserverMode && controllerActionBusy === "takeover" && !hasSelfTakeoverPending;
   const hasIncomingTakeoverRequest = activeTab.controller.role === "controller"
     && activeTab.controller.takeoverPending
@@ -1023,23 +1029,22 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, []);
 
   const onRequestWorkspaceTakeover = useCallback(async () => {
-    if (!activeTab.id || controllerActionBusy) return;
+    if (!controllerWorkspaceId || controllerActionBusy) return;
     setControllerActionBusy("takeover");
     try {
-      const controller = await requestWorkspaceTakeover(activeTab.id, deviceId, clientId);
+      const controller = await requestWorkspaceTakeover(controllerWorkspaceId, deviceId, clientId);
       updateState((current) => applyWorkspaceControllerEvent(current, {
-        workspace_id: activeTab.id,
+        workspace_id: controllerWorkspaceId,
         controller,
       }, deviceId, clientId));
       const nextController = createWorkspaceControllerStateFromLease(controller, deviceId, clientId);
-      if (nextController.role !== "controller" && !(nextController.takeoverPending && nextController.takeoverRequestedBySelf)) {
-        addToast({
-          id: createId("toast"),
-          text: t("workspaceTakeoverRequestFailed"),
-          sessionId: activeSession.id,
-        });
-      }
+      setOptimisticTakeoverWorkspaceId(
+        nextController.role === "controller" || (nextController.takeoverPending && nextController.takeoverRequestedBySelf)
+          ? null
+          : controllerWorkspaceId,
+      );
     } catch (error) {
+      setOptimisticTakeoverWorkspaceId(null);
       const detail = error instanceof Error ? error.message : String(error);
       addToast({
         id: createId("toast"),
@@ -1049,25 +1054,34 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     } finally {
       setControllerActionBusy(null);
     }
-  }, [activeSession.id, activeTab.id, addToast, clientId, controllerActionBusy, deviceId, t, updateState]);
+  }, [activeSession.id, addToast, clientId, controllerActionBusy, controllerWorkspaceId, deviceId, t, updateState]);
 
   const onRejectWorkspaceTakeover = useCallback(async () => {
-    if (!activeTab.id || controllerActionBusy) return;
+    if (!controllerWorkspaceId || controllerActionBusy) return;
     setControllerActionBusy("reject");
     try {
       const controller = await withServiceFallback(
-        () => rejectWorkspaceTakeover(activeTab.id, deviceId, clientId),
+        () => rejectWorkspaceTakeover(controllerWorkspaceId, deviceId, clientId),
         null,
       );
       if (!controller) return;
       updateState((current) => applyWorkspaceControllerEvent(current, {
-        workspace_id: activeTab.id,
+        workspace_id: controllerWorkspaceId,
         controller,
       }, deviceId, clientId));
     } finally {
       setControllerActionBusy(null);
     }
-  }, [activeTab.id, clientId, controllerActionBusy, deviceId, updateState]);
+  }, [clientId, controllerActionBusy, controllerWorkspaceId, deviceId, updateState]);
+
+  useEffect(() => {
+    if (optimisticTakeoverWorkspaceId !== controllerWorkspaceId) {
+      return;
+    }
+    if (!isObserverMode || hasControllerTakeoverPending) {
+      setOptimisticTakeoverWorkspaceId(null);
+    }
+  }, [controllerWorkspaceId, hasControllerTakeoverPending, isObserverMode, optimisticTakeoverWorkspaceId]);
 
   useEffect(() => {
     setFileSearchState((current) => syncWorkspaceFileSearchState(current, fileSearchResults.length));

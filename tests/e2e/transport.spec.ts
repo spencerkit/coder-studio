@@ -109,6 +109,10 @@ const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
 const AGENT_START_SYSTEM_MESSAGE = 'Agent started / 智能体已启动';
 const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
 const execFileAsync = promisify(execFile);
+const DEFAULT_TRANSPORT_IDS = {
+  deviceId: 'transport-default-device',
+  clientId: 'transport-default-client',
+};
 
 const commandBinary = (command: string | undefined) => command?.trim().split(/\s+/, 1)[0] ?? '';
 const splitCommandTokens = (command: string | undefined) => (command ?? '').trim().split(/\s+/).filter(Boolean);
@@ -321,7 +325,7 @@ test.describe('workspace transport baseline', () => {
       await prepareTransportPage(page);
       await installTransportProbe(page);
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      const workspace = await openWorkspace(page, ids);
       await waitForBackendSocket(page);
 
       const initialRuntime = await invokeRpc<{
@@ -400,7 +404,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 150 --stopped-delay-ms 3000 ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      const workspace = await openWorkspace(page, ids);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -498,7 +502,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_REPLAY_DELAY_MS} ${replayClaudeSessionId}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      const workspace = await openWorkspace(page, ids);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -596,7 +600,7 @@ test.describe('workspace transport baseline', () => {
       await installTransportProbe(observer);
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller);
+      const workspace = await openWorkspace(controller, controllerIds);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -647,7 +651,7 @@ test.describe('workspace transport baseline', () => {
       await installTransportProbe(observer);
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller);
+      const workspace = await openWorkspace(controller, controllerIds);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -703,7 +707,7 @@ test.describe('workspace transport baseline', () => {
       });
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(observer, observerIds);
-      const workspace = await openWorkspace(controller);
+      const workspace = await openWorkspace(controller, controllerIds);
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
@@ -770,7 +774,7 @@ test.describe('workspace transport baseline', () => {
       await seedWorkspaceControllerIds(controller, controllerIds);
       await seedWorkspaceControllerIds(reopened, reopenedIds);
 
-      const workspace = await openWorkspace(controller);
+      const workspace = await openWorkspace(controller, controllerIds);
       await waitForBackendSocket(controller);
 
       await reopened.goto(`/workspace/${workspace.workspaceId}`);
@@ -830,7 +834,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_RECOVERY_DELAY_MS}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page);
+      const workspace = await openWorkspace(page, ids);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -1271,7 +1275,11 @@ async function installTransportProbe(
   };
 }
 
-async function openWorkspace(page: Page): Promise<WorkspaceHandle> {
+async function openWorkspace(
+  page: Page,
+  ids: { deviceId: string; clientId: string } = DEFAULT_TRANSPORT_IDS,
+): Promise<WorkspaceHandle> {
+  await seedWorkspaceControllerIds(page, ids);
   const launch = await invokeRpc<{
     snapshot: {
       workspace: {
@@ -1286,6 +1294,8 @@ async function openWorkspace(page: Page): Promise<WorkspaceHandle> {
       pathOrUrl: WORKSPACE_PATH,
       target: { type: 'native' },
     },
+    deviceId: ids.deviceId,
+    clientId: ids.clientId,
   });
 
   const workspaceId = launch.snapshot.workspace.workspace_id;
@@ -1403,13 +1413,10 @@ async function closeAllOpenWorkspaces(page: Page) {
     ui_state: {
       open_workspace_ids: string[];
     };
-  }>(page, 'workbench_bootstrap');
+  }>(page, 'workbench_bootstrap', DEFAULT_TRANSPORT_IDS);
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
-    const controller = await currentWorkspaceController(page, workspaceId, {
-      deviceId: 'cleanup-device',
-      clientId: 'cleanup-client',
-    });
+    const controller = await currentWorkspaceController(page, workspaceId, DEFAULT_TRANSPORT_IDS);
     await invokeRpc(page, 'close_workspace', controller);
   }
 }

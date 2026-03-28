@@ -320,7 +320,7 @@ test("runtime snapshot keeps newer takeover state from controller events on the 
   assert.equal(merged.tabs[0]?.controller.takeoverDeadlineAt, 140);
 });
 
-test("runtime snapshot can clear takeover state when the lease is newer", () => {
+test("runtime snapshot keeps takeover state while a newer attach races the controller event", () => {
   const attached = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
     createRuntimeSnapshot({
@@ -379,6 +379,89 @@ test("runtime snapshot can clear takeover state when the lease is newer", () => 
     "client-b",
   );
 
-  assert.equal(merged.tabs[0]?.controller.takeoverPending, false);
-  assert.equal(merged.tabs[0]?.controller.takeoverRequestId, undefined);
+  assert.equal(merged.tabs[0]?.controller.takeoverPending, true);
+  assert.equal(merged.tabs[0]?.controller.takeoverRequestId, "takeover-1");
+});
+
+test("controller events can clear takeover state after a preserved runtime merge", () => {
+  const attached = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createRuntimeSnapshot({
+      workspace_id: "ws-1",
+      controller_device_id: "device-a",
+      controller_client_id: "client-a",
+      lease_expires_at: 100,
+      fencing_token: 1,
+      takeover_request_id: null,
+      takeover_requested_by_device_id: null,
+      takeover_requested_by_client_id: null,
+      takeover_deadline_at: null,
+    }),
+    "en",
+    APP_SETTINGS,
+    "device-b",
+    "client-b",
+  );
+
+  const afterControllerEvent = applyWorkspaceControllerEvent(
+    attached,
+    {
+      workspace_id: "ws-1",
+      controller: {
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: 100,
+        fencing_token: 1,
+        takeover_request_id: "takeover-1",
+        takeover_requested_by_device_id: "device-b",
+        takeover_requested_by_client_id: "client-b",
+        takeover_deadline_at: 140,
+      },
+    },
+    "device-b",
+    "client-b",
+  );
+
+  const preserved = applyWorkspaceRuntimeSnapshot(
+    afterControllerEvent,
+    createRuntimeSnapshot({
+      workspace_id: "ws-1",
+      controller_device_id: "device-a",
+      controller_client_id: "client-a",
+      lease_expires_at: 120,
+      fencing_token: 1,
+      takeover_request_id: null,
+      takeover_requested_by_device_id: null,
+      takeover_requested_by_client_id: null,
+      takeover_deadline_at: null,
+    }),
+    "en",
+    APP_SETTINGS,
+    "device-b",
+    "client-b",
+  );
+
+  const cleared = applyWorkspaceControllerEvent(
+    preserved,
+    {
+      workspace_id: "ws-1",
+      controller: {
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: 121,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      },
+    },
+    "device-b",
+    "client-b",
+  );
+
+  assert.equal(cleared.tabs[0]?.controller.takeoverPending, false);
+  assert.equal(cleared.tabs[0]?.controller.takeoverRequestId, undefined);
 });

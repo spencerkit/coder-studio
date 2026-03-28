@@ -54,6 +54,16 @@ const mergeWorkspaceControllerState = (
     return incoming.fencingToken > current.fencingToken ? incoming : current;
   }
 
+  if (current.takeoverPending && !incoming.takeoverPending) {
+    return {
+      ...incoming,
+      takeoverPending: true,
+      takeoverRequestedBySelf: current.takeoverRequestedBySelf,
+      takeoverRequestId: current.takeoverRequestId,
+      takeoverDeadlineAt: current.takeoverDeadlineAt,
+    };
+  }
+
   const incomingLeaseExpiresAt = incoming.leaseExpiresAt ?? 0;
   const currentLeaseExpiresAt = current.leaseExpiresAt ?? 0;
   if (incomingLeaseExpiresAt !== currentLeaseExpiresAt) {
