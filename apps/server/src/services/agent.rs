@@ -26,7 +26,11 @@ fn fallback_agent_lifecycle_from_output(
         return None;
     }
     state.emitted_tool_started = true;
-    Some(("tool_started", "AgentProcessOutput", r#"{"source":"agent_process_output"}"#))
+    Some((
+        "tool_started",
+        "AgentProcessOutput",
+        r#"{"source":"agent_process_output"}"#,
+    ))
 }
 
 fn fallback_agent_lifecycle_from_exit(
@@ -36,7 +40,11 @@ fn fallback_agent_lifecycle_from_exit(
         return None;
     }
     state.emitted_turn_completed = true;
-    Some(("turn_completed", "AgentProcessExit", r#"{"source":"agent_process_exit"}"#))
+    Some((
+        "turn_completed",
+        "AgentProcessExit",
+        r#"{"source":"agent_process_exit"}"#,
+    ))
 }
 
 fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
@@ -330,7 +338,10 @@ mod tests {
                 r#"{"source":"agent_process_output"}"#,
             )),
         );
-        assert_eq!(fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"), None);
+        assert_eq!(
+            fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"),
+            None
+        );
     }
 
     #[test]
