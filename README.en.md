@@ -2,111 +2,178 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Coder Studio is a local-first developer workbench that currently runs as a local server with a web UI, bringing repositories, Claude-based coding agents, code browsing, Git review, and embedded terminals into one surface.
+Coder Studio is a local-first AI coding workbench built around the `Claude` workflow. It brings `Claude`, repositories, code editing, Git review, terminals, and session history into one interface. It is not positioned as a generic chat product. It is a workbench designed for real repositories and real `Claude Code` usage.
 
-## What This Project Is
+Think of it as a workspace for the actual development loop:
 
-This project is not currently positioned as a generic multi-provider AI platform. It is a local workbench centered around real Git repositories, exposed by a local server runtime.
+- connect a local folder or remote Git repository
+- run multiple Claude sessions in parallel inside one workspace
+- inspect code, edit files, and commit changes without leaving the app
+- archive and restore past sessions when you want to continue earlier work
+- run against `Native` or `WSL` targets
 
-Its core job is to reduce context switching across the full workflow:
+## Who It Is For
 
-- attach a local or remote repository
-- start and split parallel agent tasks
-- inspect agent output while reading files and diffs
-- run Git actions and shell commands without leaving the workspace
+Coder Studio is a good fit if you:
 
-## Current Feature Set
+- already use `Claude Code` on real repositories
+- want agents, code, Git, and terminals on one screen
+- often split one task into several parallel sessions
+- prefer a local-first, self-hosted, controllable workbench
 
-- Workspace onboarding with `Remote Git` and `Local Folder`
-- Execution targets: `Native`, plus `WSL` when available
-- Parallel agent work via split panes
-- Draft task input before agent startup
-- First submitted input becomes the session title
-- PTY-based terminal interaction after launch
-- Code panel with file tree, file search, Monaco preview/edit, and save
-- Git panel with Stage / Unstage / Discard / Commit
-- Embedded multi-terminal panel
-- Quick actions palette with `Cmd/Ctrl + K`
-- Settings for Launch Command, Idle Policy, and language
-- Bilingual UI: Chinese / English
-- Public mode auth with one passphrase, session cookie, IP blocking, and a single `root.path` access root
+## Claude-Focused Capabilities
+
+This is the part worth emphasizing most.
+
+### 1. Treat Claude sessions as real working units
+
+- split one workspace into multiple Claude sessions
+- each session keeps its own context and terminal interaction flow
+- useful when implementation, verification, follow-up notes, and review need to move in parallel
+
+### 2. Archive, restore, and continue past Claude work
+
+- closing a session or workspace archives it instead of making it disappear
+- history is grouped by workspace so repository context stays readable
+- restore archived sessions and continue previous work
+- permanently delete a history record when you do not want to keep it anymore
+
+### 3. Manage how Claude starts from one Settings surface
+
+- configure Claude startup behavior in Settings instead of hand-writing one long launch command
+- common CLI flags are exposed directly
+- preview the full effective launch command
+- keep separate Claude profiles for `Native` and `WSL`
+
+### 4. Edit common Claude config fields directly
+
+- expose common `settings.json` fields
+- expose common `config.json` fields
+- manage API key, auth token, base URL, and extra environment variables for auth and gateway setups
+- if you already have local Claude config files, the Settings UI tries to surface common values for you
+
+### 5. Keep Claude, code, and Git in one loop
+
+- inspect Claude output and jump straight into files or diffs
+- make edits and commit without leaving the same workspace
+- avoid bouncing between chat, editor, terminal, and Git tools
+
+## What You Can Do With It
+
+### 1. Work on real repositories through workspaces
+
+- `Local Folder` and `Remote Git`
+- `Native` and `WSL` execution targets
+- each workspace keeps its own code, sessions, and terminal context
+
+### 2. Read and edit code in the same surface
+
+- file tree
+- file search
+- Monaco preview and editing
+- save support
+
+### 3. Review and commit Git changes directly
+
+- inspect diffs
+- `Stage / Unstage / Discard`
+- write commit messages and commit in place
+
+### 4. Keep terminals inside the workflow
+
+- multi-terminal support
+- run `git status`, scripts, and one-off commands
+- avoid bouncing between external terminals and the workbench
+
+### 5. Expose it in a controlled public mode
+
+- one-passphrase login
+- `HttpOnly` session cookie
+- IP-based lockout on repeated failures
+- single-root access restrictions via `root.path`
 
 ## Preview
 
-The screenshots below use a purpose-built demo workspace with mock data so the core flow is easier to read at a glance.
+The screenshots below use a demo workspace and mock data to make the core workflow easier to scan.
 
 ### Workspace Overview
 
 ![Coder Studio workspace overview](docs/assets/readme/workspace-overview.png)
 
-- Parallel agent panes stay visible while you inspect code and shell output
-- The right-hand code panel gives you file search plus Monaco-based preview and editing
-- The bottom terminal keeps Git and one-off commands in the same workspace
+- agent panes on the left
+- code panel on the right
+- built-in terminal at the bottom
 
-### Parallel Agent Work
+### Parallel Sessions
 
 ![Coder Studio parallel agent panes](docs/assets/readme/multi-agent.png)
 
-- Split one workspace into multiple focused agent lanes
-- Keep separate streams for implementation, verification, and follow-up tasks
-- Reduce context switching when several subtasks need to move together
+- split one task into multiple sessions
+- keep each session in its own context
+- useful for implementation, verification, and follow-up work moving together
 
 ### Code And Review
 
 ![Coder Studio code and source control review](docs/assets/readme/git-review.png)
 
-- Review code while the Source Control panel stays open on the same screen
-- Draft commit messages without leaving the workbench
-- Move quickly between agent output, file inspection, and Git review
+- inspect files, diffs, and commit flow in one place
+- better suited to the full loop of tasking, reviewing, editing, and committing
 
 ## 3-Minute Quick Start
 
-If you want the fastest path to a working local setup, do this:
+### Option 1: Start with the CLI
 
-1. Prepare the runtime: install `Node.js`, `pnpm`, `Rust`, and `Git`. If you want to start real agents, also make sure `claude` is executable.
-2. Install dependencies: run `pnpm install` at the repo root.
-3. Start the app: run `pnpm dev:stack`, then open `http://127.0.0.1:5174`.
-4. First entry flow: if public mode is enabled, enter the passphrase first. After auth and before workspace selection, the app now runs an environment check for `Claude Code` and `Git`.
-5. Pick a workspace: choose `Local Folder` or `Remote Git`, then choose `Native` or `WSL`.
-6. Start working: enter the first task in the agent pane, press Enter, then open the code, Git, and terminal panels as needed.
-
-If you are using the published npm CLI, you can also start it like this:
+If you use the published npm CLI, the fastest path is:
 
 ```bash
+npm install -g @spencer-kit/coder-studio
 coder-studio start
 coder-studio open
 ```
 
+Then:
+
+1. choose `Local Folder` or `Remote Git`
+2. choose `Native` or `WSL`
+3. enter your first task in the agent pane and press Enter
+4. split panes, open history, or restore archived sessions as needed
+5. open Settings if you want to confirm Claude startup flags or auth settings
+
+### Option 2: Run from source
+
+```bash
+pnpm install
+pnpm dev:stack
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5174
+```
+
 ## Prerequisites
 
-Before running locally, prepare:
+### If you use the published CLI
+
+- `Node.js`
+- `Git`
+- an executable `claude` command
+
+If you use `WSL`, `claude` also needs to be available in the target environment.
+
+### If you run from source
 
 - `Node.js`
 - `pnpm`
 - `Rust` toolchain
 - platform-specific `Tauri 2` system dependencies
 - `Git`
+- an executable `claude` command
 
-To actually start agents, you also need:
+## Common Commands
 
-- an executable launch command, defaulting to `claude`
-- if you use `WSL`, the command must also be available in the target environment
-
-## Install
-
-```bash
-pnpm install
-```
-
-## npm CLI Install
-
-Once published, install it directly with:
-
-```bash
-npm install -g @spencer-kit/coder-studio
-```
-
-Available commands:
+### CLI
 
 ```bash
 coder-studio start
@@ -122,120 +189,20 @@ coder-studio config root set /srv/coder-studio/workspaces
 coder-studio config password set --stdin
 coder-studio auth status
 coder-studio auth ip list
-coder-studio help start
-coder-studio help completion
-eval "$(coder-studio completion bash)"
-coder-studio completion install bash
-coder-studio completion uninstall bash
 ```
 
-For the detailed command reference, see `docs/development/cli.en.md`.
+For the full command reference, see `docs/development/cli.en.md`.
 
-## Source / Template / Artifact Layers
-
-The repository is organized into three layers:
-
-- source
-  - `apps/web`: frontend source
-  - `apps/server`: Rust / Tauri server source
-  - `packages/cli`: npm CLI package source and publish metadata
-  - `packages/cli/src`: CLI TypeScript source
-- templates
-  - `templates/npm/platform-packages/*`: per-platform npm package templates
-- build outputs
-  - `.build/web/dist`: frontend build output
-  - `.build/server/target`: Rust build output
-  - `.build/cli`: compiled CLI output
-  - `.build/stage/npm/*`: pre-publish staging packages
-  - `.artifacts/`: tarballs, manifests, and checksums
-
-This keeps maintainable source, publish templates, and generated artifacts out of the same directories.
-
-## Run
-
-### Option 1: Combined development mode (recommended)
+### Local Development
 
 ```bash
 pnpm dev:stack
-```
-
-This starts the frontend dev server, the local server runtime, and the linked development flow used by local E2E.
-
-### Option 2: Split frontend/server debugging
-
-Terminal 1:
-
-```bash
 pnpm dev
-```
-
-Terminal 2:
-
-```bash
 pnpm dev:server
-```
-
-Current development ports:
-
-- frontend: `http://127.0.0.1:5174`
-- local server transport service: `http://127.0.0.1:41033`
-
-The frontend dev server proxies `/api`, `/ws`, and `/health` to the local server.
-
-## Build
-
-Frontend build:
-
-```bash
-pnpm build
-```
-
-Server runtime build:
-
-```bash
-pnpm build:server
-```
-
-CLI build:
-
-```bash
-pnpm build:cli
-```
-
-Full runtime build:
-
-```bash
 pnpm build:web
 pnpm build:server
 pnpm build:cli
 ```
-
-## Public Deployment
-
-For a publicly reachable deployment, the current build now includes:
-
-- single-passphrase login
-- `HttpOnly` session cookie
-- a `24` hour IP block after `3` failed passphrase attempts within `10` minutes
-- server-side single-root restrictions via `root.path`
-- public access over HTTP or HTTPS, with HTTPS reverse proxy still recommended
-
-Deployment details are documented here:
-
-- Chinese deployment guide: `docs/deployment/README.md`
-- English deployment guide: `docs/deployment/README.en.md`
-
-## Getting Started
-
-1. Launch the app.
-2. In the onboarding overlay, choose `Remote Git` or `Local Folder`.
-3. Pick the execution target: `Native` or `WSL`.
-4. Once the workspace opens, enter your first task in the draft input shown in the agent pane.
-5. Press Enter. The app materializes a session, starts the agent, and uses the first input as the session title.
-6. Split the current pane if you want to run another task in parallel.
-7. Open the code panel to inspect files, edit content, or review diffs.
-8. Open the Git panel for Stage / Unstage / Discard / Commit.
-9. Open the terminal panel to run shell commands.
 
 ## Useful Shortcuts
 
@@ -248,35 +215,38 @@ Deployment details are documented here:
 - `Alt/⌘ + D`: split the current agent pane vertically
 - `Shift + Alt/⌘ + D`: split the current agent pane horizontally
 
+## Public Deployment
+
+For publicly reachable deployments, the current build supports:
+
+- one-passphrase login
+- `HttpOnly` session cookie
+- a `24` hour IP block after `3` failed passphrase attempts within `10` minutes
+- single-root server restrictions via `root.path`
+- HTTP or HTTPS access, with HTTPS reverse proxy still recommended
+
+Deployment details:
+
+- Chinese deployment guide: `docs/deployment/README.md`
+- English deployment guide: `docs/deployment/README.en.md`
+
+## Developer Entry Points
+
+If you are here to modify the product or build on top of it:
+
+- frontend: `apps/web`
+- server: `apps/server`
+- CLI: `packages/cli`
+- Chinese development docs: `docs/development/README.md`
+- English development docs: `docs/development/README.en.md`
+
 ## Current Boundaries
 
 The following should not be described as fully shipped user-facing functionality yet:
 
 - multiple agent providers
 - light theme
-- full queue / dispatch board UI
-- full archive center UI
+- full visual queueing UI
+- a more complete archive / dispatch center
 - explicit worktree management entry points
 - fully closed-loop auto-suspend behavior
-
-## Documentation
-
-Product docs:
-
-- Changelog: `CHANGELOG.md`
-- Chinese PRD: `docs/PRD.md`
-- English PRD: `docs/PRD.en.md`
-
-Development docs:
-
-- Chinese index: `docs/development/README.md`
-- Chinese deployment guide: `docs/deployment/README.md`
-- Chinese CLI manual: `docs/development/cli.md`
-- Chinese npm packaging guide: `docs/development/npm-release.md`
-- English index: `docs/development/README.en.md`
-- English deployment guide: `docs/deployment/README.en.md`
-- English CLI manual: `docs/development/cli.en.md`
-- English npm packaging guide: `docs/development/npm-release.en.md`
-- Architecture: `docs/development/architecture.en.md`
-- Frontend state: `docs/development/frontend-state.en.md`
-- Tauri commands: `docs/development/tauri-commands.en.md`
