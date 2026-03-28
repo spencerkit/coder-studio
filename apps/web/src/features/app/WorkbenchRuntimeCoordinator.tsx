@@ -53,8 +53,8 @@ import {
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import {
-  advanceWorkspaceSyncVersion,
   isWorkspaceSyncVersionCurrent,
+  readWorkspaceSyncVersion,
 } from "../workspace/workspace-sync-version.ts";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 
@@ -404,7 +404,7 @@ export const WorkbenchRuntimeCoordinator = ({
     }
 
     const task = (async () => {
-      const syncVersion = advanceWorkspaceSyncVersion(workspaceId);
+      const syncVersion = readWorkspaceSyncVersion(workspaceId);
       const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
         workspaceId,
         deviceId,
