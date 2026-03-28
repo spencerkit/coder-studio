@@ -587,7 +587,9 @@ test.describe('workspace transport baseline', () => {
             .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
             .first()
             .getAttribute('data-session-status');
-          return lastReloadStatus === 'running' || lastReloadStatus === 'background';
+          return lastReloadStatus === 'running'
+            || lastReloadStatus === 'background'
+            || lastReloadStatus === 'idle';
         }, {
           timeout: 20000,
           message: `session status after reload: ${lastReloadStatus ?? 'null'}`,
@@ -598,6 +600,12 @@ test.describe('workspace transport baseline', () => {
           `session status after reload: ${lastReloadStatus ?? 'null'}`,
           JSON.stringify(debug),
         ].join('\n'));
+      }
+      if (lastReloadStatus === 'idle') {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        expect(debug.lifecycleTail.some((event) =>
+          event.session_id === String(session.id) && event.kind === 'turn_completed'
+        )).toBe(true);
       }
 
       await page.goto('about:blank');
@@ -968,7 +976,9 @@ test.describe('workspace transport baseline', () => {
             .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
             .first()
             .getAttribute('data-session-status');
-          return resumedStatus === 'running' || resumedStatus === 'background';
+          return resumedStatus === 'running'
+            || resumedStatus === 'background'
+            || resumedStatus === 'idle';
         }, {
           timeout: 5000,
           message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
@@ -979,6 +989,12 @@ test.describe('workspace transport baseline', () => {
           `resumed session status after reload: ${resumedStatus ?? 'null'}`,
           JSON.stringify(debug),
         ].join('\n'));
+      }
+      if (resumedStatus === 'idle') {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        expect(debug.lifecycleTail.some((event) =>
+          event.session_id === String(session.id) && event.kind === 'turn_completed'
+        )).toBe(true);
       }
     } finally {
       if (workspace && !page.isClosed()) {
