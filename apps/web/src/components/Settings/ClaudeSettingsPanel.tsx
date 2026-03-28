@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { HTMLAttributes } from "react";
 import type { Locale, Translator } from "../../i18n.ts";
+import { EyeIcon, EyeOffIcon } from "../icons.tsx";
 import type {
   AppSettings,
   ClaudeRuntimeProfile,
@@ -304,6 +305,9 @@ const ClaudeInputField = ({
   testId,
   inputMode,
   min,
+  allowSecretReveal = false,
+  revealLabel,
+  concealLabel,
   className = "",
 }: {
   label: string;
@@ -316,22 +320,49 @@ const ClaudeInputField = ({
   testId?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   min?: number;
+  allowSecretReveal?: boolean;
+  revealLabel?: string;
+  concealLabel?: string;
   className?: string;
-}) => (
-  <label className={`claude-field ${className}`.trim()}>
-    <ClaudeFieldCopy label={label} help={help} meta={meta} />
-    <input
-      className="settings-command-field"
-      type={type}
-      value={value}
-      min={min}
-      inputMode={inputMode}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      data-testid={testId}
-    />
-  </label>
-);
+}) => {
+  const inputId = useId();
+  const [revealed, setRevealed] = useState(false);
+  const showSecretToggle = type === "password" && allowSecretReveal;
+  const effectiveType = showSecretToggle && revealed ? "text" : type;
+
+  return (
+    <div className={`claude-field ${className}`.trim()}>
+      <label htmlFor={inputId}>
+        <ClaudeFieldCopy label={label} help={help} meta={meta} />
+      </label>
+      <div className={`claude-input-shell ${showSecretToggle ? "with-toggle" : ""}`.trim()}>
+        <input
+          id={inputId}
+          className="settings-command-field"
+          type={effectiveType}
+          value={value}
+          min={min}
+          inputMode={inputMode}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          data-testid={testId}
+        />
+        {showSecretToggle ? (
+          <button
+            type="button"
+            className="claude-visibility-toggle"
+            onClick={() => setRevealed((current) => !current)}
+            aria-label={revealed ? concealLabel : revealLabel}
+            aria-pressed={revealed}
+            data-testid={testId ? `${testId}-visibility-toggle` : undefined}
+          >
+            {revealed ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+};
 
 const ClaudeTextareaField = ({
   label,
@@ -707,24 +738,32 @@ export const ClaudeSettingsPanel = ({
             help={t("claudeApiKeyHelp")}
             meta={t("claudeApiKeyMeta")}
             type="password"
+            allowSecretReveal
+            revealLabel={t("claudeShowSecret")}
+            concealLabel={t("claudeHideSecret")}
             value={scopeProfile.env.ANTHROPIC_API_KEY ?? ""}
             onChange={(value) => updateEnv((env) => ({
               ...env,
               ANTHROPIC_API_KEY: value,
             }))}
             placeholder={t("claudeApiKeyPlaceholder")}
+            testId="claude-api-key-input"
           />
           <ClaudeInputField
             label={t("claudeAuthToken")}
             help={t("claudeAuthTokenHelp")}
             meta={t("claudeAuthTokenMeta")}
             type="password"
+            allowSecretReveal
+            revealLabel={t("claudeShowSecret")}
+            concealLabel={t("claudeHideSecret")}
             value={scopeProfile.env.ANTHROPIC_AUTH_TOKEN ?? ""}
             onChange={(value) => updateEnv((env) => ({
               ...env,
               ANTHROPIC_AUTH_TOKEN: value,
             }))}
             placeholder={t("claudeAuthTokenPlaceholder")}
+            testId="claude-auth-token-input"
           />
           <ClaudeInputField
             label={t("claudeBaseUrl")}

@@ -10153,7 +10153,8 @@ pre.diff,
 
 .claude-field > .settings-command-field,
 .claude-field > .claude-textarea,
-.claude-field > .claude-json-editor {
+.claude-field > .claude-json-editor,
+.claude-input-shell {
   width: 100%;
   min-width: 0;
   border: 1px solid transparent;
@@ -10161,6 +10162,72 @@ pre.diff,
   background: color-mix(in srgb, var(--surface-strip) 88%, var(--bg) 12%);
   color: var(--text);
   box-shadow: none;
+}
+
+.claude-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 36px;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.claude-input-shell:focus-within {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 54%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.claude-input-shell > .settings-command-field {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.claude-input-shell > .settings-command-field:focus,
+.claude-input-shell > .settings-command-field:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.claude-input-shell.with-toggle > .settings-command-field {
+  padding-right: 4px;
+}
+
+.claude-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 3px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.claude-visibility-toggle:hover {
+  background: color-mix(in srgb, var(--surface) 70%, var(--accent) 30%);
+  color: var(--text);
+}
+
+.claude-visibility-toggle:focus {
+  outline: none;
+}
+
+.claude-visibility-toggle:focus-visible {
+  background: color-mix(in srgb, var(--surface) 74%, var(--accent) 26%);
+  color: var(--text);
 }
 
 .claude-select-trigger {

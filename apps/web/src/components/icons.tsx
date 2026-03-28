@@ -1,7 +1,7 @@
 import type { LucideIcon, LucideProps } from "lucide-react";
 import React from "react";
 import {
-  Archive, ArrowDownUp, ArrowUp, Blocks, ChevronDown, ChevronLeft, ChevronRight, Code2, Code, File, FileDiff, FileJson, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, List, Minus, Monitor, MoonStar, Palette, Plus, RefreshCw, Rows3, Search, Settings2, SlidersHorizontal, SquarePlus, SunMedium, Terminal, Undo2, X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, SquareSplitVertical, SquareSplitHorizontal
+  Archive, ArrowDownUp, ArrowUp, Blocks, ChevronDown, ChevronLeft, ChevronRight, Code2, Code, Eye, EyeOff, File, FileDiff, FileJson, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, List, Minus, Monitor, MoonStar, Palette, Plus, RefreshCw, Rows3, Search, Settings2, SlidersHorizontal, SquarePlus, SunMedium, Terminal, Undo2, X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, SquareSplitVertical, SquareSplitHorizontal
 } from "lucide-react";
 
 const createIcon = (Icon: LucideIcon, defaults?: Partial<LucideProps>) => {
@@ -57,6 +57,8 @@ export const AgentSplitHorizontalIcon = createIcon(SquareSplitHorizontal, { size
 export const FolderIcon = createIcon(Folder, { size: 14 });
 export const FolderOpenIcon = createIcon(FolderOpen, { size: 14 });
 export const FileIcon = createIcon(File, { size: 14 });
+export const EyeIcon = createIcon(Eye, { size: 14 });
+export const EyeOffIcon = createIcon(EyeOff, { size: 14 });
 
 const fileTypeColors: Record<string, string> = {
   ts: "#3178c6", tsx: "#3178c6", js: "#f7df1e", jsx: "#f7df1e", json: "#cbcb41", md: "#519aba", html: "#e34c26", css: "#563d7c", scss: "#563d7c", py: "#3572A5", go: "#00ADD8", rs: "#dea584", java: "#b07219", sql: "#e38c00", sh: "#89e051", yml: "#cb171e", yaml: "#cb171e", toml: "#9c4121", svg: "#a0c4e3", png: "#a0c4e3", jpg: "#a0c4e3", pdf: "#b30b00"

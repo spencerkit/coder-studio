@@ -243,6 +243,8 @@ test('translator exposes the new history and Claude settings keys', () => {
   assert.equal(en('claudeModelPlaceholder'), 'claude-sonnet-4-5');
   assert.equal(en('claudeSelectUnsetOption'), 'Not set');
   assert.equal(en('claudeEditorModeVimOption'), 'vim');
+  assert.equal(en('claudeShowSecret'), 'Show secret');
+  assert.equal(zh('claudeHideSecret'), '隐藏明文');
   assert.match(en('claudeApiKeyHelperHelp'), /take precedence/i);
   assert.match(zh('claudeAuthSectionHint'), /Claude 配置/);
   assert.match(zh('claudeCleanupDaysMeta'), />= 0/);

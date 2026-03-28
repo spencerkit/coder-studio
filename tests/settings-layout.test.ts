@@ -42,3 +42,15 @@ test('claude settings use dedicated inline select rows for enum fields', async (
   assert.doesNotMatch(claudeSource, /meta=\{t\("claudeEffortMeta"\)\}/);
   assert.doesNotMatch(claudeSource, /meta=\{t\("claudeEditorModeMeta"\)\}/);
 });
+
+test('claude secret fields expose a reveal toggle', async () => {
+  const claudeSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ClaudeSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(claudeSource, /allowSecretReveal/);
+  assert.match(claudeSource, /claude-api-key-input/);
+  assert.match(claudeSource, /claude-auth-token-input/);
+  assert.match(claudeSource, /visibility-toggle/);
+});
