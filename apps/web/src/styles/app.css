@@ -9954,7 +9954,7 @@ pre.diff,
 }
 
 .claude-settings-grid--startup {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .claude-settings-panel .settings-group-card {
@@ -9978,9 +9978,9 @@ pre.diff,
 
 .claude-select-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 176px);
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   min-height: 72px;
   padding: 14px 0 12px;
@@ -10006,8 +10006,12 @@ pre.diff,
   align-items: center;
   gap: 6px;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-self: flex-start;
+}
+
+.claude-field-label > span:first-child {
+  min-width: 0;
 }
 
 .claude-field-copy {
@@ -10290,7 +10294,13 @@ pre.diff,
 
 @media (max-width: 1280px) {
   .claude-settings-grid--startup {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1680px) {
+  .claude-settings-grid--startup {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

@@ -37,6 +37,8 @@ test('claude settings use dedicated inline select rows for enum fields', async (
   );
 
   assert.match(claudeSource, /claude-select-row/);
-  assert.match(claudeSource, /claudePermissionModeMeta/);
-  assert.match(claudeSource, /claudeEditorModeMeta/);
+  assert.match(claudeSource, /ClaudeSelectField/);
+  assert.doesNotMatch(claudeSource, /meta=\{t\("claudePermissionModeMeta"\)\}/);
+  assert.doesNotMatch(claudeSource, /meta=\{t\("claudeEffortMeta"\)\}/);
+  assert.doesNotMatch(claudeSource, /meta=\{t\("claudeEditorModeMeta"\)\}/);
 });

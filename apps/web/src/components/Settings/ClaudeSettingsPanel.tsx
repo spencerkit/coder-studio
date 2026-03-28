@@ -663,7 +663,6 @@ export const ClaudeSettingsPanel = ({
               className="claude-field-compact"
               label={t(option.labelKey)}
               help={t(option.helpKey)}
-              meta={t("claudePermissionModeMeta")}
               value={readSingleFlagValue(scopeProfile.startupArgs, option.flag)}
               onChange={(value) => updateStartupValueFlag(option.flag, value)}
               options={option.values}
@@ -802,7 +801,6 @@ export const ClaudeSettingsPanel = ({
           />
           <ClaudeSelectField
             label={t("claudePermissionMode")}
-            meta={t("claudePermissionModeMeta")}
             value={behaviorPermissionMode}
             onChange={(value) => updateSettingsJson(["permissionMode"], value)}
             options={BEHAVIOR_PERMISSION_MODE_OPTIONS}
@@ -810,7 +808,6 @@ export const ClaudeSettingsPanel = ({
           />
           <ClaudeSelectField
             label={t("claudeEffort")}
-            meta={t("claudeEffortMeta")}
             value={effortValue}
             onChange={(value) => updateSettingsJson(["effort"], value)}
             options={EFFORT_OPTIONS}
@@ -843,7 +840,6 @@ export const ClaudeSettingsPanel = ({
           <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldCopy label={t("claudeAutoInstallIdeExtension")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
           <ClaudeSelectField
             label={t("claudeEditorMode")}
-            meta={t("claudeEditorModeMeta")}
             value={editorModeValue}
             onChange={(value) => updateGlobalConfigJson(["editorMode"], value)}
             options={EDITOR_MODE_OPTIONS}
