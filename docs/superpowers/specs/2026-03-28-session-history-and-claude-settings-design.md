@@ -74,7 +74,10 @@
 
 - 入口固定在 workspace tabs 最左侧，不随 workspace 关闭而消失。
 - 抽屉从左侧滑出，覆盖 workspace 主内容左缘，但不跳路由。
+- 抽屉采用“固定头部 + 可滚动内容区”结构，长列表时只滚动内容区，不压缩头部、分组头或 session 行。
 - 抽屉按 workspace 分组展示 session 记录，组内按最近活动时间倒序。
+- workspace 分组使用 accordion 结构，而不是一组独立圆角卡片。
+- 默认仅展开当前 workspace；其他 workspace 默认收起，用户可手动展开。
 - 空 workspace 分组不显示。
 - 每条记录至少展示：
   - 标题
@@ -122,19 +125,37 @@
    - 标题：`History`
    - 当前说明：该抽屉展示所有 session 记录，关闭只是归档
    - 关闭按钮
+   - 固定在抽屉顶部，不随长列表滚动
 
 2. Workspace 分组
+   - 分组头就是 accordion header
+   - 展开箭头
    - workspace 名称
    - 路径或 target 摘要
    - 该组 session 数量
+   - 当前状态摘要（如当前 workspace / all archived）
+   - 分组头固定行高，不因内容多少被压缩
+   - 分组内容展开后直接渲染 session 列表，不额外包一层营销式圆角卡片
+   - 默认展开规则：
+     - 当前 workspace：展开
+     - 其他 workspace：收起
+   - 允许同时展开多个分组，但初始态只展开当前 workspace，避免长列表进入时被全部撑开
 
 3. Session 记录行
+   - 扁平行式结构，不使用独立悬浮卡片
    - 标题
    - 最近活动时间
    - 状态标签
    - 次要说明：归档 / 活跃 / 中断
    - 主点击区：聚焦或恢复
    - 行尾危险动作：删除
+   - 行与行之间通过细分隔线分开，而不是额外卡片容器
+
+4. 长列表行为
+   - 抽屉整体高度固定在 viewport 可用高度内
+   - 只有内容区滚动
+   - accordion header 保持可见和可点击
+   - 不允许通过压缩行高或把分组整体缩成小卡片来适配长列表
 
 ### 设置导航结构
 
@@ -418,6 +439,12 @@
 - 后续对 archive / restore / delete / activate 行为做本地收敛更新。
 - 点击历史行的主区域，根据状态决定“聚焦”还是“恢复”。
 - 删除动作要求二次确认。
+- 抽屉内容采用分组 accordion：
+  - 点击 workspace header 切换展开 / 收起
+  - 当前 workspace 默认展开
+  - 其他 workspace 默认收起
+- 长列表时抽屉主体内部滚动，workspace header 和 session row 保持稳定高度，不做压缩布局。
+- 视觉风格以“抽屉壳体 + 扁平分组列表”为主，不再采用一组独立圆角卡片叠放的设计语言。
 
 ### 3. Draft Pane 恢复选择器
 
