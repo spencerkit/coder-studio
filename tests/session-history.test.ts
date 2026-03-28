@@ -1,0 +1,77 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  groupSessionHistory,
+  mapSessionHistoryRecord,
+  selectHistoryPrimaryAction,
+} from "../apps/web/src/features/workspace/session-history.ts";
+import type { BackendSessionHistoryRecord, SessionHistoryRecord } from "../apps/web/src/types/app.ts";
+
+const createRecord = (overrides: Partial<SessionHistoryRecord>): SessionHistoryRecord => ({
+  workspaceId: "ws-1",
+  workspaceTitle: "Workspace One",
+  workspacePath: "/tmp/ws-1",
+  sessionId: "1",
+  title: "Session 1",
+  status: "idle",
+  archived: false,
+  mounted: false,
+  recoverable: true,
+  lastActiveAt: 1,
+  archivedAt: null,
+  claudeSessionId: null,
+  ...overrides,
+});
+
+test("mapSessionHistoryRecord normalizes backend payload fields", () => {
+  const backendRecord: BackendSessionHistoryRecord = {
+    workspace_id: "ws-1",
+    workspace_title: "Workspace One",
+    workspace_path: "/tmp/ws-1",
+    session_id: 42,
+    title: "Session 42",
+    status: "suspended",
+    archived: true,
+    mounted: false,
+    recoverable: true,
+    last_active_at: 1730000000000,
+    archived_at: 1730000001000,
+    claude_session_id: "claude-42",
+  };
+
+  assert.deepEqual(mapSessionHistoryRecord(backendRecord), {
+    workspaceId: "ws-1",
+    workspaceTitle: "Workspace One",
+    workspacePath: "/tmp/ws-1",
+    sessionId: "42",
+    title: "Session 42",
+    status: "suspended",
+    archived: true,
+    mounted: false,
+    recoverable: true,
+    lastActiveAt: 1730000000000,
+    archivedAt: 1730000001000,
+    claudeSessionId: "claude-42",
+  });
+});
+
+test("groupSessionHistory sorts records within groups and latest groups first", () => {
+  const groups = groupSessionHistory([
+    createRecord({ workspaceId: "ws-1", workspaceTitle: "Workspace One", lastActiveAt: 100, sessionId: "1" }),
+    createRecord({ workspaceId: "ws-2", workspaceTitle: "Workspace Two", workspacePath: "/tmp/ws-2", lastActiveAt: 300, sessionId: "2" }),
+    createRecord({ workspaceId: "ws-1", workspaceTitle: "Workspace One", lastActiveAt: 200, sessionId: "3" }),
+  ]);
+
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0]?.workspaceId, "ws-2");
+  assert.deepEqual(
+    groups[1]?.records.map((record) => record.sessionId),
+    ["3", "1"],
+  );
+});
+
+test("selectHistoryPrimaryAction distinguishes focus restore and noop", () => {
+  assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: true, archived: false, recoverable: true })), "focus");
+  assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: true, recoverable: true })), "restore");
+  assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: false, recoverable: false })), "noop");
+});

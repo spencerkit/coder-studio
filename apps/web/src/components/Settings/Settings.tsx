@@ -1,26 +1,25 @@
 import type { Locale, Translator } from "../../i18n";
 import type { AppSettings, SettingsPanel } from "../../types/app";
-import { SettingsAppearanceIcon, SettingsGeneralIcon } from "../icons";
+import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
+import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
+import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
 
 type SettingsProps = {
   locale: Locale;
   activeSettingsPanel: SettingsPanel;
   settingsDraft: AppSettings;
-  launchCommandStatus: {
-    stateClass: string;
-    text: string;
-    detailText: string;
-  };
   notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
-  onSettingsChange: (patch: Partial<AppSettings>) => void;
-  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["idlePolicy"]>) => void;
+  onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
+  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
+  onClaudeSettingsChange: (settings: AppSettings) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
 
 const settingsNavItems = (t: Translator) => [
   { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
+  { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
   { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> }
 ];
 
@@ -28,16 +27,21 @@ export const Settings = ({
   locale,
   activeSettingsPanel,
   settingsDraft,
-  launchCommandStatus,
   notificationPermissionText,
   onSettingsPanelChange,
-  onSettingsChange,
+  onGeneralSettingsChange,
   onSettingsIdlePolicyChange,
+  onClaudeSettingsChange,
   onSelectLocale,
   t
 }: SettingsProps) => {
-  const activePanelLabel = activeSettingsPanel === "general" ? t("settingsGeneral") : t("settingsAppearance");
-  const languageLabel = locale === "zh" ? "中文" : "English";
+  const activePanelLabel = activeSettingsPanel === "general"
+    ? t("settingsGeneral")
+    : activeSettingsPanel === "claude"
+      ? t("claudeSettingsTitle")
+      : t("settingsAppearance");
+  const selectedLocale = getSettingsDraftLocale(settingsDraft);
+  const languageLabel = selectedLocale === "zh" ? "中文" : "English";
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
@@ -52,6 +56,7 @@ export const Settings = ({
                   type="button"
                   className={`settings-nav-item ${isActive ? "active" : ""}`}
                   onClick={() => onSettingsPanelChange(item.id)}
+                  data-testid={`settings-nav-${item.id}`}
                 >
                   <span className="settings-nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
@@ -69,44 +74,12 @@ export const Settings = ({
                 <strong>{activePanelLabel}</strong>
               </div>
               <div className="settings-summary-item">
-                <span className="section-kicker">{t("launchCommand")}</span>
-                <strong>{settingsDraft.agentCommand.trim() || t("launchCommandPlaceholder")}</strong>
-              </div>
-              <div className="settings-summary-item">
                 <span className="section-kicker">{t("languageLabel")}</span>
                 <strong>{languageLabel}</strong>
               </div>
             </div>
             {activeSettingsPanel === "general" ? (
               <div className="settings-group-card">
-              <div className="settings-row">
-                <div className="settings-row-copy">
-                  <strong>{t("launchCommand")}</strong>
-                  <span>{t("launchCommandHint")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <div className="settings-command-field">
-                    <input
-                      className="settings-inline-input"
-                      value={settingsDraft.agentCommand}
-                      onChange={(event) => onSettingsChange({ agentCommand: event.target.value })}
-                      placeholder={t("launchCommandPlaceholder")}
-                      data-testid="settings-agent-command"
-                    />
-                    <div
-                      className={`settings-inline-status ${launchCommandStatus.stateClass}`}
-                      data-testid="settings-agent-command-status"
-                    >
-                      <span className="settings-inline-status-dot" aria-hidden="true" />
-                      <div className="settings-inline-status-copy">
-                        <span>{launchCommandStatus.text}</span>
-                        {launchCommandStatus.detailText && <small>{launchCommandStatus.detailText}</small>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="settings-row">
                 <div className="settings-row-copy">
                   <strong>{t("autoSuspend")}</strong>
@@ -116,8 +89,8 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.idlePolicy.enabled}
-                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.idlePolicy.enabled })}
+                      checked={settingsDraft.general.idlePolicy.enabled}
+                      onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.general.idlePolicy.enabled })}
                     />
                     <span className="toggle-track"><span className="toggle-thumb" /></span>
                   </label>
@@ -134,7 +107,7 @@ export const Settings = ({
                     className="settings-inline-number"
                     type="number"
                     min={1}
-                    value={settingsDraft.idlePolicy.idleMinutes}
+                    value={settingsDraft.general.idlePolicy.idleMinutes}
                     onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
                     data-testid="settings-idle-minutes"
                   />
@@ -152,7 +125,7 @@ export const Settings = ({
                     className="settings-inline-number"
                     type="number"
                     min={1}
-                    value={settingsDraft.idlePolicy.maxActive}
+                    value={settingsDraft.general.idlePolicy.maxActive}
                     onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
                     data-testid="settings-max-active"
                   />
@@ -169,10 +142,10 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.completionNotifications.enabled}
-                      onChange={() => onSettingsChange({
+                      checked={settingsDraft.general.completionNotifications.enabled}
+                      onChange={() => onGeneralSettingsChange({
                         completionNotifications: {
-                          enabled: !settingsDraft.completionNotifications.enabled
+                          enabled: !settingsDraft.general.completionNotifications.enabled
                         }
                       })}
                       data-testid="settings-completion-notifications"
@@ -191,10 +164,10 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.completionNotifications.onlyWhenBackground}
-                      onChange={() => onSettingsChange({
+                      checked={settingsDraft.general.completionNotifications.onlyWhenBackground}
+                      onChange={() => onGeneralSettingsChange({
                         completionNotifications: {
-                          onlyWhenBackground: !settingsDraft.completionNotifications.onlyWhenBackground
+                          onlyWhenBackground: !settingsDraft.general.completionNotifications.onlyWhenBackground
                         }
                       })}
                       data-testid="settings-notify-only-background"
@@ -222,14 +195,21 @@ export const Settings = ({
                   <label className="toggle">
                     <input
                       type="checkbox"
-                      checked={settingsDraft.idlePolicy.pressure}
-                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.idlePolicy.pressure })}
+                      checked={settingsDraft.general.idlePolicy.pressure}
+                      onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.general.idlePolicy.pressure })}
                     />
                     <span className="toggle-track"><span className="toggle-thumb" /></span>
                   </label>
                 </div>
               </div>
             </div>
+          ) : activeSettingsPanel === "claude" ? (
+            <ClaudeSettingsPanel
+              locale={locale}
+              settings={settingsDraft}
+              onChange={onClaudeSettingsChange}
+              t={t}
+            />
           ) : (
             <div className="settings-group-card">
               <div className="settings-row">
@@ -253,16 +233,16 @@ export const Settings = ({
                   <div className="settings-pill-select">
                     <button
                       type="button"
-                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "standard" ? "active" : ""}`}
-                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "standard" })}
+                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "standard" ? "active" : ""}`}
+                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "standard" })}
                       data-testid="settings-terminal-standard"
                     >
                       {t("terminalRenderingStandard")}
                     </button>
                     <button
                       type="button"
-                      className={`settings-pill-option ${settingsDraft.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
-                      onClick={() => onSettingsChange({ terminalCompatibilityMode: "compatibility" })}
+                      className={`settings-pill-option ${settingsDraft.general.terminalCompatibilityMode === "compatibility" ? "active" : ""}`}
+                      onClick={() => onGeneralSettingsChange({ terminalCompatibilityMode: "compatibility" })}
                       data-testid="settings-terminal-compatibility"
                     >
                       {t("terminalRenderingCompatibility")}
@@ -280,14 +260,14 @@ export const Settings = ({
                   <div className="settings-pill-select">
                     <button
                       type="button"
-                      className={`settings-pill-option ${locale === "zh" ? "active" : ""}`}
+                      className={`settings-pill-option ${selectedLocale === "zh" ? "active" : ""}`}
                       onClick={() => onSelectLocale("zh")}
                     >
                       中文
                     </button>
                     <button
                       type="button"
-                      className={`settings-pill-option ${locale === "en" ? "active" : ""}`}
+                      className={`settings-pill-option ${selectedLocale === "en" ? "active" : ""}`}
                       onClick={() => onSelectLocale("en")}
                     >
                       English

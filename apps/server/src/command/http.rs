@@ -71,6 +71,15 @@ struct ArchiveSessionRequest {
 }
 
 #[derive(Deserialize)]
+struct SessionHistoryMutationRequest {
+    workspace_id: String,
+    session_id: u64,
+    device_id: Option<String>,
+    client_id: Option<String>,
+    fencing_token: Option<i64>,
+}
+
+#[derive(Deserialize)]
 struct IdlePolicyRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
@@ -89,6 +98,11 @@ struct WorkbenchLayoutRequest {
     layout: WorkbenchLayout,
     device_id: Option<String>,
     client_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AppSettingsUpdateRequest {
+    settings: Value,
 }
 
 #[derive(Deserialize)]
@@ -228,12 +242,12 @@ struct TerminalCloseRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct AgentStartRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
     provider: String,
-    command: String,
     cols: Option<u16>,
     rows: Option<u16>,
 }
@@ -423,6 +437,34 @@ fn require_workspace_controller_mutation(
     Ok(())
 }
 
+fn require_optional_workspace_history_mutation(
+    app: &AppHandle,
+    request: &SessionHistoryMutationRequest,
+    authorized: &AuthorizedRequest,
+) -> Result<(), RpcError> {
+    require_workspace_access(app, &request.workspace_id, authorized)?;
+    match (
+        request.device_id.as_deref(),
+        request.client_id.as_deref(),
+        request.fencing_token,
+    ) {
+        (Some(device_id), Some(client_id), Some(fencing_token)) => {
+            assert_workspace_controller_can_mutate(
+                &request.workspace_id,
+                device_id,
+                client_id,
+                fencing_token,
+                app,
+                app.state(),
+            )
+            .map_err(rpc_forbidden)?;
+            Ok(())
+        }
+        (None, None, None) => Ok(()),
+        _ => Err(rpc_bad_request("incomplete_workspace_controller".to_string())),
+    }
+}
+
 fn require_workspace_path_controller_mutation(
     app: &AppHandle,
     controller: &WorkspaceControllerMutationRequest,
@@ -512,6 +554,28 @@ fn filter_bootstrap_for_public_mode(
     }
 }
 
+fn filter_session_history_for_public_mode(
+    app: &AppHandle,
+    records: Vec<SessionHistoryRecord>,
+    authorized: &AuthorizedRequest,
+) -> Vec<SessionHistoryRecord> {
+    if !authorized.request.public_mode {
+        return records;
+    }
+
+    records
+        .into_iter()
+        .filter(|record| {
+            workspace_access_context(app.state(), &record.workspace_id)
+                .and_then(|(path, target)| {
+                    ensure_path_allowed(&path, &target, &authorized.allowed_roots)
+                        .map_err(|e| e.to_string())
+                })
+                .is_ok()
+        })
+        .collect()
+}
+
 fn dispatch_rpc(
     app: &AppHandle,
     command: &str,
@@ -519,6 +583,18 @@ fn dispatch_rpc(
     authorized: &AuthorizedRequest,
 ) -> Result<Value, RpcError> {
     match command {
+        "app_settings_get" => {
+            serde_json::to_value(app_settings_get(app.state()).map_err(rpc_bad_request)?)
+                .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "app_settings_update" => {
+            let req: AppSettingsUpdateRequest =
+                serde_json::from_value(payload).map_err(|e| rpc_bad_request(e.to_string()))?;
+            serde_json::to_value(
+                app_settings_update(req.settings, app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "launch_workspace" => {
             let req: LaunchWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             if authorized.request.public_mode {
@@ -568,6 +644,12 @@ fn dispatch_rpc(
             serde_json::to_value(filter_bootstrap_for_public_mode(bootstrap, authorized))
                 .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "list_session_history" => serde_json::to_value(filter_session_history_for_public_mode(
+            app,
+            list_session_history(app.state()).map_err(rpc_bad_request)?,
+            authorized,
+        ))
+        .map_err(|e| rpc_bad_request(e.to_string())),
         "workspace_snapshot" => {
             let req: WorkspaceIdRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_access(app, &req.workspace_id, authorized)?;
@@ -749,6 +831,23 @@ fn dispatch_rpc(
                     .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "restore_session" => {
+            let req: SessionHistoryMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_optional_workspace_history_mutation(app, &req, authorized)?;
+            serde_json::to_value(
+                restore_session(req.workspace_id, req.session_id, app.state())
+                    .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "delete_session" => {
+            let req: SessionHistoryMutationRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_optional_workspace_history_mutation(app, &req, authorized)?;
+            delete_session(req.workspace_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
+            Ok(Value::Null)
         }
         "update_idle_policy" => {
             let req: IdlePolicyRequest = parse_payload(payload).map_err(rpc_bad_request)?;
@@ -1088,7 +1187,6 @@ fn dispatch_rpc(
                         workspace_id: req.controller.workspace_id,
                         session_id: req.session_id,
                         provider: req.provider,
-                        command: req.command,
                         cols: req.cols,
                         rows: req.rows,
                     },
@@ -1475,8 +1573,13 @@ pub(crate) fn build_transport_router(app: &AppHandle) -> Router {
 }
 
 pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer, String> {
+    let dev_backend_port = std::env::var("CODER_STUDIO_DEV_BACKEND_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEV_BACKEND_PORT);
     let (bind_host, bind_port) = if cfg!(debug_assertions) {
-        ("127.0.0.1".to_string(), DEV_BACKEND_PORT)
+        ("127.0.0.1".to_string(), dev_backend_port)
     } else {
         transport_bind_config(app)?
     };
@@ -1503,6 +1606,7 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::time::Duration;
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -1538,6 +1642,63 @@ mod tests {
         )
         .unwrap();
         result.snapshot.workspace.workspace_id
+    }
+
+    fn create_temp_workspace_root(name: &str) -> String {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coder-studio-{name}-{unique}"));
+        std::fs::create_dir_all(&root).unwrap();
+        root.to_string_lossy().to_string()
+    }
+
+    fn test_agent_launch_profile() -> (String, Vec<String>) {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "cmd".to_string(),
+                vec![
+                    "/D".to_string(),
+                    "/S".to_string(),
+                    "/C".to_string(),
+                    "echo %TEST_MARKER%".to_string(),
+                ],
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (
+                "sh".to_string(),
+                vec!["-lc".to_string(), "printf %s \"$TEST_MARKER\"".to_string()],
+            )
+        }
+    }
+
+    fn test_agent_marker_profile(marker_file: &str) -> (String, Vec<String>) {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "cmd".to_string(),
+                vec![
+                    "/D".to_string(),
+                    "/S".to_string(),
+                    "/C".to_string(),
+                    format!("echo %TEST_MARKER%> {marker_file}"),
+                ],
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (
+                "sh".to_string(),
+                vec![
+                    "-lc".to_string(),
+                    format!("printf %s \"$TEST_MARKER\" > {marker_file}"),
+                ],
+            )
+        }
     }
 
     #[test]
@@ -1937,5 +2098,390 @@ mod tests {
         let scoped_b: WorkbenchBootstrap = serde_json::from_value(bootstrap_b).unwrap();
         assert_eq!(scoped_b.ui_state.layout.left_width, 320.0);
         assert!(!scoped_b.ui_state.layout.show_code_panel);
+    }
+
+    #[test]
+    fn session_history_rpc_lists_restores_and_deletes_records() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-rpc-test");
+        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+
+        let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
+            .expect("history rpc should load");
+        let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
+        assert!(
+            history
+                .iter()
+                .any(|record| record.workspace_id == workspace_id
+                    && record.session_id == created.id
+                    && record.archived)
+        );
+
+        let restored = dispatch_rpc(
+            &app,
+            "restore_session",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": created.id,
+            }),
+            &authorized,
+        )
+        .expect("restore rpc should succeed");
+        let restored: SessionRestoreResult = serde_json::from_value(restored).unwrap();
+        assert_eq!(restored.session.id, created.id);
+        assert!(!restored.already_active);
+
+        dispatch_rpc(
+            &app,
+            "delete_session",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": created.id,
+            }),
+            &authorized,
+        )
+        .expect("delete rpc should succeed");
+
+        let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
+            .expect("history rpc should reload");
+        let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
+        assert!(!history.iter().any(|record| record.session_id == created.id));
+    }
+
+    #[test]
+    fn app_settings_rpc_round_trips_defaults_and_updates() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let initial = dispatch_rpc(&app, "app_settings_get", json!({}), &authorized)
+            .expect("default settings should load");
+        let initial: AppSettingsPayload = serde_json::from_value(initial).unwrap();
+        assert_eq!(initial.general.terminal_compatibility_mode, "standard");
+        assert_eq!(initial.claude.global.executable, "claude");
+
+        let saved = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh",
+                        "terminal_compatibility_mode": "compatibility",
+                        "completion_notifications": {
+                            "enabled": true,
+                            "only_when_background": false
+                        },
+                        "idle_policy": {
+                            "enabled": true,
+                            "idle_minutes": 12,
+                            "max_active": 4,
+                            "pressure": true
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": ["--dangerously-skip-permissions"],
+                            "env": {
+                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                            },
+                            "settings_json": {
+                                "model": "sonnet"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        },
+                        "overrides": {
+                            "native": null,
+                            "wsl": null
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("settings update should succeed");
+
+        let saved: AppSettingsPayload = serde_json::from_value(saved).unwrap();
+        assert_eq!(saved.general.locale, "zh");
+        assert_eq!(saved.claude.global.executable, "claude-nightly");
+        assert_eq!(
+            saved
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_BASE_URL")
+                .map(String::as_str),
+            Some("https://anthropic.example")
+        );
+    }
+
+    #[test]
+    fn app_settings_update_merges_partial_payload_without_resetting_other_fields() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let (executable, startup_args) = test_agent_launch_profile();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh"
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": [],
+                            "env": {
+                                "TEST_MARKER": "persisted-value"
+                            },
+                            "settings_json": {
+                                "model": "opus"
+                            },
+                            "global_config_json": {}
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": executable,
+                            "startup_args": startup_args
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("partial settings update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert_eq!(updated.general.locale, "zh");
+        assert_eq!(
+            updated
+                .claude
+                .global
+                .env
+                .get("TEST_MARKER")
+                .map(String::as_str),
+            Some("persisted-value")
+        );
+        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+    }
+
+    #[test]
+    fn app_settings_update_normalizes_camel_case_payloads_before_merge() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "completion_notifications": {
+                            "enabled": true,
+                            "only_when_background": false
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "startup_args": ["--existing"],
+                            "settings_json": {
+                                "model": "opus"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "completionNotifications": {
+                            "enabled": false
+                        }
+                    },
+                    "claude": {
+                        "global": {
+                            "startupArgs": ["--verbose"],
+                            "settingsJson": {
+                                "permissionMode": "acceptEdits"
+                            },
+                            "globalConfigJson": {
+                                "theme": "dark"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("camelCase settings update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert!(!updated.general.completion_notifications.enabled);
+        assert!(!updated.general.completion_notifications.only_when_background);
+        assert_eq!(updated.claude.global.startup_args, vec!["--verbose"]);
+        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+        assert_eq!(
+            updated.claude.global.settings_json["permissionMode"],
+            "acceptEdits"
+        );
+        assert_eq!(updated.claude.global.global_config_json["theme"], "dark");
+        assert_eq!(
+            updated.claude.global.global_config_json["showTurnDuration"],
+            true
+        );
+    }
+
+    #[test]
+    fn agent_start_uses_server_resolved_settings_from_storage() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("agent-start-settings");
+        let workspace_id = launch_test_workspace(&app, &root);
+        let marker_path = PathBuf::from(&root).join(".agent-start-marker");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "general": {
+                        "locale": "zh"
+                    },
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": [],
+                            "env": {
+                                "TEST_MARKER": "server-resolved"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let (executable, startup_args) = test_agent_marker_profile(".agent-start-marker");
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": executable,
+                            "startup_args": startup_args
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let attach = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
+        let session_id = load_workspace_snapshot(app.state(), &workspace_id)
+            .unwrap()
+            .sessions
+            .first()
+            .unwrap()
+            .id;
+
+        let started = dispatch_rpc(
+            &app,
+            "agent_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": session_id.to_string(),
+                "provider": "claude",
+                "cols": 80,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .expect("agent_start should succeed with server-resolved settings");
+        let started: AgentStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        let mut marker_value = String::new();
+        for _ in 0..100 {
+            if let Ok(value) = std::fs::read_to_string(&marker_path) {
+                marker_value = value;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            marker_value.contains("server-resolved"),
+            "expected marker file to contain server value, got: {marker_value:?}"
+        );
+    }
+
+    #[test]
+    fn agent_start_rejects_client_supplied_command() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let error = dispatch_rpc(
+            &app,
+            "agent_start",
+            json!({
+                "workspace_id": "ws_test",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": 1,
+                "session_id": "1",
+                "provider": "claude",
+                "command": "claude"
+            }),
+            &authorized,
+        )
+        .expect_err("agent_start should reject legacy command payloads");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
     }
 }

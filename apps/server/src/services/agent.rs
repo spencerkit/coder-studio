@@ -25,11 +25,63 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
     }
 }
 
+fn escape_agent_command_part(target: &ExecTarget, value: &str) -> String {
+    if matches!(target, ExecTarget::Wsl { .. }) {
+        return shell_escape(value);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        crate::infra::runtime::shell_escape_windows(value)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        shell_escape(value)
+    }
+}
+
+fn build_claude_launch_command(
+    target: &ExecTarget,
+    profile: &ClaudeRuntimeProfile,
+    claude_session_id: Option<&str>,
+) -> String {
+    let mut parts = Vec::with_capacity(1 + profile.startup_args.len());
+    parts.push(escape_agent_command_part(target, &profile.executable));
+    parts.extend(
+        profile
+            .startup_args
+            .iter()
+            .map(|arg| escape_agent_command_part(target, arg)),
+    );
+    build_claude_resume_command(&parts.join(" "), claude_session_id)
+}
+
+fn take_agent_runtime(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Option<Arc<AgentRuntime>>, String> {
+    let key = agent_key(workspace_id, session_id);
+    let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
+    Ok(agents.remove(&key))
+}
+
+pub(crate) fn stop_agent_runtime_without_status_update(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if let Some(runtime) = take_agent_runtime(workspace_id, session_id, state)? {
+        terminate_agent_runtime(runtime);
+    }
+    Ok(())
+}
+
 pub(crate) struct AgentStartParams {
     pub(crate) workspace_id: String,
     pub(crate) session_id: String,
     pub(crate) provider: String,
-    pub(crate) command: String,
     pub(crate) cols: Option<u16>,
     pub(crate) rows: Option<u16>,
 }
@@ -43,7 +95,6 @@ pub(crate) fn agent_start(
         workspace_id,
         session_id,
         provider,
-        command,
         cols,
         rows,
     } = params;
@@ -61,10 +112,14 @@ pub(crate) fn agent_start(
     let (cwd, target) = workspace_access_context(state, &workspace_id)?;
     let stored_session = load_session(state, &workspace_id, session_id_num)?;
     let effective_claude_session_id = stored_session.claude_session_id.clone();
-    let command = if provider == "claude" {
-        build_claude_resume_command(&command, effective_claude_session_id.as_deref())
+    let (command, claude_profile) = if provider == "claude" {
+        let settings = load_or_default_app_settings(state)?;
+        let profile = resolve_claude_runtime_profile(&settings, &target);
+        let command =
+            build_claude_launch_command(&target, &profile, effective_claude_session_id.as_deref());
+        (command, Some(profile))
     } else {
-        command
+        return Err("unsupported_agent_provider".to_string());
     };
 
     let (program, args) = build_agent_pty_command(&target, &cwd, &command);
@@ -89,7 +144,10 @@ pub(crate) fn agent_start(
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
-    if provider == "claude" {
+    if let Some(profile) = claude_profile.as_ref() {
+        for (key, value) in &profile.env {
+            cmd.env(key, value);
+        }
         ensure_claude_hook_settings(&cwd, &target)?;
         let app_bin = current_app_bin_for_target(&target)?;
         let hook_endpoint = current_hook_endpoint(&app)?;
@@ -180,10 +238,15 @@ pub(crate) fn agent_start(
         }
         emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
         let state: State<AppState> = state_handle.state();
-        let _ = set_session_status(state, &workspace_id, session_id_num, SessionStatus::Idle);
-        if let Ok(mut agents) = state.agents.lock() {
-            agents.remove(&key);
+        let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
+            agents.remove(&key).is_some()
+        } else {
+            false
         };
+        if should_mark_idle {
+            let _ =
+                set_session_status_if_not_archived(state, &workspace_id, session_id_num, SessionStatus::Idle);
+        }
     });
 
     Ok(AgentStartResult { started: true })
@@ -239,16 +302,9 @@ pub(crate) fn agent_stop(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let key = agent_key(&workspace_id, &session_id);
-    let runtime = {
-        let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
-        agents.remove(&key)
-    };
-    if let Some(runtime) = runtime {
-        terminate_agent_runtime(runtime);
-    }
+    stop_agent_runtime_without_status_update(&workspace_id, &session_id, state)?;
     if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = set_session_status(
+        let _ = set_session_status_if_not_archived(
             state,
             &workspace_id,
             session_id_num,
@@ -281,7 +337,7 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
     for (session_id, runtime) in runtimes {
         terminate_agent_runtime(runtime);
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = set_session_status(
+            let _ = set_session_status_if_not_archived(
                 state,
                 workspace_id,
                 session_id_num,

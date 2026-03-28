@@ -120,6 +120,7 @@ pub(crate) fn close_workspace_scoped(
     client_id: Option<&str>,
     state: State<'_, AppState>,
 ) -> Result<WorkbenchUiState, String> {
+    archive_workspace_sessions(state, &workspace_id)?;
     let ui_state = close_workspace_ui(state, &workspace_id, device_id, client_id)?;
     release_workspace_controller(&workspace_id, state)?;
     close_workspace_terminals(&workspace_id, state);
@@ -185,8 +186,31 @@ pub(crate) fn archive_session(
     state: State<'_, AppState>,
 ) -> Result<ArchiveEntry, String> {
     let entry = archive_workspace_session(state, &workspace_id, session_id)?;
-    let _ = agent_stop(workspace_id.clone(), session_id.to_string(), state);
+    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id.to_string(), state);
     Ok(entry)
+}
+
+pub(crate) fn list_session_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionHistoryRecord>, String> {
+    load_session_history_records(state)
+}
+
+pub(crate) fn restore_session(
+    workspace_id: String,
+    session_id: u64,
+    state: State<'_, AppState>,
+) -> Result<SessionRestoreResult, String> {
+    restore_workspace_session(state, &workspace_id, session_id)
+}
+
+pub(crate) fn delete_session(
+    workspace_id: String,
+    session_id: u64,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id.to_string(), state);
+    delete_workspace_session(state, &workspace_id, session_id)
 }
 
 pub(crate) fn update_idle_policy(
@@ -303,5 +327,73 @@ mod tests {
         assert_eq!(lease.controller_client_id, None);
         assert_eq!(lease.lease_expires_at, 0);
         assert_eq!(lease.takeover_request_id, None);
+    }
+
+    #[test]
+    fn archive_session_keeps_suspended_status_after_runtime_stop() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-archive-test");
+        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        set_session_status(app.state(), &workspace_id, created.id, SessionStatus::Running).unwrap();
+
+        let _entry = archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let archived = snapshot
+            .archive
+            .iter()
+            .find(|entry| entry.session_id == created.id)
+            .unwrap();
+        let status = archived.snapshot["status"].as_str().unwrap();
+        assert_eq!(status, "suspended");
+    }
+
+    #[test]
+    fn restore_and_delete_session_round_trip_history_records() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-restore-test");
+        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+
+        let history_before = list_session_history(app.state()).unwrap();
+        assert!(
+            history_before
+                .iter()
+                .any(|record| record.session_id == created.id && record.archived)
+        );
+
+        let restored = restore_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        assert_eq!(restored.session.id, created.id);
+        assert!(!restored.already_active);
+
+        delete_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let history_after = list_session_history(app.state()).unwrap();
+        assert!(!history_after.iter().any(|record| record.session_id == created.id));
+    }
+
+    #[test]
+    fn close_workspace_archives_all_sessions_but_keeps_workspace_history_visible() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-close-test");
+        let extra = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let live_ids = workspace_snapshot(workspace_id.clone(), app.state())
+            .unwrap()
+            .sessions
+            .into_iter()
+            .map(|session| session.id)
+            .collect::<Vec<_>>();
+
+        close_workspace_scoped(workspace_id.clone(), None, None, app.state()).unwrap();
+
+        let history = list_session_history(app.state()).unwrap();
+        let records = history
+            .into_iter()
+            .filter(|record| record.workspace_id == workspace_id)
+            .collect::<Vec<_>>();
+        assert_eq!(records.len(), live_ids.len());
+        assert!(records.iter().all(|record| record.archived));
+        assert!(records.iter().any(|record| record.session_id == extra.id));
+        for live_id in live_ids {
+            assert!(records.iter().any(|record| record.session_id == live_id));
+        }
     }
 }

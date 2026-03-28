@@ -84,7 +84,7 @@ const gotoWorkspaceRoot = async (page: Page) => {
   ]);
   await page.waitForFunction(() =>
     Boolean(document.querySelector('[data-testid="overlay"]'))
-    || document.querySelectorAll('.workspace-top-tab').length > 0
+    || Boolean(document.querySelector('[data-testid="workspace-topbar"]'))
   );
 };
 
@@ -100,7 +100,7 @@ const openLaunchOverlay = async (page: Page) => {
     return;
   }
 
-  await expect.poll(() => countWorkspaceTabs(page)).toBeGreaterThan(0);
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
   await page.getByRole('button', { name: 'Add workspace' }).click();
   await expect(overlay).toBeVisible();
 };
@@ -131,6 +131,40 @@ const invokeRpc = async <T>(page: Page, command: string, payload: Record<string,
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+};
+
+const resetAppSettings = async (page: Page) => {
+  await invokeRpc(page, 'app_settings_update', {
+    settings: {
+      general: {
+        locale: 'en',
+        terminalCompatibilityMode: 'standard',
+        completionNotifications: {
+          enabled: true,
+          onlyWhenBackground: true,
+        },
+        idlePolicy: {
+          enabled: true,
+          idleMinutes: 10,
+          maxActive: 3,
+          pressure: true,
+        },
+      },
+      claude: {
+        global: {
+          executable: 'claude',
+          startupArgs: [],
+          env: {},
+          settingsJson: {},
+          globalConfigJson: {},
+        },
+        overrides: {
+          native: null,
+          wsl: null,
+        },
+      },
+    },
+  });
 };
 
 const patchSystemConfig = async (request: APIRequestContext, updates: Record<string, unknown>) => {
@@ -440,12 +474,34 @@ const closeAllOpenWorkspaces = async (page: Page) => {
   }>(page, 'workbench_bootstrap');
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
-    const controller = await currentWorkspaceController(page, workspaceId, {
-      deviceId: 'cleanup-device',
-      clientId: 'cleanup-client',
-    });
+    const controller = await currentWorkspaceController(page, workspaceId);
     await invokeRpc(page, 'close_workspace', controller);
   }
+};
+
+const createArchivedSessionForWorkspace = async (
+  page: Page,
+  workspaceId: string,
+  title: string,
+) => {
+  const controller = await currentWorkspaceController(page, workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+  });
+  await invokeRpc(page, 'session_update', {
+    ...controller,
+    sessionId: session.id,
+    patch: {
+      title,
+      status: 'idle',
+    },
+  });
+  await invokeRpc(page, 'archive_session', {
+    ...controller,
+    sessionId: session.id,
+  });
+  return String(session.id);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -459,7 +515,19 @@ test.beforeEach(async ({ page }) => {
   });
   await installTransportTracker(page);
   await installRuntimeCommandMock(page);
-  await closeAllOpenWorkspaces(page);
+  await resetAppSettings(page);
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+    };
+  }>(page, 'workbench_bootstrap');
+  for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
+    const controller = await currentWorkspaceController(page, workspaceId, {
+      deviceId: 'cleanup-device',
+      clientId: 'cleanup-client',
+    });
+    await invokeRpc(page, 'close_workspace', controller);
+  }
 });
 
 test.beforeAll(async () => {
@@ -672,13 +740,17 @@ test('background turn_completed still sends a reminder while viewing settings', 
   }
 });
 
-test('settings persist across route changes and reloads', async ({ page }) => {
+test('claude settings persist across route changes and reloads', async ({ page }) => {
   await launchLocalWorkspace(page);
   await page.getByTestId('settings-open').click();
 
   await expect(page.getByTestId('settings-page')).toBeVisible();
-  await page.getByTestId('settings-agent-command').fill('claude --print');
   await page.getByTestId('settings-max-active').fill('5');
+  await page.getByTestId('settings-nav-claude').click();
+  await page.getByTestId('claude-executable-input').fill('claude-nightly');
+  await page.getByTestId('claude-startup-args').fill('--dangerously-skip-permissions');
+  await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
+  await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: 'Back to app' }).click();
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -686,8 +758,96 @@ test('settings persist across route changes and reloads', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await page.getByTestId('settings-open').click();
-  await expect(page.getByTestId('settings-agent-command')).toHaveValue('claude --print');
   await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
+  await page.getByTestId('settings-nav-claude').click();
+  await expect(page.getByTestId('claude-executable-input')).toHaveValue('claude-nightly');
+  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--dangerously-skip-permissions');
+  await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
+});
+
+test('history drawer restores archived sessions and deletes records permanently', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-history-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const current = await readWorkspaceByPath(page, workspaceDir);
+    expect(current.workspace).toBeTruthy();
+    const workspaceId = current.workspace!.workspace.workspace_id;
+
+    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Restore Session');
+    const deleteSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Delete Session');
+
+    await page.getByTestId('history-toggle').click();
+    await expect(page.getByTestId('history-drawer')).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`)).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByTestId(`history-delete-${workspaceId}-${deleteSessionId}`).click();
+    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toHaveCount(0);
+
+    await page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`).click();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await expect(page.locator('.agent-pane-title', { hasText: 'History Restore Session' })).toBeVisible();
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
+test('draft pane restore only shows current workspace history and restores into the new pane', async ({ page }) => {
+  const workspaceADir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-a-'));
+  const workspaceBDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-b-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceADir);
+    await launchWorkspaceByPath(page, workspaceBDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const workspaceA = await readWorkspaceByPath(page, workspaceADir);
+    const workspaceB = await readWorkspaceByPath(page, workspaceBDir);
+    expect(workspaceA.workspace).toBeTruthy();
+    expect(workspaceB.workspace).toBeTruthy();
+
+    const workspaceAId = workspaceA.workspace!.workspace.workspace_id;
+    const workspaceBId = workspaceB.workspace!.workspace.workspace_id;
+    const workspaceALabel = path.basename(workspaceADir);
+
+    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceAId, 'Draft Restore Alpha');
+    await createArchivedSessionForWorkspace(page, workspaceBId, 'Draft Restore Beta');
+
+    await page.reload();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    await page.locator('.workspace-top-tab').filter({ hasText: workspaceALabel }).first().click();
+    await expect(page.locator('.workspace-top-tab.active')).toContainText(workspaceALabel);
+
+    const paneCard = page.locator('.agent-pane-card').first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Split Vertically').click();
+
+    const draftLauncher = page.locator('.agent-draft-launcher').last();
+    await expect(draftLauncher).toBeVisible();
+    await draftLauncher.locator('[data-testid^="draft-mode-restore-"]').click();
+
+    await expect(draftLauncher.getByText('Draft Restore Alpha')).toBeVisible();
+    await expect(draftLauncher.getByText('Draft Restore Beta')).toHaveCount(0);
+    await draftLauncher.getByTestId(`restore-candidate-${restoreSessionId}`).click();
+
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await expect(page.locator('.agent-pane-title', { hasText: 'Draft Restore Alpha' })).toBeVisible();
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await Promise.all([
+      fs.rm(workspaceADir, { recursive: true, force: true }),
+      fs.rm(workspaceBDir, { recursive: true, force: true }),
+    ]);
+  }
 });
 
 test('restores the last workspace after reload', async ({ page }) => {

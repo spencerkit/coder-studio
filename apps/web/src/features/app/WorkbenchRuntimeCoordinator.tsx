@@ -16,7 +16,6 @@ import {
   releaseWorkspaceControllerKeepalive,
   requestWorkspaceTakeover,
 } from "../../services/http/workspace.service.ts";
-import { cloneAppSettings } from "../../shared/app/settings";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
   isForegroundActiveStatus,
@@ -29,6 +28,9 @@ import {
   applyWorkspaceControllerEvent,
   applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
+import {
+  getIdlePolicySyncWorkspaceIds,
+} from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
@@ -51,10 +53,6 @@ import {
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
-import {
-  applyAppSettingsToTabs,
-  summarizeWorkbenchSettingsSync,
-} from "./workbench-settings-sync";
 
 const withServiceFallback = async <T,>(
   operation: () => Promise<T>,
@@ -71,11 +69,13 @@ const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
   locale: Locale;
+  settingsConfirmed: boolean;
 };
 
 export const WorkbenchRuntimeCoordinator = ({
   appSettings,
   locale,
+  settingsConfirmed,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
   const [state, setState] = useRelaxState(workbenchState);
@@ -617,10 +617,8 @@ export const WorkbenchRuntimeCoordinator = ({
     };
   }, [clientId, deviceId, isDocumentVisible, isOnline, takeoverPollingFingerprint, updateState]);
 
-  const settingsSyncFingerprint = useMemo(() => state.tabs.map((tab) => [
+  const idlePolicyFingerprint = useMemo(() => state.tabs.map((tab) => [
     tab.id,
-    tab.agent.provider,
-    tab.agent.command,
     tab.idlePolicy.enabled ? "1" : "0",
     String(tab.idlePolicy.idleMinutes),
     String(tab.idlePolicy.maxActive),
@@ -628,19 +626,26 @@ export const WorkbenchRuntimeCoordinator = ({
   ].join(":")).join("|"), [state.tabs]);
 
   useEffect(() => {
-    const normalized = cloneAppSettings(appSettings);
-    const { agentWorkspaceIds, idlePolicyWorkspaceIds } = summarizeWorkbenchSettingsSync(
+    const idlePolicyWorkspaceIds = getIdlePolicySyncWorkspaceIds(
       stateRef.current.tabs,
-      normalized,
+      appSettings.idlePolicy,
+      settingsConfirmed,
     );
 
-    if (agentWorkspaceIds.length === 0 && idlePolicyWorkspaceIds.length === 0) {
+    if (idlePolicyWorkspaceIds.length === 0) {
       return;
     }
 
     updateState((current) => ({
       ...current,
-      tabs: applyAppSettingsToTabs(current.tabs, normalized),
+      tabs: current.tabs.map((tab) => (
+        idlePolicyWorkspaceIds.includes(tab.id)
+          ? {
+              ...tab,
+              idlePolicy: { ...appSettings.idlePolicy },
+            }
+          : tab
+      )),
     }));
 
     idlePolicyWorkspaceIds.forEach((workspaceId) => {
@@ -648,11 +653,11 @@ export const WorkbenchRuntimeCoordinator = ({
       if (!tab || tab.controller.role !== "controller") {
         return;
       }
-      void updateIdlePolicyRequest(workspaceId, normalized.idlePolicy, tab.controller).catch(() => {
+      void updateIdlePolicyRequest(workspaceId, appSettings.idlePolicy, tab.controller).catch(() => {
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });
-  }, [appSettings, settingsSyncFingerprint, updateState]);
+  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsConfirmed, updateState]);
 
   return null;
 };

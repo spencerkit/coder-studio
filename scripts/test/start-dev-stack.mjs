@@ -8,6 +8,7 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 let frontend = null;
 const runtime = buildDevStackRuntimeEnv(ROOT, process.env);
+const backendPort = Number.parseInt(runtime.env.CODER_STUDIO_DEV_BACKEND_PORT ?? '', 10) || 41033;
 
 let shuttingDown = false;
 
@@ -83,7 +84,7 @@ async function waitForServer() {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch('http://127.0.0.1:41033/health');
+      const response = await fetch(`http://127.0.0.1:${backendPort}/health`);
       if (response.ok) {
         return;
       }

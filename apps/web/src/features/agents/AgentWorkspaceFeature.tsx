@@ -1,6 +1,10 @@
 import type { PointerEventHandler, ReactNode } from "react";
 import type { Locale, Translator } from "../../i18n";
-import type { AppTheme, TerminalCompatibilityMode } from "../../types/app";
+import type {
+  AppTheme,
+  SessionHistoryRecord,
+  TerminalCompatibilityMode,
+} from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
 import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
@@ -34,11 +38,15 @@ type AgentWorkspaceFeatureProps = {
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
   draftPromptInputs: Record<string, string>;
+  draftPaneModes: Record<string, "new" | "restore">;
+  restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
   onExitArchive: () => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
+  onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
+  onRestoreDraftSession: (paneId: string, sessionId: string) => void;
   onSubmitDraftPrompt: (paneId: string) => void;
   onDraftPromptChange: (paneId: string, value: string) => void;
   setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
@@ -62,11 +70,15 @@ export const AgentWorkspaceFeature = ({
   terminalFontSize,
   terminalCompatibilityMode,
   draftPromptInputs,
+  draftPaneModes,
+  restoreCandidates,
   displaySessionTitle,
   onExitArchive,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
+  onDraftPaneModeChange,
+  onRestoreDraftSession,
   onSubmitDraftPrompt,
   onDraftPromptChange,
   setDraftPromptInputRef,
@@ -110,6 +122,7 @@ export const AgentWorkspaceFeature = ({
     const statusTone = sessionTone(session.status);
     const headerTag = sessionHeaderTag(session.status, locale);
     const showDraftPromptInput = isHiddenDraftPlaceholder(session);
+    const draftPaneMode = draftPaneModes[node.id] ?? "new";
     const showLiveTerminal = isPaneActive;
     const preview = showLiveTerminal ? "" : buildPanePreview(session.stream);
 
@@ -169,42 +182,81 @@ export const AgentWorkspaceFeature = ({
               <div className="agent-draft-launcher-card">
                 <div className="agent-draft-launcher-copy">
                   <div className="agent-draft-launcher-title">{t("draftSessionPrompt")}</div>
-                  <div className="agent-draft-launcher-hint">{t("draftTaskPlaceholder")}</div>
+                  <div className="agent-draft-launcher-hint">{t("draftChooserHint")}</div>
                 </div>
-                <form
-                  className="agent-pane-input agent-draft-launcher-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    onSubmitDraftPrompt(node.id);
-                  }}
-                >
-                  <div className="agent-compose">
-                    <input
-                      ref={(element) => setDraftPromptInputRef(node.id, element)}
-                      className="agent-compose-field agent-draft-launcher-field"
-                      value={draftPromptInputs[node.id] ?? ""}
-                      onChange={(event) => onDraftPromptChange(node.id, event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && (event.nativeEvent as KeyboardEvent).isComposing) {
-                          event.preventDefault();
-                        }
-                      }}
-                      placeholder={t("draftTaskPlaceholder")}
-                      aria-label={t("draftTaskPlaceholder")}
-                      data-testid={`agent-draft-input-${node.id}`}
-                      autoFocus={isPaneActive}
-                    />
-                    <button
-                      type="submit"
-                      className="agent-send-button"
-                      disabled={!draftPromptInputs[node.id]?.trim()}
-                      title={t("send")}
-                      aria-label={t("send")}
-                    >
-                      <AgentSendIcon />
-                    </button>
+                <div className="agent-draft-launcher-tabs">
+                  <button
+                    type="button"
+                    className={`agent-draft-launcher-tab ${draftPaneMode === "new" ? "active" : ""}`}
+                    onClick={() => onDraftPaneModeChange(node.id, "new")}
+                    data-testid={`draft-mode-new-${node.id}`}
+                  >
+                    {t("draftModeNew")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`agent-draft-launcher-tab ${draftPaneMode === "restore" ? "active" : ""}`}
+                    onClick={() => onDraftPaneModeChange(node.id, "restore")}
+                    data-testid={`draft-mode-restore-${node.id}`}
+                  >
+                    {t("draftModeRestore")}
+                  </button>
+                </div>
+                {draftPaneMode === "new" ? (
+                  <form
+                    className="agent-pane-input agent-draft-launcher-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      onSubmitDraftPrompt(node.id);
+                    }}
+                  >
+                    <div className="agent-compose">
+                      <input
+                        ref={(element) => setDraftPromptInputRef(node.id, element)}
+                        className="agent-compose-field agent-draft-launcher-field"
+                        value={draftPromptInputs[node.id] ?? ""}
+                        onChange={(event) => onDraftPromptChange(node.id, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && (event.nativeEvent as KeyboardEvent).isComposing) {
+                            event.preventDefault();
+                          }
+                        }}
+                        placeholder={t("draftTaskPlaceholder")}
+                        aria-label={t("draftTaskPlaceholder")}
+                        data-testid={`agent-draft-input-${node.id}`}
+                        autoFocus={isPaneActive}
+                      />
+                      <button
+                        type="submit"
+                        className="agent-send-button"
+                        disabled={!draftPromptInputs[node.id]?.trim()}
+                        title={t("send")}
+                        aria-label={t("send")}
+                      >
+                        <AgentSendIcon />
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="agent-draft-restore-list">
+                    {restoreCandidates.length === 0 ? (
+                      <div className="agent-draft-launcher-empty">{t("draftRestoreEmpty")}</div>
+                    ) : (
+                      restoreCandidates.map((record) => (
+                        <button
+                          key={`${record.workspaceId}:${record.sessionId}`}
+                          type="button"
+                          className="agent-draft-restore-item"
+                          onClick={() => onRestoreDraftSession(node.id, record.sessionId)}
+                          data-testid={`restore-candidate-${record.sessionId}`}
+                        >
+                          <strong>{record.title}</strong>
+                          <span>{record.archived ? t("historyArchived") : t("historyDetached")}</span>
+                        </button>
+                      ))
+                    )}
                   </div>
-                </form>
+                )}
               </div>
             </div>
           ) : (

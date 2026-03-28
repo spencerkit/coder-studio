@@ -1,4 +1,5 @@
 pub(crate) mod agent;
+pub(crate) mod app_settings;
 pub(crate) mod claude;
 pub(crate) mod filesystem;
 pub(crate) mod git;

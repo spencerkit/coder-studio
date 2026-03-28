@@ -6,6 +6,7 @@ const SESSION_STREAM_LIMIT: usize = 200_000;
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
+const APP_SETTINGS_ROW_ID: i64 = 1;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -84,6 +85,10 @@ fn default_file_preview_value() -> Value {
 
 fn session_title(id: u64) -> String {
     format!("Session {}", id)
+}
+
+fn archive_entry_id(session_id: u64, archived_at: i64) -> u64 {
+    ((archived_at as u64) << 32) ^ session_id
 }
 
 fn workspace_title_from_path(path: &str) -> String {
@@ -197,6 +202,24 @@ fn load_workspace_row_by_root(
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(error.to_string()),
     }
+}
+
+fn load_all_workspace_rows(conn: &Connection) -> Result<Vec<WorkspaceRow>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, title, root_path, source_kind, source_value, git_url, target_json, idle_policy_json
+             FROM workspaces
+             ORDER BY last_opened_at DESC, created_at DESC, id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], parse_workspace_row)
+        .map_err(|e| e.to_string())?;
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(items)
 }
 
 fn session_from_payload(payload: &str) -> Result<SessionInfo, String> {
@@ -888,6 +911,55 @@ fn load_sessions_from_conn(
     Ok(items)
 }
 
+fn load_all_session_rows_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<Vec<SessionRow>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT workspace_id, archived_at, sort_order, payload
+             FROM workspace_sessions
+             WHERE workspace_id = ?1
+             ORDER BY last_active_at DESC, id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![workspace_id], session_row_from_query)
+        .map_err(|e| e.to_string())?;
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(items)
+}
+
+fn collect_pane_session_ids(value: &Value, ids: &mut HashSet<String>) {
+    let Value::Object(map) = value else {
+        return;
+    };
+    let Some(Value::String(kind)) = map.get("type") else {
+        return;
+    };
+
+    if kind == "leaf" {
+        if let Some(Value::String(session_id)) =
+            map.get("session_id").or_else(|| map.get("sessionId"))
+        {
+            ids.insert(session_id.clone());
+        }
+        return;
+    }
+
+    if kind == "split" {
+        if let Some(next) = map.get("first") {
+            collect_pane_session_ids(next, ids);
+        }
+        if let Some(next) = map.get("second") {
+            collect_pane_session_ids(next, ids);
+        }
+    }
+}
+
 fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, String> {
     rows.into_iter()
         .map(|row| {
@@ -898,7 +970,7 @@ fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, S
                 .map(|dt| dt.format("%H:%M").to_string())
                 .unwrap_or_else(now_label);
             Ok(ArchiveEntry {
-                id: row.archived_at.unwrap_or(now_ts()) as u64,
+                id: archive_entry_id(session.id, row.archived_at.unwrap_or(now_ts())),
                 session_id: session.id,
                 mode: session.mode.clone(),
                 time,
@@ -906,6 +978,57 @@ fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, S
             })
         })
         .collect()
+}
+
+fn session_row_to_history_record(
+    workspace: &WorkspaceRow,
+    mounted_session_ids: &HashSet<String>,
+    row: SessionRow,
+) -> Result<SessionHistoryRecord, String> {
+    let session = session_from_payload(&row.payload)?;
+    let archived = row.archived_at.is_some();
+    let mounted = !archived
+        && (mounted_session_ids.is_empty() || mounted_session_ids.contains(&session.id.to_string()));
+    Ok(SessionHistoryRecord {
+        workspace_id: workspace.id.clone(),
+        workspace_title: workspace.title.clone(),
+        workspace_path: workspace.root_path.clone(),
+        session_id: session.id,
+        title: session.title,
+        status: session.status.clone(),
+        archived,
+        mounted,
+        recoverable: archived || !mounted,
+        last_active_at: session.last_active_at,
+        archived_at: row.archived_at,
+        claude_session_id: session.claude_session_id,
+    })
+}
+
+fn build_history_from_conn(conn: &Connection) -> Result<Vec<SessionHistoryRecord>, String> {
+    let mut records = Vec::new();
+    for workspace in load_all_workspace_rows(conn)? {
+        let mounted_session_ids = load_mounted_session_ids_from_conn(conn, &workspace.id);
+        for row in load_all_session_rows_from_conn(conn, &workspace.id)? {
+            records.push(session_row_to_history_record(
+                &workspace,
+                &mounted_session_ids,
+                row,
+            )?);
+        }
+    }
+    Ok(records)
+}
+
+fn load_mounted_session_ids_from_conn(conn: &Connection, workspace_id: &str) -> HashSet<String> {
+    load_view_state_from_conn(conn, workspace_id)
+        .ok()
+        .map(|view_state| {
+            let mut ids = HashSet::new();
+            collect_pane_session_ids(&view_state.pane_layout, &mut ids);
+            ids
+        })
+        .unwrap_or_default()
 }
 
 fn build_snapshot_from_conn(
@@ -1175,6 +1298,11 @@ pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
             payload TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS app_device_ui_state (
             device_id TEXT PRIMARY KEY,
             payload TEXT NOT NULL,
@@ -1192,6 +1320,12 @@ pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute(
         "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
         params![APP_UI_STATE_ROW_ID, payload, now_ts()],
+    )?;
+    let app_settings_payload =
+        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
     )?;
     conn.execute(
         "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",
@@ -1474,20 +1608,115 @@ pub(crate) fn archive_workspace_session(
 ) -> Result<ArchiveEntry, String> {
     with_db(state, |conn| {
         let row = load_session_row(conn, workspace_id, session_id)?;
-        let session = session_from_payload(&row.payload)?;
-        let archived_at = now_ts();
-        conn.execute(
-            "UPDATE workspace_sessions SET archived_at = ?3, status = ?4 WHERE workspace_id = ?1 AND id = ?2",
-            params![workspace_id, session_id as i64, archived_at, status_label(&SessionStatus::Suspended)],
-        )
-        .map_err(|e| e.to_string())?;
+        let mut session = session_from_payload(&row.payload)?;
+        let archived_at = row.archived_at.unwrap_or_else(now_ts);
+        session.status = SessionStatus::Suspended;
+        session.last_active_at = now_ts();
+        persist_session_row(conn, workspace_id, &session, Some(archived_at), row.sort_order)?;
         Ok(ArchiveEntry {
-            id: archived_at as u64,
+            id: archive_entry_id(session.id, archived_at),
             session_id: session.id,
             mode: session.mode.clone(),
             time: now_label(),
             snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
         })
+    })
+}
+
+pub(crate) fn archive_workspace_sessions(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+) -> Result<Vec<ArchiveEntry>, String> {
+    with_db(state, |conn| {
+        let mut entries = Vec::new();
+        for row in load_sessions_from_conn(conn, workspace_id, false)? {
+            let mut session = session_from_payload(&row.payload)?;
+            let archived_at = now_ts();
+            session.status = SessionStatus::Suspended;
+            session.last_active_at = archived_at;
+            persist_session_row(conn, workspace_id, &session, Some(archived_at), row.sort_order)?;
+            entries.push(ArchiveEntry {
+                id: archive_entry_id(session.id, archived_at),
+                session_id: session.id,
+                mode: session.mode.clone(),
+                time: now_label(),
+                snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
+            });
+        }
+        Ok(entries)
+    })
+}
+
+pub(crate) fn load_session_history_records(
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionHistoryRecord>, String> {
+    with_db(state, build_history_from_conn)
+}
+
+pub(crate) fn restore_workspace_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: u64,
+) -> Result<SessionRestoreResult, String> {
+    with_db(state, |conn| {
+        let workspace = load_workspace_row(conn, workspace_id)?;
+        let row = load_session_row(conn, workspace_id, session_id)?;
+        let mounted_session_ids = load_mounted_session_ids_from_conn(conn, workspace_id);
+        let mut session = session_from_payload(&row.payload)?;
+        let already_active =
+            row.archived_at.is_none() && mounted_session_ids.contains(&session.id.to_string());
+        if already_active {
+            return Ok(SessionRestoreResult {
+                session,
+                already_active: true,
+            });
+        }
+
+        let active_count = load_sessions_from_conn(conn, workspace_id, false)?
+            .into_iter()
+            .filter_map(|candidate| session_from_payload(&candidate.payload).ok())
+            .filter(|candidate| {
+                candidate.id != session.id
+                    && !matches!(
+                        candidate.status,
+                        SessionStatus::Suspended | SessionStatus::Queued
+                    )
+            })
+            .count() as u32;
+        let next_status = if active_count >= workspace.idle_policy.max_active {
+            SessionStatus::Queued
+        } else {
+            SessionStatus::Idle
+        };
+        session.status = next_status;
+        session.last_active_at = now_ts();
+        let sort_order = min_active_sort_order(conn, workspace_id)? - 1;
+        persist_session_row(conn, workspace_id, &session, None, sort_order)?;
+        Ok(SessionRestoreResult {
+            session,
+            already_active: false,
+        })
+    })
+}
+
+pub(crate) fn delete_workspace_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: u64,
+) -> Result<(), String> {
+    with_db(state, |conn| {
+        load_session_row(conn, workspace_id, session_id)?;
+        conn.execute(
+            "DELETE FROM workspace_sessions WHERE workspace_id = ?1 AND id = ?2",
+            params![workspace_id, session_id as i64],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM agent_lifecycle_events WHERE workspace_id = ?1 AND session_id = ?2",
+            params![workspace_id, session_id.to_string()],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
     })
 }
 
@@ -1732,6 +1961,35 @@ pub(crate) fn set_session_status(
             row.archived_at,
             row.sort_order,
         )
+    })
+}
+
+pub(crate) fn set_session_status_if_not_archived(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: u64,
+    status: SessionStatus,
+) -> Result<bool, String> {
+    with_db(state, |conn| {
+        let row = match load_session_row(conn, workspace_id, session_id) {
+            Ok(row) => row,
+            Err(error) if error == "session_not_found" => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        if row.archived_at.is_some() {
+            return Ok(false);
+        }
+        let mut session = session_from_payload(&row.payload)?;
+        session.status = status;
+        session.last_active_at = now_ts();
+        persist_session_row(
+            conn,
+            workspace_id,
+            &session,
+            row.archived_at,
+            row.sort_order,
+        )?;
+        Ok(true)
     })
 }
 
