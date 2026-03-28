@@ -69,6 +69,9 @@ const CONTROLLER_RECOVERY_INTERVAL_MS = 1_000;
 const HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS = 5_000;
 const TAKEOVER_POLL_INTERVAL_MS = 2_000;
 const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
+// Reloads can briefly land on a stale bootstrap snapshot before runtime replay settles,
+// especially on slower CI runners. Reattaching ready tabs a few times closes that gap.
+const READY_TAB_RUNTIME_RECOVERY_DELAYS_MS = [0, 1_000, 3_000, 7_000] as const;
 
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
@@ -465,18 +468,35 @@ export const WorkbenchRuntimeCoordinator = ({
   );
 
   useEffect(() => {
-    if (!attachedWorkspaceFingerprint) {
+    if (!attachedWorkspaceFingerprint || !isOnline) {
       return;
     }
 
-    const workspaceIds = state.tabs
-      .filter((tab) => tab.status === "ready")
-      .map((tab) => tab.id);
+    let cancelled = false;
+    const recoverReadyTabs = () => {
+      if (cancelled) {
+        return;
+      }
+      const workspaceIds = stateRef.current.tabs
+        .filter((tab) => tab.status === "ready")
+        .map((tab) => tab.id);
+      void Promise.all(workspaceIds.map(async (workspaceId) => {
+        await reattachWorkspaceRuntime(workspaceId);
+      }));
+    };
 
-    void Promise.all(workspaceIds.map(async (workspaceId) => {
-      await reattachWorkspaceRuntime(workspaceId);
-    }));
-  }, [attachedWorkspaceFingerprint, reattachWorkspaceRuntime]);
+    recoverReadyTabs();
+    const timers = READY_TAB_RUNTIME_RECOVERY_DELAYS_MS
+      .filter((delayMs) => delayMs > 0)
+      .map((delayMs) => window.setTimeout(recoverReadyTabs, delayMs));
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => {
+        window.clearTimeout(timer);
+      });
+    };
+  }, [attachedWorkspaceFingerprint, isOnline, reattachWorkspaceRuntime]);
 
   const controllerHeartbeatFingerprint = useMemo(
     () => state.tabs

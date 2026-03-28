@@ -938,15 +938,15 @@ test.describe('workspace transport baseline', () => {
       await expect(page.getByTestId('workspace-agent-recovery-action')).toHaveText('Resume agent');
       await page.getByTestId('workspace-agent-recovery-action').click();
 
-      await waitForWsEvent(
+      await waitForLifecycleReplayEntry(
         page,
-        'agent://lifecycle',
-        (payload) =>
-          payload.workspace_id === workspace.workspaceId
-          && payload.session_id === String(session.id)
-          && payload.kind === 'tool_started'
-          && typeof payload.data === 'string'
-          && payload.data.includes(resumeClaudeSessionId),
+        workspace.workspaceId,
+        ids,
+        (event) =>
+          event.session_id === String(session.id)
+          && event.kind === 'tool_started'
+          && typeof event.data === 'string'
+          && event.data.includes(resumeClaudeSessionId),
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 
@@ -1696,6 +1696,29 @@ async function waitForLifecycleReplayEvent(
       return runtime.lifecycle_events?.some((event) =>
         event.session_id === sessionId && event.kind === kind
       ) ?? false;
+    }, {
+      timeout: timeoutMs,
+    })
+    .toBe(true);
+}
+
+async function waitForLifecycleReplayEntry(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string },
+  predicate: (event: { session_id: string; kind: string; data?: string }) => boolean,
+  timeoutMs = 10000,
+) {
+  await expect
+    .poll(async () => {
+      const runtime = await invokeRpc<{
+        lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
+      }>(page, 'workspace_runtime_attach', {
+        workspaceId,
+        deviceId: ids.deviceId,
+        clientId: ids.clientId,
+      });
+      return runtime.lifecycle_events?.some(predicate) ?? false;
     }, {
       timeout: timeoutMs,
     })
