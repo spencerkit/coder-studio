@@ -2,13 +2,19 @@ import fs from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { buildDevStackRuntimeEnv, resetDevStackRuntimeState } from './dev-stack-runtime.mjs';
+import {
+  buildDevStackRuntimeEnv,
+  clearDevStackRuntimeProcesses,
+  resetDevStackRuntimeState,
+  writeDevStackRuntimeProcesses,
+} from './dev-stack-runtime.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 let frontend = null;
 const runtime = buildDevStackRuntimeEnv(ROOT, process.env);
 const backendPort = Number.parseInt(runtime.env.CODER_STUDIO_DEV_BACKEND_PORT ?? '', 10) || 41033;
+const frontendPort = Number.parseInt(runtime.env.CODER_STUDIO_DEV_FRONTEND_PORT ?? '', 10) || 5174;
 
 let shuttingDown = false;
 
@@ -43,10 +49,20 @@ function spawnPnpm(args) {
   });
 }
 
+async function persistRuntimeProcesses() {
+  await writeDevStackRuntimeProcesses(runtime.stateDir, {
+    serverPid: server?.pid ?? null,
+    frontendPid: frontend?.pid ?? null,
+  });
+}
+
 await fs.mkdir(path.join(ROOT, '.tmp'), { recursive: true });
-await resetDevStackRuntimeState(runtime.stateDir);
+await resetDevStackRuntimeState(runtime.stateDir, {
+  protectedPorts: [backendPort, frontendPort],
+});
 
 const server = spawnPnpm(['dev:server']);
+await persistRuntimeProcesses();
 
 const killChild = (child) => {
   if (!child || child.killed || child.pid == null) return;
@@ -69,6 +85,7 @@ const shutdown = () => {
   shuttingDown = true;
   killChild(server);
   killChild(frontend);
+  void clearDevStackRuntimeProcesses(runtime.stateDir);
 };
 
 process.on('SIGINT', shutdown);
@@ -104,6 +121,7 @@ try {
 }
 
 frontend = spawnPnpm(['dev:frontend']);
+await persistRuntimeProcesses();
 
 frontend.on('exit', (code) => {
   if (!shuttingDown) {

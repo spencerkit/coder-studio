@@ -188,6 +188,12 @@ const messages = {
     claudePermissionModeAcceptEditsOption: "acceptEdits",
     claudePermissionModeDontAskOption: "dontAsk",
     claudePermissionModeBypassPermissionsOption: "bypassPermissions",
+    claudeSelectUnsetOption: "Not set",
+    claudeEffortLowOption: "low",
+    claudeEffortMediumOption: "medium",
+    claudeEffortHighOption: "high",
+    claudeEditorModeDefaultOption: "default",
+    claudeEditorModeVimOption: "vim",
     claudeLaunchSection: "Launch & Auth",
     claudeLaunchSectionHint: "Control executable resolution, startup flags, auth secrets, and extra environment variables.",
     claudeExecutable: "Executable",
@@ -204,23 +210,43 @@ const messages = {
     claudeBareHelp: "Starts Claude in minimal mode and skips hooks, plugin sync, auto-memory, and other background integrations.",
     claudeApiKey: "API key",
     claudeApiKeyHelp: "Maps to ANTHROPIC_API_KEY. Use this for API-key auth. If Claude already has config.json.primaryApiKey locally, Coder Studio shows it here until backend settings override it.",
+    claudeApiKeyMeta: "Secret string · Example: sk-ant-api03-...",
+    claudeApiKeyPlaceholder: "sk-ant-api03-...",
     claudeAuthToken: "Auth token",
     claudeAuthTokenHelp: "Maps to ANTHROPIC_AUTH_TOKEN. Common for bearer-token or gateway setups, especially when paired with a custom base URL.",
+    claudeAuthTokenMeta: "Secret string · Example: token-demo-...",
+    claudeAuthTokenPlaceholder: "token-demo-...",
     claudeBaseUrl: "Base URL",
     claudeBaseUrlHelp: "Maps to ANTHROPIC_BASE_URL. Point Claude CLI at a proxy, gateway, or compatible endpoint instead of the default Anthropic API.",
+    claudeBaseUrlMeta: "URL string · Example: https://api.anthropic.com",
+    claudeBaseUrlPlaceholder: "https://api.anthropic.com",
     claudeCustomHeaders: "Custom headers",
     claudeCustomHeadersHelp: "Maps to ANTHROPIC_CUSTOM_HEADERS. Use this to send extra HTTP headers to proxies or internal gateways.",
+    claudeCustomHeadersMeta: "JSON string · Example: {\"x-tenant\":\"team-a\"}",
+    claudeCustomHeadersPlaceholder: "{\"x-tenant\":\"team-a\"}",
     claudeApiKeyHelper: "API key helper",
-    claudeApiKeyHelperHelp: "A settings.json field. Claude can run this helper to fetch credentials dynamically, and Claude gives it priority over ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN when present.",
+    claudeApiKeyHelperHelp: "A settings.json field. Claude can run this helper to fetch credentials dynamically and send the result as both X-Api-Key and Authorization headers, but explicit ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN values still take precedence.",
+    claudeApiKeyHelperMeta: "Shell command string · Example: /usr/local/bin/get-api-key",
+    claudeApiKeyHelperPlaceholder: "/usr/local/bin/get-api-key",
     claudeExtraEnv: "Extra environment",
     claudeExtraEnvHelp: "Additional environment variables passed through to Claude beyond the reserved auth fields above.",
+    claudeExtraEnvMeta: "KEY=VALUE per line · Example: HTTP_PROXY=http://127.0.0.1:7890",
+    claudeExtraEnvPlaceholder: "HTTP_PROXY=http://127.0.0.1:7890\nNO_PROXY=localhost,127.0.0.1",
     claudeBehaviorSection: "Model & Behavior",
     claudeBehaviorSectionHint: "Common settings.json fields for model selection, effort, cleanup, and language defaults.",
     claudeModel: "Model",
+    claudeModelMeta: "Model ID string · Example: claude-sonnet-4-5",
+    claudeModelPlaceholder: "claude-sonnet-4-5",
     claudeFallbackModel: "Fallback model",
+    claudeFallbackModelMeta: "Model ID string · Example: claude-haiku-4-5",
+    claudeFallbackModelPlaceholder: "claude-haiku-4-5",
     claudePermissionMode: "Permission mode",
+    claudePermissionModeMeta: "Enum",
     claudeEffort: "Reasoning effort",
+    claudeEffortMeta: "Enum · low | medium | high",
     claudeCleanupDays: "Cleanup period (days)",
+    claudeCleanupDaysMeta: "Integer >= 0 · Example: 30",
+    claudeCleanupDaysPlaceholder: "30",
     claudeIncludeGitInstructions: "Include Git instructions",
     claudePermissionsSection: "Permissions",
     claudePermissionsSectionHint: "Tune allow, ask, and deny lists, extra directories, and CLI-level permission flags.",
@@ -266,8 +292,13 @@ const messages = {
     claudeAutoConnectIde: "Auto-connect IDE",
     claudeAutoInstallIdeExtension: "Auto-install IDE extension",
     claudeEditorMode: "Editor mode",
+    claudeEditorModeMeta: "Enum · default | vim",
     claudeShowTurnDuration: "Show turn duration",
     claudeTerminalProgressBarEnabled: "Terminal progress bar",
+    claudeLanguageMeta: "Language or locale string · Example: zh-CN",
+    claudeLanguagePlaceholder: "zh-CN",
+    claudeExtraStartupArgsMeta: "One CLI token per line · Example: --model then claude-sonnet-4-5",
+    claudeExtraStartupArgsPlaceholder: "--model\nclaude-sonnet-4-5",
     claudeAdvancedSection: "Advanced JSON",
     claudeAdvancedSectionHint: "Directly edit the raw config objects when the structured fields are not enough.",
     claudeSettingsJsonAdvanced: "settings.json advanced",
@@ -635,6 +666,12 @@ const messages = {
     claudePermissionModeAcceptEditsOption: "acceptEdits",
     claudePermissionModeDontAskOption: "dontAsk",
     claudePermissionModeBypassPermissionsOption: "bypassPermissions",
+    claudeSelectUnsetOption: "未设置",
+    claudeEffortLowOption: "low",
+    claudeEffortMediumOption: "medium",
+    claudeEffortHighOption: "high",
+    claudeEditorModeDefaultOption: "default",
+    claudeEditorModeVimOption: "vim",
     claudeLaunchSection: "启动与鉴权",
     claudeLaunchSectionHint: "控制可执行文件、启动参数、鉴权信息，以及额外环境变量。",
     claudeExecutable: "可执行文件",
@@ -651,23 +688,43 @@ const messages = {
     claudeBareHelp: "以极简模式启动 Claude，跳过 hooks、插件同步、自动记忆和其他后台集成。",
     claudeApiKey: "API Key",
     claudeApiKeyHelp: "对应 ANTHROPIC_API_KEY，用于 API Key 鉴权。如果本机 Claude 的 config.json 里已经有 primaryApiKey，这里会先显示出来，直到后端设置覆盖它。",
+    claudeApiKeyMeta: "密文字符串 · 示例：sk-ant-api03-...",
+    claudeApiKeyPlaceholder: "sk-ant-api03-...",
     claudeAuthToken: "Auth Token",
     claudeAuthTokenHelp: "对应 ANTHROPIC_AUTH_TOKEN，常见于 bearer token 或网关代理场景，通常会和自定义 Base URL 一起使用。",
+    claudeAuthTokenMeta: "密文字符串 · 示例：token-demo-...",
+    claudeAuthTokenPlaceholder: "token-demo-...",
     claudeBaseUrl: "Base URL",
     claudeBaseUrlHelp: "对应 ANTHROPIC_BASE_URL，用来把 Claude CLI 指向代理、网关或兼容 Anthropic API 的自定义端点。",
+    claudeBaseUrlMeta: "URL 字符串 · 示例：https://api.anthropic.com",
+    claudeBaseUrlPlaceholder: "https://api.anthropic.com",
     claudeCustomHeaders: "自定义 Headers",
     claudeCustomHeadersHelp: "对应 ANTHROPIC_CUSTOM_HEADERS，用来给代理或内部网关附加额外的 HTTP 请求头。",
+    claudeCustomHeadersMeta: "JSON 字符串 · 示例：{\"x-tenant\":\"team-a\"}",
+    claudeCustomHeadersPlaceholder: "{\"x-tenant\":\"team-a\"}",
     claudeApiKeyHelper: "API Key Helper",
-    claudeApiKeyHelperHelp: "settings.json 里的字段。Claude 可以通过它执行一个 helper 动态获取凭据；一旦配置，Claude 会优先使用它，而不是 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。",
+    claudeApiKeyHelperHelp: "settings.json 里的字段。Claude 可以执行一个 helper 动态获取凭据，并把结果同时作为 X-Api-Key 和 Authorization 发送；但如果显式设置了 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN，仍然以它们为准。",
+    claudeApiKeyHelperMeta: "Shell 命令字符串 · 示例：/usr/local/bin/get-api-key",
+    claudeApiKeyHelperPlaceholder: "/usr/local/bin/get-api-key",
     claudeExtraEnv: "额外环境变量",
     claudeExtraEnvHelp: "除了上面这些保留鉴权字段之外，还会原样透传给 Claude 的其他环境变量。",
+    claudeExtraEnvMeta: "每行一个 KEY=VALUE · 示例：HTTP_PROXY=http://127.0.0.1:7890",
+    claudeExtraEnvPlaceholder: "HTTP_PROXY=http://127.0.0.1:7890\nNO_PROXY=localhost,127.0.0.1",
     claudeBehaviorSection: "模型与行为",
     claudeBehaviorSectionHint: "常用 settings.json 字段，覆盖模型、推理强度、清理周期和语言等默认行为。",
     claudeModel: "模型",
+    claudeModelMeta: "模型 ID 字符串 · 示例：claude-sonnet-4-5",
+    claudeModelPlaceholder: "claude-sonnet-4-5",
     claudeFallbackModel: "回退模型",
+    claudeFallbackModelMeta: "模型 ID 字符串 · 示例：claude-haiku-4-5",
+    claudeFallbackModelPlaceholder: "claude-haiku-4-5",
     claudePermissionMode: "权限模式",
+    claudePermissionModeMeta: "枚举值",
     claudeEffort: "推理强度",
+    claudeEffortMeta: "枚举值 · low | medium | high",
     claudeCleanupDays: "清理周期（天）",
+    claudeCleanupDaysMeta: "整数，>= 0 · 示例：30",
+    claudeCleanupDaysPlaceholder: "30",
     claudeIncludeGitInstructions: "附带 Git 指令说明",
     claudePermissionsSection: "权限",
     claudePermissionsSectionHint: "配置 allow / ask / deny 列表、附加目录，以及 CLI 层的权限参数。",
@@ -713,8 +770,13 @@ const messages = {
     claudeAutoConnectIde: "自动连接 IDE",
     claudeAutoInstallIdeExtension: "自动安装 IDE 扩展",
     claudeEditorMode: "编辑器模式",
+    claudeEditorModeMeta: "枚举值 · default | vim",
     claudeShowTurnDuration: "显示回合耗时",
     claudeTerminalProgressBarEnabled: "终端进度条",
+    claudeLanguageMeta: "语言或 locale 字符串 · 示例：zh-CN",
+    claudeLanguagePlaceholder: "zh-CN",
+    claudeExtraStartupArgsMeta: "每行一个 CLI token · 示例：--model 然后 claude-sonnet-4-5",
+    claudeExtraStartupArgsPlaceholder: "--model\nclaude-sonnet-4-5",
     claudeAdvancedSection: "高级 JSON",
     claudeAdvancedSectionHint: "当结构化字段不够用时，直接编辑底层配置对象。",
     claudeSettingsJsonAdvanced: "settings.json 高级编辑",
@@ -905,7 +967,7 @@ const messages = {
 export type TranslationKey = keyof typeof messages.en;
 export type Translator = (key: TranslationKey, params?: TranslationParams) => string;
 
-const readStoredLocale = (): Locale | null => {
+export const readStoredLocalePreference = (): Locale | null => {
   if (typeof window === "undefined") return null;
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -915,13 +977,17 @@ const readStoredLocale = (): Locale | null => {
   }
 };
 
-export const getPreferredLocale = (): Locale => {
-  const stored = readStoredLocale();
-  if (stored) return stored;
+export const getSystemLocale = (): Locale => {
   if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh")) {
     return "zh";
   }
   return "en";
+};
+
+export const getPreferredLocale = (): Locale => {
+  const stored = readStoredLocalePreference();
+  if (stored) return stored;
+  return getSystemLocale();
 };
 
 export const applyLocale = (locale: Locale) => {
@@ -939,6 +1005,16 @@ export const persistLocale = (locale: Locale) => {
     }
   }
   applyLocale(locale);
+};
+
+export const clearLocalePreference = () => {
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage failures and keep the in-memory locale.
+    }
+  }
 };
 
 export const createTranslator = (locale: Locale): Translator => {

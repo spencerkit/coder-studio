@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
 import {
   createAppSettingsDraftStore,
+  createPersistableAppSettings,
   createSequencedAppSettingsSaver,
+  deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
 } from '../apps/web/src/services/http/settings.service.ts';
@@ -54,6 +56,41 @@ test('createAppSettingsDraftStore composes new saves from the latest in-memory d
   assert.equal(localeDraft.general.locale, 'zh');
   assert.equal(mixedDraft.general.locale, 'zh');
   assert.equal(mixedDraft.general.idlePolicy.idleMinutes, 25);
+});
+
+test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {
+  const confirmed = defaultAppSettings();
+  const draft = defaultAppSettings();
+  draft.general.locale = 'zh';
+  draft.general.idlePolicy.idleMinutes = 25;
+
+  const persisted = createPersistableAppSettings(draft, confirmed, false);
+
+  assert.equal(persisted.general.locale, confirmed.general.locale);
+  assert.equal(persisted.general.idlePolicy.idleMinutes, 25);
+});
+
+test('deriveRuntimeAppSettings uses the system locale when the preference is implicit', () => {
+  const confirmed = defaultAppSettings();
+  const runtime = deriveRuntimeAppSettings({
+    settings: confirmed,
+    localeExplicit: false,
+    systemLocale: 'zh',
+  });
+
+  assert.equal(runtime.general.locale, 'zh');
+});
+
+test('deriveRuntimeAppSettings prefers the stored explicit locale over backend locale', () => {
+  const confirmed = defaultAppSettings();
+  const runtime = deriveRuntimeAppSettings({
+    settings: confirmed,
+    localeExplicit: true,
+    systemLocale: 'zh',
+    explicitLocale: 'zh',
+  });
+
+  assert.equal(runtime.general.locale, 'zh');
 });
 
 test('createSequencedAppSettingsSaver ignores stale save responses', async () => {
@@ -171,4 +208,46 @@ test('hydrateConfirmedAppSettings ignores legacy local settings when backend hyd
   assert.equal(hydrated.settings.general.idlePolicy.idleMinutes, 10);
   assert.equal(hydrated.backendConfirmed, false);
   assert.equal(hydrated.clearLegacyStorage, false);
+});
+
+test('hydrateConfirmedAppSettings keeps system locale implicit when backend locale is still default', async () => {
+  const confirmed = defaultAppSettings();
+  let persistCalls = 0;
+
+  const hydrated = await hydrateConfirmedAppSettings({
+    fallbackSettings: defaultAppSettings(),
+    legacySettings: null,
+    preferredLocale: 'zh',
+    preferredLocaleIsExplicit: false,
+    load: async () => confirmed,
+    persist: async (settings) => {
+      persistCalls += 1;
+      return settings;
+    },
+  });
+
+  assert.equal(hydrated.settings.general.locale, 'en');
+  assert.equal(persistCalls, 0);
+  assert.equal(hydrated.localeExplicit, false);
+});
+
+test('hydrateConfirmedAppSettings syncs an explicit locale preference when backend locale is still default', async () => {
+  const confirmed = defaultAppSettings();
+  let persistedLocale: string | null = null;
+
+  const hydrated = await hydrateConfirmedAppSettings({
+    fallbackSettings: defaultAppSettings(),
+    legacySettings: null,
+    preferredLocale: 'zh',
+    preferredLocaleIsExplicit: true,
+    load: async () => confirmed,
+    persist: async (settings) => {
+      persistedLocale = settings.general.locale;
+      return settings;
+    },
+  });
+
+  assert.equal(persistedLocale, 'zh');
+  assert.equal(hydrated.settings.general.locale, 'zh');
+  assert.equal(hydrated.localeExplicit, true);
 });

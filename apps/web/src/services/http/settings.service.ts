@@ -1,3 +1,4 @@
+import type { Locale } from "../../i18n.ts";
 import type { AppSettings } from "../../types/app.ts";
 import {
   appSettingsPayloadEquals,
@@ -42,54 +43,97 @@ type HydrateConfirmedAppSettingsArgs = {
   fallbackSettings: AppSettings;
   legacySettings: AppSettings | null;
   preferredLocale: AppSettings["general"]["locale"];
+  preferredLocaleIsExplicit?: boolean;
   load?: () => Promise<AppSettings>;
   persist?: (settings: AppSettings) => Promise<AppSettings>;
+};
+
+export const createPersistableAppSettings = (
+  draftSettings: AppSettings,
+  confirmedSettings: AppSettings,
+  localeExplicit: boolean,
+): AppSettings => {
+  const nextSettings = cloneAppSettings(draftSettings);
+  if (!localeExplicit) {
+    nextSettings.general.locale = confirmedSettings.general.locale;
+  }
+  return nextSettings;
+};
+
+export const deriveRuntimeAppSettings = ({
+  settings,
+  localeExplicit,
+  systemLocale,
+  explicitLocale,
+}: {
+  settings: AppSettings;
+  localeExplicit: boolean;
+  systemLocale: Locale;
+  explicitLocale?: Locale | null;
+}): AppSettings => {
+  const nextSettings = cloneAppSettings(settings);
+  nextSettings.general.locale = localeExplicit
+    ? (explicitLocale ?? settings.general.locale)
+    : systemLocale;
+  return nextSettings;
 };
 
 export const hydrateConfirmedAppSettings = async ({
   fallbackSettings,
   legacySettings,
   preferredLocale,
+  preferredLocaleIsExplicit = false,
   load = getAppSettings,
   persist = updateAppSettings,
 }: HydrateConfirmedAppSettingsArgs): Promise<{
   settings: AppSettings;
   backendConfirmed: boolean;
   clearLegacyStorage: boolean;
+  localeExplicit: boolean;
 }> => {
   try {
     const confirmedSettings = cloneAppSettings(await load());
     const shouldMigrateLegacy = legacySettings !== null
       && appSettingsPayloadEquals(confirmedSettings, fallbackSettings);
-    const shouldSyncLocale = appSettingsPayloadEquals(confirmedSettings, fallbackSettings)
+    const shouldSyncLocale = preferredLocaleIsExplicit
+      && appSettingsPayloadEquals(confirmedSettings, fallbackSettings)
       && preferredLocale !== confirmedSettings.general.locale;
+    const localeExplicit = preferredLocaleIsExplicit
+      || confirmedSettings.general.locale !== fallbackSettings.general.locale;
 
     if (!shouldMigrateLegacy && !shouldSyncLocale) {
       return {
         settings: confirmedSettings,
         backendConfirmed: true,
         clearLegacyStorage: true,
+        localeExplicit,
       };
     }
 
     const draft = shouldMigrateLegacy
       ? mergeLegacySettingsIntoAppSettings(confirmedSettings, legacySettings)
       : cloneAppSettings(confirmedSettings);
-    draft.general.locale = shouldMigrateLegacy && legacySettings?.general.locale
-      ? legacySettings.general.locale
-      : preferredLocale;
+    if (shouldMigrateLegacy && legacySettings?.general.locale) {
+      draft.general.locale = legacySettings.general.locale;
+    } else if (shouldSyncLocale) {
+      draft.general.locale = preferredLocale;
+    }
 
     try {
+      const persistedSettings = cloneAppSettings(await persist(draft));
       return {
-        settings: cloneAppSettings(await persist(draft)),
+        settings: persistedSettings,
         backendConfirmed: true,
         clearLegacyStorage: true,
+        localeExplicit: preferredLocaleIsExplicit
+          || persistedSettings.general.locale !== fallbackSettings.general.locale,
       };
     } catch {
       return {
         settings: confirmedSettings,
         backendConfirmed: true,
         clearLegacyStorage: false,
+        localeExplicit,
       };
     }
   } catch {
@@ -97,6 +141,7 @@ export const hydrateConfirmedAppSettings = async ({
       settings: cloneAppSettings(fallbackSettings),
       backendConfirmed: false,
       clearLegacyStorage: false,
+      localeExplicit: preferredLocaleIsExplicit,
     };
   }
 };

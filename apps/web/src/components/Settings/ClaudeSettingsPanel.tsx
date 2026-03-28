@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { HTMLAttributes } from "react";
 import type { Locale, Translator } from "../../i18n.ts";
 import type {
   AppSettings,
@@ -77,6 +78,29 @@ const STARTUP_VALUE_OPTIONS = [
       { value: "bypassPermissions", labelKey: "claudePermissionModeBypassPermissionsOption" },
     ],
   },
+] as const;
+
+const BEHAVIOR_PERMISSION_MODE_OPTIONS = [
+  { value: "", labelKey: "claudeSelectUnsetOption" },
+  { value: "default", labelKey: "claudePermissionModeDefaultOption" },
+  { value: "plan", labelKey: "claudePermissionModePlanOption" },
+  { value: "auto", labelKey: "claudePermissionModeAutoOption" },
+  { value: "acceptEdits", labelKey: "claudePermissionModeAcceptEditsOption" },
+  { value: "dontAsk", labelKey: "claudePermissionModeDontAskOption" },
+  { value: "bypassPermissions", labelKey: "claudePermissionModeBypassPermissionsOption" },
+] as const;
+
+const EFFORT_OPTIONS = [
+  { value: "", labelKey: "claudeSelectUnsetOption" },
+  { value: "low", labelKey: "claudeEffortLowOption" },
+  { value: "medium", labelKey: "claudeEffortMediumOption" },
+  { value: "high", labelKey: "claudeEffortHighOption" },
+] as const;
+
+const EDITOR_MODE_OPTIONS = [
+  { value: "", labelKey: "claudeSelectUnsetOption" },
+  { value: "default", labelKey: "claudeEditorModeDefaultOption" },
+  { value: "vim", labelKey: "claudeEditorModeVimOption" },
 ] as const;
 
 const STARTUP_BOOLEAN_FLAGS = STARTUP_BOOLEAN_OPTIONS.map((option) => option.flag);
@@ -254,6 +278,196 @@ const ClaudeFieldLabel = ({
   </span>
 );
 
+const ClaudeFieldCopy = ({
+  label,
+  help,
+  meta,
+}: {
+  label: string;
+  help?: string;
+  meta?: string;
+}) => (
+  <div className="claude-field-copy">
+    <ClaudeFieldLabel label={label} help={help} />
+    {meta ? <span className="claude-field-meta">{meta}</span> : null}
+  </div>
+);
+
+const ClaudeInputField = ({
+  label,
+  help,
+  meta,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  testId,
+  inputMode,
+  min,
+  className = "",
+}: {
+  label: string;
+  help?: string;
+  meta?: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: "text" | "password" | "number";
+  testId?: string;
+  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  min?: number;
+  className?: string;
+}) => (
+  <label className={`claude-field ${className}`.trim()}>
+    <ClaudeFieldCopy label={label} help={help} meta={meta} />
+    <input
+      className="settings-command-field"
+      type={type}
+      value={value}
+      min={min}
+      inputMode={inputMode}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      data-testid={testId}
+    />
+  </label>
+);
+
+const ClaudeTextareaField = ({
+  label,
+  help,
+  meta,
+  value,
+  onChange,
+  placeholder,
+  rows,
+  className = "",
+  testId,
+}: {
+  label: string;
+  help?: string;
+  meta?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows: number;
+  className?: string;
+  testId?: string;
+}) => (
+  <label className={`claude-field ${className}`.trim()}>
+    <ClaudeFieldCopy label={label} help={help} meta={meta} />
+    <textarea
+      className="claude-textarea"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      data-testid={testId}
+    />
+  </label>
+);
+
+const ClaudeSelectField = ({
+  label,
+  help,
+  meta,
+  value,
+  onChange,
+  options,
+  testId,
+  className = "",
+  t,
+}: {
+  label: string;
+  help?: string;
+  meta?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: ReadonlyArray<{ value: string; labelKey: string }>;
+  testId?: string;
+  className?: string;
+  t: Translator;
+}) => {
+  const [open, setOpen] = useState(false);
+  const listboxId = useId();
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!shellRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className={`claude-select-row ${className}`.trim()}>
+      <ClaudeFieldCopy label={label} help={help} meta={meta} />
+      <div className={`claude-select-shell ${open ? "open" : ""}`} ref={shellRef}>
+        <button
+          type="button"
+          className={`claude-select-trigger ${open ? "open" : ""}`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          onClick={() => setOpen((current) => !current)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          data-testid={testId}
+        >
+          <span className={`claude-select-trigger-text ${selected.value ? "" : "is-placeholder"}`.trim()}>
+            {t(selected.labelKey)}
+          </span>
+          <span className="claude-select-chevron" aria-hidden="true" />
+        </button>
+        {open ? (
+          <div className="claude-select-popover" role="listbox" id={listboxId}>
+            {options.map((option) => {
+              const optionSelected = option.value === value;
+              return (
+                <button
+                  key={option.value || "unset"}
+                  type="button"
+                  role="option"
+                  aria-selected={optionSelected}
+                  className={`claude-select-option ${optionSelected ? "selected" : ""}`}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  data-testid={testId ? `${testId}-option-${option.value || "unset"}` : undefined}
+                >
+                  {t(option.labelKey)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
 export const ClaudeSettingsPanel = ({
   locale: _locale,
   settings,
@@ -350,6 +564,9 @@ export const ClaudeSettingsPanel = ({
 
   const extraEnvText = envToText(scopeProfile.env);
   const commandPreview = formatClaudeLaunchPreview(scopeProfile);
+  const behaviorPermissionMode = readString(readJsonPath(settingsJson, ["permissionMode"]));
+  const effortValue = readString(readJsonPath(settingsJson, ["effort"]));
+  const editorModeValue = readString(readJsonPath(globalConfigJson, ["editorMode"]));
   const extraStartupArgs = stripFlags(
     scopeProfile.startupArgs,
     STARTUP_STRUCTURED_FLAGS,
@@ -434,33 +651,30 @@ export const ClaudeSettingsPanel = ({
       <div className="settings-group-card">
         <div className="claude-settings-grid claude-settings-grid--startup">
           <div className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeCommandPreview")} help={t("claudeStartupExecutableFixed")} />
+            <ClaudeFieldCopy
+              label={t("claudeCommandPreview")}
+              help={t("claudeStartupExecutableFixed")}
+            />
             <code className="claude-command-preview-code" data-testid="claude-command-preview">{commandPreview || "claude"}</code>
           </div>
           {STARTUP_VALUE_OPTIONS.map((option) => (
-            <label key={option.flag} className="claude-field claude-field-compact">
-              <ClaudeFieldLabel
-                label={t(option.labelKey)}
-                help={t(option.helpKey)}
-              />
-              <select
-                className="settings-command-field"
-                value={readSingleFlagValue(scopeProfile.startupArgs, option.flag)}
-                onChange={(event) => updateStartupValueFlag(option.flag, event.target.value)}
-                data-testid={option.testId}
-              >
-                {option.values.map((entry) => (
-                  <option key={entry.value || "inherit"} value={entry.value}>
-                    {t(entry.labelKey)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ClaudeSelectField
+              key={option.flag}
+              className="claude-field-compact"
+              label={t(option.labelKey)}
+              help={t(option.helpKey)}
+              meta={t("claudePermissionModeMeta")}
+              value={readSingleFlagValue(scopeProfile.startupArgs, option.flag)}
+              onChange={(value) => updateStartupValueFlag(option.flag, value)}
+              options={option.values}
+              testId={option.testId}
+              t={t}
+            />
           ))}
           {STARTUP_BOOLEAN_OPTIONS.map((option) => (
             <label key={option.flag} className="claude-inline-toggle">
               <div className="claude-inline-toggle-copy">
-                <ClaudeFieldLabel
+                <ClaudeFieldCopy
                   label={t(option.labelKey)}
                   help={t(option.helpKey)}
                 />
@@ -473,126 +687,177 @@ export const ClaudeSettingsPanel = ({
               />
             </label>
           ))}
-          <label className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeExtraStartupArgs")} help={t("claudeExtraStartupArgsHint")} />
-            <textarea
-              className="claude-textarea"
-              value={listToLines(extraStartupArgs)}
-              onChange={(event) => updateExtraStartupArgs(event.target.value)}
-              placeholder="--debug"
-              rows={4}
-              data-testid="claude-startup-args"
-            />
-          </label>
+          <ClaudeTextareaField
+            className="claude-field-wide"
+            label={t("claudeExtraStartupArgs")}
+            help={t("claudeExtraStartupArgsHint")}
+            meta={t("claudeExtraStartupArgsMeta")}
+            value={listToLines(extraStartupArgs)}
+            onChange={updateExtraStartupArgs}
+            placeholder={t("claudeExtraStartupArgsPlaceholder")}
+            rows={4}
+            testId="claude-startup-args"
+          />
         </div>
       </div>
 
       <div className="settings-group-card">
         <div className="claude-settings-grid">
-          <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeApiKey")} help={t("claudeApiKeyHelp")} />
-            <input
-              className="settings-command-field"
-              type="password"
-              value={scopeProfile.env.ANTHROPIC_API_KEY ?? ""}
-              onChange={(event) => updateEnv((env) => ({
-                ...env,
-                ANTHROPIC_API_KEY: event.target.value,
-              }))}
-            />
-          </label>
-          <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeAuthToken")} help={t("claudeAuthTokenHelp")} />
-            <input
-              className="settings-command-field"
-              type="password"
-              value={scopeProfile.env.ANTHROPIC_AUTH_TOKEN ?? ""}
-              onChange={(event) => updateEnv((env) => ({
-                ...env,
-                ANTHROPIC_AUTH_TOKEN: event.target.value,
-              }))}
-            />
-          </label>
-          <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeBaseUrl")} help={t("claudeBaseUrlHelp")} />
-            <input
-              className="settings-command-field"
-              value={scopeProfile.env.ANTHROPIC_BASE_URL ?? ""}
-              onChange={(event) => updateEnv((env) => ({
-                ...env,
-                ANTHROPIC_BASE_URL: event.target.value,
-              }))}
-            />
-          </label>
-          <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeCustomHeaders")} help={t("claudeCustomHeadersHelp")} />
-            <textarea
-              className="claude-textarea"
-              value={scopeProfile.env.ANTHROPIC_CUSTOM_HEADERS ?? ""}
-              onChange={(event) => updateEnv((env) => ({
-                ...env,
-                ANTHROPIC_CUSTOM_HEADERS: event.target.value,
-              }))}
-              rows={3}
-            />
-          </label>
-          <label className="claude-field">
-            <ClaudeFieldLabel label={t("claudeApiKeyHelper")} help={t("claudeApiKeyHelperHelp")} />
-            <input
-              className="settings-command-field"
-              value={readString(readJsonPath(settingsJson, ["apiKeyHelper"]))}
-              onChange={(event) => updateSettingsJson(["apiKeyHelper"], event.target.value.trim())}
-            />
-          </label>
-          <label className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeExtraEnv")} help={t("claudeExtraEnvHelp")} />
-            <textarea
-              className="claude-textarea"
-              value={extraEnvText}
-              onChange={(event) => updateEnv((env) => {
-                const next = { ...env };
-                for (const key of Object.keys(next)) {
-                  if (!RESERVED_ENV_KEYS.includes(key as typeof RESERVED_ENV_KEYS[number])) {
-                    delete next[key];
-                  }
+          <ClaudeInputField
+            label={t("claudeApiKey")}
+            help={t("claudeApiKeyHelp")}
+            meta={t("claudeApiKeyMeta")}
+            type="password"
+            value={scopeProfile.env.ANTHROPIC_API_KEY ?? ""}
+            onChange={(value) => updateEnv((env) => ({
+              ...env,
+              ANTHROPIC_API_KEY: value,
+            }))}
+            placeholder={t("claudeApiKeyPlaceholder")}
+          />
+          <ClaudeInputField
+            label={t("claudeAuthToken")}
+            help={t("claudeAuthTokenHelp")}
+            meta={t("claudeAuthTokenMeta")}
+            type="password"
+            value={scopeProfile.env.ANTHROPIC_AUTH_TOKEN ?? ""}
+            onChange={(value) => updateEnv((env) => ({
+              ...env,
+              ANTHROPIC_AUTH_TOKEN: value,
+            }))}
+            placeholder={t("claudeAuthTokenPlaceholder")}
+          />
+          <ClaudeInputField
+            label={t("claudeBaseUrl")}
+            help={t("claudeBaseUrlHelp")}
+            meta={t("claudeBaseUrlMeta")}
+            value={scopeProfile.env.ANTHROPIC_BASE_URL ?? ""}
+            onChange={(value) => updateEnv((env) => ({
+              ...env,
+              ANTHROPIC_BASE_URL: value,
+            }))}
+            placeholder={t("claudeBaseUrlPlaceholder")}
+            inputMode="url"
+          />
+          <ClaudeTextareaField
+            label={t("claudeCustomHeaders")}
+            help={t("claudeCustomHeadersHelp")}
+            meta={t("claudeCustomHeadersMeta")}
+            value={scopeProfile.env.ANTHROPIC_CUSTOM_HEADERS ?? ""}
+            onChange={(value) => updateEnv((env) => ({
+              ...env,
+              ANTHROPIC_CUSTOM_HEADERS: value,
+            }))}
+            placeholder={t("claudeCustomHeadersPlaceholder")}
+            rows={3}
+          />
+          <ClaudeInputField
+            label={t("claudeApiKeyHelper")}
+            help={t("claudeApiKeyHelperHelp")}
+            meta={t("claudeApiKeyHelperMeta")}
+            value={readString(readJsonPath(settingsJson, ["apiKeyHelper"]))}
+            onChange={(value) => updateSettingsJson(["apiKeyHelper"], value.trim())}
+            placeholder={t("claudeApiKeyHelperPlaceholder")}
+          />
+          <ClaudeTextareaField
+            className="claude-field-wide"
+            label={t("claudeExtraEnv")}
+            help={t("claudeExtraEnvHelp")}
+            meta={t("claudeExtraEnvMeta")}
+            value={extraEnvText}
+            onChange={(value) => updateEnv((env) => {
+              const next = { ...env };
+              for (const key of Object.keys(next)) {
+                if (!RESERVED_ENV_KEYS.includes(key as typeof RESERVED_ENV_KEYS[number])) {
+                  delete next[key];
                 }
-                return {
-                  ...next,
-                  ...textToEnv(event.target.value),
-                };
-              })}
-              rows={5}
-            />
-          </label>
+              }
+              return {
+                ...next,
+                ...textToEnv(value),
+              };
+            })}
+            placeholder={t("claudeExtraEnvPlaceholder")}
+            rows={5}
+          />
         </div>
       </div>
 
       <div className="settings-group-card">
         <div className="claude-settings-grid">
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudeModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["model"]))} onChange={(event) => updateSettingsJson(["model"], event.target.value.trim())} data-testid="claude-model-input" /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudeFallbackModel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["fallbackModel"]))} onChange={(event) => updateSettingsJson(["fallbackModel"], event.target.value.trim())} /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudePermissionMode")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["permissionMode"]))} onChange={(event) => updateSettingsJson(["permissionMode"], event.target.value.trim())} /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudeEffort")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["effort"]))} onChange={(event) => updateSettingsJson(["effort"], event.target.value.trim())} /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("languageLabel")} /><input className="settings-command-field" value={readString(readJsonPath(settingsJson, ["language"]))} onChange={(event) => updateSettingsJson(["language"], event.target.value.trim())} /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudeCleanupDays")} /><input className="settings-command-field" type="number" value={readNumber(readJsonPath(settingsJson, ["cleanupPeriodDays"]))} onChange={(event) => updateSettingsJson(["cleanupPeriodDays"], event.target.value ? Number(event.target.value) : undefined)} /></label>
+          <ClaudeInputField
+            label={t("claudeModel")}
+            meta={t("claudeModelMeta")}
+            value={readString(readJsonPath(settingsJson, ["model"]))}
+            onChange={(value) => updateSettingsJson(["model"], value.trim())}
+            placeholder={t("claudeModelPlaceholder")}
+            testId="claude-model-input"
+          />
+          <ClaudeInputField
+            label={t("claudeFallbackModel")}
+            meta={t("claudeFallbackModelMeta")}
+            value={readString(readJsonPath(settingsJson, ["fallbackModel"]))}
+            onChange={(value) => updateSettingsJson(["fallbackModel"], value.trim())}
+            placeholder={t("claudeFallbackModelPlaceholder")}
+          />
+          <ClaudeSelectField
+            label={t("claudePermissionMode")}
+            meta={t("claudePermissionModeMeta")}
+            value={behaviorPermissionMode}
+            onChange={(value) => updateSettingsJson(["permissionMode"], value)}
+            options={BEHAVIOR_PERMISSION_MODE_OPTIONS}
+            t={t}
+          />
+          <ClaudeSelectField
+            label={t("claudeEffort")}
+            meta={t("claudeEffortMeta")}
+            value={effortValue}
+            onChange={(value) => updateSettingsJson(["effort"], value)}
+            options={EFFORT_OPTIONS}
+            t={t}
+          />
+          <ClaudeInputField
+            label={t("languageLabel")}
+            meta={t("claudeLanguageMeta")}
+            value={readString(readJsonPath(settingsJson, ["language"]))}
+            onChange={(value) => updateSettingsJson(["language"], value.trim())}
+            placeholder={t("claudeLanguagePlaceholder")}
+          />
+          <ClaudeInputField
+            label={t("claudeCleanupDays")}
+            meta={t("claudeCleanupDaysMeta")}
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={readNumber(readJsonPath(settingsJson, ["cleanupPeriodDays"]))}
+            onChange={(value) => updateSettingsJson(["cleanupPeriodDays"], value ? Number(value) : undefined)}
+            placeholder={t("claudeCleanupDaysPlaceholder")}
+          />
           <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeIncludeGitInstructions")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(settingsJson, ["includeGitInstructions"]))} onChange={(event) => updateSettingsJson(["includeGitInstructions"], event.target.checked ? true : undefined)} /></label>
         </div>
       </div>
 
       <div className="settings-group-card">
         <div className="claude-settings-grid">
-          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoConnectIde")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoConnectIde"]))} onChange={(event) => updateGlobalConfigJson(["autoConnectIde"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeAutoInstallIdeExtension")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-field"><ClaudeFieldLabel label={t("claudeEditorMode")} /><input className="settings-command-field" value={readString(readJsonPath(globalConfigJson, ["editorMode"]))} onChange={(event) => updateGlobalConfigJson(["editorMode"], event.target.value.trim())} /></label>
-          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeShowTurnDuration")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["showTurnDuration"]))} onChange={(event) => updateGlobalConfigJson(["showTurnDuration"], event.target.checked ? true : undefined)} /></label>
-          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldLabel label={t("claudeTerminalProgressBarEnabled")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["terminalProgressBarEnabled"]))} onChange={(event) => updateGlobalConfigJson(["terminalProgressBarEnabled"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldCopy label={t("claudeAutoConnectIde")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoConnectIde"]))} onChange={(event) => updateGlobalConfigJson(["autoConnectIde"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldCopy label={t("claudeAutoInstallIdeExtension")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["autoInstallIdeExtension"]))} onChange={(event) => updateGlobalConfigJson(["autoInstallIdeExtension"], event.target.checked ? true : undefined)} /></label>
+          <ClaudeSelectField
+            label={t("claudeEditorMode")}
+            meta={t("claudeEditorModeMeta")}
+            value={editorModeValue}
+            onChange={(value) => updateGlobalConfigJson(["editorMode"], value)}
+            options={EDITOR_MODE_OPTIONS}
+            t={t}
+          />
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldCopy label={t("claudeShowTurnDuration")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["showTurnDuration"]))} onChange={(event) => updateGlobalConfigJson(["showTurnDuration"], event.target.checked ? true : undefined)} /></label>
+          <label className="claude-inline-toggle"><div className="claude-inline-toggle-copy"><ClaudeFieldCopy label={t("claudeTerminalProgressBarEnabled")} /></div><input type="checkbox" checked={readBoolean(readJsonPath(globalConfigJson, ["terminalProgressBarEnabled"]))} onChange={(event) => updateGlobalConfigJson(["terminalProgressBarEnabled"], event.target.checked ? true : undefined)} /></label>
         </div>
       </div>
 
       <div className="settings-group-card">
         <div className="claude-settings-grid">
           <label className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeSettingsJsonAdvanced")} />
+            <ClaudeFieldCopy label={t("claudeSettingsJsonAdvanced")} />
             <textarea
               className="claude-json-editor"
               rows={12}
@@ -603,7 +868,7 @@ export const ClaudeSettingsPanel = ({
             {settingsJsonError && <span className="claude-json-error">{settingsJsonError}</span>}
           </label>
           <label className="claude-field claude-field-wide">
-            <ClaudeFieldLabel label={t("claudeGlobalConfigAdvanced")} />
+            <ClaudeFieldCopy label={t("claudeGlobalConfigAdvanced")} />
             <textarea
               className="claude-json-editor"
               rows={12}

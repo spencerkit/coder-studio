@@ -29,3 +29,14 @@ test('settings cards avoid large per-card header blocks', async () => {
   assert.doesNotMatch(settingsSource, /settings-group-label/);
   assert.doesNotMatch(claudeSource, /settings-group-label/);
 });
+
+test('claude settings use dedicated inline select rows for enum fields', async () => {
+  const claudeSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ClaudeSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(claudeSource, /claude-select-row/);
+  assert.match(claudeSource, /claudePermissionModeMeta/);
+  assert.match(claudeSource, /claudeEditorModeMeta/);
+});

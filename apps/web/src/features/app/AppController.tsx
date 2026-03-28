@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AuthGate from "../../components/AuthGate";
-import { applyLocale, getPreferredLocale, persistLocale, type Locale } from "../../i18n";
+import {
+  applyLocale,
+  clearLocalePreference,
+  getPreferredLocale,
+  getSystemLocale,
+  persistLocale,
+  readStoredLocalePreference,
+  type Locale,
+} from "../../i18n";
 import { SettingsScreen } from "../../features/settings";
 import WorkspaceScreen from "../../features/workspace/WorkspaceScreen";
 import type { AppRoute, AppSettings } from "../../types/app";
@@ -17,6 +25,8 @@ import {
 import {
   createAppSettingsDraftStore,
   createSequencedAppSettingsSaver,
+  createPersistableAppSettings,
+  deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
 } from "../../services/http/settings.service.ts";
 
@@ -30,6 +40,7 @@ export default function AppController() {
   const backendSettingsConfirmedRef = useRef(false);
   const draftSettingsRef = useRef(createAppSettingsDraftStore(appSettings));
   const saveCoordinatorRef = useRef(createSequencedAppSettingsSaver());
+  const localePreferenceExplicitRef = useRef(readStoredLocalePreference() !== null);
   const navigate = useNavigate();
   const location = useLocation();
   const route: AppRoute = location.pathname === "/settings" ? "settings" : "workspace";
@@ -43,12 +54,14 @@ export default function AppController() {
 
     const hydrateAppSettings = async () => {
       const legacySettings = readStoredAppSettings();
-      const preferredLocale = getPreferredLocale();
+      const explicitLocale = readStoredLocalePreference();
+      const preferredLocale = explicitLocale ?? getSystemLocale();
       const fallbackDefaults = defaultAppSettings();
       const hydrated = await hydrateConfirmedAppSettings({
         fallbackSettings: fallbackDefaults,
         legacySettings,
         preferredLocale,
+        preferredLocaleIsExplicit: explicitLocale !== null,
       });
 
       if (hydrated.clearLegacyStorage) {
@@ -58,14 +71,7 @@ export default function AppController() {
         return;
       }
 
-      draftSettingsRef.current.replace(hydrated.settings);
-      confirmedSettingsRef.current = cloneAppSettings(hydrated.settings);
-      backendSettingsConfirmedRef.current = hydrated.backendConfirmed;
-      setAppSettings(hydrated.settings);
-      setSettingsDraft(hydrated.settings);
-      setLocale(hydrated.settings.general.locale);
-      persistLocale(hydrated.settings.general.locale);
-      setBackendSettingsConfirmed(hydrated.backendConfirmed);
+      applyRuntimeSettings(hydrated.settings, hydrated.backendConfirmed, hydrated.localeExplicit);
     };
 
     void hydrateAppSettings();
@@ -84,25 +90,46 @@ export default function AppController() {
     navigate(nextRoute === "settings" ? "/settings" : lastWorkspacePath);
   };
 
-  const applyRuntimeSettings = (saved: AppSettings, confirmedByBackend: boolean) => {
-    draftSettingsRef.current.replace(saved);
+  const applyRuntimeSettings = (
+    saved: AppSettings,
+    confirmedByBackend: boolean,
+    localeExplicit = localePreferenceExplicitRef.current,
+  ) => {
+    const runtimeSettings = deriveRuntimeAppSettings({
+      settings: saved,
+      localeExplicit,
+      systemLocale: getSystemLocale(),
+      explicitLocale: readStoredLocalePreference(),
+    });
+
+    draftSettingsRef.current.replace(runtimeSettings);
     confirmedSettingsRef.current = cloneAppSettings(saved);
     backendSettingsConfirmedRef.current = confirmedByBackend;
-    setAppSettings(saved);
-    setSettingsDraft(saved);
-    setLocale(saved.general.locale);
-    persistLocale(saved.general.locale);
+    localePreferenceExplicitRef.current = localeExplicit;
+    setAppSettings(runtimeSettings);
+    setSettingsDraft(runtimeSettings);
+    setLocale(runtimeSettings.general.locale);
+    if (localeExplicit) {
+      applyLocale(runtimeSettings.general.locale);
+    } else {
+      clearLocalePreference();
+      applyLocale(runtimeSettings.general.locale);
+    }
     setBackendSettingsConfirmed(confirmedByBackend);
   };
 
   const onSelectLocale = (nextLocale: Locale) => {
+    persistLocale(nextLocale);
+    localePreferenceExplicitRef.current = true;
     const nextSettings = draftSettingsRef.current.update((draft) => {
       draft.general.locale = nextLocale;
     });
+    setAppSettings(nextSettings);
     setSettingsDraft(nextSettings);
+    setLocale(nextLocale);
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
-      nextSettings,
+      createPersistableAppSettings(nextSettings, confirmedSettingsRef.current, true),
       undefined,
       backendSettingsConfirmedRef.current,
     )
@@ -110,7 +137,7 @@ export default function AppController() {
         if (!result.shouldApply) {
           return;
         }
-        applyRuntimeSettings(result.settings, result.backendConfirmed);
+        applyRuntimeSettings(result.settings, result.backendConfirmed, true);
       });
   };
 
@@ -119,7 +146,11 @@ export default function AppController() {
     setSettingsDraft(normalized);
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
-      normalized,
+      createPersistableAppSettings(
+        normalized,
+        confirmedSettingsRef.current,
+        localePreferenceExplicitRef.current,
+      ),
       undefined,
       backendSettingsConfirmedRef.current,
     )
@@ -127,7 +158,11 @@ export default function AppController() {
         if (!result.shouldApply) {
           return;
         }
-        applyRuntimeSettings(result.settings, result.backendConfirmed);
+        applyRuntimeSettings(
+          result.settings,
+          result.backendConfirmed,
+          localePreferenceExplicitRef.current,
+        );
       });
   };
 

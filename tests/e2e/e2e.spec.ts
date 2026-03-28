@@ -101,7 +101,15 @@ const openLaunchOverlay = async (page: Page) => {
   }
 
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-  await page.getByRole('button', { name: 'Add workspace' }).click();
+  try {
+    await page.getByRole('button', { name: 'Add workspace' }).click();
+  } catch (error) {
+    if (await overlay.isVisible()) {
+      await expect(overlay).toBeVisible();
+      return;
+    }
+    throw error;
+  }
   await expect(overlay).toBeVisible();
 };
 
@@ -751,7 +759,8 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
   await page.getByTestId('claude-flag-dangerously-skip-permissions').check();
   await page.getByTestId('claude-flag-verbose').check();
-  await page.getByTestId('claude-startup-permission-mode').selectOption('auto');
+  await page.getByTestId('claude-startup-permission-mode').click();
+  await page.getByTestId('claude-startup-permission-mode-option-auto').click();
   await page.getByTestId('claude-startup-args').fill('--debug');
   await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
   await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
@@ -768,7 +777,7 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
   await expect(page.getByTestId('claude-flag-dangerously-skip-permissions')).toBeChecked();
   await expect(page.getByTestId('claude-flag-verbose')).toBeChecked();
-  await expect(page.getByTestId('claude-startup-permission-mode')).toHaveValue('auto');
+  await expect(page.getByTestId('claude-startup-permission-mode')).toContainText('auto');
   await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
   await expect(page.getByTestId('claude-startup-args')).toHaveValue('--debug');
   await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
