@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -734,12 +735,13 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
-  test('first draft prompt becomes the session title', async ({ page }) => {
-    const tempWorkspaceRoot = path.join(WORKSPACE_PATH, '.tmp');
-    await fs.mkdir(tempWorkspaceRoot, { recursive: true });
-    const titleWorkspacePath = await fs.mkdtemp(path.join(tempWorkspaceRoot, 'transport-title-'));
+  test('first draft prompt becomes the session title', async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const titleWorkspacePath = await createExternalTempWorkspace('coder-studio-transport-title-');
 
     try {
+      await prepareTransportPage(page);
       await installTransportProbe(page);
       await openWorkspace(page, DEFAULT_TRANSPORT_IDS, titleWorkspacePath);
       await waitForBackendSocket(page);
@@ -758,6 +760,7 @@ test.describe('workspace transport baseline', () => {
         timeout: 10000,
       });
     } finally {
+      await context.close();
       await fs.rm(titleWorkspacePath, { recursive: true, force: true });
     }
   });
@@ -830,6 +833,7 @@ test.describe('workspace transport baseline', () => {
     const page = await context.newPage();
     const ids = { deviceId: 'device-recovery', clientId: 'client-recovery' };
     const resumeClaudeSessionId = `claude-e2e-resume-${Date.now()}`;
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-recovery-');
 
     try {
       await prepareTransportPage(page);
@@ -838,7 +842,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms ${AGENT_CLAUDE_RECOVERY_DELAY_MS}`,
       });
       await seedWorkspaceControllerIds(page, ids);
-      const workspace = await openWorkspace(page, ids);
+      const workspace = await openWorkspace(page, ids, workspacePath);
       await waitForBackendSocket(page);
       const controller = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
@@ -916,9 +920,14 @@ test.describe('workspace transport baseline', () => {
       }).toBe(true);
     } finally {
       await context.close();
+      await fs.rm(workspacePath, { recursive: true, force: true });
     }
   });
 });
+
+async function createExternalTempWorkspace(prefix: string) {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
 
 async function observePollingBaseline(page: Page): Promise<PollingBaseline> {
   const probe = await installTransportProbe(page);
