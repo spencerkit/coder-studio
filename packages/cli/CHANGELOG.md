@@ -1,5 +1,13 @@
 # @spencer-kit/coder-studio
 
+## 0.2.5
+
+### Patch Changes
+
+- Stabilize workspace session recovery, runtime reattach, and pane resize behavior across reloads and multi-session workspaces.
+- Add session history, persisted Claude settings, and the no-workspace welcome flow.
+- Harden packaged runtime recovery, Windows transport coverage, and release verification paths.
+
 ## 0.2.4
 
 ### Patch Changes
