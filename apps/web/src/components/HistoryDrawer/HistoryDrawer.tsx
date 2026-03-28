@@ -5,7 +5,7 @@ import type {
   SessionHistoryRecord,
 } from "../../types/app.ts";
 import { ChevronDownIcon, ChevronRightIcon, HeaderCloseIcon } from "../icons.tsx";
-import { selectHistoryPrimaryAction } from "../../features/workspace/session-history.ts";
+import { selectHistoryPrimaryActionBadge } from "../../features/workspace/session-history.ts";
 
 type HistoryDrawerProps = {
   open: boolean;
@@ -32,10 +32,10 @@ const recordStateClassName = (record: SessionHistoryRecord) => {
 };
 
 const primaryActionLabel = (record: SessionHistoryRecord, t: Translator) => {
-  const action = selectHistoryPrimaryAction(record);
-  if (action === "focus") return t("historyFocus");
+  const action = selectHistoryPrimaryActionBadge(record);
   if (action === "restore") return t("historyRestore");
-  return t("historyOpen");
+  if (action === "open") return t("historyOpen");
+  return null;
 };
 
 export const HistoryDrawer = ({
@@ -103,36 +103,42 @@ export const HistoryDrawer = ({
                 </button>
                 {expanded ? (
                   <div className="history-record-list" role="region" aria-label={group.workspaceTitle}>
-                    {group.records.map((record) => (
-                      <div key={`${record.workspaceId}:${record.sessionId}`} className="history-record-row">
-                        <button
-                          type="button"
-                          className="history-record-main"
-                          onClick={() => onSelectRecord(record)}
-                          data-testid={`history-record-${record.workspaceId}-${record.sessionId}`}
-                        >
-                          <div className="history-record-title-row">
-                            <strong>{record.title}</strong>
-                            <span className={`history-record-state ${recordStateClassName(record)}`}>
-                              {primaryActionLabel(record, t)}
-                            </span>
-                          </div>
-                          <div className="history-record-meta">
-                            <span>{recordMetaLabel(record, t)}</span>
-                            <span>{record.status}</span>
-                            <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          className="history-record-delete"
-                          onClick={() => onDeleteRecord(record)}
-                          data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
-                        >
-                          {t("historyDelete")}
-                        </button>
-                      </div>
-                    ))}
+                    {group.records.map((record) => {
+                      const actionLabel = primaryActionLabel(record, t);
+
+                      return (
+                        <div key={`${record.workspaceId}:${record.sessionId}`} className="history-record-row">
+                          <button
+                            type="button"
+                            className="history-record-main"
+                            onClick={() => onSelectRecord(record)}
+                            data-testid={`history-record-${record.workspaceId}-${record.sessionId}`}
+                          >
+                            <div className="history-record-title-row">
+                              <strong>{record.title}</strong>
+                              {actionLabel ? (
+                                <span className={`history-record-state ${recordStateClassName(record)}`}>
+                                  {actionLabel}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="history-record-meta">
+                              <span>{recordMetaLabel(record, t)}</span>
+                              <span>{record.status}</span>
+                              <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="history-record-delete"
+                            onClick={() => onDeleteRecord(record)}
+                            data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
+                          >
+                            {t("historyDelete")}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </section>

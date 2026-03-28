@@ -72,3 +72,12 @@ export const selectHistoryPrimaryAction = (
   }
   return "noop" as const;
 };
+
+export const selectHistoryPrimaryActionBadge = (
+  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable">,
+) => {
+  const action = selectHistoryPrimaryAction(record);
+  if (action === "focus") return null;
+  if (action === "restore") return "restore" as const;
+  return "open" as const;
+};

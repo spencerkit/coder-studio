@@ -4,6 +4,7 @@ import {
   createInitialHistoryExpansion,
   groupSessionHistory,
   mapSessionHistoryRecord,
+  selectHistoryPrimaryActionBadge,
   selectHistoryPrimaryAction,
 } from "../apps/web/src/features/workspace/session-history.ts";
 import type { BackendSessionHistoryRecord, SessionHistoryRecord } from "../apps/web/src/types/app.ts";
@@ -73,6 +74,21 @@ test("selectHistoryPrimaryAction distinguishes focus restore and noop", () => {
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: true, archived: false, recoverable: true })), "focus");
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: true, recoverable: true })), "restore");
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: false, recoverable: false })), "noop");
+});
+
+test("selectHistoryPrimaryActionBadge hides redundant focus badges and keeps restore actions", () => {
+  assert.equal(
+    selectHistoryPrimaryActionBadge(createRecord({ mounted: true, archived: false, recoverable: true })),
+    null,
+  );
+  assert.equal(
+    selectHistoryPrimaryActionBadge(createRecord({ mounted: false, archived: true, recoverable: true })),
+    "restore",
+  );
+  assert.equal(
+    selectHistoryPrimaryActionBadge(createRecord({ mounted: false, archived: false, recoverable: false })),
+    "open",
+  );
 });
 
 test("createInitialHistoryExpansion expands only the current workspace by default", () => {
