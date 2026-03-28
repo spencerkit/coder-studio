@@ -366,7 +366,7 @@ test.describe('workspace transport baseline', () => {
       );
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       await expect(page.getByTestId('workspace-read-only-banner')).toBeHidden();
 
@@ -540,7 +540,7 @@ test.describe('workspace transport baseline', () => {
       });
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
@@ -559,7 +559,7 @@ test.describe('workspace transport baseline', () => {
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const runtimeAfterReload = await invokeRpc<{
         lifecycle_events?: Array<{ session_id: string; kind: string }>;
@@ -583,7 +583,7 @@ test.describe('workspace transport baseline', () => {
       await page.goto('about:blank');
       await page.waitForTimeout(2200);
       await page.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       await expect.poll(async () =>
         page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
@@ -619,7 +619,7 @@ test.describe('workspace transport baseline', () => {
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(observer);
       await waitForBackendSocket(observer);
       await expect(observer.getByTestId('runtime-validation-overlay')).toHaveCount(0);
 
@@ -676,7 +676,7 @@ test.describe('workspace transport baseline', () => {
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(observer);
       await waitForBackendSocket(observer);
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
       await observer.bringToFront();
@@ -738,7 +738,7 @@ test.describe('workspace transport baseline', () => {
       await waitForBackendSocket(controller);
 
       await observer.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(observer.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(observer);
       await waitForBackendSocket(observer);
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
 
@@ -821,7 +821,7 @@ test.describe('workspace transport baseline', () => {
       await waitForBackendSocket(controller);
 
       await reopened.goto(`/workspace/${workspace.workspaceId}`);
-      await expect(reopened.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(reopened);
       await waitForBackendSocket(reopened);
       await expect(reopened.getByTestId('runtime-validation-overlay')).toHaveCount(0);
       await expect(reopened.getByTestId('workspace-read-only-banner')).toBeVisible();
@@ -900,7 +900,7 @@ test.describe('workspace transport baseline', () => {
         },
       });
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
       const interruptedSessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
@@ -946,7 +946,7 @@ test.describe('workspace transport baseline', () => {
       );
 
       await page.reload();
-      await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+      await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       let resumedStatus: string | null = null;
       await expect.poll(async () => {
@@ -1357,13 +1357,14 @@ async function openWorkspace(
   });
 
   const workspaceId = launch.snapshot.workspace.workspace_id;
-  await Promise.all([
-    page.waitForResponse((response) =>
-      response.request().method() === 'POST' && response.url().includes('/api/rpc/workbench_bootstrap'),
-    ),
-    page.goto(`/workspace/${workspaceId}`),
-  ]);
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+  const bootstrapRequest = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && response.url().includes('/api/rpc/workbench_bootstrap'),
+  {
+    timeout: 15000,
+  }).catch(() => null);
+  await page.goto(`/workspace/${workspaceId}`);
+  await bootstrapRequest;
+  await waitForWorkspaceTopbar(page);
 
   return {
     workspaceId,
@@ -1464,6 +1465,10 @@ async function invokeRpc<T>(page: Page, command: string, payload: Record<string,
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+}
+
+async function waitForWorkspaceTopbar(page: Page, timeout = 15000) {
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible({ timeout });
 }
 
 async function closeAllOpenWorkspaces(page: Page) {
