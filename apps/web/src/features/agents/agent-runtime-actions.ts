@@ -1,19 +1,20 @@
 import type { MutableRefObject } from "react";
-import type { WorkspaceControllerState } from "../workspace/workspace-controller";
-import { formatSessionTitle, type Locale, type Translator } from "../../i18n";
-import type { Session, Tab } from "../../state/workbench";
-import { resizeAgent } from "../../services/http/agent.service";
+import type { WorkspaceControllerState } from "../workspace/workspace-controller.ts";
+import { formatSessionTitle, type Locale, type Translator } from "../../i18n.ts";
+import type { Session, Tab } from "../../state/workbench.ts";
+import { resizeAgent } from "../../services/http/agent.service.ts";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STARTUP_DISCOVERY_MS,
   AGENT_STARTUP_MAX_WAIT_MS,
   AGENT_STARTUP_QUIET_MS,
   AGENT_TITLE_TRACK_LIMIT,
-} from "../../shared/app/constants";
-import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi";
-import { parseNumericId, sessionTitleFromInput } from "../../shared/utils/session";
-import type { AgentEvent, AgentLifecycleEvent } from "../../types/app";
-import type { XtermBaseHandle } from "../../components/terminal";
+} from "../../shared/app/constants.ts";
+import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi.ts";
+import { parseNumericId, sessionTitleFromInput } from "../../shared/utils/session.ts";
+import type { AgentEvent, AgentLifecycleEvent } from "../../types/app.ts";
+import type { XtermBaseHandle } from "../../components/terminal/XtermBase.tsx";
+import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
 
 type AgentSize = { cols: number; rows: number };
 
@@ -61,9 +62,7 @@ export const isAgentRuntimeRunning = (
 ) => refs.runningAgentKeysRef.current.has(agentRuntimeKey(tabId, sessionId));
 
 export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
-  requestAnimationFrame(() => {
-    refs.agentTerminalRefs.current.forEach((handle) => handle?.fit());
-  });
+  fitAgentTerminalHandles(refs.agentTerminalRefs.current);
 };
 
 const flushAgentRuntimeSize = (

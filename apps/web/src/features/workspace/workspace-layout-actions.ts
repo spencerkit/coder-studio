@@ -114,7 +114,8 @@ type StartWorkspacePanelResizeArgs = {
   stateRef: MutableRefObject<WorkbenchState>;
   updateState: UpdateState;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
-  fitAgentTerminals: () => void;
+  scheduleFitAgentTerminals: () => void;
+  flushFitAgentTerminals: () => void;
 };
 
 export const startWorkspacePanelResize = ({
@@ -123,7 +124,8 @@ export const startWorkspacePanelResize = ({
   stateRef,
   updateState,
   shellTerminalRef,
-  fitAgentTerminals,
+  scheduleFitAgentTerminals,
+  flushFitAgentTerminals,
 }: StartWorkspacePanelResizeArgs) => {
   event.preventDefault();
   document.body.classList.add("is-resizing-panels");
@@ -150,6 +152,7 @@ export const startWorkspacePanelResize = ({
         rightSplit: type === "right-split" ? pendingSplit : current.layout.rightSplit,
       },
     }));
+    scheduleFitAgentTerminals();
   };
 
   const onMove = (moveEvent: PointerEvent) => {
@@ -176,7 +179,7 @@ export const startWorkspacePanelResize = ({
     }
     requestAnimationFrame(() => {
       shellTerminalRef.current?.fit();
-      fitAgentTerminals();
+      flushFitAgentTerminals();
     });
   };
 
@@ -191,7 +194,8 @@ type StartWorkspacePaneSplitResizeArgs = {
   splitId: string;
   axis: "horizontal" | "vertical";
   updateTab: UpdateTab;
-  fitAgentTerminals: () => void;
+  scheduleFitAgentTerminals: () => void;
+  flushFitAgentTerminals: () => void;
 };
 
 export const startWorkspacePaneSplitResize = ({
@@ -201,7 +205,8 @@ export const startWorkspacePaneSplitResize = ({
   splitId,
   axis,
   updateTab,
-  fitAgentTerminals,
+  scheduleFitAgentTerminals,
+  flushFitAgentTerminals,
 }: StartWorkspacePaneSplitResizeArgs) => {
   event.preventDefault();
   document.body.classList.add("is-resizing-panels");
@@ -228,6 +233,7 @@ export const startWorkspacePaneSplitResize = ({
       ...tab,
       paneLayout: updateSplitRatio(tab.paneLayout, splitId, pendingRatio),
     }));
+    scheduleFitAgentTerminals();
   };
 
   const onMove = (moveEvent: PointerEvent) => {
@@ -249,7 +255,9 @@ export const startWorkspacePaneSplitResize = ({
       window.cancelAnimationFrame(frameId);
       flushRatio();
     }
-    fitAgentTerminals();
+    requestAnimationFrame(() => {
+      flushFitAgentTerminals();
+    });
   };
 
   window.addEventListener("pointermove", onMove);

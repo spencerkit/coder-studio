@@ -3868,6 +3868,21 @@ body.is-resizing-panels .h-resizer::before {
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
+body.is-resizing-panels .agent-pane-card,
+body.is-resizing-panels .agent-pane-header,
+body.is-resizing-panels .agent-pane-actions,
+body.is-resizing-panels .pane-action,
+body.is-resizing-panels .surface-progress-bar,
+body.is-resizing-panels .session-top-dot {
+  transition: none !important;
+}
+
+body.is-resizing-panels .session-top-dot.pulse,
+body.is-resizing-panels .agent-pane-card .pulse {
+  animation: none !important;
+  filter: none !important;
+}
+
 /* --- Workspace Main --- */
 
 .workspace-main {

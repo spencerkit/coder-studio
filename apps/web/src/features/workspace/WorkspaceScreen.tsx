@@ -53,6 +53,7 @@ import {
   buildSlashMenuSections,
   clearAgentStartupGate,
   commitAgentSessionTitle,
+  createAgentTerminalFitScheduler,
   focusAgentTerminal,
   fitAgentTerminals,
   isAgentRuntimeRunning,
@@ -422,6 +423,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
+  const agentTerminalFitSchedulerRef = useRef<ReturnType<typeof createAgentTerminalFitScheduler> | null>(null);
   const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
   const agentRuntimeSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
   const agentResizeStateRef = useRef(new Map<string, {
@@ -569,9 +571,35 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     agentStartupTokenRef
   }), []);
 
-  const fitWorkspaceAgentTerminals = () => {
+  if (!agentTerminalFitSchedulerRef.current && typeof window !== "undefined") {
+    agentTerminalFitSchedulerRef.current = createAgentTerminalFitScheduler(
+      window.requestAnimationFrame.bind(window),
+      window.cancelAnimationFrame.bind(window),
+    );
+  }
+
+  const runWorkspaceAgentFit = useCallback(() => {
     fitAgentTerminals(agentRuntimeRefs);
-  };
+  }, [agentRuntimeRefs]);
+
+  const scheduleWorkspaceAgentFit = useCallback(() => {
+    const scheduler = agentTerminalFitSchedulerRef.current;
+    if (!scheduler) {
+      runWorkspaceAgentFit();
+      return;
+    }
+    scheduler.schedule(runWorkspaceAgentFit);
+  }, [runWorkspaceAgentFit]);
+
+  const flushWorkspaceAgentFit = useCallback(() => {
+    const scheduler = agentTerminalFitSchedulerRef.current;
+    if (!scheduler) {
+      runWorkspaceAgentFit();
+      return;
+    }
+    scheduler.schedule(runWorkspaceAgentFit);
+    scheduler.flush();
+  }, [runWorkspaceAgentFit]);
 
   const registerAgentTerminalRef = (paneId: string, handle: XtermBaseHandle | null) => {
     setAgentTerminalRef(agentRuntimeRefs, paneId, handle);
@@ -613,6 +641,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => () => {
+    agentTerminalFitSchedulerRef.current?.dispose();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1978,7 +2010,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       stateRef,
       updateState,
       shellTerminalRef,
-      fitAgentTerminals: fitWorkspaceAgentTerminals,
+      scheduleFitAgentTerminals: scheduleWorkspaceAgentFit,
+      flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
 
@@ -2034,7 +2067,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       splitId,
       axis,
       updateTab,
-      fitAgentTerminals: fitWorkspaceAgentTerminals,
+      scheduleFitAgentTerminals: scheduleWorkspaceAgentFit,
+      flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
 

@@ -1,5 +1,9 @@
 export { default as AgentWorkspaceFeature } from "./AgentWorkspaceFeature";
 export {
+  createAgentTerminalFitScheduler,
+  type AgentTerminalFitScheduler,
+} from "./agent-terminal-fit-scheduler";
+export {
   agentRuntimeKey,
   armAgentStartupGate,
   clearAgentRuntimeTracking,
