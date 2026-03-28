@@ -737,6 +737,10 @@ test.describe('workspace transport baseline', () => {
     await seedAppSettings(page, {
       agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
     });
+    const initialPaneTitle = (await page.locator('.agent-pane-title').first().textContent())?.trim() ?? '';
+    if (initialPaneTitle !== 'New Session') {
+      await page.locator('.agent-pane-card').first().getByRole('button', { name: 'Close' }).click();
+    }
 
     const firstPrompt = 'title derived from first prompt';
     const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
@@ -745,7 +749,7 @@ test.describe('workspace transport baseline', () => {
     await draftInput.fill(firstPrompt);
     await draftInput.press('Enter');
 
-    await expect(page.locator('.agent-pane-title').first()).toContainText(firstPrompt, {
+    await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
       timeout: 10000,
     });
   });
