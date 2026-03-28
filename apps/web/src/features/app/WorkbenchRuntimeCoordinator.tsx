@@ -52,6 +52,10 @@ import {
 } from "../workspace/workspace-controller";
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
+import {
+  advanceWorkspaceSyncVersion,
+  isWorkspaceSyncVersionCurrent,
+} from "../workspace/workspace-sync-version.ts";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 
 const withServiceFallback = async <T,>(
@@ -400,17 +404,25 @@ export const WorkbenchRuntimeCoordinator = ({
     }
 
     const task = (async () => {
+      const syncVersion = advanceWorkspaceSyncVersion(workspaceId);
       const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
         workspaceId,
         deviceId,
         clientId,
         withServiceFallback,
       );
-      if (!runtimeSnapshot || !hasLiveWorkspaceTab(workspaceId)) {
+      if (
+        !runtimeSnapshot
+        || !hasLiveWorkspaceTab(workspaceId)
+        || !isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)
+      ) {
         return;
       }
       updateState((current) => {
-        if (!current.tabs.some((tab) => tab.id === workspaceId)) {
+        if (
+          !current.tabs.some((tab) => tab.id === workspaceId)
+          || !isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)
+        ) {
           return current;
         }
         return applyWorkspaceRuntimeSnapshot(

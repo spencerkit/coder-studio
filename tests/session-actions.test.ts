@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTranslator } from '../apps/web/src/i18n.ts';
 import { createWorkspaceSessionActions } from '../apps/web/src/features/workspace/session-actions.ts';
+import { readWorkspaceSyncVersion } from '../apps/web/src/features/workspace/workspace-sync-version.ts';
 import type { AppSettings, Toast } from '../apps/web/src/types/app.ts';
 import type { WorkbenchState } from '../apps/web/src/state/workbench.ts';
 
@@ -199,4 +200,135 @@ test('markSessionIdle does not trigger completion reminder for agent exit notes'
   await actions.markSessionIdle('ws-1', 'session-background', t('agentExited'));
 
   assert.deepEqual(reminders, []);
+});
+
+test('restoreSessionIntoPane bumps the workspace sync version before applying the restored session', async () => {
+  const locale = 'en';
+  const t = createTranslator(locale);
+  const workspaceId = 'ws-restore-sync';
+  const beforeVersion = readWorkspaceSyncVersion(workspaceId);
+  const stateRef = {
+    current: {
+      activeTabId: workspaceId,
+      layout: {
+        leftWidth: 320,
+        rightWidth: 320,
+        rightSplit: 64,
+        showCodePanel: false,
+        showTerminalPanel: false,
+      },
+      overlay: {
+        visible: false,
+        mode: 'local' as const,
+        input: '',
+        target: { type: 'native' as const },
+      },
+      tabs: [
+        {
+          id: workspaceId,
+          title: 'Workspace Restore',
+          status: 'ready' as const,
+          controller: {
+            role: 'controller' as const,
+            deviceId: 'device-a',
+            clientId: 'client-a',
+            fencingToken: 1,
+            takeoverPending: false,
+            takeoverRequestedBySelf: false,
+          },
+          agent: {
+            provider: 'claude' as const,
+            command: 'claude',
+            useWsl: false,
+          },
+          git: { branch: 'main', changes: 0, lastCommit: 'abc123' },
+          gitChanges: [],
+          worktrees: [],
+          sessions: [
+            {
+              id: 'draft-restore',
+              title: 'Session 1',
+              status: 'idle' as const,
+              mode: 'branch' as const,
+              autoFeed: true,
+              queue: [],
+              messages: [],
+              stream: '',
+              unread: 0,
+              lastActiveAt: 1,
+              isDraft: true,
+            },
+          ],
+          activeSessionId: 'draft-restore',
+          archive: [],
+          terminals: [],
+          activeTerminalId: '',
+          fileTree: [],
+          changesTree: [],
+          filePreview: {
+            path: '',
+            content: '',
+            mode: 'preview' as const,
+            originalContent: '',
+            modifiedContent: '',
+            dirty: false,
+          },
+          paneLayout: {
+            type: 'leaf' as const,
+            id: 'pane-draft',
+            sessionId: 'draft-restore',
+          },
+          activePaneId: 'pane-draft',
+          idlePolicy: {
+            enabled: true,
+            idleMinutes: 10,
+            maxActive: 3,
+            pressure: true,
+          },
+        },
+      ],
+    } satisfies WorkbenchState,
+  };
+
+  const actions = createWorkspaceSessionActions({
+    appSettings: defaultAppSettings(),
+    locale,
+    t,
+    stateRef,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    withServiceFallback: async (_operation, fallback) => {
+      if (fallback === null) {
+        return {
+          session: {
+            id: 7,
+            title: 'History Restore Session',
+            status: 'idle' as const,
+            mode: 'branch' as const,
+            auto_feed: true,
+            queue: [],
+            messages: [],
+            stream: '',
+            unread: 0,
+            last_active_at: 10,
+            claude_session_id: 'claude-restore-sync',
+          },
+          alreadyActive: false,
+        };
+      }
+      return fallback;
+    },
+    addToast: () => {},
+  });
+
+  const restored = await actions.restoreSessionIntoPane(workspaceId, '7');
+
+  assert.equal(restored?.id, 7);
+  assert.equal(readWorkspaceSyncVersion(workspaceId), beforeVersion + 1);
+  assert.equal(stateRef.current.tabs[0]?.activeSessionId, '7');
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, 'History Restore Session');
 });

@@ -43,6 +43,7 @@ import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace.ts"
 import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app.ts";
 
 import type { CompletionReminderTarget } from "./completion-reminders.ts";
+import { advanceWorkspaceSyncVersion } from "./workspace-sync-version.ts";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
@@ -495,6 +496,7 @@ export const createWorkspaceSessionActions = ({
     const target = ensureRestorePane(tabId, preferredPaneId);
     if (!target) return null;
 
+    advanceWorkspaceSyncVersion(tabId);
     const restored = await withServiceFallback(
       () => restoreSessionRequest(tabId, numericSessionId, controllerForTab(tabId)),
       null,

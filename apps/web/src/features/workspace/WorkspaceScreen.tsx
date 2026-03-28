@@ -121,6 +121,10 @@ import {
   updateWorkspaceOverlayTarget
 } from "./workspace-overlay-actions";
 import {
+  advanceWorkspaceSyncVersion,
+  isWorkspaceSyncVersionCurrent,
+} from "./workspace-sync-version.ts";
+import {
   buildWorkspaceFileSearchResults,
   closeWorkspaceFileSearch,
   createInitialWorkspaceFileSearchState,
@@ -461,7 +465,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const validatedRuntimeTargetsRef = useRef(new Set<string>());
   const runtimeValidationRequestIdRef = useRef(0);
   const overlayBrowseRequestIdRef = useRef(0);
-  const workspaceSyncVersionRef = useRef(new Map<string, number>());
   const persistedLayoutRef = useRef<string>("");
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
@@ -578,16 +581,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     stateRef.current = next;
     setState(next);
   };
-
-  const advanceWorkspaceSyncVersion = useCallback((workspaceId: string) => {
-    const nextVersion = (workspaceSyncVersionRef.current.get(workspaceId) ?? 0) + 1;
-    workspaceSyncVersionRef.current.set(workspaceId, nextVersion);
-    return nextVersion;
-  }, []);
-
-  const isWorkspaceSyncVersionCurrent = useCallback((workspaceId: string, version: number) => (
-    (workspaceSyncVersionRef.current.get(workspaceId) ?? 0) === version
-  ), []);
 
   const agentRuntimeRefs = useMemo(() => ({
     draftPromptInputRefs,
