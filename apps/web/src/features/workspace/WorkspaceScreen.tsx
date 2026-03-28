@@ -1700,8 +1700,33 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const onRecoverActiveSession = async () => {
-    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
-    const session = currentTab.sessions.find((item) => item.id === activePaneSession.id) ?? activePaneSession;
+    let currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    let session = currentTab.sessions.find((item) => item.id === activePaneSession.id) ?? activePaneSession;
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      currentTab.id,
+      deviceId,
+      clientId,
+      withServiceFallback,
+    );
+    if (runtimeSnapshot) {
+      let nextTab: Tab | null = null;
+      updateState((current) => {
+        const next = applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        );
+        nextTab = next.tabs.find((tab) => tab.id === currentTab.id) ?? null;
+        return next;
+      });
+      if (nextTab) {
+        currentTab = nextTab;
+        session = nextTab.sessions.find((item) => item.id === session.id) ?? session;
+      }
+    }
     const recoveryAction = resolveAgentRecoveryAction(currentTab.controller, session);
     if (!recoveryAction) return;
     setAgentRecoveryBusy({

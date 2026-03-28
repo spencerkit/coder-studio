@@ -7,6 +7,7 @@ import {
   createWorkspaceControllerRpcPayload,
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
+  shouldRecoverWorkspaceController,
 } from "../apps/web/src/features/workspace/workspace-controller.ts";
 import {
   applyWorkspaceControllerEvent,
@@ -125,6 +126,20 @@ test("same device with a different client stays observer", () => {
   }, "device-a", "client-b");
 
   assert.equal(controller.role, "observer");
+});
+
+test("observer controllers remain recoverable while takeover is not pending", () => {
+  const controller = createWorkspaceControllerState({
+    role: "observer",
+    deviceId: "device-a",
+    clientId: "client-b",
+    controllerDeviceId: "device-a",
+    controllerClientId: "client-a",
+    fencingToken: 1,
+    takeoverPending: false,
+  });
+
+  assert.equal(shouldRecoverWorkspaceController(controller), true);
 });
 
 test("controller mutation payload carries device, client, and fencing token", () => {

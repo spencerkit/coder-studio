@@ -163,3 +163,7 @@ export const canMutateWorkspace = (
   controller: WorkspaceControllerState | null | undefined,
   _action: WorkspaceMutationAction,
 ) => controller?.role === "controller";
+
+export const shouldRecoverWorkspaceController = (
+  controller: WorkspaceControllerState | null | undefined,
+) => controller?.role === "observer" && !controller.takeoverPending;

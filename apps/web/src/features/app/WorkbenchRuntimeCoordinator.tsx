@@ -48,6 +48,7 @@ import {
   collectControlledWorkspaceReleasePayloads,
   getOrCreateClientId as getWorkspaceClientId,
   getOrCreateDeviceId as getWorkspaceDeviceId,
+  shouldRecoverWorkspaceController,
 } from "../workspace/workspace-controller";
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
@@ -509,10 +510,7 @@ export const WorkbenchRuntimeCoordinator = ({
     () => state.tabs
       .filter((tab) =>
         tab.status === "ready"
-        && tab.controller.role === "observer"
-        && !tab.controller.controllerDeviceId
-        && !tab.controller.controllerClientId
-        && !tab.controller.takeoverPending,
+        && shouldRecoverWorkspaceController(tab.controller),
       )
       .map((tab) => tab.id)
       .join("|"),
@@ -527,14 +525,13 @@ export const WorkbenchRuntimeCoordinator = ({
     const recoverableWorkspaceIds = () => stateRef.current.tabs
       .filter((tab) =>
         tab.status === "ready"
-        && tab.controller.role === "observer"
-        && !tab.controller.controllerDeviceId
-        && !tab.controller.controllerClientId
-        && !tab.controller.takeoverPending,
+        && shouldRecoverWorkspaceController(tab.controller),
       )
       .map((tab) => tab.id);
 
     const recoverControllers = () => {
+      // Observer tabs can miss an initial runtime attach/controller event during reloads.
+      // Reattaching until the tab converges keeps recovery/replay flows stable across slower environments.
       void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
         await reattachWorkspaceRuntime(workspaceId);
       }));
