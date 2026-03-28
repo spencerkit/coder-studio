@@ -15,6 +15,7 @@ export {
   markAgentRuntimeStarted,
   noteAgentStartupEvent,
   noteAgentStartupLifecycle,
+  previewAgentSessionTitle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
   syncAgentPaneSize,

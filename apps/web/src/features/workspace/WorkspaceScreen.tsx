@@ -58,6 +58,7 @@ import {
   fitAgentTerminals,
   isAgentRuntimeRunning,
   markAgentRuntimeStarted,
+  previewAgentSessionTitle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
   syncAgentPaneSize,
@@ -409,6 +410,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
   const [controllerActionBusy, setControllerActionBusy] = useState<"takeover" | "reject" | null>(null);
+  const [agentRecoveryBusy, setAgentRecoveryBusy] = useState<{
+    sessionId: string;
+    kind: "resume" | "restart";
+  } | null>(null);
   const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
   const t = useMemo(() => createTranslator(locale), [locale]);
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
@@ -1697,10 +1702,22 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onRecoverActiveSession = async () => {
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
     const session = currentTab.sessions.find((item) => item.id === activePaneSession.id) ?? activePaneSession;
-    const started = await agentStartMaybe(currentTab, session, currentTab.activePaneId);
-    if (!started) return;
-    if (started.started && started.startupToken !== null) {
-      await waitForAgentStartupDrain(agentRuntimeRefs, currentTab.id, session.id, started.startupToken);
+    const recoveryAction = resolveAgentRecoveryAction(currentTab.controller, session);
+    if (!recoveryAction) return;
+    setAgentRecoveryBusy({
+      sessionId: session.id,
+      kind: recoveryAction.kind,
+    });
+    try {
+      const started = await agentStartMaybe(currentTab, session, currentTab.activePaneId);
+      if (!started) return;
+      if (started.started && started.startupToken !== null) {
+        await waitForAgentStartupDrain(agentRuntimeRefs, currentTab.id, session.id, started.startupToken);
+      }
+    } finally {
+      setAgentRecoveryBusy((current) => (
+        current?.sessionId === session.id ? null : current
+      ));
     }
   };
 
@@ -2226,6 +2243,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const onSubmitDraftPrompt = async (paneId: string, submittedValue?: string) => {
     if (!guardWorkspaceMutation("agent_input")) return;
+    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    const paneSessionId = activeTabSnapshot
+      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
+      : null;
+    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
+      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
+      : null;
     const content = (
       submittedValue
       ?? draftPromptInputRefs.current.get(paneId)?.value
@@ -2233,6 +2257,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       ?? ""
     ).trim();
     if (!content) return;
+    if (activeTabSnapshot && currentSessionSnapshot) {
+      previewAgentSessionTitle({
+        tabId: activeTabSnapshot.id,
+        sessionId: currentSessionSnapshot.id,
+        rawInput: content,
+        locale,
+        t,
+        updateTab,
+      });
+    }
     setDraftPromptInputs((current) => ({
       ...current,
       [paneId]: ""
@@ -2496,6 +2530,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     ? (hasTerminalOutput ? "live" : "steady")
     : "idle";
   const agentRecoveryAction = resolveAgentRecoveryAction(activeTab.controller, isArchiveView ? null : activePaneSession);
+  const activeAgentRecoveryBusy = !isArchiveView && agentRecoveryBusy?.sessionId === activePaneSession.id
+    ? agentRecoveryBusy
+    : null;
+  const visibleAgentRecoveryAction = agentRecoveryAction ?? activeAgentRecoveryBusy;
   const terminalRecoveryAction = resolveTerminalRecoveryAction(activeTab.controller, activeTerminal);
   const workspaceStatusBanner = isObserverMode ? (
     <div
@@ -2549,9 +2587,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         </button>
       </div>
     </div>
-  ) : (agentRecoveryAction || terminalRecoveryAction) ? (
+  ) : (visibleAgentRecoveryAction || terminalRecoveryAction) ? (
     <>
-      {agentRecoveryAction && (
+      {visibleAgentRecoveryAction && (
         <div
           className="workspace-status-banner recovery"
           data-testid="workspace-agent-recovery-banner"
@@ -2559,7 +2597,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           <div className="workspace-status-banner-copy">
             <span className="workspace-status-banner-title">{t("workspaceAgentRecoveryTitle")}</span>
             <span className="workspace-status-banner-text">
-              {agentRecoveryAction.kind === "resume"
+              {visibleAgentRecoveryAction.kind === "resume"
                 ? t("workspaceAgentResumeBody")
                 : t("workspaceAgentRestartBody")}
             </span>
@@ -2572,9 +2610,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               onClick={() => {
                 void onRecoverActiveSession();
               }}
-              disabled={controllerActionBusy !== null}
+              disabled={controllerActionBusy !== null || activeAgentRecoveryBusy !== null}
             >
-              {agentRecoveryAction.kind === "resume"
+              {visibleAgentRecoveryAction.kind === "resume"
                 ? t("workspaceAgentResumeAction")
                 : t("workspaceAgentRestartAction")}
             </button>

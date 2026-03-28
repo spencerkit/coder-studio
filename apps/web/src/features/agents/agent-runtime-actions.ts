@@ -344,6 +344,43 @@ export const commitAgentSessionTitle = ({
   return title;
 };
 
+type PreviewAgentSessionTitleArgs = {
+  tabId: string;
+  sessionId: string;
+  rawInput: string;
+  locale: Locale;
+  t: Translator;
+  updateTab: UpdateTab;
+};
+
+export const previewAgentSessionTitle = ({
+  tabId,
+  sessionId,
+  rawInput,
+  locale,
+  t,
+  updateTab,
+}: PreviewAgentSessionTitleArgs): string | null => {
+  const title = sessionTitleFromInput(rawInput);
+  if (!title) return null;
+
+  let applied = false;
+  updateTab(tabId, (tab) => ({
+    ...tab,
+    sessions: tab.sessions.map((session) => {
+      if (session.id !== sessionId) return session;
+      const canReplace = session.isDraft
+        || session.title === t("draftSessionTitle")
+        || isGeneratedSessionTitleForId(session.title, session.id);
+      if (!canReplace) return session;
+      applied = true;
+      return { ...session, title };
+    }),
+  }));
+
+  return applied ? title : null;
+};
+
 export const noteAgentStartupEvent = (
   refs: AgentRuntimeRefs,
   tabId: string,

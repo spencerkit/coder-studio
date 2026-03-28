@@ -3,6 +3,12 @@ use crate::*;
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
 
+#[derive(Default)]
+struct AgentLifecycleFallbackState {
+    emitted_tool_started: bool,
+    emitted_turn_completed: bool,
+}
+
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     PtySize {
         rows: rows.filter(|value| *value > 0).unwrap_or(DEFAULT_PTY_ROWS),
@@ -10,6 +16,27 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
         pixel_width: 0,
         pixel_height: 0,
     }
+}
+
+fn fallback_agent_lifecycle_from_output(
+    state: &mut AgentLifecycleFallbackState,
+    text: &str,
+) -> Option<(&'static str, &'static str, &'static str)> {
+    if state.emitted_tool_started || text.trim().is_empty() {
+        return None;
+    }
+    state.emitted_tool_started = true;
+    Some(("tool_started", "AgentProcessOutput", r#"{"source":"agent_process_output"}"#))
+}
+
+fn fallback_agent_lifecycle_from_exit(
+    state: &mut AgentLifecycleFallbackState,
+) -> Option<(&'static str, &'static str, &'static str)> {
+    if state.emitted_turn_completed || !state.emitted_tool_started {
+        return None;
+    }
+    state.emitted_turn_completed = true;
+    Some(("turn_completed", "AgentProcessExit", r#"{"source":"agent_process_exit"}"#))
 }
 
 fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
@@ -202,8 +229,10 @@ pub(crate) fn agent_start(
     let workspace_id_out = workspace_id.clone();
     let session_out = session_id.clone();
     let session_out_num = session_id_num;
+    let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState::default()));
     let app_handle = app.clone();
     let state_handle = app.clone();
+    let lifecycle_fallback_state_out = lifecycle_fallback_state.clone();
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 4096];
@@ -214,6 +243,20 @@ pub(crate) fn agent_start(
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     if text.is_empty() {
                         continue;
+                    }
+                    if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
+                        if let Some((kind, source_event, data)) =
+                            fallback_agent_lifecycle_from_output(&mut lifecycle_state, &text)
+                        {
+                            emit_agent_lifecycle(
+                                &app_handle,
+                                &workspace_id_out,
+                                &session_out,
+                                kind,
+                                source_event,
+                                data,
+                            );
+                        }
                     }
                     emit_agent(
                         &app_handle,
@@ -232,9 +275,24 @@ pub(crate) fn agent_start(
 
     let app_handle = app.clone();
     let state_handle = app.clone();
+    let lifecycle_fallback_state_out = lifecycle_fallback_state.clone();
     std::thread::spawn(move || {
         if let Ok(mut child) = runtime.child.lock() {
             let _ = child.wait();
+        }
+        if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
+            if let Some((kind, source_event, data)) =
+                fallback_agent_lifecycle_from_exit(&mut lifecycle_state)
+            {
+                emit_agent_lifecycle(
+                    &app_handle,
+                    &workspace_id,
+                    &session_id,
+                    kind,
+                    source_event,
+                    data,
+                );
+            }
         }
         emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
         let state: State<AppState> = state_handle.state();
@@ -254,6 +312,43 @@ pub(crate) fn agent_start(
     });
 
     Ok(AgentStartResult { started: true })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
+        let mut state = AgentLifecycleFallbackState::default();
+
+        assert_eq!(
+            fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
+            Some((
+                "tool_started",
+                "AgentProcessOutput",
+                r#"{"source":"agent_process_output"}"#,
+            )),
+        );
+        assert_eq!(fallback_agent_lifecycle_from_output(&mut state, "fixture-still-running\n"), None);
+    }
+
+    #[test]
+    fn fallback_agent_lifecycle_only_emits_completion_after_output_started() {
+        let mut state = AgentLifecycleFallbackState::default();
+        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
+
+        let _ = fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n");
+        assert_eq!(
+            fallback_agent_lifecycle_from_exit(&mut state),
+            Some((
+                "turn_completed",
+                "AgentProcessExit",
+                r#"{"source":"agent_process_exit"}"#,
+            )),
+        );
+        assert_eq!(fallback_agent_lifecycle_from_exit(&mut state), None);
+    }
 }
 
 pub(crate) fn agent_send(
