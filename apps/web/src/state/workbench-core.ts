@@ -435,6 +435,7 @@ export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | 
       ...fallback,
       overlay: {
         ...fallback.overlay,
+        ...input?.overlay,
         visible: false,
       },
     };
@@ -447,6 +448,7 @@ export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | 
       ...fallback,
       overlay: {
         ...fallback.overlay,
+        ...input.overlay,
         visible: false,
       },
     };

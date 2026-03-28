@@ -4,6 +4,7 @@ import {
   normalizeWorkbenchState,
 } from "../apps/web/src/state/workbench-core.ts";
 import {
+  applyWorkbenchUiState,
   buildWorkbenchStateFromBootstrap,
 } from "../apps/web/src/shared/utils/workspace.ts";
 import {
@@ -15,13 +16,16 @@ test("empty workbench state does not auto-open the launch overlay", () => {
     tabs: [],
     overlay: {
       visible: true,
-      mode: "local",
-      input: "",
-      target: { type: "native" },
+      mode: "remote",
+      input: "ssh://demo",
+      target: { type: "wsl", distro: "Ubuntu" },
     },
   });
 
   assert.equal(normalized.overlay.visible, false);
+  assert.equal(normalized.overlay.mode, "remote");
+  assert.equal(normalized.overlay.input, "ssh://demo");
+  assert.deepEqual(normalized.overlay.target, { type: "wsl", distro: "Ubuntu" });
 });
 
 test("bootstrap with zero open workspaces keeps the launch overlay hidden", () => {
@@ -63,4 +67,43 @@ test("bootstrap with zero open workspaces keeps the launch overlay hidden", () =
 
   assert.equal(next.tabs.length, 0);
   assert.equal(next.overlay.visible, false);
+});
+
+test("ui state with zero open workspaces keeps the launch overlay hidden", () => {
+  const next = applyWorkbenchUiState(
+    {
+      tabs: [],
+      activeTabId: "",
+      layout: {
+        leftWidth: 320,
+        rightWidth: 320,
+        rightSplit: 64,
+        showCodePanel: true,
+        showTerminalPanel: true,
+      },
+      overlay: {
+        visible: false,
+        mode: "remote",
+        input: "ssh://demo",
+        target: { type: "wsl", distro: "Ubuntu" },
+      },
+    },
+    {
+      open_workspace_ids: [],
+      active_workspace_id: null,
+      layout: {
+        left_width: 320,
+        right_width: 320,
+        right_split: 64,
+        show_code_panel: true,
+        show_terminal_panel: true,
+      },
+    },
+  );
+
+  assert.equal(next.tabs.length, 0);
+  assert.equal(next.overlay.visible, false);
+  assert.equal(next.overlay.mode, "remote");
+  assert.equal(next.overlay.input, "ssh://demo");
+  assert.deepEqual(next.overlay.target, { type: "wsl", distro: "Ubuntu" });
 });
