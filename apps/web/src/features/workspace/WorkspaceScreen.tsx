@@ -2218,8 +2218,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       ...current,
       [paneId]: ""
     }));
-    await onAgentTerminalData(paneId, content);
-    await onAgentTerminalData(paneId, "\r");
+    await onAgentTerminalData(paneId, `${content}\r`);
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
