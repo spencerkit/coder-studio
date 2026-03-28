@@ -581,16 +581,24 @@ test.describe('workspace transport baseline', () => {
         event.session_id === String(session.id) && event.kind === 'tool_started'
       )).toBe(true);
       let lastReloadStatus: string | null = null;
-      await expect.poll(async () => {
-        lastReloadStatus = await page
-          .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
-          .first()
-          .getAttribute('data-session-status');
-        return lastReloadStatus === 'running' || lastReloadStatus === 'background';
-      }, {
-        timeout: 20000,
-        message: `session status after reload: ${lastReloadStatus ?? 'null'}`,
-      }).toBe(true);
+      try {
+        await expect.poll(async () => {
+          lastReloadStatus = await page
+            .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+            .first()
+            .getAttribute('data-session-status');
+          return lastReloadStatus === 'running' || lastReloadStatus === 'background';
+        }, {
+          timeout: 20000,
+          message: `session status after reload: ${lastReloadStatus ?? 'null'}`,
+        }).toBe(true);
+      } catch {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        throw new Error([
+          `session status after reload: ${lastReloadStatus ?? 'null'}`,
+          JSON.stringify(debug),
+        ].join('\n'));
+      }
 
       await page.goto('about:blank');
       await page.waitForTimeout(2200);
@@ -954,16 +962,24 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       let resumedStatus: string | null = null;
-      await expect.poll(async () => {
-        resumedStatus = await page
-          .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
-          .first()
-          .getAttribute('data-session-status');
-        return resumedStatus === 'running' || resumedStatus === 'background';
-      }, {
-        timeout: 5000,
-        message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
-      }).toBe(true);
+      try {
+        await expect.poll(async () => {
+          resumedStatus = await page
+            .locator(`.agent-pane-card[data-session-id="${session.id}"]`)
+            .first()
+            .getAttribute('data-session-status');
+          return resumedStatus === 'running' || resumedStatus === 'background';
+        }, {
+          timeout: 5000,
+          message: `resumed session status after reload: ${resumedStatus ?? 'null'}`,
+        }).toBe(true);
+      } catch {
+        const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
+        throw new Error([
+          `resumed session status after reload: ${resumedStatus ?? 'null'}`,
+          JSON.stringify(debug),
+        ].join('\n'));
+      }
     } finally {
       if (workspace && !page.isClosed()) {
         await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
@@ -1723,6 +1739,56 @@ async function waitForLifecycleReplayEntry(
       timeout: timeoutMs,
     })
     .toBe(true);
+}
+
+async function readWorkspaceReloadDebug(
+  page: Page,
+  workspaceId: string,
+  ids: { deviceId: string; clientId: string },
+) {
+  const [cards, focusState, runtime] = await Promise.all([
+    page.locator('.agent-pane-card').evaluateAll((nodes) => nodes.map((node) => ({
+      sessionId: node.getAttribute('data-session-id'),
+      status: node.getAttribute('data-session-status'),
+      title: node.querySelector('.agent-pane-title')?.textContent?.trim() ?? null,
+    }))),
+    page.evaluate(() => ({
+      visibilityState: document.visibilityState,
+      hasFocus: document.hasFocus(),
+    })),
+    invokeRpc<{
+      snapshot: {
+        sessions: Array<{ id: number }>;
+        view_state: {
+          active_session_id: string;
+          active_pane_id: string;
+        };
+      };
+      controller: {
+        controller_device_id?: string | null;
+        controller_client_id?: string | null;
+        fencing_token?: number;
+      };
+      lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
+    }>(page, 'workspace_runtime_attach', {
+      workspaceId,
+      deviceId: ids.deviceId,
+      clientId: ids.clientId,
+    }),
+  ]);
+
+  return {
+    url: page.url(),
+    focusState,
+    cards,
+    snapshot: {
+      sessionIds: runtime.snapshot.sessions.map((session) => session.id),
+      activeSessionId: runtime.snapshot.view_state.active_session_id,
+      activePaneId: runtime.snapshot.view_state.active_pane_id,
+    },
+    controller: runtime.controller,
+    lifecycleTail: (runtime.lifecycle_events ?? []).slice(-6),
+  };
 }
 
 async function countWsEvents(
