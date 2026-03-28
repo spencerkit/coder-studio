@@ -461,7 +461,9 @@ fn require_optional_workspace_history_mutation(
             Ok(())
         }
         (None, None, None) => Ok(()),
-        _ => Err(rpc_bad_request("incomplete_workspace_controller".to_string())),
+        _ => Err(rpc_bad_request(
+            "incomplete_workspace_controller".to_string(),
+        )),
     }
 }
 
@@ -846,7 +848,8 @@ fn dispatch_rpc(
             let req: SessionHistoryMutationRequest =
                 parse_payload(payload).map_err(rpc_bad_request)?;
             require_optional_workspace_history_mutation(app, &req, authorized)?;
-            delete_session(req.workspace_id, req.session_id, app.state()).map_err(rpc_bad_request)?;
+            delete_session(req.workspace_id, req.session_id, app.state())
+                .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         "update_idle_policy" => {
@@ -2105,19 +2108,18 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-rpc-test");
-        let created = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let created =
+            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
         archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
 
         let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
             .expect("history rpc should load");
         let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
-        assert!(
-            history
-                .iter()
-                .any(|record| record.workspace_id == workspace_id
-                    && record.session_id == created.id
-                    && record.archived)
-        );
+        assert!(history
+            .iter()
+            .any(|record| record.workspace_id == workspace_id
+                && record.session_id == created.id
+                && record.archived));
 
         let restored = dispatch_rpc(
             &app,
@@ -2330,9 +2332,11 @@ mod tests {
                         "global": {
                             "startupArgs": ["--verbose"],
                             "settingsJson": {
+                                "model": "opus",
                                 "permissionMode": "acceptEdits"
                             },
                             "globalConfigJson": {
+                                "showTurnDuration": true,
                                 "theme": "dark"
                             }
                         }
@@ -2345,7 +2349,12 @@ mod tests {
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
 
         assert!(!updated.general.completion_notifications.enabled);
-        assert!(!updated.general.completion_notifications.only_when_background);
+        assert!(
+            !updated
+                .general
+                .completion_notifications
+                .only_when_background
+        );
         assert_eq!(updated.claude.global.startup_args, vec!["--verbose"]);
         assert_eq!(updated.claude.global.settings_json["model"], "opus");
         assert_eq!(
@@ -2356,6 +2365,86 @@ mod tests {
         assert_eq!(
             updated.claude.global.global_config_json["showTurnDuration"],
             true
+        );
+    }
+
+    #[test]
+    fn app_settings_update_replaces_object_fields_so_cleared_keys_stay_cleared() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "env": {
+                                "TEST_MARKER": "persisted-value",
+                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                            },
+                            "settings_json": {
+                                "model": "opus",
+                                "permissionMode": "acceptEdits"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "env": {
+                                "ANTHROPIC_BASE_URL": "https://next.example"
+                            },
+                            "settings_json": {
+                                "permissionMode": "plan"
+                            },
+                            "global_config_json": {}
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("object field replacement should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert_eq!(
+            updated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_BASE_URL")
+                .map(String::as_str),
+            Some("https://next.example")
+        );
+        assert_eq!(updated.claude.global.env.get("TEST_MARKER"), None);
+        assert_eq!(
+            updated.claude.global.settings_json.get("permissionMode"),
+            Some(&json!("plan"))
+        );
+        assert_eq!(updated.claude.global.settings_json.get("model"), None);
+        assert_eq!(
+            updated
+                .claude
+                .global
+                .global_config_json
+                .as_object()
+                .map(|value| value.is_empty()),
+            Some(true)
         );
     }
 

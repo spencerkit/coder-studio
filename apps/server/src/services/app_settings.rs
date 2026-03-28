@@ -52,18 +52,43 @@ fn save_app_settings_to_conn(
     Ok(settings.clone())
 }
 
-fn merge_settings_value(current: &mut Value, patch: Value) {
-    match (current, patch) {
-        (Value::Object(current_map), Value::Object(patch_map)) => {
-            for (key, value) in patch_map {
-                if let Some(existing) = current_map.get_mut(&key) {
-                    merge_settings_value(existing, value);
-                } else {
-                    current_map.insert(key, value);
+fn should_replace_object_patch(path: &[String]) -> bool {
+    let path = path.iter().map(String::as_str).collect::<Vec<_>>();
+    matches!(
+        path.as_slice(),
+        ["claude", "global", "env"]
+            | ["claude", "global", "settings_json"]
+            | ["claude", "global", "global_config_json"]
+            | ["claude", "overrides", "native", "profile", "env"]
+            | ["claude", "overrides", "native", "profile", "settings_json"]
+            | ["claude", "overrides", "native", "profile", "global_config_json"]
+            | ["claude", "overrides", "wsl", "profile", "env"]
+            | ["claude", "overrides", "wsl", "profile", "settings_json"]
+            | ["claude", "overrides", "wsl", "profile", "global_config_json"]
+    )
+}
+
+fn merge_settings_value(current: &mut Value, patch: Value, path: &[String]) {
+    match patch {
+        Value::Object(patch_map) if should_replace_object_patch(path) => {
+            *current = Value::Object(patch_map);
+        }
+        Value::Object(patch_map) => {
+            if let Value::Object(current_map) = current {
+                for (key, value) in patch_map {
+                    let mut next_path = path.to_vec();
+                    next_path.push(key.clone());
+                    if let Some(existing) = current_map.get_mut(&key) {
+                        merge_settings_value(existing, value, &next_path);
+                    } else {
+                        current_map.insert(key, value);
+                    }
                 }
+            } else {
+                *current = Value::Object(patch_map);
             }
         }
-        (current, patch) => {
+        patch => {
             *current = patch;
         }
     }
@@ -139,7 +164,7 @@ fn app_settings_update_with_before_save_hook(
     with_db(state, |conn| {
         let mut current = serde_json::to_value(load_or_default_app_settings_from_conn(conn)?)
             .map_err(|e| e.to_string())?;
-        merge_settings_value(&mut current, normalized_patch);
+        merge_settings_value(&mut current, normalized_patch, &[]);
         before_save()?;
         let merged: AppSettingsPayload =
             serde_json::from_value(current).map_err(|e| e.to_string())?;
