@@ -2403,6 +2403,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     ["--right-w" as string]: `${state.layout.rightWidth}px`,
     ["--right-split" as string]: `${state.layout.rightSplit}%`
   };
+  const workspaceUiReady = bootstrapReady && (state.tabs.length > 0 || state.overlay.visible);
 
   const workspaceTabs = state.tabs.map((tab) => {
     const sessions = [...tab.sessions].sort((left, right) => {
@@ -2839,132 +2840,134 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   return (
     <div ref={appRef} className="app" style={layoutStyle} data-theme={theme}>
-      <TopBar
-        isSettingsRoute={false}
-        locale={locale}
-        workspaceTabs={workspaceTabs}
-        historyOpen={historyOpen}
-        onSwitchWorkspace={onSwitchWorkspace}
-        onToggleHistory={onToggleHistory}
-        onAddTab={onAddTab}
-        onRemoveTab={onRemoveTab}
-        onOpenSettings={onOpenSettings}
-        onCloseSettings={() => {}}
-        onOpenCommandPalette={openCommandPalette}
-        t={t}
-      />
+      {workspaceUiReady && (
+        <>
+          <TopBar
+            isSettingsRoute={false}
+            locale={locale}
+            workspaceTabs={workspaceTabs}
+            historyOpen={historyOpen}
+            onSwitchWorkspace={onSwitchWorkspace}
+            onToggleHistory={onToggleHistory}
+            onAddTab={onAddTab}
+            onRemoveTab={onRemoveTab}
+            onOpenSettings={onOpenSettings}
+            onCloseSettings={() => {}}
+            onOpenCommandPalette={openCommandPalette}
+            t={t}
+          />
 
-      <HistoryDrawer
-        open={historyOpen}
-        loading={historyLoading}
-        groups={historyGroups}
-        expandedGroups={historyExpandedGroups}
-        onClose={() => setHistoryOpen(false)}
-        onToggleGroup={(workspaceId) => {
-          setHistoryExpandedGroups((current) => ({
-            ...current,
-            [workspaceId]: !current[workspaceId],
-          }));
-        }}
-        onSelectRecord={(record) => {
-          void handleHistoryRecordSelect(record);
-        }}
-        onDeleteRecord={(record) => {
-          void handleHistoryRecordDelete(record);
-        }}
-        t={t}
-      />
+          <HistoryDrawer
+            open={historyOpen}
+            loading={historyLoading}
+            groups={historyGroups}
+            expandedGroups={historyExpandedGroups}
+            onClose={() => setHistoryOpen(false)}
+            onToggleGroup={(workspaceId) => {
+              setHistoryExpandedGroups((current) => ({
+                ...current,
+                [workspaceId]: !current[workspaceId],
+              }));
+            }}
+            onSelectRecord={(record) => {
+              void handleHistoryRecordSelect(record);
+            }}
+            onDeleteRecord={(record) => {
+              void handleHistoryRecordDelete(record);
+            }}
+            t={t}
+          />
 
-      <WorkspaceShell
-        isFocusMode={isFocusMode}
-        isCodeExpanded={isCodeExpanded}
-        showAgentPanel={showAgentPanel}
-        showCodePanel={showCodePanel}
-        showTerminalPanel={showTerminalPanel}
-        rightSplit={state.layout.rightSplit}
-        statusItems={workspaceShellSummary}
-        runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
-        statusBanner={workspaceStatusBanner}
-        agentPanel={workspaceAgentPanel}
-        codePanel={workspaceCodePanel}
-        terminalPanel={workspaceTerminalPanel}
-        onToggleRightPane={toggleRightPane}
-        t={t}
-      />
+          <WorkspaceShell
+            isFocusMode={isFocusMode}
+            isCodeExpanded={isCodeExpanded}
+            showAgentPanel={showAgentPanel}
+            showCodePanel={showCodePanel}
+            showTerminalPanel={showTerminalPanel}
+            rightSplit={state.layout.rightSplit}
+            statusItems={workspaceShellSummary}
+            runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
+            statusBanner={workspaceStatusBanner}
+            agentPanel={workspaceAgentPanel}
+            codePanel={workspaceCodePanel}
+            terminalPanel={workspaceTerminalPanel}
+            onToggleRightPane={toggleRightPane}
+            t={t}
+          />
 
-      {commandPaletteOpen && (
-        <CommandPalette
-          locale={locale}
-          inputRef={commandPaletteInputRef}
-          query={commandPaletteQuery}
-          activeIndex={commandPaletteActiveIndex}
-          actions={filteredCommandPaletteActions}
-          activeAction={activeCommandPaletteAction}
-          onClose={closeCommandPalette}
-          onQueryChange={setCommandPaletteQuery}
-          onActivateIndex={setCommandPaletteActiveIndex}
-          onRunAction={onRunCommandPaletteAction}
-        />
+          {commandPaletteOpen && (
+            <CommandPalette
+              locale={locale}
+              inputRef={commandPaletteInputRef}
+              query={commandPaletteQuery}
+              activeIndex={commandPaletteActiveIndex}
+              actions={filteredCommandPaletteActions}
+              activeAction={activeCommandPaletteAction}
+              onClose={closeCommandPalette}
+              onQueryChange={setCommandPaletteQuery}
+              onActivateIndex={setCommandPaletteActiveIndex}
+              onRunAction={onRunCommandPaletteAction}
+            />
+          )}
+
+          <div className="toast-container">
+            {toasts.map((toast) => (
+              <button key={toast.id} className="toast" onClick={() => onSwitchSession(toast.sessionId)}>
+                {toast.text}
+              </button>
+            ))}
+          </div>
+
+          {worktreeModal && (
+            <WorktreeModal
+              locale={locale}
+              worktree={worktreeModal}
+              view={worktreeView}
+              collapsedPaths={worktreeCollapsedPaths}
+              onClose={() => setWorktreeModal(null)}
+              onViewChange={setWorktreeView}
+              onFileSelect={onFileSelect}
+              onToggleCollapse={(path) => {
+                setWorktreeCollapsedPaths((current) => {
+                  const next = new Set(current);
+                  if (next.has(path)) {
+                    next.delete(path);
+                  } else {
+                    next.add(path);
+                  }
+                  return next;
+                });
+              }}
+              t={t}
+            />
+          )}
+
+          <RuntimeValidationOverlay
+            visible={showRuntimeValidationOverlay}
+            target={state.overlay.target}
+            canUseWsl={overlayCanUseWsl}
+            runtimeLabel={formatExecTargetLabel(state.overlay.target, t)}
+            validation={runtimeValidationView}
+            onUpdateTarget={onOverlayUpdateTarget}
+            onRetry={() => {
+              void runRuntimeValidation(stateRef.current.overlay.target);
+            }}
+            t={t}
+          />
+
+          <WorkspaceLaunchOverlay
+            visible={showWorkspaceLaunchOverlay}
+            target={state.overlay.target}
+            input={state.overlay.input}
+            canUseWsl={overlayCanUseWsl}
+            folderBrowser={folderBrowser}
+            onUpdateTarget={onOverlayUpdateTarget}
+            onBrowseDirectory={onBrowseOverlayDirectory}
+            onStartWorkspace={onStartWorkspace}
+            t={t}
+          />
+        </>
       )}
-
-
-      <div className="toast-container">
-        {toasts.map((toast) => (
-          <button key={toast.id} className="toast" onClick={() => onSwitchSession(toast.sessionId)}>
-            {toast.text}
-          </button>
-        ))}
-      </div>
-
-      {worktreeModal && (
-        <WorktreeModal
-          locale={locale}
-          worktree={worktreeModal}
-          view={worktreeView}
-          collapsedPaths={worktreeCollapsedPaths}
-          onClose={() => setWorktreeModal(null)}
-          onViewChange={setWorktreeView}
-          onFileSelect={onFileSelect}
-          onToggleCollapse={(path) => {
-            setWorktreeCollapsedPaths((current) => {
-              const next = new Set(current);
-              if (next.has(path)) {
-                next.delete(path);
-              } else {
-                next.add(path);
-              }
-              return next;
-            });
-          }}
-          t={t}
-        />
-      )}
-
-      <RuntimeValidationOverlay
-        visible={showRuntimeValidationOverlay}
-        target={state.overlay.target}
-        canUseWsl={overlayCanUseWsl}
-        runtimeLabel={formatExecTargetLabel(state.overlay.target, t)}
-        validation={runtimeValidationView}
-        onUpdateTarget={onOverlayUpdateTarget}
-        onRetry={() => {
-          void runRuntimeValidation(stateRef.current.overlay.target);
-        }}
-        t={t}
-      />
-
-      <WorkspaceLaunchOverlay
-        visible={showWorkspaceLaunchOverlay}
-        target={state.overlay.target}
-        input={state.overlay.input}
-        canUseWsl={overlayCanUseWsl}
-        folderBrowser={folderBrowser}
-        onUpdateTarget={onOverlayUpdateTarget}
-        onBrowseDirectory={onBrowseOverlayDirectory}
-        onStartWorkspace={onStartWorkspace}
-        t={t}
-      />
-
     </div>
   );
 }

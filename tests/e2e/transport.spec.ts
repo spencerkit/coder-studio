@@ -102,7 +102,7 @@ const BACKEND_WS_PATH = '/ws';
 const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
-const AGENT_STDIN_ECHO_SCRIPT = 'tests/e2e/fixtures/agent-stdin-echo.mjs';
+const AGENT_STDIN_ECHO_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-stdin-echo.mjs');
 const AGENT_CLAUDE_LIFECYCLE_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/claude-lifecycle-agent.mjs');
 const AGENT_CLAUDE_REPLAY_DELAY_MS = 5000;
 const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
@@ -735,27 +735,31 @@ test.describe('workspace transport baseline', () => {
   });
 
   test('first draft prompt becomes the session title', async ({ page }) => {
-    await installTransportProbe(page);
-    const workspace = await openWorkspace(page);
-    await waitForBackendSocket(page);
-    await seedAppSettings(page, {
-      agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
-    });
-    const initialPaneTitle = (await page.locator('.agent-pane-title').first().textContent())?.trim() ?? '';
-    if (initialPaneTitle !== 'New Session') {
-      await page.locator('.agent-pane-card').first().getByRole('button', { name: 'Close' }).click();
+    const tempWorkspaceRoot = path.join(WORKSPACE_PATH, '.tmp');
+    await fs.mkdir(tempWorkspaceRoot, { recursive: true });
+    const titleWorkspacePath = await fs.mkdtemp(path.join(tempWorkspaceRoot, 'transport-title-'));
+
+    try {
+      await installTransportProbe(page);
+      await openWorkspace(page, DEFAULT_TRANSPORT_IDS, titleWorkspacePath);
+      await waitForBackendSocket(page);
+      await seedAppSettings(page, {
+        agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
+      });
+
+      const firstPrompt = 'title derived from first prompt';
+      const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
+      await expect(draftInput).toBeVisible();
+
+      await draftInput.fill(firstPrompt);
+      await draftInput.press('Enter');
+
+      await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
+        timeout: 10000,
+      });
+    } finally {
+      await fs.rm(titleWorkspacePath, { recursive: true, force: true });
     }
-
-    const firstPrompt = 'title derived from first prompt';
-    const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
-    await expect(draftInput).toBeVisible();
-
-    await draftInput.fill(firstPrompt);
-    await draftInput.press('Enter');
-
-    await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
-      timeout: 10000,
-    });
   });
 
   test('same-device new client takes over immediately after controller disconnects', async ({ browser }) => {
@@ -1278,6 +1282,7 @@ async function installTransportProbe(
 async function openWorkspace(
   page: Page,
   ids: { deviceId: string; clientId: string } = DEFAULT_TRANSPORT_IDS,
+  workspacePath = WORKSPACE_PATH,
 ): Promise<WorkspaceHandle> {
   await seedWorkspaceControllerIds(page, ids);
   const launch = await invokeRpc<{
@@ -1291,7 +1296,7 @@ async function openWorkspace(
   }>(page, 'launch_workspace', {
     source: {
       kind: 'local',
-      pathOrUrl: WORKSPACE_PATH,
+      pathOrUrl: workspacePath,
       target: { type: 'native' },
     },
     deviceId: ids.deviceId,
