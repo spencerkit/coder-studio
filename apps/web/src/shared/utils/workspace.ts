@@ -34,10 +34,16 @@ import {
   isDraftSession,
   resolveVisibleStatus,
 } from "./session.ts";
+import { mergeMonotonicTextSnapshot } from "./stream-snapshot.ts";
 import {
   rememberWorkspaceViewBaseline,
   rememberWorkspaceViewBaselines,
+  shouldIgnoreIncomingWorkspaceViewPatch,
 } from "../../features/workspace/workspace-view-persistence.ts";
+import {
+  AGENT_STREAM_BUFFER_LIMIT,
+  TERMINAL_STREAM_BUFFER_LIMIT,
+} from "../app/constants.ts";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 
@@ -202,7 +208,11 @@ const mapTerminals = (
     return {
       id,
       title: existingTerminal?.title ?? formatTerminalTitle(index + 1, locale),
-      output: terminal.output ?? existingTerminal?.output ?? "",
+      output: mergeMonotonicTextSnapshot(
+        existingTerminal?.output ?? "",
+        terminal.output ?? existingTerminal?.output ?? "",
+        TERMINAL_STREAM_BUFFER_LIMIT,
+      ),
       recoverable: terminal.recoverable ?? existingTerminal?.recoverable ?? false,
     };
   });
@@ -274,7 +284,15 @@ export const createTabFromWorkspaceSnapshot = (
 ): Tab => {
   const backendSessions = snapshot.sessions.map((session) => {
     const current = existing?.sessions.find((item) => item.id === String(session.id));
-    return createSessionFromBackend(session, locale, current);
+    const hydrated = createSessionFromBackend(session, locale, current);
+    return {
+      ...hydrated,
+      stream: mergeMonotonicTextSnapshot(
+        current?.stream ?? "",
+        session.stream ?? current?.stream ?? "",
+        AGENT_STREAM_BUFFER_LIMIT,
+      ),
+    };
   });
 
   const existingDraftSessions = existing?.sessions.filter((session) => isDraftSession(session)) ?? [];
@@ -406,6 +424,39 @@ export const buildWorkbenchStateFromBootstrap = (
   return nextState;
 };
 
+export const applyWorkspaceBootstrapResult = (
+  current: WorkbenchState,
+  bootstrap: WorkbenchBootstrap,
+  locale: Locale,
+  appSettings: AppSettings,
+  routeRuntime?: {
+    deviceId: string;
+    clientId: string;
+    uiState?: WorkbenchUiState | null;
+    runtimeSnapshot?: WorkspaceRuntimeSnapshot | null;
+  },
+): WorkbenchState => {
+  const nextState = buildWorkbenchStateFromBootstrap(current, bootstrap, locale, appSettings);
+  if (!routeRuntime) {
+    return nextState;
+  }
+  if (routeRuntime.uiState && routeRuntime.runtimeSnapshot) {
+    return applyWorkspaceRuntimeSnapshot(
+      nextState,
+      routeRuntime.runtimeSnapshot,
+      locale,
+      appSettings,
+      routeRuntime.deviceId,
+      routeRuntime.clientId,
+      routeRuntime.uiState,
+    );
+  }
+  if (routeRuntime.uiState) {
+    return applyWorkbenchUiState(nextState, routeRuntime.uiState);
+  }
+  return nextState;
+};
+
 export const upsertWorkspaceSnapshot = (
   current: WorkbenchState,
   snapshot: WorkspaceSnapshot,
@@ -493,22 +544,25 @@ export const applyWorkspaceRuntimeStateEvent = (
   const nextState = {
     ...current,
     tabs: current.tabs.map((tab) => {
-    if (tab.id !== payload.workspace_id) return tab;
-    const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
-      ? payload.view_state.active_session_id
-      : tab.activeSessionId;
-    const nextActiveTerminalId = tab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
-      ? payload.view_state.active_terminal_id
-      : tab.activeTerminalId;
-    return {
-      ...tab,
-      activeSessionId: nextActiveSessionId,
-      activePaneId: payload.view_state.active_pane_id || tab.activePaneId,
-      activeTerminalId: nextActiveTerminalId,
-      paneLayout: normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId),
-      filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
-      viewingArchiveId: undefined,
-    };
+      if (tab.id !== payload.workspace_id) return tab;
+      if (shouldIgnoreIncomingWorkspaceViewPatch(tab, payload.view_state)) {
+        return tab;
+      }
+      const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
+        ? payload.view_state.active_session_id
+        : tab.activeSessionId;
+      const nextActiveTerminalId = tab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
+        ? payload.view_state.active_terminal_id
+        : tab.activeTerminalId;
+      return {
+        ...tab,
+        activeSessionId: nextActiveSessionId,
+        activePaneId: payload.view_state.active_pane_id || tab.activePaneId,
+        activeTerminalId: nextActiveTerminalId,
+        paneLayout: normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId),
+        filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
+        viewingArchiveId: undefined,
+      };
     }),
   };
   const nextTab = nextState.tabs.find((tab) => tab.id === payload.workspace_id);

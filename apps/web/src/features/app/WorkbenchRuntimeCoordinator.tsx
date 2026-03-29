@@ -51,6 +51,10 @@ import {
   shouldRecoverWorkspaceController,
 } from "../workspace/workspace-controller";
 import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
+import {
+  READY_TAB_RUNTIME_RECOVERY_DELAYS_MS,
+  collectReadyTabRuntimeRecoveryWorkspaceIds,
+} from "../workspace/workspace-ready-runtime";
 import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import {
   isWorkspaceSyncVersionCurrent,
@@ -69,9 +73,6 @@ const CONTROLLER_RECOVERY_INTERVAL_MS = 1_000;
 const HIDDEN_CONTROLLER_RECOVERY_INTERVAL_MS = 5_000;
 const TAKEOVER_POLL_INTERVAL_MS = 2_000;
 const HIDDEN_TAKEOVER_POLL_INTERVAL_MS = 5_000;
-// Reloads can briefly land on a stale bootstrap snapshot before runtime replay settles,
-// especially on slower CI runners. Reattaching ready tabs a few times closes that gap.
-const READY_TAB_RUNTIME_RECOVERY_DELAYS_MS = [0, 1_000, 3_000, 7_000] as const;
 
 type WorkbenchRuntimeCoordinatorProps = {
   appSettings: AppSettings;
@@ -477,9 +478,7 @@ export const WorkbenchRuntimeCoordinator = ({
       if (cancelled) {
         return;
       }
-      const workspaceIds = stateRef.current.tabs
-        .filter((tab) => tab.status === "ready")
-        .map((tab) => tab.id);
+      const workspaceIds = collectReadyTabRuntimeRecoveryWorkspaceIds(stateRef.current.tabs);
       void Promise.all(workspaceIds.map(async (workspaceId) => {
         await reattachWorkspaceRuntime(workspaceId);
       }));
@@ -523,6 +522,9 @@ export const WorkbenchRuntimeCoordinator = ({
         heartbeatInflightRef.current.add(workspaceId);
         void heartbeatWorkspaceController(workspaceId, deviceId, clientId)
           .then((controller) => {
+            if (!controller) {
+              return;
+            }
             updateState((current) => applyWorkspaceControllerEvent(current, {
               workspace_id: workspaceId,
               controller,

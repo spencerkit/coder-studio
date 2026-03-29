@@ -5,6 +5,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalCompatibilityMode } from "../../types/app";
 import { resetTerminalMeasurementCache, resolveTerminalFontFamily, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
+import { planTerminalSnapshotUpdate } from "../../shared/utils/stream-snapshot";
 import { shouldRefreshTerminalAfterFit } from "./xterm-fit-refresh";
 
 type XtermBaseMode = "interactive" | "readonly";
@@ -70,32 +71,15 @@ const readTerminalTheme = (source?: Element | null) => {
   };
 };
 
-const resolveXtermAppendDelta = (previous: string, next: string) => {
-  if (next === previous) return "";
-  if (next.startsWith(previous)) {
-    return next.slice(previous.length);
-  }
-
-  const probeLength = Math.min(256, next.length);
-  if (probeLength === 0) return null;
-  const probe = next.slice(0, probeLength);
-  const overlapStart = previous.lastIndexOf(probe);
-  if (overlapStart === -1) return null;
-
-  const overlap = previous.slice(overlapStart);
-  if (!next.startsWith(overlap)) return null;
-  return next.slice(overlap.length);
-};
-
 const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => {
-  if (next === previous) return;
-  const delta = resolveXtermAppendDelta(previous, next);
-  if (delta !== null) {
-    if (delta) term.write(delta);
+  const plan = planTerminalSnapshotUpdate(previous, next);
+  if (plan.kind === "noop") return;
+  if (plan.kind === "append") {
+    term.write(plan.data);
     return;
   }
   term.reset();
-  if (next) term.write(next);
+  if (plan.data) term.write(plan.data);
 };
 
 const resolveTerminalThemeSource = (mount: HTMLElement | null) => {

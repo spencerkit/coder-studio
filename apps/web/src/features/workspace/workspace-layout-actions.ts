@@ -6,15 +6,15 @@ import {
   type WorkbenchState,
   createId,
   createPaneLeaf,
-} from "../../state/workbench";
+} from "../../state/workbench-core.ts";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
   findPaneSessionId,
   replacePaneNode,
   updateSplitRatio,
-} from "../../shared/utils/panes";
-import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session";
+} from "../../shared/utils/panes.ts";
+import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session.ts";
 
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
@@ -114,7 +114,7 @@ type StartWorkspacePanelResizeArgs = {
   stateRef: MutableRefObject<WorkbenchState>;
   updateState: UpdateState;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
-  scheduleFitAgentTerminals: () => void;
+  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   flushFitAgentTerminals: () => void;
 };
 
@@ -124,7 +124,7 @@ export const startWorkspacePanelResize = ({
   stateRef,
   updateState,
   shellTerminalRef,
-  scheduleFitAgentTerminals,
+  archiveTerminalRef,
   flushFitAgentTerminals,
 }: StartWorkspacePanelResizeArgs) => {
   event.preventDefault();
@@ -152,7 +152,6 @@ export const startWorkspacePanelResize = ({
         rightSplit: type === "right-split" ? pendingSplit : current.layout.rightSplit,
       },
     }));
-    scheduleFitAgentTerminals();
   };
 
   const onMove = (moveEvent: PointerEvent) => {
@@ -179,6 +178,7 @@ export const startWorkspacePanelResize = ({
     }
     requestAnimationFrame(() => {
       shellTerminalRef.current?.fit();
+      archiveTerminalRef?.current?.fit();
       flushFitAgentTerminals();
     });
   };
@@ -194,7 +194,7 @@ type StartWorkspacePaneSplitResizeArgs = {
   splitId: string;
   axis: "horizontal" | "vertical";
   updateTab: UpdateTab;
-  scheduleFitAgentTerminals: () => void;
+  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   flushFitAgentTerminals: () => void;
 };
 
@@ -205,7 +205,7 @@ export const startWorkspacePaneSplitResize = ({
   splitId,
   axis,
   updateTab,
-  scheduleFitAgentTerminals,
+  archiveTerminalRef,
   flushFitAgentTerminals,
 }: StartWorkspacePaneSplitResizeArgs) => {
   event.preventDefault();
@@ -233,7 +233,6 @@ export const startWorkspacePaneSplitResize = ({
       ...tab,
       paneLayout: updateSplitRatio(tab.paneLayout, splitId, pendingRatio),
     }));
-    scheduleFitAgentTerminals();
   };
 
   const onMove = (moveEvent: PointerEvent) => {
@@ -256,6 +255,7 @@ export const startWorkspacePaneSplitResize = ({
       flushRatio();
     }
     requestAnimationFrame(() => {
+      archiveTerminalRef?.current?.fit();
       flushFitAgentTerminals();
     });
   };

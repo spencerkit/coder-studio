@@ -5,6 +5,7 @@ pub(crate) mod filesystem;
 pub(crate) mod git;
 pub(crate) mod system;
 pub(crate) mod terminal;
+pub(crate) mod utf8_stream;
 pub(crate) mod workspace;
 pub(crate) mod workspace_runtime;
 pub(crate) mod workspace_watch;
