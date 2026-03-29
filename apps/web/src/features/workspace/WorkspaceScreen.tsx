@@ -102,9 +102,16 @@ import {
 } from "./workspace-recovery";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
+  shouldAttachRouteRuntimeForExistingTab,
+} from "./workspace-route-runtime";
+import {
+  createWorkspaceViewPatchFromTab,
+  createWorkspaceViewPersistScheduler,
+  noteWorkspaceViewPersistRequest,
   pruneWorkspaceViewBaselines,
-  rememberWorkspaceViewBaseline,
+  rememberWorkspaceViewPatchBaseline,
   shouldPersistWorkspaceView,
+  type WorkspaceViewPersistScheduler,
 } from "./workspace-view-persistence";
 import {
   createInitialHistoryExpansion,
@@ -167,9 +174,9 @@ import {
 } from "../../services/http/workspace.service";
 import {
   applyWorkbenchUiState,
+  applyWorkspaceBootstrapResult,
   applyWorkspaceControllerEvent,
   applyWorkspaceRuntimeSnapshot,
-  buildWorkbenchStateFromBootstrap,
   upsertWorkspaceSnapshot,
   workbenchLayoutToBackend
 } from "../../shared/utils/workspace";
@@ -265,8 +272,6 @@ const REQUIRED_RUNTIME_COMMANDS = [
   id: RuntimeRequirementStatus["id"];
   command: string;
 }>;
-const ROUTE_RUNTIME_ATTACH_RECOVERY_DELAYS_MS = [0, 1_000, 3_000, 7_000] as const;
-
 type RuntimeRequirementSpec = {
   id: RuntimeRequirementStatus["id"];
   command: string;
@@ -371,6 +376,8 @@ const isTextInputTarget = (target: EventTarget | null) => {
   return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 };
 
+const isAgentFocusTransitionSequence = (value: string) => value === "\u001b[I" || value === "\u001b[O";
+
 export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
   const [state, setState] = useRelaxState(workbenchState);
   const navigate = useNavigate();
@@ -444,6 +451,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
+  const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
   const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
@@ -455,6 +463,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     inflight: boolean;
     pending?: { cols: number; rows: number };
   }>());
+  const workspaceViewPersistSchedulerRef = useRef<WorkspaceViewPersistScheduler<Tab["controller"]> | null>(null);
   const agentTitleTrackerRef = useRef(new Map<string, {
     draftSessionId?: string;
     buffer: string;
@@ -607,15 +616,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     fitAgentTerminals(agentRuntimeRefs);
   }, [agentRuntimeRefs]);
 
-  const scheduleWorkspaceAgentFit = useCallback(() => {
-    const scheduler = agentTerminalFitSchedulerRef.current;
-    if (!scheduler) {
-      runWorkspaceAgentFit();
-      return;
-    }
-    scheduler.schedule(runWorkspaceAgentFit);
-  }, [runWorkspaceAgentFit]);
-
   const flushWorkspaceAgentFit = useCallback(() => {
     const scheduler = agentTerminalFitSchedulerRef.current;
     if (!scheduler) {
@@ -625,6 +625,33 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     scheduler.schedule(runWorkspaceAgentFit);
     scheduler.flush();
   }, [runWorkspaceAgentFit]);
+
+  const fitVisibleWorkspaceTerminals = useCallback(() => {
+    shellTerminalRef.current?.fit();
+    archiveTerminalRef.current?.fit();
+    flushWorkspaceAgentFit();
+  }, [flushWorkspaceAgentFit]);
+
+  const persistWorkspaceView = useCallback((
+    workspaceId: string,
+    patch: ReturnType<typeof createWorkspaceViewPatchFromTab>,
+    controller: Tab["controller"],
+  ) => {
+    rememberWorkspaceViewPatchBaseline(workspaceId, patch);
+    noteWorkspaceViewPersistRequest(workspaceId, patch);
+    void withServiceFallback(
+      () => updateWorkspaceView(workspaceId, patch, controller),
+      null,
+    );
+  }, []);
+
+  if (!workspaceViewPersistSchedulerRef.current && typeof window !== "undefined") {
+    workspaceViewPersistSchedulerRef.current = createWorkspaceViewPersistScheduler(
+      persistWorkspaceView,
+      window.setTimeout.bind(window),
+      window.clearTimeout.bind(window),
+    );
+  }
 
   const registerAgentTerminalRef = (paneId: string, handle: XtermBaseHandle | null) => {
     setAgentTerminalRef(agentRuntimeRefs, paneId, handle);
@@ -670,6 +697,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [state]);
 
   useEffect(() => () => {
+    workspaceViewPersistSchedulerRef.current?.flush();
+    workspaceViewPersistSchedulerRef.current?.dispose();
     agentTerminalFitSchedulerRef.current?.dispose();
   }, []);
 
@@ -683,8 +712,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }
         return;
       }
-      const nextState = buildWorkbenchStateFromBootstrap(stateRef.current, bootstrap, locale, appSettings);
-
       if (routeWorkspaceId) {
         const syncVersion = advanceWorkspaceSyncVersion(routeWorkspaceId);
         const uiState = await withServiceFallback(
@@ -705,20 +732,38 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }
 
         if (uiState && runtimeSnapshot) {
-          updateState(() => applyWorkspaceRuntimeSnapshot(
-            nextState,
-            runtimeSnapshot,
+          updateState((current) => applyWorkspaceBootstrapResult(
+            current,
+            bootstrap,
             locale,
             appSettings,
-            deviceId,
-            clientId,
-            uiState,
+            {
+              deviceId,
+              clientId,
+              uiState,
+              runtimeSnapshot,
+            },
           ));
         } else {
-          updateState(() => nextState);
+          updateState((current) => applyWorkspaceBootstrapResult(
+            current,
+            bootstrap,
+            locale,
+            appSettings,
+            {
+              deviceId,
+              clientId,
+              uiState,
+            },
+          ));
         }
       } else {
-        updateState(() => nextState);
+        updateState((current) => applyWorkspaceBootstrapResult(
+          current,
+          bootstrap,
+          locale,
+          appSettings,
+        ));
       }
       if (!cancelled) {
         setBootstrapReady(true);
@@ -734,33 +779,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (routeWorkspaceId) {
       const syncVersion = advanceWorkspaceSyncVersion(routeWorkspaceId);
       const existing = stateRef.current.tabs.find((tab) => tab.id === routeWorkspaceId);
-      if (existing) {
+      if (existing && !shouldAttachRouteRuntimeForExistingTab(existing)) {
         let cancelled = false;
-        const attachRouteRuntime = () => {
-          void attachWorkspaceRuntimeWithRetry(
-            routeWorkspaceId,
-            deviceId,
-            clientId,
-            withServiceFallback,
-          ).then((runtimeSnapshot) => {
-            if (
-              cancelled
-              || !runtimeSnapshot
-              || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)
-            ) {
-              return;
-            }
-            updateState((current) => applyWorkspaceRuntimeSnapshot(
-              current,
-              runtimeSnapshot,
-              locale,
-              appSettings,
-              deviceId,
-              clientId,
-            ));
-          });
-        };
-
         if (stateRef.current.activeTabId !== routeWorkspaceId) {
           switchWorkspaceLocally(routeWorkspaceId);
           void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null).then((uiState) => {
@@ -768,16 +788,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             updateState((current) => applyWorkbenchUiState(current, uiState));
           });
         }
-        attachRouteRuntime();
-        const timers = ROUTE_RUNTIME_ATTACH_RECOVERY_DELAYS_MS
-          .filter((delayMs) => delayMs > 0)
-          .map((delayMs) => window.setTimeout(attachRouteRuntime, delayMs));
         void ensureWorkspaceTerminal(routeWorkspaceId);
         return () => {
           cancelled = true;
-          timers.forEach((timer) => {
-            window.clearTimeout(timer);
-          });
         };
       }
 
@@ -889,26 +902,31 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!bootstrapReady) return;
+    const scheduler = workspaceViewPersistSchedulerRef.current;
     const liveWorkspaceIds = new Set(state.tabs.map((tab) => tab.id));
     state.tabs.forEach((tab) => {
-      if (tab.status !== "ready" || !tab.project?.path) return;
-      if (!canMutateWorkspace(tab.controller, "switch_pane")) return;
-      if (!shouldPersistWorkspaceView(tab)) return;
-      const patch = {
-        active_session_id: tab.activeSessionId,
-        active_pane_id: tab.activePaneId,
-        active_terminal_id: tab.activeTerminalId,
-        pane_layout: tab.paneLayout,
-        file_preview: tab.filePreview,
-      };
-      rememberWorkspaceViewBaseline(tab);
-      void withServiceFallback(
-        () => updateWorkspaceView(tab.id, patch, tab.controller),
-        null,
-      );
+      if (tab.status !== "ready" || !tab.project?.path) {
+        scheduler?.cancel(tab.id);
+        return;
+      }
+      if (!canMutateWorkspace(tab.controller, "switch_pane")) {
+        scheduler?.cancel(tab.id);
+        return;
+      }
+      if (!shouldPersistWorkspaceView(tab)) {
+        scheduler?.cancel(tab.id);
+        return;
+      }
+      const patch = createWorkspaceViewPatchFromTab(tab);
+      if (!scheduler) {
+        persistWorkspaceView(tab.id, patch, tab.controller);
+        return;
+      }
+      scheduler.schedule(tab.id, patch, tab.controller);
     });
+    scheduler?.prune(liveWorkspaceIds);
     pruneWorkspaceViewBaselines(liveWorkspaceIds);
-  }, [bootstrapReady, state.tabs]);
+  }, [bootstrapReady, persistWorkspaceView, state.tabs]);
 
   useEffect(() => {
     if (!slashMenuOpen) return;
@@ -2194,7 +2212,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       stateRef,
       updateState,
       shellTerminalRef,
-      scheduleFitAgentTerminals: scheduleWorkspaceAgentFit,
+      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
@@ -2205,7 +2223,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       setIsCodeExpanded(false);
     }
     requestAnimationFrame(() => {
-      shellTerminalRef.current?.fit();
+      fitVisibleWorkspaceTerminals();
     });
   };
 
@@ -2251,7 +2269,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       splitId,
       axis,
       updateTab,
-      scheduleFitAgentTerminals: scheduleWorkspaceAgentFit,
+      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
@@ -2323,6 +2341,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const onAgentTerminalData = async (paneId: string, data: string) => {
     if (isArchiveView || !data) return;
+    if (isAgentFocusTransitionSequence(data)) return;
     if (!guardWorkspaceMutation("agent_input")) return;
     const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     const paneSessionId = activeTabSnapshot
@@ -2531,9 +2550,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   useEffect(() => {
     if (!showTerminalPanel || isCodeExpanded) return;
     requestAnimationFrame(() => {
-      shellTerminalRef.current?.fit();
+      fitVisibleWorkspaceTerminals();
     });
-  }, [showTerminalPanel, isCodeExpanded, state.layout.rightSplit]);
+  }, [fitVisibleWorkspaceTerminals, showTerminalPanel, isCodeExpanded, state.layout.rightSplit]);
 
   useEffect(() => {
     if (activeTerminal && showTerminalPanel && !isCodeExpanded) {
@@ -2786,6 +2805,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }}
       setDraftPromptInputRef={registerDraftPromptInputRef}
       setAgentTerminalRef={registerAgentTerminalRef}
+      archiveTerminalRef={archiveTerminalRef}
       onAgentTerminalData={(paneId, data) => {
         void onAgentTerminalData(paneId, data);
       }}

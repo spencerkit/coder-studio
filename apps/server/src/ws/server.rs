@@ -68,16 +68,21 @@ pub(crate) async fn ws_session(
                         let Ok(envelope) = serde_json::from_str::<WsClientEnvelope>(&text) else {
                             continue;
                         };
-                        match envelope {
-                            WsClientEnvelope::Ping { ts } => {
-                                let Ok(body) = serde_json::to_string(&WsEnvelope::Pong { ts }) else {
-                                    continue;
-                                };
-                                if socket.send(Message::Text(body)).await.is_err() {
-                                    break;
-                                }
+                        let response = match handle_ws_client_envelope(
+                            envelope,
+                            &app,
+                            workspace_client.as_ref(),
+                        ) {
+                            Ok(response) => response,
+                            Err(response) => Some(response),
+                        };
+                        if let Some(response) = response {
+                            let Ok(body) = serde_json::to_string(&response) else {
+                                continue;
+                            };
+                            if socket.send(Message::Text(body)).await.is_err() {
+                                break;
                             }
-                            WsClientEnvelope::Pong { .. } => {}
                         }
                     }
                     Some(Ok(_)) => {}
@@ -107,6 +112,163 @@ pub(crate) async fn ws_session(
 
     if let Some((device_id, client_id)) = workspace_client {
         let _ = unregister_workspace_client_connection(&device_id, &client_id, &app, app.state());
+    }
+}
+
+fn require_ws_workspace_controller_mutation(
+    workspace_id: &str,
+    fencing_token: i64,
+    workspace_client: Option<&(String, String)>,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let (device_id, client_id) = workspace_client.ok_or("workspace_client_missing")?;
+    assert_workspace_controller_can_mutate(
+        workspace_id,
+        device_id,
+        client_id,
+        fencing_token,
+        app,
+        app.state(),
+    )
+    .map(|_| ())
+}
+
+fn ws_input_error_envelope(workspace_id: &str, kind: &str, error: &str) -> WsEnvelope {
+    WsEnvelope::Event {
+        event: "workspace://input_error".to_string(),
+        payload: json!({
+            "workspace_id": workspace_id,
+            "kind": kind,
+            "error": error,
+        }),
+    }
+}
+
+fn handle_ws_client_envelope(
+    envelope: WsClientEnvelope,
+    app: &AppHandle,
+    workspace_client: Option<&(String, String)>,
+) -> Result<Option<WsEnvelope>, WsEnvelope> {
+    match envelope {
+        WsClientEnvelope::Ping { ts } => Ok(Some(WsEnvelope::Pong { ts })),
+        WsClientEnvelope::Pong { .. } => Ok(None),
+        WsClientEnvelope::AgentSend {
+            workspace_id,
+            session_id,
+            input,
+            append_newline,
+            fencing_token,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
+            agent_send(
+                workspace_id.clone(),
+                session_id,
+                input,
+                append_newline,
+                app.state(),
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
+            Ok(None)
+        }
+        WsClientEnvelope::TerminalWrite {
+            workspace_id,
+            terminal_id,
+            input,
+            fencing_token,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
+            terminal_write(workspace_id.clone(), terminal_id, input, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "terminal_write", &error),
+            )?;
+            Ok(None)
+        }
+        WsClientEnvelope::TerminalResize {
+            workspace_id,
+            terminal_id,
+            cols,
+            rows,
+            fencing_token,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error))?;
+            terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error),
+            )?;
+            Ok(None)
+        }
+        WsClientEnvelope::AgentResize {
+            workspace_id,
+            session_id,
+            cols,
+            rows,
+            fencing_token,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
+            agent_resize(workspace_id.clone(), session_id, cols, rows, app.state())
+                .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
+            Ok(None)
+        }
+        WsClientEnvelope::SessionUpdate {
+            workspace_id,
+            session_id,
+            patch,
+            fencing_token,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "session_update", &error))?;
+            session_update(workspace_id.clone(), session_id, patch, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "session_update", &error),
+            )?;
+            Ok(None)
+        }
+        WsClientEnvelope::WorkspaceControllerHeartbeat { workspace_id } => {
+            let (device_id, client_id) = workspace_client.ok_or_else(|| {
+                ws_input_error_envelope(
+                    &workspace_id,
+                    "workspace_controller_heartbeat",
+                    "workspace_client_missing",
+                )
+            })?;
+            workspace_controller_heartbeat(
+                workspace_id.clone(),
+                device_id.clone(),
+                client_id.clone(),
+                app.clone(),
+                app.state(),
+            )
+            .map_err(|error| {
+                ws_input_error_envelope(&workspace_id, "workspace_controller_heartbeat", &error)
+            })?;
+            Ok(None)
+        }
     }
 }
 

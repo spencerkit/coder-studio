@@ -11,6 +11,7 @@ import {
 } from "../apps/web/src/features/workspace/workspace-controller.ts";
 import {
   applyWorkspaceControllerEvent,
+  applyWorkspaceBootstrapResult,
   applyWorkspaceRuntimeSnapshot,
 } from "../apps/web/src/shared/utils/workspace.ts";
 import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
@@ -97,6 +98,32 @@ const createRuntimeSnapshot = (controller: {
   controller,
   lifecycle_events: [],
 });
+
+const createOutputSnapshot = ({
+  sessionStream,
+  terminalOutput = "",
+}: {
+  sessionStream: string;
+  terminalOutput?: string;
+}) => {
+  const runtime = createRuntimeSnapshot({
+    workspace_id: "ws-1",
+    controller_device_id: "device-a",
+    controller_client_id: "client-a",
+    lease_expires_at: Date.now() + 30_000,
+    fencing_token: 1,
+    takeover_request_id: null,
+    takeover_requested_by_device_id: null,
+    takeover_requested_by_client_id: null,
+    takeover_deadline_at: null,
+  });
+  runtime.snapshot.sessions[0].stream = sessionStream;
+  runtime.snapshot.terminals = terminalOutput
+    ? [{ id: 7, output: terminalOutput, recoverable: true }]
+    : [];
+  runtime.snapshot.view_state.active_terminal_id = terminalOutput ? "term-7" : "";
+  return runtime;
+};
 
 test("observer role blocks session switches and shell input", () => {
   const controller = createWorkspaceControllerState({ role: "observer", fencingToken: 1 });
@@ -479,4 +506,104 @@ test("controller events can clear takeover state after a preserved runtime merge
 
   assert.equal(cleared.tabs[0]?.controller.takeoverPending, false);
   assert.equal(cleared.tabs[0]?.controller.takeoverRequestId, undefined);
+});
+
+test("runtime snapshot does not overwrite a newer live session stream with a shorter replay", () => {
+  const attached = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "terminal-output" }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const merged = applyWorkspaceRuntimeSnapshot(
+    attached,
+    createOutputSnapshot({ sessionStream: "abc", terminalOutput: "term" }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdef");
+  assert.equal(merged.tabs[0]?.terminals[0]?.output, "terminal-output");
+});
+
+test("runtime snapshot bridges truncated-head replays with newer appended output", () => {
+  const attached = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const merged = applyWorkspaceRuntimeSnapshot(
+    attached,
+    createOutputSnapshot({ sessionStream: "cdefgh", terminalOutput: "345678" }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdefgh");
+  assert.equal(merged.tabs[0]?.terminals[0]?.output, "12345678");
+});
+
+test("bootstrap replay merges against the latest store state instead of replacing newer streams", () => {
+  const current = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const next = applyWorkspaceBootstrapResult(
+    current,
+    {
+      ui_state: {
+        open_workspace_ids: ["ws-1"],
+        active_workspace_id: "ws-1",
+        layout: {
+          left_width: 320,
+          right_width: 320,
+          right_split: 64,
+          show_code_panel: false,
+          show_terminal_panel: false,
+        },
+      },
+      workspaces: [
+        {
+          ...createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }).snapshot,
+        },
+      ],
+    },
+    "en",
+    APP_SETTINGS,
+    {
+      deviceId: "device-a",
+      clientId: "client-a",
+      uiState: {
+        open_workspace_ids: ["ws-1"],
+        active_workspace_id: "ws-1",
+        layout: {
+          left_width: 320,
+          right_width: 320,
+          right_split: 64,
+          show_code_panel: false,
+          show_terminal_panel: false,
+        },
+      },
+      runtimeSnapshot: createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }),
+    },
+  );
+
+  assert.equal(next.tabs[0]?.sessions[0]?.stream, "abcdef");
+  assert.equal(next.tabs[0]?.terminals[0]?.output, "123456");
 });

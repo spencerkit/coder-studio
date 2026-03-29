@@ -3,6 +3,8 @@ import { createWorkspaceControllerRpcPayload } from "../../features/workspace/wo
 import type { AgentStartResult } from "../../types/app";
 import type { TerminalGridSize } from "../../shared/utils/terminal";
 import { invokeRpc } from "./client.ts";
+import { sendWsMessage } from "../../ws/client.ts";
+import { sendWsMutationWithHttpFallback } from "./ws-rpc-fallback.ts";
 
 export type AgentStartRequest = {
   workspaceId: string;
@@ -31,9 +33,19 @@ export const sendAgentInput = (
   sessionId: string,
   input: string,
   appendNewline: boolean,
-) => invokeRpc<void>(
-  "agent_send",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, input, appendNewline }),
+) => sendWsMutationWithHttpFallback(
+  () => sendWsMessage({
+    type: "agent_send",
+    workspace_id: workspaceId,
+    session_id: sessionId,
+    input,
+    append_newline: appendNewline,
+    fencing_token: controller.fencingToken,
+  }),
+  () => invokeRpc<void>(
+    "agent_send",
+    createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, input, appendNewline }),
+  ),
 );
 
 export const stopAgent = (
@@ -51,7 +63,17 @@ export const resizeAgent = (
   sessionId: string,
   cols: number,
   rows: number,
-) => invokeRpc<void>(
-  "agent_resize",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, cols, rows }),
+) => sendWsMutationWithHttpFallback(
+  () => sendWsMessage({
+    type: "agent_resize",
+    workspace_id: workspaceId,
+    session_id: sessionId,
+    cols,
+    rows,
+    fencing_token: controller.fencingToken,
+  }),
+  () => invokeRpc<void>(
+    "agent_resize",
+    createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, cols, rows }),
+  ),
 );

@@ -1,3 +1,4 @@
+use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
 
 const DEFAULT_PTY_COLS: u16 = 120;
@@ -83,11 +84,25 @@ pub(crate) fn terminal_create(
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 4096];
+        let mut decoder = Utf8StreamDecoder::new();
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break,
+                Ok(0) => {
+                    let text = decoder.finish();
+                    if !text.is_empty() {
+                        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
+                        let state: State<AppState> = state_handle.state();
+                        let _ = append_workspace_terminal_output(
+                            state,
+                            &workspace_id_out,
+                            terminal_id,
+                            &text,
+                        );
+                    }
+                    break;
+                }
                 Ok(n) => {
-                    let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let text = decoder.push(&buf[..n]);
                     if text.is_empty() {
                         continue;
                     }

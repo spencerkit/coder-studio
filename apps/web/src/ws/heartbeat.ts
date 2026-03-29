@@ -1,4 +1,4 @@
-import type { WsPingEnvelope } from "./protocol";
+import type { WsPingEnvelope } from "./protocol.ts";
 
 const PING_INTERVAL_MS = 15000;
 const PONG_TIMEOUT_MS = 10000;
@@ -11,8 +11,11 @@ type WsHeartbeatOptions = {
 export class WsHeartbeat {
   private pingTimer: number | null = null;
   private pongTimer: number | null = null;
+  private readonly options: WsHeartbeatOptions;
 
-  constructor(private readonly options: WsHeartbeatOptions) {}
+  constructor(options: WsHeartbeatOptions) {
+    this.options = options;
+  }
 
   start() {
     this.stop();

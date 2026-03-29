@@ -19,6 +19,8 @@ import type { WorkspaceControllerState } from "../../features/workspace/workspac
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
 import { mapSessionHistoryRecord } from "../../features/workspace/session-history.ts";
 import { fireAndForgetRpc, invokeRpc } from "./client.ts";
+import { sendWsMessage } from "../../ws/client.ts";
+import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback.ts";
 
 export const launchWorkspace = (source: {
   kind: "remote" | "local";
@@ -54,11 +56,17 @@ export const heartbeatWorkspaceController = (
   workspaceId: string,
   deviceId: string,
   clientId: string,
-) => invokeRpc("workspace_controller_heartbeat", {
-  workspaceId,
-  deviceId,
-  clientId,
-});
+) => sendWsMutationWithNullableHttpFallback(
+  () => sendWsMessage({
+    type: "workspace_controller_heartbeat",
+    workspace_id: workspaceId,
+  }),
+  () => invokeRpc<WorkspaceControllerLease>("workspace_controller_heartbeat", {
+    workspaceId,
+    deviceId,
+    clientId,
+  }),
+);
 
 export const requestWorkspaceTakeover = (
   workspaceId: string,

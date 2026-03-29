@@ -9,6 +9,114 @@ import type {
   SessionRestoreResult,
 } from "../../types/app.ts";
 import { invokeRpc } from "./client.ts";
+import { sendWsMessage } from "../../ws/client.ts";
+import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback.ts";
+
+type ScheduleTimeout = (callback: () => void, delayMs: number) => unknown;
+type CancelTimeout = (handle: unknown) => void;
+
+type SessionActivityPersistScheduler<TController> = {
+  schedule: (
+    workspaceId: string,
+    sessionId: number,
+    lastActiveAt: number,
+    controller: TController,
+  ) => void;
+  takeLastActiveAt: (workspaceId: string, sessionId: number) => number | undefined;
+  dispose: () => void;
+};
+
+export const SESSION_ACTIVITY_PERSIST_DEBOUNCE_MS = 1500;
+
+const sessionActivityKey = (workspaceId: string, sessionId: number) => `${workspaceId}:${sessionId}`;
+
+const isLastActiveOnlySessionPatch = (patch: SessionPatch) => {
+  const keys = Object.entries(patch)
+    .filter(([, value]) => typeof value !== "undefined")
+    .map(([key]) => key);
+  return keys.length === 1 && keys[0] === "last_active_at" && typeof patch.last_active_at === "number";
+};
+
+export const createSessionActivityPersistScheduler = <TController>(
+  persist: (
+    workspaceId: string,
+    sessionId: number,
+    patch: SessionPatch,
+    controller: TController,
+  ) => void | Promise<unknown>,
+  scheduleTimeout: ScheduleTimeout,
+  cancelTimeout: CancelTimeout,
+  delayMs = SESSION_ACTIVITY_PERSIST_DEBOUNCE_MS,
+): SessionActivityPersistScheduler<TController> => {
+  const pending = new Map<string, {
+    handle: unknown;
+    workspaceId: string;
+    sessionId: number;
+    lastActiveAt: number;
+    controller: TController;
+  }>();
+
+  const clearPending = (workspaceId: string, sessionId: number) => {
+    const key = sessionActivityKey(workspaceId, sessionId);
+    const entry = pending.get(key);
+    if (!entry) return undefined;
+    cancelTimeout(entry.handle);
+    pending.delete(key);
+    return entry;
+  };
+
+  return {
+    schedule(workspaceId, sessionId, lastActiveAt, controller) {
+      clearPending(workspaceId, sessionId);
+      const key = sessionActivityKey(workspaceId, sessionId);
+      const handle = scheduleTimeout(() => {
+        pending.delete(key);
+        void persist(workspaceId, sessionId, { last_active_at: lastActiveAt }, controller);
+      }, delayMs);
+      pending.set(key, {
+        handle,
+        workspaceId,
+        sessionId,
+        lastActiveAt,
+        controller,
+      });
+    },
+    takeLastActiveAt(workspaceId, sessionId) {
+      return clearPending(workspaceId, sessionId)?.lastActiveAt;
+    },
+    dispose() {
+      Array.from(pending.values()).forEach((entry) => {
+        cancelTimeout(entry.handle);
+      });
+      pending.clear();
+    },
+  };
+};
+
+const sendSessionUpdateMutation = (
+  workspaceId: string,
+  sessionId: number,
+  patch: SessionPatch,
+  controller: WorkspaceControllerState,
+) => sendWsMutationWithNullableHttpFallback(
+  () => sendWsMessage({
+    type: "session_update",
+    workspace_id: workspaceId,
+    session_id: sessionId,
+    patch,
+    fencing_token: controller.fencingToken,
+  }),
+  () => invokeRpc<BackendSession>(
+    "session_update",
+    createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, patch }),
+  ),
+);
+
+const sessionActivityPersistScheduler = createSessionActivityPersistScheduler(
+  sendSessionUpdateMutation,
+  (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+  (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+);
 
 const createOptionalHistoryMutationPayload = (
   workspaceId: string,
@@ -34,10 +142,25 @@ export const updateSession = (
   sessionId: number,
   patch: SessionPatch,
   controller: WorkspaceControllerState,
-) => invokeRpc<BackendSession>(
-  "session_update",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, patch }),
-);
+) => {
+  if (isLastActiveOnlySessionPatch(patch)) {
+    sessionActivityPersistScheduler.schedule(
+      workspaceId,
+      sessionId,
+      patch.last_active_at!,
+      controller,
+    );
+    return Promise.resolve(null);
+  }
+
+  const pendingLastActiveAt = sessionActivityPersistScheduler.takeLastActiveAt(workspaceId, sessionId);
+  const mergedPatch = typeof pendingLastActiveAt === "number"
+    && (typeof patch.last_active_at !== "number" || pendingLastActiveAt > patch.last_active_at)
+    ? { ...patch, last_active_at: pendingLastActiveAt }
+    : patch;
+
+  return sendSessionUpdateMutation(workspaceId, sessionId, mergedPatch, controller);
+};
 
 export const switchSession = (
   workspaceId: string,

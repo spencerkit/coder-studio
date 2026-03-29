@@ -7527,6 +7527,12 @@ pre.diff,
   background: var(--surface-chip) !important;
 }
 
+.workspace-panel-toggle.icon-only.active {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-subtle)) !important;
+  background: color-mix(in srgb, var(--surface-chip) 48%, var(--accent) 52%) !important;
+  color: color-mix(in srgb, var(--text) 82%, var(--accent) 18%) !important;
+}
+
 .workspace-panel-toggle.icon-only svg {
   width: 14px;
   height: 14px;

@@ -3,6 +3,8 @@ import { createWorkspaceControllerRpcPayload } from "../../features/workspace/wo
 import type { ExecTarget } from "../../state/workbench";
 import type { TerminalGridSize } from "../../shared/utils/terminal";
 import { invokeRpc } from "./client";
+import { sendWsMessage } from "../../ws/client.ts";
+import { sendWsMutationWithHttpFallback } from "./ws-rpc-fallback.ts";
 
 export const createTerminal = (
   workspaceId: string,
@@ -24,9 +26,18 @@ export const writeTerminal = (
   controller: WorkspaceControllerState,
   terminalId: number,
   input: string,
-) => invokeRpc<void>(
-  "terminal_write",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { terminalId, input }),
+) => sendWsMutationWithHttpFallback(
+  () => sendWsMessage({
+    type: "terminal_write",
+    workspace_id: workspaceId,
+    terminal_id: terminalId,
+    input,
+    fencing_token: controller.fencingToken,
+  }),
+  () => invokeRpc<void>(
+    "terminal_write",
+    createWorkspaceControllerRpcPayload(workspaceId, controller, { terminalId, input }),
+  ),
 );
 
 export const resizeTerminal = (
@@ -35,9 +46,19 @@ export const resizeTerminal = (
   terminalId: number,
   cols: number,
   rows: number,
-) => invokeRpc<void>(
-  "terminal_resize",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { terminalId, cols, rows }),
+) => sendWsMutationWithHttpFallback(
+  () => sendWsMessage({
+    type: "terminal_resize",
+    workspace_id: workspaceId,
+    terminal_id: terminalId,
+    cols,
+    rows,
+    fencing_token: controller.fencingToken,
+  }),
+  () => invokeRpc<void>(
+    "terminal_resize",
+    createWorkspaceControllerRpcPayload(workspaceId, controller, { terminalId, cols, rows }),
+  ),
 );
 
 export const closeTerminal = (

@@ -11,6 +11,46 @@ pub(crate) enum WsEnvelope {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum WsClientEnvelope {
-    Ping { ts: i64 },
-    Pong { ts: i64 },
+    Ping {
+        ts: i64,
+    },
+    Pong {
+        ts: i64,
+    },
+    AgentSend {
+        workspace_id: String,
+        session_id: String,
+        input: String,
+        append_newline: Option<bool>,
+        fencing_token: i64,
+    },
+    TerminalWrite {
+        workspace_id: String,
+        terminal_id: u64,
+        input: String,
+        fencing_token: i64,
+    },
+    TerminalResize {
+        workspace_id: String,
+        terminal_id: u64,
+        cols: u16,
+        rows: u16,
+        fencing_token: i64,
+    },
+    AgentResize {
+        workspace_id: String,
+        session_id: String,
+        cols: u16,
+        rows: u16,
+        fencing_token: i64,
+    },
+    SessionUpdate {
+        workspace_id: String,
+        session_id: u64,
+        patch: SessionPatch,
+        fencing_token: i64,
+    },
+    WorkspaceControllerHeartbeat {
+        workspace_id: String,
+    },
 }

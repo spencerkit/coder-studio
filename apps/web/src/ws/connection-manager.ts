@@ -1,12 +1,12 @@
-import { healthUrl, websocketUrl } from "../shared/runtime/backend";
-import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service";
+import { healthUrl, websocketUrl } from "../shared/runtime/backend.ts";
+import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service.ts";
 import {
   getOrCreateClientId,
   getOrCreateDeviceId,
-} from "../features/workspace/workspace-controller";
-import { WsHeartbeat } from "./heartbeat";
-import { parseWsEnvelope, type WsEventEnvelope } from "./protocol";
-import { getReconnectDelayMs } from "./reconnect-policy";
+} from "../features/workspace/workspace-controller.ts";
+import { WsHeartbeat } from "./heartbeat.ts";
+import { parseWsEnvelope, type WsClientEnvelope, type WsEventEnvelope } from "./protocol.ts";
+import { getReconnectDelayMs } from "./reconnect-policy.ts";
 
 type EventHandler<T = unknown> = (payload: T) => void;
 export type WsConnectionState = {
@@ -66,6 +66,21 @@ export class WsConnectionManager {
     return () => {
       this.connectionListeners.delete(handler);
     };
+  }
+
+  send(message: WsClientEnvelope) {
+    this.bindOnlineListeners();
+    this.connect();
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      this.socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      this.socket?.close();
+      return false;
+    }
   }
 
   private bindOnlineListeners() {

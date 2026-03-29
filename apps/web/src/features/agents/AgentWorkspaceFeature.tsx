@@ -1,4 +1,4 @@
-import { memo, useCallback, type FormEvent, type PointerEventHandler, type ReactNode } from "react";
+import { memo, useCallback, type FormEvent, type PointerEventHandler, type ReactNode, type RefObject } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type {
   AppTheme,
@@ -37,6 +37,7 @@ type AgentWorkspaceFeatureProps = {
   onDraftPromptChange: (paneId: string, value: string) => void;
   setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
+  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
   onPaneSplitResizeStart: (splitId: string, axis: "horizontal" | "vertical") => PointerEventHandler<HTMLDivElement>;
@@ -95,6 +96,7 @@ const AgentPaneLeaf = memo(({
   onDraftPromptChange,
   setDraftPromptInputRef,
   setAgentTerminalRef,
+  archiveTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
   t,
@@ -452,6 +454,7 @@ export const AgentWorkspaceFeature = ({
                 <div className="agent-pane-body">
                   {viewedSessionPlainStream.trim() ? (
                     <AgentStreamTerminal
+                      ref={archiveTerminalRef}
                       streamId={viewedSession.id}
                       stream={viewedSession.stream}
                       toneKey="active"
