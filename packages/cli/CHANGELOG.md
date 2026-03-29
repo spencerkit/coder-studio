@@ -1,5 +1,11 @@
 # @spencer-kit/coder-studio
 
+## 0.2.6
+
+### Patch Changes
+
+- Stabilize workspace transport and session persistence by moving hot mutations onto websocket-first paths, debouncing noisy session and view sync updates, and hardening UTF-8 terminal recovery.
+
 ## 0.2.5
 
 ### Patch Changes
