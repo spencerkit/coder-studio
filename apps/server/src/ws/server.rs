@@ -189,8 +189,9 @@ fn handle_ws_client_envelope(
                 app,
             )
             .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
-            terminal_write(workspace_id.clone(), terminal_id, input, app.state())
-                .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
+            terminal_write(workspace_id.clone(), terminal_id, input, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "terminal_write", &error),
+            )?;
             Ok(None)
         }
         WsClientEnvelope::TerminalResize {
@@ -207,8 +208,9 @@ fn handle_ws_client_envelope(
                 app,
             )
             .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error))?;
-            terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state())
-                .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error))?;
+            terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error),
+            )?;
             Ok(None)
         }
         WsClientEnvelope::AgentResize {
@@ -242,8 +244,9 @@ fn handle_ws_client_envelope(
                 app,
             )
             .map_err(|error| ws_input_error_envelope(&workspace_id, "session_update", &error))?;
-            session_update(workspace_id.clone(), session_id, patch, app.state())
-                .map_err(|error| ws_input_error_envelope(&workspace_id, "session_update", &error))?;
+            session_update(workspace_id.clone(), session_id, patch, app.state()).map_err(
+                |error| ws_input_error_envelope(&workspace_id, "session_update", &error),
+            )?;
             Ok(None)
         }
         WsClientEnvelope::WorkspaceControllerHeartbeat { workspace_id } => {

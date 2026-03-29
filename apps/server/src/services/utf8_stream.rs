@@ -27,8 +27,8 @@ impl Utf8StreamDecoder {
                 Err(error) => {
                     let valid_up_to = error.valid_up_to();
                     if valid_up_to > 0 {
-                        let valid = std::str::from_utf8(&self.pending[..valid_up_to])
-                            .unwrap_or_default();
+                        let valid =
+                            std::str::from_utf8(&self.pending[..valid_up_to]).unwrap_or_default();
                         output.push_str(valid);
                         self.pending.drain(..valid_up_to);
                     }

@@ -1,5 +1,5 @@
-use crate::*;
 use crate::services::utf8_stream::Utf8StreamDecoder;
+use crate::*;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
