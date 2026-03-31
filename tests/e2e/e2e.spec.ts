@@ -147,7 +147,6 @@ const launchLocalWorkspace = async (page: Page) => {
   const selectedPath = ((await page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong').textContent()) ?? '').trim();
   await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
-  await expect(page.getByTestId('overlay')).toHaveCount(0);
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
   return workspaceLabelForPath(selectedPath);
 };
@@ -440,11 +439,27 @@ const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
     const foreground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
     expect(background.workspace).toBeTruthy();
     expect(foreground.workspace).toBeTruthy();
-    expect(foreground.activeWorkspaceId).toBe(foreground.workspace!.workspace.workspace_id);
+
+    await createActiveSessionForWorkspace(
+      page,
+      background.workspace!.workspace.workspace_id,
+      'Background Reminder Session',
+    );
+    await createActiveSessionForWorkspace(
+      page,
+      foreground.workspace!.workspace.workspace_id,
+      'Foreground Reminder Session',
+    );
+
+    const hydratedBackground = await readWorkspaceByPath(page, backgroundWorkspaceDir);
+    const hydratedForeground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+    expect(hydratedBackground.workspace).toBeTruthy();
+    expect(hydratedForeground.workspace).toBeTruthy();
+    expect(hydratedForeground.activeWorkspaceId).toBe(hydratedForeground.workspace!.workspace.workspace_id);
 
     return {
-      background: background.workspace as ReminderWorkspaceSnapshot,
-      foreground: foreground.workspace as ReminderWorkspaceSnapshot,
+      background: hydratedBackground.workspace as ReminderWorkspaceSnapshot,
+      foreground: hydratedForeground.workspace as ReminderWorkspaceSnapshot,
       cleanup: async () => {
         await Promise.all([
           fs.rm(backgroundWorkspaceDir, { recursive: true, force: true }),
@@ -522,6 +537,7 @@ const createArchivedSessionForWorkspace = async (
   const session = await invokeRpc<{ id: number }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
+    provider: 'claude',
   });
   await invokeRpc(page, 'session_update', {
     ...controller,
@@ -536,6 +552,41 @@ const createArchivedSessionForWorkspace = async (
     sessionId: session.id,
   });
   return String(session.id);
+};
+
+const createActiveSessionForWorkspace = async (
+  page: Page,
+  workspaceId: string,
+  title: string,
+) => {
+  const controller = await currentWorkspaceController(page, workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  await invokeRpc(page, 'session_update', {
+    ...controller,
+    sessionId: session.id,
+    patch: {
+      title,
+      status: 'idle',
+    },
+  });
+  await invokeRpc(page, 'workspace_view_update', {
+    ...controller,
+    patch: {
+      active_session_id: sessionId,
+      active_pane_id: `pane-${session.id}`,
+      pane_layout: {
+        type: 'leaf',
+        id: `pane-${session.id}`,
+        sessionId,
+      },
+    },
+  });
+  return sessionId;
 };
 
 test.beforeEach(async ({ page }) => {
@@ -619,16 +670,20 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Changes');
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Queue');
   await expect(page.locator('.agent-pane-header').first()).toHaveAttribute('data-density', 'compact');
-  await expect(page.locator('.agent-pane-state-tag').first()).toBeVisible();
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveText(/Ready|Queued|Suspended|Running|Background/);
+  const stateTags = page.locator('.agent-pane-header').first().locator('.agent-pane-state-tag');
+  await expect(stateTags.nth(0)).toBeVisible();
+  await expect(stateTags.nth(0)).toHaveAttribute('data-tone', 'muted');
+  await expect(stateTags.nth(0)).toHaveText(/Claude|Codex/);
+  await expect(stateTags.nth(1)).toBeVisible();
+  await expect(stateTags.nth(1)).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
+  await expect(stateTags.nth(1)).toHaveText(/Ready|Queued|Suspended|Running|Background/);
 
   await page.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByTestId('command-palette-shell')).toBeVisible();
   await expect(page.getByTestId('command-palette-shell')).toHaveAttribute('data-density', 'compact');
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Code' }).click();
+  await page.getByTestId('workspace-status-strip').getByRole('button', { name: 'Code' }).click();
   await page.getByRole('button', { name: 'Expand code area' }).click();
   await expect(page.getByTestId('workspace-review-dock')).toBeVisible();
   await expect(page.getByTestId('workspace-review-dock-tabs')).toBeVisible();

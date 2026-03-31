@@ -170,7 +170,7 @@ export const useWorkspaceTransportSync = ({
   const pendingStreamIndexRef = useRef(createPendingStreamIndex());
   const streamFlushTimerRef = useRef<number | null>(null);
 
-  const resyncWorkspaceSnapshots = useCallback(async () => {
+  const resyncWorkspaceSnapshots = useCallback(async (force = false) => {
     if (transportResyncPromiseRef.current) {
       await transportResyncPromiseRef.current;
       return;
@@ -182,7 +182,8 @@ export const useWorkspaceTransportSync = ({
     const task = (async () => {
       await Promise.all(workspaceIds.map(async (workspaceId) => {
         await reattachWorkspaceRuntimeRef.current(workspaceId, {
-          successReuseMs: WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
+          force,
+          successReuseMs: force ? 0 : WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
         });
       }));
     })().finally(() => {
@@ -379,7 +380,7 @@ export const useWorkspaceTransportSync = ({
   useEffect(() => {
     const unsubscribe = subscribeWsConnectionState(({ kind }) => {
       if ((kind !== "connected" && kind !== "reconnected") || !bootstrapReady) return;
-      void resyncWorkspaceSnapshots();
+      void resyncWorkspaceSnapshots(kind === "reconnected");
     });
     return unsubscribe;
   }, [bootstrapReady, resyncWorkspaceSnapshots]);
