@@ -1,5 +1,11 @@
+use std::{pin::Pin, time::Duration};
+
+use crate::ws::outbound_batcher::OutboundBatcher;
 use crate::ws::protocol::{WsClientEnvelope, WsEnvelope};
 use crate::*;
+
+const WS_OUTBOUND_BATCH_INTERVAL_MS: u64 = 16;
+const WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES: usize = 32 * 1024;
 
 fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
     uri.query()
@@ -58,6 +64,10 @@ pub(crate) async fn ws_session(
         let _ = register_workspace_client_connection(device_id, client_id, state);
     }
     let mut rx = state.transport_events.subscribe();
+    let mut batcher = OutboundBatcher::new(WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES);
+    let mut flush_timer: Pin<Box<tokio::time::Sleep>> =
+        Box::pin(tokio::time::sleep(Duration::from_secs(24 * 60 * 60)));
+    let mut flush_timer_armed = false;
 
     loop {
         tokio::select! {
@@ -77,10 +87,13 @@ pub(crate) async fn ws_session(
                             Err(response) => Some(response),
                         };
                         if let Some(response) = response {
-                            let Ok(body) = serde_json::to_string(&response) else {
-                                continue;
-                            };
-                            if socket.send(Message::Text(body)).await.is_err() {
+                            if flush_timer_armed
+                                && send_transport_events(&mut socket, batcher.flush()).await.is_err()
+                            {
+                                break;
+                            }
+                            flush_timer_armed = false;
+                            if send_ws_envelope(&mut socket, response).await.is_err() {
                                 break;
                             }
                         }
@@ -92,19 +105,26 @@ pub(crate) async fn ws_session(
             event = rx.recv() => {
                 match event {
                     Ok(event) => {
-                        let envelope = WsEnvelope::Event {
-                            event: event.event,
-                            payload: event.payload,
-                        };
-                        let Ok(text) = serde_json::to_string(&envelope) else {
-                            continue;
-                        };
-                        if socket.send(Message::Text(text)).await.is_err() {
-                            break;
+                        let outbound = batcher.push(event);
+                        if batcher.has_pending() && !flush_timer_armed {
+                            flush_timer.as_mut().reset(tokio::time::Instant::now() + Duration::from_millis(WS_OUTBOUND_BATCH_INTERVAL_MS));
+                            flush_timer_armed = true;
+                        }
+                        if !outbound.is_empty() {
+                            flush_timer_armed = false;
+                            if send_transport_events(&mut socket, outbound).await.is_err() {
+                                break;
+                            }
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(_) => break,
+                }
+            }
+            _ = &mut flush_timer, if flush_timer_armed => {
+                flush_timer_armed = false;
+                if send_transport_events(&mut socket, batcher.flush()).await.is_err() {
+                    break;
                 }
             }
         }
@@ -113,6 +133,34 @@ pub(crate) async fn ws_session(
     if let Some((device_id, client_id)) = workspace_client {
         let _ = unregister_workspace_client_connection(&device_id, &client_id, &app, app.state());
     }
+}
+
+async fn send_transport_events(socket: &mut WebSocket, events: Vec<TransportEvent>) -> Result<(), ()> {
+    for event in events {
+        if send_ws_envelope(
+            socket,
+            WsEnvelope::Event {
+                event: event.event,
+                payload: event.payload,
+            },
+        )
+        .await
+        .is_err()
+        {
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
+async fn send_ws_envelope(socket: &mut WebSocket, envelope: WsEnvelope) -> Result<(), ()> {
+    let Ok(body) = serde_json::to_string(&envelope) else {
+        return Ok(());
+    };
+    if socket.send(Message::Text(body)).await.is_err() {
+        return Err(());
+    }
+    Ok(())
 }
 
 fn require_ws_workspace_controller_mutation(

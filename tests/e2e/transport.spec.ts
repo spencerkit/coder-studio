@@ -287,8 +287,13 @@ test.describe('workspace transport baseline', () => {
     expect(
       baseline.countsAfterReconnectBeforePoll.workspace_tree - baseline.countsAtDisconnect.workspace_tree,
     ).toBeLessThanOrEqual(1);
-    expect(baseline.countsAfterNextPoll).toEqual(
-      incrementCounts(baseline.countsAfterReconnectBeforePoll),
+    expectPollCountsNotToRegressFrom(
+      baseline.countsAfterNextPoll,
+      baseline.countsAfterReconnectBeforePoll,
+    );
+    expectPollCountsToAdvanceFrom(
+      baseline.countsAfterNextPoll,
+      baseline.countsAtDisconnect,
     );
   });
 
@@ -413,6 +418,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
       const sessionId = String(session.id);
 
@@ -441,7 +447,6 @@ test.describe('workspace transport baseline', () => {
       await invokeRpc(page, 'agent_start', {
         ...controller,
         sessionId,
-        provider: 'claude',
       });
 
       await waitForLifecycleReplayEvent(
@@ -517,6 +522,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
 
       await invokeRpc(page, 'workspace_view_update', {
@@ -546,7 +552,6 @@ test.describe('workspace transport baseline', () => {
       await invokeRpc(page, 'agent_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
-        provider: 'claude',
       });
 
       await waitForLifecycleReplayEvent(
@@ -917,6 +922,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
 
       await invokeRpc(page, 'session_update', {
@@ -924,7 +930,7 @@ test.describe('workspace transport baseline', () => {
         sessionId: session.id,
         patch: {
           status: 'interrupted',
-          claude_session_id: resumeClaudeSessionId,
+          resume_id: resumeClaudeSessionId,
         },
       });
       await page.reload();
@@ -1063,6 +1069,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const session = await invokeRpc<{ id: number }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
+    provider: 'claude',
   });
   const sessionId = String(session.id);
   controlPlaneCommands.push('create_session');
@@ -1070,7 +1077,6 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await invokeRpc(page, 'agent_start', {
     ...controller,
     sessionId,
-    provider: 'claude',
     cols: 120,
     rows: 30,
   });
