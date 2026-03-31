@@ -113,6 +113,8 @@ const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
 const BURST_CHUNK_COUNT = readIntEnv('CODER_STUDIO_TEST_BURST_CHUNKS', 24, 1);
 const BURST_INTERVAL_MS = readIntEnv('CODER_STUDIO_TEST_BURST_INTERVAL_MS', 2, 0);
 const BURST_MAX_FRAMES = readIntEnv('CODER_STUDIO_TEST_BURST_MAX_FRAMES', 12, 1);
+const TERMINAL_BURST_MAX_FRAMES = readIntEnv('CODER_STUDIO_TEST_TERMINAL_BURST_MAX_FRAMES', 14, 1);
+const MIXED_BURST_MAX_TOTAL_FRAMES = readIntEnv('CODER_STUDIO_TEST_MIXED_BURST_MAX_TOTAL_FRAMES', 24, 1);
 const BURST_EMIT_MEASURE = process.env.CODER_STUDIO_TEST_BURST_EMIT_MEASURE === '1';
 const execFileAsync = promisify(execFile);
 const DEFAULT_TRANSPORT_IDS = {
@@ -278,17 +280,52 @@ test.describe('workspace transport baseline', () => {
       intervalMs: BURST_INTERVAL_MS,
     });
 
-    if (BURST_EMIT_MEASURE) {
-      console.log(`__TRANSPORT_BURST_MEASURE__ ${JSON.stringify({
-        chunkCount: BURST_CHUNK_COUNT,
-        intervalMs: BURST_INTERVAL_MS,
-        frameCount: baseline.frameCount,
-        textLength: baseline.text.length,
-      })}`);
-    }
-    expect(baseline.text).toContain('burst-00');
-    expect(baseline.text).toContain(`burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    emitBurstMeasure('agent', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+      frameCount: baseline.frameCount,
+      textLength: baseline.text.length,
+    });
+    expect(baseline.text).toContain('agent-burst-00');
+    expect(baseline.text).toContain(`agent-burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
     expect(baseline.frameCount).toBeLessThanOrEqual(BURST_MAX_FRAMES);
+  });
+
+  test('high-frequency terminal output is coalesced into fewer websocket frames', async ({ page }) => {
+    const baseline = await observeBurstTerminalTransport(page, {
+      chunkCount: BURST_CHUNK_COUNT,
+    });
+
+    emitBurstMeasure('terminal', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: 0,
+      frameCount: baseline.frameCount,
+      textLength: baseline.text.length,
+    });
+    expect(baseline.text).toContain('term-burst-00');
+    expect(baseline.text).toContain(`term-burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.frameCount).toBeLessThanOrEqual(TERMINAL_BURST_MAX_FRAMES);
+  });
+
+  test('mixed agent and terminal burst workloads stay within bounded websocket frames', async ({ page }) => {
+    const baseline = await observeMixedBurstTransport(page, {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+    });
+
+    emitBurstMeasure('mixed', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+      frameCount: baseline.totalFrameCount,
+      textLength: baseline.agentText.length + baseline.terminalText.length,
+      agentFrameCount: baseline.agentFrameCount,
+      terminalFrameCount: baseline.terminalFrameCount,
+    });
+    expect(baseline.agentText).toContain('mix-agent-00');
+    expect(baseline.agentText).toContain(`mix-agent-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.terminalText).toContain('mix-term-00');
+    expect(baseline.terminalText).toContain(`mix-term-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.totalFrameCount).toBeLessThanOrEqual(MIXED_BURST_MAX_TOTAL_FRAMES);
   });
 
   test('websocket reconnect preserves resource resync cadence after reconnect', async ({ page }) => {
@@ -1199,7 +1236,7 @@ async function observeBurstAgentTransport(
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
   await seedAppSettings(page, {
-    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs}`,
+    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs} --prefix agent-burst`,
   });
 
   const controller = await currentWorkspaceController(page, workspace.workspaceId);
@@ -1217,7 +1254,7 @@ async function observeBurstAgentTransport(
     rows: 30,
   });
 
-  const finalMarker = `burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
+  const finalMarker = `agent-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
   await expect
     .poll(async () => (await readAgentStreamFrames(page, sessionId, 'stdout')).text.includes(finalMarker), {
       timeout: TRANSPORT_EVENT_TIMEOUT_MS,
@@ -1226,6 +1263,125 @@ async function observeBurstAgentTransport(
   await page.waitForTimeout(150);
 
   return readAgentStreamFrames(page, sessionId, 'stdout');
+}
+
+async function observeBurstTerminalTransport(
+  page: Page,
+  options: { chunkCount: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const terminal = await invokeRpc<{ id: number }>(page, 'terminal_create', {
+    ...controller,
+    cwd: workspace.workspacePath,
+    target: workspace.target,
+    cols: 120,
+    rows: 30,
+  });
+
+  const probeFile = await writeBurstProbeFile(
+    workspace.workspacePath,
+    'term-burst',
+    options.chunkCount,
+  );
+  try {
+    await page.waitForTimeout(150);
+    const frameCursor = await readTransportFrameCursor(page);
+    await invokeRpc(page, 'terminal_write', {
+      ...controller,
+      terminalId: terminal.id,
+      input: buildTerminalBurstInput(workspace.target, probeFile),
+    });
+
+    const finalMarker = `term-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    await expect
+      .poll(async () => (await readTerminalStreamFrames(page, terminal.id, frameCursor)).text.includes(finalMarker), {
+        timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+      })
+      .toBe(true);
+    await page.waitForTimeout(150);
+
+    return readTerminalStreamFrames(page, terminal.id, frameCursor);
+  } finally {
+    await fs.rm(probeFile, { force: true });
+  }
+}
+
+async function observeMixedBurstTransport(
+  page: Page,
+  options: { chunkCount: number; intervalMs: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  await seedAppSettings(page, {
+    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs} --prefix mix-agent`,
+  });
+
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const terminal = await invokeRpc<{ id: number }>(page, 'terminal_create', {
+    ...controller,
+    cwd: workspace.workspacePath,
+    target: workspace.target,
+    cols: 120,
+    rows: 30,
+  });
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  const probeFile = await writeBurstProbeFile(
+    workspace.workspacePath,
+    'mix-term',
+    options.chunkCount,
+  );
+
+  try {
+    await page.waitForTimeout(150);
+    const frameCursor = await readTransportFrameCursor(page);
+    await invokeRpc(page, 'terminal_write', {
+      ...controller,
+      terminalId: terminal.id,
+      input: buildTerminalBurstInput(workspace.target, probeFile),
+    });
+    await invokeRpc(page, 'agent_start', {
+      ...controller,
+      sessionId,
+      cols: 120,
+      rows: 30,
+    });
+
+    const finalAgentMarker = `mix-agent-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    const finalTerminalMarker = `mix-term-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    await expect
+      .poll(async () => {
+        const agent = await readAgentStreamFrames(page, sessionId, 'stdout', frameCursor);
+        const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
+        return agent.text.includes(finalAgentMarker) && terminalFrames.text.includes(finalTerminalMarker);
+      }, {
+        timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+      })
+      .toBe(true);
+    await page.waitForTimeout(150);
+
+    const agentFrames = await readAgentStreamFrames(page, sessionId, 'stdout', frameCursor);
+    const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
+    return {
+      agentFrameCount: agentFrames.frameCount,
+      terminalFrameCount: terminalFrames.frameCount,
+      totalFrameCount: agentFrames.frameCount + terminalFrames.frameCount,
+      agentText: agentFrames.text,
+      terminalText: terminalFrames.text,
+    };
+  } finally {
+    await fs.rm(probeFile, { force: true });
+  }
 }
 
 async function observeArtifactsDirtyBaseline(page: Page): Promise<ArtifactsDirtyBaseline> {
@@ -1905,13 +2061,19 @@ async function waitForWsEventCount(
     .toBeGreaterThanOrEqual(expectedCount);
 }
 
+async function readTransportFrameCursor(page: Page) {
+  return (await readTransportTracker(page)).frames.length;
+}
+
 async function readAgentStreamFrames(
   page: Page,
   sessionId: string,
   kind: 'stdout' | 'stderr',
+  fromFrameIndex = 0,
 ) {
   const tracker = await readTransportTracker(page);
   const frames = tracker.frames
+    .slice(fromFrameIndex)
     .map(parseBackendEnvelope)
     .filter((frame): frame is WsEventFrame =>
       Boolean(frame)
@@ -1924,6 +2086,63 @@ async function readAgentStreamFrames(
     frameCount: frames.length,
     text: frames.map((frame) => String(frame.payload.data ?? '')).join(''),
   };
+}
+
+async function readTerminalStreamFrames(
+  page: Page,
+  terminalId: number,
+  fromFrameIndex = 0,
+) {
+  const tracker = await readTransportTracker(page);
+  const frames = tracker.frames
+    .slice(fromFrameIndex)
+    .map(parseBackendEnvelope)
+    .filter((frame): frame is WsEventFrame =>
+      Boolean(frame)
+      && frame.event === 'terminal://event'
+      && frame.payload.terminal_id === terminalId,
+    );
+
+  return {
+    frameCount: frames.length,
+    text: frames.map((frame) => String(frame.payload.data ?? '')).join(''),
+  };
+}
+
+async function writeBurstProbeFile(workspacePath: string, prefix: string, chunkCount: number) {
+  const probeFile = path.join(
+    workspacePath,
+    `.${prefix}-${process.pid}-${Date.now()}.txt`,
+  );
+  const lines = Array.from({ length: chunkCount }, (_, index) =>
+    `${prefix}-${String(index).padStart(2, '0')}`,
+  ).join('\n');
+  await fs.writeFile(probeFile, `${lines}\n`, 'utf8');
+  return probeFile;
+}
+
+function buildTerminalBurstInput(target: WorkspaceHandle['target'], filePath: string) {
+  if (isWindowsNativeTarget(target)) {
+    return `type "${filePath.replaceAll('"', '""')}"\r`;
+  }
+  return `cat ${quotePosixShellArg(filePath)}\r`;
+}
+
+function quotePosixShellArg(value: string) {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function emitBurstMeasure(
+  scenario: 'agent' | 'terminal' | 'mixed',
+  measure: Record<string, number>,
+) {
+  if (!BURST_EMIT_MEASURE) {
+    return;
+  }
+  console.log(`__TRANSPORT_BURST_MEASURE__ ${JSON.stringify({
+    scenario,
+    ...measure,
+  })}`);
 }
 
 function parseBackendEnvelope(frame: string): WsEventFrame | null {

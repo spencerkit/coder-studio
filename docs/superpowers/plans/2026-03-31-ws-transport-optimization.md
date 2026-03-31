@@ -20,6 +20,10 @@
 - A repeatable profiling entrypoint now exists:
   - `pnpm profile:ws:transport`
   - example: `pnpm profile:ws:transport -- --chunks 24,48 --interval-ms 2`
+- Latest local measurements from that entrypoint:
+  - `agent` burst: `24 -> 3 frames`, `48 -> 6 frames`
+  - `terminal` burst: `24 -> 4 frames`, `48 -> 4 frames`
+  - `mixed` burst: `24 -> 7 frames`, `48 -> 10 frames`
 - Current recommendation: continue deferring protocol-level batched envelopes until the profiling run above shows phase 1 plus bounded pressure is still insufficient.
 
 ---
@@ -222,6 +226,7 @@ Plus any targeted local slow-socket test harness used for this task.
 Implemented with:
 - burst-stream transport regression in `tests/e2e/transport.spec.ts`
 - repeatable local profiling entrypoint in `scripts/test/ws-transport-profile.mjs`
+- current measured coverage includes `agent`, `terminal`, and `mixed agent+terminal` burst scenarios
 
 Current result: batching plus bounded pressure is sufficient for the measured burst scenarios, so protocol changes stay deferred.
 

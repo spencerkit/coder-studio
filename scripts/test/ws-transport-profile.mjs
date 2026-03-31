@@ -4,12 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const TEST_GREP = 'high-frequency agent stdout is coalesced';
 const MEASURE_PREFIX = '__TRANSPORT_BURST_MEASURE__ ';
+const SCENARIO_GREP = {
+  agent: 'high-frequency agent stdout is coalesced',
+  terminal: 'high-frequency terminal output is coalesced',
+  mixed: 'mixed agent and terminal burst workloads stay within bounded websocket frames',
+};
 
 function parseArgs(argv) {
   const args = [...argv];
   const options = {
+    scenarios: ['agent', 'terminal', 'mixed'],
     chunks: [24, 48, 96],
     intervalMs: 2,
     backendPortBase: 44033,
@@ -34,6 +39,21 @@ function parseArgs(argv) {
         throw new Error('invalid value for --chunks');
       }
       options.chunks = parsed;
+      continue;
+    }
+    if (current === '--scenarios') {
+      const value = args.shift();
+      if (!value) {
+        throw new Error('missing value for --scenarios');
+      }
+      const parsed = value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      if (parsed.length === 0 || parsed.some((entry) => !(entry in SCENARIO_GREP))) {
+        throw new Error('invalid value for --scenarios');
+      }
+      options.scenarios = parsed;
       continue;
     }
     if (current === '--interval-ms') {
@@ -87,7 +107,7 @@ function resolveSpawn(command, args) {
   return { command, args };
 }
 
-function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
+function runScenario({ scenario, chunkCount, intervalMs, backendPort, frontendPort }) {
   return new Promise((resolve, reject) => {
     const args = [
       'exec',
@@ -95,13 +115,13 @@ function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
       'test',
       'tests/e2e/transport.spec.ts',
       '--grep',
-      TEST_GREP,
+      SCENARIO_GREP[scenario],
     ];
     const resolved = resolveSpawn(PNPM_CMD, args);
     const output = [];
 
     process.stdout.write(
-      `\n[ws-transport-profile] chunks=${chunkCount} interval_ms=${intervalMs} ports=${backendPort}/${frontendPort}\n`,
+      `\n[ws-transport-profile] scenario=${scenario} chunks=${chunkCount} interval_ms=${intervalMs} ports=${backendPort}/${frontendPort}\n`,
     );
     process.stdout.write(`[ws-transport-profile] ${PNPM_CMD} ${args.join(' ')}\n`);
 
@@ -115,6 +135,8 @@ function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
         CODER_STUDIO_TEST_BURST_CHUNKS: String(chunkCount),
         CODER_STUDIO_TEST_BURST_INTERVAL_MS: String(intervalMs),
         CODER_STUDIO_TEST_BURST_MAX_FRAMES: String(chunkCount),
+        CODER_STUDIO_TEST_TERMINAL_BURST_MAX_FRAMES: String(chunkCount),
+        CODER_STUDIO_TEST_MIXED_BURST_MAX_TOTAL_FRAMES: String(chunkCount * 2),
         CODER_STUDIO_TEST_BURST_EMIT_MEASURE: '1',
       },
     });
@@ -135,7 +157,7 @@ function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
       if (code !== 0) {
         reject(
           new Error(
-            `scenario failed for chunks=${chunkCount}: ${signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`}\n${transcript}`.trimEnd(),
+            `scenario failed for ${scenario} chunks=${chunkCount}: ${signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`}\n${transcript}`.trimEnd(),
           ),
         );
         return;
@@ -145,7 +167,7 @@ function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
         .split(/\r?\n/)
         .find((line) => line.startsWith(MEASURE_PREFIX));
       if (!measureLine) {
-        reject(new Error(`missing transport measure output for chunks=${chunkCount}`));
+        reject(new Error(`missing transport measure output for ${scenario} chunks=${chunkCount}`));
         return;
       }
 
@@ -153,7 +175,7 @@ function runScenario({ chunkCount, intervalMs, backendPort, frontendPort }) {
         const measure = JSON.parse(measureLine.slice(MEASURE_PREFIX.length));
         resolve(measure);
       } catch (error) {
-        reject(new Error(`failed to parse transport measure output for chunks=${chunkCount}: ${error}`));
+        reject(new Error(`failed to parse transport measure output for ${scenario} chunks=${chunkCount}: ${error}`));
       }
     });
   });
@@ -163,21 +185,26 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const results = [];
 
-  for (const [index, chunkCount] of options.chunks.entries()) {
-    const result = await runScenario({
-      chunkCount,
-      intervalMs: options.intervalMs,
-      backendPort: options.backendPortBase + (index * 10),
-      frontendPort: options.frontendPortBase + (index * 10),
-    });
-    results.push(result);
+  let runIndex = 0;
+  for (const scenario of options.scenarios) {
+    for (const chunkCount of options.chunks) {
+      const result = await runScenario({
+        scenario,
+        chunkCount,
+        intervalMs: options.intervalMs,
+        backendPort: options.backendPortBase + (runIndex * 10),
+        frontendPort: options.frontendPortBase + (runIndex * 10),
+      });
+      results.push(result);
+      runIndex += 1;
+    }
   }
 
   process.stdout.write('\n[ws-transport-profile] summary\n');
   for (const result of results) {
     const ratio = (result.frameCount / result.chunkCount).toFixed(3);
     process.stdout.write(
-      `[ws-transport-profile] chunks=${result.chunkCount} frames=${result.frameCount} ratio=${ratio} interval_ms=${result.intervalMs} text_length=${result.textLength}\n`,
+      `[ws-transport-profile] scenario=${result.scenario} chunks=${result.chunkCount} frames=${result.frameCount} ratio=${ratio} interval_ms=${result.intervalMs} text_length=${result.textLength}${result.agentFrameCount ? ` agent_frames=${result.agentFrameCount}` : ''}${result.terminalFrameCount ? ` terminal_frames=${result.terminalFrameCount}` : ''}\n`,
     );
   }
   process.stdout.write(`${MEASURE_PREFIX}${JSON.stringify(results)}\n`);
