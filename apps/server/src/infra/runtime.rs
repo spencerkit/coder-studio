@@ -467,24 +467,6 @@ pub(crate) fn resolve_unix_agent_shell() -> (String, String) {
     (shell, flag)
 }
 
-pub(crate) fn build_claude_resume_command(
-    command: &str,
-    claude_session_id: Option<&str>,
-) -> String {
-    let Some(claude_session_id) = claude_session_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return command.to_string();
-    };
-
-    if command.contains("--resume") || command.contains(" -r ") {
-        return command.to_string();
-    }
-
-    format!("{command} --resume {claude_session_id}")
-}
-
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn build_windows_native_agent_shell_invocation(command: &str) -> (String, Vec<String>) {
     (

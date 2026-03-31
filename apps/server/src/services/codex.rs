@@ -41,18 +41,34 @@ pub(crate) fn build_codex_start_command(
     target: &ExecTarget,
     profile: &CodexRuntimeProfile,
 ) -> String {
-    let executable =
-        crate::services::agent_client::escape_agent_command_part(target, &profile.executable);
-    let args = profile
+    let (program, args) = build_codex_start_invocation(profile);
+    let mut parts = vec![crate::services::agent_client::escape_agent_command_part(
+        target, &program,
+    )];
+    parts.extend(
+        args.iter()
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
+}
+
+pub(crate) fn build_codex_start_invocation(profile: &CodexRuntimeProfile) -> (String, Vec<String>) {
+    let executable = profile.executable.trim();
+    let program = if executable.is_empty() {
+        "codex".to_string()
+    } else {
+        executable.to_string()
+    };
+    let mut args = profile
         .extra_args
         .iter()
-        .chain(build_codex_config_override_args(profile).iter())
-        .chain(build_codex_feature_args().iter())
-        .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg))
+        .map(|arg| arg.trim())
+        .filter(|arg| !arg.is_empty())
+        .map(ToString::to_string)
         .collect::<Vec<_>>();
-    let mut parts = vec![executable];
-    parts.extend(args);
-    parts.join(" ")
+    args.extend(build_codex_config_override_args(profile));
+    args.extend(build_codex_feature_args());
+    (program, args)
 }
 
 pub(crate) fn build_codex_resume_command(
@@ -60,22 +76,44 @@ pub(crate) fn build_codex_resume_command(
     profile: &CodexRuntimeProfile,
     resume_id: &str,
 ) -> String {
-    let escaped_resume_id =
-        crate::services::agent_client::escape_agent_command_part(target, resume_id.trim());
-    let mut parts = vec![
-        crate::services::agent_client::escape_agent_command_part(target, &profile.executable),
-        "resume".to_string(),
-        escaped_resume_id,
-    ];
+    let (program, args) = build_codex_resume_invocation(profile, resume_id);
+    let mut parts = vec![crate::services::agent_client::escape_agent_command_part(
+        target, &program,
+    )];
     parts.extend(
-        profile
-            .extra_args
-            .iter()
-            .chain(build_codex_config_override_args(profile).iter())
-            .chain(build_codex_feature_args().iter())
+        args.iter()
             .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
     );
     parts.join(" ")
+}
+
+pub(crate) fn build_codex_resume_invocation(
+    profile: &CodexRuntimeProfile,
+    resume_id: &str,
+) -> (String, Vec<String>) {
+    let executable = profile.executable.trim();
+    let program = if executable.is_empty() {
+        "codex".to_string()
+    } else {
+        executable.to_string()
+    };
+    let mut args = Vec::new();
+    let trimmed_resume_id = resume_id.trim();
+    if !trimmed_resume_id.is_empty() {
+        args.push("resume".to_string());
+        args.push(trimmed_resume_id.to_string());
+    }
+    args.extend(
+        profile
+            .extra_args
+            .iter()
+            .map(|arg| arg.trim())
+            .filter(|arg| !arg.is_empty())
+            .map(ToString::to_string),
+    );
+    args.extend(build_codex_config_override_args(profile));
+    args.extend(build_codex_feature_args());
+    (program, args)
 }
 
 fn build_codex_hook_command(target: &ExecTarget) -> String {
@@ -346,6 +384,65 @@ mod tests {
         assert_eq!(
             build_codex_resume_command(&target, &profile, "resume-123"),
             format!("codex resume resume-123 --full-auto {expected_config} --enable codex_hooks")
+        );
+    }
+
+    #[test]
+    fn build_codex_invocations_split_program_and_args() {
+        let profile = CodexRuntimeProfile {
+            executable: "codex".into(),
+            extra_args: vec!["--full-auto".into()],
+            model: "gpt-5.4".into(),
+            approval_policy: "on-request".into(),
+            sandbox_mode: "workspace-write".into(),
+            web_search: "live".into(),
+            model_reasoning_effort: "high".into(),
+            env: BTreeMap::new(),
+        };
+
+        assert_eq!(
+            build_codex_start_invocation(&profile),
+            (
+                "codex".to_string(),
+                vec![
+                    "--full-auto".to_string(),
+                    "--config".to_string(),
+                    "model=\"gpt-5.4\"".to_string(),
+                    "--config".to_string(),
+                    "approval_policy=\"on-request\"".to_string(),
+                    "--config".to_string(),
+                    "sandbox_mode=\"workspace-write\"".to_string(),
+                    "--config".to_string(),
+                    "web_search=\"live\"".to_string(),
+                    "--config".to_string(),
+                    "model_reasoning_effort=\"high\"".to_string(),
+                    "--enable".to_string(),
+                    "codex_hooks".to_string(),
+                ],
+            )
+        );
+        assert_eq!(
+            build_codex_resume_invocation(&profile, "resume-123"),
+            (
+                "codex".to_string(),
+                vec![
+                    "resume".to_string(),
+                    "resume-123".to_string(),
+                    "--full-auto".to_string(),
+                    "--config".to_string(),
+                    "model=\"gpt-5.4\"".to_string(),
+                    "--config".to_string(),
+                    "approval_policy=\"on-request\"".to_string(),
+                    "--config".to_string(),
+                    "sandbox_mode=\"workspace-write\"".to_string(),
+                    "--config".to_string(),
+                    "web_search=\"live\"".to_string(),
+                    "--config".to_string(),
+                    "model_reasoning_effort=\"high\"".to_string(),
+                    "--enable".to_string(),
+                    "codex_hooks".to_string(),
+                ],
+            )
         );
     }
 }

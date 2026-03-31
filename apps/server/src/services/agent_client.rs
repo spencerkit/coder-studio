@@ -1,8 +1,24 @@
 use crate::*;
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) enum AgentLaunchSpec {
+    ShellCommand(String),
+    Direct {
+        program: String,
+        args: Vec<String>,
+        display_command: String,
+    },
+}
+
 pub(crate) trait AgentClientAdapter {
     fn start_command(&self, target: &ExecTarget) -> String;
     fn resume_command(&self, target: &ExecTarget, resume_id: &str) -> String;
+    fn start_launch_spec(&self, target: &ExecTarget) -> AgentLaunchSpec {
+        AgentLaunchSpec::ShellCommand(self.start_command(target))
+    }
+    fn resume_launch_spec(&self, target: &ExecTarget, resume_id: &str) -> AgentLaunchSpec {
+        AgentLaunchSpec::ShellCommand(self.resume_command(target, resume_id))
+    }
     fn runtime_env(&self) -> &std::collections::BTreeMap<String, String>;
     fn ensure_workspace_hooks(&self, cwd: &str, target: &ExecTarget) -> Result<(), String>;
 }
@@ -28,6 +44,36 @@ impl AgentClientAdapter for ClaudeClient {
             &self.profile,
             resume_id,
         )
+    }
+
+    fn start_launch_spec(&self, target: &ExecTarget) -> AgentLaunchSpec {
+        #[cfg(target_os = "windows")]
+        if matches!(target, ExecTarget::Native) {
+            let (program, args) =
+                crate::services::claude::build_claude_start_invocation(&self.profile);
+            return AgentLaunchSpec::Direct {
+                program,
+                args,
+                display_command: self.start_command(target),
+            };
+        }
+
+        AgentLaunchSpec::ShellCommand(self.start_command(target))
+    }
+
+    fn resume_launch_spec(&self, target: &ExecTarget, resume_id: &str) -> AgentLaunchSpec {
+        #[cfg(target_os = "windows")]
+        if matches!(target, ExecTarget::Native) {
+            let (program, args) =
+                crate::services::claude::build_claude_resume_invocation(&self.profile, resume_id);
+            return AgentLaunchSpec::Direct {
+                program,
+                args,
+                display_command: self.resume_command(target, resume_id),
+            };
+        }
+
+        AgentLaunchSpec::ShellCommand(self.resume_command(target, resume_id))
     }
 
     fn runtime_env(&self) -> &std::collections::BTreeMap<String, String> {
@@ -56,6 +102,36 @@ impl AgentClientAdapter for CodexClient {
 
     fn resume_command(&self, target: &ExecTarget, resume_id: &str) -> String {
         crate::services::codex::build_codex_resume_command(target, &self.profile, resume_id)
+    }
+
+    fn start_launch_spec(&self, target: &ExecTarget) -> AgentLaunchSpec {
+        #[cfg(target_os = "windows")]
+        if matches!(target, ExecTarget::Native) {
+            let (program, args) =
+                crate::services::codex::build_codex_start_invocation(&self.profile);
+            return AgentLaunchSpec::Direct {
+                program,
+                args,
+                display_command: self.start_command(target),
+            };
+        }
+
+        AgentLaunchSpec::ShellCommand(self.start_command(target))
+    }
+
+    fn resume_launch_spec(&self, target: &ExecTarget, resume_id: &str) -> AgentLaunchSpec {
+        #[cfg(target_os = "windows")]
+        if matches!(target, ExecTarget::Native) {
+            let (program, args) =
+                crate::services::codex::build_codex_resume_invocation(&self.profile, resume_id);
+            return AgentLaunchSpec::Direct {
+                program,
+                args,
+                display_command: self.resume_command(target, resume_id),
+            };
+        }
+
+        AgentLaunchSpec::ShellCommand(self.resume_command(target, resume_id))
     }
 
     fn runtime_env(&self) -> &std::collections::BTreeMap<String, String> {

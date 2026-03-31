@@ -159,13 +159,23 @@ pub(crate) fn agent_start(
     let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
     let client =
         crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings);
-    let command = match effective_resume_id.as_deref() {
-        Some(resume_id) => client.resume_command(&agent_target, resume_id),
-        None => client.start_command(&agent_target),
+    let launch_spec = match effective_resume_id.as_deref() {
+        Some(resume_id) => client.resume_launch_spec(&agent_target, resume_id),
+        None => client.start_launch_spec(&agent_target),
     };
     client.ensure_workspace_hooks(&agent_cwd, &agent_target)?;
 
-    let (program, args) = build_agent_pty_command(&agent_target, &agent_cwd, &command);
+    let (command, program, args) = match launch_spec {
+        crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
+            let (program, args) = build_agent_pty_command(&agent_target, &agent_cwd, &command);
+            (command, program, args)
+        }
+        crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command,
+        } => (display_command, program, args),
+    };
     #[cfg(not(target_os = "windows"))]
     let shell_env = matches!(agent_target, ExecTarget::Native).then(|| program.clone());
     let pty_system = native_pty_system();

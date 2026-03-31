@@ -38,18 +38,48 @@ pub(crate) fn build_claude_start_command(
     target: &ExecTarget,
     profile: &ClaudeRuntimeProfile,
 ) -> String {
-    let mut parts = Vec::with_capacity(1 + profile.startup_args.len());
+    let (program, args) = build_claude_start_invocation(profile);
+    let mut parts = Vec::with_capacity(1 + args.len());
     parts.push(crate::services::agent_client::escape_agent_command_part(
-        target,
-        &profile.executable,
+        target, &program,
     ));
     parts.extend(
-        profile
-            .startup_args
-            .iter()
+        args.iter()
             .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
     );
     parts.join(" ")
+}
+
+pub(crate) fn build_claude_start_invocation(
+    profile: &ClaudeRuntimeProfile,
+) -> (String, Vec<String>) {
+    let executable = profile.executable.trim();
+    let program = if executable.is_empty() {
+        "claude".to_string()
+    } else {
+        executable.to_string()
+    };
+    let args = profile
+        .startup_args
+        .iter()
+        .map(|arg| arg.trim())
+        .filter(|arg| !arg.is_empty())
+        .map(ToString::to_string)
+        .collect();
+    (program, args)
+}
+
+pub(crate) fn build_claude_resume_invocation(
+    profile: &ClaudeRuntimeProfile,
+    resume_id: &str,
+) -> (String, Vec<String>) {
+    let (program, mut args) = build_claude_start_invocation(profile);
+    let trimmed_resume_id = resume_id.trim();
+    if !trimmed_resume_id.is_empty() {
+        args.push("--resume".to_string());
+        args.push(trimmed_resume_id.to_string());
+    }
+    (program, args)
 }
 
 pub(crate) fn build_claude_resume_launch_command(
@@ -57,10 +87,16 @@ pub(crate) fn build_claude_resume_launch_command(
     profile: &ClaudeRuntimeProfile,
     resume_id: &str,
 ) -> String {
-    build_claude_resume_command(
-        &build_claude_start_command(target, profile),
-        Some(resume_id),
-    )
+    let (program, args) = build_claude_resume_invocation(profile, resume_id);
+    let mut parts = Vec::with_capacity(1 + args.len());
+    parts.push(crate::services::agent_client::escape_agent_command_part(
+        target, &program,
+    ));
+    parts.extend(
+        args.iter()
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
 }
 
 fn parse_http_json(stream: &TcpStream) -> Result<Value, String> {
@@ -420,6 +456,37 @@ mod tests {
         assert_eq!(
             build_claude_resume_launch_command(&ExecTarget::Native, &profile, "resume-123"),
             "claude --model claude-sonnet-4-5 --resume resume-123"
+        );
+    }
+
+    #[test]
+    fn build_claude_invocations_split_program_and_args() {
+        let profile = ClaudeRuntimeProfile {
+            executable: "claude".into(),
+            startup_args: vec!["--model".into(), "claude-sonnet-4-5".into()],
+            env: BTreeMap::new(),
+            settings_json: Value::Object(Map::new()),
+            global_config_json: Value::Object(Map::new()),
+        };
+
+        assert_eq!(
+            build_claude_start_invocation(&profile),
+            (
+                "claude".to_string(),
+                vec!["--model".to_string(), "claude-sonnet-4-5".to_string()],
+            )
+        );
+        assert_eq!(
+            build_claude_resume_invocation(&profile, "resume-123"),
+            (
+                "claude".to_string(),
+                vec![
+                    "--model".to_string(),
+                    "claude-sonnet-4-5".to_string(),
+                    "--resume".to_string(),
+                    "resume-123".to_string(),
+                ],
+            )
         );
     }
 }
