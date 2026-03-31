@@ -68,7 +68,8 @@ pub(crate) use infra::db::{
 };
 #[cfg(test)]
 pub(crate) use infra::db::{
-    launch_workspace_record, read_with_db_call_count, reset_with_db_call_count,
+    launch_workspace_record, read_with_db_call_count, read_workspace_session_query_count,
+    reset_with_db_call_count, reset_workspace_session_query_count,
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,

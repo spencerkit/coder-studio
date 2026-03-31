@@ -655,6 +655,41 @@ mod tests {
     }
 
     #[test]
+    fn workspace_runtime_attach_scans_workspace_sessions_once_for_snapshot_assembly() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-scan-count");
+
+        let archived = create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::Claude,
+        )
+        .unwrap();
+        archive_workspace_session(app.state(), &workspace_id, archived.id).unwrap();
+        create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::Claude,
+        )
+        .unwrap();
+
+        reset_workspace_session_query_count();
+        workspace_runtime_attach(
+            workspace_id,
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(read_workspace_session_query_count(), 1);
+    }
+
+    #[test]
     fn workspace_runtime_attach_assigns_controller_and_observer_roles() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-attach-test");

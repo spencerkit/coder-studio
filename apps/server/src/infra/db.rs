@@ -17,6 +17,8 @@ const DB_SCHEMA_VERSION: i64 = 2;
 static WITH_DB_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static WITH_DB_COUNT_OWNER: Mutex<Option<ThreadId>> = Mutex::new(None);
+#[cfg(test)]
+static WORKSPACE_SESSION_QUERY_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -1050,6 +1052,8 @@ fn load_sessions_from_conn(
     workspace_id: &str,
     archived: bool,
 ) -> Result<Vec<SessionRow>, String> {
+    #[cfg(test)]
+    record_workspace_session_query_count();
     let sql = if archived {
         "SELECT workspace_id, archived_at, sort_order, payload
          FROM workspace_sessions
@@ -1076,6 +1080,8 @@ fn load_all_session_rows_from_conn(
     conn: &Connection,
     workspace_id: &str,
 ) -> Result<Vec<SessionRow>, String> {
+    #[cfg(test)]
+    record_workspace_session_query_count();
     let mut stmt = conn
         .prepare(
             "SELECT workspace_id, archived_at, sort_order, payload
@@ -1092,6 +1098,43 @@ fn load_all_session_rows_from_conn(
         items.push(row.map_err(|e| e.to_string())?);
     }
     Ok(items)
+}
+
+fn load_snapshot_sessions_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(Vec<SessionInfo>, Vec<ArchiveEntry>), String> {
+    #[cfg(test)]
+    record_workspace_session_query_count();
+    let mut stmt = conn
+        .prepare(
+            "SELECT workspace_id, archived_at, sort_order, payload
+             FROM workspace_sessions
+             WHERE workspace_id = ?1
+             ORDER BY
+                CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END ASC,
+                CASE WHEN archived_at IS NULL THEN sort_order END ASC,
+                CASE WHEN archived_at IS NULL THEN last_active_at END DESC,
+                CASE WHEN archived_at IS NULL THEN id END DESC,
+                CASE WHEN archived_at IS NOT NULL THEN archived_at END DESC,
+                CASE WHEN archived_at IS NOT NULL THEN id END DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![workspace_id], session_row_from_query)
+        .map_err(|e| e.to_string())?;
+    let mut sessions = Vec::new();
+    let mut archive = Vec::new();
+    for row in rows {
+        let row = row.map_err(|e| e.to_string())?;
+        let session = session_from_payload(&row.payload)?;
+        if row.archived_at.is_some() {
+            archive.push(archive_entry_from_session_row(row, session)?);
+        } else {
+            sessions.push(session);
+        }
+    }
+    Ok((sessions, archive))
 }
 
 fn collect_pane_session_ids(value: &Value, ids: &mut HashSet<String>) {
@@ -1121,24 +1164,22 @@ fn collect_pane_session_ids(value: &Value, ids: &mut HashSet<String>) {
     }
 }
 
-fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, String> {
-    rows.into_iter()
-        .map(|row| {
-            let session = session_from_payload(&row.payload)?;
-            let time = row
-                .archived_at
-                .and_then(|value| chrono::Local.timestamp_opt(value, 0).single())
-                .map(|dt| dt.format("%H:%M").to_string())
-                .unwrap_or_else(now_label);
-            Ok(ArchiveEntry {
-                id: archive_entry_id(session.id, row.archived_at.unwrap_or(now_ts())),
-                session_id: session.id,
-                mode: session.mode.clone(),
-                time,
-                snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
-            })
-        })
-        .collect()
+fn archive_entry_from_session_row(
+    row: SessionRow,
+    session: SessionInfo,
+) -> Result<ArchiveEntry, String> {
+    let time = row
+        .archived_at
+        .and_then(|value| chrono::Local.timestamp_opt(value, 0).single())
+        .map(|dt| dt.format("%H:%M").to_string())
+        .unwrap_or_else(now_label);
+    Ok(ArchiveEntry {
+        id: archive_entry_id(session.id, row.archived_at.unwrap_or(now_ts())),
+        session_id: session.id,
+        mode: session.mode.clone(),
+        time,
+        snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
+    })
 }
 
 fn session_row_to_history_record(
@@ -1199,11 +1240,7 @@ pub(crate) fn build_snapshot_from_conn(
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
     let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
-    let sessions = load_sessions_from_conn(conn, workspace_id, false)?
-        .into_iter()
-        .map(|row| session_from_payload(&row.payload))
-        .collect::<Result<Vec<_>, _>>()?;
-    let archive = session_rows_to_archive(load_sessions_from_conn(conn, workspace_id, true)?)?;
+    let (sessions, archive) = load_snapshot_sessions_from_conn(conn, workspace_id)?;
     let view_state = match load_view_state_from_conn(conn, workspace_id) {
         Ok(value) => value,
         Err(_) => default_view_state(sessions.first().map(|session| session.id).unwrap_or(1)),
@@ -1427,6 +1464,32 @@ pub(crate) fn reset_with_db_call_count() {
 #[cfg(test)]
 pub(crate) fn read_with_db_call_count() -> usize {
     WITH_DB_CALL_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+fn record_workspace_session_query_count() {
+    let current = std::thread::current().id();
+    if WITH_DB_COUNT_OWNER
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|owner| owner == &current))
+        .unwrap_or(false)
+    {
+        WORKSPACE_SESSION_QUERY_COUNT.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn reset_workspace_session_query_count() {
+    if let Ok(mut owner) = WITH_DB_COUNT_OWNER.lock() {
+        *owner = Some(std::thread::current().id());
+    }
+    WORKSPACE_SESSION_QUERY_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn read_workspace_session_query_count() -> usize {
+    WORKSPACE_SESSION_QUERY_COUNT.load(Ordering::SeqCst)
 }
 
 pub(crate) fn workbench_bootstrap(
