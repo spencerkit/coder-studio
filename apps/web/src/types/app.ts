@@ -438,6 +438,8 @@ export type AppSettings = AppSettingsPayload & {
   terminalCompatibilityMode: TerminalCompatibilityMode;
 };
 
+export type AppSettingsUpdater = (settings: AppSettings) => AppSettings;
+
 export type AgentCommandStatus = {
   loading: boolean;
   available: boolean | null;

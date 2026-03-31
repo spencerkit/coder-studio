@@ -17,13 +17,16 @@ const writeIntervalMs = Number.isFinite(intervalMs) && intervalMs >= 0 ? interva
 let index = 0;
 const writeNext = () => {
   if (index >= totalChunks) {
-    setTimeout(() => process.exit(0), writeIntervalMs);
+    setTimeout(() => {
+      process.exitCode = 0;
+    }, writeIntervalMs);
     return;
   }
 
-  process.stdout.write(`${prefix}-${String(index).padStart(2, '0')}\n`);
-  index += 1;
-  setTimeout(writeNext, writeIntervalMs);
+  process.stdout.write(`${prefix}-${String(index).padStart(2, '0')}\n`, () => {
+    index += 1;
+    setTimeout(writeNext, writeIntervalMs);
+  });
 };
 
 writeNext();

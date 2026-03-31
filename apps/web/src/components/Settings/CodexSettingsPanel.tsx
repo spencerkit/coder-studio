@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Locale, Translator } from "../../i18n.ts";
-import type { AppSettings } from "../../types/app.ts";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app.ts";
 import {
   formatCodexRuntimeCommand,
   patchCodexStructuredSettings,
@@ -9,7 +9,7 @@ import {
 type CodexSettingsPanelProps = {
   locale: Locale;
   settings: AppSettings;
-  onChange: (settings: AppSettings) => void;
+  onChange: (updater: AppSettingsUpdater) => void;
   t: Translator;
 };
 
@@ -193,14 +193,14 @@ export const CodexSettingsPanel = ({
   );
   const commandPreview = formatCodexRuntimeCommand(scopeProfile);
 
-  const commitSettings = (nextSettings: AppSettings) => {
-    onChange(nextSettings);
+  const commitSettings = (updater: AppSettingsUpdater) => {
+    onChange(updater);
   };
 
   const updateProfile = (
     patch: Parameters<typeof patchCodexStructuredSettings>[1],
   ) => {
-    commitSettings(patchCodexStructuredSettings(settings, patch));
+    commitSettings((current) => patchCodexStructuredSettings(current, patch));
   };
 
   return (

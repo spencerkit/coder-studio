@@ -385,6 +385,10 @@ fn merge_settings_value(current: &mut Value, patch: Value, path: &[String]) {
 fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
     let path = path.iter().map(String::as_str).collect::<Vec<_>>();
     match path.as_slice() {
+        [] => match key {
+            "agentDefaults" => "agent_defaults".to_string(),
+            _ => key.to_string(),
+        },
         ["general"] => match key {
             "terminalCompatibilityMode" => "terminal_compatibility_mode".to_string(),
             "completionNotifications" => "completion_notifications".to_string(),

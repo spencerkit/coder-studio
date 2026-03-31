@@ -8,14 +8,19 @@ import {
   applyGeneralSettingsPatch,
 } from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
-import type { AppSettings, BrowserNotificationSupport, SettingsPanel } from "../../types/app";
+import type {
+  AppSettings,
+  AppSettingsUpdater,
+  BrowserNotificationSupport,
+  SettingsPanel,
+} from "../../types/app";
 import { buildWorkspaceTabItems, getBrowserNotificationPermissionState } from "../workspace";
 
 type SettingsScreenProps = {
   locale: Locale;
   settingsDraft: AppSettings;
   onSelectLocale: (locale: Locale) => void;
-  onCommitSettings: (nextSettings: AppSettings) => void;
+  onCommitSettings: (updater: AppSettingsUpdater) => void;
   onCloseSettings: () => void;
 };
 
@@ -34,20 +39,20 @@ export const SettingsScreen = ({
   const t = useMemo(() => createTranslator(locale), [locale]);
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
 
-  const commitSettings = (nextSettings: AppSettings) => {
-    onCommitSettings(nextSettings);
+  const commitSettings = (updater: AppSettingsUpdater) => {
+    onCommitSettings(updater);
   };
 
   const onGeneralSettingsChange = (patch: Partial<AppSettings["general"]>) => {
-    commitSettings(applyGeneralSettingsPatch(settingsDraft, patch));
+    commitSettings((current) => applyGeneralSettingsPatch(current, patch));
   };
 
   const onAgentDefaultsChange = (patch: Partial<AppSettings["agentDefaults"]>) => {
-    commitSettings(applyAgentDefaultsPatch(settingsDraft, patch));
+    commitSettings((current) => applyAgentDefaultsPatch(current, patch));
   };
 
   const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
-    commitSettings(applyGeneralSettingsPatch(settingsDraft, { idlePolicy: patch }));
+    commitSettings((current) => applyGeneralSettingsPatch(current, { idlePolicy: patch }));
   };
 
   const notificationPermissionText = notificationPermissionState === "allowed"

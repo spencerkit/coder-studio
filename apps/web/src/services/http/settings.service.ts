@@ -1,5 +1,5 @@
 import type { Locale } from "../../i18n.ts";
-import type { AppSettings } from "../../types/app.ts";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app.ts";
 import {
   appSettingsPayloadEquals,
   cloneAppSettings,
@@ -38,6 +38,11 @@ export const createAppSettingsDraftStore = (initialSettings: AppSettings) => {
     },
   };
 };
+
+export const applyAppSettingsUpdater = (
+  store: ReturnType<typeof createAppSettingsDraftStore>,
+  updater: AppSettingsUpdater,
+): AppSettings => store.replace(cloneAppSettings(updater(store.get())));
 
 type HydrateConfirmedAppSettingsArgs = {
   fallbackSettings: AppSettings;

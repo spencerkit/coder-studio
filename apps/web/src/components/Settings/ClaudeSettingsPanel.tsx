@@ -4,6 +4,7 @@ import type { Locale, Translator } from "../../i18n.ts";
 import { EyeIcon, EyeOffIcon } from "../icons.tsx";
 import type {
   AppSettings,
+  AppSettingsUpdater,
   ClaudeRuntimeProfile,
 } from "../../types/app.ts";
 import {
@@ -249,7 +250,7 @@ const parseJsonObject = (value: string): { data?: Record<string, unknown>; error
 type ClaudeSettingsPanelProps = {
   locale: Locale;
   settings: AppSettings;
-  onChange: (settings: AppSettings) => void;
+  onChange: (updater: AppSettingsUpdater) => void;
   t: Translator;
 };
 
@@ -509,8 +510,10 @@ export const ClaudeSettingsPanel = ({
     () => forceClaudeExecutableDefaults(settings),
     [settings],
   );
-  const commitSettings = (nextSettings: AppSettings) => {
-    onChange(forceClaudeExecutableDefaults(nextSettings));
+  const commitSettings = (updater: AppSettingsUpdater) => {
+    onChange((current) => forceClaudeExecutableDefaults(
+      updater(forceClaudeExecutableDefaults(current)),
+    ));
   };
   const scopeProfile = normalizedSettings.claude.global;
   const settingsJson = scopeProfile.settingsJson;
@@ -523,30 +526,42 @@ export const ClaudeSettingsPanel = ({
     setGlobalConfigJsonError("");
   }, [settingsJson, globalConfigJson]);
 
-  const updateEnv = (updater: (env: Record<string, string>) => Record<string, string>) => {
-    commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
-      env: updater(scopeProfile.env),
-    }));
+  const updateEnv = (envUpdater: (env: Record<string, string>) => Record<string, string>) => {
+    commitSettings((current) => {
+      const normalizedCurrent = forceClaudeExecutableDefaults(current);
+      return patchClaudeStructuredSettings(normalizedCurrent, {
+        env: envUpdater(normalizedCurrent.claude.global.env),
+      });
+    });
   };
 
-  const updateStartupArgs = (updater: (startupArgs: string[]) => string[]) => {
-    commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
-      startupArgs: updater(scopeProfile.startupArgs),
-    }));
+  const updateStartupArgs = (startupArgsUpdater: (startupArgs: string[]) => string[]) => {
+    commitSettings((current) => {
+      const normalizedCurrent = forceClaudeExecutableDefaults(current);
+      return patchClaudeStructuredSettings(normalizedCurrent, {
+        startupArgs: startupArgsUpdater(normalizedCurrent.claude.global.startupArgs),
+      });
+    });
   };
 
   const updateSettingsJson = (path: string[], value: unknown) => {
-    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      field: "settingsJson",
-      value: setJsonPath(settingsJson, path, value),
-    }));
+    commitSettings((current) => {
+      const normalizedCurrent = forceClaudeExecutableDefaults(current);
+      return replaceClaudeAdvancedJson(normalizedCurrent, {
+        field: "settingsJson",
+        value: setJsonPath(normalizedCurrent.claude.global.settingsJson, path, value),
+      });
+    });
   };
 
   const updateGlobalConfigJson = (path: string[], value: unknown) => {
-    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      field: "globalConfigJson",
-      value: setJsonPath(globalConfigJson, path, value),
-    }));
+    commitSettings((current) => {
+      const normalizedCurrent = forceClaudeExecutableDefaults(current);
+      return replaceClaudeAdvancedJson(normalizedCurrent, {
+        field: "globalConfigJson",
+        value: setJsonPath(normalizedCurrent.claude.global.globalConfigJson, path, value),
+      });
+    });
   };
 
   const commitSettingsJsonDraft = () => {
@@ -556,10 +571,13 @@ export const ClaudeSettingsPanel = ({
       return;
     }
     setSettingsJsonError("");
-    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      field: "settingsJson",
-      value: parsed.data,
-    }));
+    commitSettings((current) => replaceClaudeAdvancedJson(
+      forceClaudeExecutableDefaults(current),
+      {
+        field: "settingsJson",
+        value: parsed.data,
+      },
+    ));
   };
 
   const commitGlobalConfigJsonDraft = () => {
@@ -569,10 +587,13 @@ export const ClaudeSettingsPanel = ({
       return;
     }
     setGlobalConfigJsonError("");
-    commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      field: "globalConfigJson",
-      value: parsed.data,
-    }));
+    commitSettings((current) => replaceClaudeAdvancedJson(
+      forceClaudeExecutableDefaults(current),
+      {
+        field: "globalConfigJson",
+        value: parsed.data,
+      },
+    ));
   };
 
   const extraEnvText = envToText(scopeProfile.env);

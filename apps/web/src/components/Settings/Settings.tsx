@@ -1,5 +1,5 @@
 import type { Locale, Translator } from "../../i18n";
-import type { AppSettings, SettingsPanel } from "../../types/app";
+import type { AppSettings, AppSettingsUpdater, SettingsPanel } from "../../types/app";
 import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
@@ -14,8 +14,8 @@ type SettingsProps = {
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
   onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
-  onClaudeSettingsChange: (settings: AppSettings) => void;
-  onCodexSettingsChange: (settings: AppSettings) => void;
+  onClaudeSettingsChange: (updater: AppSettingsUpdater) => void;
+  onCodexSettingsChange: (updater: AppSettingsUpdater) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };

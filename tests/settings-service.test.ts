@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 
 import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
 import {
+  applyGeneralSettingsPatch,
+  forceClaudeExecutableDefaults,
+  patchClaudeStructuredSettings,
+} from '../apps/web/src/shared/app/claude-settings.ts';
+import {
+  applyAppSettingsUpdater,
   createAppSettingsDraftStore,
   createPersistableAppSettings,
   createSequencedAppSettingsSaver,
@@ -56,6 +62,49 @@ test('createAppSettingsDraftStore composes new saves from the latest in-memory d
   assert.equal(localeDraft.general.locale, 'zh');
   assert.equal(mixedDraft.general.locale, 'zh');
   assert.equal(mixedDraft.general.idlePolicy.idleMinutes, 25);
+});
+
+test('applyAppSettingsUpdater preserves consecutive general changes created from stale UI snapshots', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  const disableCompletionNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        enabled: false,
+      },
+    })
+  );
+  const disableBackgroundOnlyNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        onlyWhenBackground: false,
+      },
+    })
+  );
+
+  applyAppSettingsUpdater(store, disableCompletionNotifications);
+  const updated = applyAppSettingsUpdater(store, disableBackgroundOnlyNotifications);
+
+  assert.equal(updated.general.completionNotifications.enabled, false);
+  assert.equal(updated.general.completionNotifications.onlyWhenBackground, false);
+});
+
+test('applyAppSettingsUpdater preserves general changes when a later claude update is committed', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  applyAppSettingsUpdater(store, (current) => applyGeneralSettingsPatch(current, {
+    idlePolicy: {
+      maxActive: 5,
+    },
+  }));
+  const updated = applyAppSettingsUpdater(store, (current) => (
+    patchClaudeStructuredSettings(forceClaudeExecutableDefaults(current), {
+      startupArgs: ['--verbose', '--debug'],
+    })
+  ));
+
+  assert.equal(updated.general.idlePolicy.maxActive, 5);
+  assert.deepEqual(updated.claude.global.startupArgs, ['--verbose', '--debug']);
 });
 
 test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {

@@ -2613,6 +2613,29 @@ mod tests {
     }
 
     #[test]
+    fn app_settings_update_normalizes_root_agent_defaults_camel_case_key() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "agentDefaults": {
+                        "provider": "codex"
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("camelCase root agent defaults update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert_eq!(updated.agent_defaults.provider, AgentProvider::Codex);
+    }
+
+    #[test]
     fn app_settings_update_replaces_object_fields_so_cleared_keys_stay_cleared() {
         let app = test_app();
         let authorized = authorized_request();
