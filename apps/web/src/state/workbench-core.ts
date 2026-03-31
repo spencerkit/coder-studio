@@ -11,6 +11,7 @@ export type SessionStatus = "idle" | "running" | "background" | "waiting" | "sus
 export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";
+export type AgentProvider = "claude" | "codex";
 
 export type ExecTarget =
   | { type: "native" }
@@ -41,6 +42,7 @@ export type Session = {
   title: string;
   status: SessionStatus;
   mode: SessionMode;
+  provider: AgentProvider;
   autoFeed: boolean;
   isDraft?: boolean;
   queue: QueueTask[];
@@ -48,7 +50,7 @@ export type Session = {
   stream: string;
   unread: number;
   lastActiveAt: number;
-  claudeSessionId?: string;
+  resumeId?: string;
 };
 
 export type GitStatus = {
@@ -145,12 +147,6 @@ export type Tab = {
   status: "init" | "ready";
   controller: WorkspaceControllerState;
   project?: Project;
-  agent: {
-    provider: "claude";
-    command: string;
-    useWsl: boolean;
-    distro?: string;
-  };
   git: GitStatus;
   gitChanges: GitChange[];
   worktrees: WorktreeInfo[];
@@ -229,11 +225,17 @@ export const createPaneLeaf = (sessionId: string): SessionPaneLeaf => ({
 
 export const createPaneLayout = (sessionId: string): SessionPaneNode => createPaneLeaf(sessionId);
 
-export const createSession = (index: number, mode: SessionMode = "branch", locale: Locale = getPreferredLocale()): Session => ({
+export const createSession = (
+  index: number,
+  mode: SessionMode = "branch",
+  locale: Locale = getPreferredLocale(),
+  provider: AgentProvider = "claude",
+): Session => ({
   id: createId("session"),
   title: formatSessionTitle(index, locale),
   status: "idle",
   mode,
+  provider,
   autoFeed: true,
   isDraft: false,
   queue: [],
@@ -260,11 +262,6 @@ export const createTab = (index: number, locale: Locale = getPreferredLocale()):
       fencingToken: 0,
       takeoverPending: false,
       takeoverRequestedBySelf: false,
-    },
-    agent: {
-      provider: "claude",
-      command: "claude",
-      useWsl: false
     },
     git: { branch: "—", changes: 0, lastCommit: "—" },
     gitChanges: [],

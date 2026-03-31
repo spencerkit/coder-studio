@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Locale } from "../i18n.ts";
 import type {
   AgentMessage,
+  AgentProvider,
   ExecTarget,
   FilePreview,
   GitChange,
@@ -66,13 +67,14 @@ export type BackendSession = {
   title: string;
   status: SessionStatus;
   mode: SessionMode;
+  provider: AgentProvider;
   auto_feed: boolean;
   queue: BackendQueueTask[];
   messages: BackendSessionMessage[];
   stream: string;
   unread: number;
   last_active_at: number;
-  claude_session_id?: string | null;
+  resume_id?: string | null;
 };
 
 export type BackendArchiveEntry = {
@@ -89,12 +91,13 @@ export type BackendSessionHistoryRecord = {
   session_id: number;
   title: string;
   status: SessionStatus;
+  provider: AgentProvider;
   archived: boolean;
   mounted: boolean;
   recoverable: boolean;
   last_active_at: number;
   archived_at?: number | null;
-  claude_session_id?: string | null;
+  resume_id?: string | null;
 };
 
 export type SessionHistoryRecord = {
@@ -104,12 +107,13 @@ export type SessionHistoryRecord = {
   sessionId: string;
   title: string;
   status: SessionStatus;
+  provider: AgentProvider;
   archived: boolean;
   mounted: boolean;
   recoverable: boolean;
   lastActiveAt: number;
   archivedAt?: number | null;
-  claudeSessionId?: string | null;
+  resumeId?: string | null;
 };
 
 export type SessionHistoryGroup = {
@@ -201,7 +205,7 @@ export type SessionPatch = {
   stream?: string;
   unread?: number;
   last_active_at?: number;
-  claude_session_id?: string;
+  resume_id?: string;
 };
 
 export type WorkspaceViewPatch = {
@@ -394,6 +398,22 @@ export type ClaudeTargetOverride = {
   profile: ClaudeRuntimeProfile;
 };
 
+export type CodexRuntimeProfile = {
+  executable: string;
+  extraArgs: string[];
+  model: string;
+  approvalPolicy: string;
+  sandboxMode: string;
+  webSearch: string;
+  modelReasoningEffort: string;
+  env: Record<string, string>;
+};
+
+export type CodexTargetOverride = {
+  enabled: boolean;
+  profile: CodexRuntimeProfile;
+};
+
 export type AppSettingsPayload = {
   general: {
     locale: Locale;
@@ -401,11 +421,21 @@ export type AppSettingsPayload = {
     completionNotifications: CompletionNotificationSettings;
     idlePolicy: IdlePolicy;
   };
+  agentDefaults: {
+    provider: AgentProvider;
+  };
   claude: {
     global: ClaudeRuntimeProfile;
     overrides: {
       native: ClaudeTargetOverride | null;
       wsl: ClaudeTargetOverride | null;
+    };
+  };
+  codex: {
+    global: CodexRuntimeProfile;
+    overrides: {
+      native: CodexTargetOverride | null;
+      wsl: CodexTargetOverride | null;
     };
   };
 };
@@ -419,8 +449,6 @@ export type LegacyAppSettings = {
 };
 
 export type AppSettings = AppSettingsPayload & {
-  agentProvider: Tab["agent"]["provider"];
-  agentCommand: string;
   idlePolicy: IdlePolicy;
   completionNotifications: CompletionNotificationSettings;
   terminalCompatibilityMode: TerminalCompatibilityMode;
@@ -436,7 +464,7 @@ export type AgentCommandStatus = {
 
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
-export type SettingsPanel = "general" | "claude" | "appearance";
+export type SettingsPanel = "general" | "claude" | "codex" | "appearance";
 export type ClaudeSettingsScope = "global" | "native" | "wsl";
 
 export type SettingsNavItem = {

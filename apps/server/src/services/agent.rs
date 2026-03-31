@@ -1,14 +1,16 @@
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
+use std::time::Duration;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
+const CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS: u64 = 120;
 
 #[derive(Default)]
 struct AgentLifecycleFallbackState {
     emitted_tool_started: bool,
     emitted_turn_completed: bool,
-    claude_session_id: Option<String>,
+    resume_id: Option<String>,
 }
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
@@ -29,7 +31,7 @@ fn fallback_agent_lifecycle_from_output(
     }
     state.emitted_tool_started = true;
     let data = state
-        .claude_session_id
+        .resume_id
         .as_deref()
         .map(|session_id| {
             json!({
@@ -73,36 +75,30 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
     }
 }
 
-fn escape_agent_command_part(target: &ExecTarget, value: &str) -> String {
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        return shell_escape(value);
+fn write_agent_input<F>(
+    writer: &mut dyn Write,
+    input: &str,
+    append_newline: bool,
+    codex_first_submit_pending: &mut bool,
+    mut delay: F,
+) -> Result<(), String>
+where
+    F: FnMut(Duration),
+{
+    writer
+        .write_all(input.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    if append_newline {
+        if *codex_first_submit_pending && !input.is_empty() {
+            writer.flush().map_err(|e| e.to_string())?;
+            delay(Duration::from_millis(CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS));
+        }
+        writer.write_all(b"\r").map_err(|e| e.to_string())?;
+        *codex_first_submit_pending = false;
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        crate::infra::runtime::shell_escape_windows(value)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        shell_escape(value)
-    }
-}
-
-fn build_claude_launch_command(
-    target: &ExecTarget,
-    profile: &ClaudeRuntimeProfile,
-    claude_session_id: Option<&str>,
-) -> String {
-    let mut parts = Vec::with_capacity(1 + profile.startup_args.len());
-    parts.push(escape_agent_command_part(target, &profile.executable));
-    parts.extend(
-        profile
-            .startup_args
-            .iter()
-            .map(|arg| escape_agent_command_part(target, arg)),
-    );
-    build_claude_resume_command(&parts.join(" "), claude_session_id)
+    writer.flush().map_err(|e| e.to_string())
 }
 
 fn take_agent_runtime(
@@ -129,7 +125,6 @@ pub(crate) fn stop_agent_runtime_without_status_update(
 pub(crate) struct AgentStartParams {
     pub(crate) workspace_id: String,
     pub(crate) session_id: String,
-    pub(crate) provider: String,
     pub(crate) cols: Option<u16>,
     pub(crate) rows: Option<u16>,
 }
@@ -142,7 +137,6 @@ pub(crate) fn agent_start(
     let AgentStartParams {
         workspace_id,
         session_id,
-        provider,
         cols,
         rows,
     } = params;
@@ -159,16 +153,15 @@ pub(crate) fn agent_start(
         .map_err(|_| "invalid_session_id".to_string())?;
     let (cwd, target) = workspace_access_context(state, &workspace_id)?;
     let stored_session = load_session(state, &workspace_id, session_id_num)?;
-    let effective_claude_session_id = stored_session.claude_session_id.clone();
-    let (command, claude_profile) = if provider == "claude" {
-        let settings = load_or_default_app_settings(state)?;
-        let profile = resolve_claude_runtime_profile(&settings, &target);
-        let command =
-            build_claude_launch_command(&target, &profile, effective_claude_session_id.as_deref());
-        (command, Some(profile))
-    } else {
-        return Err("unsupported_agent_provider".to_string());
+    let effective_resume_id = stored_session.resume_id.clone();
+    let settings = load_or_default_app_settings(state)?;
+    let client =
+        crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings, &target);
+    let command = match effective_resume_id.as_deref() {
+        Some(resume_id) => client.resume_command(&target, resume_id),
+        None => client.start_command(&target),
     };
+    client.ensure_workspace_hooks(&cwd, &target)?;
 
     let (program, args) = build_agent_pty_command(&target, &cwd, &command);
     #[cfg(not(target_os = "windows"))]
@@ -192,18 +185,15 @@ pub(crate) fn agent_start(
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
-    if let Some(profile) = claude_profile.as_ref() {
-        for (key, value) in &profile.env {
-            cmd.env(key, value);
-        }
-        ensure_claude_hook_settings(&cwd, &target)?;
-        let app_bin = current_app_bin_for_target(&target)?;
-        let hook_endpoint = current_hook_endpoint(&app)?;
-        cmd.env("CODER_STUDIO_APP_BIN", app_bin);
-        cmd.env("CODER_STUDIO_HOOK_ENDPOINT", hook_endpoint);
-        cmd.env("CODER_STUDIO_WORKSPACE_ID", workspace_id.clone());
-        cmd.env("CODER_STUDIO_SESSION_ID", session_id.clone());
+    for (key, value) in client.runtime_env() {
+        cmd.env(key, value);
     }
+    let app_bin = current_app_bin_for_target(&target)?;
+    let hook_endpoint = current_hook_endpoint(&app)?;
+    cmd.env("CODER_STUDIO_APP_BIN", app_bin);
+    cmd.env("CODER_STUDIO_HOOK_ENDPOINT", hook_endpoint);
+    cmd.env("CODER_STUDIO_WORKSPACE_ID", workspace_id.clone());
+    cmd.env("CODER_STUDIO_SESSION_ID", session_id.clone());
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         let raw = e.to_string();
@@ -229,6 +219,7 @@ pub(crate) fn agent_start(
         child: Mutex::new(child),
         killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
+        codex_first_submit_pending: Mutex::new(matches!(stored_session.provider, AgentProvider::Codex)),
         master: Mutex::new(pair.master),
         process_id,
         process_group_leader,
@@ -251,7 +242,7 @@ pub(crate) fn agent_start(
     let session_out = session_id.clone();
     let session_out_num = session_id_num;
     let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState {
-        claude_session_id: effective_claude_session_id.clone(),
+        resume_id: effective_resume_id.clone(),
         ..Default::default()
     }));
     let app_handle = app.clone();
@@ -380,14 +371,18 @@ pub(crate) fn agent_send(
     let runtime = agents.get(&key).ok_or("agent_not_running")?.clone();
     drop(agents);
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
+    let mut codex_first_submit_pending = runtime
+        .codex_first_submit_pending
+        .lock()
+        .map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
-        handle
-            .write_all(input.as_bytes())
-            .map_err(|e| e.to_string())?;
-        if append_newline.unwrap_or(true) {
-            handle.write_all(b"\r").map_err(|e| e.to_string())?;
-        }
-        handle.flush().map_err(|e| e.to_string())?;
+        write_agent_input(
+            &mut **handle,
+            &input,
+            append_newline.unwrap_or(true),
+            &mut codex_first_submit_pending,
+            std::thread::sleep,
+        )?;
         if let Ok(session_id_num) = session_id.parse::<u64>() {
             let _ = update_workspace_session(
                 state,
@@ -403,7 +398,7 @@ pub(crate) fn agent_send(
                     stream: None,
                     unread: None,
                     last_active_at: Some(now_ts()),
-                    claude_session_id: None,
+                    resume_id: None,
                 },
             );
         }
@@ -487,6 +482,89 @@ pub(crate) fn agent_resize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct RecordingWriter {
+        ops: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl RecordingWriter {
+        fn operations(&self) -> Vec<String> {
+            self.ops.lock().unwrap().clone()
+        }
+    }
+
+    impl Write for RecordingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let op = match buf {
+                b"\r" => "write:<CR>".to_string(),
+                other => format!("write:{}", String::from_utf8_lossy(other)),
+            };
+            self.ops.lock().unwrap().push(op);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.ops.lock().unwrap().push("flush".to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn codex_first_submit_flushes_before_enter() {
+        let mut writer = RecordingWriter::default();
+        let mut pending = true;
+        let mut delays = Vec::new();
+
+        write_agent_input(
+            &mut writer,
+            "hello",
+            true,
+            &mut pending,
+            |duration| delays.push(duration),
+        )
+        .unwrap();
+
+        assert_eq!(
+            writer.operations(),
+            vec![
+                "write:hello".to_string(),
+                "flush".to_string(),
+                "write:<CR>".to_string(),
+                "flush".to_string(),
+            ]
+        );
+        assert_eq!(
+            delays,
+            vec![Duration::from_millis(CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS)]
+        );
+        assert!(!pending);
+    }
+
+    #[test]
+    fn codex_follow_up_enter_submits_buffered_prompt_without_extra_delay() {
+        let mut writer = RecordingWriter::default();
+        let mut pending = true;
+        let mut delays = Vec::new();
+
+        write_agent_input(
+            &mut writer,
+            "",
+            true,
+            &mut pending,
+            |duration| delays.push(duration),
+        )
+        .unwrap();
+
+        assert_eq!(
+            writer.operations(),
+            vec!["write:<CR>".to_string(), "flush".to_string()]
+        );
+        assert!(delays.is_empty());
+        assert!(!pending);
+    }
 
     #[test]
     fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
@@ -507,9 +585,9 @@ mod tests {
     }
 
     #[test]
-    fn fallback_agent_lifecycle_carries_known_claude_session_id() {
+    fn fallback_agent_lifecycle_carries_known_resume_id() {
         let mut state = AgentLifecycleFallbackState {
-            claude_session_id: Some("claude-resume-known".to_string()),
+            resume_id: Some("claude-resume-known".to_string()),
             ..Default::default()
         };
 

@@ -7,7 +7,7 @@ struct ClaudeHookEnvelope {
     payload: Value,
 }
 
-fn parse_http_endpoint(endpoint: &str) -> Option<(String, u16, String)> {
+pub(crate) fn parse_http_endpoint(endpoint: &str) -> Option<(String, u16, String)> {
     let trimmed = endpoint.trim();
     let without_scheme = trimmed.strip_prefix("http://")?;
     let (host_port, path) = without_scheme
@@ -89,6 +89,32 @@ pub(crate) fn resolve_claude_runtime_profile(
         .unwrap_or_else(|| settings.claude.global.clone())
 }
 
+pub(crate) fn build_claude_start_command(
+    target: &ExecTarget,
+    profile: &ClaudeRuntimeProfile,
+) -> String {
+    let mut parts = Vec::with_capacity(1 + profile.startup_args.len());
+    parts.push(crate::services::agent_client::escape_agent_command_part(
+        target,
+        &profile.executable,
+    ));
+    parts.extend(
+        profile
+            .startup_args
+            .iter()
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
+}
+
+pub(crate) fn build_claude_resume_launch_command(
+    target: &ExecTarget,
+    profile: &ClaudeRuntimeProfile,
+    resume_id: &str,
+) -> String {
+    build_claude_resume_command(&build_claude_start_command(target, profile), Some(resume_id))
+}
+
 fn parse_http_json(stream: &TcpStream) -> Result<Value, String> {
     let cloned = stream.try_clone().map_err(|e| e.to_string())?;
     let mut reader = BufReader::new(cloned);
@@ -146,7 +172,7 @@ fn handle_claude_hook_payload(app: &AppHandle, envelope: ClaudeHookEnvelope) {
     {
         let state: State<AppState> = app.state();
         if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
-            let _ = set_session_claude_id(
+            let _ = set_session_resume_id(
                 state,
                 &envelope.workspace_id,
                 internal_session_id,
@@ -402,6 +428,7 @@ mod tests {
                 },
                 idle_policy: default_idle_policy(),
             },
+            agent_defaults: AgentDefaultsPayload::default(),
             claude: ClaudeSettingsPayload {
                 global: ClaudeRuntimeProfile {
                     executable: "claude".into(),
@@ -424,6 +451,7 @@ mod tests {
                     wsl: None,
                 },
             },
+            codex: CodexSettingsPayload::default(),
         };
 
         let resolved = resolve_claude_runtime_profile(&settings, &ExecTarget::Native);
@@ -447,6 +475,7 @@ mod tests {
                 },
                 idle_policy: default_idle_policy(),
             },
+            agent_defaults: AgentDefaultsPayload::default(),
             claude: ClaudeSettingsPayload {
                 global: ClaudeRuntimeProfile {
                     executable: "claude".into(),
@@ -460,6 +489,7 @@ mod tests {
                     wsl: None,
                 },
             },
+            codex: CodexSettingsPayload::default(),
         };
 
         let resolved = resolve_claude_runtime_profile(
@@ -469,5 +499,25 @@ mod tests {
             },
         );
         assert_eq!(resolved.executable, "claude");
+    }
+
+    #[test]
+    fn build_claude_commands_split_start_and_resume() {
+        let profile = ClaudeRuntimeProfile {
+            executable: "claude".into(),
+            startup_args: vec!["--model".into(), "claude-sonnet-4-5".into()],
+            env: BTreeMap::new(),
+            settings_json: Value::Object(Map::new()),
+            global_config_json: Value::Object(Map::new()),
+        };
+
+        assert_eq!(
+            build_claude_start_command(&ExecTarget::Native, &profile),
+            "claude --model claude-sonnet-4-5"
+        );
+        assert_eq!(
+            build_claude_resume_launch_command(&ExecTarget::Native, &profile, "resume-123"),
+            "claude --model claude-sonnet-4-5 --resume resume-123"
+        );
     }
 }

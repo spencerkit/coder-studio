@@ -126,7 +126,7 @@ const matchesWorkspaceArtifactsEvent = (tab: Tab, event: ArtifactsDirtyEvent) =>
   return pathsIntersect(workspacePath, event.path);
 };
 
-const readClaudeSessionId = (data: string) => {
+const readResumeId = (data: string) => {
   try {
     const payload = JSON.parse(data) as { session_id?: string };
     return typeof payload.session_id === "string" && payload.session_id.trim()
@@ -352,8 +352,8 @@ export const useWorkspaceTransportSync = ({
         }));
       }
 
-      const claudeSessionId = readClaudeSessionId(data);
-      if (claudeSessionId) {
+      const resumeId = readResumeId(data);
+      if (resumeId) {
         let changed = false;
         updateStateRef.current((current) => ({
           ...current,
@@ -362,20 +362,20 @@ export const useWorkspaceTransportSync = ({
             return {
               ...tab,
               sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
+                if (session.id !== session_id || session.resumeId === resumeId) {
                   return session;
                 }
                 changed = true;
                 return {
                   ...session,
-                  claudeSessionId,
+                  resumeId,
                 };
               }),
             };
           }),
         }));
         if (changed) {
-          void syncSessionPatchRef.current(workspace_id, session_id, { claude_session_id: claudeSessionId });
+          void syncSessionPatchRef.current(workspace_id, session_id, { resume_id: resumeId });
         }
       }
 

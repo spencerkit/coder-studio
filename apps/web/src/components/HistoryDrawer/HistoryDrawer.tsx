@@ -123,6 +123,7 @@ export const HistoryDrawer = ({
                               ) : null}
                             </div>
                             <div className="history-record-meta">
+                              <span>{record.provider === "codex" ? "Codex" : "Claude"}</span>
                               <span>{recordMetaLabel(record, t)}</span>
                               <span>{record.status}</span>
                               <span>{new Date(record.lastActiveAt).toLocaleString()}</span>

@@ -1,6 +1,6 @@
 import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
-import type { SessionMode } from "../../state/workbench.ts";
+import type { AgentProvider, SessionMode } from "../../state/workbench.ts";
 import type {
   BackendArchiveEntry,
   BackendSession,
@@ -131,10 +131,11 @@ const createOptionalHistoryMutationPayload = (
 export const createSession = (
   workspaceId: string,
   mode: SessionMode,
+  provider: AgentProvider,
   controller: WorkspaceControllerState,
 ) => invokeRpc<BackendSession>(
   "create_session",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { mode }),
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { mode, provider }),
 );
 
 export const updateSession = (

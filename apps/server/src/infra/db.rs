@@ -7,6 +7,7 @@ const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
 const APP_SETTINGS_ROW_ID: i64 = 1;
+const DB_SCHEMA_VERSION: i64 = 2;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -269,23 +270,167 @@ fn persist_session_row(
         "UPDATE workspace_sessions
          SET status = ?3,
              last_active_at = ?4,
-             claude_session_id = ?5,
-             payload = ?6,
-             archived_at = ?7,
-             sort_order = ?8
+             provider = ?5,
+             resume_id = ?6,
+             payload = ?7,
+             archived_at = ?8,
+             sort_order = ?9
          WHERE workspace_id = ?1 AND id = ?2",
         params![
             workspace_id,
             session.id as i64,
             status_label(&session.status),
             session.last_active_at,
-            session.claude_session_id,
+            serde_json::to_string(&session.provider).map_err(|e| e.to_string())?,
+            session.resume_id,
             payload,
             archived_at,
             sort_order,
         ],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn recreate_all_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS app_client_ui_state;
+        DROP TABLE IF EXISTS app_device_ui_state;
+        DROP TABLE IF EXISTS app_settings;
+        DROP TABLE IF EXISTS app_ui_state;
+        DROP TABLE IF EXISTS agent_lifecycle_events;
+        DROP TABLE IF EXISTS workspace_terminals;
+        DROP TABLE IF EXISTS workspace_attachments;
+        DROP TABLE IF EXISTS workspace_controller_leases;
+        DROP TABLE IF EXISTS workspace_view_state;
+        DROP TABLE IF EXISTS workspace_sessions;
+        DROP TABLE IF EXISTS workspaces;",
+    )
+}
+
+fn ensure_schema_version(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let current_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if current_version != 0 && current_version != DB_SCHEMA_VERSION {
+        recreate_all_tables(conn)?;
+    }
+    conn.pragma_update(None, "user_version", DB_SCHEMA_VERSION)?;
+    Ok(())
+}
+
+pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
+    ensure_schema_version(conn)?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            root_path TEXT NOT NULL UNIQUE,
+            source_kind TEXT NOT NULL,
+            source_value TEXT NOT NULL,
+            git_url TEXT,
+            target_json TEXT NOT NULL,
+            idle_policy_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            last_opened_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workspace_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id TEXT NOT NULL,
+            archived_at INTEGER,
+            sort_order INTEGER NOT NULL,
+            last_active_at INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            resume_id TEXT,
+            payload TEXT NOT NULL,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_active
+            ON workspace_sessions(workspace_id, archived_at, sort_order, last_active_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_provider_resume
+            ON workspace_sessions(workspace_id, provider, resume_id)
+            WHERE resume_id IS NOT NULL;
+        CREATE TABLE IF NOT EXISTS workspace_view_state (
+            workspace_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_controller_leases (
+            workspace_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_attachments (
+            attachment_id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            attached_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL,
+            detached_at INTEGER,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_terminals (
+            workspace_id TEXT NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            output TEXT NOT NULL,
+            recoverable INTEGER NOT NULL DEFAULT 1,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (workspace_id, terminal_id),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+            workspace_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            seq INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            source_event TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (workspace_id, session_id, seq),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS app_ui_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_device_ui_state (
+            device_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_client_ui_state (
+            device_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (device_id, client_id)
+        );",
+    )?;
+    let payload = serde_json::to_string(&default_ui_state()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_UI_STATE_ROW_ID, payload, now_ts()],
+    )?;
+    let app_settings_payload =
+        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
+    )?;
+    conn.execute(
+        "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",
+        params![now_ts()],
+    )?;
     Ok(())
 }
 
@@ -997,12 +1142,13 @@ fn session_row_to_history_record(
         session_id: session.id,
         title: session.title,
         status: session.status.clone(),
+        provider: session.provider,
         archived,
         mounted,
         recoverable: archived || !mounted,
         last_active_at: session.last_active_at,
         archived_at: row.archived_at,
-        claude_session_id: session.claude_session_id,
+        resume_id: session.resume_id,
     })
 }
 
@@ -1037,33 +1183,10 @@ fn build_snapshot_from_conn(
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
     let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
-    let mut sessions = load_sessions_from_conn(conn, workspace_id, false)?
+    let sessions = load_sessions_from_conn(conn, workspace_id, false)?
         .into_iter()
         .map(|row| session_from_payload(&row.payload))
         .collect::<Result<Vec<_>, _>>()?;
-    if sessions.is_empty() {
-        let template = SessionInfo {
-            id: 0,
-            title: String::new(),
-            status: SessionStatus::Idle,
-            mode: SessionMode::Branch,
-            auto_feed: true,
-            queue: Vec::new(),
-            messages: vec![SessionMessage {
-                id: format!("msg-{}", random_hex(6)?),
-                role: SessionMessageRole::System,
-                content: format!("{} ready", workspace.title),
-                time: now_label(),
-            }],
-            stream: String::new(),
-            unread: 0,
-            last_active_at: now_ts(),
-            claude_session_id: None,
-        };
-        let session = create_workspace_session_from_template(conn, workspace_id, template)?;
-        sessions.push(session.clone());
-        save_view_state_to_conn(conn, workspace_id, &default_view_state(session.id))?;
-    }
     let archive = session_rows_to_archive(load_sessions_from_conn(conn, workspace_id, true)?)?;
     let view_state = match load_view_state_from_conn(conn, workspace_id) {
         Ok(value) => value,
@@ -1220,121 +1343,6 @@ fn remove_workspace_from_all_ui_state_scopes(
     load_ui_state_from_conn(conn, device_id, client_id)
 }
 
-pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS workspaces (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            root_path TEXT NOT NULL UNIQUE,
-            source_kind TEXT NOT NULL,
-            source_value TEXT NOT NULL,
-            git_url TEXT,
-            target_json TEXT NOT NULL,
-            idle_policy_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            last_opened_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS workspace_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id TEXT NOT NULL,
-            archived_at INTEGER,
-            sort_order INTEGER NOT NULL,
-            last_active_at INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            claude_session_id TEXT,
-            payload TEXT NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_active
-            ON workspace_sessions(workspace_id, archived_at, sort_order, last_active_at DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_claude
-            ON workspace_sessions(workspace_id, claude_session_id)
-            WHERE claude_session_id IS NOT NULL;
-        CREATE TABLE IF NOT EXISTS workspace_view_state (
-            workspace_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_controller_leases (
-            workspace_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_attachments (
-            attachment_id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL,
-            device_id TEXT NOT NULL,
-            client_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            attached_at INTEGER NOT NULL,
-            last_seen_at INTEGER NOT NULL,
-            detached_at INTEGER,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_terminals (
-            workspace_id TEXT NOT NULL,
-            terminal_id INTEGER NOT NULL,
-            output TEXT NOT NULL,
-            recoverable INTEGER NOT NULL DEFAULT 1,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (workspace_id, terminal_id),
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
-            workspace_id TEXT NOT NULL,
-            session_id TEXT NOT NULL,
-            seq INTEGER NOT NULL,
-            kind TEXT NOT NULL,
-            source_event TEXT NOT NULL,
-            data TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            PRIMARY KEY (workspace_id, session_id, seq),
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS app_ui_state (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_settings (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_device_ui_state (
-            device_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_client_ui_state (
-            device_id TEXT NOT NULL,
-            client_id TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (device_id, client_id)
-        );",
-    )?;
-    let payload = serde_json::to_string(&default_ui_state()).unwrap_or_else(|_| "{}".to_string());
-    conn.execute(
-        "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
-        params![APP_UI_STATE_ROW_ID, payload, now_ts()],
-    )?;
-    let app_settings_payload =
-        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
-    conn.execute(
-        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
-        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
-    )?;
-    conn.execute(
-        "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",
-        params![now_ts()],
-    )?;
-    Ok(())
-}
-
 pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
@@ -1466,14 +1474,15 @@ fn create_workspace_session_from_template(
 ) -> Result<SessionInfo, String> {
     let sort_order = min_active_sort_order(conn, workspace_id)? - 1;
     conn.execute(
-        "INSERT INTO workspace_sessions (workspace_id, archived_at, sort_order, last_active_at, status, claude_session_id, payload)
-         VALUES (?1, NULL, ?2, ?3, ?4, ?5, '')",
+        "INSERT INTO workspace_sessions (workspace_id, archived_at, sort_order, last_active_at, status, provider, resume_id, payload)
+         VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, '')",
         params![
             workspace_id,
             sort_order,
             template.last_active_at,
             status_label(&template.status),
-            template.claude_session_id,
+            serde_json::to_string(&template.provider).map_err(|e| e.to_string())?,
+            template.resume_id,
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -1489,6 +1498,7 @@ pub(crate) fn create_workspace_session(
     state: State<'_, AppState>,
     workspace_id: &str,
     mode: SessionMode,
+    provider: AgentProvider,
 ) -> Result<SessionInfo, String> {
     with_db(state, |conn| {
         let workspace = load_workspace_row(conn, workspace_id)?;
@@ -1515,6 +1525,7 @@ pub(crate) fn create_workspace_session(
             title: String::new(),
             status,
             mode,
+            provider,
             auto_feed: true,
             queue: Vec::new(),
             messages: vec![SessionMessage {
@@ -1526,7 +1537,7 @@ pub(crate) fn create_workspace_session(
             stream: String::new(),
             unread: 0,
             last_active_at: now_ts(),
-            claude_session_id: None,
+            resume_id: None,
         };
         create_workspace_session_from_template(conn, workspace_id, template)
     })
@@ -1568,8 +1579,8 @@ pub(crate) fn update_workspace_session(
         if let Some(last_active_at) = patch.last_active_at {
             session.last_active_at = last_active_at;
         }
-        if let Some(claude_session_id) = patch.claude_session_id {
-            session.claude_session_id = Some(claude_session_id);
+        if let Some(resume_id) = patch.resume_id {
+            session.resume_id = Some(resume_id);
         }
         persist_session_row(
             conn,
@@ -2007,16 +2018,16 @@ pub(crate) fn set_session_status_if_not_archived(
     })
 }
 
-pub(crate) fn set_session_claude_id(
+pub(crate) fn set_session_resume_id(
     state: State<'_, AppState>,
     workspace_id: &str,
     session_id: u64,
-    claude_session_id: String,
+    resume_id: String,
 ) -> Result<(), String> {
     with_db(state, |conn| {
         let row = load_session_row(conn, workspace_id, session_id)?;
         let mut session = session_from_payload(&row.payload)?;
-        session.claude_session_id = Some(claude_session_id);
+        session.resume_id = Some(resume_id);
         persist_session_row(
             conn,
             workspace_id,

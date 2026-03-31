@@ -55,6 +55,18 @@ export type AgentRuntimeRefs = {
 
 export const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
 
+export const resolveAgentStartupQuietMs = (provider: Session["provider"]) => (
+  provider === "codex"
+    ? Math.max(AGENT_STARTUP_QUIET_MS, 1200)
+    : AGENT_STARTUP_QUIET_MS
+);
+
+export const resolveAgentStartupDiscoveryMs = (provider: Session["provider"]) => (
+  provider === "codex"
+    ? Math.max(AGENT_STARTUP_DISCOVERY_MS, 3000)
+    : AGENT_STARTUP_DISCOVERY_MS
+);
+
 export const isAgentRuntimeRunning = (
   refs: AgentRuntimeRefs,
   tabId: string,
@@ -429,11 +441,30 @@ export const noteAgentStartupLifecycle = (
   }
 };
 
+export const shouldReleaseAgentStartupGate = (
+  state: Pick<AgentStartupState, "startedAt" | "lastEventAt" | "sawOutput" | "sawReady" | "exited">,
+  now: number,
+  provider: Session["provider"],
+) => {
+  if (state.exited) return true;
+  if (state.sawReady && now - state.lastEventAt >= 120) return true;
+
+  if (provider !== "codex") {
+    const quietMs = resolveAgentStartupQuietMs(provider);
+    const discoveryMs = resolveAgentStartupDiscoveryMs(provider);
+    if (state.sawOutput && now - state.lastEventAt >= quietMs) return true;
+    if (!state.sawOutput && now - state.startedAt >= discoveryMs) return true;
+  }
+
+  return now - state.startedAt >= AGENT_STARTUP_MAX_WAIT_MS;
+};
+
 export const waitForAgentStartupDrain = async (
   refs: AgentRuntimeRefs,
   tabId: string,
   sessionId: string,
   token: number,
+  provider: Session["provider"],
 ) => {
   const key = agentRuntimeKey(tabId, sessionId);
   while (true) {
@@ -441,23 +472,7 @@ export const waitForAgentStartupDrain = async (
     if (!current || current.token !== token) return;
 
     const now = Date.now();
-    if (current.exited) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (current.sawReady && now - current.lastEventAt >= 120) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (current.sawOutput && now - current.lastEventAt >= AGENT_STARTUP_QUIET_MS) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (!current.sawOutput && now - current.startedAt >= AGENT_STARTUP_DISCOVERY_MS) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (now - current.startedAt >= AGENT_STARTUP_MAX_WAIT_MS) {
+    if (shouldReleaseAgentStartupGate(current, now, provider)) {
       clearAgentStartupGate(refs, tabId, sessionId, token);
       return;
     }

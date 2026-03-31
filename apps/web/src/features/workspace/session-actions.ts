@@ -75,12 +75,20 @@ export const createWorkspaceSessionActions = ({
     branch: tab.git.branch,
   }).messages;
 
-  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => createDraftSessionPlaceholder({
-    locale,
-    workspacePath: tab.project?.path ?? t("noWorkspace"),
-    branch: tab.git.branch,
-    mode,
-  });
+  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => {
+    const inheritedProvider = tab.sessions.find((session) => session.id === tab.activeSessionId)?.provider
+      ?? appSettings.agentDefaults.provider;
+    const draft = createDraftSessionPlaceholder({
+      locale,
+      workspacePath: tab.project?.path ?? t("noWorkspace"),
+      branch: tab.git.branch,
+      mode,
+    });
+    return {
+      ...draft,
+      provider: inheritedProvider,
+    };
+  };
 
   const controllerForTab = (tabId: string) =>
     stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
@@ -117,7 +125,12 @@ export const createWorkspaceSessionActions = ({
 
     let nextSession: Session | null = null;
     const created = await withServiceFallback<BackendSession | null>(
-      () => createSessionRequest(tabId, currentSession.mode, currentTab.controller),
+      () => createSessionRequest(
+        tabId,
+        currentSession.mode,
+        currentSession.provider,
+        currentTab.controller,
+      ),
       null,
     );
     if (created) {
@@ -130,13 +143,15 @@ export const createWorkspaceSessionActions = ({
     updateTab(tabId, (tab) => {
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
-      const baseSession = nextSession ?? createSession(tab.sessions.length + 1, draftSession.mode, locale);
+      const baseSession = nextSession
+        ?? createSession(tab.sessions.length + 1, draftSession.mode, locale, draftSession.provider);
       const title = sessionTitleFromInput(firstInput) || draftSession.title || formatSessionTitle(baseSession.id, locale);
       const preparedSession: Session = {
         ...baseSession,
         title,
         status: baseSession.status === "queued" ? "queued" : "idle",
         mode: draftSession.mode,
+        provider: draftSession.provider,
         autoFeed: draftSession.autoFeed,
         isDraft: false,
         queue: draftSession.queue,
@@ -144,7 +159,7 @@ export const createWorkspaceSessionActions = ({
         stream: draftSession.stream,
         unread: 0,
         lastActiveAt: Date.now(),
-        claudeSessionId: baseSession.claudeSessionId,
+        resumeId: baseSession.resumeId,
       };
       const remainingSessions = tab.sessions.filter((session) => session.id !== sessionId);
       tabSnapshot = {
@@ -168,8 +183,9 @@ export const createWorkspaceSessionActions = ({
     });
 
     if (!tabSnapshot || !sessionSnapshot) return null;
-    if (titlePatch) {
-      await syncSessionPatch(tabId, titlePatch.sessionId, { title: titlePatch.title });
+    const pendingTitlePatch = titlePatch;
+    if (pendingTitlePatch) {
+      await syncSessionPatch(tabId, pendingTitlePatch.sessionId, { title: pendingTitlePatch.title });
     }
     return { tab: tabSnapshot, session: sessionSnapshot };
   };

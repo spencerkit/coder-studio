@@ -4,6 +4,7 @@ import { createTranslator, type Locale } from "../../i18n";
 import { Settings } from "../../components/Settings";
 import { TopBar } from "../../components/TopBar";
 import {
+  applyAgentDefaultsPatch,
   applyGeneralSettingsPatch,
 } from "../../shared/app/claude-settings.ts";
 import { workbenchState } from "../../state/workbench";
@@ -41,6 +42,10 @@ export const SettingsScreen = ({
     commitSettings(applyGeneralSettingsPatch(settingsDraft, patch));
   };
 
+  const onAgentDefaultsChange = (patch: Partial<AppSettings["agentDefaults"]>) => {
+    commitSettings(applyAgentDefaultsPatch(settingsDraft, patch));
+  };
+
   const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
     commitSettings(applyGeneralSettingsPatch(settingsDraft, { idlePolicy: patch }));
   };
@@ -74,8 +79,10 @@ export const SettingsScreen = ({
         notificationPermissionText={notificationPermissionText}
         onSettingsPanelChange={setActiveSettingsPanel}
         onGeneralSettingsChange={onGeneralSettingsChange}
+        onAgentDefaultsChange={onAgentDefaultsChange}
         onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
         onClaudeSettingsChange={commitSettings}
+        onCodexSettingsChange={commitSettings}
         onSelectLocale={onSelectLocale}
         t={t}
       />

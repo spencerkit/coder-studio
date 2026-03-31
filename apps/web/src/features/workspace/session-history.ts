@@ -14,12 +14,13 @@ export const mapSessionHistoryRecord = (
   sessionId: String(record.session_id),
   title: record.title,
   status: record.status,
+  provider: record.provider,
   archived: record.archived,
   mounted: record.mounted,
   recoverable: record.recoverable,
   lastActiveAt: record.last_active_at,
   archivedAt: record.archived_at ?? null,
-  claudeSessionId: record.claude_session_id ?? null,
+  resumeId: record.resume_id ?? null,
 });
 
 export const groupSessionHistory = (

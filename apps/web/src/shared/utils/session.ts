@@ -33,6 +33,7 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
     : (source.title || existing?.title || formatSessionTitle(source.id, locale)),
   status: source.status,
   mode: source.mode,
+  provider: source.provider,
   autoFeed: source.auto_feed,
   isDraft: false,
   queue: source.queue.map((task) => ({
@@ -49,11 +50,11 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
         content: formatSessionReadyMessage(source.id, locale),
         time: nowLabel()
       }
-    ]),
+  ]),
   stream: source.stream ?? existing?.stream ?? "",
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
-  claudeSessionId: source.claude_session_id ?? existing?.claudeSessionId
+  resumeId: source.resume_id ?? existing?.resumeId
 });
 
 type CreateDraftSessionArgs = {
@@ -61,6 +62,7 @@ type CreateDraftSessionArgs = {
   workspacePath: string;
   branch?: string;
   mode?: SessionMode;
+  provider?: Session["provider"];
   existing?: Session;
 };
 
@@ -69,6 +71,7 @@ export const createDraftSessionPlaceholder = ({
   workspacePath,
   branch,
   mode = "branch",
+  provider,
   existing,
 }: CreateDraftSessionArgs): Session => {
   const t = createTranslator(locale);
@@ -79,6 +82,7 @@ export const createDraftSessionPlaceholder = ({
     title: existing?.title ?? t("draftSessionTitle"),
     status: existing?.status ?? "idle",
     mode: existing?.mode ?? mode,
+    provider: existing?.provider ?? provider ?? "claude",
     autoFeed: existing?.autoFeed ?? true,
     isDraft: true,
     queue: existing?.queue ?? [],
@@ -101,7 +105,7 @@ export const createDraftSessionPlaceholder = ({
     stream: existing?.stream ?? "",
     unread: existing?.unread ?? 0,
     lastActiveAt: existing?.lastActiveAt ?? Date.now(),
-    claudeSessionId: existing?.claudeSessionId,
+    resumeId: existing?.resumeId,
   };
 };
 

@@ -7,6 +7,8 @@ import type {
   ClaudeRuntimeProfile,
   ClaudeTargetOverride,
   CompletionNotificationSettings,
+  CodexRuntimeProfile,
+  CodexTargetOverride,
   LegacyAppSettings,
   TerminalCompatibilityMode,
 } from "../../types/app.ts";
@@ -14,6 +16,7 @@ import type {
 const DEFAULT_LOCALE: Locale = "en";
 const DEFAULT_TERMINAL_COMPATIBILITY_MODE: TerminalCompatibilityMode = "standard";
 const DEFAULT_CLAUDE_EXECUTABLE = "claude";
+const DEFAULT_CODEX_EXECUTABLE = "codex";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -121,12 +124,39 @@ const cloneClaudeTargetOverride = (
     : null
 );
 
+const cloneCodexRuntimeProfile = (
+  profile: CodexRuntimeProfile,
+): CodexRuntimeProfile => ({
+  executable: profile.executable,
+  extraArgs: [...profile.extraArgs],
+  model: profile.model,
+  approvalPolicy: profile.approvalPolicy,
+  sandboxMode: profile.sandboxMode,
+  webSearch: profile.webSearch,
+  modelReasoningEffort: profile.modelReasoningEffort,
+  env: { ...profile.env },
+});
+
+const cloneCodexTargetOverride = (
+  override: CodexTargetOverride | null,
+): CodexTargetOverride | null => (
+  override
+    ? {
+        enabled: override.enabled,
+        profile: cloneCodexRuntimeProfile(override.profile),
+      }
+    : null
+);
+
 const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPayload => ({
   general: {
     locale: settings.general.locale,
     terminalCompatibilityMode: settings.general.terminalCompatibilityMode,
     completionNotifications: cloneCompletionNotifications(settings.general.completionNotifications),
     idlePolicy: cloneIdlePolicy(settings.general.idlePolicy),
+  },
+  agentDefaults: {
+    provider: settings.agentDefaults.provider,
   },
   claude: {
     global: cloneClaudeRuntimeProfile(settings.claude.global),
@@ -135,12 +165,17 @@ const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPaylo
       wsl: cloneClaudeTargetOverride(settings.claude.overrides.wsl),
     },
   },
+  codex: {
+    global: cloneCodexRuntimeProfile(settings.codex.global),
+    overrides: {
+      native: cloneCodexTargetOverride(settings.codex.overrides.native),
+      wsl: cloneCodexTargetOverride(settings.codex.overrides.wsl),
+    },
+  },
 });
 
 const syncCompatibilityFields = (settings: AppSettingsPayload): AppSettings => ({
   ...cloneAppSettingsPayload(settings),
-  agentProvider: "claude",
-  agentCommand: formatClaudeRuntimeCommand(settings.claude.global),
   idlePolicy: cloneIdlePolicy(settings.general.idlePolicy),
   completionNotifications: cloneCompletionNotifications(settings.general.completionNotifications),
   terminalCompatibilityMode: settings.general.terminalCompatibilityMode,
@@ -158,6 +193,50 @@ const defaultClaudeRuntimeProfile = (): ClaudeRuntimeProfile => ({
   settingsJson: {},
   globalConfigJson: {},
 });
+
+const defaultCodexRuntimeProfile = (): CodexRuntimeProfile => ({
+  executable: DEFAULT_CODEX_EXECUTABLE,
+  extraArgs: [],
+  model: "",
+  approvalPolicy: "",
+  sandboxMode: "",
+  webSearch: "",
+  modelReasoningEffort: "",
+  env: {},
+});
+
+const pickCodexProfileValue = (overrideValue: string, fallbackValue: string) => (
+  overrideValue.trim() || fallbackValue
+);
+
+const formatCodexTomlString = (value: string) => JSON.stringify(value.trim());
+
+const buildCodexConfigOverrideArgs = (
+  profile: Pick<
+    CodexRuntimeProfile,
+    "model" | "approvalPolicy" | "sandboxMode" | "webSearch" | "modelReasoningEffort"
+  >,
+): string[] => {
+  const parts: string[] = [];
+
+  const append = (key: string, value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+    parts.push("--config", `${key}=${formatCodexTomlString(trimmed)}`);
+  };
+
+  append("model", profile.model);
+  append("approval_policy", profile.approvalPolicy);
+  append("sandbox_mode", profile.sandboxMode);
+  append("web_search", profile.webSearch);
+  append("model_reasoning_effort", profile.modelReasoningEffort);
+
+  return parts;
+};
+
+const buildCodexFeatureArgs = (): string[] => ["--enable", "codex_hooks"];
 
 const mergeJsonObjects = (
   base: Record<string, unknown>,
@@ -233,6 +312,58 @@ const normalizeClaudeTargetOverride = (
   return {
     enabled: readBoolean(value.enabled, false),
     profile: normalizeClaudeRuntimeProfile(value.profile, fallback),
+  };
+};
+
+const normalizeCodexRuntimeProfile = (
+  value: unknown,
+  fallback: CodexRuntimeProfile,
+): CodexRuntimeProfile => {
+  const source = isRecord(value) ? value : {};
+  const executable = typeof source.executable === "string" && source.executable.trim()
+    ? source.executable
+    : fallback.executable;
+  const extraArgsSource = source.extraArgs ?? source.extra_args;
+  const extraArgs = Array.isArray(extraArgsSource)
+    ? extraArgsSource.filter((entry): entry is string => typeof entry === "string")
+    : [...fallback.extraArgs];
+
+  return {
+    executable,
+    extraArgs,
+    model: typeof source.model === "string" ? source.model : fallback.model,
+    approvalPolicy: typeof (source.approvalPolicy ?? source.approval_policy) === "string"
+      ? String(source.approvalPolicy ?? source.approval_policy)
+      : fallback.approvalPolicy,
+    sandboxMode: typeof (source.sandboxMode ?? source.sandbox_mode) === "string"
+      ? String(source.sandboxMode ?? source.sandbox_mode)
+      : fallback.sandboxMode,
+    webSearch: typeof (source.webSearch ?? source.web_search) === "string"
+      ? String(source.webSearch ?? source.web_search)
+      : fallback.webSearch,
+    modelReasoningEffort: typeof (
+      source.modelReasoningEffort ?? source.model_reasoning_effort
+    ) === "string"
+      ? String(source.modelReasoningEffort ?? source.model_reasoning_effort)
+      : fallback.modelReasoningEffort,
+    env: normalizeEnv(source.env ?? fallback.env),
+  };
+};
+
+const normalizeCodexTargetOverride = (
+  value: unknown,
+  fallback: CodexRuntimeProfile,
+): CodexTargetOverride | null => {
+  if (value === null) {
+    return null;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    enabled: readBoolean(value.enabled, false),
+    profile: normalizeCodexRuntimeProfile(value.profile, fallback),
   };
 };
 
@@ -316,6 +447,17 @@ export const formatClaudeRuntimeCommand = (profile: ClaudeRuntimeProfile): strin
     .join(" ")
 );
 
+export const formatCodexRuntimeCommand = (profile: CodexRuntimeProfile): string => (
+  [
+    profile.executable.trim(),
+    ...profile.extraArgs.map((arg) => arg.trim()).filter(Boolean),
+    ...buildCodexConfigOverrideArgs(profile),
+    ...buildCodexFeatureArgs(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+);
+
 export const formatClaudeLaunchPreview = (
   profile: Pick<ClaudeRuntimeProfile, "startupArgs">,
 ): string => (
@@ -347,8 +489,18 @@ export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
       pressure: true,
     },
   },
+  agentDefaults: {
+    provider: "claude",
+  },
   claude: {
     global: defaultClaudeRuntimeProfile(),
+    overrides: {
+      native: null,
+      wsl: null,
+    },
+  },
+  codex: {
+    global: defaultCodexRuntimeProfile(),
     overrides: {
       native: null,
       wsl: null,
@@ -359,7 +511,9 @@ export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
 export const toAppSettingsPayload = (settings: AppSettings): AppSettingsPayload => (
   cloneAppSettingsPayload({
     general: settings.general,
+    agentDefaults: settings.agentDefaults,
     claude: settings.claude,
+    codex: settings.codex,
   })
 );
 
@@ -376,7 +530,7 @@ export const normalizeAppSettings = (
     return cloneAppSettings(fallback);
   }
 
-  if (!("general" in value) && !("claude" in value)) {
+  if (!("general" in value) && !("claude" in value) && !("codex" in value)) {
     return mergeLegacySettingsIntoAppSettings(
       fallback,
       value as LegacyAppSettings,
@@ -385,9 +539,14 @@ export const normalizeAppSettings = (
 
   const generalSource = isRecord(value.general) ? value.general : {};
   const claudeSource = isRecord(value.claude) ? value.claude : {};
+  const codexSource = isRecord(value.codex) ? value.codex : {};
   const globalProfile = normalizeClaudeRuntimeProfile(
     claudeSource.global,
     fallbackPayload.claude.global,
+  );
+  const globalCodexProfile = normalizeCodexRuntimeProfile(
+    codexSource.global,
+    fallbackPayload.codex.global,
   );
 
   return syncCompatibilityFields({
@@ -406,6 +565,12 @@ export const normalizeAppSettings = (
         fallbackPayload.general.idlePolicy,
       ),
     },
+    agentDefaults: {
+      provider: isRecord(value.agentDefaults)
+        && value.agentDefaults.provider === "codex"
+        ? "codex"
+        : fallbackPayload.agentDefaults.provider,
+    },
     claude: {
       global: globalProfile,
       overrides: {
@@ -416,6 +581,19 @@ export const normalizeAppSettings = (
         wsl: normalizeClaudeTargetOverride(
           isRecord(claudeSource.overrides) ? claudeSource.overrides.wsl : null,
           globalProfile,
+        ),
+      },
+    },
+    codex: {
+      global: globalCodexProfile,
+      overrides: {
+        native: normalizeCodexTargetOverride(
+          isRecord(codexSource.overrides) ? codexSource.overrides.native : null,
+          globalCodexProfile,
+        ),
+        wsl: normalizeCodexTargetOverride(
+          isRecord(codexSource.overrides) ? codexSource.overrides.wsl : null,
+          globalCodexProfile,
         ),
       },
     },
@@ -491,6 +669,18 @@ export const applyGeneralSettingsPatch = (
   return syncCompatibilityFields(toAppSettingsPayload(next));
 };
 
+export const applyAgentDefaultsPatch = (
+  settings: AppSettings,
+  patch: Partial<AppSettings["agentDefaults"]>,
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  next.agentDefaults = {
+    ...next.agentDefaults,
+    ...patch,
+  };
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
 export const resolveClaudeRuntimeProfile = (
   settings: AppSettings,
   target: ExecTarget,
@@ -505,6 +695,62 @@ export const resolveClaudeRuntimeProfile = (
 
   return mergeClaudeRuntimeProfiles(settings.claude.global, override.profile);
 };
+
+export const resolveCodexRuntimeProfile = (
+  settings: AppSettings,
+  target: ExecTarget,
+): CodexRuntimeProfile => {
+  const override = target.type === "native"
+    ? settings.codex.overrides.native
+    : settings.codex.overrides.wsl;
+
+  if (!override?.enabled) {
+    return cloneCodexRuntimeProfile(settings.codex.global);
+  }
+
+  return {
+    executable: override.profile.executable.trim() || settings.codex.global.executable,
+    extraArgs: override.profile.extraArgs.length > 0
+      ? [...override.profile.extraArgs]
+      : [...settings.codex.global.extraArgs],
+    model: pickCodexProfileValue(override.profile.model, settings.codex.global.model),
+    approvalPolicy: pickCodexProfileValue(
+      override.profile.approvalPolicy,
+      settings.codex.global.approvalPolicy,
+    ),
+    sandboxMode: pickCodexProfileValue(
+      override.profile.sandboxMode,
+      settings.codex.global.sandboxMode,
+    ),
+    webSearch: pickCodexProfileValue(
+      override.profile.webSearch,
+      settings.codex.global.webSearch,
+    ),
+    modelReasoningEffort: pickCodexProfileValue(
+      override.profile.modelReasoningEffort,
+      settings.codex.global.modelReasoningEffort,
+    ),
+    env: {
+      ...settings.codex.global.env,
+      ...override.profile.env,
+    },
+  };
+};
+
+export const resolveAgentRuntimeCommand = (
+  settings: AppSettings,
+  target: ExecTarget,
+  provider: AppSettings["agentDefaults"]["provider"],
+): string => (
+  provider === "codex"
+    ? formatCodexRuntimeCommand(resolveCodexRuntimeProfile(settings, target))
+    : formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target))
+);
+
+export const resolveDefaultAgentRuntimeCommand = (
+  settings: AppSettings,
+  target: ExecTarget,
+): string => resolveAgentRuntimeCommand(settings, target, settings.agentDefaults.provider);
 
 export const getIdlePolicySyncWorkspaceIds = (
   tabs: ReadonlyArray<{ id: string; idlePolicy: AppSettings["idlePolicy"] }>,
@@ -556,6 +802,24 @@ const ensureClaudeScopeOverride = (
   return created;
 };
 
+const ensureCodexScopeOverride = (
+  settings: AppSettings,
+  scope: Exclude<ClaudeSettingsScope, "global">,
+): CodexTargetOverride => {
+  const key = getScopeOverrideKey(scope);
+  const existing = settings.codex.overrides[key];
+  if (existing) {
+    return existing;
+  }
+
+  const created: CodexTargetOverride = {
+    enabled: false,
+    profile: cloneCodexRuntimeProfile(settings.codex.global),
+  };
+  settings.codex.overrides[key] = created;
+  return created;
+};
+
 export const getClaudeScopeProfile = (
   settings: AppSettings,
   scope: ClaudeSettingsScope,
@@ -568,6 +832,18 @@ export const getClaudeScopeProfile = (
       )
 );
 
+export const getCodexScopeProfile = (
+  settings: AppSettings,
+  scope: ClaudeSettingsScope,
+): CodexRuntimeProfile => (
+  scope === "global"
+    ? cloneCodexRuntimeProfile(settings.codex.global)
+    : cloneCodexRuntimeProfile(
+        settings.codex.overrides[getScopeOverrideKey(scope)]?.profile
+        ?? settings.codex.global,
+      )
+);
+
 export const isClaudeScopeOverrideEnabled = (
   settings: AppSettings,
   scope: ClaudeSettingsScope,
@@ -577,6 +853,15 @@ export const isClaudeScopeOverrideEnabled = (
     : Boolean(settings.claude.overrides[getScopeOverrideKey(scope)]?.enabled)
 );
 
+export const isCodexScopeOverrideEnabled = (
+  settings: AppSettings,
+  scope: ClaudeSettingsScope,
+): boolean => (
+  scope === "global"
+    ? true
+    : Boolean(settings.codex.overrides[getScopeOverrideKey(scope)]?.enabled)
+);
+
 export const setClaudeScopeOverrideEnabled = (
   settings: AppSettings,
   scope: Exclude<ClaudeSettingsScope, "global">,
@@ -584,6 +869,17 @@ export const setClaudeScopeOverrideEnabled = (
 ): AppSettings => {
   const next = cloneAppSettings(settings);
   const override = ensureClaudeScopeOverride(next, scope);
+  override.enabled = enabled;
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
+export const setCodexScopeOverrideEnabled = (
+  settings: AppSettings,
+  scope: Exclude<ClaudeSettingsScope, "global">,
+  enabled: boolean,
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const override = ensureCodexScopeOverride(next, scope);
   override.enabled = enabled;
   return syncCompatibilityFields(toAppSettingsPayload(next));
 };
@@ -607,6 +903,53 @@ export const patchClaudeStructuredSettings = (
   }
   if (patch.startupArgs) {
     profile.startupArgs = [...patch.startupArgs];
+  }
+  if (patch.env) {
+    profile.env = { ...patch.env };
+  }
+
+  return syncCompatibilityFields(toAppSettingsPayload(next));
+};
+
+export const patchCodexStructuredSettings = (
+  settings: AppSettings,
+  patch: {
+    scope: ClaudeSettingsScope;
+    executable?: string;
+    extraArgs?: string[];
+    model?: string;
+    approvalPolicy?: string;
+    sandboxMode?: string;
+    webSearch?: string;
+    modelReasoningEffort?: string;
+    env?: Record<string, string>;
+  },
+): AppSettings => {
+  const next = cloneAppSettings(settings);
+  const profile = patch.scope === "global"
+    ? next.codex.global
+    : ensureCodexScopeOverride(next, patch.scope).profile;
+
+  if (typeof patch.executable === "string") {
+    profile.executable = patch.executable.trim() || profile.executable;
+  }
+  if (patch.extraArgs) {
+    profile.extraArgs = [...patch.extraArgs];
+  }
+  if (typeof patch.model === "string") {
+    profile.model = patch.model;
+  }
+  if (typeof patch.approvalPolicy === "string") {
+    profile.approvalPolicy = patch.approvalPolicy;
+  }
+  if (typeof patch.sandboxMode === "string") {
+    profile.sandboxMode = patch.sandboxMode;
+  }
+  if (typeof patch.webSearch === "string") {
+    profile.webSearch = patch.webSearch;
+  }
+  if (typeof patch.modelReasoningEffort === "string") {
+    profile.modelReasoningEffort = patch.modelReasoningEffort;
   }
   if (patch.env) {
     profile.env = { ...patch.env };

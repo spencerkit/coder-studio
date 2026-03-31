@@ -20,7 +20,7 @@ export const resolveAgentRecoveryAction = (
     return null;
   }
   return {
-    kind: session.claudeSessionId ? "resume" : "restart",
+    kind: session.resumeId ? "resume" : "restart",
   };
 };
 

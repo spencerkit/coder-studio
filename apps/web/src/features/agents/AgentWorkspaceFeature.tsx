@@ -32,6 +32,7 @@ type AgentWorkspaceFeatureProps = {
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
+  onDraftProviderChange: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
   onSubmitDraftPrompt: (paneId: string, value?: string) => void;
   onDraftPromptChange: (paneId: string, value: string) => void;
@@ -63,11 +64,13 @@ type AgentPaneLeafProps = {
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
+  onDraftProviderChange: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
   onSubmitDraftPrompt: (paneId: string, value?: string) => void;
   onDraftPromptChange: (paneId: string, value: string) => void;
   setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
+  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
   t: Translator;
@@ -91,6 +94,7 @@ const AgentPaneLeaf = memo(({
   onSplitPane,
   onCloseAgentPane,
   onDraftPaneModeChange,
+  onDraftProviderChange,
   onRestoreDraftSession,
   onSubmitDraftPrompt,
   onDraftPromptChange,
@@ -142,6 +146,10 @@ const AgentPaneLeaf = memo(({
     onDraftPaneModeChange(paneId, "restore");
   }, [onDraftPaneModeChange, paneId]);
 
+  const handleSetDraftProvider = useCallback((provider: Session["provider"]) => {
+    onDraftProviderChange(paneId, provider);
+  }, [onDraftProviderChange, paneId]);
+
   const handleRestoreDraftSession = useCallback((sessionId: string) => {
     onRestoreDraftSession(paneId, sessionId);
   }, [onRestoreDraftSession, paneId]);
@@ -185,6 +193,9 @@ const AgentPaneLeaf = memo(({
           <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
         </div>
         <div className="agent-pane-meta">
+          <span className="agent-pane-state-tag muted" data-tone="muted">
+            {session.provider === "codex" ? "Codex" : "Claude"}
+          </span>
           <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
             {headerTag.label}
           </span>
@@ -249,6 +260,22 @@ const AgentPaneLeaf = memo(({
                   className="agent-pane-input agent-draft-launcher-form"
                   onSubmit={handleSubmitDraftPrompt}
                 >
+                  <div className="agent-draft-launcher-tabs">
+                    <button
+                      type="button"
+                      className={`agent-draft-launcher-tab ${session.provider === "claude" ? "active" : ""}`}
+                      onClick={() => handleSetDraftProvider("claude")}
+                    >
+                      Claude
+                    </button>
+                    <button
+                      type="button"
+                      className={`agent-draft-launcher-tab ${session.provider === "codex" ? "active" : ""}`}
+                      onClick={() => handleSetDraftProvider("codex")}
+                    >
+                      Codex
+                    </button>
+                  </div>
                   <div className="agent-compose">
                     <input
                       ref={handleDraftPromptRef}
@@ -355,6 +382,7 @@ export const AgentWorkspaceFeature = ({
   onSplitPane,
   onCloseAgentPane,
   onDraftPaneModeChange,
+  onDraftProviderChange,
   onRestoreDraftSession,
   onSubmitDraftPrompt,
   onDraftPromptChange,
@@ -405,6 +433,7 @@ export const AgentWorkspaceFeature = ({
         onSplitPane={onSplitPane}
         onCloseAgentPane={onCloseAgentPane}
         onDraftPaneModeChange={onDraftPaneModeChange}
+        onDraftProviderChange={onDraftProviderChange}
         onRestoreDraftSession={onRestoreDraftSession}
         onSubmitDraftPrompt={onSubmitDraftPrompt}
         onDraftPromptChange={onDraftPromptChange}

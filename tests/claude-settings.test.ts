@@ -7,6 +7,7 @@ import {
   defaultAppSettings,
   forceClaudeExecutableDefaults,
   formatClaudeLaunchPreview,
+  formatCodexRuntimeCommand,
   getIdlePolicySyncWorkspaceIds,
   getClaudeScopeProfile,
   getSettingsDraftLocale,
@@ -27,6 +28,22 @@ test('formatClaudeLaunchPreview always starts with claude and omits blank args',
       globalConfigJson: {},
     }),
     'claude --verbose --dangerously-skip-permissions',
+  );
+});
+
+test('formatCodexRuntimeCommand includes generated config overrides and codex hooks feature', () => {
+  assert.equal(
+    formatCodexRuntimeCommand({
+      executable: 'codex',
+      extraArgs: ['--full-auto', '   '],
+      model: 'gpt-5.4',
+      approvalPolicy: 'on-request',
+      sandboxMode: '',
+      webSearch: '',
+      modelReasoningEffort: '',
+      env: {},
+    }),
+    'codex --full-auto --config model="gpt-5.4" --config approval_policy="on-request" --enable codex_hooks',
   );
 });
 

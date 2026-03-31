@@ -62,7 +62,7 @@ pub(crate) use infra::db::{
     load_session_history_records, load_workspace_controller_lease,
     mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
     patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_claude_id, set_session_status_if_not_archived,
+    save_workspace_controller_lease, set_session_resume_id, set_session_status_if_not_archived,
     set_workspace_terminal_recoverable, switch_workspace_session,
     update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
     update_workspace_session, upsert_workspace_attachment,
@@ -82,21 +82,23 @@ pub(crate) use infra::support::{
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
-    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult,
+    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
     AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
     CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
-    SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
-    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
-    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
-    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
-    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
+    SessionMode, SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo,
+    TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
+    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot,
+    WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
+    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
+    WorktreeInfo, CodexRuntimeProfile,
 };
 #[cfg(test)]
 pub(crate) use models::{
-    ClaudeSettingsPayload, ClaudeTargetOverrides, CompletionNotificationSettings,
-    GeneralSettingsPayload, TargetClaudeOverride,
+    AgentDefaultsPayload, ClaudeSettingsPayload, ClaudeTargetOverrides,
+    CodexSettingsPayload, CodexTargetOverrides, CompletionNotificationSettings,
+    GeneralSettingsPayload, TargetClaudeOverride, TargetCodexOverride,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -108,7 +110,11 @@ pub(crate) use services::app_settings::{
 };
 pub(crate) use services::claude::{
     current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
-    resolve_claude_runtime_profile, run_claude_hook_helper, start_claude_hook_receiver,
+    parse_http_endpoint, resolve_claude_runtime_profile, run_claude_hook_helper,
+    start_claude_hook_receiver,
+};
+pub(crate) use services::codex::{
+    ensure_codex_hook_settings, resolve_codex_runtime_profile, run_codex_hook_helper,
 };
 pub(crate) use services::filesystem::{
     file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
@@ -213,6 +219,10 @@ fn resolve_app_data_dir() -> Result<PathBuf, std::io::Error> {
 async fn main() {
     if std::env::args().any(|arg| arg == "--coder-studio-claude-hook") {
         run_claude_hook_helper();
+        return;
+    }
+    if std::env::args().any(|arg| arg == "--coder-studio-codex-hook") {
+        run_codex_hook_helper();
         return;
     }
 

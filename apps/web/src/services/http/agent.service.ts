@@ -10,7 +10,6 @@ export type AgentStartRequest = {
   workspaceId: string;
   controller: WorkspaceControllerState;
   sessionId: string;
-  provider: "claude";
   cols?: TerminalGridSize["cols"];
   rows?: TerminalGridSize["rows"];
 };
@@ -21,7 +20,6 @@ export const startAgent = (args: AgentStartRequest) => invokeRpc<AgentStartResul
   "agent_start",
   createWorkspaceControllerRpcPayload(args.workspaceId, args.controller, {
     sessionId: args.sessionId,
-    provider: args.provider,
     cols: args.cols,
     rows: args.rows,
   }),

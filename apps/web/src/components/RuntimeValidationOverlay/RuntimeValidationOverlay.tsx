@@ -3,7 +3,7 @@ import type { Translator } from "../../i18n";
 import type { ExecTarget } from "../../state/workbench";
 import { HeaderCloseIcon } from "../icons";
 
-export type RuntimeRequirementId = "claude" | "git";
+export type RuntimeRequirementId = "claude" | "codex" | "git";
 
 export type RuntimeRequirementStatus = {
   id: RuntimeRequirementId;
@@ -37,6 +37,12 @@ const requirementCopy = (id: RuntimeRequirementId, t: Translator) => {
     return {
       label: t("runtimeCheckClaudeLabel"),
       hint: t("runtimeCheckClaudeHint"),
+    };
+  }
+  if (id === "codex") {
+    return {
+      label: t("runtimeCheckCodexLabel"),
+      hint: t("runtimeCheckCodexHint"),
     };
   }
 

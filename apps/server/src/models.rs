@@ -29,6 +29,14 @@ pub enum SessionStatus {
     Interrupted,
 }
 
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentProvider {
+    #[default]
+    Claude,
+    Codex,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IdlePolicy {
     pub enabled: bool,
@@ -66,6 +74,10 @@ fn default_idle_policy_settings() -> IdlePolicy {
 
 fn default_claude_executable() -> String {
     "claude".to_string()
+}
+
+fn default_codex_executable() -> String {
+    "codex".to_string()
 }
 
 fn default_json_object() -> Value {
@@ -168,9 +180,73 @@ pub struct ClaudeSettingsPayload {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
+pub struct AgentDefaultsPayload {
+    pub provider: AgentProvider,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct CodexRuntimeProfile {
+    #[serde(default = "default_codex_executable")]
+    pub executable: String,
+    #[serde(alias = "extraArgs")]
+    pub extra_args: Vec<String>,
+    pub model: String,
+    #[serde(alias = "approvalPolicy")]
+    pub approval_policy: String,
+    #[serde(alias = "sandboxMode")]
+    pub sandbox_mode: String,
+    #[serde(alias = "webSearch")]
+    pub web_search: String,
+    #[serde(alias = "modelReasoningEffort")]
+    pub model_reasoning_effort: String,
+    pub env: BTreeMap<String, String>,
+}
+
+impl Default for CodexRuntimeProfile {
+    fn default() -> Self {
+        Self {
+            executable: default_codex_executable(),
+            extra_args: Vec::new(),
+            model: String::new(),
+            approval_policy: String::new(),
+            sandbox_mode: String::new(),
+            web_search: String::new(),
+            model_reasoning_effort: String::new(),
+            env: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct TargetCodexOverride {
+    pub enabled: bool,
+    pub profile: CodexRuntimeProfile,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct CodexTargetOverrides {
+    pub native: Option<TargetCodexOverride>,
+    pub wsl: Option<TargetCodexOverride>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct CodexSettingsPayload {
+    pub global: CodexRuntimeProfile,
+    pub overrides: CodexTargetOverrides,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
 pub struct AppSettingsPayload {
     pub general: GeneralSettingsPayload,
+    #[serde(alias = "agentDefaults")]
+    pub agent_defaults: AgentDefaultsPayload,
     pub claude: ClaudeSettingsPayload,
+    pub codex: CodexSettingsPayload,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -202,13 +278,14 @@ pub struct SessionInfo {
     pub title: String,
     pub status: SessionStatus,
     pub mode: SessionMode,
+    pub provider: AgentProvider,
     pub auto_feed: bool,
     pub queue: Vec<QueueTask>,
     pub messages: Vec<SessionMessage>,
     pub stream: String,
     pub unread: u32,
     pub last_active_at: i64,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -267,12 +344,13 @@ pub struct SessionHistoryRecord {
     pub session_id: u64,
     pub title: String,
     pub status: SessionStatus,
+    pub provider: AgentProvider,
     pub archived: bool,
     pub mounted: bool,
     pub recoverable: bool,
     pub last_active_at: i64,
     pub archived_at: Option<i64>,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -517,7 +595,7 @@ pub struct SessionPatch {
     pub stream: Option<String>,
     pub unread: Option<u32>,
     pub last_active_at: Option<i64>,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Debug)]

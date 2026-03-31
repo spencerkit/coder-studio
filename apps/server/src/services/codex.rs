@@ -1,0 +1,416 @@
+use crate::*;
+
+fn pick_codex_profile_value(base: &str, override_: &str) -> String {
+    let trimmed = override_.trim();
+    if trimmed.is_empty() {
+        base.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn push_codex_config_override(parts: &mut Vec<String>, key: &str, value: &str) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    parts.push("--config".to_string());
+    parts.push(format!(
+        "{key}={}",
+        toml::Value::String(trimmed.to_string())
+    ));
+}
+
+fn build_codex_config_override_args(profile: &CodexRuntimeProfile) -> Vec<String> {
+    let mut parts = Vec::new();
+    push_codex_config_override(&mut parts, "model", &profile.model);
+    push_codex_config_override(
+        &mut parts,
+        "approval_policy",
+        &profile.approval_policy,
+    );
+    push_codex_config_override(&mut parts, "sandbox_mode", &profile.sandbox_mode);
+    push_codex_config_override(&mut parts, "web_search", &profile.web_search);
+    push_codex_config_override(
+        &mut parts,
+        "model_reasoning_effort",
+        &profile.model_reasoning_effort,
+    );
+    parts
+}
+
+fn build_codex_feature_args() -> Vec<String> {
+    vec!["--enable".to_string(), "codex_hooks".to_string()]
+}
+
+fn merge_codex_runtime_profile(
+    base: &CodexRuntimeProfile,
+    override_: &CodexRuntimeProfile,
+) -> CodexRuntimeProfile {
+    CodexRuntimeProfile {
+        executable: pick_codex_profile_value(&base.executable, &override_.executable),
+        extra_args: if override_.extra_args.is_empty() {
+            base.extra_args.clone()
+        } else {
+            override_.extra_args.clone()
+        },
+        model: pick_codex_profile_value(&base.model, &override_.model),
+        approval_policy: pick_codex_profile_value(
+            &base.approval_policy,
+            &override_.approval_policy,
+        ),
+        sandbox_mode: pick_codex_profile_value(&base.sandbox_mode, &override_.sandbox_mode),
+        web_search: pick_codex_profile_value(&base.web_search, &override_.web_search),
+        model_reasoning_effort: pick_codex_profile_value(
+            &base.model_reasoning_effort,
+            &override_.model_reasoning_effort,
+        ),
+        env: base
+            .env
+            .iter()
+            .chain(override_.env.iter())
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    }
+}
+
+pub(crate) fn resolve_codex_runtime_profile(
+    settings: &AppSettingsPayload,
+    target: &ExecTarget,
+) -> CodexRuntimeProfile {
+    let override_ = match target {
+        ExecTarget::Native => settings.codex.overrides.native.as_ref(),
+        ExecTarget::Wsl { .. } => settings.codex.overrides.wsl.as_ref(),
+    };
+
+    override_
+        .filter(|override_| override_.enabled)
+        .map(|override_| merge_codex_runtime_profile(&settings.codex.global, &override_.profile))
+        .unwrap_or_else(|| settings.codex.global.clone())
+}
+
+pub(crate) fn build_codex_start_command(
+    target: &ExecTarget,
+    profile: &CodexRuntimeProfile,
+) -> String {
+    let executable = crate::services::agent_client::escape_agent_command_part(
+        target,
+        &profile.executable,
+    );
+    let args = profile
+        .extra_args
+        .iter()
+        .chain(build_codex_config_override_args(profile).iter())
+        .chain(build_codex_feature_args().iter())
+        .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg))
+        .collect::<Vec<_>>();
+    let mut parts = vec![executable];
+    parts.extend(args);
+    parts.join(" ")
+}
+
+pub(crate) fn build_codex_resume_command(
+    target: &ExecTarget,
+    profile: &CodexRuntimeProfile,
+    resume_id: &str,
+) -> String {
+    let escaped_resume_id = crate::services::agent_client::escape_agent_command_part(
+        target,
+        resume_id.trim(),
+    );
+    let mut parts = vec![
+        crate::services::agent_client::escape_agent_command_part(target, &profile.executable),
+        "resume".to_string(),
+        escaped_resume_id,
+    ];
+    parts.extend(
+        profile
+            .extra_args
+            .iter()
+            .chain(build_codex_config_override_args(profile).iter())
+            .chain(build_codex_feature_args().iter())
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
+}
+
+fn build_codex_hook_command(target: &ExecTarget) -> String {
+    if matches!(target, ExecTarget::Wsl { .. }) {
+        "\"$CODER_STUDIO_APP_BIN\" --coder-studio-codex-hook".to_string()
+    } else {
+        #[cfg(target_os = "windows")]
+        {
+            "\"%CODER_STUDIO_APP_BIN%\" --coder-studio-codex-hook".to_string()
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            "\"$CODER_STUDIO_APP_BIN\" --coder-studio-codex-hook".to_string()
+        }
+    }
+}
+
+fn is_coder_studio_codex_group(group: &Value) -> bool {
+    group
+        .get("hooks")
+        .and_then(Value::as_array)
+        .map(|hooks| {
+            hooks.iter().any(|hook| {
+                hook.get("type").and_then(Value::as_str) == Some("command")
+                    && hook
+                        .get("command")
+                        .and_then(Value::as_str)
+                        .map(|command| command.contains("--coder-studio-codex-hook"))
+                        .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn build_hook_group(command: &str, matcher: Option<&str>) -> Value {
+    let mut group = Map::new();
+    if let Some(value) = matcher {
+        group.insert("matcher".to_string(), Value::String(value.to_string()));
+    }
+    group.insert(
+        "hooks".to_string(),
+        Value::Array(vec![json!({
+            "type": "command",
+            "command": command
+        })]),
+    );
+    Value::Object(group)
+}
+
+fn upsert_hook_groups(
+    hooks_root: &mut Map<String, Value>,
+    event_name: &str,
+    matcher: Option<&str>,
+    command: &str,
+) {
+    let entry = hooks_root
+        .entry(event_name.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if !entry.is_array() {
+        *entry = Value::Array(Vec::new());
+    }
+    let groups = entry.as_array_mut().expect("array");
+    groups.retain(|group| !is_coder_studio_codex_group(group));
+    groups.push(build_hook_group(command, matcher));
+}
+
+pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
+    let current = if matches!(target, ExecTarget::Wsl { .. }) {
+        run_cmd(
+            target,
+            cwd,
+            &[
+                "/bin/sh",
+                "-lc",
+                "if [ -f .codex/hooks.json ]; then cat .codex/hooks.json; else printf '{}'; fi",
+            ],
+        )
+        .unwrap_or_else(|_| "{}".to_string())
+    } else {
+        let hooks_path = PathBuf::from(cwd).join(".codex").join("hooks.json");
+        if hooks_path.exists() {
+            std::fs::read_to_string(&hooks_path).map_err(|e| e.to_string())?
+        } else {
+            "{}".to_string()
+        }
+    };
+
+    let mut root =
+        serde_json::from_str::<Value>(&current).unwrap_or_else(|_| Value::Object(Map::new()));
+    if !root.is_object() {
+        root = Value::Object(Map::new());
+    }
+    let root_obj = root.as_object_mut().expect("object");
+    let hooks_value = root_obj
+        .entry("hooks".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !hooks_value.is_object() {
+        *hooks_value = Value::Object(Map::new());
+    }
+    let hooks_obj = hooks_value.as_object_mut().expect("object");
+    let command = build_codex_hook_command(target);
+
+    upsert_hook_groups(hooks_obj, "SessionStart", Some("startup|resume"), &command);
+    upsert_hook_groups(hooks_obj, "UserPromptSubmit", None, &command);
+    upsert_hook_groups(hooks_obj, "PreToolUse", Some("Bash"), &command);
+    upsert_hook_groups(hooks_obj, "PostToolUse", Some("Bash"), &command);
+    upsert_hook_groups(hooks_obj, "Stop", None, &command);
+
+    let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
+    if matches!(target, ExecTarget::Wsl { .. }) {
+        let script = format!(
+            "mkdir -p .codex && printf %s {} > .codex/hooks.json",
+            shell_escape(&serialized)
+        );
+        run_cmd(target, cwd, &["/bin/sh", "-lc", &script]).map(|_| ())
+    } else {
+        let hooks_dir = PathBuf::from(cwd).join(".codex");
+        std::fs::create_dir_all(&hooks_dir).map_err(|e| e.to_string())?;
+        let hooks_path = hooks_dir.join("hooks.json");
+        std::fs::write(hooks_path, serialized).map_err(|e| e.to_string())
+    }
+}
+
+pub(crate) fn run_codex_hook_helper() {
+    let _ = (|| -> Result<(), String> {
+        let endpoint = std::env::var("CODER_STUDIO_HOOK_ENDPOINT").map_err(|e| e.to_string())?;
+        let workspace_id = std::env::var("CODER_STUDIO_WORKSPACE_ID").map_err(|e| e.to_string())?;
+        let session_id = std::env::var("CODER_STUDIO_SESSION_ID").map_err(|e| e.to_string())?;
+        let (host, port, path) = parse_http_endpoint(&endpoint).ok_or("invalid_hook_endpoint")?;
+
+        let mut stdin = String::new();
+        std::io::stdin()
+            .read_to_string(&mut stdin)
+            .map_err(|e| e.to_string())?;
+        let payload = serde_json::from_str::<Value>(&stdin).map_err(|e| e.to_string())?;
+        let body = json!({
+            "workspace_id": workspace_id,
+            "session_id": session_id,
+            "payload": payload
+        })
+        .to_string();
+
+        let mut stream = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
+        let request = format!(
+            "POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream
+            .write_all(request.as_bytes())
+            .map_err(|e| e.to_string())?;
+        stream.flush().map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn resolve_codex_runtime_profile_prefers_enabled_target_override() {
+        let settings = AppSettingsPayload {
+            codex: CodexSettingsPayload {
+                global: CodexRuntimeProfile {
+                    executable: "codex".into(),
+                    extra_args: vec!["--search".into()],
+                    model: "gpt-5.4".into(),
+                    approval_policy: String::new(),
+                    sandbox_mode: "workspace-write".into(),
+                    web_search: String::new(),
+                    model_reasoning_effort: String::new(),
+                    env: BTreeMap::new(),
+                },
+                overrides: CodexTargetOverrides {
+                    native: Some(TargetCodexOverride {
+                        enabled: true,
+                        profile: CodexRuntimeProfile {
+                            executable: "codex-nightly".into(),
+                            extra_args: vec!["--full-auto".into()],
+                            model: String::new(),
+                            approval_policy: "on-request".into(),
+                            sandbox_mode: String::new(),
+                            web_search: "live".into(),
+                            model_reasoning_effort: "high".into(),
+                            env: BTreeMap::new(),
+                        },
+                    }),
+                    wsl: None,
+                },
+            },
+            ..AppSettingsPayload::default()
+        };
+
+        let resolved = resolve_codex_runtime_profile(&settings, &ExecTarget::Native);
+        assert_eq!(resolved.executable, "codex-nightly");
+        assert_eq!(resolved.extra_args, vec!["--full-auto"]);
+        assert_eq!(resolved.model, "gpt-5.4");
+        assert_eq!(resolved.approval_policy, "on-request");
+        assert_eq!(resolved.sandbox_mode, "workspace-write");
+        assert_eq!(resolved.web_search, "live");
+        assert_eq!(resolved.model_reasoning_effort, "high");
+    }
+
+    #[test]
+    fn build_codex_commands_split_start_and_resume() {
+        let profile = CodexRuntimeProfile {
+            executable: "codex".into(),
+            extra_args: vec!["--full-auto".into()],
+            model: String::new(),
+            approval_policy: String::new(),
+            sandbox_mode: String::new(),
+            web_search: String::new(),
+            model_reasoning_effort: String::new(),
+            env: BTreeMap::new(),
+        };
+
+        assert_eq!(
+            build_codex_start_command(&ExecTarget::Native, &profile),
+            "codex --full-auto --enable codex_hooks"
+        );
+        assert_eq!(
+            build_codex_resume_command(&ExecTarget::Native, &profile, "resume-123"),
+            "codex resume resume-123 --full-auto --enable codex_hooks"
+        );
+    }
+
+    fn expected_config_args(target: &ExecTarget, values: &[(&str, &str)]) -> String {
+        values
+            .iter()
+            .flat_map(|(key, value)| {
+                [
+                    crate::services::agent_client::escape_agent_command_part(target, "--config"),
+                    crate::services::agent_client::escape_agent_command_part(
+                        target,
+                        &format!(
+                            "{key}={}",
+                            toml::Value::String((*value).to_string())
+                        ),
+                    ),
+                ]
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn build_codex_commands_append_structured_config_overrides() {
+        let target = ExecTarget::Native;
+        let profile = CodexRuntimeProfile {
+            executable: "codex".into(),
+            extra_args: vec!["--full-auto".into()],
+            model: "gpt-5.4".into(),
+            approval_policy: "on-request".into(),
+            sandbox_mode: "workspace-write".into(),
+            web_search: "live".into(),
+            model_reasoning_effort: "high".into(),
+            env: BTreeMap::new(),
+        };
+        let expected_config = expected_config_args(
+            &target,
+            &[
+                ("model", "gpt-5.4"),
+                ("approval_policy", "on-request"),
+                ("sandbox_mode", "workspace-write"),
+                ("web_search", "live"),
+                ("model_reasoning_effort", "high"),
+            ],
+        );
+
+        assert_eq!(
+            build_codex_start_command(&target, &profile),
+            format!("codex --full-auto {expected_config} --enable codex_hooks")
+        );
+        assert_eq!(
+            build_codex_resume_command(&target, &profile, "resume-123"),
+            format!(
+                "codex resume resume-123 --full-auto {expected_config} --enable codex_hooks"
+            )
+        );
+    }
+}

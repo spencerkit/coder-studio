@@ -35,7 +35,7 @@ import type {
   Tab,
   WorkbenchState,
 } from "../../state/workbench-core.ts";
-import type { AppSettings } from "../../types/app";
+import type { AppSettings, SessionPatch } from "../../types/app";
 import {
   type AgentRuntimeRefs,
 } from "../agents";
@@ -237,11 +237,7 @@ export const WorkbenchRuntimeCoordinator = ({
   const syncSessionPatch = useCallback(async (
     tabId: string,
     sessionId: string,
-    patch: {
-      status?: string;
-      last_active_at?: number;
-      claude_session_id?: string;
-    },
+    patch: Pick<SessionPatch, "status" | "last_active_at" | "resume_id">,
   ) => {
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;

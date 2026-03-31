@@ -103,7 +103,7 @@ const mergeWorkspaceControllerState = (
   return incoming;
 };
 
-const readClaudeSessionId = (data: string) => {
+const readResumeId = (data: string) => {
   try {
     const payload = JSON.parse(data) as { session_id?: string };
     return typeof payload.session_id === "string" && payload.session_id.trim()
@@ -133,23 +133,23 @@ const applyLifecycleReplayToState = (
   current: WorkbenchState,
   lifecycleEvents: AgentLifecycleHistoryEntry[],
 ): WorkbenchState => lifecycleEvents.reduce((state, event) => ({
-  ...state,
-  tabs: state.tabs.map((tab) => {
-    if (tab.id !== event.workspace_id) return tab;
-    return {
-      ...tab,
-      sessions: tab.sessions.map((session) => {
-        if (session.id !== event.session_id) return session;
-        const nextStatus = lifecycleStatusForReplay(event.kind);
-        const claudeSessionId = readClaudeSessionId(event.data);
+      ...state,
+      tabs: state.tabs.map((tab) => {
+        if (tab.id !== event.workspace_id) return tab;
         return {
-          ...session,
-          status: nextStatus ? resolveVisibleStatus(tab, session, nextStatus) : session.status,
-          claudeSessionId: claudeSessionId ?? session.claudeSessionId,
+          ...tab,
+          sessions: tab.sessions.map((session) => {
+            if (session.id !== event.session_id) return session;
+            const nextStatus = lifecycleStatusForReplay(event.kind);
+            const resumeId = readResumeId(event.data);
+            return {
+              ...session,
+              status: nextStatus ? resolveVisibleStatus(tab, session, nextStatus) : session.status,
+              resumeId: resumeId ?? session.resumeId,
+            };
+          }),
         };
       }),
-    };
-  }),
 }), current);
 
 const normalizeFilePreview = (
@@ -306,6 +306,7 @@ export const createTabFromWorkspaceSnapshot = (
               locale,
               workspacePath: snapshot.workspace.project_path,
               branch: existing?.git.branch,
+              provider: appSettings.agentDefaults.provider,
             }),
           ]
     );
@@ -315,7 +316,7 @@ export const createTabFromWorkspaceSnapshot = (
     ? snapshot.view_state.active_session_id
     : sessions.some((session) => session.id === existing?.activeSessionId)
       ? existing?.activeSessionId ?? fallbackSessionId
-    : fallbackSessionId;
+      : fallbackSessionId;
   const terminalState = mapTerminals(
     snapshot.terminals,
     locale,
@@ -332,12 +333,6 @@ export const createTabFromWorkspaceSnapshot = (
       path: snapshot.workspace.project_path,
       gitUrl: snapshot.workspace.git_url ?? undefined,
       target: snapshot.workspace.target,
-    },
-    agent: {
-      provider: appSettings.agentProvider,
-      command: appSettings.agentCommand,
-      useWsl: snapshot.workspace.target.type === "wsl",
-      distro: snapshot.workspace.target.type === "wsl" ? snapshot.workspace.target.distro : undefined,
     },
     git: existing?.git ?? { branch: "—", changes: 0, lastCommit: "—" },
     gitChanges: existing?.gitChanges ?? [],

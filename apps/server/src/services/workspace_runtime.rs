@@ -783,8 +783,13 @@ mod tests {
     fn workspace_runtime_attach_includes_agent_lifecycle_replay() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-lifecycle-replay-test");
-        let session = create_workspace_session(app.state(), &workspace_id, SessionMode::Branch)
-            .expect("session should be created");
+        let session = create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::Claude,
+        )
+        .expect("session should be created");
 
         emit_agent_lifecycle(
             &app,
@@ -818,8 +823,13 @@ mod tests {
     fn workspace_runtime_attach_keeps_created_session_view_and_claude_id() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-view-test");
-        let session = create_workspace_session(app.state(), &workspace_id, SessionMode::Branch)
-            .expect("session should be created");
+        let session = create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::Claude,
+        )
+        .expect("session should be created");
 
         patch_workspace_view_state(
             app.state(),
@@ -851,7 +861,7 @@ mod tests {
                 stream: None,
                 unread: None,
                 last_active_at: None,
-                claude_session_id: Some("claude-runtime-attach".to_string()),
+                resume_id: Some("claude-runtime-attach".to_string()),
             },
         )
         .expect("session should be updated");
@@ -872,10 +882,7 @@ mod tests {
             .find(|candidate| candidate.id == session.id)
             .expect("created session should be present");
         assert_eq!(restored.status, SessionStatus::Interrupted);
-        assert_eq!(
-            restored.claude_session_id.as_deref(),
-            Some("claude-runtime-attach")
-        );
+        assert_eq!(restored.resume_id.as_deref(), Some("claude-runtime-attach"));
         assert_eq!(
             runtime.snapshot.view_state.active_session_id,
             session.id.to_string()

@@ -3,6 +3,7 @@ import type { AppSettings, SettingsPanel } from "../../types/app";
 import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
+import { CodexSettingsPanel } from "./CodexSettingsPanel.tsx";
 
 type SettingsProps = {
   locale: Locale;
@@ -11,8 +12,10 @@ type SettingsProps = {
   notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
+  onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
   onClaudeSettingsChange: (settings: AppSettings) => void;
+  onCodexSettingsChange: (settings: AppSettings) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
@@ -20,6 +23,7 @@ type SettingsProps = {
 const settingsNavItems = (t: Translator) => [
   { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
   { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
+  { id: "codex" as const, label: t("codexSettingsTitle"), icon: <SettingsConfigIcon /> },
   { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> },
 ];
 
@@ -30,8 +34,10 @@ export const Settings = ({
   notificationPermissionText,
   onSettingsPanelChange,
   onGeneralSettingsChange,
+  onAgentDefaultsChange,
   onSettingsIdlePolicyChange,
   onClaudeSettingsChange,
+  onCodexSettingsChange,
   onSelectLocale,
   t,
 }: SettingsProps) => {
@@ -66,6 +72,33 @@ export const Settings = ({
               {activeSettingsPanel === "general" ? (
                 <>
                   <div className="settings-group-card settings-group-card--document">
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("defaultProvider")}</strong>
+                        <span>{t("defaultProviderHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <div className="settings-pill-select">
+                          <button
+                            type="button"
+                            className={`settings-pill-option ${settingsDraft.agentDefaults.provider === "claude" ? "active" : ""}`}
+                            onClick={() => onAgentDefaultsChange({ provider: "claude" })}
+                            data-testid="settings-default-provider-claude"
+                          >
+                            {t("providerClaude")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`settings-pill-option ${settingsDraft.agentDefaults.provider === "codex" ? "active" : ""}`}
+                            onClick={() => onAgentDefaultsChange({ provider: "codex" })}
+                            data-testid="settings-default-provider-codex"
+                          >
+                            {t("providerCodex")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="settings-row">
                       <div className="settings-row-copy">
                         <strong>{t("autoSuspend")}</strong>
@@ -197,6 +230,13 @@ export const Settings = ({
                   locale={locale}
                   settings={settingsDraft}
                   onChange={onClaudeSettingsChange}
+                  t={t}
+                />
+              ) : activeSettingsPanel === "codex" ? (
+                <CodexSettingsPanel
+                  locale={locale}
+                  settings={settingsDraft}
+                  onChange={onCodexSettingsChange}
                   t={t}
                 />
               ) : (
