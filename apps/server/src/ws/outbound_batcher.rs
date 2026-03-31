@@ -228,17 +228,17 @@ impl OutboundSendQueue {
         }
 
         let mut merged = Vec::new();
-        let mut merged_keys: Vec<(BatchKey, usize)> = Vec::new();
 
         for event in group.drain(..) {
             let key = batch_key(&event).expect("stream group only stores batchable events");
-            if let Some((_, index)) = merged_keys.iter().find(|(existing, _)| existing == &key) {
-                append_event_data(&mut merged[*index], &event);
-                self.collapse_count = self.collapse_count.saturating_add(1);
-            } else {
-                merged_keys.push((key, merged.len()));
-                merged.push(event);
+            if let Some(last) = merged.last_mut() {
+                if batch_key(last).as_ref() == Some(&key) {
+                    append_event_data(last, &event);
+                    self.collapse_count = self.collapse_count.saturating_add(1);
+                    continue;
+                }
             }
+            merged.push(event);
         }
 
         for event in merged {
@@ -520,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn outbound_send_queue_collapses_stream_groups_and_trims_oldest_bytes_under_pressure() {
+    fn outbound_send_queue_preserves_interleaved_stream_order_when_trimming_under_pressure() {
         let mut queue = OutboundSendQueue::new(4);
 
         queue.enqueue_transport_events(vec![
@@ -532,15 +532,15 @@ mod tests {
         let stats = queue.stats();
         assert_eq!(stats.pending_stream_bytes, 4);
         assert_eq!(stats.flush_count, 1);
-        assert_eq!(stats.collapse_count, 1);
+        assert_eq!(stats.collapse_count, 0);
         assert_eq!(stats.drop_count, 1);
 
         let drained = drain_events(&mut queue);
         assert_eq!(drained.len(), 2);
-        assert_eq!(drained[0].0, "agent://event");
-        assert_eq!(drained[0].1["data"], Value::String("ef".to_string()));
-        assert_eq!(drained[1].0, "terminal://event");
-        assert_eq!(drained[1].1["data"], Value::String("cd".to_string()));
+        assert_eq!(drained[0].0, "terminal://event");
+        assert_eq!(drained[0].1["data"], Value::String("cd".to_string()));
+        assert_eq!(drained[1].0, "agent://event");
+        assert_eq!(drained[1].1["data"], Value::String("ef".to_string()));
     }
 
     #[test]

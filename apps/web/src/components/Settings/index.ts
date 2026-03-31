@@ -1,3 +1,2 @@
-export { Settings } from "./Settings";
-export { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
-export { CodexSettingsPanel } from "./CodexSettingsPanel";
+export { Settings } from "./Settings.tsx";
+export { ProviderSettingsPanel } from "./ProviderSettingsPanel.tsx";

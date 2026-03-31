@@ -28,6 +28,20 @@ test("resolveArtifactRefreshScope keeps tree refreshes out of git-only invalidat
   );
 });
 
+test("resolveArtifactRefreshScope includes tree refreshes when categories contain tree", () => {
+  assert.deepEqual(
+    resolveArtifactRefreshScope({
+      reason: "git_commit",
+      categories: ["git", "worktrees", "tree"],
+    }),
+    {
+      git: true,
+      worktrees: true,
+      tree: true,
+    },
+  );
+});
+
 test("mergeArtifactRefreshScopes unions refresh work across repeated invalidations", () => {
   assert.deepEqual(
     mergeArtifactRefreshScopes(

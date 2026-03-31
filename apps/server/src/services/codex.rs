@@ -1,5 +1,11 @@
 use crate::*;
 
+const CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS: u64 = 120;
+
+pub(crate) struct CodexProviderAdapter;
+
+static CODEX_PROVIDER_ADAPTER: CodexProviderAdapter = CodexProviderAdapter;
+
 fn push_codex_config_override(parts: &mut Vec<String>, key: &str, value: &str) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -34,7 +40,15 @@ pub(crate) fn resolve_codex_runtime_profile(
     settings: &AppSettingsPayload,
     _target: &ExecTarget,
 ) -> CodexRuntimeProfile {
-    settings.codex.global.clone()
+    settings
+        .providers
+        .get("codex")
+        .and_then(|payload| serde_json::from_value::<CodexRuntimeProfile>(payload.global.clone()).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn adapter() -> &'static dyn crate::services::provider_registry::ProviderAdapter {
+    &CODEX_PROVIDER_ADAPTER
 }
 
 pub(crate) fn build_codex_start_command(
@@ -116,19 +130,140 @@ pub(crate) fn build_codex_resume_invocation(
     (program, args)
 }
 
-fn build_codex_hook_command(target: &ExecTarget) -> String {
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        "\"$CODER_STUDIO_APP_BIN\" --coder-studio-codex-hook".to_string()
-    } else {
-        #[cfg(target_os = "windows")]
-        {
-            "\"%CODER_STUDIO_APP_BIN%\" --coder-studio-codex-hook".to_string()
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            "\"$CODER_STUDIO_APP_BIN\" --coder-studio-codex-hook".to_string()
-        }
+fn normalize_codex_lifecycle(payload: &Value) -> Option<(&'static str, String)> {
+    let hook_event = payload.get("hook_event_name")?.as_str()?;
+    let normalized = match hook_event {
+        "SessionStart" => "session_started",
+        "UserPromptSubmit" => "turn_waiting",
+        "PreToolUse" => "tool_started",
+        "PostToolUse" | "PostToolUseFailure" => "tool_finished",
+        "Stop" => "turn_completed",
+        _ => return None,
+    };
+    Some((normalized, hook_event.to_string()))
+}
+
+fn normalize_codex_lifecycle_event(payload: &Value) -> Option<AgentLifecycleEvent> {
+    let (kind, source_event) = normalize_codex_lifecycle(payload)?;
+    Some(AgentLifecycleEvent {
+        workspace_id: String::new(),
+        session_id: String::new(),
+        kind: kind.to_string(),
+        source_event,
+        data: payload.to_string(),
+    })
+}
+
+impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapter {
+    fn id(&self) -> &'static str {
+        "codex"
     }
+
+    fn build_start(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+    ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
+        let profile = resolve_codex_runtime_profile(settings, target);
+        let launch_spec = {
+            #[cfg(target_os = "windows")]
+            if matches!(target, ExecTarget::Native) {
+                let (program, args) = build_codex_start_invocation(&profile);
+                crate::services::agent_client::AgentLaunchSpec::Direct {
+                    program,
+                    args,
+                    display_command: build_codex_start_command(target, &profile),
+                }
+            } else {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_codex_start_command(target, &profile),
+                )
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_codex_start_command(target, &profile),
+                )
+            }
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: profile.env,
+            input_policy: crate::services::provider_registry::ProviderInputPolicy {
+                first_submit_strategy:
+                    crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
+                        delay_ms: CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS,
+                    },
+            },
+        })
+    }
+
+    fn build_resume(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+        resume_id: &str,
+    ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
+        let profile = resolve_codex_runtime_profile(settings, target);
+        let launch_spec = {
+            #[cfg(target_os = "windows")]
+            if matches!(target, ExecTarget::Native) {
+                let (program, args) = build_codex_resume_invocation(&profile, resume_id);
+                crate::services::agent_client::AgentLaunchSpec::Direct {
+                    program,
+                    args,
+                    display_command: build_codex_resume_command(target, &profile, resume_id),
+                }
+            } else {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_codex_resume_command(target, &profile, resume_id),
+                )
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_codex_resume_command(target, &profile, resume_id),
+                )
+            }
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: profile.env,
+            input_policy: crate::services::provider_registry::ProviderInputPolicy {
+                first_submit_strategy:
+                    crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
+                        delay_ms: CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS,
+                    },
+            },
+        })
+    }
+
+    fn ensure_workspace_integration(
+        &self,
+        cwd: &str,
+        target: &ExecTarget,
+    ) -> Result<(), String> {
+        ensure_codex_hook_settings(cwd, target)
+    }
+
+    fn normalize_hook_payload(&self, payload: &Value) -> Option<AgentLifecycleEvent> {
+        normalize_codex_lifecycle_event(payload)
+    }
+
+    fn extract_resume_id(&self, payload: &Value) -> Option<String> {
+        payload
+            .get("session_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    }
+}
+
+fn build_codex_hook_command(target: &ExecTarget) -> String {
+    crate::services::provider_hooks::build_shared_hook_command(target)
 }
 
 fn is_coder_studio_codex_group(group: &Value) -> bool {
@@ -141,7 +276,10 @@ fn is_coder_studio_codex_group(group: &Value) -> bool {
                     && hook
                         .get("command")
                         .and_then(Value::as_str)
-                        .map(|command| command.contains("--coder-studio-codex-hook"))
+                        .map(|command| {
+                            command.contains("--coder-studio-agent-hook")
+                                || command.contains("--coder-studio-codex-hook")
+                        })
                         .unwrap_or(false)
             })
         })
@@ -237,38 +375,6 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
     }
 }
 
-pub(crate) fn run_codex_hook_helper() {
-    let _ = (|| -> Result<(), String> {
-        let endpoint = std::env::var("CODER_STUDIO_HOOK_ENDPOINT").map_err(|e| e.to_string())?;
-        let workspace_id = std::env::var("CODER_STUDIO_WORKSPACE_ID").map_err(|e| e.to_string())?;
-        let session_id = std::env::var("CODER_STUDIO_SESSION_ID").map_err(|e| e.to_string())?;
-        let (host, port, path) = parse_http_endpoint(&endpoint).ok_or("invalid_hook_endpoint")?;
-
-        let mut stdin = String::new();
-        std::io::stdin()
-            .read_to_string(&mut stdin)
-            .map_err(|e| e.to_string())?;
-        let payload = serde_json::from_str::<Value>(&stdin).map_err(|e| e.to_string())?;
-        let body = json!({
-            "workspace_id": workspace_id,
-            "session_id": session_id,
-            "payload": payload
-        })
-        .to_string();
-
-        let mut stream = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
-        let request = format!(
-            "POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream
-            .write_all(request.as_bytes())
-            .map_err(|e| e.to_string())?;
-        stream.flush().map_err(|e| e.to_string())?;
-        Ok(())
-    })();
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,9 +382,11 @@ mod tests {
 
     #[test]
     fn resolve_codex_runtime_profile_ignores_workspace_target() {
-        let settings = AppSettingsPayload {
-            codex: CodexSettingsPayload {
-                global: CodexRuntimeProfile {
+        let mut settings = AppSettingsPayload::default();
+        settings
+            .set_provider_profile(
+                "codex",
+                &CodexRuntimeProfile {
                     executable: "codex-current".into(),
                     extra_args: vec!["--full-auto".into()],
                     model: "gpt-5.4".into(),
@@ -288,9 +396,8 @@ mod tests {
                     model_reasoning_effort: "high".into(),
                     env: BTreeMap::from([("OPENAI_API_KEY".into(), "secret".into())]),
                 },
-            },
-            ..AppSettingsPayload::default()
-        };
+            )
+            .unwrap();
 
         let native = resolve_codex_runtime_profile(&settings, &ExecTarget::Native);
         let wsl = resolve_codex_runtime_profile(

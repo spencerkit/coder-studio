@@ -1,37 +1,22 @@
 use crate::*;
 
-#[derive(Deserialize)]
-struct ClaudeHookEnvelope {
-    workspace_id: String,
-    session_id: String,
-    payload: Value,
-}
+pub(crate) struct ClaudeProviderAdapter;
 
-pub(crate) fn parse_http_endpoint(endpoint: &str) -> Option<(String, u16, String)> {
-    let trimmed = endpoint.trim();
-    let without_scheme = trimmed.strip_prefix("http://")?;
-    let (host_port, path) = without_scheme
-        .split_once('/')
-        .unwrap_or((without_scheme, ""));
-    let (host, port_raw) = host_port.rsplit_once(':')?;
-    let port = port_raw.parse::<u16>().ok()?;
-    Some((host.to_string(), port, format!("/{}", path)))
-}
-
-fn respond_http(mut stream: TcpStream, status: &str, body: &str) {
-    let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
-}
+static CLAUDE_PROVIDER_ADAPTER: ClaudeProviderAdapter = ClaudeProviderAdapter;
 
 pub(crate) fn resolve_claude_runtime_profile(
     settings: &AppSettingsPayload,
     _target: &ExecTarget,
 ) -> ClaudeRuntimeProfile {
-    settings.claude.global.clone()
+    settings
+        .providers
+        .get("claude")
+        .and_then(|payload| serde_json::from_value::<ClaudeRuntimeProfile>(payload.global.clone()).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn adapter() -> &'static dyn crate::services::provider_registry::ProviderAdapter {
+    &CLAUDE_PROVIDER_ADAPTER
 }
 
 pub(crate) fn build_claude_start_command(
@@ -99,37 +84,6 @@ pub(crate) fn build_claude_resume_launch_command(
     parts.join(" ")
 }
 
-fn parse_http_json(stream: &TcpStream) -> Result<Value, String> {
-    let cloned = stream.try_clone().map_err(|e| e.to_string())?;
-    let mut reader = BufReader::new(cloned);
-
-    let mut request_line = String::new();
-    reader
-        .read_line(&mut request_line)
-        .map_err(|e| e.to_string())?;
-    if !request_line.starts_with("POST ") {
-        return Err("method_not_allowed".to_string());
-    }
-
-    let mut content_length = 0usize;
-    loop {
-        let mut line = String::new();
-        reader.read_line(&mut line).map_err(|e| e.to_string())?;
-        if line == "\r\n" || line.is_empty() {
-            break;
-        }
-        if let Some((name, value)) = line.split_once(':') {
-            if name.trim().eq_ignore_ascii_case("content-length") {
-                content_length = value.trim().parse::<usize>().unwrap_or(0);
-            }
-        }
-    }
-
-    let mut body = vec![0u8; content_length];
-    reader.read_exact(&mut body).map_err(|e| e.to_string())?;
-    serde_json::from_slice::<Value>(&body).map_err(|e| e.to_string())
-}
-
 fn normalize_claude_lifecycle(payload: &Value) -> Option<(&'static str, String)> {
     let hook_event = payload.get("hook_event_name")?.as_str()?;
     let normalized = match hook_event {
@@ -145,101 +99,123 @@ fn normalize_claude_lifecycle(payload: &Value) -> Option<(&'static str, String)>
     Some((normalized, hook_event.to_string()))
 }
 
-fn handle_claude_hook_payload(app: &AppHandle, envelope: ClaudeHookEnvelope) {
-    if let Some(claude_session_id) = envelope
-        .payload
-        .get("session_id")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-    {
-        let state: State<AppState> = app.state();
-        if let Ok(internal_session_id) = envelope.session_id.parse::<u64>() {
-            let _ = set_session_resume_id(
-                state,
-                &envelope.workspace_id,
-                internal_session_id,
-                claude_session_id,
-            );
-        }
-    }
-
-    if let Some((kind, source_event)) = normalize_claude_lifecycle(&envelope.payload) {
-        let data = serde_json::to_string(&envelope.payload).unwrap_or_default();
-        emit_agent_lifecycle(
-            app,
-            &envelope.workspace_id,
-            &envelope.session_id,
-            kind,
-            &source_event,
-            &data,
-        );
-    }
+fn normalize_claude_lifecycle_event(payload: &Value) -> Option<AgentLifecycleEvent> {
+    let (kind, source_event) = normalize_claude_lifecycle(payload)?;
+    Some(AgentLifecycleEvent {
+        workspace_id: String::new(),
+        session_id: String::new(),
+        kind: kind.to_string(),
+        source_event,
+        data: serde_json::to_string(payload).unwrap_or_default(),
+    })
 }
 
-pub(crate) fn start_claude_hook_receiver(app: &AppHandle) -> Result<(), String> {
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
-    let endpoint = format!(
-        "http://127.0.0.1:{}/claude-hook",
-        listener.local_addr().map_err(|e| e.to_string())?.port()
-    );
-
-    {
-        let state: State<AppState> = app.state();
-        let mut guard = state.hook_endpoint.lock().map_err(|e| e.to_string())?;
-        *guard = Some(endpoint);
+impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapter {
+    fn id(&self) -> &'static str {
+        "claude"
     }
 
-    let app_handle = app.clone();
-    std::thread::spawn(move || {
-        for incoming in listener.incoming() {
-            let stream = match incoming {
-                Ok(stream) => stream,
-                Err(_) => continue,
-            };
-            let payload = parse_http_json(&stream);
-            match payload {
-                Ok(body) => {
-                    if let Ok(envelope) = serde_json::from_value::<ClaudeHookEnvelope>(body) {
-                        handle_claude_hook_payload(&app_handle, envelope);
-                        respond_http(stream, "200 OK", "ok");
-                    } else {
-                        respond_http(stream, "400 Bad Request", "invalid_payload");
-                    }
+    fn build_start(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+    ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
+        let profile = resolve_claude_runtime_profile(settings, target);
+        let launch_spec = {
+            #[cfg(target_os = "windows")]
+            if matches!(target, ExecTarget::Native) {
+                let (program, args) = build_claude_start_invocation(&profile);
+                crate::services::agent_client::AgentLaunchSpec::Direct {
+                    program,
+                    args,
+                    display_command: build_claude_start_command(target, &profile),
                 }
-                Err(err) if err == "method_not_allowed" => {
-                    respond_http(stream, "405 Method Not Allowed", "method_not_allowed");
-                }
-                Err(_) => {
-                    respond_http(stream, "400 Bad Request", "invalid_request");
-                }
+            } else {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_claude_start_command(target, &profile),
+                )
             }
-        }
-    });
 
-    Ok(())
-}
+            #[cfg(not(target_os = "windows"))]
+            {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_claude_start_command(target, &profile),
+                )
+            }
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: profile.env,
+            input_policy: crate::services::provider_registry::ProviderInputPolicy {
+                first_submit_strategy:
+                    crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline,
+            },
+        })
+    }
 
-pub(crate) fn current_hook_endpoint(app: &AppHandle) -> Result<String, String> {
-    let state: State<AppState> = app.state();
-    let guard = state.hook_endpoint.lock().map_err(|e| e.to_string())?;
-    guard.clone().ok_or("hook_endpoint_not_ready".to_string())
+    fn build_resume(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+        resume_id: &str,
+    ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
+        let profile = resolve_claude_runtime_profile(settings, target);
+        let launch_spec = {
+            #[cfg(target_os = "windows")]
+            if matches!(target, ExecTarget::Native) {
+                let (program, args) = build_claude_resume_invocation(&profile, resume_id);
+                crate::services::agent_client::AgentLaunchSpec::Direct {
+                    program,
+                    args,
+                    display_command: build_claude_resume_launch_command(target, &profile, resume_id),
+                }
+            } else {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_claude_resume_launch_command(target, &profile, resume_id),
+                )
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
+                    build_claude_resume_launch_command(target, &profile, resume_id),
+                )
+            }
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: profile.env,
+            input_policy: crate::services::provider_registry::ProviderInputPolicy {
+                first_submit_strategy:
+                    crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline,
+            },
+        })
+    }
+
+    fn ensure_workspace_integration(
+        &self,
+        cwd: &str,
+        target: &ExecTarget,
+    ) -> Result<(), String> {
+        ensure_claude_hook_settings(cwd, target)
+    }
+
+    fn normalize_hook_payload(&self, payload: &Value) -> Option<AgentLifecycleEvent> {
+        normalize_claude_lifecycle_event(payload)
+    }
+
+    fn extract_resume_id(&self, payload: &Value) -> Option<String> {
+        payload
+            .get("session_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    }
 }
 
 fn build_claude_hook_command(target: &ExecTarget) -> String {
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        "\"$CODER_STUDIO_APP_BIN\" --coder-studio-claude-hook".to_string()
-    } else {
-        #[cfg(target_os = "windows")]
-        {
-            "\"%CODER_STUDIO_APP_BIN%\" --coder-studio-claude-hook".to_string()
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            "\"$CODER_STUDIO_APP_BIN\" --coder-studio-claude-hook".to_string()
-        }
-    }
+    crate::services::provider_hooks::build_shared_hook_command(target)
 }
 
 fn is_coder_studio_hook_group(group: &Value) -> bool {
@@ -252,7 +228,10 @@ fn is_coder_studio_hook_group(group: &Value) -> bool {
                     && hook
                         .get("command")
                         .and_then(Value::as_str)
-                        .map(|command| command.contains("--coder-studio-claude-hook"))
+                        .map(|command| {
+                            command.contains("--coder-studio-agent-hook")
+                                || command.contains("--coder-studio-claude-hook")
+                        })
                         .unwrap_or(false)
             })
         })
@@ -357,44 +336,6 @@ pub(crate) fn ensure_claude_hook_settings(cwd: &str, target: &ExecTarget) -> Res
     }
 }
 
-pub(crate) fn current_app_bin_for_target(target: &ExecTarget) -> Result<String, String> {
-    let current = std::env::current_exe().map_err(|e| e.to_string())?;
-    let raw = current.to_string_lossy().to_string();
-    resolve_target_path(&raw, target)
-}
-
-pub(crate) fn run_claude_hook_helper() {
-    let _ = (|| -> Result<(), String> {
-        let endpoint = std::env::var("CODER_STUDIO_HOOK_ENDPOINT").map_err(|e| e.to_string())?;
-        let workspace_id = std::env::var("CODER_STUDIO_WORKSPACE_ID").map_err(|e| e.to_string())?;
-        let session_id = std::env::var("CODER_STUDIO_SESSION_ID").map_err(|e| e.to_string())?;
-        let (host, port, path) = parse_http_endpoint(&endpoint).ok_or("invalid_hook_endpoint")?;
-
-        let mut stdin = String::new();
-        std::io::stdin()
-            .read_to_string(&mut stdin)
-            .map_err(|e| e.to_string())?;
-        let payload = serde_json::from_str::<Value>(&stdin).map_err(|e| e.to_string())?;
-        let body = json!({
-            "workspace_id": workspace_id,
-            "session_id": session_id,
-            "payload": payload
-        })
-        .to_string();
-
-        let mut stream = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
-        let request = format!(
-            "POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream
-            .write_all(request.as_bytes())
-            .map_err(|e| e.to_string())?;
-        stream.flush().map_err(|e| e.to_string())?;
-        Ok(())
-    })();
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,28 +343,19 @@ mod tests {
 
     #[test]
     fn resolve_claude_runtime_profile_ignores_workspace_target() {
-        let settings = AppSettingsPayload {
-            general: GeneralSettingsPayload {
-                locale: "en".into(),
-                terminal_compatibility_mode: "standard".into(),
-                completion_notifications: CompletionNotificationSettings {
-                    enabled: true,
-                    only_when_background: true,
-                },
-                idle_policy: default_idle_policy(),
-            },
-            agent_defaults: AgentDefaultsPayload::default(),
-            claude: ClaudeSettingsPayload {
-                global: ClaudeRuntimeProfile {
+        let mut settings = AppSettingsPayload::default();
+        settings
+            .set_provider_profile(
+                "claude",
+                &ClaudeRuntimeProfile {
                     executable: "claude-current".into(),
                     startup_args: vec!["--verbose".into()],
                     env: BTreeMap::new(),
                     settings_json: json!({ "model": "sonnet" }),
                     global_config_json: json!({}),
                 },
-            },
-            codex: CodexSettingsPayload::default(),
-        };
+            )
+            .unwrap();
 
         let native = resolve_claude_runtime_profile(&settings, &ExecTarget::Native);
         let wsl = resolve_claude_runtime_profile(

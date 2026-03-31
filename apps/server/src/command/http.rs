@@ -1762,6 +1762,14 @@ mod tests {
         app
     }
 
+    fn claude_profile(settings: &AppSettingsPayload) -> ClaudeRuntimeProfile {
+        settings.provider_profile("claude").unwrap_or_default()
+    }
+
+    fn codex_profile(settings: &AppSettingsPayload) -> CodexRuntimeProfile {
+        settings.provider_profile("codex").unwrap_or_default()
+    }
+
     fn authorized_request() -> AuthorizedRequest {
         AuthorizedRequest {
             request: RequestContext {
@@ -2354,7 +2362,7 @@ mod tests {
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
             app.state(),
         )
         .unwrap();
@@ -2411,9 +2419,9 @@ mod tests {
             initial["general"]["terminal_compatibility_mode"],
             "standard"
         );
-        assert_eq!(initial["claude"]["global"]["executable"], "claude");
-        assert!(initial["claude"].get("overrides").is_none());
-        assert!(initial["codex"].get("overrides").is_none());
+        assert_eq!(initial["providers"]["claude"]["global"]["executable"], "claude");
+        assert!(initial.get("claude").is_none());
+        assert!(initial.get("codex").is_none());
 
         let saved = dispatch_rpc(
             &app,
@@ -2456,13 +2464,16 @@ mod tests {
         .expect("settings update should succeed");
 
         assert_eq!(saved["general"]["locale"], "zh");
-        assert_eq!(saved["claude"]["global"]["executable"], "claude-nightly");
         assert_eq!(
-            saved["claude"]["global"]["env"]["ANTHROPIC_BASE_URL"],
+            saved["providers"]["claude"]["global"]["executable"],
+            "claude-nightly"
+        );
+        assert_eq!(
+            saved["providers"]["claude"]["global"]["env"]["ANTHROPIC_BASE_URL"],
             "https://anthropic.example"
         );
-        assert!(saved["claude"].get("overrides").is_none());
-        assert!(saved["codex"].get("overrides").is_none());
+        assert!(saved.get("claude").is_none());
+        assert!(saved.get("codex").is_none());
     }
 
     #[test]
@@ -2515,18 +2526,14 @@ mod tests {
         )
         .expect("partial settings update should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert_eq!(updated.general.locale, "zh");
         assert_eq!(
-            updated
-                .claude
-                .global
-                .env
-                .get("TEST_MARKER")
-                .map(String::as_str),
+            claude.env.get("TEST_MARKER").map(String::as_str),
             Some("persisted-value")
         );
-        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+        assert_eq!(claude.settings_json["model"], "opus");
     }
 
     #[test]
@@ -2591,6 +2598,7 @@ mod tests {
         )
         .expect("camelCase settings update should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert!(!updated.general.completion_notifications.enabled);
         assert!(
@@ -2599,17 +2607,11 @@ mod tests {
                 .completion_notifications
                 .only_when_background
         );
-        assert_eq!(updated.claude.global.startup_args, vec!["--verbose"]);
-        assert_eq!(updated.claude.global.settings_json["model"], "opus");
-        assert_eq!(
-            updated.claude.global.settings_json["permissionMode"],
-            "acceptEdits"
-        );
-        assert_eq!(updated.claude.global.global_config_json["theme"], "dark");
-        assert_eq!(
-            updated.claude.global.global_config_json["showTurnDuration"],
-            true
-        );
+        assert_eq!(claude.startup_args, vec!["--verbose"]);
+        assert_eq!(claude.settings_json["model"], "opus");
+        assert_eq!(claude.settings_json["permissionMode"], "acceptEdits");
+        assert_eq!(claude.global_config_json["theme"], "dark");
+        assert_eq!(claude.global_config_json["showTurnDuration"], true);
     }
 
     #[test]
@@ -2632,7 +2634,7 @@ mod tests {
         .expect("camelCase root agent defaults update should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
 
-        assert_eq!(updated.agent_defaults.provider, AgentProvider::Codex);
+        assert_eq!(updated.agent_defaults.provider, AgentProvider::codex());
     }
 
     #[test]
@@ -2688,29 +2690,20 @@ mod tests {
         )
         .expect("object field replacement should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert_eq!(
-            updated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
             Some("https://next.example")
         );
-        assert_eq!(updated.claude.global.env.get("TEST_MARKER"), None);
+        assert_eq!(claude.env.get("TEST_MARKER"), None);
         assert_eq!(
-            updated.claude.global.settings_json.get("permissionMode"),
+            claude.settings_json.get("permissionMode"),
             Some(&json!("plan"))
         );
-        assert_eq!(updated.claude.global.settings_json.get("model"), None);
+        assert_eq!(claude.settings_json.get("model"), None);
         assert_eq!(
-            updated
-                .claude
-                .global
-                .global_config_json
-                .as_object()
-                .map(|value| value.is_empty()),
+            claude.global_config_json.as_object().map(|value| value.is_empty()),
             Some(true)
         );
     }
@@ -2740,18 +2733,18 @@ mod tests {
             &authorized,
         )
         .expect("camelCase codex settings update should succeed");
-        let updated: Value = updated;
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let codex = codex_profile(&updated);
 
-        assert_eq!(updated["codex"]["global"]["model"], "gpt-5.4");
-        assert!(updated["codex"].get("overrides").is_none());
-        assert_eq!(updated["codex"]["global"]["approval_policy"], "on-request");
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.approval_policy, "on-request");
         assert_eq!(
-            updated["codex"]["global"]["sandbox_mode"],
+            codex.sandbox_mode,
             "workspace-write"
         );
-        assert_eq!(updated["codex"]["global"]["web_search"], "live");
-        assert_eq!(updated["codex"]["global"]["model_reasoning_effort"], "high");
-        assert_eq!(updated["codex"]["global"]["extra_args"][0], "--full-auto");
+        assert_eq!(codex.web_search, "live");
+        assert_eq!(codex.model_reasoning_effort, "high");
+        assert_eq!(codex.extra_args, vec!["--full-auto"]);
     }
 
     #[test]
@@ -2944,7 +2937,7 @@ mod tests {
         )
         .expect("create_session should persist codex provider");
         let created: SessionInfo = serde_json::from_value(created).unwrap();
-        assert_eq!(created.provider, AgentProvider::Codex);
+        assert_eq!(created.provider, AgentProvider::codex());
 
         let started = dispatch_rpc(
             &app,

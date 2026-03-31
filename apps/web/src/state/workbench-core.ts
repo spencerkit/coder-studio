@@ -11,7 +11,7 @@ export type SessionStatus = "idle" | "running" | "background" | "waiting" | "sus
 export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";
-export type AgentProvider = "claude" | "codex";
+export type AgentProvider = string;
 
 export type ExecTarget =
   | { type: "native" }

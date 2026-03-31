@@ -337,7 +337,7 @@ mod tests {
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
             app.state(),
         )
         .unwrap();
@@ -367,7 +367,7 @@ mod tests {
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
             app.state(),
         )
         .unwrap();
@@ -396,7 +396,7 @@ mod tests {
         let extra = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
             app.state(),
         )
         .unwrap();
@@ -430,12 +430,12 @@ mod tests {
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
-            AgentProvider::Codex,
+            AgentProvider::codex(),
             app.state(),
         )
         .unwrap();
 
-        assert_eq!(created.provider, AgentProvider::Codex);
+        assert_eq!(created.provider, AgentProvider::codex());
         assert_eq!(created.resume_id, None);
 
         let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
@@ -444,7 +444,7 @@ mod tests {
             .into_iter()
             .find(|session| session.id == created.id)
             .expect("session should exist in snapshot");
-        assert_eq!(restored.provider, AgentProvider::Codex);
+        assert_eq!(restored.provider, AgentProvider::codex());
         assert_eq!(restored.resume_id, None);
     }
 

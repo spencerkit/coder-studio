@@ -6,6 +6,8 @@ pub(crate) mod claude;
 pub(crate) mod codex;
 pub(crate) mod filesystem;
 pub(crate) mod git;
+pub(crate) mod provider_hooks;
+pub(crate) mod provider_registry;
 pub(crate) mod system;
 pub(crate) mod terminal;
 pub(crate) mod utf8_stream;

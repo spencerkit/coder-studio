@@ -1,9 +1,12 @@
 import type { Locale, Translator } from "../../i18n";
 import type { AppSettings, AppSettingsUpdater, SettingsPanel } from "../../types/app";
+import {
+  BUILTIN_PROVIDER_MANIFESTS,
+  getProviderPanelId,
+} from "../../features/providers/registry.ts";
 import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
-import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
-import { CodexSettingsPanel } from "./CodexSettingsPanel.tsx";
+import { ProviderSettingsPanel } from "./ProviderSettingsPanel.tsx";
 
 type SettingsProps = {
   locale: Locale;
@@ -14,18 +17,25 @@ type SettingsProps = {
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
   onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
-  onClaudeSettingsChange: (updater: AppSettingsUpdater) => void;
-  onCodexSettingsChange: (updater: AppSettingsUpdater) => void;
+  onProviderSettingsChange: (updater: AppSettingsUpdater) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
 
 const settingsNavItems = (t: Translator) => [
-  { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
-  { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
-  { id: "codex" as const, label: t("codexSettingsTitle"), icon: <SettingsConfigIcon /> },
-  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> },
+  { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon />, testId: "general" },
+  ...BUILTIN_PROVIDER_MANIFESTS.map((manifest) => ({
+    id: getProviderPanelId(manifest.id) as SettingsPanel,
+    label: t(manifest.settingsTitleKey),
+    icon: <SettingsConfigIcon />,
+    testId: manifest.id,
+  })),
+  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon />, testId: "appearance" },
 ];
+
+const getActiveProviderId = (panel: SettingsPanel): string | null => (
+  panel.startsWith("provider:") ? panel.slice("provider:".length) : null
+);
 
 export const Settings = ({
   locale,
@@ -36,12 +46,12 @@ export const Settings = ({
   onGeneralSettingsChange,
   onAgentDefaultsChange,
   onSettingsIdlePolicyChange,
-  onClaudeSettingsChange,
-  onCodexSettingsChange,
+  onProviderSettingsChange,
   onSelectLocale,
   t,
 }: SettingsProps) => {
   const selectedLocale = getSettingsDraftLocale(settingsDraft);
+  const activeProviderId = getActiveProviderId(activeSettingsPanel);
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
@@ -56,7 +66,7 @@ export const Settings = ({
                   type="button"
                   className={`settings-nav-item ${isActive ? "active" : ""}`}
                   onClick={() => onSettingsPanelChange(item.id)}
-                  data-testid={`settings-nav-${item.id}`}
+                  data-testid={`settings-nav-${item.testId}`}
                 >
                   <span className="settings-nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
@@ -79,22 +89,17 @@ export const Settings = ({
                       </div>
                       <div className="settings-row-control">
                         <div className="settings-pill-select">
-                          <button
-                            type="button"
-                            className={`settings-pill-option ${settingsDraft.agentDefaults.provider === "claude" ? "active" : ""}`}
-                            onClick={() => onAgentDefaultsChange({ provider: "claude" })}
-                            data-testid="settings-default-provider-claude"
-                          >
-                            {t("providerClaude")}
-                          </button>
-                          <button
-                            type="button"
-                            className={`settings-pill-option ${settingsDraft.agentDefaults.provider === "codex" ? "active" : ""}`}
-                            onClick={() => onAgentDefaultsChange({ provider: "codex" })}
-                            data-testid="settings-default-provider-codex"
-                          >
-                            {t("providerCodex")}
-                          </button>
+                          {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
+                            <button
+                              key={manifest.id}
+                              type="button"
+                              className={`settings-pill-option ${settingsDraft.agentDefaults.provider === manifest.id ? "active" : ""}`}
+                              onClick={() => onAgentDefaultsChange({ provider: manifest.id })}
+                              data-testid={`settings-default-provider-${manifest.id}`}
+                            >
+                              {manifest.badgeLabel}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -225,18 +230,11 @@ export const Settings = ({
                     </div>
                   </div>
                 </>
-              ) : activeSettingsPanel === "claude" ? (
-                <ClaudeSettingsPanel
-                  locale={locale}
+              ) : activeSettingsPanel.startsWith("provider:") ? (
+                <ProviderSettingsPanel
+                  providerId={activeProviderId ?? ""}
                   settings={settingsDraft}
-                  onChange={onClaudeSettingsChange}
-                  t={t}
-                />
-              ) : activeSettingsPanel === "codex" ? (
-                <CodexSettingsPanel
-                  locale={locale}
-                  settings={settingsDraft}
-                  onChange={onCodexSettingsChange}
+                  onChange={onProviderSettingsChange}
                   t={t}
                 />
               ) : (

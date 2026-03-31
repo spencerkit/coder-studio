@@ -510,11 +510,7 @@ pub(crate) fn emit_workspace_artifacts_dirty(
     target: &ExecTarget,
     reason: &str,
 ) {
-    let categories = match reason {
-        "git_stage_all" | "git_stage_file" | "git_unstage_all" | "git_unstage_file"
-        | "git_discard_all" | "git_discard_file" | "git_commit" => vec!["git", "worktrees"],
-        _ => vec!["full"],
-    };
+    let categories = artifact_dirty_categories(reason);
     emit_transport_event(
         app,
         "workspace://artifacts_dirty",
@@ -525,4 +521,45 @@ pub(crate) fn emit_workspace_artifacts_dirty(
             "categories": categories,
         }),
     );
+}
+
+fn artifact_dirty_categories(reason: &str) -> Vec<&'static str> {
+    match reason {
+        "git_stage_all" | "git_stage_file" | "git_unstage_all" | "git_unstage_file" => {
+            vec!["git", "worktrees"]
+        }
+        "git_discard_all" | "git_discard_file" | "git_commit" => {
+            vec!["git", "worktrees", "tree"]
+        }
+        _ => vec!["full"],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::artifact_dirty_categories;
+
+    #[test]
+    fn artifact_dirty_categories_keep_tree_off_for_index_only_git_changes() {
+        assert_eq!(
+            artifact_dirty_categories("git_stage_all"),
+            vec!["git", "worktrees"]
+        );
+    }
+
+    #[test]
+    fn artifact_dirty_categories_include_tree_for_git_mutations_that_change_sidebar_paths() {
+        assert_eq!(
+            artifact_dirty_categories("git_commit"),
+            vec!["git", "worktrees", "tree"]
+        );
+        assert_eq!(
+            artifact_dirty_categories("git_discard_all"),
+            vec!["git", "worktrees", "tree"]
+        );
+        assert_eq!(
+            artifact_dirty_categories("git_discard_file"),
+            vec!["git", "worktrees", "tree"]
+        );
+    }
 }

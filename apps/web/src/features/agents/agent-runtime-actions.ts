@@ -14,6 +14,7 @@ import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi.ts
 import { isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session.ts";
 import type { AgentEvent, AgentLifecycleEvent } from "../../types/app.ts";
 import type { XtermBaseHandle } from "../../components/terminal/XtermBase.tsx";
+import { getProviderStartupBehavior } from "../providers/runtime-helpers.ts";
 import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
 
 type AgentSize = { cols: number; rows: number };
@@ -56,15 +57,11 @@ export type AgentRuntimeRefs = {
 export const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
 
 export const resolveAgentStartupQuietMs = (provider: Session["provider"]) => (
-  provider === "codex"
-    ? Math.max(AGENT_STARTUP_QUIET_MS, 1200)
-    : AGENT_STARTUP_QUIET_MS
+  Math.max(AGENT_STARTUP_QUIET_MS, getProviderStartupBehavior(provider).startupQuietMs)
 );
 
 export const resolveAgentStartupDiscoveryMs = (provider: Session["provider"]) => (
-  provider === "codex"
-    ? Math.max(AGENT_STARTUP_DISCOVERY_MS, 3000)
-    : AGENT_STARTUP_DISCOVERY_MS
+  Math.max(AGENT_STARTUP_DISCOVERY_MS, getProviderStartupBehavior(provider).startupDiscoveryMs)
 );
 
 export const isAgentRuntimeRunning = (
@@ -449,12 +446,10 @@ export const shouldReleaseAgentStartupGate = (
   if (state.exited) return true;
   if (state.sawReady && now - state.lastEventAt >= 120) return true;
 
-  if (provider !== "codex") {
-    const quietMs = resolveAgentStartupQuietMs(provider);
-    const discoveryMs = resolveAgentStartupDiscoveryMs(provider);
-    if (state.sawOutput && now - state.lastEventAt >= quietMs) return true;
-    if (!state.sawOutput && now - state.startedAt >= discoveryMs) return true;
-  }
+  const quietMs = resolveAgentStartupQuietMs(provider);
+  const discoveryMs = resolveAgentStartupDiscoveryMs(provider);
+  if (state.sawOutput && now - state.lastEventAt >= quietMs) return true;
+  if (!state.sawOutput && now - state.startedAt >= discoveryMs) return true;
 
   return now - state.startedAt >= AGENT_STARTUP_MAX_WAIT_MS;
 };

@@ -100,6 +100,7 @@ import {
   resolveAgentRecoveryAction,
   resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
+import { buildRuntimeRequirementStatusesFromManifest } from "../providers/runtime-helpers";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
   shouldAttachRouteRuntimeForExistingTab,
@@ -118,6 +119,7 @@ import {
   groupSessionHistory,
   selectHistoryPrimaryAction,
 } from "./session-history";
+import { createHistoryRefreshController } from "./history-refresh-controller";
 import { listRestoreCandidatesForWorkspace } from "./session-restore-chooser";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
@@ -263,88 +265,8 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
 const resolveTargetAgentCommand = (
   settings: AppSettings,
   target: ExecTarget,
-  provider: "claude" | "codex",
-) => resolveAgentRuntimeCommand(settings, target, provider);
-
-const REQUIRED_RUNTIME_COMMANDS = [
-  { id: "git", command: "git" },
-] as const satisfies ReadonlyArray<{
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-}>;
-type RuntimeRequirementSpec = {
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-  deferred?: boolean;
-  detailText?: string;
-};
-
-const parseRuntimeCommandBinary = (command: string) => {
-  const trimmed = command.trim();
-  if (!trimmed) return "";
-
-  let token = "";
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-
-  for (const ch of trimmed) {
-    if (escaped) {
-      token += ch;
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\" && !inSingle) {
-      escaped = true;
-      continue;
-    }
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-      continue;
-    }
-    if (ch === "\"" && !inSingle) {
-      inDouble = !inDouble;
-      continue;
-    }
-    if (/\s/.test(ch) && !inSingle && !inDouble) {
-      if (token) break;
-      continue;
-    }
-    token += ch;
-  }
-
-  return token.trim();
-};
-
-const commandUsesWorkspaceRelativePath = (binary: string) => {
-  return binary.startsWith("./")
-    || binary.startsWith("../")
-    || binary.startsWith(".\\")
-    || binary.startsWith("..\\");
-};
-
-const buildRuntimeRequirementSpecs = (
-  agentCommand: string,
   provider: Session["provider"],
-  t: ReturnType<typeof createTranslator>,
-): RuntimeRequirementSpec[] => {
-  const trimmedAgentCommand = agentCommand.trim();
-  const commandBinary = parseRuntimeCommandBinary(trimmedAgentCommand);
-  const agentRequirement: RuntimeRequirementSpec = {
-    id: provider === "codex" ? "codex" : "claude",
-    command: trimmedAgentCommand,
-  };
-
-  if (commandBinary.includes("{path}") || commandUsesWorkspaceRelativePath(commandBinary)) {
-    agentRequirement.deferred = true;
-    agentRequirement.detailText = provider === "codex"
-      ? t("runtimeCheckCodexDeferredHint")
-      : t("runtimeCheckClaudeDeferredHint");
-  }
-
-  return [agentRequirement, ...REQUIRED_RUNTIME_COMMANDS];
-};
+) => resolveAgentRuntimeCommand(settings, target, provider);
 
 const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
   target.type === "wsl"
@@ -356,12 +278,11 @@ const createRuntimeRequirementStatus = (
   provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
 ): RuntimeRequirementStatus[] =>
-  buildRuntimeRequirementSpecs(agentCommand, provider, t).map(({ id, command, deferred, detailText }) => ({
-    id,
-    command,
-    available: deferred ? true : null,
-    detailText,
-  }));
+  buildRuntimeRequirementStatusesFromManifest(
+    provider,
+    agentCommand,
+    (key, params) => t(key as never, params),
+  );
 
 const createRuntimeValidationState = (
   agentCommand: string,
@@ -459,9 +380,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
-  const historyLoadPromiseRef = useRef<Promise<void> | null>(null);
-  const historyHasLoadedRef = useRef(false);
-  const historyNeedsRefreshRef = useRef(false);
+  const historyRefreshControllerRef = useRef(createHistoryRefreshController(
+    () => withServiceFallback(() => listSessionHistory(), null),
+  ));
+  const historyLoadingRequestCountRef = useRef(0);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -506,43 +428,36 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
     const command = getTargetDefaultAgentCommand(target);
     const targetKey = serializeRuntimeValidationKey(target, command);
-    const requirementSpecs = buildRuntimeRequirementSpecs(command, appSettings.agentDefaults.provider, t);
-    const requestId = ++runtimeValidationRequestIdRef.current;
-    setRuntimeValidation(createRuntimeValidationState(
+    const requirements = createRuntimeRequirementStatus(
       command,
       appSettings.agentDefaults.provider,
       t,
+    );
+    const requestId = ++runtimeValidationRequestIdRef.current;
+    setRuntimeValidation({
+      status: "checking",
       targetKey,
-      "checking",
-    ));
+      requirements,
+    });
 
     const results = await Promise.all(
-      requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
-        if (deferred) {
-          return {
-            id,
-            command,
-            available: true,
-            detailText,
-          } satisfies RuntimeRequirementStatus;
+      requirements.map(async (requirement) => {
+        if (requirement.available === true) {
+          return requirement;
         }
         try {
-          const result = await checkCommandAvailability(command, target);
+          const result = await checkCommandAvailability(requirement.command, target);
           return {
-            id,
-            command,
+            ...requirement,
             available: result.available,
             resolvedPath: result.resolved_path ?? undefined,
             error: result.error ?? undefined,
-            detailText,
           } satisfies RuntimeRequirementStatus;
         } catch (error) {
           return {
-            id,
-            command,
+            ...requirement,
             available: false,
             error: error instanceof Error ? error.message : String(error),
-            detailText,
           } satisfies RuntimeRequirementStatus;
         }
       }),
@@ -918,33 +833,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   ]);
 
   const requestHistoryRecords = useCallback(async (force = false) => {
-    if (!force && historyHasLoadedRef.current && !historyNeedsRefreshRef.current) {
-      return;
-    }
-
-    const inflight = historyLoadPromiseRef.current;
-    if (inflight) {
-      await inflight;
-      if (!force || historyHasLoadedRef.current) {
-        return;
-      }
-    }
-
-    const task = (async () => {
-      setHistoryLoading(true);
-      const records = await withServiceFallback(() => listSessionHistory(), null);
+    historyLoadingRequestCountRef.current += 1;
+    setHistoryLoading(true);
+    try {
+      const records = await historyRefreshControllerRef.current.request(force);
       if (records) {
         setHistoryRecords(records);
-        historyHasLoadedRef.current = true;
-        historyNeedsRefreshRef.current = false;
       }
-    })().finally(() => {
-      historyLoadPromiseRef.current = null;
-      setHistoryLoading(false);
-    });
-
-    historyLoadPromiseRef.current = task;
-    await task;
+    } finally {
+      historyLoadingRequestCountRef.current = Math.max(
+        0,
+        historyLoadingRequestCountRef.current - 1,
+      );
+      setHistoryLoading(historyLoadingRequestCountRef.current > 0);
+    }
   }, []);
 
   const loadHistoryRecords = useCallback(async () => {
@@ -965,8 +867,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       await refreshHistoryRecords();
       return;
     }
-    if (historyHasLoadedRef.current) {
-      historyNeedsRefreshRef.current = true;
+    if (historyRefreshControllerRef.current.hasLoaded()) {
+      historyRefreshControllerRef.current.markDirty();
     }
   }, [hasRestoreDraftModeSelected, historyOpen, refreshHistoryRecords]);
 
@@ -1976,7 +1878,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }));
   };
 
-  const onDraftProviderChange = (paneId: string, provider: "claude" | "codex") => {
+  const onDraftProviderChange = (paneId: string, provider: Session["provider"]) => {
     const sessionId = findPaneSessionId(activeTab.paneLayout, paneId);
     if (!sessionId) return;
     updateTab(activeTab.id, (tab) => ({

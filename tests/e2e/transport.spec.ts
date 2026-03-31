@@ -385,6 +385,58 @@ test.describe('workspace transport baseline', () => {
     expect(normalizePathForComparison(baseline.workspacePath)).toBe(normalizePathForComparison(WORKSPACE_PATH));
   });
 
+  test('git discard all invalidations refresh the file tree over /ws before fallback polling', async ({ page }) => {
+    test.setTimeout(30000);
+    const probe = await installTransportProbe(page, { pollIntervalMs: 10000 });
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-git-discard-');
+    const untrackedFile = path.join(workspacePath, 'discard-me.txt');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await execFileAsync('git', ['init'], { cwd: workspacePath });
+      await fs.writeFile(untrackedFile, 'discard me\n', 'utf8');
+
+      workspace = await openWorkspace(page, DEFAULT_TRANSPORT_IDS, workspacePath);
+      await waitForBackendSocket(page);
+      const controller = await currentWorkspaceController(page, workspace.workspaceId);
+      const workspaceTreeCountBeforeDiscard = probe.rpcCounts.workspace_tree ?? 0;
+
+      await invokeRpc(page, 'git_discard_all', {
+        ...controller,
+        path: workspace.workspacePath,
+        target: workspace.target,
+      });
+
+      const dirtyFrame = await waitForWsEvent(
+        page,
+        'workspace://artifacts_dirty',
+        (payload) => payload.path === workspace?.workspacePath && payload.reason === 'git_discard_all',
+      );
+
+      expect(dirtyFrame.payload.categories).toEqual(['git', 'worktrees', 'tree']);
+      await expect
+        .poll(() => probe.rpcCounts.workspace_tree ?? 0, {
+          timeout: 5000,
+        })
+        .toBeGreaterThan(workspaceTreeCountBeforeDiscard);
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(untrackedFile);
+            return true;
+          } catch {
+            return false;
+          }
+        })
+        .toBe(false);
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
+      }
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
   test('refresh reattaches to the same shell replay and controller state', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();

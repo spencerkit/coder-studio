@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -29,12 +29,39 @@ pub enum SessionStatus {
     Interrupted,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentProvider {
-    #[default]
-    Claude,
-    Codex,
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct ProviderId(String);
+
+pub type AgentProvider = ProviderId;
+
+impl Default for ProviderId {
+    fn default() -> Self {
+        Self::claude()
+    }
+}
+
+impl ProviderId {
+    pub fn new(value: impl Into<String>) -> Result<Self, String> {
+        let raw = value.into();
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err("invalid_provider_id".to_string());
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn claude() -> Self {
+        Self("claude".to_string())
+    }
+
+    pub fn codex() -> Self {
+        Self("codex".to_string())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -159,14 +186,8 @@ impl Default for ClaudeRuntimeProfile {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
-pub struct ClaudeSettingsPayload {
-    pub global: ClaudeRuntimeProfile,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(default)]
 pub struct AgentDefaultsPayload {
-    pub provider: AgentProvider,
+    pub provider: ProviderId,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -203,20 +224,96 @@ impl Default for CodexRuntimeProfile {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
-pub struct CodexSettingsPayload {
-    pub global: CodexRuntimeProfile,
+pub struct ProviderSettingsPayload {
+    pub global: Value,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+impl Default for ProviderSettingsPayload {
+    fn default() -> Self {
+        Self {
+            global: default_json_object(),
+        }
+    }
+}
+
+fn default_provider_settings() -> BTreeMap<String, ProviderSettingsPayload> {
+    BTreeMap::from([
+        (
+            "claude".to_string(),
+            ProviderSettingsPayload {
+                global: serde_json::to_value(ClaudeRuntimeProfile::default())
+                    .unwrap_or_else(|_| default_json_object()),
+            },
+        ),
+        (
+            "codex".to_string(),
+            ProviderSettingsPayload {
+                global: serde_json::to_value(CodexRuntimeProfile::default())
+                    .unwrap_or_else(|_| default_json_object()),
+            },
+        ),
+    ])
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
 pub struct AppSettingsPayload {
     pub general: GeneralSettingsPayload,
     #[serde(alias = "agentDefaults")]
     pub agent_defaults: AgentDefaultsPayload,
-    pub claude: ClaudeSettingsPayload,
-    pub codex: CodexSettingsPayload,
+    pub providers: BTreeMap<String, ProviderSettingsPayload>,
+}
+
+impl Default for AppSettingsPayload {
+    fn default() -> Self {
+        Self {
+            general: GeneralSettingsPayload::default(),
+            agent_defaults: AgentDefaultsPayload::default(),
+            providers: default_provider_settings(),
+        }
+    }
+}
+
+impl AppSettingsPayload {
+    pub fn provider_global(&self, provider_id: &str) -> Option<&Value> {
+        self.providers.get(provider_id).map(|payload| &payload.global)
+    }
+
+    pub fn provider_profile<T>(&self, provider_id: &str) -> Option<T>
+    where
+        T: DeserializeOwned,
+    {
+        self.provider_global(provider_id)
+            .and_then(|value| serde_json::from_value::<T>(value.clone()).ok())
+    }
+
+    pub fn set_provider_global(&mut self, provider_id: impl Into<String>, global: Value) {
+        self.providers
+            .insert(provider_id.into(), ProviderSettingsPayload { global });
+    }
+
+    pub fn set_provider_profile<T>(
+        &mut self,
+        provider_id: impl Into<String>,
+        profile: &T,
+    ) -> Result<(), String>
+    where
+        T: Serialize,
+    {
+        self.set_provider_global(
+            provider_id,
+            serde_json::to_value(profile).map_err(|error| error.to_string())?,
+        );
+        Ok(())
+    }
+
+    pub fn ensure_builtin_provider_defaults(&mut self) {
+        for (provider_id, payload) in default_provider_settings() {
+            self.providers.entry(provider_id).or_insert(payload);
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

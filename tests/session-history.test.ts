@@ -16,12 +16,13 @@ const createRecord = (overrides: Partial<SessionHistoryRecord>): SessionHistoryR
   sessionId: "1",
   title: "Session 1",
   status: "idle",
+  provider: "claude",
   archived: false,
   mounted: false,
   recoverable: true,
   lastActiveAt: 1,
   archivedAt: null,
-  claudeSessionId: null,
+  resumeId: null,
   ...overrides,
 });
 
@@ -33,12 +34,13 @@ test("mapSessionHistoryRecord normalizes backend payload fields", () => {
     session_id: 42,
     title: "Session 42",
     status: "suspended",
+    provider: "claude",
     archived: true,
     mounted: false,
     recoverable: true,
     last_active_at: 1730000000000,
     archived_at: 1730000001000,
-    claude_session_id: "claude-42",
+    resume_id: "claude-42",
   };
 
   assert.deepEqual(mapSessionHistoryRecord(backendRecord), {
@@ -48,12 +50,13 @@ test("mapSessionHistoryRecord normalizes backend payload fields", () => {
     sessionId: "42",
     title: "Session 42",
     status: "suspended",
+    provider: "claude",
     archived: true,
     mounted: false,
     recoverable: true,
     lastActiveAt: 1730000000000,
     archivedAt: 1730000001000,
-    claudeSessionId: "claude-42",
+    resumeId: "claude-42",
   });
 });
 

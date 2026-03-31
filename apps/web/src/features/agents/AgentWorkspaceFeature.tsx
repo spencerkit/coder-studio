@@ -10,6 +10,8 @@ import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, Header
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
+import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry.ts";
+import { getProviderDisplayLabel } from "../providers/runtime-helpers.ts";
 import { resolveAgentPaneRenderState } from "./agent-pane-render";
 
 type AgentWorkspaceFeatureProps = {
@@ -197,7 +199,7 @@ const AgentPaneLeaf = memo(({
         </div>
         <div className="agent-pane-meta">
           <span className="agent-pane-state-tag muted" data-tone="muted">
-            {session.provider === "codex" ? "Codex" : "Claude"}
+            {getProviderDisplayLabel(session.provider)}
           </span>
           <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
             {headerTag.label}
@@ -264,20 +266,16 @@ const AgentPaneLeaf = memo(({
                   onSubmit={handleSubmitDraftPrompt}
                 >
                   <div className="agent-draft-launcher-tabs">
-                    <button
-                      type="button"
-                      className={`agent-draft-launcher-tab ${session.provider === "claude" ? "active" : ""}`}
-                      onClick={() => handleSetDraftProvider("claude")}
-                    >
-                      Claude
-                    </button>
-                    <button
-                      type="button"
-                      className={`agent-draft-launcher-tab ${session.provider === "codex" ? "active" : ""}`}
-                      onClick={() => handleSetDraftProvider("codex")}
-                    >
-                      Codex
-                    </button>
+                    {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
+                      <button
+                        key={manifest.id}
+                        type="button"
+                        className={`agent-draft-launcher-tab ${session.provider === manifest.id ? "active" : ""}`}
+                        onClick={() => handleSetDraftProvider(manifest.id)}
+                      >
+                        {manifest.badgeLabel}
+                      </button>
+                    ))}
                   </div>
                   <div className="agent-compose">
                     <input

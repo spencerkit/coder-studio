@@ -4,7 +4,6 @@ use std::time::Duration;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
-const CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS: u64 = 120;
 
 #[derive(Default)]
 struct AgentLifecycleFallbackState {
@@ -79,7 +78,7 @@ fn write_agent_input<F>(
     writer: &mut dyn Write,
     input: &str,
     append_newline: bool,
-    codex_first_submit_pending: &mut bool,
+    input_policy: &mut crate::services::provider_registry::ProviderInputPolicy,
     mut delay: F,
 ) -> Result<(), String>
 where
@@ -90,12 +89,18 @@ where
         .map_err(|e| e.to_string())?;
 
     if append_newline {
-        if *codex_first_submit_pending && !input.is_empty() {
-            writer.flush().map_err(|e| e.to_string())?;
-            delay(Duration::from_millis(CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS));
+        if let crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
+            delay_ms,
+        } = input_policy.first_submit_strategy.clone()
+        {
+            if !input.is_empty() {
+                writer.flush().map_err(|e| e.to_string())?;
+                delay(Duration::from_millis(delay_ms));
+            }
+            input_policy.first_submit_strategy =
+                crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline;
         }
         writer.write_all(b"\r").map_err(|e| e.to_string())?;
-        *codex_first_submit_pending = false;
     }
 
     writer.flush().map_err(|e| e.to_string())
@@ -157,13 +162,16 @@ pub(crate) fn agent_start(
     let settings = load_or_default_app_settings(state)?;
     let agent_target = ExecTarget::Native;
     let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
-    let client =
-        crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings);
-    let launch_spec = match effective_resume_id.as_deref() {
-        Some(resume_id) => client.resume_launch_spec(&agent_target, resume_id),
-        None => client.start_launch_spec(&agent_target),
+    let adapter =
+        crate::services::provider_registry::resolve_provider_adapter(stored_session.provider.as_str())
+            .ok_or_else(|| format!("unknown_provider:{}", stored_session.provider.as_str()))?;
+    let launch = match effective_resume_id.as_deref() {
+        Some(resume_id) => adapter.build_resume(&settings, &agent_target, resume_id)?,
+        None => adapter.build_start(&settings, &agent_target)?,
     };
-    client.ensure_workspace_hooks(&agent_cwd, &agent_target)?;
+    let input_policy = launch.input_policy.clone();
+    let launch_spec = launch.launch_spec;
+    adapter.ensure_workspace_integration(&agent_cwd, &agent_target)?;
 
     let (command, program, args) = match launch_spec {
         crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
@@ -197,7 +205,7 @@ pub(crate) fn agent_start(
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
-    for (key, value) in client.runtime_env() {
+    for (key, value) in launch.runtime_env {
         cmd.env(key, value);
     }
     let app_bin = current_app_bin_for_target(&agent_target)?;
@@ -231,10 +239,7 @@ pub(crate) fn agent_start(
         child: Mutex::new(child),
         killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
-        codex_first_submit_pending: Mutex::new(matches!(
-            stored_session.provider,
-            AgentProvider::Codex
-        )),
+        input_policy: Mutex::new(input_policy),
         master: Mutex::new(pair.master),
         process_id,
         process_group_leader,
@@ -386,8 +391,8 @@ pub(crate) fn agent_send(
     let runtime = agents.get(&key).ok_or("agent_not_running")?.clone();
     drop(agents);
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
-    let mut codex_first_submit_pending = runtime
-        .codex_first_submit_pending
+    let mut input_policy = runtime
+        .input_policy
         .lock()
         .map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
@@ -395,7 +400,7 @@ pub(crate) fn agent_send(
             &mut **handle,
             &input,
             append_newline.unwrap_or(true),
-            &mut codex_first_submit_pending,
+            &mut input_policy,
             std::thread::sleep,
         )?;
         if let Ok(session_id_num) = session_id.parse::<u64>() {
@@ -530,10 +535,15 @@ mod tests {
     #[test]
     fn codex_first_submit_flushes_before_enter() {
         let mut writer = RecordingWriter::default();
-        let mut pending = true;
+        let mut input_policy = crate::services::provider_registry::ProviderInputPolicy {
+            first_submit_strategy:
+                crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
+                    delay_ms: 120,
+                },
+        };
         let mut delays = Vec::new();
 
-        write_agent_input(&mut writer, "hello", true, &mut pending, |duration| {
+        write_agent_input(&mut writer, "hello", true, &mut input_policy, |duration| {
             delays.push(duration)
         })
         .unwrap();
@@ -549,18 +559,26 @@ mod tests {
         );
         assert_eq!(
             delays,
-            vec![Duration::from_millis(CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS)]
+            vec![Duration::from_millis(120)]
         );
-        assert!(!pending);
+        assert_eq!(
+            input_policy.first_submit_strategy,
+            crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline
+        );
     }
 
     #[test]
     fn codex_follow_up_enter_submits_buffered_prompt_without_extra_delay() {
         let mut writer = RecordingWriter::default();
-        let mut pending = true;
+        let mut input_policy = crate::services::provider_registry::ProviderInputPolicy {
+            first_submit_strategy:
+                crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
+                    delay_ms: 120,
+                },
+        };
         let mut delays = Vec::new();
 
-        write_agent_input(&mut writer, "", true, &mut pending, |duration| {
+        write_agent_input(&mut writer, "", true, &mut input_policy, |duration| {
             delays.push(duration)
         })
         .unwrap();
@@ -570,7 +588,10 @@ mod tests {
             vec!["write:<CR>".to_string(), "flush".to_string()]
         );
         assert!(delays.is_empty());
-        assert!(!pending);
+        assert_eq!(
+            input_policy.first_submit_strategy,
+            crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline
+        );
     }
 
     #[test]

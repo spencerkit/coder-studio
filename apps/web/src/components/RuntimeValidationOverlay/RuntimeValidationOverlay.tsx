@@ -3,10 +3,10 @@ import type { Translator } from "../../i18n";
 import type { ExecTarget } from "../../state/workbench";
 import { HeaderCloseIcon } from "../icons";
 
-export type RuntimeRequirementId = "claude" | "codex" | "git";
-
 export type RuntimeRequirementStatus = {
-  id: RuntimeRequirementId;
+  id: string;
+  label: string;
+  hint: string;
   command: string;
   available: boolean | null;
   resolvedPath?: string;
@@ -30,26 +30,6 @@ type RuntimeValidationOverlayProps = {
   onClose: () => void;
   onRetry: () => void;
   t: Translator;
-};
-
-const requirementCopy = (id: RuntimeRequirementId, t: Translator) => {
-  if (id === "claude") {
-    return {
-      label: t("runtimeCheckClaudeLabel"),
-      hint: t("runtimeCheckClaudeHint"),
-    };
-  }
-  if (id === "codex") {
-    return {
-      label: t("runtimeCheckCodexLabel"),
-      hint: t("runtimeCheckCodexHint"),
-    };
-  }
-
-  return {
-    label: t("runtimeCheckGitLabel"),
-    hint: t("runtimeCheckGitHint"),
-  };
 };
 
 export const RuntimeValidationOverlay = ({
@@ -141,7 +121,6 @@ export const RuntimeValidationOverlay = ({
 
           <div className="runtime-check-list" role="status" aria-live="polite">
             {validation.requirements.map((requirement) => {
-              const copy = requirementCopy(requirement.id, t);
               const stateClass = requirement.available === true
                 ? "available"
                 : requirement.available === false
@@ -150,16 +129,16 @@ export const RuntimeValidationOverlay = ({
               const detailText = requirement.detailText || (requirement.available === true
                 ? (requirement.resolvedPath
                     ? t("launchCommandResolvedPath", { path: requirement.resolvedPath })
-                    : copy.hint)
+                    : requirement.hint)
                 : requirement.available === false
-                  ? (requirement.error || copy.hint)
-                  : copy.hint);
+                  ? (requirement.error || requirement.hint)
+                  : requirement.hint);
 
               return (
                 <div key={requirement.id} className={`settings-inline-status ${stateClass}`}>
                   <span className="settings-inline-status-dot" />
                   <div className="settings-inline-status-copy">
-                    <span>{copy.label}</span>
+                    <span>{requirement.label}</span>
                     <small>{detailText}</small>
                   </div>
                 </div>

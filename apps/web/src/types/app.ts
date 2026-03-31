@@ -405,6 +405,10 @@ export type CodexRuntimeProfile = {
   env: Record<string, string>;
 };
 
+export type ProviderSettingsPayload = {
+  global: Record<string, unknown>;
+};
+
 export type AppSettingsPayload = {
   general: {
     locale: Locale;
@@ -413,17 +417,23 @@ export type AppSettingsPayload = {
     idlePolicy: IdlePolicy;
   };
   agentDefaults: {
-    provider: AgentProvider;
+    provider: string;
   };
-  claude: {
-    global: ClaudeRuntimeProfile;
-  };
-  codex: {
-    global: CodexRuntimeProfile;
-  };
+  providers: Record<string, ProviderSettingsPayload>;
 };
 
 export type LegacyAppSettings = {
+  general?: Partial<AppSettingsPayload["general"]>;
+  agentDefaults?: Partial<AppSettingsPayload["agentDefaults"]>;
+  providers?: Record<string, Partial<ProviderSettingsPayload> | undefined>;
+  claude?: {
+    global?: Partial<ClaudeRuntimeProfile>;
+    overrides?: unknown;
+  };
+  codex?: {
+    global?: Partial<CodexRuntimeProfile>;
+    overrides?: unknown;
+  };
   locale?: Locale;
   agentCommand?: string;
   idlePolicy?: Partial<IdlePolicy>;
@@ -432,6 +442,12 @@ export type LegacyAppSettings = {
 };
 
 export type AppSettings = AppSettingsPayload & {
+  claude: {
+    global: ClaudeRuntimeProfile;
+  };
+  codex: {
+    global: CodexRuntimeProfile;
+  };
   agentCommand: string;
   idlePolicy: IdlePolicy;
   completionNotifications: CompletionNotificationSettings;
@@ -450,7 +466,7 @@ export type AgentCommandStatus = {
 
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
-export type SettingsPanel = "general" | "claude" | "codex" | "appearance";
+export type SettingsPanel = "general" | "appearance" | `provider:${string}`;
 
 export type SettingsNavItem = {
   id: SettingsPanel;

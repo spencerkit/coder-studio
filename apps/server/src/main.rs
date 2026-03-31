@@ -82,17 +82,12 @@ pub(crate) use infra::support::{
     resolve_git_command_path, wsl_parent_path,
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
-#[cfg(test)]
-pub(crate) use models::{
-    AgentDefaultsPayload, ClaudeSettingsPayload, CodexSettingsPayload,
-    CompletionNotificationSettings, GeneralSettingsPayload,
-};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
     AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
     CodexRuntimeProfile, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus, IdlePolicy,
+    ProviderId, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
     SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
     WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
     WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
@@ -107,14 +102,6 @@ pub(crate) use services::agent::{
 pub(crate) use services::app_settings::{
     app_settings_get, app_settings_update, load_or_default_app_settings,
 };
-pub(crate) use services::claude::{
-    current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
-    parse_http_endpoint, resolve_claude_runtime_profile, run_claude_hook_helper,
-    start_claude_hook_receiver,
-};
-pub(crate) use services::codex::{
-    ensure_codex_hook_settings, resolve_codex_runtime_profile, run_codex_hook_helper,
-};
 pub(crate) use services::filesystem::{
     file_preview, file_save, filesystem_list, filesystem_roots, invalidate_workspace_tree_cache,
     workspace_tree, workspace_tree_cached,
@@ -127,6 +114,10 @@ pub(crate) use services::git::{
 pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
     close_workspace_terminals, terminal_close, terminal_create, terminal_resize, terminal_write,
+};
+pub(crate) use services::provider_hooks::{
+    current_app_bin_for_target, current_hook_endpoint, run_provider_hook_helper,
+    start_provider_hook_receiver,
 };
 pub(crate) use services::workspace::{
     activate_workspace_scoped, archive_session, close_workspace_scoped, create_session,
@@ -217,12 +208,8 @@ fn resolve_app_data_dir() -> Result<PathBuf, std::io::Error> {
 
 #[tokio::main]
 async fn main() {
-    if std::env::args().any(|arg| arg == "--coder-studio-claude-hook") {
-        run_claude_hook_helper();
-        return;
-    }
-    if std::env::args().any(|arg| arg == "--coder-studio-codex-hook") {
-        run_codex_hook_helper();
+    if std::env::args().any(|arg| arg == "--coder-studio-agent-hook") {
+        run_provider_hook_helper();
         return;
     }
 
@@ -243,7 +230,7 @@ async fn run() -> Result<(), String> {
     mark_active_sessions_interrupted_on_boot(&conn)?;
 
     let (app, mut shutdown_rx) = RuntimeHandle::new();
-    start_claude_hook_receiver(&app)?;
+    start_provider_hook_receiver(&app)?;
 
     let state: State<AppState> = app.state();
     {

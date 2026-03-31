@@ -27,7 +27,7 @@ pub(crate) struct AgentRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
-    pub codex_first_submit_pending: Mutex<bool>,
+    pub input_policy: Mutex<crate::services::provider_registry::ProviderInputPolicy>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
     pub process_id: Option<u32>,
     pub process_group_leader: Option<i32>,

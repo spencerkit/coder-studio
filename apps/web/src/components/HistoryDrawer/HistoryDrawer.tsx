@@ -4,6 +4,7 @@ import type {
   SessionHistoryGroup,
   SessionHistoryRecord,
 } from "../../types/app.ts";
+import { getProviderDisplayLabel } from "../../features/providers/runtime-helpers.ts";
 import { ChevronDownIcon, ChevronRightIcon, HeaderCloseIcon } from "../icons.tsx";
 import { selectHistoryPrimaryActionBadge } from "../../features/workspace/session-history.ts";
 
@@ -123,7 +124,7 @@ export const HistoryDrawer = ({
                               ) : null}
                             </div>
                             <div className="history-record-meta">
-                              <span>{record.provider === "codex" ? "Codex" : "Claude"}</span>
+                              <span>{getProviderDisplayLabel(record.provider)}</span>
                               <span>{recordMetaLabel(record, t)}</span>
                               <span>{record.status}</span>
                               <span>{new Date(record.lastActiveAt).toLocaleString()}</span>

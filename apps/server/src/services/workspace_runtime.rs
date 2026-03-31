@@ -664,7 +664,7 @@ mod tests {
             app.state(),
             &workspace_id,
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
         )
         .unwrap();
         archive_workspace_session(app.state(), &workspace_id, archived.id).unwrap();
@@ -672,7 +672,7 @@ mod tests {
             app.state(),
             &workspace_id,
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
         )
         .unwrap();
 
@@ -1023,7 +1023,7 @@ mod tests {
             app.state(),
             &workspace_id,
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
         )
         .expect("session should be created");
 
@@ -1063,7 +1063,7 @@ mod tests {
             app.state(),
             &workspace_id,
             SessionMode::Branch,
-            AgentProvider::Claude,
+            AgentProvider::claude(),
         )
         .expect("session should be created");
 

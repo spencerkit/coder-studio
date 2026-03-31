@@ -86,8 +86,7 @@ export const SettingsScreen = ({
         onGeneralSettingsChange={onGeneralSettingsChange}
         onAgentDefaultsChange={onAgentDefaultsChange}
         onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
-        onClaudeSettingsChange={commitSettings}
-        onCodexSettingsChange={commitSettings}
+        onProviderSettingsChange={commitSettings}
         onSelectLocale={onSelectLocale}
         t={t}
       />

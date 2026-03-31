@@ -22,6 +22,63 @@ fn ensure_app_settings_row(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn normalize_app_settings_payload(raw: Value) -> Result<AppSettingsPayload, String> {
+    let Value::Object(mut source) = raw else {
+        return Ok(default_app_settings());
+    };
+
+    let mut providers = source
+        .remove("providers")
+        .unwrap_or_else(|| Value::Object(Map::new()));
+    if !providers.is_object() {
+        providers = Value::Object(Map::new());
+    }
+
+    if let Some(providers_object) = providers.as_object_mut() {
+        for provider_id in ["claude", "codex"] {
+            if let Some(global) = source
+                .get(provider_id)
+                .and_then(Value::as_object)
+                .and_then(|provider| provider.get("global"))
+            {
+                let provider_entry = providers_object
+                    .entry(provider_id.to_string())
+                    .or_insert_with(|| json!({ "global": {} }));
+                if !provider_entry.is_object() {
+                    *provider_entry = json!({ "global": {} });
+                }
+                let provider_object = provider_entry.as_object_mut().expect("object");
+                let global_entry = provider_object
+                    .entry("global".to_string())
+                    .or_insert_with(|| Value::Object(Map::new()));
+                merge_settings_value(
+                    global_entry,
+                    global.clone(),
+                    &[
+                        "providers".to_string(),
+                        provider_id.to_string(),
+                        "global".to_string(),
+                    ],
+                );
+            }
+        }
+    }
+
+    source.insert("providers".to_string(), providers);
+
+    let mut normalized =
+        serde_json::from_value::<AppSettingsPayload>(Value::Object(source)).unwrap_or_default();
+    normalized.ensure_builtin_provider_defaults();
+    if crate::services::provider_registry::resolve_provider_adapter(
+        normalized.agent_defaults.provider.as_str(),
+    )
+    .is_none()
+    {
+        normalized.agent_defaults.provider = ProviderId::default();
+    }
+    Ok(normalized)
+}
+
 fn load_or_default_app_settings_from_conn(conn: &Connection) -> Result<AppSettingsPayload, String> {
     ensure_app_settings_row(conn)?;
     let raw: String = conn
@@ -31,7 +88,8 @@ fn load_or_default_app_settings_from_conn(conn: &Connection) -> Result<AppSettin
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
-    serde_json::from_str(&raw).map_err(|e| e.to_string())
+    let parsed = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    normalize_app_settings_payload(parsed)
 }
 
 fn resolve_claude_home_root(root_override: Option<&Path>) -> Option<PathBuf> {
@@ -239,8 +297,9 @@ fn hydrate_settings_from_claude_sources(
     let mut hydrated = settings.clone();
 
     if let Some(sources) = sources {
-        hydrated.claude.global =
-            hydrate_runtime_profile_from_claude_sources(&hydrated.claude.global, sources);
+        let profile = settings.provider_profile::<ClaudeRuntimeProfile>("claude").unwrap_or_default();
+        let hydrated_profile = hydrate_runtime_profile_from_claude_sources(&profile, sources);
+        let _ = hydrated.set_provider_profile("claude", &hydrated_profile);
     }
 
     hydrated
@@ -297,8 +356,9 @@ fn hydrate_settings_from_codex_sources(
     let mut hydrated = settings.clone();
 
     if let Some(source) = source {
-        hydrated.codex.global =
-            hydrate_runtime_profile_from_codex_source(&hydrated.codex.global, source);
+        let profile = settings.provider_profile::<CodexRuntimeProfile>("codex").unwrap_or_default();
+        let hydrated_profile = hydrate_runtime_profile_from_codex_source(&profile, source);
+        let _ = hydrated.set_provider_profile("codex", &hydrated_profile);
     }
 
     hydrated
@@ -331,18 +391,21 @@ fn save_app_settings_to_conn(
     settings: &AppSettingsPayload,
 ) -> Result<AppSettingsPayload, String> {
     ensure_app_settings_row(conn)?;
+    let normalized = normalize_app_settings_payload(
+        serde_json::to_value(settings).map_err(|e| e.to_string())?,
+    )?;
     conn.execute(
         "INSERT INTO app_settings (id, payload, updated_at)
          VALUES (?1, ?2, ?3)
          ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
         params![
             APP_SETTINGS_ROW_ID,
-            serde_json::to_string(settings).map_err(|e| e.to_string())?,
+            serde_json::to_string(&normalized).map_err(|e| e.to_string())?,
             now_ts(),
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(settings.clone())
+    Ok(normalized)
 }
 
 fn should_replace_object_patch(path: &[String]) -> bool {
@@ -353,6 +416,10 @@ fn should_replace_object_patch(path: &[String]) -> bool {
             | ["claude", "global", "settings_json"]
             | ["claude", "global", "global_config_json"]
             | ["codex", "global", "env"]
+            | ["providers", "claude", "global", "env"]
+            | ["providers", "claude", "global", "settings_json"]
+            | ["providers", "claude", "global", "global_config_json"]
+            | ["providers", "codex", "global", "env"]
     )
 }
 
@@ -405,12 +472,27 @@ fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
             _ => key.to_string(),
         },
         ["claude", "global"] => match key {
+            "startup_args" => "startup_args".to_string(),
             "startupArgs" => "startup_args".to_string(),
             "settingsJson" => "settings_json".to_string(),
             "globalConfigJson" => "global_config_json".to_string(),
             _ => key.to_string(),
         },
         ["codex", "global"] => match key {
+            "extraArgs" => "extra_args".to_string(),
+            "approvalPolicy" => "approval_policy".to_string(),
+            "sandboxMode" => "sandbox_mode".to_string(),
+            "webSearch" => "web_search".to_string(),
+            "modelReasoningEffort" => "model_reasoning_effort".to_string(),
+            _ => key.to_string(),
+        },
+        ["providers", "claude", "global"] => match key {
+            "startupArgs" => "startup_args".to_string(),
+            "settingsJson" => "settings_json".to_string(),
+            "globalConfigJson" => "global_config_json".to_string(),
+            _ => key.to_string(),
+        },
+        ["providers", "codex", "global"] => match key {
             "extraArgs" => "extra_args".to_string(),
             "approvalPolicy" => "approval_policy".to_string(),
             "sandboxMode" => "sandbox_mode".to_string(),
@@ -465,8 +547,7 @@ fn app_settings_update_with_before_save_hook(
                 .map_err(|e| e.to_string())?;
         merge_settings_value(&mut current, normalized_patch, &[]);
         before_save()?;
-        let merged: AppSettingsPayload =
-            serde_json::from_value(current).map_err(|e| e.to_string())?;
+        let merged = normalize_app_settings_payload(current)?;
         save_app_settings_to_conn(conn, &merged)
     })
 }
@@ -511,6 +592,14 @@ mod tests {
         fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
     }
 
+    fn claude_profile(settings: &AppSettingsPayload) -> ClaudeRuntimeProfile {
+        settings.provider_profile("claude").unwrap_or_default()
+    }
+
+    fn codex_profile(settings: &AppSettingsPayload) -> CodexRuntimeProfile {
+        settings.provider_profile("codex").unwrap_or_default()
+    }
+
     #[test]
     fn hydrate_settings_from_claude_home_imports_auth_and_existing_file_values() {
         let root = unique_temp_dir("claude-settings-import");
@@ -541,43 +630,23 @@ mod tests {
 
         let hydrated =
             hydrate_settings_from_claude_home(&AppSettingsPayload::default(), Some(root.as_path()));
+        let claude = claude_profile(&hydrated);
 
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_API_KEY")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_API_KEY").map(String::as_str),
             Some("primary-api-key-12345")
         );
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_AUTH_TOKEN")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
             Some("auth-token-12345")
         );
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
             Some("https://anthropic.example")
         );
-        assert_eq!(hydrated.claude.global.settings_json["model"], "sonnet");
-        assert_eq!(
-            hydrated.claude.global.settings_json["permissionMode"],
-            "auto"
-        );
-        assert_eq!(
-            hydrated.claude.global.global_config_json["showTurnDuration"],
-            true
-        );
+        assert_eq!(claude.settings_json["model"], "sonnet");
+        assert_eq!(claude.settings_json["permissionMode"], "auto");
+        assert_eq!(claude.global_config_json["showTurnDuration"], true);
 
         let _ = fs::remove_dir_all(root);
     }
@@ -604,43 +673,31 @@ mod tests {
         );
 
         let mut settings = AppSettingsPayload::default();
-        settings
-            .claude
-            .global
+        let mut profile = claude_profile(&settings);
+        profile
             .env
             .insert("ANTHROPIC_API_KEY".into(), "api-key-from-backend".into());
-        settings.claude.global.env.insert(
+        profile.env.insert(
             "ANTHROPIC_AUTH_TOKEN".into(),
             "auth-token-from-backend".into(),
         );
-        settings.claude.global.settings_json = json!({
+        profile.settings_json = json!({
             "model": "backend-model"
         });
+        settings.set_provider_profile("claude", &profile).unwrap();
 
         let hydrated = hydrate_settings_from_claude_home(&settings, Some(root.as_path()));
+        let claude = claude_profile(&hydrated);
 
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_API_KEY")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_API_KEY").map(String::as_str),
             Some("api-key-from-backend")
         );
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_AUTH_TOKEN")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
             Some("auth-token-from-backend")
         );
-        assert_eq!(
-            hydrated.claude.global.settings_json["model"],
-            "backend-model"
-        );
+        assert_eq!(claude.settings_json["model"], "backend-model");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -674,39 +731,22 @@ mod tests {
                 ),
             }),
         );
+        let claude = claude_profile(&hydrated);
 
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_API_KEY")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_API_KEY").map(String::as_str),
             Some("wsl-primary-api-key")
         );
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_AUTH_TOKEN")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
             Some("wsl-auth-token")
         );
         assert_eq!(
-            hydrated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
             Some("https://wsl.example")
         );
-        assert_eq!(hydrated.claude.global.settings_json["model"], "wsl-sonnet");
-        assert_eq!(
-            hydrated.claude.global.global_config_json["showTurnDuration"],
-            true
-        );
+        assert_eq!(claude.settings_json["model"], "wsl-sonnet");
+        assert_eq!(claude.global_config_json["showTurnDuration"], true);
     }
 
     #[test]
@@ -731,12 +771,13 @@ mod tests {
 
         let hydrated =
             hydrate_settings_from_codex_home(&AppSettingsPayload::default(), Some(root.as_path()));
+        let codex = codex_profile(&hydrated);
 
-        assert_eq!(hydrated.codex.global.model, "gpt-5.4");
-        assert_eq!(hydrated.codex.global.approval_policy, "on-request");
-        assert_eq!(hydrated.codex.global.sandbox_mode, "workspace-write");
-        assert_eq!(hydrated.codex.global.web_search, "live");
-        assert_eq!(hydrated.codex.global.model_reasoning_effort, "high");
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.approval_policy, "on-request");
+        assert_eq!(codex.sandbox_mode, "workspace-write");
+        assert_eq!(codex.web_search, "live");
+        assert_eq!(codex.model_reasoning_effort, "high");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -760,15 +801,18 @@ mod tests {
         .unwrap();
 
         let mut settings = AppSettingsPayload::default();
-        settings.codex.global.model = "gpt-5.5".into();
-        settings.codex.global.approval_policy = "on-request".into();
-        settings.codex.global.sandbox_mode = "workspace-write".into();
+        let mut profile = codex_profile(&settings);
+        profile.model = "gpt-5.5".into();
+        profile.approval_policy = "on-request".into();
+        profile.sandbox_mode = "workspace-write".into();
+        settings.set_provider_profile("codex", &profile).unwrap();
 
         let hydrated = hydrate_settings_from_codex_home(&settings, Some(root.as_path()));
+        let codex = codex_profile(&hydrated);
 
-        assert_eq!(hydrated.codex.global.model, "gpt-5.5");
-        assert_eq!(hydrated.codex.global.approval_policy, "on-request");
-        assert_eq!(hydrated.codex.global.sandbox_mode, "workspace-write");
+        assert_eq!(codex.model, "gpt-5.5");
+        assert_eq!(codex.approval_policy, "on-request");
+        assert_eq!(codex.sandbox_mode, "workspace-write");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -793,11 +837,12 @@ mod tests {
                 ),
             ])),
         );
+        let codex = codex_profile(&hydrated);
 
-        assert_eq!(hydrated.codex.global.model, "gpt-5.4");
-        assert_eq!(hydrated.codex.global.approval_policy, "on-request");
-        assert_eq!(hydrated.codex.global.sandbox_mode, "workspace-write");
-        assert_eq!(hydrated.codex.global.model_reasoning_effort, "high");
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.approval_policy, "on-request");
+        assert_eq!(codex.sandbox_mode, "workspace-write");
+        assert_eq!(codex.model_reasoning_effort, "high");
     }
 
     #[test]
@@ -842,14 +887,10 @@ mod tests {
         }
 
         let saved = load_or_default_app_settings(app.state()).unwrap();
+        let claude = claude_profile(&saved);
         assert_eq!(saved.general.locale, "zh");
         assert_eq!(
-            saved
-                .claude
-                .global
-                .env
-                .get("TEST_MARKER")
-                .map(String::as_str),
+            claude.env.get("TEST_MARKER").map(String::as_str),
             Some("persisted-value")
         );
     }

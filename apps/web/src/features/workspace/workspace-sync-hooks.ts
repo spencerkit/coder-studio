@@ -52,6 +52,7 @@ import {
   resolveArtifactRefreshScope,
   type ArtifactRefreshScope,
 } from "./workspace-artifact-refresh";
+import { createWorkspaceArtifactRefreshQueue } from "./workspace-artifact-refresh-queue";
 import {
   applyPendingStreamIndex,
   createPendingStreamIndex,
@@ -396,9 +397,11 @@ export const useWorkspaceArtifactsSync = ({
   updateTab,
   withServiceFallback,
 }: UseWorkspaceArtifactsSyncArgs) => {
-  const pendingRefreshesRef = useRef(new Map<string, Promise<WorkspaceTree | null>>());
   const queuedRefreshScopesRef = useRef(new Map<string, ArtifactRefreshScope>());
-  const queuedRefreshTimersRef = useRef(new Map<string, number>());
+  const refreshQueueRunnerRef = useRef<(tabId: string) => Promise<WorkspaceTree | null>>(
+    async () => null,
+  );
+  const refreshQueueRef = useRef<ReturnType<typeof createWorkspaceArtifactRefreshQueue<WorkspaceTree | null>> | null>(null);
   const updateTabRef = useLatestRef(updateTab);
   const withServiceFallbackRef = useLatestRef(withServiceFallback);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
@@ -407,6 +410,19 @@ export const useWorkspaceArtifactsSync = ({
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === "undefined" ? true : navigator.onLine !== false
   ));
+
+  if (!refreshQueueRef.current) {
+    refreshQueueRef.current = createWorkspaceArtifactRefreshQueue<WorkspaceTree | null>(
+      (tabId) => refreshQueueRunnerRef.current(tabId),
+      (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+      (handle) => globalThis.clearTimeout(handle as number),
+      120,
+    );
+  }
+
+  useEffect(() => () => {
+    refreshQueueRef.current?.dispose();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
@@ -499,29 +515,21 @@ export const useWorkspaceArtifactsSync = ({
   const flushWorkspaceArtifactsRefresh = useCallback(async (
     tabId: string,
   ): Promise<WorkspaceTree | null> => {
-    const pending = pendingRefreshesRef.current.get(tabId);
-    if (pending) {
-      return pending;
-    }
-
     const queuedScope = queuedRefreshScopesRef.current.get(tabId);
     if (!queuedScope || !hasArtifactRefreshWork(queuedScope)) {
       return null;
     }
     queuedRefreshScopesRef.current.delete(tabId);
 
-    const task = runWorkspaceArtifactsRefresh(tabId, queuedScope).finally(() => {
-      pendingRefreshesRef.current.delete(tabId);
-      if (queuedRefreshScopesRef.current.has(tabId) && !queuedRefreshTimersRef.current.has(tabId)) {
-        queuedRefreshTimersRef.current.set(tabId, window.setTimeout(() => {
-          queuedRefreshTimersRef.current.delete(tabId);
-          void flushWorkspaceArtifactsRefresh(tabId);
-        }, 120));
+    try {
+      return await runWorkspaceArtifactsRefresh(tabId, queuedScope);
+    } finally {
+      if (queuedRefreshScopesRef.current.has(tabId)) {
+        void refreshQueueRef.current?.request(tabId);
       }
-    });
-    pendingRefreshesRef.current.set(tabId, task);
-    return task;
+    }
   }, [runWorkspaceArtifactsRefresh]);
+  refreshQueueRunnerRef.current = flushWorkspaceArtifactsRefresh;
 
   const refreshWorkspaceArtifacts = useCallback(async (
     tabId: string,
@@ -536,24 +544,10 @@ export const useWorkspaceArtifactsSync = ({
     queuedRefreshScopesRef.current.set(tabId, mergeArtifactRefreshScopes(queuedScope, scope));
 
     if (immediate) {
-      const timer = queuedRefreshTimersRef.current.get(tabId);
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-        queuedRefreshTimersRef.current.delete(tabId);
-      }
-      return flushWorkspaceArtifactsRefresh(tabId);
+      return refreshQueueRef.current?.request(tabId, true) ?? flushWorkspaceArtifactsRefresh(tabId);
     }
 
-    if (queuedRefreshTimersRef.current.has(tabId)) {
-      return pendingRefreshesRef.current.get(tabId) ?? null;
-    }
-
-    queuedRefreshTimersRef.current.set(tabId, window.setTimeout(() => {
-      queuedRefreshTimersRef.current.delete(tabId);
-      void flushWorkspaceArtifactsRefresh(tabId);
-    }, 120));
-
-    return pendingRefreshesRef.current.get(tabId) ?? null;
+    return refreshQueueRef.current?.request(tabId) ?? Promise.resolve(null);
   }, [flushWorkspaceArtifactsRefresh]);
 
   useEffect(() => {
@@ -595,8 +589,8 @@ export const useWorkspaceArtifactsSync = ({
   }, [activeProjectPath, activeTabId, isDocumentVisible, isOnline, refreshWorkspaceArtifacts]);
 
   useEffect(() => () => {
-    queuedRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    queuedRefreshTimersRef.current.clear();
+    refreshQueueRef.current?.dispose();
+    queuedRefreshScopesRef.current.clear();
   }, []);
 
   return {
