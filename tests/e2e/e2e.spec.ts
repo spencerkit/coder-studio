@@ -145,13 +145,25 @@ const launchLocalWorkspace = async (page: Page) => {
 
   await page.getByRole('button', { name: 'Home' }).click();
   const selectedPath = ((await page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong').textContent()) ?? '').trim();
+  const expectedLabel = workspaceLabelForPath(selectedPath);
   await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-  return workspaceLabelForPath(selectedPath);
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(1);
+  await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(expectedLabel);
+  await expect(page).toHaveURL(/\/workspace\/.+/);
+  await expect(page.getByTestId('workspace-welcome-screen')).toHaveCount(0);
+  return expectedLabel;
 };
 
 const closeActiveWorkspaceFromTopBar = async (page: Page) => {
+  const { bootstrap, controllerIds } = await readScopedWorkbenchBootstrap(page);
+  const workspaceIdMatch = new URL(page.url()).pathname.match(/^\/workspace\/([^/]+)$/);
+  const activeWorkspaceId = bootstrap.ui_state.active_workspace_id
+    ?? bootstrap.ui_state.open_workspace_ids[0]
+    ?? (workspaceIdMatch?.[1] ? decodeURIComponent(workspaceIdMatch[1]) : '');
+  expect(activeWorkspaceId).toBeTruthy();
+  await currentWorkspaceController(page, activeWorkspaceId, controllerIds);
+
   const activeWorkspaceTab = page.locator('.workspace-top-tab.active');
   await expect(activeWorkspaceTab).toBeVisible();
   await activeWorkspaceTab.hover();
@@ -164,6 +176,36 @@ const invokeRpc = async <T>(page: Page, command: string, payload: Record<string,
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+};
+
+const readScopedWorkbenchBootstrap = async (page: Page) => {
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+      active_workspace_id?: string | null;
+    };
+    workspaces: ReminderWorkspaceSnapshot[];
+  }>(page, 'workbench_bootstrap', controllerIds);
+  return {
+    bootstrap,
+    controllerIds,
+  };
 };
 
 const resetAppSettings = async (page: Page) => {
@@ -225,13 +267,33 @@ const readSystemConfig = async (request: APIRequestContext) => {
 };
 
 const launchWorkspaceByPath = async (page: Page, workspacePath: string) => {
+  await gotoWorkspaceRoot(page);
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
   await invokeRpc(page, 'launch_workspace', {
     source: {
       kind: 'local',
       pathOrUrl: workspacePath,
       target: { type: 'native' },
     },
+    ...controllerIds,
   });
+  await page.goto('/');
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
 };
 
 const readWorkspaceTabLabels = async (page: Page) =>
@@ -410,12 +472,7 @@ type ReminderWorkspaceSnapshot = {
 };
 
 const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      active_workspace_id?: string | null;
-    };
-    workspaces: ReminderWorkspaceSnapshot[];
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   return {
     activeWorkspaceId: bootstrap.ui_state.active_workspace_id ?? null,
@@ -426,6 +483,7 @@ const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
 const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
   const backgroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-background-`));
   const foregroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-foreground-`));
+  const foregroundWorkspaceLabel = path.basename(foregroundWorkspaceDir);
 
   try {
     await closeAllOpenWorkspaces(page);
@@ -450,6 +508,20 @@ const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
       foreground.workspace!.workspace.workspace_id,
       'Foreground Reminder Session',
     );
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    const { controllerIds } = await readScopedWorkbenchBootstrap(page);
+    await invokeRpc(page, 'activate_workspace', {
+      workspaceId: foreground.workspace!.workspace.workspace_id,
+      ...controllerIds,
+    });
+    await page.goto('/');
+    await expect(page.locator('.workspace-top-tab.active')).toContainText(foregroundWorkspaceLabel);
+    await waitForReminderSocket(page);
+    await expect.poll(async () => {
+      const snapshot = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+      return snapshot.activeWorkspaceId;
+    }).toBe(foreground.workspace!.workspace.workspace_id);
 
     const hydratedBackground = await readWorkspaceByPath(page, backgroundWorkspaceDir);
     const hydratedForeground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
@@ -516,11 +588,7 @@ const currentWorkspaceController = async (
 };
 
 const closeAllOpenWorkspaces = async (page: Page) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId);
@@ -601,11 +669,7 @@ test.beforeEach(async ({ page }) => {
   await installTransportTracker(page);
   await installRuntimeCommandMock(page);
   await resetAppSettings(page);
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId, {
       deviceId: 'cleanup-device',

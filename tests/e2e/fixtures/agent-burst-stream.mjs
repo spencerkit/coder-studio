@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 const argv = process.argv.slice(2);
 
 const findArgValue = (flag) => {
@@ -13,20 +15,20 @@ const prefix = findArgValue('--prefix') || process.env.CODER_STUDIO_TEST_BURST_P
 
 const totalChunks = Number.isFinite(chunkCount) && chunkCount > 0 ? Math.floor(chunkCount) : 24;
 const writeIntervalMs = Number.isFinite(intervalMs) && intervalMs >= 0 ? intervalMs : 2;
+const finalDrainDelayMs = Math.max(writeIntervalMs, 100);
 
 let index = 0;
 const writeNext = () => {
   if (index >= totalChunks) {
     setTimeout(() => {
       process.exitCode = 0;
-    }, writeIntervalMs);
+    }, finalDrainDelayMs);
     return;
   }
 
-  process.stdout.write(`${prefix}-${String(index).padStart(2, '0')}\n`, () => {
-    index += 1;
-    setTimeout(writeNext, writeIntervalMs);
-  });
+  fs.writeSync(process.stdout.fd, `${prefix}-${String(index).padStart(2, '0')}\n`);
+  index += 1;
+  setTimeout(writeNext, writeIntervalMs);
 };
 
 writeNext();

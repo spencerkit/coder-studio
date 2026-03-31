@@ -489,6 +489,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const runtimeValidationRequestIdRef = useRef(0);
   const overlayBrowseRequestIdRef = useRef(0);
   const persistedLayoutRef = useRef<string>("");
+  const workbenchStateVersionRef = useRef(0);
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
@@ -606,7 +607,18 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [editorMetrics.terminalFontSize, terminalCompatibilityMode]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
-    const next = updater(stateRef.current);
+    const current = stateRef.current;
+    const next = updater(current);
+    if (
+      next !== current
+      && (
+        next.tabs !== current.tabs
+        || next.activeTabId !== current.activeTabId
+        || next.layout !== current.layout
+      )
+    ) {
+      workbenchStateVersionRef.current += 1;
+    }
     stateRef.current = next;
     setState(next);
   };
@@ -723,6 +735,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     let cancelled = false;
+    const bootstrapStateVersion = workbenchStateVersionRef.current;
     void (async () => {
       const bootstrap = await withServiceFallback(() => getWorkbenchBootstrap(deviceId, clientId), null);
       if (cancelled || !bootstrap) {
@@ -747,6 +760,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           : null;
 
         if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
+          return;
+        }
+        if (workbenchStateVersionRef.current !== bootstrapStateVersion) {
+          setBootstrapReady(true);
           return;
         }
 
