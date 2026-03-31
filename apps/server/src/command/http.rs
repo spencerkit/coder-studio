@@ -1,3 +1,11 @@
+use crate::infra::db::{
+    load_workspace_controller_lease_from_conn, save_workspace_controller_lease_to_conn,
+    with_db_mapped, workspace_access_context_from_conn,
+};
+use crate::services::workspace_runtime::{
+    emit_workspace_controller_change, reconcile_workspace_controller_lease,
+    validate_workspace_controller_mutation,
+};
 use crate::ws::server::ws_handler;
 use crate::*;
 
@@ -414,8 +422,55 @@ fn require_workspace_access(
     workspace_id: &str,
     authorized: &AuthorizedRequest,
 ) -> Result<(String, ExecTarget), RpcError> {
-    let context = workspace_access_context(app.state(), workspace_id).map_err(rpc_bad_request)?;
-    require_path_access(&context.0, &context.1, authorized)?;
+    require_workspace_context(app, workspace_id, None, authorized, |_, _| Ok(()))
+}
+
+fn require_workspace_context<F>(
+    app: &AppHandle,
+    workspace_id: &str,
+    controller: Option<(&str, &str, i64)>,
+    authorized: &AuthorizedRequest,
+    extra_check: F,
+) -> Result<(String, ExecTarget), RpcError>
+where
+    F: FnOnce(&str, &ExecTarget) -> Result<(), RpcError>,
+{
+    let mut changed_lease = None;
+    let context = with_db_mapped(app.state(), rpc_bad_request, |conn| {
+        let context =
+            workspace_access_context_from_conn(conn, workspace_id).map_err(rpc_bad_request)?;
+        require_path_access(&context.0, &context.1, authorized)?;
+        extra_check(&context.0, &context.1)?;
+
+        if let Some((device_id, client_id, fencing_token)) = controller {
+            let now = now_ts();
+            let mut lease = load_workspace_controller_lease_from_conn(conn, workspace_id)
+                .map_err(rpc_bad_request)?;
+            let before = lease.clone();
+            reconcile_workspace_controller_lease(&mut lease, now);
+
+            if lease != before {
+                save_workspace_controller_lease_to_conn(conn, &lease).map_err(rpc_bad_request)?;
+                changed_lease = Some(lease.clone());
+            }
+
+            validate_workspace_controller_mutation(
+                &lease,
+                device_id,
+                client_id,
+                fencing_token,
+                now,
+            )
+            .map_err(rpc_forbidden)?;
+        }
+
+        Ok(context)
+    })?;
+
+    if let Some(lease) = changed_lease.as_ref() {
+        emit_workspace_controller_change(app, lease);
+    }
+
     Ok(context)
 }
 
@@ -424,16 +479,18 @@ fn require_workspace_controller_mutation(
     controller: &WorkspaceControllerMutationRequest,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    require_workspace_access(app, &controller.workspace_id, authorized)?;
-    assert_workspace_controller_can_mutate(
-        &controller.workspace_id,
-        &controller.device_id,
-        &controller.client_id,
-        controller.fencing_token,
+    require_workspace_context(
         app,
-        app.state(),
+        &controller.workspace_id,
+        Some((
+            &controller.device_id,
+            &controller.client_id,
+            controller.fencing_token,
+        )),
+        authorized,
+        |_, _| Ok(()),
     )
-    .map_err(rpc_forbidden)?;
+    .map(|_| ())?;
     Ok(())
 }
 
@@ -442,25 +499,26 @@ fn require_optional_workspace_history_mutation(
     request: &SessionHistoryMutationRequest,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    require_workspace_access(app, &request.workspace_id, authorized)?;
     match (
         request.device_id.as_deref(),
         request.client_id.as_deref(),
         request.fencing_token,
     ) {
         (Some(device_id), Some(client_id), Some(fencing_token)) => {
-            assert_workspace_controller_can_mutate(
-                &request.workspace_id,
-                device_id,
-                client_id,
-                fencing_token,
+            require_workspace_context(
                 app,
-                app.state(),
+                &request.workspace_id,
+                Some((device_id, client_id, fencing_token)),
+                authorized,
+                |_, _| Ok(()),
             )
-            .map_err(rpc_forbidden)?;
+            .map(|_| ())?;
             Ok(())
         }
-        (None, None, None) => Ok(()),
+        (None, None, None) => {
+            require_workspace_access(app, &request.workspace_id, authorized)?;
+            Ok(())
+        }
         _ => Err(rpc_bad_request(
             "incomplete_workspace_controller".to_string(),
         )),
@@ -474,28 +532,32 @@ fn require_workspace_path_controller_mutation(
     target: &ExecTarget,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    let (workspace_path, workspace_target) =
-        require_workspace_access(app, &controller.workspace_id, authorized)?;
-    if workspace_target != *target {
-        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
-    }
-
-    let normalized_path = normalize_path_for_target(path, target).map_err(rpc_bad_request)?;
-    let normalized_workspace =
-        normalize_path_for_target(&workspace_path, &workspace_target).map_err(rpc_bad_request)?;
-    if !path_within_root(&normalized_path, &normalized_workspace, target) {
-        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
-    }
-
-    assert_workspace_controller_can_mutate(
-        &controller.workspace_id,
-        &controller.device_id,
-        &controller.client_id,
-        controller.fencing_token,
+    require_workspace_context(
         app,
-        app.state(),
+        &controller.workspace_id,
+        Some((
+            &controller.device_id,
+            &controller.client_id,
+            controller.fencing_token,
+        )),
+        authorized,
+        |workspace_path, workspace_target| {
+            if *workspace_target != *target {
+                return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+            }
+
+            let normalized_path =
+                normalize_path_for_target(path, target).map_err(rpc_bad_request)?;
+            let normalized_workspace = normalize_path_for_target(workspace_path, workspace_target)
+                .map_err(rpc_bad_request)?;
+            if !path_within_root(&normalized_path, &normalized_workspace, target) {
+                return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+            }
+
+            Ok(())
+        },
     )
-    .map_err(rpc_forbidden)?;
+    .map(|_| ())?;
     Ok(())
 }
 
@@ -797,8 +859,13 @@ fn dispatch_rpc(
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                create_session(req.controller.workspace_id, req.mode, req.provider, app.state())
-                    .map_err(rpc_bad_request)?,
+                create_session(
+                    req.controller.workspace_id,
+                    req.mode,
+                    req.provider,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -1095,12 +1162,9 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let worktrees = worktree_list_cached(
-                req.path,
-                req.target.clone(),
-                &app.state().artifact_caches,
-            )
-            .map_err(rpc_bad_request);
+            let worktrees =
+                worktree_list_cached(req.path, req.target.clone(), &app.state().artifact_caches)
+                    .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             let worktrees = worktrees?;
             let filtered = if authorized.request.public_mode {
@@ -1676,7 +1740,19 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::sync::OnceLock;
     use std::time::Duration;
+
+    fn with_db_count_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn lock_with_db_count_tests() -> std::sync::MutexGuard<'static, ()> {
+        with_db_count_test_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -1798,6 +1874,106 @@ mod tests {
             snapshot.controller.controller_client_id.as_deref(),
             Some("client-a")
         );
+    }
+
+    #[test]
+    fn require_workspace_controller_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-http-controller-guard-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_workspace_controller_mutation(
+            &app,
+            &WorkspaceControllerMutationRequest {
+                workspace_id,
+                device_id: "device-a".to_string(),
+                client_id: "client-a".to_string(),
+                fencing_token: runtime.controller.fencing_token,
+            },
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn require_workspace_path_controller_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("http-path-guard-db-count");
+        let workspace_id = launch_test_workspace(&app, &root);
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_workspace_path_controller_mutation(
+            &app,
+            &WorkspaceControllerMutationRequest {
+                workspace_id,
+                device_id: "device-a".to_string(),
+                client_id: "client-a".to_string(),
+                fencing_token: runtime.controller.fencing_token,
+            },
+            &root,
+            &ExecTarget::Native,
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn require_optional_workspace_history_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-http-history-guard-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_optional_workspace_history_mutation(
+            &app,
+            &SessionHistoryMutationRequest {
+                workspace_id,
+                session_id: 1,
+                device_id: Some("device-a".to_string()),
+                client_id: Some("client-a".to_string()),
+                fencing_token: Some(runtime.controller.fencing_token),
+            },
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
     }
 
     #[test]
@@ -2175,14 +2351,13 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-rpc-test");
-        let created =
-            create_session(
-                workspace_id.clone(),
-                SessionMode::Branch,
-                AgentProvider::Claude,
-                app.state(),
-            )
-            .unwrap();
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::Claude,
+            app.state(),
+        )
+        .unwrap();
         archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
 
         let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
@@ -2232,7 +2407,10 @@ mod tests {
 
         let initial = dispatch_rpc(&app, "app_settings_get", json!({}), &authorized)
             .expect("default settings should load");
-        assert_eq!(initial["general"]["terminal_compatibility_mode"], "standard");
+        assert_eq!(
+            initial["general"]["terminal_compatibility_mode"],
+            "standard"
+        );
         assert_eq!(initial["claude"]["global"]["executable"], "claude");
         assert!(initial["claude"].get("overrides").is_none());
         assert!(initial["codex"].get("overrides").is_none());
@@ -2543,19 +2721,13 @@ mod tests {
 
         assert_eq!(updated["codex"]["global"]["model"], "gpt-5.4");
         assert!(updated["codex"].get("overrides").is_none());
-        assert_eq!(
-            updated["codex"]["global"]["approval_policy"],
-            "on-request"
-        );
+        assert_eq!(updated["codex"]["global"]["approval_policy"], "on-request");
         assert_eq!(
             updated["codex"]["global"]["sandbox_mode"],
             "workspace-write"
         );
         assert_eq!(updated["codex"]["global"]["web_search"], "live");
-        assert_eq!(
-            updated["codex"]["global"]["model_reasoning_effort"],
-            "high"
-        );
+        assert_eq!(updated["codex"]["global"]["model_reasoning_effort"], "high");
         assert_eq!(updated["codex"]["global"]["extra_args"][0], "--full-auto");
     }
 

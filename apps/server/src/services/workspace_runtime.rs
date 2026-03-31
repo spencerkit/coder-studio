@@ -86,7 +86,31 @@ fn finalize_takeover_if_due(lease: &mut WorkspaceControllerLease, now: i64) -> b
     false
 }
 
-fn emit_workspace_controller_change(app: &AppHandle, lease: &WorkspaceControllerLease) {
+pub(crate) fn reconcile_workspace_controller_lease(
+    lease: &mut WorkspaceControllerLease,
+    now: i64,
+) -> bool {
+    finalize_takeover_if_due(lease, now)
+}
+
+pub(crate) fn validate_workspace_controller_mutation(
+    lease: &WorkspaceControllerLease,
+    device_id: &str,
+    client_id: &str,
+    fencing_token: i64,
+    now: i64,
+) -> Result<(), String> {
+    if !lease_alive(lease, now)
+        || !same_controller(lease, device_id, client_id)
+        || lease.fencing_token != fencing_token
+    {
+        return Err("stale_fencing_token".to_string());
+    }
+
+    Ok(())
+}
+
+pub(crate) fn emit_workspace_controller_change(app: &AppHandle, lease: &WorkspaceControllerLease) {
     let state: State<AppState> = app.state();
     let _ = state.transport_events.send(TransportEvent {
         event: "workspace://controller".to_string(),
@@ -172,20 +196,14 @@ pub(crate) fn assert_workspace_controller_can_mutate(
     let now = now_ts();
     let mut lease = load_workspace_controller_lease(state, workspace_id)?;
     let before = lease.clone();
-    finalize_takeover_if_due(&mut lease, now);
+    reconcile_workspace_controller_lease(&mut lease, now);
 
     if lease != before {
         save_workspace_controller_lease(state, &lease)?;
         emit_workspace_controller_change(app, &lease);
     }
 
-    if !lease_alive(&lease, now)
-        || !same_controller(&lease, device_id, client_id)
-        || lease.fencing_token != fencing_token
-    {
-        return Err("stale_fencing_token".to_string());
-    }
-
+    validate_workspace_controller_mutation(&lease, device_id, client_id, fencing_token, now)?;
     Ok(lease)
 }
 

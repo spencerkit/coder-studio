@@ -1389,6 +1389,14 @@ pub(crate) fn with_db<T>(
     state: State<'_, AppState>,
     f: impl FnOnce(&Connection) -> Result<T, String>,
 ) -> Result<T, String> {
+    with_db_mapped(state, |error| error, f)
+}
+
+pub(crate) fn with_db_mapped<T, E>(
+    state: State<'_, AppState>,
+    map_err: impl Fn(String) -> E,
+    f: impl FnOnce(&Connection) -> Result<T, E>,
+) -> Result<T, E> {
     #[cfg(test)]
     {
         let current = std::thread::current().id();
@@ -1401,8 +1409,10 @@ pub(crate) fn with_db<T>(
             WITH_DB_CALL_COUNT.fetch_add(1, Ordering::SeqCst);
         }
     }
-    let guard = state.db.lock().map_err(|e| e.to_string())?;
-    let conn = guard.as_ref().ok_or("db_not_ready")?;
+    let guard = state.db.lock().map_err(|e| map_err(e.to_string()))?;
+    let conn = guard
+        .as_ref()
+        .ok_or_else(|| map_err("db_not_ready".to_string()))?;
     f(conn)
 }
 
@@ -1441,9 +1451,16 @@ pub(crate) fn workspace_access_context(
     workspace_id: &str,
 ) -> Result<(String, ExecTarget), String> {
     with_db(state, |conn| {
-        let row = load_workspace_row(conn, workspace_id)?;
-        Ok((row.root_path, row.target))
+        workspace_access_context_from_conn(conn, workspace_id)
     })
+}
+
+pub(crate) fn workspace_access_context_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(String, ExecTarget), String> {
+    let row = load_workspace_row(conn, workspace_id)?;
+    Ok((row.root_path, row.target))
 }
 
 #[cfg(test)]
