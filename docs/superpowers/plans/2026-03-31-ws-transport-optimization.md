@@ -8,6 +8,17 @@
 
 **Tech Stack:** Rust backend, React + TypeScript frontend, Axum WebSocket, tokio broadcast, Playwright transport tests, cargo test, pnpm build
 
+## Status Update
+
+- Task 1 is implemented: outbound hot-path stream events are merged with schema-preserving `data` concatenation.
+- Task 2 is implemented: batching runs per socket inside `ws_session(...)` and preserves control-event ordering barriers.
+- Task 3 is implemented in the current backend scope: each socket now drains through a dedicated sender queue with bounded pending stream bytes, collapse under pressure, and non-droppable control events.
+- Transport verification is currently green:
+  - `cargo test --manifest-path apps/server/Cargo.toml`
+  - `CODER_STUDIO_DEV_BACKEND_PORT=43033 CODER_STUDIO_DEV_FRONTEND_PORT=5374 pnpm test:e2e -- --grep transport`
+- A dedicated transport regression now asserts that a high-frequency agent stdout burst is delivered with the full content while staying within a reduced WS frame budget.
+- Current recommendation: defer protocol-level batched envelopes until fresh profiling shows phase 1 plus bounded pressure is still insufficient.
+
 ---
 
 ## Scope Guardrails
@@ -69,7 +80,7 @@ Any control-path event must force a flush of pending stream batches before it is
 - Modify: `apps/server/src/ws/server.rs`
 - Test: `apps/server/src/ws/outbound_batcher.rs`
 
-- [ ] **Step 1: Write failing batcher tests**
+- [x] **Step 1: Write failing batcher tests**
 
 Add unit tests covering:
 - two adjacent `agent://event stdout` chunks for the same `workspace_id/session_id/kind` merge into one outbound event
@@ -77,7 +88,7 @@ Add unit tests covering:
 - a control event forces pending stream chunks to flush before the control event
 - chunks for different session ids / terminal ids never merge
 
-- [ ] **Step 2: Run the targeted tests and confirm failure**
+- [x] **Step 2: Run the targeted tests and confirm failure**
 
 Run:
 
@@ -87,7 +98,7 @@ cargo test --manifest-path apps/server/Cargo.toml outbound_batcher -- --nocaptur
 
 Expected: FAIL because the batcher module and merge logic do not exist yet.
 
-- [ ] **Step 3: Implement the batcher with schema-preserving merges**
+- [x] **Step 3: Implement the batcher with schema-preserving merges**
 
 Implementation rules:
 - keep the emitted WS event name unchanged
@@ -96,7 +107,7 @@ Implementation rules:
 - flush after a short window such as `16ms` or `33ms`
 - also flush immediately when accumulated bytes cross a hard threshold such as `32KB`-`64KB`
 
-- [ ] **Step 4: Re-run the tests and confirm pass**
+- [x] **Step 4: Re-run the tests and confirm pass**
 
 Run:
 
@@ -112,7 +123,7 @@ Expected: PASS.
 - Modify: `apps/server/src/ws/server.rs`
 - Test: `tests/e2e/transport.spec.ts`
 
-- [ ] **Step 1: Add per-socket batching instead of changing the shared transport bus first**
+- [x] **Step 1: Add per-socket batching instead of changing the shared transport bus first**
 
 Integrate the batcher inside `ws_session(...)` so phase 1 only changes the final outbound leg:
 - read from the existing `transport_events` broadcast
@@ -122,21 +133,21 @@ Integrate the batcher inside `ws_session(...)` so phase 1 only changes the final
 
 This keeps the blast radius smaller than changing the global transport bus.
 
-- [ ] **Step 2: Preserve ordering guarantees explicitly**
+- [x] **Step 2: Preserve ordering guarantees explicitly**
 
 The integration must guarantee:
 - stream chunk order is preserved within a session/terminal
 - lifecycle/controller/runtime events cannot overtake earlier stream output
 - `exit`/`session_ended` related visibility still appears after all preceding output
 
-- [ ] **Step 3: Update transport e2e expectations**
+- [x] **Step 3: Update transport e2e expectations**
 
 Adjust tests so they verify:
 - the same semantic output still arrives
 - frame counts for long-running output are lower than before
 - reconnect behavior still works
 
-- [ ] **Step 4: Run verification**
+- [x] **Step 4: Run verification**
 
 Run:
 
@@ -160,14 +171,14 @@ Expected:
 - Optional Modify: `apps/web/src/ws/connection-manager.ts`
 - Test: `tests/e2e/transport.spec.ts`
 
-- [ ] **Step 1: Define a bounded pending-output policy**
+- [x] **Step 1: Define a bounded pending-output policy**
 
 Rules for phase 1:
 - control-path events are never dropped
 - hot-path stream output is allowed to collapse further under pressure
 - once pending stream bytes exceed a configured cap, prefer replacing multiple queued stream events with one newer aggregate event instead of letting the queue grow indefinitely
 
-- [ ] **Step 2: Add explicit accounting**
+- [x] **Step 2: Add explicit accounting**
 
 Track at least:
 - current pending stream bytes per socket
@@ -177,14 +188,14 @@ Track at least:
 
 This can be debug-only logging or lightweight counters; it does not need product UI.
 
-- [ ] **Step 3: Verify degraded behavior is controlled**
+- [x] **Step 3: Verify degraded behavior is controlled**
 
 Simulate a slow consumer or artificial send delay and confirm:
 - the socket does not accumulate unbounded pending output
 - control events still arrive
 - the connection does not thrash reconnects under normal stream load
 
-- [ ] **Step 4: Run verification**
+- [x] **Step 4: Run verification**
 
 Run:
 

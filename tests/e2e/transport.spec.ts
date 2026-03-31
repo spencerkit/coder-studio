@@ -104,6 +104,7 @@ const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
 const AGENT_STDIN_ECHO_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-stdin-echo.mjs');
+const AGENT_BURST_STREAM_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-burst-stream.mjs');
 const AGENT_CLAUDE_LIFECYCLE_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/claude-lifecycle-agent.mjs');
 const AGENT_CLAUDE_REPLAY_DELAY_MS = 5000;
 const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
@@ -265,6 +266,18 @@ test.describe('workspace transport baseline', () => {
     expect(String(baseline.agentFrame.payload.data ?? '')).toContain(
       baseline.agentProbeMode === 'stdin' ? 'transport-agent' : AGENT_START_SYSTEM_MESSAGE,
     );
+  });
+
+  test('high-frequency agent stdout is coalesced into fewer websocket frames', async ({ page }) => {
+    const chunkCount = 24;
+    const baseline = await observeBurstAgentTransport(page, {
+      chunkCount,
+      intervalMs: 2,
+    });
+
+    expect(baseline.text).toContain('burst-00');
+    expect(baseline.text).toContain(`burst-${String(chunkCount - 1).padStart(2, '0')}`);
+    expect(baseline.frameCount).toBeLessThanOrEqual(12);
   });
 
   test('websocket reconnect preserves resource resync cadence after reconnect', async ({ page }) => {
@@ -1166,6 +1179,44 @@ async function observeReconnectBaseline(page: Page): Promise<ReconnectBaseline> 
   };
 }
 
+async function observeBurstAgentTransport(
+  page: Page,
+  options: { chunkCount: number; intervalMs: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  await seedAppSettings(page, {
+    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs}`,
+  });
+
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+
+  await invokeRpc(page, 'agent_start', {
+    ...controller,
+    sessionId,
+    cols: 120,
+    rows: 30,
+  });
+
+  const finalMarker = `burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
+  await expect
+    .poll(async () => (await readAgentStreamFrames(page, sessionId, 'stdout')).text.includes(finalMarker), {
+      timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+    })
+    .toBe(true);
+  await page.waitForTimeout(150);
+
+  return readAgentStreamFrames(page, sessionId, 'stdout');
+}
+
 async function observeArtifactsDirtyBaseline(page: Page): Promise<ArtifactsDirtyBaseline> {
   await installTransportProbe(page);
   const workspace = await openWorkspace(page);
@@ -1841,6 +1892,27 @@ async function waitForWsEventCount(
       timeout: timeoutMs,
     })
     .toBeGreaterThanOrEqual(expectedCount);
+}
+
+async function readAgentStreamFrames(
+  page: Page,
+  sessionId: string,
+  kind: 'stdout' | 'stderr',
+) {
+  const tracker = await readTransportTracker(page);
+  const frames = tracker.frames
+    .map(parseBackendEnvelope)
+    .filter((frame): frame is WsEventFrame =>
+      Boolean(frame)
+      && frame.event === 'agent://event'
+      && frame.payload.session_id === sessionId
+      && frame.payload.kind === kind,
+    );
+
+  return {
+    frameCount: frames.length,
+    text: frames.map((frame) => String(frame.payload.data ?? '')).join(''),
+  };
 }
 
 function parseBackendEnvelope(frame: string): WsEventFrame | null {
