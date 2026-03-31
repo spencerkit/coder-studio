@@ -17,7 +17,10 @@
   - `cargo test --manifest-path apps/server/Cargo.toml`
   - `CODER_STUDIO_DEV_BACKEND_PORT=43033 CODER_STUDIO_DEV_FRONTEND_PORT=5374 pnpm test:e2e -- --grep transport`
 - A dedicated transport regression now asserts that a high-frequency agent stdout burst is delivered with the full content while staying within a reduced WS frame budget.
-- Current recommendation: defer protocol-level batched envelopes until fresh profiling shows phase 1 plus bounded pressure is still insufficient.
+- A repeatable profiling entrypoint now exists:
+  - `pnpm profile:ws:transport`
+  - example: `pnpm profile:ws:transport -- --chunks 24,48 --interval-ms 2`
+- Current recommendation: continue deferring protocol-level batched envelopes until the profiling run above shows phase 1 plus bounded pressure is still insufficient.
 
 ---
 
@@ -214,9 +217,13 @@ Plus any targeted local slow-socket test harness used for this task.
 - Modify: `apps/server/src/ws/server.rs`
 - Test: `tests/e2e/transport.spec.ts`
 
-- [ ] **Step 1: Re-measure after Tasks 1-3**
+- [x] **Step 1: Re-measure after Tasks 1-3**
 
-Only continue if phase 1 is still insufficient.
+Implemented with:
+- burst-stream transport regression in `tests/e2e/transport.spec.ts`
+- repeatable local profiling entrypoint in `scripts/test/ws-transport-profile.mjs`
+
+Current result: batching plus bounded pressure is sufficient for the measured burst scenarios, so protocol changes stay deferred.
 
 - [ ] **Step 2: Introduce a true batched envelope if necessary**
 

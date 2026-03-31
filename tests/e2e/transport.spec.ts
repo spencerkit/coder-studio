@@ -110,6 +110,10 @@ const AGENT_CLAUDE_REPLAY_DELAY_MS = 5000;
 const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
 const AGENT_START_SYSTEM_MESSAGE = 'Agent started / 智能体已启动';
 const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
+const BURST_CHUNK_COUNT = readIntEnv('CODER_STUDIO_TEST_BURST_CHUNKS', 24, 1);
+const BURST_INTERVAL_MS = readIntEnv('CODER_STUDIO_TEST_BURST_INTERVAL_MS', 2, 0);
+const BURST_MAX_FRAMES = readIntEnv('CODER_STUDIO_TEST_BURST_MAX_FRAMES', 12, 1);
+const BURST_EMIT_MEASURE = process.env.CODER_STUDIO_TEST_BURST_EMIT_MEASURE === '1';
 const execFileAsync = promisify(execFile);
 const DEFAULT_TRANSPORT_IDS = {
   deviceId: 'transport-default-device',
@@ -269,15 +273,22 @@ test.describe('workspace transport baseline', () => {
   });
 
   test('high-frequency agent stdout is coalesced into fewer websocket frames', async ({ page }) => {
-    const chunkCount = 24;
     const baseline = await observeBurstAgentTransport(page, {
-      chunkCount,
-      intervalMs: 2,
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
     });
 
+    if (BURST_EMIT_MEASURE) {
+      console.log(`__TRANSPORT_BURST_MEASURE__ ${JSON.stringify({
+        chunkCount: BURST_CHUNK_COUNT,
+        intervalMs: BURST_INTERVAL_MS,
+        frameCount: baseline.frameCount,
+        textLength: baseline.text.length,
+      })}`);
+    }
     expect(baseline.text).toContain('burst-00');
-    expect(baseline.text).toContain(`burst-${String(chunkCount - 1).padStart(2, '0')}`);
-    expect(baseline.frameCount).toBeLessThanOrEqual(12);
+    expect(baseline.text).toContain(`burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.frameCount).toBeLessThanOrEqual(BURST_MAX_FRAMES);
   });
 
   test('websocket reconnect preserves resource resync cadence after reconnect', async ({ page }) => {
@@ -1928,6 +1939,11 @@ function parseBackendEnvelope(frame: string): WsEventFrame | null {
   } catch {
     return null;
   }
+}
+
+function readIntEnv(name: string, fallback: number, minimum: number) {
+  const parsed = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
 }
 
 declare global {
