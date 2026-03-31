@@ -57,7 +57,10 @@ pub(crate) fn build_claude_resume_launch_command(
     profile: &ClaudeRuntimeProfile,
     resume_id: &str,
 ) -> String {
-    build_claude_resume_command(&build_claude_start_command(target, profile), Some(resume_id))
+    build_claude_resume_command(
+        &build_claude_start_command(target, profile),
+        Some(resume_id),
+    )
 }
 
 fn parse_http_json(stream: &TcpStream) -> Result<Value, String> {

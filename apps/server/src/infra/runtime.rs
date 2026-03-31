@@ -582,7 +582,10 @@ pub(crate) fn resolve_target_path(path: &str, target: &ExecTarget) -> Result<Str
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_native_agent_cwd_from_wsl(path: &str, workspace_target: &ExecTarget) -> Result<String, String> {
+fn resolve_native_agent_cwd_from_wsl(
+    path: &str,
+    workspace_target: &ExecTarget,
+) -> Result<String, String> {
     let output = run_cmd(workspace_target, "", &["wslpath", "-w", path])?;
     let trimmed = output.trim();
     if trimmed.is_empty() {

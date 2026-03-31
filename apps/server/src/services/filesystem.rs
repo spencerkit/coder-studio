@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
+use crate::app::ArtifactCaches;
 #[cfg(target_os = "windows")]
 use crate::infra::support::windows_drive_roots;
-use crate::app::ArtifactCaches;
 use crate::services::artifact_cache::{
     artifact_cache_key, cache_lookup, cache_store, invalidate_cache_prefix,
 };

@@ -397,6 +397,12 @@ pub(crate) fn invalidate_git_artifact_caches(
 ) {
     let resolved = resolve_git_repo_path(path, target).unwrap_or_else(|_| path.to_string());
     invalidate_cache_entry(&caches.git_status, &git_status_cache_key(&resolved, target));
-    invalidate_cache_entry(&caches.git_changes, &git_changes_cache_key(&resolved, target));
-    invalidate_cache_entry(&caches.worktree_list, &worktree_list_cache_key(&resolved, target));
+    invalidate_cache_entry(
+        &caches.git_changes,
+        &git_changes_cache_key(&resolved, target),
+    );
+    invalidate_cache_entry(
+        &caches.worktree_list,
+        &worktree_list_cache_key(&resolved, target),
+    );
 }

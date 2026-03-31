@@ -315,7 +315,9 @@ fn register_workspace_watch_paths(
                     watched_root.display()
                 );
             } else {
-                if let Some(git_dir_path) = resolve_git_dir_watch_path(root_path, target, watched_root) {
+                if let Some(git_dir_path) =
+                    resolve_git_dir_watch_path(root_path, target, watched_root)
+                {
                     watch_git_metadata_paths(watcher, &git_dir_path);
                 }
                 return Ok(());

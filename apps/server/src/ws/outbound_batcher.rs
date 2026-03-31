@@ -446,16 +446,12 @@ mod tests {
     fn outbound_batcher_merges_adjacent_agent_stdout_chunks_for_same_session() {
         let mut batcher = OutboundBatcher::new(32 * 1024);
 
-        assert!(
-            batcher
-                .push(agent_stream_event("ws-1", "session-1", "stdout", "hello "))
-                .is_empty()
-        );
-        assert!(
-            batcher
-                .push(agent_stream_event("ws-1", "session-1", "stdout", "world"))
-                .is_empty()
-        );
+        assert!(batcher
+            .push(agent_stream_event("ws-1", "session-1", "stdout", "hello "))
+            .is_empty());
+        assert!(batcher
+            .push(agent_stream_event("ws-1", "session-1", "stdout", "world"))
+            .is_empty());
 
         let flushed = batcher.flush();
         assert_eq!(flushed.len(), 1);
@@ -470,32 +466,29 @@ mod tests {
     fn outbound_batcher_merges_adjacent_terminal_chunks_for_same_terminal() {
         let mut batcher = OutboundBatcher::new(32 * 1024);
 
-        assert!(
-            batcher
-                .push(terminal_stream_event("ws-1", 7, "abc"))
-                .is_empty()
-        );
-        assert!(
-            batcher
-                .push(terminal_stream_event("ws-1", 7, "def"))
-                .is_empty()
-        );
+        assert!(batcher
+            .push(terminal_stream_event("ws-1", 7, "abc"))
+            .is_empty());
+        assert!(batcher
+            .push(terminal_stream_event("ws-1", 7, "def"))
+            .is_empty());
 
         let flushed = batcher.flush();
         assert_eq!(flushed.len(), 1);
         assert_eq!(flushed[0].event, "terminal://event");
-        assert_eq!(flushed[0].payload["data"], Value::String("abcdef".to_string()));
+        assert_eq!(
+            flushed[0].payload["data"],
+            Value::String("abcdef".to_string())
+        );
     }
 
     #[test]
     fn outbound_batcher_flushes_pending_streams_before_control_events() {
         let mut batcher = OutboundBatcher::new(32 * 1024);
 
-        assert!(
-            batcher
-                .push(agent_stream_event("ws-1", "session-1", "stdout", "hello"))
-                .is_empty()
-        );
+        assert!(batcher
+            .push(agent_stream_event("ws-1", "session-1", "stdout", "hello"))
+            .is_empty());
 
         let flushed = batcher.push(control_event("ws-1"));
         assert_eq!(flushed.len(), 2);
@@ -507,16 +500,12 @@ mod tests {
     fn outbound_batcher_does_not_merge_different_sessions() {
         let mut batcher = OutboundBatcher::new(32 * 1024);
 
-        assert!(
-            batcher
-                .push(agent_stream_event("ws-1", "session-1", "stdout", "hello"))
-                .is_empty()
-        );
-        assert!(
-            batcher
-                .push(agent_stream_event("ws-1", "session-2", "stdout", "world"))
-                .is_empty()
-        );
+        assert!(batcher
+            .push(agent_stream_event("ws-1", "session-1", "stdout", "hello"))
+            .is_empty());
+        assert!(batcher
+            .push(agent_stream_event("ws-1", "session-2", "stdout", "world"))
+            .is_empty());
 
         let flushed = batcher.flush();
         assert_eq!(flushed.len(), 2);
@@ -575,7 +564,11 @@ mod tests {
                 .iter()
                 .map(|(event, _)| event.as_str())
                 .collect::<Vec<_>>(),
-            vec!["workspace://runtime_state", "terminal://event", "agent://event"]
+            vec![
+                "workspace://runtime_state",
+                "terminal://event",
+                "agent://event"
+            ]
         );
     }
 

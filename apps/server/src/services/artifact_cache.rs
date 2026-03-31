@@ -34,11 +34,7 @@ pub(crate) fn artifact_cache_key(
     }
 }
 
-pub(crate) fn cache_lookup<T: Clone>(
-    cache: &TimedCache<T>,
-    key: &str,
-    now: Instant,
-) -> Option<T> {
+pub(crate) fn cache_lookup<T: Clone>(cache: &TimedCache<T>, key: &str, now: Instant) -> Option<T> {
     let Ok(mut guard) = cache.lock() else {
         return None;
     };
@@ -52,22 +48,11 @@ pub(crate) fn cache_lookup<T: Clone>(
     }
 }
 
-pub(crate) fn cache_store<T>(
-    cache: &TimedCache<T>,
-    key: String,
-    value: T,
-    fresh_until: Instant,
-) {
+pub(crate) fn cache_store<T>(cache: &TimedCache<T>, key: String, value: T, fresh_until: Instant) {
     let Ok(mut guard) = cache.lock() else {
         return;
     };
-    guard.insert(
-        key,
-        TimedCacheEntry {
-            value,
-            fresh_until,
-        },
-    );
+    guard.insert(key, TimedCacheEntry { value, fresh_until });
 }
 
 pub(crate) fn invalidate_cache_entry<T>(cache: &TimedCache<T>, key: &str) {
@@ -127,7 +112,12 @@ mod tests {
     #[test]
     fn artifact_cache_key_includes_kind_target_path_and_variant() {
         assert_eq!(
-            artifact_cache_key("workspace_tree", "/tmp/repo", &ExecTarget::Native, Some("4")),
+            artifact_cache_key(
+                "workspace_tree",
+                "/tmp/repo",
+                &ExecTarget::Native,
+                Some("4")
+            ),
             "workspace_tree::native::/tmp/repo::4"
         );
     }

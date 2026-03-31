@@ -59,10 +59,9 @@ pub(crate) use infra::db::{
     load_session_history_records, load_workspace_controller_lease,
     mark_active_sessions_interrupted_on_boot, patch_workspace_view_state,
     persist_workspace_terminal, restore_workspace_session, save_workspace_controller_lease,
-    set_session_resume_id, set_session_status_if_not_archived,
-    set_workspace_terminal_recoverable, switch_workspace_session,
-    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session, upsert_workspace_attachment,
+    set_session_resume_id, set_session_status_if_not_archived, set_workspace_terminal_recoverable,
+    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
+    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
     workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
     workspace_snapshot as load_workspace_snapshot,
 };

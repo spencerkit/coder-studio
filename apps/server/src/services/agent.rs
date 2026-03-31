@@ -157,7 +157,8 @@ pub(crate) fn agent_start(
     let settings = load_or_default_app_settings(state)?;
     let agent_target = ExecTarget::Native;
     let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
-    let client = crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings);
+    let client =
+        crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings);
     let command = match effective_resume_id.as_deref() {
         Some(resume_id) => client.resume_command(&agent_target, resume_id),
         None => client.start_command(&agent_target),
@@ -220,7 +221,10 @@ pub(crate) fn agent_start(
         child: Mutex::new(child),
         killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
-        codex_first_submit_pending: Mutex::new(matches!(stored_session.provider, AgentProvider::Codex)),
+        codex_first_submit_pending: Mutex::new(matches!(
+            stored_session.provider,
+            AgentProvider::Codex
+        )),
         master: Mutex::new(pair.master),
         process_id,
         process_group_leader,
@@ -519,13 +523,9 @@ mod tests {
         let mut pending = true;
         let mut delays = Vec::new();
 
-        write_agent_input(
-            &mut writer,
-            "hello",
-            true,
-            &mut pending,
-            |duration| delays.push(duration),
-        )
+        write_agent_input(&mut writer, "hello", true, &mut pending, |duration| {
+            delays.push(duration)
+        })
         .unwrap();
 
         assert_eq!(
@@ -550,13 +550,9 @@ mod tests {
         let mut pending = true;
         let mut delays = Vec::new();
 
-        write_agent_input(
-            &mut writer,
-            "",
-            true,
-            &mut pending,
-            |duration| delays.push(duration),
-        )
+        write_agent_input(&mut writer, "", true, &mut pending, |duration| {
+            delays.push(duration)
+        })
         .unwrap();
 
         assert_eq!(

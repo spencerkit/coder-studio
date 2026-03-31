@@ -699,7 +699,10 @@ mod tests {
             Some("https://wsl.example")
         );
         assert_eq!(hydrated.claude.global.settings_json["model"], "wsl-sonnet");
-        assert_eq!(hydrated.claude.global.global_config_json["showTurnDuration"], true);
+        assert_eq!(
+            hydrated.claude.global.global_config_json["showTurnDuration"],
+            true
+        );
     }
 
     #[test]

@@ -72,12 +72,14 @@ pub(crate) fn resolve_agent_client(
     settings: &AppSettingsPayload,
 ) -> Box<dyn AgentClientAdapter> {
     match provider {
-        AgentProvider::Claude => {
-            Box::new(ClaudeClient::new(resolve_claude_runtime_profile(settings, &ExecTarget::Native)))
-        }
-        AgentProvider::Codex => {
-            Box::new(CodexClient::new(resolve_codex_runtime_profile(settings, &ExecTarget::Native)))
-        }
+        AgentProvider::Claude => Box::new(ClaudeClient::new(resolve_claude_runtime_profile(
+            settings,
+            &ExecTarget::Native,
+        ))),
+        AgentProvider::Codex => Box::new(CodexClient::new(resolve_codex_runtime_profile(
+            settings,
+            &ExecTarget::Native,
+        ))),
     }
 }
 

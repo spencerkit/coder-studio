@@ -15,11 +15,7 @@ fn push_codex_config_override(parts: &mut Vec<String>, key: &str, value: &str) {
 fn build_codex_config_override_args(profile: &CodexRuntimeProfile) -> Vec<String> {
     let mut parts = Vec::new();
     push_codex_config_override(&mut parts, "model", &profile.model);
-    push_codex_config_override(
-        &mut parts,
-        "approval_policy",
-        &profile.approval_policy,
-    );
+    push_codex_config_override(&mut parts, "approval_policy", &profile.approval_policy);
     push_codex_config_override(&mut parts, "sandbox_mode", &profile.sandbox_mode);
     push_codex_config_override(&mut parts, "web_search", &profile.web_search);
     push_codex_config_override(
@@ -45,10 +41,8 @@ pub(crate) fn build_codex_start_command(
     target: &ExecTarget,
     profile: &CodexRuntimeProfile,
 ) -> String {
-    let executable = crate::services::agent_client::escape_agent_command_part(
-        target,
-        &profile.executable,
-    );
+    let executable =
+        crate::services::agent_client::escape_agent_command_part(target, &profile.executable);
     let args = profile
         .extra_args
         .iter()
@@ -66,10 +60,8 @@ pub(crate) fn build_codex_resume_command(
     profile: &CodexRuntimeProfile,
     resume_id: &str,
 ) -> String {
-    let escaped_resume_id = crate::services::agent_client::escape_agent_command_part(
-        target,
-        resume_id.trim(),
-    );
+    let escaped_resume_id =
+        crate::services::agent_client::escape_agent_command_part(target, resume_id.trim());
     let mut parts = vec![
         crate::services::agent_client::escape_agent_command_part(target, &profile.executable),
         "resume".to_string(),
@@ -315,10 +307,7 @@ mod tests {
                     crate::services::agent_client::escape_agent_command_part(target, "--config"),
                     crate::services::agent_client::escape_agent_command_part(
                         target,
-                        &format!(
-                            "{key}={}",
-                            toml::Value::String((*value).to_string())
-                        ),
+                        &format!("{key}={}", toml::Value::String((*value).to_string())),
                     ),
                 ]
             })
@@ -356,9 +345,7 @@ mod tests {
         );
         assert_eq!(
             build_codex_resume_command(&target, &profile, "resume-123"),
-            format!(
-                "codex resume resume-123 --full-auto {expected_config} --enable codex_hooks"
-            )
+            format!("codex resume resume-123 --full-auto {expected_config} --enable codex_hooks")
         );
     }
 }
