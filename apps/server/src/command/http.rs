@@ -2164,9 +2164,10 @@ mod tests {
 
         let initial = dispatch_rpc(&app, "app_settings_get", json!({}), &authorized)
             .expect("default settings should load");
-        let initial: AppSettingsPayload = serde_json::from_value(initial).unwrap();
-        assert_eq!(initial.general.terminal_compatibility_mode, "standard");
-        assert_eq!(initial.claude.global.executable, "claude");
+        assert_eq!(initial["general"]["terminal_compatibility_mode"], "standard");
+        assert_eq!(initial["claude"]["global"]["executable"], "claude");
+        assert!(initial["claude"].get("overrides").is_none());
+        assert!(initial["codex"].get("overrides").is_none());
 
         let saved = dispatch_rpc(
             &app,
@@ -2200,10 +2201,6 @@ mod tests {
                             "global_config_json": {
                                 "showTurnDuration": true
                             }
-                        },
-                        "overrides": {
-                            "native": null,
-                            "wsl": null
                         }
                     }
                 }
@@ -2212,18 +2209,14 @@ mod tests {
         )
         .expect("settings update should succeed");
 
-        let saved: AppSettingsPayload = serde_json::from_value(saved).unwrap();
-        assert_eq!(saved.general.locale, "zh");
-        assert_eq!(saved.claude.global.executable, "claude-nightly");
+        assert_eq!(saved["general"]["locale"], "zh");
+        assert_eq!(saved["claude"]["global"]["executable"], "claude-nightly");
         assert_eq!(
-            saved
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
-            Some("https://anthropic.example")
+            saved["claude"]["global"]["env"]["ANTHROPIC_BASE_URL"],
+            "https://anthropic.example"
         );
+        assert!(saved["claude"].get("overrides").is_none());
+        assert!(saved["codex"].get("overrides").is_none());
     }
 
     #[test]
@@ -2481,6 +2474,7 @@ mod tests {
         let updated: Value = updated;
 
         assert_eq!(updated["codex"]["global"]["model"], "gpt-5.4");
+        assert!(updated["codex"].get("overrides").is_none());
         assert_eq!(
             updated["codex"]["global"]["approval_policy"],
             "on-request"
@@ -2559,12 +2553,21 @@ mod tests {
         )
         .unwrap();
         let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
-        let session_id = load_workspace_snapshot(app.state(), &workspace_id)
-            .unwrap()
-            .sessions
-            .first()
-            .unwrap()
-            .id;
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .expect("create_session should succeed for marker launch test");
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
 
         let started = dispatch_rpc(
             &app,
@@ -2574,7 +2577,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": session_id.to_string(),
+                "session_id": created.id.to_string(),
                 "cols": 80,
                 "rows": 24,
             }),

@@ -5,16 +5,12 @@ import { EyeIcon, EyeOffIcon } from "../icons.tsx";
 import type {
   AppSettings,
   ClaudeRuntimeProfile,
-  ClaudeSettingsScope,
 } from "../../types/app.ts";
 import {
   forceClaudeExecutableDefaults,
   formatClaudeLaunchPreview,
-  getClaudeScopeProfile,
-  isClaudeScopeOverrideEnabled,
   patchClaudeStructuredSettings,
   replaceClaudeAdvancedJson,
-  setClaudeScopeOverrideEnabled,
 } from "../../shared/app/claude-settings.ts";
 
 const RESERVED_ENV_KEYS = [
@@ -505,7 +501,6 @@ export const ClaudeSettingsPanel = ({
   onChange,
   t,
 }: ClaudeSettingsPanelProps) => {
-  const [activeScope, setActiveScope] = useState<ClaudeSettingsScope>("global");
   const [settingsJsonDraft, setSettingsJsonDraft] = useState("");
   const [globalConfigJsonDraft, setGlobalConfigJsonDraft] = useState("");
   const [settingsJsonError, setSettingsJsonError] = useState("");
@@ -517,14 +512,7 @@ export const ClaudeSettingsPanel = ({
   const commitSettings = (nextSettings: AppSettings) => {
     onChange(forceClaudeExecutableDefaults(nextSettings));
   };
-
-  const scopeProfile = useMemo(
-    () => getClaudeScopeProfile(normalizedSettings, activeScope),
-    [activeScope, normalizedSettings],
-  );
-  const scopeOverrideEnabled = activeScope === "global"
-    ? true
-    : isClaudeScopeOverrideEnabled(normalizedSettings, activeScope);
+  const scopeProfile = normalizedSettings.claude.global;
   const settingsJson = scopeProfile.settingsJson;
   const globalConfigJson = scopeProfile.globalConfigJson;
 
@@ -533,25 +521,22 @@ export const ClaudeSettingsPanel = ({
     setGlobalConfigJsonDraft(formatJson(globalConfigJson));
     setSettingsJsonError("");
     setGlobalConfigJsonError("");
-  }, [activeScope, settingsJson, globalConfigJson]);
+  }, [settingsJson, globalConfigJson]);
 
   const updateEnv = (updater: (env: Record<string, string>) => Record<string, string>) => {
     commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
-      scope: activeScope,
       env: updater(scopeProfile.env),
     }));
   };
 
   const updateStartupArgs = (updater: (startupArgs: string[]) => string[]) => {
     commitSettings(patchClaudeStructuredSettings(normalizedSettings, {
-      scope: activeScope,
       startupArgs: updater(scopeProfile.startupArgs),
     }));
   };
 
   const updateSettingsJson = (path: string[], value: unknown) => {
     commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      scope: activeScope,
       field: "settingsJson",
       value: setJsonPath(settingsJson, path, value),
     }));
@@ -559,7 +544,6 @@ export const ClaudeSettingsPanel = ({
 
   const updateGlobalConfigJson = (path: string[], value: unknown) => {
     commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      scope: activeScope,
       field: "globalConfigJson",
       value: setJsonPath(globalConfigJson, path, value),
     }));
@@ -573,7 +557,6 @@ export const ClaudeSettingsPanel = ({
     }
     setSettingsJsonError("");
     commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      scope: activeScope,
       field: "settingsJson",
       value: parsed.data,
     }));
@@ -587,7 +570,6 @@ export const ClaudeSettingsPanel = ({
     }
     setGlobalConfigJsonError("");
     commitSettings(replaceClaudeAdvancedJson(normalizedSettings, {
-      scope: activeScope,
       field: "globalConfigJson",
       value: parsed.data,
     }));
@@ -650,35 +632,6 @@ export const ClaudeSettingsPanel = ({
 
   return (
     <div className="claude-settings-panel">
-      <div className="claude-settings-toolbar">
-        <div className="claude-scope-switcher">
-          {(["global", "native", "wsl"] as ClaudeSettingsScope[]).map((scope) => (
-            <button
-              key={scope}
-              type="button"
-              className={`settings-pill-option ${activeScope === scope ? "active" : ""}`}
-              onClick={() => setActiveScope(scope)}
-              data-testid={`claude-scope-${scope}`}
-            >
-              {scope === "global" ? t("claudeScopeGlobal") : scope === "native" ? t("claudeScopeNative") : t("claudeScopeWsl")}
-            </button>
-          ))}
-        </div>
-        {activeScope !== "global" && (
-          <div className="claude-override-toggle">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={scopeOverrideEnabled}
-                onChange={(event) => commitSettings(setClaudeScopeOverrideEnabled(normalizedSettings, activeScope, event.target.checked))}
-              />
-              <span className="toggle-track"><span className="toggle-thumb" /></span>
-            </label>
-            <span>{scopeOverrideEnabled ? t("claudeOverrideEnabled") : t("claudeOverrideInherited")}</span>
-          </div>
-        )}
-      </div>
-
       <div className="settings-group-card">
         <div className="claude-settings-grid claude-settings-grid--startup">
           <div className="claude-field claude-field-wide">

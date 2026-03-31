@@ -1,12 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Locale, Translator } from "../../i18n.ts";
-import type { AppSettings, ClaudeSettingsScope } from "../../types/app.ts";
+import type { AppSettings } from "../../types/app.ts";
 import {
   formatCodexRuntimeCommand,
-  getCodexScopeProfile,
-  isCodexScopeOverrideEnabled,
   patchCodexStructuredSettings,
-  setCodexScopeOverrideEnabled,
 } from "../../shared/app/claude-settings.ts";
 
 type CodexSettingsPanelProps = {
@@ -190,15 +187,10 @@ export const CodexSettingsPanel = ({
   onChange,
   t,
 }: CodexSettingsPanelProps) => {
-  const [activeScope, setActiveScope] = useState<ClaudeSettingsScope>("global");
-
   const scopeProfile = useMemo(
-    () => getCodexScopeProfile(settings, activeScope),
-    [activeScope, settings],
+    () => settings.codex.global,
+    [settings],
   );
-  const scopeOverrideEnabled = activeScope === "global"
-    ? true
-    : isCodexScopeOverrideEnabled(settings, activeScope);
   const commandPreview = formatCodexRuntimeCommand(scopeProfile);
 
   const commitSettings = (nextSettings: AppSettings) => {
@@ -213,41 +205,6 @@ export const CodexSettingsPanel = ({
 
   return (
     <div className="claude-settings-panel">
-      <div className="claude-settings-toolbar">
-        <div className="claude-scope-switcher">
-          {(["global", "native", "wsl"] as ClaudeSettingsScope[]).map((scope) => (
-            <button
-              key={scope}
-              type="button"
-              className={`settings-pill-option ${activeScope === scope ? "active" : ""}`}
-              onClick={() => setActiveScope(scope)}
-              data-testid={`codex-scope-${scope}`}
-            >
-              {scope === "global"
-                ? t("codexScopeGlobal")
-                : scope === "native"
-                  ? t("codexScopeNative")
-                  : t("codexScopeWsl")}
-            </button>
-          ))}
-        </div>
-        {activeScope !== "global" ? (
-          <div className="claude-override-toggle">
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={scopeOverrideEnabled}
-                onChange={(event) => commitSettings(
-                  setCodexScopeOverrideEnabled(settings, activeScope, event.target.checked),
-                )}
-              />
-              <span className="toggle-track"><span className="toggle-thumb" /></span>
-            </label>
-            <span>{scopeOverrideEnabled ? t("codexOverrideEnabled") : t("codexOverrideInherited")}</span>
-          </div>
-        ) : null}
-      </div>
-
       <div className="settings-group-card">
         <div className="settings-row">
           <div className="settings-row-copy">
@@ -270,7 +227,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexExecutableHint")}
             value={scopeProfile.executable}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               executable: value,
             })}
             placeholder="codex"
@@ -283,7 +239,6 @@ export const CodexSettingsPanel = ({
             hint={t("codexExtraArgsHint")}
             value={listToLines(scopeProfile.extraArgs)}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               extraArgs: linesToList(value),
             })}
             placeholder={t("codexExtraArgsPlaceholder")}
@@ -306,7 +261,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexModelHint")}
             value={scopeProfile.model}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               model: value,
             })}
             placeholder={t("codexModelPlaceholder")}
@@ -317,7 +271,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexApprovalPolicyHint")}
             value={scopeProfile.approvalPolicy}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               approvalPolicy: value,
             })}
             options={APPROVAL_POLICY_OPTIONS}
@@ -329,7 +282,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexSandboxModeHint")}
             value={scopeProfile.sandboxMode}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               sandboxMode: value,
             })}
             options={SANDBOX_MODE_OPTIONS}
@@ -341,7 +293,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexWebSearchHint")}
             value={scopeProfile.webSearch}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               webSearch: value,
             })}
             options={WEB_SEARCH_OPTIONS}
@@ -353,7 +304,6 @@ export const CodexSettingsPanel = ({
             meta={t("codexReasoningEffortHint")}
             value={scopeProfile.modelReasoningEffort}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               modelReasoningEffort: value,
             })}
             options={REASONING_EFFORT_OPTIONS}
@@ -371,7 +321,6 @@ export const CodexSettingsPanel = ({
             hint={t("codexExtraEnvHint")}
             value={envToText(scopeProfile.env)}
             onChange={(value) => updateProfile({
-              scope: activeScope,
               env: textToEnv(value),
             })}
             placeholder={t("codexExtraEnvPlaceholder")}

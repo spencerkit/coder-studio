@@ -51,14 +51,6 @@ test('cloneAppSettings creates independent nested settings objects', () => {
   original.claude.global.env.ANTHROPIC_BASE_URL = 'https://anthropic.example';
   original.claude.global.settingsJson = { model: 'sonnet' };
   original.claude.global.globalConfigJson = { showTurnDuration: true };
-  original.claude.overrides.native = {
-    enabled: true,
-    profile: {
-      ...original.claude.global,
-      executable: 'claude-native',
-      startupArgs: ['--verbose'],
-    },
-  };
   const cloned = cloneAppSettings(original);
 
   assert.notStrictEqual(cloned, original);
@@ -76,8 +68,8 @@ test('cloneAppSettings creates independent nested settings objects', () => {
     cloned.claude.global.globalConfigJson,
     original.claude.global.globalConfigJson,
   );
-  assert.notStrictEqual(cloned.claude.overrides.native, original.claude.overrides.native);
   assert.deepEqual(cloned, original);
+  assert.ok(!('overrides' in cloned.claude));
 });
 
 test('readStoredAppSettings returns null without browser storage', () => {
@@ -142,18 +134,6 @@ test('readStoredAppSettings hydrates backend-shaped settings and derived compati
                 showTurnDuration: true,
               },
             },
-            overrides: {
-              native: {
-                enabled: true,
-                profile: {
-                  executable: 'claude-native',
-                  startupArgs: ['--dangerously-skip-permissions'],
-                  env: {},
-                  settingsJson: {},
-                  globalConfigJson: {},
-                },
-              },
-            },
           },
         }),
       setItem: () => {},
@@ -166,6 +146,7 @@ test('readStoredAppSettings hydrates backend-shaped settings and derived compati
       assert.equal(settings.general.terminalCompatibilityMode, 'compatibility');
       assert.equal(settings.claude.global.executable, 'claude-nightly');
       assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
+      assert.ok(!('overrides' in settings.claude));
       assert.equal(settings.agentCommand, 'claude-nightly --verbose');
       assert.deepEqual(settings.completionNotifications, {
         enabled: false,

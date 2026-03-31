@@ -45,8 +45,9 @@
 - Settings 已和 Claude 方案在信息架构上对齐到同一层级：
   - General 面板可设置默认 provider
   - Claude 和 Codex 分别有独立 provider panel
-  - Codex 已支持 `global / native / wsl` 三层覆盖
-  - Codex settings schema 已扩展为：
+  - Claude / Codex settings 都已收敛为“当前运行环境单份配置”
+  - 不再做 `native / wsl` 双轨 agent 配置，也不再在 settings UI 暴露 target override
+- Codex settings schema 已扩展为：
     - `executable`
     - `extra_args`
     - `env`
@@ -58,9 +59,13 @@
 - Codex settings 现在会按官方 CLI 语义落到启动命令：
   - 结构化字段会在启动时追加为 `--config key=value`
   - `extra_args` 仍然保留为原始 CLI 参数兜底层
-- Codex settings 会参考本地现有配置：
-  - Native 会从 `~/.codex/config.toml` hydrate 缺省值
-  - WSL 会从对应 Linux home 下的 `~/.codex/config.toml` hydrate 缺省值
+- Claude / Codex settings 现在都只会 hydrate 当前运行环境里的本地配置：
+  - Windows 进程只看 Windows 自己的 Claude / Codex 配置
+  - WSL 进程只看 WSL 自己的 Claude / Codex 配置
+  - macOS / Linux 同理
+- Agent 启动语义也已与 settings 对齐：
+  - agent 永远从当前运行环境启动对应的 Claude / Codex CLI
+  - 不再因为 workspace target 是 WSL 就切到另一套 agent 配置或另一种 agent 启动策略
 
 ## 无法完全对齐 / 接受降级
 
@@ -81,6 +86,9 @@
   - 当前实现已经在运行时强制打开这个 feature，但这仍然是对实验能力的依赖
 - slash / skills 相关逻辑仍然是 Claude-only，这一轮没有给 Codex 做同级支持。
 - 没有做 Codex native Windows 的专门兼容增强；Windows 下如果 CLI 或 hooks 行为不同，当前按降级处理。
+- Windows 宿主 + WSL workspace 的场景，现在不再走专门的 WSL agent 通道：
+  - Coder Studio 会尝试把 WSL workspace 路径转换成当前运行环境可访问的路径后，再启动当前环境下的 Claude / Codex
+  - 如果路径转换失败，就直接报错，不再保留一套独立的 WSL agent 配置作为兜底
 - 未信任目录下的 trust prompt 没有被抹平：
   - Coder Studio 只能把它透传到终端里由用户确认
   - 当前不会在启动前替用户预写 trust 配置

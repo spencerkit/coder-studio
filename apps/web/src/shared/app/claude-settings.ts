@@ -3,12 +3,9 @@ import type { ExecTarget } from "../../state/workbench.ts";
 import type {
   AppSettings,
   AppSettingsPayload,
-  ClaudeSettingsScope,
   ClaudeRuntimeProfile,
-  ClaudeTargetOverride,
   CompletionNotificationSettings,
   CodexRuntimeProfile,
-  CodexTargetOverride,
   LegacyAppSettings,
   TerminalCompatibilityMode,
 } from "../../types/app.ts";
@@ -113,17 +110,6 @@ const cloneClaudeRuntimeProfile = (
   globalConfigJson: cloneJsonRecord(profile.globalConfigJson),
 });
 
-const cloneClaudeTargetOverride = (
-  override: ClaudeTargetOverride | null,
-): ClaudeTargetOverride | null => (
-  override
-    ? {
-        enabled: override.enabled,
-        profile: cloneClaudeRuntimeProfile(override.profile),
-      }
-    : null
-);
-
 const cloneCodexRuntimeProfile = (
   profile: CodexRuntimeProfile,
 ): CodexRuntimeProfile => ({
@@ -137,17 +123,6 @@ const cloneCodexRuntimeProfile = (
   env: { ...profile.env },
 });
 
-const cloneCodexTargetOverride = (
-  override: CodexTargetOverride | null,
-): CodexTargetOverride | null => (
-  override
-    ? {
-        enabled: override.enabled,
-        profile: cloneCodexRuntimeProfile(override.profile),
-      }
-    : null
-);
-
 const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPayload => ({
   general: {
     locale: settings.general.locale,
@@ -160,22 +135,17 @@ const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPaylo
   },
   claude: {
     global: cloneClaudeRuntimeProfile(settings.claude.global),
-    overrides: {
-      native: cloneClaudeTargetOverride(settings.claude.overrides.native),
-      wsl: cloneClaudeTargetOverride(settings.claude.overrides.wsl),
-    },
   },
   codex: {
     global: cloneCodexRuntimeProfile(settings.codex.global),
-    overrides: {
-      native: cloneCodexTargetOverride(settings.codex.overrides.native),
-      wsl: cloneCodexTargetOverride(settings.codex.overrides.wsl),
-    },
   },
 });
 
 const syncCompatibilityFields = (settings: AppSettingsPayload): AppSettings => ({
   ...cloneAppSettingsPayload(settings),
+  agentCommand: settings.agentDefaults.provider === "codex"
+    ? formatCodexRuntimeCommand(settings.codex.global)
+    : formatClaudeRuntimeCommand(settings.claude.global),
   idlePolicy: cloneIdlePolicy(settings.general.idlePolicy),
   completionNotifications: cloneCompletionNotifications(settings.general.completionNotifications),
   terminalCompatibilityMode: settings.general.terminalCompatibilityMode,
@@ -204,10 +174,6 @@ const defaultCodexRuntimeProfile = (): CodexRuntimeProfile => ({
   modelReasoningEffort: "",
   env: {},
 });
-
-const pickCodexProfileValue = (overrideValue: string, fallbackValue: string) => (
-  overrideValue.trim() || fallbackValue
-);
 
 const formatCodexTomlString = (value: string) => JSON.stringify(value.trim());
 
@@ -256,20 +222,6 @@ const mergeJsonObjects = (
   return merged;
 };
 
-const mergeClaudeRuntimeProfiles = (
-  base: ClaudeRuntimeProfile,
-  override: ClaudeRuntimeProfile,
-): ClaudeRuntimeProfile => ({
-  executable: override.executable.trim() ? override.executable : base.executable,
-  startupArgs: override.startupArgs.length > 0 ? [...override.startupArgs] : [...base.startupArgs],
-  env: {
-    ...base.env,
-    ...override.env,
-  },
-  settingsJson: mergeJsonObjects(base.settingsJson, override.settingsJson),
-  globalConfigJson: mergeJsonObjects(base.globalConfigJson, override.globalConfigJson),
-});
-
 const normalizeClaudeRuntimeProfile = (
   value: unknown,
   fallback: ClaudeRuntimeProfile,
@@ -295,23 +247,6 @@ const normalizeClaudeRuntimeProfile = (
       source.globalConfigJson ?? source.global_config_json,
       fallback.globalConfigJson,
     ),
-  };
-};
-
-const normalizeClaudeTargetOverride = (
-  value: unknown,
-  fallback: ClaudeRuntimeProfile,
-): ClaudeTargetOverride | null => {
-  if (value === null) {
-    return null;
-  }
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return {
-    enabled: readBoolean(value.enabled, false),
-    profile: normalizeClaudeRuntimeProfile(value.profile, fallback),
   };
 };
 
@@ -347,23 +282,6 @@ const normalizeCodexRuntimeProfile = (
       ? String(source.modelReasoningEffort ?? source.model_reasoning_effort)
       : fallback.modelReasoningEffort,
     env: normalizeEnv(source.env ?? fallback.env),
-  };
-};
-
-const normalizeCodexTargetOverride = (
-  value: unknown,
-  fallback: CodexRuntimeProfile,
-): CodexTargetOverride | null => {
-  if (value === null) {
-    return null;
-  }
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return {
-    enabled: readBoolean(value.enabled, false),
-    profile: normalizeCodexRuntimeProfile(value.profile, fallback),
   };
 };
 
@@ -468,12 +386,6 @@ export const formatClaudeLaunchPreview = (
 export const forceClaudeExecutableDefaults = (settings: AppSettings): AppSettings => {
   const next = cloneAppSettings(settings);
   next.claude.global.executable = DEFAULT_CLAUDE_EXECUTABLE;
-  if (next.claude.overrides.native) {
-    next.claude.overrides.native.profile.executable = DEFAULT_CLAUDE_EXECUTABLE;
-  }
-  if (next.claude.overrides.wsl) {
-    next.claude.overrides.wsl.profile.executable = DEFAULT_CLAUDE_EXECUTABLE;
-  }
   return syncCompatibilityFields(toAppSettingsPayload(next));
 };
 
@@ -494,17 +406,9 @@ export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
   },
   claude: {
     global: defaultClaudeRuntimeProfile(),
-    overrides: {
-      native: null,
-      wsl: null,
-    },
   },
   codex: {
     global: defaultCodexRuntimeProfile(),
-    overrides: {
-      native: null,
-      wsl: null,
-    },
   },
 });
 
@@ -573,29 +477,9 @@ export const normalizeAppSettings = (
     },
     claude: {
       global: globalProfile,
-      overrides: {
-        native: normalizeClaudeTargetOverride(
-          isRecord(claudeSource.overrides) ? claudeSource.overrides.native : null,
-          globalProfile,
-        ),
-        wsl: normalizeClaudeTargetOverride(
-          isRecord(claudeSource.overrides) ? claudeSource.overrides.wsl : null,
-          globalProfile,
-        ),
-      },
     },
     codex: {
       global: globalCodexProfile,
-      overrides: {
-        native: normalizeCodexTargetOverride(
-          isRecord(codexSource.overrides) ? codexSource.overrides.native : null,
-          globalCodexProfile,
-        ),
-        wsl: normalizeCodexTargetOverride(
-          isRecord(codexSource.overrides) ? codexSource.overrides.wsl : null,
-          globalCodexProfile,
-        ),
-      },
     },
   });
 };
@@ -683,59 +567,13 @@ export const applyAgentDefaultsPatch = (
 
 export const resolveClaudeRuntimeProfile = (
   settings: AppSettings,
-  target: ExecTarget,
-): ClaudeRuntimeProfile => {
-  const override = target.type === "native"
-    ? settings.claude.overrides.native
-    : settings.claude.overrides.wsl;
-
-  if (!override?.enabled) {
-    return cloneClaudeRuntimeProfile(settings.claude.global);
-  }
-
-  return mergeClaudeRuntimeProfiles(settings.claude.global, override.profile);
-};
+  _target: ExecTarget,
+): ClaudeRuntimeProfile => cloneClaudeRuntimeProfile(settings.claude.global);
 
 export const resolveCodexRuntimeProfile = (
   settings: AppSettings,
-  target: ExecTarget,
-): CodexRuntimeProfile => {
-  const override = target.type === "native"
-    ? settings.codex.overrides.native
-    : settings.codex.overrides.wsl;
-
-  if (!override?.enabled) {
-    return cloneCodexRuntimeProfile(settings.codex.global);
-  }
-
-  return {
-    executable: override.profile.executable.trim() || settings.codex.global.executable,
-    extraArgs: override.profile.extraArgs.length > 0
-      ? [...override.profile.extraArgs]
-      : [...settings.codex.global.extraArgs],
-    model: pickCodexProfileValue(override.profile.model, settings.codex.global.model),
-    approvalPolicy: pickCodexProfileValue(
-      override.profile.approvalPolicy,
-      settings.codex.global.approvalPolicy,
-    ),
-    sandboxMode: pickCodexProfileValue(
-      override.profile.sandboxMode,
-      settings.codex.global.sandboxMode,
-    ),
-    webSearch: pickCodexProfileValue(
-      override.profile.webSearch,
-      settings.codex.global.webSearch,
-    ),
-    modelReasoningEffort: pickCodexProfileValue(
-      override.profile.modelReasoningEffort,
-      settings.codex.global.modelReasoningEffort,
-    ),
-    env: {
-      ...settings.codex.global.env,
-      ...override.profile.env,
-    },
-  };
-};
+  _target: ExecTarget,
+): CodexRuntimeProfile => cloneCodexRuntimeProfile(settings.codex.global);
 
 export const resolveAgentRuntimeCommand = (
   settings: AppSettings,
@@ -780,123 +618,16 @@ export const appSettingsPayloadEquals = (
   JSON.stringify(toAppSettingsPayload(left)) === JSON.stringify(toAppSettingsPayload(right))
 );
 
-const getScopeOverrideKey = (scope: Exclude<ClaudeSettingsScope, "global">) => (
-  scope === "native" ? "native" : "wsl"
-);
-
-const ensureClaudeScopeOverride = (
-  settings: AppSettings,
-  scope: Exclude<ClaudeSettingsScope, "global">,
-): ClaudeTargetOverride => {
-  const key = getScopeOverrideKey(scope);
-  const existing = settings.claude.overrides[key];
-  if (existing) {
-    return existing;
-  }
-
-  const created: ClaudeTargetOverride = {
-    enabled: false,
-    profile: cloneClaudeRuntimeProfile(settings.claude.global),
-  };
-  settings.claude.overrides[key] = created;
-  return created;
-};
-
-const ensureCodexScopeOverride = (
-  settings: AppSettings,
-  scope: Exclude<ClaudeSettingsScope, "global">,
-): CodexTargetOverride => {
-  const key = getScopeOverrideKey(scope);
-  const existing = settings.codex.overrides[key];
-  if (existing) {
-    return existing;
-  }
-
-  const created: CodexTargetOverride = {
-    enabled: false,
-    profile: cloneCodexRuntimeProfile(settings.codex.global),
-  };
-  settings.codex.overrides[key] = created;
-  return created;
-};
-
-export const getClaudeScopeProfile = (
-  settings: AppSettings,
-  scope: ClaudeSettingsScope,
-): ClaudeRuntimeProfile => (
-  scope === "global"
-    ? cloneClaudeRuntimeProfile(settings.claude.global)
-    : cloneClaudeRuntimeProfile(
-        settings.claude.overrides[getScopeOverrideKey(scope)]?.profile
-        ?? settings.claude.global,
-      )
-);
-
-export const getCodexScopeProfile = (
-  settings: AppSettings,
-  scope: ClaudeSettingsScope,
-): CodexRuntimeProfile => (
-  scope === "global"
-    ? cloneCodexRuntimeProfile(settings.codex.global)
-    : cloneCodexRuntimeProfile(
-        settings.codex.overrides[getScopeOverrideKey(scope)]?.profile
-        ?? settings.codex.global,
-      )
-);
-
-export const isClaudeScopeOverrideEnabled = (
-  settings: AppSettings,
-  scope: ClaudeSettingsScope,
-): boolean => (
-  scope === "global"
-    ? true
-    : Boolean(settings.claude.overrides[getScopeOverrideKey(scope)]?.enabled)
-);
-
-export const isCodexScopeOverrideEnabled = (
-  settings: AppSettings,
-  scope: ClaudeSettingsScope,
-): boolean => (
-  scope === "global"
-    ? true
-    : Boolean(settings.codex.overrides[getScopeOverrideKey(scope)]?.enabled)
-);
-
-export const setClaudeScopeOverrideEnabled = (
-  settings: AppSettings,
-  scope: Exclude<ClaudeSettingsScope, "global">,
-  enabled: boolean,
-): AppSettings => {
-  const next = cloneAppSettings(settings);
-  const override = ensureClaudeScopeOverride(next, scope);
-  override.enabled = enabled;
-  return syncCompatibilityFields(toAppSettingsPayload(next));
-};
-
-export const setCodexScopeOverrideEnabled = (
-  settings: AppSettings,
-  scope: Exclude<ClaudeSettingsScope, "global">,
-  enabled: boolean,
-): AppSettings => {
-  const next = cloneAppSettings(settings);
-  const override = ensureCodexScopeOverride(next, scope);
-  override.enabled = enabled;
-  return syncCompatibilityFields(toAppSettingsPayload(next));
-};
-
 export const patchClaudeStructuredSettings = (
   settings: AppSettings,
   patch: {
-    scope: ClaudeSettingsScope;
     executable?: string;
     startupArgs?: string[];
     env?: Record<string, string>;
   },
 ): AppSettings => {
   const next = cloneAppSettings(settings);
-  const profile = patch.scope === "global"
-    ? next.claude.global
-    : ensureClaudeScopeOverride(next, patch.scope).profile;
+  const profile = next.claude.global;
 
   if (typeof patch.executable === "string") {
     profile.executable = patch.executable.trim() || profile.executable;
@@ -914,7 +645,6 @@ export const patchClaudeStructuredSettings = (
 export const patchCodexStructuredSettings = (
   settings: AppSettings,
   patch: {
-    scope: ClaudeSettingsScope;
     executable?: string;
     extraArgs?: string[];
     model?: string;
@@ -926,9 +656,7 @@ export const patchCodexStructuredSettings = (
   },
 ): AppSettings => {
   const next = cloneAppSettings(settings);
-  const profile = patch.scope === "global"
-    ? next.codex.global
-    : ensureCodexScopeOverride(next, patch.scope).profile;
+  const profile = next.codex.global;
 
   if (typeof patch.executable === "string") {
     profile.executable = patch.executable.trim() || profile.executable;
@@ -961,15 +689,11 @@ export const patchCodexStructuredSettings = (
 export const replaceClaudeAdvancedJson = (
   settings: AppSettings,
   patch: {
-    scope: ClaudeSettingsScope;
     field: "settingsJson" | "globalConfigJson";
     value: Record<string, unknown>;
   },
 ): AppSettings => {
   const next = cloneAppSettings(settings);
-  const profile = patch.scope === "global"
-    ? next.claude.global
-    : ensureClaudeScopeOverride(next, patch.scope).profile;
-  profile[patch.field] = cloneJsonRecord(patch.value);
+  next.claude.global[patch.field] = cloneJsonRecord(patch.value);
   return syncCompatibilityFields(toAppSettingsPayload(next));
 };

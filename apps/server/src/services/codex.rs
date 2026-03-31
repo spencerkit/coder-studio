@@ -1,14 +1,5 @@
 use crate::*;
 
-fn pick_codex_profile_value(base: &str, override_: &str) -> String {
-    let trimmed = override_.trim();
-    if trimmed.is_empty() {
-        base.to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
 fn push_codex_config_override(parts: &mut Vec<String>, key: &str, value: &str) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -43,50 +34,11 @@ fn build_codex_feature_args() -> Vec<String> {
     vec!["--enable".to_string(), "codex_hooks".to_string()]
 }
 
-fn merge_codex_runtime_profile(
-    base: &CodexRuntimeProfile,
-    override_: &CodexRuntimeProfile,
-) -> CodexRuntimeProfile {
-    CodexRuntimeProfile {
-        executable: pick_codex_profile_value(&base.executable, &override_.executable),
-        extra_args: if override_.extra_args.is_empty() {
-            base.extra_args.clone()
-        } else {
-            override_.extra_args.clone()
-        },
-        model: pick_codex_profile_value(&base.model, &override_.model),
-        approval_policy: pick_codex_profile_value(
-            &base.approval_policy,
-            &override_.approval_policy,
-        ),
-        sandbox_mode: pick_codex_profile_value(&base.sandbox_mode, &override_.sandbox_mode),
-        web_search: pick_codex_profile_value(&base.web_search, &override_.web_search),
-        model_reasoning_effort: pick_codex_profile_value(
-            &base.model_reasoning_effort,
-            &override_.model_reasoning_effort,
-        ),
-        env: base
-            .env
-            .iter()
-            .chain(override_.env.iter())
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect(),
-    }
-}
-
 pub(crate) fn resolve_codex_runtime_profile(
     settings: &AppSettingsPayload,
-    target: &ExecTarget,
+    _target: &ExecTarget,
 ) -> CodexRuntimeProfile {
-    let override_ = match target {
-        ExecTarget::Native => settings.codex.overrides.native.as_ref(),
-        ExecTarget::Wsl { .. } => settings.codex.overrides.wsl.as_ref(),
-    };
-
-    override_
-        .filter(|override_| override_.enabled)
-        .map(|override_| merge_codex_runtime_profile(&settings.codex.global, &override_.profile))
-        .unwrap_or_else(|| settings.codex.global.clone())
+    settings.codex.global.clone()
 }
 
 pub(crate) fn build_codex_start_command(
@@ -293,47 +245,43 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn resolve_codex_runtime_profile_prefers_enabled_target_override() {
+    fn resolve_codex_runtime_profile_ignores_workspace_target() {
         let settings = AppSettingsPayload {
             codex: CodexSettingsPayload {
                 global: CodexRuntimeProfile {
-                    executable: "codex".into(),
-                    extra_args: vec!["--search".into()],
+                    executable: "codex-current".into(),
+                    extra_args: vec!["--full-auto".into()],
                     model: "gpt-5.4".into(),
-                    approval_policy: String::new(),
+                    approval_policy: "on-request".into(),
                     sandbox_mode: "workspace-write".into(),
-                    web_search: String::new(),
-                    model_reasoning_effort: String::new(),
-                    env: BTreeMap::new(),
-                },
-                overrides: CodexTargetOverrides {
-                    native: Some(TargetCodexOverride {
-                        enabled: true,
-                        profile: CodexRuntimeProfile {
-                            executable: "codex-nightly".into(),
-                            extra_args: vec!["--full-auto".into()],
-                            model: String::new(),
-                            approval_policy: "on-request".into(),
-                            sandbox_mode: String::new(),
-                            web_search: "live".into(),
-                            model_reasoning_effort: "high".into(),
-                            env: BTreeMap::new(),
-                        },
-                    }),
-                    wsl: None,
+                    web_search: "live".into(),
+                    model_reasoning_effort: "high".into(),
+                    env: BTreeMap::from([("OPENAI_API_KEY".into(), "secret".into())]),
                 },
             },
             ..AppSettingsPayload::default()
         };
 
-        let resolved = resolve_codex_runtime_profile(&settings, &ExecTarget::Native);
-        assert_eq!(resolved.executable, "codex-nightly");
-        assert_eq!(resolved.extra_args, vec!["--full-auto"]);
-        assert_eq!(resolved.model, "gpt-5.4");
-        assert_eq!(resolved.approval_policy, "on-request");
-        assert_eq!(resolved.sandbox_mode, "workspace-write");
-        assert_eq!(resolved.web_search, "live");
-        assert_eq!(resolved.model_reasoning_effort, "high");
+        let native = resolve_codex_runtime_profile(&settings, &ExecTarget::Native);
+        let wsl = resolve_codex_runtime_profile(
+            &settings,
+            &ExecTarget::Wsl {
+                distro: Some("Ubuntu".into()),
+            },
+        );
+
+        assert_eq!(native, wsl);
+        assert_eq!(native.executable, "codex-current");
+        assert_eq!(native.extra_args, vec!["--full-auto"]);
+        assert_eq!(native.model, "gpt-5.4");
+        assert_eq!(native.approval_policy, "on-request");
+        assert_eq!(native.sandbox_mode, "workspace-write");
+        assert_eq!(native.web_search, "live");
+        assert_eq!(native.model_reasoning_effort, "high");
+        assert_eq!(
+            native.env.get("OPENAI_API_KEY").map(String::as_str),
+            Some("secret")
+        );
     }
 
     #[test]

@@ -151,21 +151,22 @@ pub(crate) fn agent_start(
     let session_id_num = session_id
         .parse::<u64>()
         .map_err(|_| "invalid_session_id".to_string())?;
-    let (cwd, target) = workspace_access_context(state, &workspace_id)?;
+    let (workspace_cwd, workspace_target) = workspace_access_context(state, &workspace_id)?;
     let stored_session = load_session(state, &workspace_id, session_id_num)?;
     let effective_resume_id = stored_session.resume_id.clone();
     let settings = load_or_default_app_settings(state)?;
-    let client =
-        crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings, &target);
+    let agent_target = ExecTarget::Native;
+    let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
+    let client = crate::services::agent_client::resolve_agent_client(stored_session.provider, &settings);
     let command = match effective_resume_id.as_deref() {
-        Some(resume_id) => client.resume_command(&target, resume_id),
-        None => client.start_command(&target),
+        Some(resume_id) => client.resume_command(&agent_target, resume_id),
+        None => client.start_command(&agent_target),
     };
-    client.ensure_workspace_hooks(&cwd, &target)?;
+    client.ensure_workspace_hooks(&agent_cwd, &agent_target)?;
 
-    let (program, args) = build_agent_pty_command(&target, &cwd, &command);
+    let (program, args) = build_agent_pty_command(&agent_target, &agent_cwd, &command);
     #[cfg(not(target_os = "windows"))]
-    let shell_env = matches!(target, ExecTarget::Native).then(|| program.clone());
+    let shell_env = matches!(agent_target, ExecTarget::Native).then(|| program.clone());
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))
@@ -176,19 +177,19 @@ pub(crate) fn agent_start(
     }
 
     #[cfg(target_os = "windows")]
-    if matches!(target, ExecTarget::Native) && !cwd.is_empty() {
-        cmd.cwd(&cwd);
+    if matches!(agent_target, ExecTarget::Native) && !agent_cwd.is_empty() {
+        cmd.cwd(&agent_cwd);
     }
 
     #[cfg(not(target_os = "windows"))]
-    if matches!(target, ExecTarget::Native) {
+    if matches!(agent_target, ExecTarget::Native) {
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
     for (key, value) in client.runtime_env() {
         cmd.env(key, value);
     }
-    let app_bin = current_app_bin_for_target(&target)?;
+    let app_bin = current_app_bin_for_target(&agent_target)?;
     let hook_endpoint = current_hook_endpoint(&app)?;
     cmd.env("CODER_STUDIO_APP_BIN", app_bin);
     cmd.env("CODER_STUDIO_HOOK_ENDPOINT", hook_endpoint);

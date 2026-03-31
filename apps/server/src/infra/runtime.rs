@@ -581,6 +581,37 @@ pub(crate) fn resolve_target_path(path: &str, target: &ExecTarget) -> Result<Str
     Ok(path.to_string())
 }
 
+#[cfg(target_os = "windows")]
+fn resolve_native_agent_cwd_from_wsl(path: &str, workspace_target: &ExecTarget) -> Result<String, String> {
+    let output = run_cmd(workspace_target, "", &["wslpath", "-w", path])?;
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return Err("failed to resolve a Windows path for the WSL workspace".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_native_agent_cwd_from_wsl(
+    _path: &str,
+    _workspace_target: &ExecTarget,
+) -> Result<String, String> {
+    Err("current runtime cannot access a WSL workspace path directly".to_string())
+}
+
+pub(crate) fn resolve_agent_runtime_cwd(
+    path: &str,
+    workspace_target: &ExecTarget,
+    agent_target: &ExecTarget,
+) -> Result<String, String> {
+    match (workspace_target, agent_target) {
+        (ExecTarget::Wsl { .. }, ExecTarget::Native) => {
+            resolve_native_agent_cwd_from_wsl(path, workspace_target)
+        }
+        _ => resolve_target_path(path, agent_target),
+    }
+}
+
 pub(crate) fn resolve_git_repo_path(path: &str, target: &ExecTarget) -> Result<String, String> {
     let resolved = resolve_target_path(path, target)?;
     match run_cmd(target, &resolved, &["git", "rev-parse", "--show-toplevel"]) {

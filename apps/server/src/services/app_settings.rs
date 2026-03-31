@@ -81,14 +81,6 @@ struct ClaudeJsonSources {
     global_config_json: Option<Map<String, Value>>,
 }
 
-impl ClaudeJsonSources {
-    fn is_empty(&self) -> bool {
-        self.settings_json.is_none()
-            && self.config_json.is_none()
-            && self.global_config_json.is_none()
-    }
-}
-
 type CodexTomlSource = toml::Table;
 
 fn parse_json_object_text(raw: &str) -> Option<Map<String, Value>> {
@@ -112,16 +104,6 @@ fn read_toml_table_file(path: &Path) -> Option<CodexTomlSource> {
     parse_toml_table_text(&raw)
 }
 
-fn read_target_json_object_file(target: &ExecTarget, path: &str) -> Option<Map<String, Value>> {
-    let raw = run_cmd(target, "", &["cat", path]).ok()?;
-    parse_json_object_text(&raw)
-}
-
-fn read_target_toml_table_file(target: &ExecTarget, path: &str) -> Option<CodexTomlSource> {
-    let raw = run_cmd(target, "", &["cat", path]).ok()?;
-    parse_toml_table_text(&raw)
-}
-
 fn load_native_claude_json_sources(root: &Path) -> ClaudeJsonSources {
     ClaudeJsonSources {
         settings_json: read_json_object_file(&root.join(".claude/settings.json")),
@@ -130,43 +112,8 @@ fn load_native_claude_json_sources(root: &Path) -> ClaudeJsonSources {
     }
 }
 
-fn load_wsl_claude_json_sources(target: &ExecTarget) -> Option<ClaudeJsonSources> {
-    let home = filesystem_home_for_target(target).ok()?;
-    let home = home.trim_end_matches('/');
-    let render = |relative: &str| {
-        if home.is_empty() || home == "/" {
-            format!("/{}", relative.trim_start_matches('/'))
-        } else {
-            format!("{home}/{}", relative.trim_start_matches('/'))
-        }
-    };
-
-    let sources = ClaudeJsonSources {
-        settings_json: read_target_json_object_file(target, &render(".claude/settings.json")),
-        config_json: read_target_json_object_file(target, &render(".claude/config.json")),
-        global_config_json: read_target_json_object_file(target, &render(".claude.json")),
-    };
-
-    if sources.is_empty() {
-        None
-    } else {
-        Some(sources)
-    }
-}
-
 fn load_native_codex_toml_source(root: &Path) -> Option<CodexTomlSource> {
     read_toml_table_file(&root.join(".codex/config.toml"))
-}
-
-fn load_wsl_codex_toml_source(target: &ExecTarget) -> Option<CodexTomlSource> {
-    let home = filesystem_home_for_target(target).ok()?;
-    let home = home.trim_end_matches('/');
-    let path = if home.is_empty() || home == "/" {
-        "/.codex/config.toml".to_string()
-    } else {
-        format!("{home}/.codex/config.toml")
-    };
-    read_target_toml_table_file(target, &path)
 }
 
 fn merge_missing_env_value(
@@ -287,25 +234,13 @@ fn hydrate_runtime_profile_from_claude_sources(
 
 fn hydrate_settings_from_claude_sources(
     settings: &AppSettingsPayload,
-    native_sources: Option<&ClaudeJsonSources>,
-    wsl_sources: Option<&ClaudeJsonSources>,
+    sources: Option<&ClaudeJsonSources>,
 ) -> AppSettingsPayload {
     let mut hydrated = settings.clone();
 
-    if let Some(sources) = native_sources {
+    if let Some(sources) = sources {
         hydrated.claude.global =
             hydrate_runtime_profile_from_claude_sources(&hydrated.claude.global, sources);
-    }
-
-    if let Some(sources) = wsl_sources {
-        let existing_override = hydrated.claude.overrides.wsl.clone();
-        let mut wsl_override = existing_override.clone().unwrap_or_default();
-        let next_profile =
-            hydrate_runtime_profile_from_claude_sources(&wsl_override.profile, sources);
-        if existing_override.is_some() || next_profile != wsl_override.profile {
-            wsl_override.profile = next_profile;
-            hydrated.claude.overrides.wsl = Some(wsl_override);
-        }
     }
 
     hydrated
@@ -320,7 +255,7 @@ fn hydrate_settings_from_claude_home(
     };
 
     let sources = load_native_claude_json_sources(&root);
-    hydrate_settings_from_claude_sources(settings, Some(&sources), None)
+    hydrate_settings_from_claude_sources(settings, Some(&sources))
 }
 
 fn hydrate_runtime_profile_from_codex_source(
@@ -357,24 +292,13 @@ fn hydrate_runtime_profile_from_codex_source(
 
 fn hydrate_settings_from_codex_sources(
     settings: &AppSettingsPayload,
-    native_source: Option<&CodexTomlSource>,
-    wsl_source: Option<&CodexTomlSource>,
+    source: Option<&CodexTomlSource>,
 ) -> AppSettingsPayload {
     let mut hydrated = settings.clone();
 
-    if let Some(source) = native_source {
+    if let Some(source) = source {
         hydrated.codex.global =
             hydrate_runtime_profile_from_codex_source(&hydrated.codex.global, source);
-    }
-
-    if let Some(source) = wsl_source {
-        let existing_override = hydrated.codex.overrides.wsl.clone();
-        let mut wsl_override = existing_override.clone().unwrap_or_default();
-        let next_profile = hydrate_runtime_profile_from_codex_source(&wsl_override.profile, source);
-        if existing_override.is_some() || next_profile != wsl_override.profile {
-            wsl_override.profile = next_profile;
-            hydrated.codex.overrides.wsl = Some(wsl_override);
-        }
     }
 
     hydrated
@@ -391,7 +315,7 @@ fn hydrate_settings_from_codex_home(
     let Some(source) = load_native_codex_toml_source(&root) else {
         return settings.clone();
     };
-    hydrate_settings_from_codex_sources(settings, Some(&source), None)
+    hydrate_settings_from_codex_sources(settings, Some(&source))
 }
 
 fn load_or_default_app_settings_from_conn_hydrated(
@@ -399,16 +323,7 @@ fn load_or_default_app_settings_from_conn_hydrated(
 ) -> Result<AppSettingsPayload, String> {
     let settings = load_or_default_app_settings_from_conn(conn)?;
     let settings = hydrate_settings_from_claude_home(&settings, None);
-    let settings = hydrate_settings_from_codex_home(&settings, None);
-    let wsl_target = ExecTarget::Wsl { distro: None };
-    let wsl_claude_sources = load_wsl_claude_json_sources(&wsl_target);
-    let settings = hydrate_settings_from_claude_sources(&settings, None, wsl_claude_sources.as_ref());
-    let wsl_codex_source = load_wsl_codex_toml_source(&wsl_target);
-    Ok(hydrate_settings_from_codex_sources(
-        &settings,
-        None,
-        wsl_codex_source.as_ref(),
-    ))
+    Ok(hydrate_settings_from_codex_home(&settings, None))
 }
 
 fn save_app_settings_to_conn(
@@ -438,26 +353,6 @@ fn should_replace_object_patch(path: &[String]) -> bool {
             | ["claude", "global", "settings_json"]
             | ["claude", "global", "global_config_json"]
             | ["codex", "global", "env"]
-            | ["claude", "overrides", "native", "profile", "env"]
-            | ["claude", "overrides", "native", "profile", "settings_json"]
-            | [
-                "claude",
-                "overrides",
-                "native",
-                "profile",
-                "global_config_json"
-            ]
-            | ["codex", "overrides", "native", "profile", "env"]
-            | ["claude", "overrides", "wsl", "profile", "env"]
-            | ["claude", "overrides", "wsl", "profile", "settings_json"]
-            | [
-                "claude",
-                "overrides",
-                "wsl",
-                "profile",
-                "global_config_json"
-            ]
-            | ["codex", "overrides", "wsl", "profile", "env"]
     )
 }
 
@@ -505,17 +400,13 @@ fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
             "maxActive" => "max_active".to_string(),
             _ => key.to_string(),
         },
-        ["claude", "global"]
-        | ["claude", "overrides", "native", "profile"]
-        | ["claude", "overrides", "wsl", "profile"] => match key {
+        ["claude", "global"] => match key {
             "startupArgs" => "startup_args".to_string(),
             "settingsJson" => "settings_json".to_string(),
             "globalConfigJson" => "global_config_json".to_string(),
             _ => key.to_string(),
         },
-        ["codex", "global"]
-        | ["codex", "overrides", "native", "profile"]
-        | ["codex", "overrides", "wsl", "profile"] => match key {
+        ["codex", "global"] => match key {
             "extraArgs" => "extra_args".to_string(),
             "approvalPolicy" => "approval_policy".to_string(),
             "sandboxMode" => "sandbox_mode".to_string(),
@@ -751,10 +642,9 @@ mod tests {
     }
 
     #[test]
-    fn hydrate_settings_from_claude_sources_imports_wsl_values_into_wsl_override_profile() {
+    fn hydrate_settings_from_claude_sources_imports_current_runtime_values_into_global_profile() {
         let hydrated = hydrate_settings_from_claude_sources(
             &AppSettingsPayload::default(),
-            None,
             Some(&ClaudeJsonSources {
                 settings_json: Some(
                     serde_json::from_value(json!({
@@ -781,33 +671,35 @@ mod tests {
             }),
         );
 
-        let wsl = hydrated
-            .claude
-            .overrides
-            .wsl
-            .expect("wsl override should be created");
-        assert!(!wsl.enabled);
         assert_eq!(
-            wsl.profile.env.get("ANTHROPIC_API_KEY").map(String::as_str),
+            hydrated
+                .claude
+                .global
+                .env
+                .get("ANTHROPIC_API_KEY")
+                .map(String::as_str),
             Some("wsl-primary-api-key")
         );
         assert_eq!(
-            wsl.profile
+            hydrated
+                .claude
+                .global
                 .env
                 .get("ANTHROPIC_AUTH_TOKEN")
                 .map(String::as_str),
             Some("wsl-auth-token")
         );
         assert_eq!(
-            wsl.profile
+            hydrated
+                .claude
+                .global
                 .env
                 .get("ANTHROPIC_BASE_URL")
                 .map(String::as_str),
             Some("https://wsl.example")
         );
-        assert_eq!(wsl.profile.settings_json["model"], "wsl-sonnet");
-        assert_eq!(wsl.profile.global_config_json["showTurnDuration"], true);
-        assert_eq!(hydrated.claude.global.env.get("ANTHROPIC_API_KEY"), None);
+        assert_eq!(hydrated.claude.global.settings_json["model"], "wsl-sonnet");
+        assert_eq!(hydrated.claude.global.global_config_json["showTurnDuration"], true);
     }
 
     #[test]
@@ -875,10 +767,9 @@ mod tests {
     }
 
     #[test]
-    fn hydrate_settings_from_codex_sources_imports_wsl_values_into_wsl_override_profile() {
+    fn hydrate_settings_from_codex_sources_imports_current_runtime_values_into_global_profile() {
         let hydrated = hydrate_settings_from_codex_sources(
             &AppSettingsPayload::default(),
-            None,
             Some(&toml::Table::from_iter([
                 ("model".to_string(), toml::Value::String("gpt-5.4".into())),
                 (
@@ -896,17 +787,10 @@ mod tests {
             ])),
         );
 
-        let wsl = hydrated
-            .codex
-            .overrides
-            .wsl
-            .expect("wsl override should be created");
-        assert!(!wsl.enabled);
-        assert_eq!(wsl.profile.model, "gpt-5.4");
-        assert_eq!(wsl.profile.approval_policy, "on-request");
-        assert_eq!(wsl.profile.sandbox_mode, "workspace-write");
-        assert_eq!(wsl.profile.model_reasoning_effort, "high");
-        assert!(hydrated.codex.global.model.is_empty());
+        assert_eq!(hydrated.codex.global.model, "gpt-5.4");
+        assert_eq!(hydrated.codex.global.approval_policy, "on-request");
+        assert_eq!(hydrated.codex.global.sandbox_mode, "workspace-write");
+        assert_eq!(hydrated.codex.global.model_reasoning_effort, "high");
     }
 
     #[test]

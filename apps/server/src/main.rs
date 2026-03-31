@@ -71,8 +71,8 @@ pub(crate) use infra::db::{
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
-    repo_name_from_url, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
-    summarize_status, temp_root, terminate_process_tree, trim_branch_name,
+    repo_name_from_url, resolve_agent_runtime_cwd, resolve_git_repo_path, resolve_target_path,
+    run_cmd, shell_escape, summarize_status, temp_root, terminate_process_tree, trim_branch_name,
 };
 pub(crate) use infra::support::{
     build_changes_tree, build_tree, build_tree_from_paths, combine_git_diff_sections,
@@ -96,9 +96,8 @@ pub(crate) use models::{
 };
 #[cfg(test)]
 pub(crate) use models::{
-    AgentDefaultsPayload, ClaudeSettingsPayload, ClaudeTargetOverrides,
-    CodexSettingsPayload, CodexTargetOverrides, CompletionNotificationSettings,
-    GeneralSettingsPayload, TargetClaudeOverride, TargetCodexOverride,
+    AgentDefaultsPayload, ClaudeSettingsPayload, CodexSettingsPayload,
+    CompletionNotificationSettings, GeneralSettingsPayload,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{

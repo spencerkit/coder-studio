@@ -159,23 +159,8 @@ impl Default for ClaudeRuntimeProfile {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
-pub struct TargetClaudeOverride {
-    pub enabled: bool,
-    pub profile: ClaudeRuntimeProfile,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(default)]
-pub struct ClaudeTargetOverrides {
-    pub native: Option<TargetClaudeOverride>,
-    pub wsl: Option<TargetClaudeOverride>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(default)]
 pub struct ClaudeSettingsPayload {
     pub global: ClaudeRuntimeProfile,
-    pub overrides: ClaudeTargetOverrides,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
@@ -220,23 +205,8 @@ impl Default for CodexRuntimeProfile {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
-pub struct TargetCodexOverride {
-    pub enabled: bool,
-    pub profile: CodexRuntimeProfile,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(default)]
-pub struct CodexTargetOverrides {
-    pub native: Option<TargetCodexOverride>,
-    pub wsl: Option<TargetCodexOverride>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-#[serde(default)]
 pub struct CodexSettingsPayload {
     pub global: CodexRuntimeProfile,
-    pub overrides: CodexTargetOverrides,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]

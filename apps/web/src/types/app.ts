@@ -393,11 +393,6 @@ export type ClaudeRuntimeProfile = {
   globalConfigJson: Record<string, unknown>;
 };
 
-export type ClaudeTargetOverride = {
-  enabled: boolean;
-  profile: ClaudeRuntimeProfile;
-};
-
 export type CodexRuntimeProfile = {
   executable: string;
   extraArgs: string[];
@@ -407,11 +402,6 @@ export type CodexRuntimeProfile = {
   webSearch: string;
   modelReasoningEffort: string;
   env: Record<string, string>;
-};
-
-export type CodexTargetOverride = {
-  enabled: boolean;
-  profile: CodexRuntimeProfile;
 };
 
 export type AppSettingsPayload = {
@@ -426,17 +416,9 @@ export type AppSettingsPayload = {
   };
   claude: {
     global: ClaudeRuntimeProfile;
-    overrides: {
-      native: ClaudeTargetOverride | null;
-      wsl: ClaudeTargetOverride | null;
-    };
   };
   codex: {
     global: CodexRuntimeProfile;
-    overrides: {
-      native: CodexTargetOverride | null;
-      wsl: CodexTargetOverride | null;
-    };
   };
 };
 
@@ -449,6 +431,7 @@ export type LegacyAppSettings = {
 };
 
 export type AppSettings = AppSettingsPayload & {
+  agentCommand: string;
   idlePolicy: IdlePolicy;
   completionNotifications: CompletionNotificationSettings;
   terminalCompatibilityMode: TerminalCompatibilityMode;
@@ -465,7 +448,6 @@ export type AgentCommandStatus = {
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
 export type SettingsPanel = "general" | "claude" | "codex" | "appearance";
-export type ClaudeSettingsScope = "global" | "native" | "wsl";
 
 export type SettingsNavItem = {
   id: SettingsPanel;
