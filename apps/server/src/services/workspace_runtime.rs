@@ -1,6 +1,7 @@
 use crate::infra::db::{
     build_snapshot_from_conn, ensure_workspace_exists_from_conn,
-    load_agent_lifecycle_events_from_conn, load_workspace_controller_lease_from_conn,
+    list_workspace_ids_for_workspace_client_from_conn, load_agent_lifecycle_events_from_conn,
+    load_workspace_controller_lease_from_conn, mark_workspace_client_detached_from_conn,
     save_workspace_controller_lease_to_conn, upsert_workspace_attachment_to_conn, with_db,
 };
 use crate::*;
@@ -222,27 +223,44 @@ pub(crate) fn release_workspace_controller_for_client(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceControllerLease, String> {
-    let mut lease = assert_workspace_controller_can_mutate(
-        &workspace_id,
-        &device_id,
-        &client_id,
-        fencing_token,
-        &app,
-        state,
-    )?;
-    let before = lease.clone();
+    let mut changed_lease = None;
+    let result = with_db(state, |conn| {
+        let now = now_ts();
+        let mut lease = load_workspace_controller_lease_from_conn(conn, &workspace_id)?;
+        let before = lease.clone();
+        finalize_takeover_if_due(&mut lease, now);
 
-    lease.controller_device_id = None;
-    lease.controller_client_id = None;
-    lease.lease_expires_at = 0;
-    clear_takeover_request(&mut lease);
+        if lease != before {
+            save_workspace_controller_lease_to_conn(conn, &lease)?;
+            changed_lease = Some(lease.clone());
+        }
 
-    if lease != before {
-        save_workspace_controller_lease(state, &lease)?;
-        emit_workspace_controller_change(&app, &lease);
+        if !lease_alive(&lease, now)
+            || !same_controller(&lease, &device_id, &client_id)
+            || lease.fencing_token != fencing_token
+        {
+            return Err("stale_fencing_token".to_string());
+        }
+
+        let before_release = lease.clone();
+        lease.controller_device_id = None;
+        lease.controller_client_id = None;
+        lease.lease_expires_at = 0;
+        clear_takeover_request(&mut lease);
+
+        if lease != before_release {
+            save_workspace_controller_lease_to_conn(conn, &lease)?;
+            changed_lease = Some(lease.clone());
+        }
+
+        Ok(lease)
+    });
+
+    if let Some(lease) = changed_lease.as_ref() {
+        emit_workspace_controller_change(&app, lease);
     }
 
-    Ok(lease)
+    result
 }
 
 pub(crate) fn handle_workspace_client_disconnect(
@@ -251,32 +269,42 @@ pub(crate) fn handle_workspace_client_disconnect(
     app: &AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let workspace_ids = list_workspace_ids_for_workspace_client(state, device_id, client_id)?;
-    let _ = mark_workspace_client_detached(state, device_id, client_id);
-    let now = now_ts();
+    let changed_leases = with_db(state, |conn| {
+        let workspace_ids =
+            list_workspace_ids_for_workspace_client_from_conn(conn, device_id, client_id)?;
+        let _ = mark_workspace_client_detached_from_conn(conn, device_id, client_id);
+        let now = now_ts();
+        let mut changed_leases = Vec::new();
 
-    for workspace_id in workspace_ids {
-        let mut lease = load_workspace_controller_lease(state, &workspace_id)?;
-        if !same_controller(&lease, device_id, client_id) {
-            continue;
-        }
-        let before = lease.clone();
-        if let (Some(next_device), Some(next_client)) = (
-            lease.takeover_requested_by_device_id.clone(),
-            lease.takeover_requested_by_client_id.clone(),
-        ) {
-            transfer_controller(&mut lease, &next_device, &next_client, now);
-        } else {
-            lease.controller_device_id = None;
-            lease.controller_client_id = None;
-            lease.lease_expires_at = 0;
-            clear_takeover_request(&mut lease);
+        for workspace_id in workspace_ids {
+            let mut lease = load_workspace_controller_lease_from_conn(conn, &workspace_id)?;
+            if !same_controller(&lease, device_id, client_id) {
+                continue;
+            }
+            let before = lease.clone();
+            if let (Some(next_device), Some(next_client)) = (
+                lease.takeover_requested_by_device_id.clone(),
+                lease.takeover_requested_by_client_id.clone(),
+            ) {
+                transfer_controller(&mut lease, &next_device, &next_client, now);
+            } else {
+                lease.controller_device_id = None;
+                lease.controller_client_id = None;
+                lease.lease_expires_at = 0;
+                clear_takeover_request(&mut lease);
+            }
+
+            if lease != before {
+                save_workspace_controller_lease_to_conn(conn, &lease)?;
+                changed_leases.push(lease);
+            }
         }
 
-        if lease != before {
-            save_workspace_controller_lease(state, &lease)?;
-            emit_workspace_controller_change(app, &lease);
-        }
+        Ok(changed_leases)
+    })?;
+
+    for lease in changed_leases {
+        emit_workspace_controller_change(app, &lease);
     }
 
     Ok(())
@@ -452,6 +480,12 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    fn lock_with_db_count_tests() -> std::sync::MutexGuard<'static, ()> {
+        with_db_count_test_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
+
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
         let conn = Connection::open_in_memory().unwrap();
@@ -477,7 +511,7 @@ mod tests {
 
     #[test]
     fn workspace_runtime_attach_uses_single_with_db_critical_section() {
-        let _guard = with_db_count_test_lock().lock().unwrap();
+        let _guard = lock_with_db_count_tests();
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-attach-db-count");
 
@@ -496,7 +530,7 @@ mod tests {
 
     #[test]
     fn workspace_controller_heartbeat_uses_single_with_db_critical_section() {
-        let _guard = with_db_count_test_lock().lock().unwrap();
+        let _guard = lock_with_db_count_tests();
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-heartbeat-db-count");
 
@@ -518,6 +552,86 @@ mod tests {
             app.state(),
         )
         .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn assert_workspace_controller_can_mutate_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-assert-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        assert_workspace_controller_can_mutate(
+            &workspace_id,
+            "device-a",
+            "client-a",
+            runtime.controller.fencing_token,
+            &app,
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn release_workspace_controller_for_client_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-release-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        release_workspace_controller_for_client(
+            workspace_id,
+            "device-a".to_string(),
+            "client-a".to_string(),
+            runtime.controller.fencing_token,
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn handle_workspace_client_disconnect_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-disconnect-db-count");
+
+        register_workspace_client_connection("device-a", "client-a", app.state()).unwrap();
+        workspace_runtime_attach(
+            workspace_id,
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        handle_workspace_client_disconnect("device-a", "client-a", &app, app.state()).unwrap();
 
         assert_eq!(read_with_db_call_count(), 1);
     }

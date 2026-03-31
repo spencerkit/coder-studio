@@ -1008,7 +1008,7 @@ pub(crate) fn upsert_workspace_attachment_to_conn(
     Ok(())
 }
 
-fn list_workspace_ids_for_workspace_client_from_conn(
+pub(crate) fn list_workspace_ids_for_workspace_client_from_conn(
     conn: &Connection,
     device_id: &str,
     client_id: &str,
@@ -1030,7 +1030,7 @@ fn list_workspace_ids_for_workspace_client_from_conn(
     Ok(workspace_ids)
 }
 
-fn mark_workspace_client_detached_from_conn(
+pub(crate) fn mark_workspace_client_detached_from_conn(
     conn: &Connection,
     device_id: &str,
     client_id: &str,
@@ -1907,26 +1907,6 @@ pub(crate) fn append_agent_lifecycle_event(
             source_event,
             data,
         )
-    })
-}
-
-pub(crate) fn list_workspace_ids_for_workspace_client(
-    state: State<'_, AppState>,
-    device_id: &str,
-    client_id: &str,
-) -> Result<Vec<String>, String> {
-    with_db(state, |conn| {
-        list_workspace_ids_for_workspace_client_from_conn(conn, device_id, client_id)
-    })
-}
-
-pub(crate) fn mark_workspace_client_detached(
-    state: State<'_, AppState>,
-    device_id: &str,
-    client_id: &str,
-) -> Result<(), String> {
-    with_db(state, |conn| {
-        mark_workspace_client_detached_from_conn(conn, device_id, client_id)
     })
 }
 
