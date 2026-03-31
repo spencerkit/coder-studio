@@ -297,7 +297,7 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
 
   const session = next.tabs[0]?.sessions[0];
   assert.equal(session?.status, "running");
-  assert.equal(session?.claudeSessionId, "claude-replay");
+  assert.equal(session?.resumeId, "claude-replay");
   assert.equal(next.tabs[0]?.paneLayout.type, "leaf");
   if (next.tabs[0]?.paneLayout.type === "leaf") {
     assert.equal(next.tabs[0].paneLayout.sessionId, "1");
@@ -506,6 +506,49 @@ test("controller events can clear takeover state after a preserved runtime merge
 
   assert.equal(cleared.tabs[0]?.controller.takeoverPending, false);
   assert.equal(cleared.tabs[0]?.controller.takeoverRequestId, undefined);
+});
+
+test("controller events reuse the current state when the effective controller is unchanged", () => {
+  const current = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createRuntimeSnapshot({
+      workspace_id: "ws-1",
+      controller_device_id: "device-a",
+      controller_client_id: "client-a",
+      lease_expires_at: 100,
+      fencing_token: 1,
+      takeover_request_id: null,
+      takeover_requested_by_device_id: null,
+      takeover_requested_by_client_id: null,
+      takeover_deadline_at: null,
+    }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const next = applyWorkspaceControllerEvent(
+    current,
+    {
+      workspace_id: "ws-1",
+      controller: {
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: 100,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      },
+    },
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(next, current);
 });
 
 test("runtime snapshot does not overwrite a newer live session stream with a shorter replay", () => {

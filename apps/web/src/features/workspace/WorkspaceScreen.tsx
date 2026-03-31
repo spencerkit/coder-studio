@@ -441,6 +441,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   } | null>(null);
   const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const hasRestoreDraftModeSelected = useMemo(
+    () => Object.values(draftPaneModes).some((mode) => mode === "restore"),
+    [draftPaneModes],
+  );
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
   const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
@@ -455,6 +459,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const historyLoadPromiseRef = useRef<Promise<void> | null>(null);
+  const historyHasLoadedRef = useRef(false);
+  const historyNeedsRefreshRef = useRef(false);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -893,24 +900,73 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.layout.showTerminalPanel,
   ]);
 
-  const refreshHistoryRecords = useCallback(async () => {
-    setHistoryLoading(true);
-    const records = await withServiceFallback(() => listSessionHistory(), null);
-    if (records) {
-      setHistoryRecords(records);
+  const requestHistoryRecords = useCallback(async (force = false) => {
+    if (!force && historyHasLoadedRef.current && !historyNeedsRefreshRef.current) {
+      return;
     }
-    setHistoryLoading(false);
+
+    const inflight = historyLoadPromiseRef.current;
+    if (inflight) {
+      await inflight;
+      if (!force || historyHasLoadedRef.current) {
+        return;
+      }
+    }
+
+    const task = (async () => {
+      setHistoryLoading(true);
+      const records = await withServiceFallback(() => listSessionHistory(), null);
+      if (records) {
+        setHistoryRecords(records);
+        historyHasLoadedRef.current = true;
+        historyNeedsRefreshRef.current = false;
+      }
+    })().finally(() => {
+      historyLoadPromiseRef.current = null;
+      setHistoryLoading(false);
+    });
+
+    historyLoadPromiseRef.current = task;
+    await task;
   }, []);
 
+  const loadHistoryRecords = useCallback(async () => {
+    await requestHistoryRecords(false);
+  }, [requestHistoryRecords]);
+
+  const refreshHistoryRecords = useCallback(async () => {
+    await requestHistoryRecords(true);
+  }, [requestHistoryRecords]);
+
+  const refreshHistoryRecordsIfNeeded = useCallback(async () => {
+    const shouldRefreshImmediately = (
+      historyOpen
+      || hasRestoreDraftModeSelected
+      || stateRef.current.tabs.length === 0
+    );
+    if (shouldRefreshImmediately) {
+      await refreshHistoryRecords();
+      return;
+    }
+    if (historyHasLoadedRef.current) {
+      historyNeedsRefreshRef.current = true;
+    }
+  }, [hasRestoreDraftModeSelected, historyOpen, refreshHistoryRecords]);
+
   useEffect(() => {
-    if (!bootstrapReady) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, refreshHistoryRecords]);
+    if (!bootstrapReady || state.tabs.length > 0) return;
+    void loadHistoryRecords();
+  }, [bootstrapReady, loadHistoryRecords, state.tabs.length]);
 
   useEffect(() => {
     if (!bootstrapReady || !historyOpen) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, historyOpen, refreshHistoryRecords]);
+    void loadHistoryRecords();
+  }, [bootstrapReady, historyOpen, loadHistoryRecords]);
+
+  useEffect(() => {
+    if (!bootstrapReady || !hasRestoreDraftModeSelected) return;
+    void loadHistoryRecords();
+  }, [bootstrapReady, hasRestoreDraftModeSelected, loadHistoryRecords]);
 
   useEffect(() => {
     if (!bootstrapReady) return;
@@ -1346,6 +1402,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     activeProjectPath: activeTab.project?.path,
     bootstrapReady,
     codeSidebarView,
+    showCodePanel,
     stateRef,
     updateTab,
     withServiceFallback,
@@ -1467,12 +1524,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       };
     });
     if (uiState.active_workspace_id) {
-      void refreshHistoryRecords();
+      void refreshHistoryRecordsIfNeeded();
       navigate(`/workspace/${uiState.active_workspace_id}`);
       void ensureWorkspaceTerminal(uiState.active_workspace_id);
       return;
     }
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
     navigate("/workspace");
   };
 
@@ -1594,7 +1651,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
     const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId);
     if (!restored) return;
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
     setHistoryOpen(false);
   };
 
@@ -1607,7 +1664,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
     if (!deleted) return;
 
-    await refreshHistoryRecords();
+    await refreshHistoryRecordsIfNeeded();
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -1885,14 +1942,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     closeAgentPaneSession(activeTab, paneId, sessionId);
     window.setTimeout(() => {
-      void refreshHistoryRecords();
+      void refreshHistoryRecordsIfNeeded();
     }, 0);
   };
 
   const onArchiveSession = async (sessionId: string) => {
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     await archiveSessionForTab(activeTab.id, sessionId);
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
   };
 
   const onDraftPaneModeChange = (paneId: string, mode: "new" | "restore") => {
@@ -1918,7 +1975,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onRestoreDraftSession = (paneId: string, sessionId: string) => {
     void restoreSessionIntoPane(activeTab.id, sessionId, paneId).then((restored) => {
       if (!restored) return;
-      void refreshHistoryRecords();
+      void refreshHistoryRecordsIfNeeded();
     });
   };
 
@@ -2834,6 +2891,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       terminalCompatibilityMode={terminalCompatibilityMode}
       draftPromptInputs={draftPromptInputs}
       draftPaneModes={draftPaneModes}
+      historyLoading={historyLoading}
       restoreCandidates={restoreCandidates}
       displaySessionTitle={displaySessionTitle}
       onExitArchive={onExitArchive}

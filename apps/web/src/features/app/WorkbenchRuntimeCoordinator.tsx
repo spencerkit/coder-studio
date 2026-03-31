@@ -50,7 +50,12 @@ import {
   getOrCreateDeviceId as getWorkspaceDeviceId,
   shouldRecoverWorkspaceController,
 } from "../workspace/workspace-controller";
-import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
+import {
+  attachWorkspaceRuntimeWithRetry,
+  CONTROLLER_RECOVERY_ATTACH_SUCCESS_REUSE_MS,
+  READY_TAB_ATTACH_SUCCESS_REUSE_MS,
+  type WorkspaceRuntimeAttachRequestOptions,
+} from "../workspace/runtime-attach";
 import {
   READY_TAB_RUNTIME_RECOVERY_DELAYS_MS,
   collectReadyTabRuntimeRecoveryWorkspaceIds,
@@ -396,7 +401,10 @@ export const WorkbenchRuntimeCoordinator = ({
     onCompletionReminder,
   });
 
-  const reattachWorkspaceRuntime = useCallback(async (workspaceId: string) => {
+  const reattachWorkspaceRuntime = useCallback(async (
+    workspaceId: string,
+    options: WorkspaceRuntimeAttachRequestOptions = {},
+  ) => {
     const inflight = runtimeAttachInflightRef.current.get(workspaceId);
     if (inflight) {
       await inflight;
@@ -410,6 +418,7 @@ export const WorkbenchRuntimeCoordinator = ({
         deviceId,
         clientId,
         withServiceFallback,
+        options,
       );
       if (
         !runtimeSnapshot
@@ -476,7 +485,9 @@ export const WorkbenchRuntimeCoordinator = ({
       }
       const workspaceIds = collectReadyTabRuntimeRecoveryWorkspaceIds(stateRef.current.tabs);
       void Promise.all(workspaceIds.map(async (workspaceId) => {
-        await reattachWorkspaceRuntime(workspaceId);
+        await reattachWorkspaceRuntime(workspaceId, {
+          successReuseMs: READY_TAB_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     };
 
@@ -572,7 +583,9 @@ export const WorkbenchRuntimeCoordinator = ({
       // Observer tabs can miss an initial runtime attach/controller event during reloads.
       // Reattaching until the tab converges keeps recovery/replay flows stable across slower environments.
       void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
-        await reattachWorkspaceRuntime(workspaceId);
+        await reattachWorkspaceRuntime(workspaceId, {
+          successReuseMs: CONTROLLER_RECOVERY_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     };
 

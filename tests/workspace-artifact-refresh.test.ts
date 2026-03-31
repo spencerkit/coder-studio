@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FULL_ARTIFACT_REFRESH_SCOPE,
   mergeArtifactRefreshScopes,
+  resolveInitialArtifactRefreshScope,
   resolveArtifactRefreshScope,
 } from "../apps/web/src/features/workspace/workspace-artifact-refresh.ts";
 
@@ -37,6 +38,36 @@ test("mergeArtifactRefreshScopes unions refresh work across repeated invalidatio
       git: true,
       worktrees: true,
       tree: true,
+    },
+  );
+});
+
+test("resolveInitialArtifactRefreshScope keeps initial reloads off the full artifact path when the code panel is hidden", () => {
+  assert.deepEqual(
+    resolveInitialArtifactRefreshScope(false, "files"),
+    {
+      git: true,
+      worktrees: false,
+      tree: false,
+    },
+  );
+});
+
+test("resolveInitialArtifactRefreshScope loads the workspace tree only when the files sidebar is visible", () => {
+  assert.deepEqual(
+    resolveInitialArtifactRefreshScope(true, "files"),
+    {
+      git: true,
+      worktrees: false,
+      tree: true,
+    },
+  );
+  assert.deepEqual(
+    resolveInitialArtifactRefreshScope(true, "git"),
+    {
+      git: true,
+      worktrees: false,
+      tree: false,
     },
   );
 });

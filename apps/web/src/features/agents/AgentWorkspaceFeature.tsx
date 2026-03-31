@@ -25,6 +25,7 @@ type AgentWorkspaceFeatureProps = {
   terminalCompatibilityMode: TerminalCompatibilityMode;
   draftPromptInputs: Record<string, string>;
   draftPaneModes: Record<string, "new" | "restore">;
+  historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
   onExitArchive: () => void;
@@ -58,6 +59,7 @@ type AgentPaneLeafProps = {
   terminalCompatibilityMode: TerminalCompatibilityMode;
   draftPromptValue: string;
   draftPaneMode: "new" | "restore";
+  historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
   onSetActivePane: (paneId: string, sessionId: string) => void;
@@ -88,6 +90,7 @@ const AgentPaneLeaf = memo(({
   terminalCompatibilityMode,
   draftPromptValue,
   draftPaneMode,
+  historyLoading,
   restoreCandidates,
   displaySessionTitle,
   onSetActivePane,
@@ -306,7 +309,9 @@ const AgentPaneLeaf = memo(({
                 </form>
               ) : (
                 <div className="agent-draft-restore-list">
-                  {restoreCandidates.length === 0 ? (
+                  {historyLoading ? (
+                    <div className="agent-draft-launcher-empty">{t("loading")}</div>
+                  ) : restoreCandidates.length === 0 ? (
                     <div className="agent-draft-launcher-empty">{t("draftRestoreEmpty")}</div>
                   ) : (
                     restoreCandidates.map((record) => (
@@ -357,6 +362,7 @@ const AgentPaneLeaf = memo(({
   && previous.terminalCompatibilityMode === next.terminalCompatibilityMode
   && previous.draftPromptValue === next.draftPromptValue
   && previous.draftPaneMode === next.draftPaneMode
+  && previous.historyLoading === next.historyLoading
   && previous.restoreCandidates === next.restoreCandidates
 ));
 
@@ -375,6 +381,7 @@ export const AgentWorkspaceFeature = ({
   terminalCompatibilityMode,
   draftPromptInputs,
   draftPaneModes,
+  historyLoading,
   restoreCandidates,
   displaySessionTitle,
   onExitArchive,
@@ -427,6 +434,7 @@ export const AgentWorkspaceFeature = ({
         terminalCompatibilityMode={terminalCompatibilityMode}
         draftPromptValue={draftPromptInputs[node.id] ?? ""}
         draftPaneMode={draftPaneModes[node.id] ?? "new"}
+        historyLoading={historyLoading}
         restoreCandidates={restoreCandidates}
         displaySessionTitle={displaySessionTitle}
         onSetActivePane={onSetActivePane}

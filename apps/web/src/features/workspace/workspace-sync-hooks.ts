@@ -48,6 +48,7 @@ import {
   FULL_ARTIFACT_REFRESH_SCOPE,
   hasArtifactRefreshWork,
   mergeArtifactRefreshScopes,
+  resolveInitialArtifactRefreshScope,
   resolveArtifactRefreshScope,
   type ArtifactRefreshScope,
 } from "./workspace-artifact-refresh";
@@ -59,6 +60,10 @@ import {
   recordPendingAgentStream,
   recordPendingTerminalStream,
 } from "./workspace-stream-index";
+import {
+  type WorkspaceRuntimeAttachRequestOptions,
+  WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
+} from "./runtime-attach";
 
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
@@ -70,7 +75,10 @@ type UseWorkspaceTransportSyncArgs = {
   clientId: string;
   deviceId: string;
   markSessionIdle: (workspaceId: string, sessionId: string) => Promise<void>;
-  reattachWorkspaceRuntime: (workspaceId: string) => Promise<void>;
+  reattachWorkspaceRuntime: (
+    workspaceId: string,
+    options?: WorkspaceRuntimeAttachRequestOptions,
+  ) => Promise<void>;
   settleSessionAfterExit: (workspaceId: string, sessionId: string) => Promise<void>;
   syncSessionPatch: (tabId: string, sessionId: string, patch: SessionPatch) => Promise<void>;
   stateRef: MutableRefObject<WorkbenchState>;
@@ -82,7 +90,8 @@ type UseWorkspaceArtifactsSyncArgs = {
   activeTabId: string;
   activeProjectPath?: string;
   bootstrapReady: boolean;
-  codeSidebarView: string;
+  codeSidebarView: "files" | "git";
+  showCodePanel: boolean;
   stateRef: MutableRefObject<WorkbenchState>;
   updateTab: UpdateTab;
   withServiceFallback: WithServiceFallback;
@@ -172,7 +181,9 @@ export const useWorkspaceTransportSync = ({
 
     const task = (async () => {
       await Promise.all(workspaceIds.map(async (workspaceId) => {
-        await reattachWorkspaceRuntimeRef.current(workspaceId);
+        await reattachWorkspaceRuntimeRef.current(workspaceId, {
+          successReuseMs: WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     })().finally(() => {
       transportResyncPromiseRef.current = null;
@@ -379,6 +390,7 @@ export const useWorkspaceArtifactsSync = ({
   activeProjectPath,
   bootstrapReady,
   codeSidebarView,
+  showCodePanel,
   stateRef,
   updateTab,
   withServiceFallback,
@@ -559,8 +571,19 @@ export const useWorkspaceArtifactsSync = ({
 
   useEffect(() => {
     if (!activeProjectPath) return;
-    void refreshWorkspaceArtifacts(activeTabId, FULL_ARTIFACT_REFRESH_SCOPE, true);
-  }, [activeProjectPath, activeTabId, bootstrapReady, codeSidebarView, refreshWorkspaceArtifacts]);
+    void refreshWorkspaceArtifacts(
+      activeTabId,
+      resolveInitialArtifactRefreshScope(showCodePanel, codeSidebarView),
+      true,
+    );
+  }, [
+    activeProjectPath,
+    activeTabId,
+    bootstrapReady,
+    codeSidebarView,
+    refreshWorkspaceArtifacts,
+    showCodePanel,
+  ]);
 
   useEffect(() => {
     if (!activeProjectPath || !isDocumentVisible || !isOnline) return;

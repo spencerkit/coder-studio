@@ -310,3 +310,44 @@ test("runtime state still applies a remote pane layout that was not sent locally
     assert.equal(next.tabs[0].paneLayout.ratio, 0.61);
   }
 });
+
+test("runtime state reuses the current state when the incoming view is effectively unchanged", () => {
+  const initial = buildWorkbenchStateFromBootstrap(
+    createDefaultWorkbenchState(),
+    {
+      ui_state: {
+        open_workspace_ids: ["ws-1"],
+        active_workspace_id: "ws-1",
+        layout: {
+          left_width: 320,
+          right_width: 320,
+          right_split: 64,
+          show_code_panel: false,
+          show_terminal_panel: false,
+        },
+      },
+      workspaces: [createWorkspaceSnapshot("2")],
+    },
+    "en",
+    APP_SETTINGS,
+  );
+
+  const currentTab = initial.tabs[0];
+  const paneLayout = currentTab?.paneLayout;
+  if (!currentTab || !paneLayout) {
+    throw new Error("expected hydrated tab");
+  }
+
+  const next = applyWorkspaceRuntimeStateEvent(initial, {
+    workspace_id: "ws-1",
+    view_state: {
+      active_session_id: currentTab.activeSessionId,
+      active_pane_id: currentTab.activePaneId,
+      active_terminal_id: currentTab.activeTerminalId,
+      pane_layout: paneLayout,
+      file_preview: currentTab.filePreview,
+    },
+  });
+
+  assert.equal(next, initial);
+});

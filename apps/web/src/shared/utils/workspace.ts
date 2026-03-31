@@ -103,6 +103,23 @@ const mergeWorkspaceControllerState = (
   return incoming;
 };
 
+const sameWorkspaceControllerState = (
+  left: WorkspaceControllerState | undefined,
+  right: WorkspaceControllerState | undefined,
+) => (
+  left?.role === right?.role
+  && left?.deviceId === right?.deviceId
+  && left?.clientId === right?.clientId
+  && left?.controllerDeviceId === right?.controllerDeviceId
+  && left?.controllerClientId === right?.controllerClientId
+  && left?.fencingToken === right?.fencingToken
+  && left?.takeoverPending === right?.takeoverPending
+  && left?.takeoverRequestedBySelf === right?.takeoverRequestedBySelf
+  && left?.takeoverRequestId === right?.takeoverRequestId
+  && left?.takeoverDeadlineAt === right?.takeoverDeadlineAt
+  && left?.leaseExpiresAt === right?.leaseExpiresAt
+);
+
 const readResumeId = (data: string) => {
   try {
     const payload = JSON.parse(data) as { session_id?: string };
@@ -259,6 +276,42 @@ const normalizePaneLayout = (
 
   return createPaneLeaf(fallbackSessionId);
 };
+
+const samePaneLayout = (
+  left: Tab["paneLayout"],
+  right: Tab["paneLayout"],
+): boolean => {
+  if (left.type !== right.type || left.id !== right.id) {
+    return false;
+  }
+  if (left.type === "leaf" && right.type === "leaf") {
+    return left.sessionId === right.sessionId;
+  }
+  if (left.type === "split" && right.type === "split") {
+    return left.axis === right.axis
+      && left.ratio === right.ratio
+      && samePaneLayout(left.first, right.first)
+      && samePaneLayout(left.second, right.second);
+  }
+  return false;
+};
+
+const sameFilePreview = (
+  left: FilePreview,
+  right: FilePreview,
+) => (
+  left.path === right.path
+  && left.content === right.content
+  && left.mode === right.mode
+  && left.diff === right.diff
+  && left.originalContent === right.originalContent
+  && left.modifiedContent === right.modifiedContent
+  && left.dirty === right.dirty
+  && left.source === right.source
+  && left.statusLabel === right.statusLabel
+  && left.parentPath === right.parentPath
+  && left.section === right.section
+);
 
 export const workbenchLayoutFromBackend = (layout: WorkbenchLayout): LayoutState => ({
   leftWidth: layout.left_width,
@@ -520,51 +573,80 @@ export const applyWorkspaceControllerEvent = (
   payload: WorkspaceRuntimeControllerEvent,
   deviceId: string,
   clientId: string,
-): WorkbenchState => ({
-  ...current,
-  tabs: current.tabs.map((tab) => (
-    tab.id === payload.workspace_id
-      ? {
-          ...tab,
-          controller: createWorkspaceControllerStateFromLease(payload.controller, deviceId, clientId),
-        }
-      : tab
-  )),
-});
+): WorkbenchState => {
+  const tabIndex = current.tabs.findIndex((tab) => tab.id === payload.workspace_id);
+  if (tabIndex < 0) {
+    return current;
+  }
+
+  const currentTab = current.tabs[tabIndex];
+  const nextController = createWorkspaceControllerStateFromLease(payload.controller, deviceId, clientId);
+  if (sameWorkspaceControllerState(currentTab.controller, nextController)) {
+    return current;
+  }
+
+  const tabs = [...current.tabs];
+  tabs[tabIndex] = {
+    ...currentTab,
+    controller: nextController,
+  };
+  return {
+    ...current,
+    tabs,
+  };
+};
 
 export const applyWorkspaceRuntimeStateEvent = (
   current: WorkbenchState,
   payload: WorkspaceRuntimeStateEvent,
 ): WorkbenchState => {
-  const nextState = {
-    ...current,
-    tabs: current.tabs.map((tab) => {
-      if (tab.id !== payload.workspace_id) return tab;
-      if (shouldIgnoreIncomingWorkspaceViewPatch(tab, payload.view_state)) {
-        return tab;
-      }
-      const nextActiveSessionId = tab.sessions.some((session) => session.id === payload.view_state.active_session_id)
-        ? payload.view_state.active_session_id
-        : tab.activeSessionId;
-      const nextActiveTerminalId = tab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
-        ? payload.view_state.active_terminal_id
-        : tab.activeTerminalId;
-      return {
-        ...tab,
-        activeSessionId: nextActiveSessionId,
-        activePaneId: payload.view_state.active_pane_id || tab.activePaneId,
-        activeTerminalId: nextActiveTerminalId,
-        paneLayout: normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId),
-        filePreview: normalizeFilePreview(payload.view_state.file_preview, tab.filePreview),
-        viewingArchiveId: undefined,
-      };
-    }),
-  };
-  const nextTab = nextState.tabs.find((tab) => tab.id === payload.workspace_id);
-  if (nextTab) {
-    rememberWorkspaceViewBaseline(nextTab);
+  const tabIndex = current.tabs.findIndex((tab) => tab.id === payload.workspace_id);
+  if (tabIndex < 0) {
+    return current;
   }
-  return nextState;
+
+  const currentTab = current.tabs[tabIndex];
+  if (shouldIgnoreIncomingWorkspaceViewPatch(currentTab, payload.view_state)) {
+    return current;
+  }
+
+  const nextActiveSessionId = currentTab.sessions.some((session) => session.id === payload.view_state.active_session_id)
+    ? payload.view_state.active_session_id
+    : currentTab.activeSessionId;
+  const nextActiveTerminalId = currentTab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
+    ? payload.view_state.active_terminal_id
+    : currentTab.activeTerminalId;
+  const nextActivePaneId = payload.view_state.active_pane_id || currentTab.activePaneId;
+  const nextPaneLayout = normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId);
+  const nextFilePreview = normalizeFilePreview(payload.view_state.file_preview, currentTab.filePreview);
+
+  if (
+    nextActiveSessionId === currentTab.activeSessionId
+    && nextActivePaneId === currentTab.activePaneId
+    && nextActiveTerminalId === currentTab.activeTerminalId
+    && samePaneLayout(currentTab.paneLayout, nextPaneLayout)
+    && sameFilePreview(currentTab.filePreview, nextFilePreview)
+    && currentTab.viewingArchiveId === undefined
+  ) {
+    return current;
+  }
+
+  const nextTab = {
+    ...currentTab,
+    activeSessionId: nextActiveSessionId,
+    activePaneId: nextActivePaneId,
+    activeTerminalId: nextActiveTerminalId,
+    paneLayout: nextPaneLayout,
+    filePreview: nextFilePreview,
+    viewingArchiveId: undefined,
+  };
+  const tabs = [...current.tabs];
+  tabs[tabIndex] = nextTab;
+  rememberWorkspaceViewBaseline(nextTab);
+  return {
+    ...current,
+    tabs,
+  };
 };
 
 export const applyWorkbenchUiState = (

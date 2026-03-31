@@ -60,3 +60,12 @@ export const resolveArtifactRefreshScope = (
     mergeArtifactRefreshScopes(scope, CATEGORY_SCOPE[category] ?? FULL_ARTIFACT_REFRESH_SCOPE)
   ), EMPTY_ARTIFACT_REFRESH_SCOPE);
 };
+
+export const resolveInitialArtifactRefreshScope = (
+  showCodePanel: boolean,
+  codeSidebarView: "files" | "git",
+): ArtifactRefreshScope => ({
+  git: true,
+  worktrees: false,
+  tree: showCodePanel && codeSidebarView === "files",
+});

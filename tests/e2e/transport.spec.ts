@@ -78,6 +78,8 @@ type WorkspaceControllerLeaseSnapshot = {
   takeover_deadline_at?: number | null;
 };
 
+type RpcCounts = Record<string, number>;
+
 type TransportTrackerSnapshot = {
   urls: string[];
   connectTimes: number[];
@@ -682,6 +684,76 @@ test.describe('workspace transport baseline', () => {
       await expect.poll(async () =>
         page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
       ).toBe('idle');
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('reload keeps automatic workspace runtime attaches bounded', async ({ browser }) => {
+    test.setTimeout(30000);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const ids = { deviceId: 'device-reload-attach', clientId: 'client-reload-attach' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reload-attach-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(page);
+      const probe = await installTransportProbe(page);
+      await seedWorkspaceControllerIds(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
+      await waitForBackendSocket(page);
+
+      const attachCountBeforeReload = probe.rpcCounts.workspace_runtime_attach ?? 0;
+
+      await page.reload();
+      await waitForWorkspaceTopbar(page);
+      await waitForBackendSocket(page);
+      await page.waitForTimeout(3600);
+
+      const attachCountAfterReload = probe.rpcCounts.workspace_runtime_attach ?? 0;
+      expect(attachCountAfterReload - attachCountBeforeReload).toBeLessThanOrEqual(1);
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('reload defers session history loading until the drawer is opened', async ({ browser }) => {
+    test.setTimeout(30000);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const ids = { deviceId: 'device-reload-history', clientId: 'client-reload-history' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reload-history-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(page);
+      const probe = await installTransportProbe(page);
+      await seedWorkspaceControllerIds(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
+      await waitForBackendSocket(page);
+
+      const historyCountBeforeReload = probe.rpcCounts.list_session_history ?? 0;
+
+      await page.reload();
+      await waitForWorkspaceTopbar(page);
+      await waitForBackendSocket(page);
+      await page.waitForTimeout(1200);
+
+      const historyCountAfterReload = probe.rpcCounts.list_session_history ?? 0;
+      expect(historyCountAfterReload - historyCountBeforeReload).toBe(0);
+
+      await page.getByTestId('history-toggle').click();
+      await expect(page.getByTestId('history-drawer')).toBeVisible();
+      await expect.poll(() => probe.rpcCounts.list_session_history ?? 0).toBe(historyCountAfterReload + 1);
     } finally {
       if (workspace && !page.isClosed()) {
         await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
@@ -1506,6 +1578,7 @@ async function installTransportProbe(
   options: { pollIntervalMs?: number } = {},
 ) {
   const counts = emptyPollCounts();
+  const rpcCounts: RpcCounts = {};
   const initialCommandOrder: PollCommand[] = [];
   const pollIntervalMs = options.pollIntervalMs ?? 4000;
 
@@ -1578,6 +1651,7 @@ async function installTransportProbe(
 
   await page.route('**/api/rpc/*', async (route) => {
     const command = rpcCommand(route.request().url());
+    rpcCounts[command] = (rpcCounts[command] ?? 0) + 1;
     if (isPollCommand(command)) {
       counts[command] += 1;
       if (!initialCommandOrder.includes(command)) {
@@ -1590,6 +1664,7 @@ async function installTransportProbe(
   return {
     counts,
     initialCommandOrder,
+    rpcCounts,
   };
 }
 
