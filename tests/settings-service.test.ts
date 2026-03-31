@@ -142,7 +142,7 @@ test('deriveRuntimeAppSettings prefers the stored explicit locale over backend l
   assert.equal(runtime.general.locale, 'zh');
 });
 
-test('createSequencedAppSettingsSaver ignores stale save responses', async () => {
+test('createSequencedAppSettingsSaver defers applying an earlier save while a newer save is pending', async () => {
   const saver = createSequencedAppSettingsSaver();
   const confirmed = defaultAppSettings();
   const firstDraft = defaultAppSettings();
@@ -170,14 +170,14 @@ test('createSequencedAppSettingsSaver ignores stale save responses', async () =>
     async () => secondPersist,
   );
 
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
   resolveSecond?.(secondDraft);
   const secondResult = await secondSave;
   assert.equal(secondResult.shouldApply, true);
   assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
-
-  resolveFirst?.(firstDraft);
-  const firstResult = await firstSave;
-  assert.equal(firstResult.shouldApply, false);
 });
 
 test('createSequencedAppSettingsSaver applies the latest confirmed save after a newer request fails', async () => {
@@ -216,6 +216,58 @@ test('createSequencedAppSettingsSaver applies the latest confirmed save after a 
   const secondResult = await secondSave;
   assert.equal(secondResult.shouldApply, true);
   assert.equal(secondResult.settings.general.locale, 'zh');
+});
+
+test('createSequencedAppSettingsSaver serializes backend saves to preserve request order', async () => {
+  const saver = createSequencedAppSettingsSaver();
+  const confirmed = defaultAppSettings();
+  const firstDraft = defaultAppSettings();
+  const secondDraft = defaultAppSettings();
+  firstDraft.general.locale = 'zh';
+  secondDraft.general.idlePolicy.idleMinutes = 25;
+
+  const started: number[] = [];
+  let resolveFirst: ((settings: typeof firstDraft) => void) | undefined;
+  let resolveSecond: ((settings: typeof secondDraft) => void) | undefined;
+  const firstPersist = new Promise<typeof firstDraft>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const secondPersist = new Promise<typeof secondDraft>((resolve) => {
+    resolveSecond = resolve;
+  });
+
+  const firstSave = saver.save(
+    confirmed,
+    firstDraft,
+    async () => {
+      started.push(1);
+      return firstPersist;
+    },
+  );
+  const secondSave = saver.save(
+    confirmed,
+    secondDraft,
+    async () => {
+      started.push(2);
+      return secondPersist;
+    },
+  );
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(started, [1]);
+
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
+  await Promise.resolve();
+  assert.deepEqual(started, [1, 2]);
+
+  resolveSecond?.(secondDraft);
+  const secondResult = await secondSave;
+  assert.equal(secondResult.shouldApply, true);
+  assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
 });
 
 test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy migration save fails', async () => {

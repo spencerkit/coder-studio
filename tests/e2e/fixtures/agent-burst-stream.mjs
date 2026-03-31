@@ -15,7 +15,7 @@ const prefix = findArgValue('--prefix') || process.env.CODER_STUDIO_TEST_BURST_P
 
 const totalChunks = Number.isFinite(chunkCount) && chunkCount > 0 ? Math.floor(chunkCount) : 24;
 const writeIntervalMs = Number.isFinite(intervalMs) && intervalMs >= 0 ? intervalMs : 2;
-const finalDrainDelayMs = Math.max(writeIntervalMs, 100);
+const finalDrainDelayMs = Math.max(writeIntervalMs * 8, 500);
 
 let index = 0;
 const writeNext = () => {

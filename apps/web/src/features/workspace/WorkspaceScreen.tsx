@@ -971,9 +971,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [hasRestoreDraftModeSelected, historyOpen, refreshHistoryRecords]);
 
   useEffect(() => {
-    if (!bootstrapReady || state.tabs.length > 0) return;
+    if (!bootstrapReady || routeWorkspaceId || state.tabs.length > 0) return;
     void loadHistoryRecords();
-  }, [bootstrapReady, loadHistoryRecords, state.tabs.length]);
+  }, [bootstrapReady, loadHistoryRecords, routeWorkspaceId, state.tabs.length]);
 
   useEffect(() => {
     if (!bootstrapReady || !historyOpen) return;

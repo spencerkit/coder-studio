@@ -200,6 +200,7 @@ export const createSequencedAppSettingsSaver = () => {
   let lastAppliedRequestId = 0;
   const pendingRequestIds = new Set<number>();
   const settledRequests = new Map<number, SequencedSaveState>();
+  let persistChain = Promise.resolve();
 
   const pruneSettledRequests = () => {
     for (const requestId of settledRequests.keys()) {
@@ -222,23 +223,31 @@ export const createSequencedAppSettingsSaver = () => {
     }> => {
       latestRequestId += 1;
       const requestId = latestRequestId;
+      const confirmedSnapshot = cloneAppSettings(confirmedSettings);
+      const draftSnapshot = cloneAppSettings(draftSettings);
       pendingRequestIds.add(requestId);
 
-      try {
-        settledRequests.set(requestId, {
-          settings: cloneAppSettings(await persist(cloneAppSettings(draftSettings))),
-          success: true,
-          backendConfirmed: true,
-        });
-      } catch {
-        settledRequests.set(requestId, {
-          settings: cloneAppSettings(confirmedSettings),
-          success: false,
-          backendConfirmed: confirmedSettingsAreBackendConfirmed,
-        });
-      } finally {
-        pendingRequestIds.delete(requestId);
-      }
+      const runPersist = async () => {
+        try {
+          settledRequests.set(requestId, {
+            settings: cloneAppSettings(await persist(cloneAppSettings(draftSnapshot))),
+            success: true,
+            backendConfirmed: true,
+          });
+        } catch {
+          settledRequests.set(requestId, {
+            settings: cloneAppSettings(confirmedSnapshot),
+            success: false,
+            backendConfirmed: confirmedSettingsAreBackendConfirmed,
+          });
+        } finally {
+          pendingRequestIds.delete(requestId);
+        }
+      };
+
+      const persistTask = persistChain.then(runPersist, runPersist);
+      persistChain = persistTask.then(() => undefined, () => undefined);
+      await persistTask;
 
       const visibleSave = findLatestVisibleSave(latestRequestId, pendingRequestIds, settledRequests);
       if (!visibleSave || visibleSave.requestId === lastAppliedRequestId) {
@@ -246,7 +255,7 @@ export const createSequencedAppSettingsSaver = () => {
         return {
           settings: visibleSave
             ? cloneAppSettings(visibleSave.settings)
-            : cloneAppSettings(confirmedSettings),
+            : cloneAppSettings(confirmedSnapshot),
           backendConfirmed: visibleSave?.backendConfirmed ?? confirmedSettingsAreBackendConfirmed,
           shouldApply: false,
         };
