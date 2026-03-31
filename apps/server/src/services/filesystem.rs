@@ -1,6 +1,22 @@
+use std::time::{Duration, Instant};
+
 #[cfg(target_os = "windows")]
 use crate::infra::support::windows_drive_roots;
+use crate::app::ArtifactCaches;
+use crate::services::artifact_cache::{
+    artifact_cache_key, cache_lookup, cache_store, invalidate_cache_prefix,
+};
 use crate::*;
+
+const WORKSPACE_TREE_CACHE_TTL: Duration = Duration::from_millis(500);
+
+fn workspace_tree_cache_key(path: &str, target: &ExecTarget, depth: usize) -> String {
+    artifact_cache_key("workspace_tree", path, target, Some(&depth.to_string()))
+}
+
+fn workspace_tree_cache_prefix(path: &str, target: &ExecTarget) -> String {
+    artifact_cache_key("workspace_tree", path, target, None)
+}
 
 pub(crate) fn workspace_tree(
     path: String,
@@ -67,6 +83,42 @@ pub(crate) fn workspace_tree(
         root,
         changes: changes_tree,
     })
+}
+
+pub(crate) fn workspace_tree_cached(
+    path: String,
+    target: ExecTarget,
+    depth: Option<usize>,
+    caches: &ArtifactCaches,
+) -> Result<WorkspaceTree, String> {
+    let resolved = resolve_git_repo_path(&path, &target)?;
+    let resolved_depth = depth.unwrap_or(4);
+    let key = workspace_tree_cache_key(&resolved, &target, resolved_depth);
+    let now = Instant::now();
+    if let Some(value) = cache_lookup(&caches.workspace_tree, &key, now) {
+        return Ok(value);
+    }
+
+    let value = workspace_tree(resolved.clone(), target.clone(), Some(resolved_depth))?;
+    cache_store(
+        &caches.workspace_tree,
+        key,
+        value.clone(),
+        now + WORKSPACE_TREE_CACHE_TTL,
+    );
+    Ok(value)
+}
+
+pub(crate) fn invalidate_workspace_tree_cache(
+    caches: &ArtifactCaches,
+    path: &str,
+    target: &ExecTarget,
+) {
+    let resolved = resolve_git_repo_path(path, target).unwrap_or_else(|_| path.to_string());
+    invalidate_cache_prefix(
+        &caches.workspace_tree,
+        &workspace_tree_cache_prefix(&resolved, target),
+    );
 }
 
 pub(crate) fn file_preview(path: String) -> Result<FilePreview, String> {

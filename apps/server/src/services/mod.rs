@@ -1,5 +1,6 @@
 pub(crate) mod agent;
 pub(crate) mod agent_client;
+pub(crate) mod artifact_cache;
 pub(crate) mod app_settings;
 pub(crate) mod claude;
 pub(crate) mod codex;

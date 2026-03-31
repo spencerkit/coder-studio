@@ -218,7 +218,6 @@ import {
   sessionTone,
   toBackgroundStatus
 } from "../../shared/utils/session";
-import { sortTreeNodes } from "../../shared/utils/tree";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
 import type {
   AgentStartResult,

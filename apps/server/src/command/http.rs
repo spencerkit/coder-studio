@@ -863,7 +863,8 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result = git_status(req.path, req.target).map_err(rpc_bad_request);
+            let result = git_status_cached(req.path, req.target, &app.state().artifact_caches)
+                .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -879,7 +880,8 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result = git_changes(req.path, req.target).map_err(rpc_bad_request);
+            let result = git_changes_cached(req.path, req.target, &app.state().artifact_caches)
+                .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -912,6 +914,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_stage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_all");
             Ok(Value::Null)
         }
@@ -931,6 +935,16 @@ fn dispatch_rpc(
                 req.file_path,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -950,6 +964,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_unstage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_all");
             Ok(Value::Null)
         }
@@ -969,6 +985,16 @@ fn dispatch_rpc(
                 req.file_path,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -988,6 +1014,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_discard_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_all");
             Ok(Value::Null)
         }
@@ -1008,6 +1036,16 @@ fn dispatch_rpc(
                 req.section,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -1035,6 +1073,16 @@ fn dispatch_rpc(
                 .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -1047,7 +1095,12 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let worktrees = worktree_list(req.path, req.target.clone()).map_err(rpc_bad_request);
+            let worktrees = worktree_list_cached(
+                req.path,
+                req.target.clone(),
+                &app.state().artifact_caches,
+            )
+            .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             let worktrees = worktrees?;
             let filtered = if authorized.request.public_mode {
@@ -1070,8 +1123,13 @@ fn dispatch_rpc(
             let req: WorkspaceTreeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result =
-                workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request);
+            let result = workspace_tree_cached(
+                req.path,
+                req.target,
+                Some(req.depth),
+                &app.state().artifact_caches,
+            )
+            .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -1088,6 +1146,16 @@ fn dispatch_rpc(
                 file_save(req.path.clone(), req.content).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.path,
+                &ExecTarget::Native,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.path,
+                &ExecTarget::Native,
+            );
             emit_workspace_artifacts_dirty(app, &req.path, &ExecTarget::Native, "file_save");
             Ok(saved)
         }

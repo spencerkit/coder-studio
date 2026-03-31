@@ -375,6 +375,16 @@ pub(crate) fn emit_workspace_artifacts_dirty(
     target: &ExecTarget,
     reason: &str,
 ) {
+    let categories = match reason {
+        "git_stage_all"
+        | "git_stage_file"
+        | "git_unstage_all"
+        | "git_unstage_file"
+        | "git_discard_all"
+        | "git_discard_file"
+        | "git_commit" => vec!["git", "worktrees"],
+        _ => vec!["full"],
+    };
     emit_transport_event(
         app,
         "workspace://artifacts_dirty",
@@ -382,6 +392,7 @@ pub(crate) fn emit_workspace_artifacts_dirty(
             "path": path,
             "target": target,
             "reason": reason,
+            "categories": categories,
         }),
     );
 }

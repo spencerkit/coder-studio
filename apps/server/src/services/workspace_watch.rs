@@ -10,6 +10,9 @@ use notify::{
     Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
 
+use crate::app::ArtifactCaches;
+use crate::services::filesystem::invalidate_workspace_tree_cache;
+use crate::services::git::invalidate_git_artifact_caches;
 use crate::*;
 
 const WATCH_DEBOUNCE_MS: Duration = Duration::from_millis(250);
@@ -82,11 +85,20 @@ fn event_is_index_only(event: &Event) -> bool {
     !event.paths.is_empty() && event.paths.iter().all(|path| is_git_index_path(path))
 }
 
+fn artifact_categories_for_watch_batch(saw_non_index_event: bool) -> Vec<&'static str> {
+    if saw_non_index_event {
+        vec!["full"]
+    } else {
+        vec!["git", "worktrees"]
+    }
+}
+
 fn emit_workspace_artifacts_dirty_event(
     transport_events: &broadcast::Sender<TransportEvent>,
     path: &str,
     target: &ExecTarget,
     reason: &str,
+    categories: &[&str],
 ) {
     let _ = transport_events.send(TransportEvent {
         event: "workspace://artifacts_dirty".to_string(),
@@ -94,6 +106,7 @@ fn emit_workspace_artifacts_dirty_event(
             "path": path,
             "target": target,
             "reason": reason,
+            "categories": categories,
         }),
     });
 }
@@ -116,6 +129,12 @@ fn is_workspace_watch_suppressed(
 fn watch_single_path(watcher: &mut RecommendedWatcher, path: &Path) -> Result<(), String> {
     watcher
         .watch(path, RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())
+}
+
+fn watch_recursive_path(watcher: &mut RecommendedWatcher, path: &Path) -> Result<(), String> {
+    watcher
+        .watch(path, RecursiveMode::Recursive)
         .map_err(|e| e.to_string())
 }
 
@@ -288,6 +307,31 @@ fn register_workspace_watch_paths(
     target: &ExecTarget,
     watched_root: &Path,
 ) -> Result<(), String> {
+    match std::fs::symlink_metadata(watched_root) {
+        Ok(metadata) if !metadata.file_type().is_symlink() && metadata.is_dir() => {
+            if let Err(error) = watch_recursive_path(watcher, watched_root) {
+                eprintln!(
+                    "failed to watch workspace root {} recursively, falling back to directory registration: {error}",
+                    watched_root.display()
+                );
+            } else {
+                if let Some(git_dir_path) = resolve_git_dir_watch_path(root_path, target, watched_root) {
+                    watch_git_metadata_paths(watcher, &git_dir_path);
+                }
+                return Ok(());
+            }
+        }
+        Ok(_) => {}
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "failed to inspect workspace watch root {}: {error}",
+                    watched_root.display()
+                );
+            }
+        }
+    }
+
     let mut directories = git_visible_directories(root_path, target, watched_root)
         .into_iter()
         .collect::<Vec<_>>();
@@ -327,6 +371,7 @@ fn register_workspace_watch_paths(
 
 fn spawn_workspace_watch(
     transport_events: broadcast::Sender<TransportEvent>,
+    artifact_caches: ArtifactCaches,
     suppressions: Arc<Mutex<HashMap<String, WorkspaceWatchSuppression>>>,
     workspace_id: String,
     root_path: String,
@@ -389,11 +434,17 @@ fn spawn_workspace_watch(
             let suppressed_index_event =
                 !saw_non_index_event && is_workspace_watch_suppressed(&suppressions, &workspace_id);
             if !suppressed_index_event {
+                invalidate_git_artifact_caches(&artifact_caches, &root_path, &target);
+                if saw_non_index_event {
+                    invalidate_workspace_tree_cache(&artifact_caches, &root_path, &target);
+                }
+                let categories = artifact_categories_for_watch_batch(saw_non_index_event);
                 emit_workspace_artifacts_dirty_event(
                     &transport_events,
                     &root_path,
                     &target,
                     WATCH_REASON,
+                    &categories,
                 );
             }
         }
@@ -414,6 +465,7 @@ pub(crate) fn ensure_workspace_watch(
 ) -> Result<(), String> {
     let watched_path = resolve_watch_path(root_path, target)?;
     let transport_events = state.transport_events.clone();
+    let artifact_caches = state.artifact_caches.clone();
     let suppressions = state.workspace_watch_suppressions.clone();
     let mut watches = state.workspace_watches.lock().map_err(|e| e.to_string())?;
 
@@ -428,6 +480,7 @@ pub(crate) fn ensure_workspace_watch(
 
     let watcher = spawn_workspace_watch(
         transport_events,
+        artifact_caches,
         suppressions,
         workspace_id.to_string(),
         root_path.to_string(),
@@ -512,7 +565,7 @@ pub(crate) fn end_workspace_watch_suppression(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_wsl_watch_path;
+    use super::{artifact_categories_for_watch_batch, parse_wsl_watch_path};
     use std::path::PathBuf;
 
     #[test]
@@ -528,5 +581,18 @@ mod tests {
             parsed,
             PathBuf::from("\\\\wsl$\\Ubuntu\\home\\spencer\\repo")
         );
+    }
+
+    #[test]
+    fn artifact_categories_for_watch_batch_uses_git_only_refresh_for_index_only_batches() {
+        assert_eq!(
+            artifact_categories_for_watch_batch(false),
+            vec!["git", "worktrees"]
+        );
+    }
+
+    #[test]
+    fn artifact_categories_for_watch_batch_uses_full_refresh_for_non_index_batches() {
+        assert_eq!(artifact_categories_for_watch_batch(true), vec!["full"]);
     }
 }

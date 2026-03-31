@@ -116,12 +116,13 @@ pub(crate) use services::codex::{
     ensure_codex_hook_settings, resolve_codex_runtime_profile, run_codex_hook_helper,
 };
 pub(crate) use services::filesystem::{
-    file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
+    file_preview, file_save, filesystem_list, filesystem_roots,
+    invalidate_workspace_tree_cache, workspace_tree, workspace_tree_cached,
 };
 pub(crate) use services::git::{
-    git_changes, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
-    git_file_diff_payload, git_stage_all, git_stage_file, git_status, git_status_label,
-    git_unstage_all, git_unstage_file, worktree_list,
+    git_changes_cached, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
+    git_file_diff_payload, git_stage_all, git_stage_file, git_status_cached, git_status_label,
+    git_unstage_all, git_unstage_file, invalidate_git_artifact_caches, worktree_list_cached,
 };
 pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{

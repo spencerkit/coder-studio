@@ -245,6 +245,7 @@ export type ArtifactsDirtyEvent = {
   path: string;
   target: ExecTarget;
   reason: string;
+  categories?: Array<"git" | "worktrees" | "tree" | "full">;
 };
 
 export type WorktreeDetail = {
