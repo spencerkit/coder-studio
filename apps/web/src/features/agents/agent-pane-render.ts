@@ -1,5 +1,5 @@
 import type { Session } from "../../state/workbench.ts";
-import { isHiddenDraftPlaceholder } from "../../shared/utils/session.ts";
+import { isDraftSession } from "../../shared/utils/session.ts";
 
 export type AgentPaneRenderState =
   | { kind: "draft" }
@@ -9,7 +9,7 @@ export const resolveAgentPaneRenderState = (
   session: Session,
   isPaneActive: boolean,
 ): AgentPaneRenderState => {
-  if (isHiddenDraftPlaceholder(session)) {
+  if (isDraftSession(session)) {
     return { kind: "draft" };
   }
 
