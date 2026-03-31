@@ -1,6 +1,10 @@
 use crate::*;
 use chrono::TimeZone;
 use serde::de::DeserializeOwned;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(test)]
+use std::thread::ThreadId;
 
 const SESSION_STREAM_LIMIT: usize = 200_000;
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
@@ -8,6 +12,11 @@ const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
 const APP_SETTINGS_ROW_ID: i64 = 1;
 const DB_SCHEMA_VERSION: i64 = 2;
+
+#[cfg(test)]
+static WITH_DB_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static WITH_DB_COUNT_OWNER: Mutex<Option<ThreadId>> = Mutex::new(None);
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -185,6 +194,13 @@ fn load_workspace_row(conn: &Connection, workspace_id: &str) -> Result<Workspace
             rusqlite::Error::QueryReturnedNoRows => "workspace_not_found".to_string(),
             other => other.to_string(),
         })
+}
+
+pub(crate) fn ensure_workspace_exists_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(), String> {
+    load_workspace_row(conn, workspace_id).map(|_| ())
 }
 
 fn load_workspace_row_by_root(
@@ -896,7 +912,7 @@ fn append_agent_lifecycle_event_to_conn(
     })
 }
 
-fn load_agent_lifecycle_events_from_conn(
+pub(crate) fn load_agent_lifecycle_events_from_conn(
     conn: &Connection,
     workspace_id: &str,
     limit: usize,
@@ -941,7 +957,7 @@ fn default_workspace_controller_lease(workspace_id: &str) -> WorkspaceController
     }
 }
 
-fn load_workspace_controller_lease_from_conn(
+pub(crate) fn load_workspace_controller_lease_from_conn(
     conn: &Connection,
     workspace_id: &str,
 ) -> Result<WorkspaceControllerLease, String> {
@@ -960,7 +976,7 @@ fn load_workspace_controller_lease_from_conn(
     }
 }
 
-fn save_workspace_controller_lease_to_conn(
+pub(crate) fn save_workspace_controller_lease_to_conn(
     conn: &Connection,
     lease: &WorkspaceControllerLease,
 ) -> Result<(), String> {
@@ -974,7 +990,7 @@ fn save_workspace_controller_lease_to_conn(
     Ok(())
 }
 
-fn upsert_workspace_attachment_to_conn(
+pub(crate) fn upsert_workspace_attachment_to_conn(
     conn: &Connection,
     workspace_id: &str,
     device_id: &str,
@@ -1178,7 +1194,7 @@ fn load_mounted_session_ids_from_conn(conn: &Connection, workspace_id: &str) -> 
         .unwrap_or_default()
 }
 
-fn build_snapshot_from_conn(
+pub(crate) fn build_snapshot_from_conn(
     conn: &Connection,
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
@@ -1373,9 +1389,34 @@ pub(crate) fn with_db<T>(
     state: State<'_, AppState>,
     f: impl FnOnce(&Connection) -> Result<T, String>,
 ) -> Result<T, String> {
+    #[cfg(test)]
+    {
+        let current = std::thread::current().id();
+        if WITH_DB_COUNT_OWNER
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|owner| owner == &current))
+            .unwrap_or(false)
+        {
+            WITH_DB_CALL_COUNT.fetch_add(1, Ordering::SeqCst);
+        }
+    }
     let guard = state.db.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("db_not_ready")?;
     f(conn)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_with_db_call_count() {
+    if let Ok(mut owner) = WITH_DB_COUNT_OWNER.lock() {
+        *owner = Some(std::thread::current().id());
+    }
+    WITH_DB_CALL_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn read_with_db_call_count() -> usize {
+    WITH_DB_CALL_COUNT.load(Ordering::SeqCst)
 }
 
 pub(crate) fn workbench_bootstrap(
@@ -1866,16 +1907,6 @@ pub(crate) fn append_agent_lifecycle_event(
             source_event,
             data,
         )
-    })
-}
-
-pub(crate) fn load_agent_lifecycle_events(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    limit: usize,
-) -> Result<Vec<AgentLifecycleHistoryEntry>, String> {
-    with_db(state, |conn| {
-        load_agent_lifecycle_events_from_conn(conn, workspace_id, limit)
     })
 }
 

@@ -50,24 +50,25 @@ pub(crate) use auth::{
 };
 pub(crate) use command::http::start_transport_server;
 #[cfg(test)]
-pub(crate) use infra::db::launch_workspace_record;
-#[cfg(test)]
 pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
     activate_workspace_ui, append_agent_lifecycle_event, append_session_stream,
     append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
     close_workspace_ui, create_workspace_session, delete_workspace_session,
     delete_workspace_terminal, init_db, launch_workspace_record_scoped,
-    list_workspace_ids_for_workspace_client, load_agent_lifecycle_events, load_session,
-    load_session_history_records, load_workspace_controller_lease,
-    mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
-    patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_resume_id, set_session_status_if_not_archived,
-    set_workspace_terminal_recoverable, switch_workspace_session,
-    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session, upsert_workspace_attachment,
+    list_workspace_ids_for_workspace_client, load_session, load_session_history_records,
+    load_workspace_controller_lease, mark_active_sessions_interrupted_on_boot,
+    mark_workspace_client_detached, patch_workspace_view_state, persist_workspace_terminal,
+    restore_workspace_session, save_workspace_controller_lease, set_session_resume_id,
+    set_session_status_if_not_archived, set_workspace_terminal_recoverable,
+    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
+    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
     workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
     workspace_snapshot as load_workspace_snapshot,
+};
+#[cfg(test)]
+pub(crate) use infra::db::{
+    launch_workspace_record, read_with_db_call_count, reset_with_db_call_count,
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
@@ -81,23 +82,22 @@ pub(crate) use infra::support::{
     resolve_git_command_path, wsl_parent_path,
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
-pub(crate) use models::{
-    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
-    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
-    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
-    SessionMode, SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo,
-    TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
-    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot,
-    WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
-    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
-    WorktreeInfo, CodexRuntimeProfile,
-};
 #[cfg(test)]
 pub(crate) use models::{
     AgentDefaultsPayload, ClaudeSettingsPayload, CodexSettingsPayload,
     CompletionNotificationSettings, GeneralSettingsPayload,
+};
+pub(crate) use models::{
+    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
+    CodexRuntimeProfile, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
+    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
+    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
+    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
+    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -116,8 +116,8 @@ pub(crate) use services::codex::{
     ensure_codex_hook_settings, resolve_codex_runtime_profile, run_codex_hook_helper,
 };
 pub(crate) use services::filesystem::{
-    file_preview, file_save, filesystem_list, filesystem_roots,
-    invalidate_workspace_tree_cache, workspace_tree, workspace_tree_cached,
+    file_preview, file_save, filesystem_list, filesystem_roots, invalidate_workspace_tree_cache,
+    workspace_tree, workspace_tree_cached,
 };
 pub(crate) use services::git::{
     git_changes_cached, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
