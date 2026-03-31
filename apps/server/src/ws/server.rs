@@ -1,11 +1,15 @@
 use std::{pin::Pin, time::Duration};
 
-use crate::ws::outbound_batcher::OutboundBatcher;
+use futures_util::{Sink, SinkExt, StreamExt};
+use tokio::sync::{oneshot, Mutex as AsyncMutex, Notify};
+
+use crate::ws::outbound_batcher::{OutboundBatcher, OutboundSendQueue};
 use crate::ws::protocol::{WsClientEnvelope, WsEnvelope};
 use crate::*;
 
 const WS_OUTBOUND_BATCH_INTERVAL_MS: u64 = 16;
 const WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES: usize = 32 * 1024;
+const WS_OUTBOUND_PENDING_STREAM_CAP_BYTES: usize = 256 * 1024;
 
 fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
     uri.query()
@@ -55,7 +59,7 @@ pub(crate) async fn ws_handler(
 }
 
 pub(crate) async fn ws_session(
-    mut socket: WebSocket,
+    socket: WebSocket,
     app: AppHandle,
     workspace_client: Option<(String, String)>,
 ) {
@@ -63,15 +67,32 @@ pub(crate) async fn ws_session(
     if let Some((device_id, client_id)) = workspace_client.as_ref() {
         let _ = register_workspace_client_connection(device_id, client_id, state);
     }
+    let (socket_tx, mut socket_rx) = socket.split();
     let mut rx = state.transport_events.subscribe();
     let mut batcher = OutboundBatcher::new(WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES);
+    let outbound_queue = Arc::new(AsyncMutex::new(OutboundSendQueue::new(
+        WS_OUTBOUND_PENDING_STREAM_CAP_BYTES,
+    )));
+    let outbound_notify = Arc::new(Notify::new());
+    let (sender_done_tx, mut sender_done_rx) = oneshot::channel();
+    let sender_queue = outbound_queue.clone();
+    let sender_notify = outbound_notify.clone();
+    let sender_task = tokio::spawn(async move {
+        run_ws_sender(socket_tx, sender_queue, sender_notify).await;
+        let _ = sender_done_tx.send(());
+    });
     let mut flush_timer: Pin<Box<tokio::time::Sleep>> =
         Box::pin(tokio::time::sleep(Duration::from_secs(24 * 60 * 60)));
     let mut flush_timer_armed = false;
+    let mut sender_running = true;
 
     loop {
         tokio::select! {
-            message = socket.recv() => {
+            _ = &mut sender_done_rx, if sender_running => {
+                sender_running = false;
+                break;
+            }
+            message = socket_rx.next() => {
                 match message {
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(Message::Text(text))) => {
@@ -87,15 +108,15 @@ pub(crate) async fn ws_session(
                             Err(response) => Some(response),
                         };
                         if let Some(response) = response {
-                            if flush_timer_armed
-                                && send_transport_events(&mut socket, batcher.flush()).await.is_err()
-                            {
-                                break;
+                            if flush_timer_armed {
+                                enqueue_transport_events(
+                                    &outbound_queue,
+                                    &outbound_notify,
+                                    batcher.flush(),
+                                ).await;
                             }
                             flush_timer_armed = false;
-                            if send_ws_envelope(&mut socket, response).await.is_err() {
-                                break;
-                            }
+                            enqueue_ws_envelope(&outbound_queue, &outbound_notify, response).await;
                         }
                     }
                     Some(Ok(_)) => {}
@@ -112,9 +133,7 @@ pub(crate) async fn ws_session(
                         }
                         if !outbound.is_empty() {
                             flush_timer_armed = false;
-                            if send_transport_events(&mut socket, outbound).await.is_err() {
-                                break;
-                            }
+                            enqueue_transport_events(&outbound_queue, &outbound_notify, outbound).await;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -123,11 +142,37 @@ pub(crate) async fn ws_session(
             }
             _ = &mut flush_timer, if flush_timer_armed => {
                 flush_timer_armed = false;
-                if send_transport_events(&mut socket, batcher.flush()).await.is_err() {
-                    break;
-                }
+                enqueue_transport_events(&outbound_queue, &outbound_notify, batcher.flush()).await;
             }
         }
+    }
+
+    if sender_running {
+        if batcher.has_pending() {
+            enqueue_transport_events(&outbound_queue, &outbound_notify, batcher.flush()).await;
+        }
+        let stats = {
+            let mut queue = outbound_queue.lock().await;
+            queue.close();
+            let mut stats = queue.stats();
+            stats.pending_stream_bytes = stats
+                .pending_stream_bytes
+                .saturating_add(batcher.pending_stream_bytes());
+            stats
+        };
+        outbound_notify.notify_waiters();
+        let _ = sender_task.await;
+        if stats.collapse_count > 0 || stats.drop_count > 0 {
+            eprintln!(
+                "ws outbound backpressure: flushes={} collapses={} drops={} pending_stream_bytes={}",
+                stats.flush_count,
+                stats.collapse_count,
+                stats.drop_count,
+                stats.pending_stream_bytes
+            );
+        }
+    } else {
+        let _ = sender_task.await;
     }
 
     if let Some((device_id, client_id)) = workspace_client {
@@ -135,25 +180,67 @@ pub(crate) async fn ws_session(
     }
 }
 
-async fn send_transport_events(socket: &mut WebSocket, events: Vec<TransportEvent>) -> Result<(), ()> {
-    for event in events {
-        if send_ws_envelope(
-            socket,
-            WsEnvelope::Event {
-                event: event.event,
-                payload: event.payload,
-            },
-        )
-        .await
-        .is_err()
-        {
-            return Err(());
-        }
+async fn enqueue_transport_events(
+    queue: &Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: &Notify,
+    events: Vec<TransportEvent>,
+) {
+    if events.is_empty() {
+        return;
     }
-    Ok(())
+    {
+        let mut queue = queue.lock().await;
+        queue.enqueue_transport_events(events);
+    }
+    notify.notify_one();
 }
 
-async fn send_ws_envelope(socket: &mut WebSocket, envelope: WsEnvelope) -> Result<(), ()> {
+async fn enqueue_ws_envelope(
+    queue: &Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: &Notify,
+    envelope: WsEnvelope,
+) {
+    {
+        let mut queue = queue.lock().await;
+        queue.enqueue_ws_envelope(envelope);
+    }
+    notify.notify_one();
+}
+
+async fn run_ws_sender<S>(
+    mut socket_tx: S,
+    queue: Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: Arc<Notify>,
+) where
+    S: Sink<Message> + Unpin,
+{
+    loop {
+        let next = {
+            let mut queue = queue.lock().await;
+            if let Some(envelope) = queue.pop_front() {
+                Some(envelope)
+            } else if queue.is_closed() {
+                None
+            } else {
+                drop(queue);
+                notify.notified().await;
+                continue;
+            }
+        };
+
+        let Some(envelope) = next else {
+            return;
+        };
+        if send_ws_envelope(&mut socket_tx, envelope).await.is_err() {
+            return;
+        }
+    }
+}
+
+async fn send_ws_envelope<S>(socket: &mut S, envelope: WsEnvelope) -> Result<(), ()>
+where
+    S: Sink<Message> + Unpin,
+{
     let Ok(body) = serde_json::to_string(&envelope) else {
         return Ok(());
     };
