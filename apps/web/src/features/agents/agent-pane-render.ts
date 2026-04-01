@@ -18,3 +18,6 @@ export const resolveAgentPaneRenderState = (
     terminalMode: isPaneActive ? "interactive" : "readonly",
   };
 };
+
+export const resolveAgentPaneStream = (session: Session) =>
+  session.liveTerminalStream ?? session.stream;

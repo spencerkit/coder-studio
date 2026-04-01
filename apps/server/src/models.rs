@@ -487,6 +487,8 @@ pub struct AgentEvent {
     pub session_id: String,
     pub kind: String,
     pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_data: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

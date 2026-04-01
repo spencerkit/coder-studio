@@ -4326,7 +4326,9 @@ body.is-resizing-panels .agent-pane-card .pulse {
 .settings-footer-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
@@ -4335,6 +4337,32 @@ body.is-resizing-panels .agent-pane-card .pulse {
 .settings-page-status {
   font-size: var(--font-sm);
   color: var(--text-tertiary);
+}
+
+.settings-page-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+}
+
+.settings-build-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.settings-build-meta-label {
+  color: var(--text-quaternary);
+}
+
+.settings-build-meta-value {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 /* --- Ecosystem Card --- */
@@ -10503,6 +10531,11 @@ pre.diff,
   .settings-footer-bar,
   .settings-route[data-density="compact"] .settings-footer-bar {
     padding: 10px 14px 16px;
+  }
+
+  .settings-page-meta {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .claude-settings-grid--startup {

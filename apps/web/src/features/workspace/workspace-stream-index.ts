@@ -8,7 +8,8 @@ import { appendBufferedChunks } from "./workspace-stream-buffer.ts";
 export type PendingAgentStream = {
   workspaceId: string;
   sessionId: string;
-  chunks: string[];
+  transcriptChunks: string[];
+  liveChunks: string[];
   unreadDelta: number;
 };
 
@@ -42,14 +43,19 @@ export const recordPendingAgentStream = (
     workspaceId: string;
     sessionId: string;
     chunk: string;
+    liveChunk?: string;
     unreadDelta: number;
   },
 ) => {
+  const liveChunk = entry.liveChunk ?? entry.chunk;
   const key = `${entry.workspaceId}:${entry.sessionId}`;
   const existing = index.agent.get(key);
   if (existing) {
     if (entry.chunk) {
-      existing.chunks.push(entry.chunk);
+      existing.transcriptChunks.push(entry.chunk);
+    }
+    if (liveChunk) {
+      existing.liveChunks.push(liveChunk);
     }
     existing.unreadDelta += entry.unreadDelta;
     return;
@@ -58,7 +64,8 @@ export const recordPendingAgentStream = (
   index.agent.set(key, {
     workspaceId: entry.workspaceId,
     sessionId: entry.sessionId,
-    chunks: entry.chunk ? [entry.chunk] : [],
+    transcriptChunks: entry.chunk ? [entry.chunk] : [],
+    liveChunks: liveChunk ? [liveChunk] : [],
     unreadDelta: entry.unreadDelta,
   });
 };
@@ -160,7 +167,16 @@ export const applyPendingStreamIndex = (
             unread: tab.activeSessionId === session.id
               ? 0
               : session.unread + entry.unreadDelta,
-            stream: appendBufferedChunks(session.stream, entry.chunks, AGENT_STREAM_BUFFER_LIMIT),
+            stream: appendBufferedChunks(
+              session.stream,
+              entry.transcriptChunks,
+              AGENT_STREAM_BUFFER_LIMIT,
+            ),
+            liveTerminalStream: appendBufferedChunks(
+              session.liveTerminalStream ?? "",
+              entry.liveChunks,
+              AGENT_STREAM_BUFFER_LIMIT,
+            ),
           };
         });
 

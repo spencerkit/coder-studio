@@ -221,6 +221,7 @@ export type AgentEvent = {
   session_id: string;
   kind: "stdout" | "stderr" | "exit" | "system";
   data: string;
+  raw_data?: string;
 };
 
 export type AgentLifecycleEvent = {

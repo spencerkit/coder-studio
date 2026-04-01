@@ -72,3 +72,16 @@ test('provider settings panel only resets draft state when the selected provider
   assert.match(providerSource, /\}, \[providerId\]\);/);
   assert.doesNotMatch(providerSource, /settings\.providers/);
 });
+
+test('settings footer exposes build version and published time metadata', async () => {
+  const settingsSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(settingsSource, /settings-page-meta/);
+  assert.match(settingsSource, /settings-build-version/);
+  assert.match(settingsSource, /settings-build-published-at/);
+  assert.match(settingsSource, /buildVersionLabel/);
+  assert.match(settingsSource, /buildPublishedLabel/);
+});

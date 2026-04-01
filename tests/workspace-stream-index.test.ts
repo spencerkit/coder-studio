@@ -51,6 +51,7 @@ test("applyPendingStreamIndex only rewrites the affected workspace slices", () =
   assert.notEqual(next.tabs[0].sessions[0], state.tabs[0].sessions[0]);
   assert.equal(next.tabs[0].sessions[1], state.tabs[0].sessions[1]);
   assert.equal(next.tabs[0].sessions[0].stream, "hello");
+  assert.equal(next.tabs[0].sessions[0].liveTerminalStream, "hello");
   assert.equal(next.tabs[0].terminals[0].output, "before world");
 });
 
@@ -76,4 +77,5 @@ test("applyPendingStreamIndex increments unread counts for background sessions",
 
   assert.equal(next.tabs[0].sessions[1].unread, 2);
   assert.equal(next.tabs[0].sessions[1].stream, "background output");
+  assert.equal(next.tabs[0].sessions[1].liveTerminalStream, "background output");
 });

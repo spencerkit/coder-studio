@@ -4,6 +4,7 @@ import {
   BUILTIN_PROVIDER_MANIFESTS,
   getProviderPanelId,
 } from "../../features/providers/registry.ts";
+import { readAppBuildMetadata } from "../../shared/app/build-metadata.ts";
 import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
 import { ProviderSettingsPanel } from "./ProviderSettingsPanel.tsx";
@@ -52,6 +53,7 @@ export const Settings = ({
 }: SettingsProps) => {
   const selectedLocale = getSettingsDraftLocale(settingsDraft);
   const activeProviderId = getActiveProviderId(activeSettingsPanel);
+  const buildMetadata = readAppBuildMetadata();
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
@@ -310,6 +312,20 @@ export const Settings = ({
           <div className="settings-footer-bar">
             <div className="settings-page-status">
               {t("settingsAutoSave")}
+            </div>
+            <div className="settings-page-meta">
+              <div className="settings-build-meta">
+                <span className="settings-build-meta-label">{t("buildVersionLabel")}</span>
+                <span className="settings-build-meta-value" data-testid="settings-build-version">
+                  {buildMetadata.version}
+                </span>
+              </div>
+              <div className="settings-build-meta">
+                <span className="settings-build-meta-label">{t("buildPublishedLabel")}</span>
+                <span className="settings-build-meta-value" data-testid="settings-build-published-at">
+                  {buildMetadata.publishedAtDisplay}
+                </span>
+              </div>
             </div>
           </div>
         </section>

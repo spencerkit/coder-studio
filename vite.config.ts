@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -5,6 +6,7 @@ import react from '@vitejs/plugin-react';
 const WEB_ROOT = path.resolve('apps/web');
 const BUILD_WEB_DIR = path.resolve('.build/web/dist');
 const VITE_CACHE_DIR = path.resolve('.build/vite');
+const APP_VERSION = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8')).version;
 
 const readPort = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -16,11 +18,16 @@ export default defineConfig(({ mode }) => {
   const frontendPort = readPort(process.env.CODER_STUDIO_DEV_FRONTEND_PORT, 5174);
   const backendPort = readPort(process.env.CODER_STUDIO_DEV_BACKEND_PORT, 41033);
   const backendOrigin = `http://127.0.0.1:${backendPort}`;
+  const buildPublishedAt = new Date().toISOString();
 
   return {
     root: WEB_ROOT,
     cacheDir: VITE_CACHE_DIR,
     plugins: [react()],
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __APP_BUILD_PUBLISHED_AT__: JSON.stringify(buildPublishedAt),
+    },
     build: {
       outDir: BUILD_WEB_DIR,
       emptyOutDir: true,

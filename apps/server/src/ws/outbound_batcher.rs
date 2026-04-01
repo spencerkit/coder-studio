@@ -289,46 +289,71 @@ fn transport_event_data_len(event: &TransportEvent) -> usize {
 }
 
 fn event_data_len(payload: &Value) -> usize {
-    payload
-        .as_object()
-        .and_then(|map| map.get("data"))
+    let Some(payload) = payload.as_object() else {
+        return 0;
+    };
+    let data_len = payload
+        .get("data")
         .and_then(Value::as_str)
         .map(str::len)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let raw_data_len = payload
+        .get("raw_data")
+        .and_then(Value::as_str)
+        .map(str::len)
+        .unwrap_or_default();
+    data_len.max(raw_data_len)
 }
 
 fn append_event_data(target: &mut TransportEvent, source: &TransportEvent) {
-    let Some(source_data) = source
-        .payload
-        .as_object()
-        .and_then(|map| map.get("data"))
-        .and_then(Value::as_str)
-    else {
-        return;
-    };
-
     let Some(target_payload) = target.payload.as_object_mut() else {
         return;
     };
-    let mut merged = target_payload
-        .get("data")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    merged.push_str(source_data);
-    target_payload.insert("data".to_string(), Value::String(merged));
+    let Some(source_payload) = source.payload.as_object() else {
+        return;
+    };
+
+    append_payload_string_field(target_payload, source_payload, "data");
+    append_payload_string_field(target_payload, source_payload, "raw_data");
 }
 
 fn trim_event_data_front(event: &mut TransportEvent, bytes_to_remove: usize) {
     let Some(payload) = event.payload.as_object_mut() else {
         return;
     };
-    let Some(data) = payload.get("data").and_then(Value::as_str) else {
-        return;
-    };
     if bytes_to_remove == 0 {
         return;
     }
+
+    trim_payload_string_field_front(payload, "data", bytes_to_remove);
+    trim_payload_string_field_front(payload, "raw_data", bytes_to_remove);
+}
+
+fn append_payload_string_field(
+    target_payload: &mut serde_json::Map<String, Value>,
+    source_payload: &serde_json::Map<String, Value>,
+    key: &str,
+) {
+    let Some(source_data) = source_payload.get(key).and_then(Value::as_str) else {
+        return;
+    };
+    let mut merged = target_payload
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    merged.push_str(source_data);
+    target_payload.insert(key.to_string(), Value::String(merged));
+}
+
+fn trim_payload_string_field_front(
+    payload: &mut serde_json::Map<String, Value>,
+    key: &str,
+    bytes_to_remove: usize,
+) {
+    let Some(data) = payload.get(key).and_then(Value::as_str) else {
+        return;
+    };
 
     let split_index = if bytes_to_remove >= data.len() {
         data.len()
@@ -342,7 +367,7 @@ fn trim_event_data_front(event: &mut TransportEvent, bytes_to_remove: usize) {
     };
 
     payload.insert(
-        "data".to_string(),
+        key.to_string(),
         Value::String(data.get(split_index..).unwrap_or_default().to_string()),
     );
 }
@@ -411,6 +436,25 @@ mod tests {
         }
     }
 
+    fn agent_stream_event_with_raw(
+        workspace_id: &str,
+        session_id: &str,
+        kind: &str,
+        data: &str,
+        raw_data: &str,
+    ) -> TransportEvent {
+        TransportEvent {
+            event: "agent://event".to_string(),
+            payload: json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "kind": kind,
+                "data": data,
+                "raw_data": raw_data,
+            }),
+        }
+    }
+
     fn terminal_stream_event(workspace_id: &str, terminal_id: u64, data: &str) -> TransportEvent {
         TransportEvent {
             event: "terminal://event".to_string(),
@@ -459,6 +503,37 @@ mod tests {
         assert_eq!(
             flushed[0].payload["data"],
             Value::String("hello world".to_string())
+        );
+    }
+
+    #[test]
+    fn outbound_batcher_merges_adjacent_agent_stdout_raw_chunks_for_same_session() {
+        let mut batcher = OutboundBatcher::new(32 * 1024);
+
+        assert!(batcher
+            .push(agent_stream_event_with_raw(
+                "ws-1",
+                "session-1",
+                "stdout",
+                "hello ",
+                "\rworking",
+            ))
+            .is_empty());
+        assert!(batcher
+            .push(agent_stream_event_with_raw(
+                "ws-1",
+                "session-1",
+                "stdout",
+                "world",
+                "\rworking.",
+            ))
+            .is_empty());
+
+        let flushed = batcher.flush();
+        assert_eq!(flushed.len(), 1);
+        assert_eq!(
+            flushed[0].payload["raw_data"],
+            Value::String("\rworking\rworking.".to_string())
         );
     }
 

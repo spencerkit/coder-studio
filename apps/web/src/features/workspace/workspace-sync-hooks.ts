@@ -221,7 +221,7 @@ export const useWorkspaceTransportSync = ({
   }, [flushPendingStreams]);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data }) => {
+    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data, raw_data }) => {
       noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
       const cleaned = stripAnsi(data);
       const isStream = kind === "stdout" || kind === "stderr";
@@ -234,6 +234,7 @@ export const useWorkspaceTransportSync = ({
           workspaceId: workspace_id,
           sessionId: session_id,
           chunk: data,
+          liveChunk: raw_data ?? data,
           unreadDelta: currentTab?.activeSessionId === session_id ? 0 : 1,
         });
         schedulePendingStreamFlush();

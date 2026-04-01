@@ -82,23 +82,33 @@ fn dispatch_agent_output(
     session_id: &str,
     session_id_num: u64,
     lifecycle_state_out: &Mutex<AgentLifecycleFallbackState>,
-    text: &str,
+    raw_text: &str,
+    transcript_text: &str,
 ) {
-    if text.is_empty() {
+    if raw_text.is_empty() && transcript_text.is_empty() {
         return;
     }
 
     if let Ok(mut lifecycle_state) = lifecycle_state_out.lock() {
         if let Some((kind, source_event, data)) =
-            fallback_agent_lifecycle_from_output(&mut lifecycle_state, text)
+            fallback_agent_lifecycle_from_output(&mut lifecycle_state, transcript_text)
         {
             emit_agent_lifecycle(app, workspace_id, session_id, kind, source_event, &data);
         }
     }
 
-    emit_agent(app, workspace_id, session_id, "stdout", text);
+    emit_agent(
+        app,
+        workspace_id,
+        session_id,
+        "stdout",
+        transcript_text,
+        Some(raw_text),
+    );
     let state: State<AppState> = state_handle.state();
-    let _ = append_session_stream(state, workspace_id, session_id_num, text);
+    if !transcript_text.is_empty() {
+        let _ = append_session_stream(state, workspace_id, session_id_num, transcript_text);
+    }
 }
 
 fn write_agent_input<F>(
@@ -284,6 +294,7 @@ pub(crate) fn agent_start(
         &session_id,
         "system",
         "Agent started / 智能体已启动",
+        None,
     );
 
     let workspace_id_out = workspace_id.clone();
@@ -313,6 +324,7 @@ pub(crate) fn agent_start(
                         &session_out,
                         session_out_num,
                         &lifecycle_fallback_state_out,
+                        "",
                         &transcript,
                     );
                     break;
@@ -330,6 +342,7 @@ pub(crate) fn agent_start(
                         &session_out,
                         session_out_num,
                         &lifecycle_fallback_state_out,
+                        &raw,
                         &transcript,
                     );
                 }
@@ -359,7 +372,7 @@ pub(crate) fn agent_start(
                 );
             }
         }
-        emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
+        emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited", None);
         let state: State<AppState> = state_handle.state();
         let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
             agents.remove(&key).is_some()

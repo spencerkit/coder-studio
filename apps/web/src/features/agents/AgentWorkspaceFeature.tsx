@@ -12,7 +12,7 @@ import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, session
 import { stripAnsi } from "../../shared/utils/ansi";
 import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry.ts";
 import { getProviderDisplayLabel } from "../providers/runtime-helpers.ts";
-import { resolveAgentPaneRenderState } from "./agent-pane-render";
+import { resolveAgentPaneRenderState, resolveAgentPaneStream } from "./agent-pane-render";
 
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
@@ -126,6 +126,7 @@ const AgentPaneLeaf = memo(({
   const statusTone = sessionTone(visibleStatus);
   const headerTag = sessionHeaderTag(visibleStatus, locale);
   const renderState = resolveAgentPaneRenderState(session, isPaneActive);
+  const terminalStream = resolveAgentPaneStream(session);
 
   const handleSetActivePane = useCallback(() => {
     onSetActivePane(paneId, session.id);
@@ -329,13 +330,13 @@ const AgentPaneLeaf = memo(({
               )}
             </div>
           </div>
-        ) : (!session.stream.trim() && renderState.terminalMode === "readonly") ? (
+        ) : (!terminalStream.trim() && renderState.terminalMode === "readonly") ? (
           <div className="terminal-empty">{t("noAgentOutputYet")}</div>
         ) : (
           <AgentStreamTerminal
             ref={handleTerminalRef}
-            streamId={session.id}
-            stream={session.stream}
+            streamId={`${session.id}:${session.liveTerminalStream ? "live" : "transcript"}`}
+            stream={terminalStream}
             toneKey={isPaneActive ? "active" : "inactive"}
             theme={theme}
             fontSize={terminalFontSize}
@@ -491,7 +492,7 @@ export const AgentWorkspaceFeature = ({
                     <AgentStreamTerminal
                       ref={archiveTerminalRef}
                       streamId={viewedSession.id}
-                      stream={viewedSession.stream}
+                      stream={resolveAgentPaneStream(viewedSession)}
                       toneKey="active"
                       theme={theme}
                       fontSize={terminalFontSize}

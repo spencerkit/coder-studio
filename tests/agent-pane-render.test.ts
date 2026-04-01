@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveAgentPaneRenderState } from "../apps/web/src/features/agents/agent-pane-render.ts";
+import {
+  resolveAgentPaneRenderState,
+  resolveAgentPaneStream,
+} from "../apps/web/src/features/agents/agent-pane-render.ts";
 import type { Session } from "../apps/web/src/state/workbench.ts";
 
 const createSession = (patch: Partial<Session> = {}): Session => ({
@@ -35,5 +38,22 @@ test("draft launcher only renders for draft placeholder sessions", () => {
   assert.deepEqual(
     resolveAgentPaneRenderState(createSession({ isDraft: false }), true),
     { kind: "terminal", terminalMode: "interactive" },
+  );
+});
+
+test("resolveAgentPaneStream prefers the live terminal stream over the transcript", () => {
+  assert.equal(
+    resolveAgentPaneStream(createSession({
+      stream: "transcript output",
+      liveTerminalStream: "\rworking\rworking.",
+    })),
+    "\rworking\rworking.",
+  );
+
+  assert.equal(
+    resolveAgentPaneStream(createSession({
+      stream: "transcript output",
+    })),
+    "transcript output",
   );
 });

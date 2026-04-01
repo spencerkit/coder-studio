@@ -429,6 +429,7 @@ pub(crate) fn emit_agent(
     session_id: &str,
     kind: &str,
     data: &str,
+    raw_data: Option<&str>,
 ) {
     emit_transport_event(
         app,
@@ -438,6 +439,7 @@ pub(crate) fn emit_agent(
             "session_id": session_id,
             "kind": kind,
             "data": data,
+            "raw_data": raw_data,
         }),
     );
     let _ = app.emit(
@@ -447,6 +449,7 @@ pub(crate) fn emit_agent(
             session_id: session_id.to_string(),
             kind: kind.to_string(),
             data: data.to_string(),
+            raw_data: raw_data.map(str::to_string),
         },
     );
 }
