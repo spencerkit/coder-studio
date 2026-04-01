@@ -11,7 +11,9 @@ pub(crate) fn resolve_claude_runtime_profile(
     settings
         .providers
         .get("claude")
-        .and_then(|payload| serde_json::from_value::<ClaudeRuntimeProfile>(payload.global.clone()).ok())
+        .and_then(|payload| {
+            serde_json::from_value::<ClaudeRuntimeProfile>(payload.global.clone()).ok()
+        })
         .unwrap_or_default()
 }
 
@@ -167,7 +169,9 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
                 crate::services::agent_client::AgentLaunchSpec::Direct {
                     program,
                     args,
-                    display_command: build_claude_resume_launch_command(target, &profile, resume_id),
+                    display_command: build_claude_resume_launch_command(
+                        target, &profile, resume_id,
+                    ),
                 }
             } else {
                 crate::services::agent_client::AgentLaunchSpec::ShellCommand(
@@ -192,11 +196,7 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         })
     }
 
-    fn ensure_workspace_integration(
-        &self,
-        cwd: &str,
-        target: &ExecTarget,
-    ) -> Result<(), String> {
+    fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String> {
         ensure_claude_hook_settings(cwd, target)
     }
 

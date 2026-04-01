@@ -62,7 +62,8 @@ pub(crate) fn process_provider_hook_payload(
     app: &AppHandle,
     value: Value,
 ) -> Result<AgentLifecycleEvent, String> {
-    let envelope: ProviderHookEnvelope = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    let envelope: ProviderHookEnvelope =
+        serde_json::from_value(value).map_err(|e| e.to_string())?;
     let session_id_num = envelope
         .session_id
         .parse::<u64>()

@@ -297,7 +297,9 @@ fn hydrate_settings_from_claude_sources(
     let mut hydrated = settings.clone();
 
     if let Some(sources) = sources {
-        let profile = settings.provider_profile::<ClaudeRuntimeProfile>("claude").unwrap_or_default();
+        let profile = settings
+            .provider_profile::<ClaudeRuntimeProfile>("claude")
+            .unwrap_or_default();
         let hydrated_profile = hydrate_runtime_profile_from_claude_sources(&profile, sources);
         let _ = hydrated.set_provider_profile("claude", &hydrated_profile);
     }
@@ -356,7 +358,9 @@ fn hydrate_settings_from_codex_sources(
     let mut hydrated = settings.clone();
 
     if let Some(source) = source {
-        let profile = settings.provider_profile::<CodexRuntimeProfile>("codex").unwrap_or_default();
+        let profile = settings
+            .provider_profile::<CodexRuntimeProfile>("codex")
+            .unwrap_or_default();
         let hydrated_profile = hydrate_runtime_profile_from_codex_source(&profile, source);
         let _ = hydrated.set_provider_profile("codex", &hydrated_profile);
     }
@@ -391,9 +395,8 @@ fn save_app_settings_to_conn(
     settings: &AppSettingsPayload,
 ) -> Result<AppSettingsPayload, String> {
     ensure_app_settings_row(conn)?;
-    let normalized = normalize_app_settings_payload(
-        serde_json::to_value(settings).map_err(|e| e.to_string())?,
-    )?;
+    let normalized =
+        normalize_app_settings_payload(serde_json::to_value(settings).map_err(|e| e.to_string())?)?;
     conn.execute(
         "INSERT INTO app_settings (id, payload, updated_at)
          VALUES (?1, ?2, ?3)

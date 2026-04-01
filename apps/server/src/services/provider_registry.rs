@@ -59,7 +59,10 @@ mod tests {
     #[test]
     fn provider_id_serializes_as_plain_json_string() {
         let provider_id = ProviderId::new("custom-agent").expect("provider id");
-        assert_eq!(serde_json::to_string(&provider_id).unwrap(), "\"custom-agent\"");
+        assert_eq!(
+            serde_json::to_string(&provider_id).unwrap(),
+            "\"custom-agent\""
+        );
         assert_eq!(
             serde_json::from_str::<ProviderId>("\"codex\"")
                 .unwrap()

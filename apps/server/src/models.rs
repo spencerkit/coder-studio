@@ -278,7 +278,9 @@ impl Default for AppSettingsPayload {
 
 impl AppSettingsPayload {
     pub fn provider_global(&self, provider_id: &str) -> Option<&Value> {
-        self.providers.get(provider_id).map(|payload| &payload.global)
+        self.providers
+            .get(provider_id)
+            .map(|payload| &payload.global)
     }
 
     pub fn provider_profile<T>(&self, provider_id: &str) -> Option<T>

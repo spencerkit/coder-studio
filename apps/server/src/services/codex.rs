@@ -43,7 +43,9 @@ pub(crate) fn resolve_codex_runtime_profile(
     settings
         .providers
         .get("codex")
-        .and_then(|payload| serde_json::from_value::<CodexRuntimeProfile>(payload.global.clone()).ok())
+        .and_then(|payload| {
+            serde_json::from_value::<CodexRuntimeProfile>(payload.global.clone()).ok()
+        })
         .unwrap_or_default()
 }
 
@@ -240,11 +242,7 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         })
     }
 
-    fn ensure_workspace_integration(
-        &self,
-        cwd: &str,
-        target: &ExecTarget,
-    ) -> Result<(), String> {
+    fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String> {
         ensure_codex_hook_settings(cwd, target)
     }
 

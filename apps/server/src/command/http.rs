@@ -2419,7 +2419,10 @@ mod tests {
             initial["general"]["terminal_compatibility_mode"],
             "standard"
         );
-        assert_eq!(initial["providers"]["claude"]["global"]["executable"], "claude");
+        assert_eq!(
+            initial["providers"]["claude"]["global"]["executable"],
+            "claude"
+        );
         assert!(initial.get("claude").is_none());
         assert!(initial.get("codex").is_none());
 
@@ -2703,7 +2706,10 @@ mod tests {
         );
         assert_eq!(claude.settings_json.get("model"), None);
         assert_eq!(
-            claude.global_config_json.as_object().map(|value| value.is_empty()),
+            claude
+                .global_config_json
+                .as_object()
+                .map(|value| value.is_empty()),
             Some(true)
         );
     }
@@ -2738,10 +2744,7 @@ mod tests {
 
         assert_eq!(codex.model, "gpt-5.4");
         assert_eq!(codex.approval_policy, "on-request");
-        assert_eq!(
-            codex.sandbox_mode,
-            "workspace-write"
-        );
+        assert_eq!(codex.sandbox_mode, "workspace-write");
         assert_eq!(codex.web_search, "live");
         assert_eq!(codex.model_reasoning_effort, "high");
         assert_eq!(codex.extra_args, vec!["--full-auto"]);

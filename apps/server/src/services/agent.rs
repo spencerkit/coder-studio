@@ -1,3 +1,4 @@
+use crate::services::ansi_stream::AnsiTranscriptSanitizer;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
 use std::time::Duration;
@@ -72,6 +73,32 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
             runtime.process_group_leader,
         );
     }
+}
+
+fn dispatch_agent_output(
+    app: &AppHandle,
+    state_handle: &AppHandle,
+    workspace_id: &str,
+    session_id: &str,
+    session_id_num: u64,
+    lifecycle_state_out: &Mutex<AgentLifecycleFallbackState>,
+    text: &str,
+) {
+    if text.is_empty() {
+        return;
+    }
+
+    if let Ok(mut lifecycle_state) = lifecycle_state_out.lock() {
+        if let Some((kind, source_event, data)) =
+            fallback_agent_lifecycle_from_output(&mut lifecycle_state, text)
+        {
+            emit_agent_lifecycle(app, workspace_id, session_id, kind, source_event, &data);
+        }
+    }
+
+    emit_agent(app, workspace_id, session_id, "stdout", text);
+    let state: State<AppState> = state_handle.state();
+    let _ = append_session_stream(state, workspace_id, session_id_num, text);
 }
 
 fn write_agent_input<F>(
@@ -162,9 +189,10 @@ pub(crate) fn agent_start(
     let settings = load_or_default_app_settings(state)?;
     let agent_target = ExecTarget::Native;
     let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
-    let adapter =
-        crate::services::provider_registry::resolve_provider_adapter(stored_session.provider.as_str())
-            .ok_or_else(|| format!("unknown_provider:{}", stored_session.provider.as_str()))?;
+    let adapter = crate::services::provider_registry::resolve_provider_adapter(
+        stored_session.provider.as_str(),
+    )
+    .ok_or_else(|| format!("unknown_provider:{}", stored_session.provider.as_str()))?;
     let launch = match effective_resume_id.as_deref() {
         Some(resume_id) => adapter.build_resume(&settings, &agent_target, resume_id)?,
         None => adapter.build_start(&settings, &agent_target)?,
@@ -272,66 +300,38 @@ pub(crate) fn agent_start(
         let mut reader = reader;
         let mut buf = [0u8; 4096];
         let mut decoder = Utf8StreamDecoder::new();
+        let mut sanitizer = AnsiTranscriptSanitizer::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => {
-                    let text = decoder.finish();
-                    if !text.is_empty() {
-                        if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
-                            if let Some((kind, source_event, data)) =
-                                fallback_agent_lifecycle_from_output(&mut lifecycle_state, &text)
-                            {
-                                emit_agent_lifecycle(
-                                    &app_handle,
-                                    &workspace_id_out,
-                                    &session_out,
-                                    kind,
-                                    source_event,
-                                    &data,
-                                );
-                            }
-                        }
-                        emit_agent(
-                            &app_handle,
-                            &workspace_id_out,
-                            &session_out,
-                            "stdout",
-                            &text,
-                        );
-                        let state: State<AppState> = state_handle.state();
-                        let _ =
-                            append_session_stream(state, &workspace_id_out, session_out_num, &text);
-                    }
+                    let mut transcript = sanitizer.push(&decoder.finish());
+                    transcript.push_str(&sanitizer.finish());
+                    dispatch_agent_output(
+                        &app_handle,
+                        &state_handle,
+                        &workspace_id_out,
+                        &session_out,
+                        session_out_num,
+                        &lifecycle_fallback_state_out,
+                        &transcript,
+                    );
                     break;
                 }
                 Ok(n) => {
-                    let text = decoder.push(&buf[..n]);
-                    if text.is_empty() {
+                    let raw = decoder.push(&buf[..n]);
+                    if raw.is_empty() {
                         continue;
                     }
-                    if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
-                        if let Some((kind, source_event, data)) =
-                            fallback_agent_lifecycle_from_output(&mut lifecycle_state, &text)
-                        {
-                            emit_agent_lifecycle(
-                                &app_handle,
-                                &workspace_id_out,
-                                &session_out,
-                                kind,
-                                source_event,
-                                &data,
-                            );
-                        }
-                    }
-                    emit_agent(
+                    let transcript = sanitizer.push(&raw);
+                    dispatch_agent_output(
                         &app_handle,
+                        &state_handle,
                         &workspace_id_out,
                         &session_out,
-                        "stdout",
-                        &text,
+                        session_out_num,
+                        &lifecycle_fallback_state_out,
+                        &transcript,
                     );
-                    let state: State<AppState> = state_handle.state();
-                    let _ = append_session_stream(state, &workspace_id_out, session_out_num, &text);
                 }
                 Err(_) => break,
             }
@@ -391,10 +391,7 @@ pub(crate) fn agent_send(
     let runtime = agents.get(&key).ok_or("agent_not_running")?.clone();
     drop(agents);
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
-    let mut input_policy = runtime
-        .input_policy
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut input_policy = runtime.input_policy.lock().map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
         write_agent_input(
             &mut **handle,
@@ -557,10 +554,7 @@ mod tests {
                 "flush".to_string(),
             ]
         );
-        assert_eq!(
-            delays,
-            vec![Duration::from_millis(120)]
-        );
+        assert_eq!(delays, vec![Duration::from_millis(120)]);
         assert_eq!(
             input_policy.first_submit_strategy,
             crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline

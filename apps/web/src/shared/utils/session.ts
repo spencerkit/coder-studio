@@ -1,6 +1,7 @@
 import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n.ts";
 import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench-core.ts";
 import type { BackendSession } from "../../types/app.ts";
+import { sanitizeAgentSessionStream } from "./agent-session-stream.ts";
 
 export const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
 
@@ -51,7 +52,7 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
         time: nowLabel()
       }
   ]),
-  stream: source.stream ?? existing?.stream ?? "",
+  stream: sanitizeAgentSessionStream(source.stream ?? existing?.stream ?? ""),
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
   resumeId: source.resume_id ?? existing?.resumeId
