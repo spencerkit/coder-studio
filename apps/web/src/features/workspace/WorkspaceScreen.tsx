@@ -49,23 +49,16 @@ import { WorkspaceWelcomeScreen } from "../../components/WorkspaceWelcomeScreen"
 import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
-  armAgentStartupGate,
   buildSlashMenuItems,
   buildSlashMenuSections,
-  clearAgentStartupGate,
   commitAgentSessionTitle,
   createAgentTerminalFitScheduler,
   focusAgentTerminal,
   fitAgentTerminals,
-  isAgentRuntimeRunning,
-  markAgentRuntimeStarted,
   previewAgentSessionTitle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
-  syncAgentPaneSize,
-  syncAgentRuntimeSize,
   trackAgentInitialTitleInput,
-  waitForAgentStartupDrain
 } from "../../features/agents";
 import { buildCommandPaletteActions, filterCommandPaletteActions } from "../../features/command-palette";
 import { WorkspaceCodeFeature } from "../../features/editor";
@@ -148,7 +141,7 @@ import {
   updateWorkspaceFileSearchQuery,
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
-import { startAgent, sendAgentInput } from "../../services/http/agent.service";
+import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
 import { withFallback } from "../../services/http/client";
 import {
   commitGitChanges,
@@ -159,8 +152,6 @@ import {
   unstageAllGitChanges,
   unstageGitFile
 } from "../../services/http/git.service";
-import {
-} from "../../services/http/session.service";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
@@ -187,7 +178,6 @@ import {
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
 import {
-  resolveAgentRuntimeCommand,
   resolveDefaultAgentRuntimeCommand,
 } from "../../shared/app/claude-settings.ts";
 import { stripAnsi } from "../../shared/utils/ansi";
@@ -207,14 +197,12 @@ import {
   sanitizeGitRelativePath,
 } from "../../shared/utils/path";
 import {
-  createSessionFromBackend,
   formatRelativeSessionTime,
   isForegroundActiveStatus,
   isDraftSession,
   isHiddenDraftPlaceholder,
   nowLabel,
   parseNumericId,
-  resolveVisibleStatus,
   restoreVisibleStatus,
   sessionCompletionRatio,
   sessionTone,
@@ -222,12 +210,10 @@ import {
 } from "../../shared/utils/session";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
 import type {
-  AgentStartResult,
   AppSettings,
   AppTheme,
   ClaudeSlashMenuItem,
   ClaudeSlashSkillEntry,
-  CommandAvailability,
   CommandPaletteAction,
   FolderBrowserState,
   GitChangeAction,
@@ -261,12 +247,6 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
       ? `WSL (${target.distro.trim()})`
       : "WSL"
     : t("nativeTarget");
-
-const resolveTargetAgentCommand = (
-  settings: AppSettings,
-  target: ExecTarget,
-  provider: Session["provider"],
-) => resolveAgentRuntimeCommand(settings, target, provider);
 
 const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
   target.type === "wsl"
@@ -1686,35 +1666,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
   };
 
-  const buildAgentCommand = (tab: Tab, session: Session) => (
-    resolveTargetAgentCommand(
-      appSettings,
-      tab.project?.target ?? { type: "native" },
-      session.provider,
-    )
-  );
-
-  const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
+  const startSessionRuntimeInPane = async (paneId: string | null | undefined, tab: Tab, session: Session) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const project = tab.project;
-    if (!project?.path) return false;
-    const command = buildAgentCommand(tab, session);
-    const target = project.target;
     const initialSize = resolveAgentInitialSize(paneId);
-    const availability = await withServiceFallback<CommandAvailability | null>(
-      () => checkCommandAvailability(command, target, project.path),
-      null
-    );
-    if (availability && !availability.available) {
-      addToast({
-        id: createId("toast"),
-        text: `${t("agentStartFailed")}: ${availability.error ?? t("launchCommandMissing", { runtime: formatExecTargetLabel(target, t) })}`,
-        sessionId: session.id
-      });
-      return false;
-    }
-    const startupToken = armAgentStartupGate(agentRuntimeRefs, tab.id, session.id);
-    const result = await invokeAgent<AgentStartResult>(() => startAgent({
+    const result = await invokeAgent(() => startSessionRuntime({
       workspaceId: tab.id,
       controller: tab.controller,
       sessionId: session.id,
@@ -1722,40 +1677,37 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));
     if (!result) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-      return false;
+      return null;
     }
-    markAgentRuntimeStarted(agentRuntimeRefs, tab.id, session.id);
-    if (!result.started) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-    }
-    return {
-      ok: true,
-      started: result.started,
-      startupToken: result.started ? startupToken : null
+    const terminalId = `term-${result.terminal_id}`;
+    let nextSession = { ...session, terminalId };
+    let nextTab = {
+      ...tab,
+      sessions: tab.sessions.map((item) => (
+        item.id === session.id
+          ? nextSession
+          : item
+      )),
     };
-  };
-
-  const agentSend = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((s) =>
-        s.id === session.id ? { ...s, status: resolveVisibleStatus(current, s, "waiting"), lastActiveAt } : s
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { status: "waiting", last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, true),
-      session.id,
-      t("agentSendFailed")
-    );
-    return sent !== null;
+    updateTab(tab.id, (current) => {
+      nextTab = {
+        ...current,
+        sessions: current.sessions.map((item) => (
+          item.id === session.id
+            ? { ...item, terminalId }
+            : item
+        )),
+      };
+      nextSession = nextTab.sessions.find((item) => item.id === session.id) ?? nextSession;
+      return nextTab;
+    });
+    focusAgentTerminal(agentRuntimeRefs, paneId);
+    return { tab: nextTab, session: nextSession };
   };
 
   const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
+    if (!session.terminalId) return false;
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
       ...current,
@@ -1764,36 +1716,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, false),
-      session.id,
-      t("agentKeySendFailed")
-    );
-    return sent !== null;
-  };
-
-  const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((item) =>
-        item.id === session.id ? { ...item, lastActiveAt } : item
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const started = await agentStartMaybe(tab, session);
-    if (!started) return;
-    if (started.started && started.startupToken !== null) {
-      await waitForAgentStartupDrain(
-        agentRuntimeRefs,
-        tab.id,
-        session.id,
-        started.startupToken,
-        session.provider,
-      );
-    }
-    await sendAgentRawChunk(tab, session, input);
+    writeWorkspaceTerminalData(tab.id, tab.controller, session.terminalId, input);
+    return true;
   };
 
   const onRecoverActiveSession = async () => {
@@ -1834,17 +1758,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       kind: recoveryAction.kind,
     });
     try {
-      const started = await agentStartMaybe(currentTab, session, currentTab.activePaneId);
-      if (!started) return;
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(
-          agentRuntimeRefs,
-          currentTab.id,
-          session.id,
-          started.startupToken,
-          session.provider,
-        );
-      }
+      await startSessionRuntimeInPane(currentTab.activePaneId, currentTab, session);
     } finally {
       setAgentRecoveryBusy((current) => (
         current?.sessionId === session.id ? null : current
@@ -1894,6 +1808,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onRestoreDraftSession = (paneId: string, sessionId: string) => {
     void restoreSessionIntoPane(activeTab.id, sessionId, paneId).then((restored) => {
       if (!restored) return;
+      const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
+      const restoredSession = currentTab?.sessions.find((session) => session.id === sessionId);
+      if (currentTab && restoredSession) {
+        void startSessionRuntimeInPane(paneId, currentTab, restoredSession);
+      }
       void refreshHistoryRecordsIfNeeded();
     });
   };
@@ -2325,40 +2244,17 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const materialized = isDraftSession(activeSessionSnapshot)
       ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, firstInput)
       : { tab: activeTabSnapshot, session: activeSessionSnapshot };
-    const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
-    const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
+    let tabSnapshot = materialized?.tab ?? activeTabSnapshot;
+    let sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return null;
 
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot, paneId);
+    if (!sessionSnapshot.terminalId) {
+      const started = await startSessionRuntimeInPane(paneId, tabSnapshot, sessionSnapshot);
       if (!started) return null;
-      if (started.started) {
-        syncAgentPaneSize(
-          agentRuntimeRefs,
-          paneId,
-          tabSnapshot.controller,
-          tabSnapshot.id,
-          sessionSnapshot.id,
-        );
-      }
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(
-          agentRuntimeRefs,
-          tabSnapshot.id,
-          sessionSnapshot.id,
-          started.startupToken,
-          sessionSnapshot.provider,
-        );
-      }
+      tabSnapshot = started.tab;
+      sessionSnapshot = started.session;
     }
 
-    syncAgentPaneSize(
-      agentRuntimeRefs,
-      paneId,
-      tabSnapshot.controller,
-      tabSnapshot.id,
-      sessionSnapshot.id,
-    );
     touchSession(tabSnapshot.id, sessionSnapshot.id);
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
@@ -2565,10 +2461,18 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     size: { cols: number; rows: number }
   ) => {
     agentPaneSizeRef.current.set(paneId, size);
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabId, sessionId)) return;
-    const controller = stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
-    if (!controller || controller.role !== "controller") return;
-    syncAgentRuntimeSize(agentRuntimeRefs, controller, tabId, sessionId, size);
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!tab || !session?.terminalId) return;
+    if (!canMutateWorkspace(tab.controller, "resize_terminal")) return;
+    syncWorkspaceTerminalSize(
+      terminalSizeRef,
+      tab.id,
+      tab.controller,
+      session.terminalId,
+      size.cols,
+      size.rows,
+    );
   }, []);
 
   useEffect(() => {

@@ -6,7 +6,7 @@ import {
 } from "../apps/web/src/features/workspace/workspace-recovery.ts";
 import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
 
-test("controller gets resume action for interrupted claude session", () => {
+test("controller gets resume action for interrupted session with resume id", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
       role: "controller",
@@ -19,13 +19,14 @@ test("controller gets resume action for interrupted claude session", () => {
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "claude",
       autoFeed: true,
       queue: [],
       messages: [],
       stream: "",
       unread: 0,
       lastActiveAt: 1,
-      claudeSessionId: "claude-123",
+      resumeId: "resume-77",
     },
   );
 
@@ -45,6 +46,7 @@ test("controller gets restart action for interrupted non-claude session", () => 
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "codex",
       autoFeed: true,
       queue: [],
       messages: [],
@@ -70,13 +72,14 @@ test("observer does not get agent recovery action", () => {
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "claude",
       autoFeed: true,
       queue: [],
       messages: [],
       stream: "",
       unread: 0,
       lastActiveAt: 1,
-      claudeSessionId: "claude-123",
+      resumeId: "resume-77",
     },
   );
 

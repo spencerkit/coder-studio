@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
-import { startAgent } from "../apps/web/src/services/http/agent.service.ts";
+import { startSessionRuntime } from "../apps/web/src/services/http/session-runtime.service.ts";
 
 type MockFetchCall = {
   input: string | URL | Request;
@@ -34,7 +34,7 @@ const withMockWindow = (
   });
 };
 
-test("startAgent omits legacy command field from agent_start payload", async () => {
+test("startSessionRuntime posts to session_runtime_start without any client-supplied command", async () => {
   const calls: MockFetchCall[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -42,7 +42,7 @@ test("startAgent omits legacy command field from agent_start payload", async () 
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, data: { started: true } }),
+      json: async () => ({ ok: true, data: { terminal_id: 9, started: true } }),
     } as Response;
   }) as typeof fetch;
 
@@ -58,7 +58,7 @@ test("startAgent omits legacy command field from agent_start payload", async () 
         },
       } as Window & typeof globalThis,
       async () => {
-        await startAgent({
+        await startSessionRuntime({
           workspaceId: "ws-1",
           controller: createWorkspaceControllerState({
             role: "controller",
@@ -66,8 +66,7 @@ test("startAgent omits legacy command field from agent_start payload", async () 
             clientId: "client-a",
             fencingToken: 7,
           }),
-          sessionId: "1",
-          provider: "claude",
+          sessionId: "42",
           cols: 120,
           rows: 30,
         });
@@ -78,16 +77,16 @@ test("startAgent omits legacy command field from agent_start payload", async () 
   }
 
   assert.equal(calls.length, 1);
+  assert.match(String(calls[0].input), /\/api\/rpc\/session_runtime_start$/);
   const payload = JSON.parse(String(calls[0].init?.body));
-  assert.equal(payload.command, undefined);
   assert.deepEqual(payload, {
     workspaceId: "ws-1",
     deviceId: "device-a",
     clientId: "client-a",
     fencingToken: 7,
-    sessionId: "1",
-    provider: "claude",
+    sessionId: "42",
     cols: 120,
     rows: 30,
   });
+  assert.equal(payload.command, undefined);
 });
