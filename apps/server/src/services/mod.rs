@@ -9,6 +9,7 @@ pub(crate) mod filesystem;
 pub(crate) mod git;
 pub(crate) mod provider_hooks;
 pub(crate) mod provider_registry;
+pub(crate) mod session_runtime;
 pub(crate) mod system;
 pub(crate) mod terminal;
 pub(crate) mod utf8_stream;

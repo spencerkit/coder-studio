@@ -251,6 +251,15 @@ struct TerminalCloseRequest {
 }
 
 #[derive(Deserialize)]
+struct SessionRuntimeStartRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
+    session_id: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AgentStartRequest {
     #[serde(flatten)]
@@ -1281,6 +1290,25 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "session_runtime_start" => {
+            let req: SessionRuntimeStartRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                session_runtime_start(
+                    SessionRuntimeStartParams {
+                        workspace_id: req.controller.workspace_id,
+                        session_id: req.session_id,
+                        cols: req.cols,
+                        rows: req.rows,
+                    },
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "terminal_write" => {
             let req: TerminalWriteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
@@ -1806,6 +1834,26 @@ mod tests {
         let root = std::env::temp_dir().join(format!("coder-studio-{name}-{unique}"));
         std::fs::create_dir_all(&root).unwrap();
         root.to_string_lossy().to_string()
+    }
+
+    fn attach_controller(
+        app: &AppHandle,
+        authorized: &AuthorizedRequest,
+        workspace_id: &str,
+    ) -> WorkspaceRuntimeSnapshot {
+        let value = dispatch_rpc(
+            app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            authorized,
+        )
+        .unwrap();
+
+        serde_json::from_value(value).unwrap()
     }
 
     fn test_agent_launch_profile() -> (String, Vec<String>) {
@@ -2969,5 +3017,82 @@ mod tests {
             std::thread::sleep(Duration::from_millis(25));
         }
         assert_eq!(marker_value, "codex-provider");
+    }
+
+    #[test]
+    fn dispatches_session_runtime_start_and_returns_terminal_id() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-start");
+        let workspace_id = launch_test_workspace(&app, &root);
+        let marker_path = PathBuf::from(&root).join(".session-runtime-start-marker");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": test_agent_marker_profile(".session-runtime-start-marker").0,
+                            "startup_args": test_agent_marker_profile(".session-runtime-start-marker").1,
+                            "env": {
+                                "TEST_MARKER": "session-runtime-started"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        assert!(started.terminal_id > 0);
+
+        let mut marker_value = String::new();
+        for _ in 0..100 {
+            if let Ok(value) = std::fs::read_to_string(&marker_path) {
+                marker_value = value;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(marker_value, "session-runtime-started");
     }
 }

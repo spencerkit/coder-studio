@@ -84,16 +84,15 @@ pub(crate) use infra::support::{
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
-    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
-    CodexRuntimeProfile, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, ProviderId, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
-    SessionMode, SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo,
-    TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
-    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot,
-    WorkspaceRuntimeStateEvent, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
-    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
-    WorktreeInfo,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry, CodexRuntimeProfile,
+    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry, FilesystemListResponse,
+    FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId,
+    SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
+    SessionRestoreResult, SessionRuntimeStartResult, SessionStatus,
+    TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
+    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
+    WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree,
+    WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -116,6 +115,7 @@ pub(crate) use services::provider_hooks::{
     current_app_bin_for_target, current_hook_endpoint, run_provider_hook_helper,
     start_provider_hook_receiver,
 };
+pub(crate) use services::session_runtime::{session_runtime_start, SessionRuntimeStartParams};
 pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
     close_workspace_terminals, terminal_close, terminal_create, terminal_resize, terminal_write,

@@ -369,6 +369,7 @@ pub(crate) fn workspace_runtime_attach(
         snapshot,
         controller: lease,
         lifecycle_events,
+        session_runtime_bindings: Vec::new(),
     })
 }
 

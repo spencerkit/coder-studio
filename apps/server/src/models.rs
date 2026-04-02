@@ -362,6 +362,18 @@ pub struct AgentStartResult {
     pub started: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct SessionRuntimeBindingInfo {
+    pub session_id: String,
+    pub terminal_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct SessionRuntimeStartResult {
+    pub terminal_id: u64,
+    pub started: bool,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct GitStatus {
     pub branch: String,
@@ -617,6 +629,8 @@ pub struct WorkspaceRuntimeSnapshot {
     pub controller: WorkspaceControllerLease,
     #[serde(default)]
     pub lifecycle_events: Vec<AgentLifecycleHistoryEntry>,
+    #[serde(default)]
+    pub session_runtime_bindings: Vec<SessionRuntimeBindingInfo>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

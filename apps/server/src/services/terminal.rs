@@ -1,8 +1,10 @@
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
+use std::collections::BTreeMap;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
+const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 256 * 1024;
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     PtySize {
@@ -26,27 +28,56 @@ fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
     }
 }
 
-pub(crate) fn terminal_create(
-    workspace_id: String,
-    cwd: String,
-    target: ExecTarget,
+pub(crate) struct TerminalCreateOptions {
+    pub persist_workspace_terminal: bool,
+    pub env: BTreeMap<String, String>,
+}
+
+fn next_terminal_id(state: State<'_, AppState>) -> Result<u64, String> {
+    let mut next = state.next_terminal_id.lock().map_err(|e| e.to_string())?;
+    let value = *next;
+    *next += 1;
+    Ok(value)
+}
+
+fn truncate_terminal_output(buffer: &mut String) {
+    if buffer.len() <= TERMINAL_RUNTIME_OUTPUT_LIMIT {
+        return;
+    }
+    let keep_from = buffer.len().saturating_sub(TERMINAL_RUNTIME_OUTPUT_LIMIT);
+    buffer.drain(..keep_from);
+}
+
+fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    if let Ok(mut output) = runtime.output.lock() {
+        output.push_str(text);
+        truncate_terminal_output(&mut output);
+    }
+}
+
+pub(crate) fn create_terminal_runtime(
+    workspace_id: &str,
+    cwd: &str,
+    target: &ExecTarget,
     cols: Option<u16>,
     rows: Option<u16>,
-    app: AppHandle,
+    options: TerminalCreateOptions,
+    app: &AppHandle,
     state: State<'_, AppState>,
 ) -> Result<TerminalInfo, String> {
-    let terminal_id = {
-        let mut next = state.next_terminal_id.lock().map_err(|e| e.to_string())?;
-        let value = *next;
-        *next += 1;
-        value
-    };
+    let terminal_id = next_terminal_id(state)?;
 
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))
         .map_err(|e| e.to_string())?;
-    let cmd = build_terminal_pty_command(&target, &cwd);
+    let mut cmd = build_terminal_pty_command(target, cwd);
+    for (key, value) in &options.env {
+        cmd.env(key, value);
+    }
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let process_id = child.process_id();
     #[cfg(unix)]
@@ -63,16 +94,20 @@ pub(crate) fn terminal_create(
         killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
         master: Mutex::new(pair.master),
+        output: Mutex::new(String::new()),
+        persist_workspace_terminal: options.persist_workspace_terminal,
         process_id,
         process_group_leader,
     });
 
-    if let Err(error) = persist_workspace_terminal(state, &workspace_id, terminal_id, "", true) {
-        terminate_terminal_runtime(runtime);
-        return Err(error);
+    if runtime.persist_workspace_terminal {
+        if let Err(error) = persist_workspace_terminal(state, workspace_id, terminal_id, "", true) {
+            terminate_terminal_runtime(runtime);
+            return Err(error);
+        }
     }
 
-    let key = terminal_key(&workspace_id, terminal_id);
+    let key = terminal_key(workspace_id, terminal_id);
     {
         let mut terms = state.terminals.lock().map_err(|e| e.to_string())?;
         terms.insert(key.clone(), runtime.clone());
@@ -80,7 +115,8 @@ pub(crate) fn terminal_create(
 
     let app_handle = app.clone();
     let state_handle = app.clone();
-    let workspace_id_out = workspace_id.clone();
+    let runtime_out = runtime.clone();
+    let workspace_id_out = workspace_id.to_string();
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 4096];
@@ -90,14 +126,17 @@ pub(crate) fn terminal_create(
                 Ok(0) => {
                     let text = decoder.finish();
                     if !text.is_empty() {
+                        append_runtime_output(&runtime_out, &text);
                         emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
-                        let state: State<AppState> = state_handle.state();
-                        let _ = append_workspace_terminal_output(
-                            state,
-                            &workspace_id_out,
-                            terminal_id,
-                            &text,
-                        );
+                        if runtime_out.persist_workspace_terminal {
+                            let state: State<AppState> = state_handle.state();
+                            let _ = append_workspace_terminal_output(
+                                state,
+                                &workspace_id_out,
+                                terminal_id,
+                                &text,
+                            );
+                        }
                     }
                     break;
                 }
@@ -106,14 +145,17 @@ pub(crate) fn terminal_create(
                     if text.is_empty() {
                         continue;
                     }
+                    append_runtime_output(&runtime_out, &text);
                     emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
-                    let state: State<AppState> = state_handle.state();
-                    let _ = append_workspace_terminal_output(
-                        state,
-                        &workspace_id_out,
-                        terminal_id,
-                        &text,
-                    );
+                    if runtime_out.persist_workspace_terminal {
+                        let state: State<AppState> = state_handle.state();
+                        let _ = append_workspace_terminal_output(
+                            state,
+                            &workspace_id_out,
+                            terminal_id,
+                            &text,
+                        );
+                    }
                 }
                 Err(_) => break,
             }
@@ -122,27 +164,23 @@ pub(crate) fn terminal_create(
 
     let app_handle = app.clone();
     let state_handle = app.clone();
+    let runtime_out = runtime.clone();
+    let workspace_id_out = workspace_id.to_string();
     std::thread::spawn(move || {
-        if let Ok(mut child) = runtime.child.lock() {
+        if let Ok(mut child) = runtime_out.child.lock() {
             let _ = child.wait();
         }
-        emit_terminal(
-            &app_handle,
-            &workspace_id,
-            terminal_id,
-            "\n[terminal exited]\n",
-        );
+        let exit_text = "\n[terminal exited]\n";
+        append_runtime_output(&runtime_out, exit_text);
+        emit_terminal(&app_handle, &workspace_id_out, terminal_id, exit_text);
         let state: State<AppState> = state_handle.state();
-        let _ = append_workspace_terminal_output(
-            state,
-            &workspace_id,
-            terminal_id,
-            "\n[terminal exited]\n",
-        );
-        let _ = set_workspace_terminal_recoverable(state, &workspace_id, terminal_id, false);
+        if runtime_out.persist_workspace_terminal {
+            let _ = append_workspace_terminal_output(state, &workspace_id_out, terminal_id, exit_text);
+            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+        }
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);
-        };
+        }
     });
 
     Ok(TerminalInfo {
@@ -150,6 +188,30 @@ pub(crate) fn terminal_create(
         output: String::new(),
         recoverable: true,
     })
+}
+
+pub(crate) fn terminal_create(
+    workspace_id: String,
+    cwd: String,
+    target: ExecTarget,
+    cols: Option<u16>,
+    rows: Option<u16>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TerminalInfo, String> {
+    create_terminal_runtime(
+        &workspace_id,
+        &cwd,
+        &target,
+        cols,
+        rows,
+        TerminalCreateOptions {
+            persist_workspace_terminal: true,
+            env: BTreeMap::new(),
+        },
+        &app,
+        state,
+    )
 }
 
 pub(crate) fn terminal_write(
