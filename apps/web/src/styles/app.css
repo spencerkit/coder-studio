@@ -8433,6 +8433,14 @@ pre.diff,
   box-shadow: var(--shadow-md) !important;
 }
 
+.confirm-dialog-card {
+  width: min(400px, calc(100vw - 40px));
+  border-radius: 10px !important;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
 .worktree-modal-header {
   display: flex;
   align-items: flex-start;
@@ -8609,6 +8617,40 @@ pre.diff,
 
   .worktree-modal-meta {
     justify-content: flex-start;
+  }
+
+  .confirm-dialog-card {
+    max-width: 400px;
+    min-width: 320px;
+  }
+
+  .confirm-dialog-header {
+    padding: 16px 20px 12px;
+  }
+
+  .confirm-dialog-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .confirm-dialog-body {
+    padding: 0 20px 16px;
+  }
+
+  .confirm-dialog-body p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .confirm-dialog-footer {
+    padding: 12px 20px 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
   .settings-layout {

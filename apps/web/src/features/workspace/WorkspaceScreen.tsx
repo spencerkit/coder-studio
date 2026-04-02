@@ -211,6 +211,7 @@ import {
   toBackgroundStatus
 } from "../../shared/utils/session";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
+import { ConfirmDialog, type ConfirmDialogState } from "../../components/ConfirmDialog";
 import type {
   AppSettings,
   AppTheme,
@@ -343,6 +344,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     kind: "resume" | "restart";
   } | null>(null);
   const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    visible: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
   const t = useMemo(() => createTranslator(locale), [locale]);
   const hasRestoreDraftModeSelected = useMemo(
     () => Object.values(draftPaneModes).some((mode) => mode === "restore"),
@@ -1538,15 +1546,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
-    const confirmed = typeof window === "undefined"
-      ? true
-      : window.confirm(t("historyDeleteConfirm", { title: record.title }));
-    if (!confirmed) return;
-
-    const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
-    if (!deleted) return;
-
-    await refreshHistoryRecordsIfNeeded();
+    setConfirmDialog({
+      visible: true,
+      title: t("historyDeleteTitle"),
+      message: t("historyDeleteConfirm", { title: record.title }),
+      confirmLabel: t("delete"),
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, visible: false }));
+        const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
+        if (!deleted) return;
+        await refreshHistoryRecordsIfNeeded();
+      },
+      onCancel: () => {
+        setConfirmDialog((prev) => ({ ...prev, visible: false }));
+      },
+    });
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -2993,6 +3007,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             }}
             t={t}
           />
+
+          <ConfirmDialog state={confirmDialog} locale={locale} t={t} />
 
           {showWelcomeScreen ? (
             <WorkspaceWelcomeScreen
