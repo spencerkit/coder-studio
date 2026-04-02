@@ -42,13 +42,13 @@ test("draft launcher only renders for draft placeholder sessions", () => {
   );
 });
 
-test("resolveAgentPaneStream prefers the live terminal stream over the transcript", () => {
+test("resolveAgentPaneStream returns the persisted transcript for archive rendering", () => {
   assert.equal(
     resolveAgentPaneStream(createSession({
       stream: "transcript output",
       liveTerminalStream: "\rworking\rworking.",
-    })),
-    "\rworking\rworking.",
+    } as never)),
+    "transcript output",
   );
 
   assert.equal(

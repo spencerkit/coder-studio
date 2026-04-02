@@ -96,8 +96,7 @@ pub(crate) use models::{
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
-    agent_resize, agent_send, agent_start, agent_stop, stop_agent_runtime_without_status_update,
-    stop_workspace_agents,
+    agent_stop, stop_agent_runtime_without_status_update, stop_workspace_agents,
 };
 pub(crate) use services::app_settings::{
     app_settings_get, app_settings_update, load_or_default_app_settings,

@@ -25,8 +25,7 @@ export const resolveAgentPaneRenderState = (
   };
 };
 
-export const resolveAgentPaneStream = (session: Session) =>
-  session.liveTerminalStream ?? session.stream;
+export const resolveAgentPaneStream = (session: Session) => session.stream;
 
 export const resolveAgentPaneTerminalBinding = (
   session: Session,

@@ -139,10 +139,7 @@ export const WorkbenchRuntimeCoordinator = ({
     agentTerminalRefs,
     agentTerminalQueueRef,
     agentPaneSizeRef,
-    agentRuntimeSizeRef,
-    agentResizeStateRef,
     agentTitleTrackerRef,
-    runningAgentKeysRef,
     agentStartupStateRef,
     agentStartupTokenRef,
   }), []);

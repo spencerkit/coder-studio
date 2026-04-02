@@ -1,8 +1,6 @@
 import type { MutableRefObject } from "react";
-import type { WorkspaceControllerState } from "../workspace/workspace-controller.ts";
 import type { Locale, Translator } from "../../i18n.ts";
 import type { Session, Tab } from "../../state/workbench.ts";
-import { resizeAgent } from "../../services/http/agent.service.ts";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STARTUP_DISCOVERY_MS,
@@ -18,11 +16,6 @@ import { getProviderStartupBehavior } from "../providers/runtime-helpers.ts";
 import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
 
 type AgentSize = { cols: number; rows: number };
-
-type AgentResizeState = {
-  inflight: boolean;
-  pending?: AgentSize;
-};
 
 type AgentTitleTracker = {
   draftSessionId?: string;
@@ -46,10 +39,7 @@ export type AgentRuntimeRefs = {
   agentTerminalRefs: MutableRefObject<Map<string, XtermBaseHandle | null>>;
   agentTerminalQueueRef: MutableRefObject<Map<string, Promise<void>>>;
   agentPaneSizeRef: MutableRefObject<Map<string, AgentSize>>;
-  agentRuntimeSizeRef: MutableRefObject<Map<string, AgentSize>>;
-  agentResizeStateRef: MutableRefObject<Map<string, AgentResizeState>>;
   agentTitleTrackerRef: MutableRefObject<Map<string, AgentTitleTracker>>;
-  runningAgentKeysRef: MutableRefObject<Set<string>>;
   agentStartupStateRef: MutableRefObject<Map<string, AgentStartupState>>;
   agentStartupTokenRef: MutableRefObject<number>;
 };
@@ -64,84 +54,8 @@ export const resolveAgentStartupDiscoveryMs = (provider: Session["provider"]) =>
   Math.max(AGENT_STARTUP_DISCOVERY_MS, getProviderStartupBehavior(provider).startupDiscoveryMs)
 );
 
-export const isAgentRuntimeRunning = (
-  refs: AgentRuntimeRefs,
-  tabId: string,
-  sessionId: string,
-) => refs.runningAgentKeysRef.current.has(agentRuntimeKey(tabId, sessionId));
-
 export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
   fitAgentTerminalHandles(refs.agentTerminalRefs.current);
-};
-
-const flushAgentRuntimeSize = (
-  refs: AgentRuntimeRefs,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  const current = refs.agentResizeStateRef.current.get(key);
-  if (!current || current.inflight || !current.pending) return;
-
-  const nextSize = current.pending;
-  current.pending = undefined;
-
-  const last = refs.agentRuntimeSizeRef.current.get(key);
-  if (last?.cols === nextSize.cols && last?.rows === nextSize.rows) {
-    if (!current.pending) return;
-  }
-
-  current.inflight = true;
-  void resizeAgent(tabId, controller, sessionId, nextSize.cols, nextSize.rows)
-    .then(() => {
-      refs.agentRuntimeSizeRef.current.set(key, nextSize);
-    })
-    .catch(() => {
-      refs.agentRuntimeSizeRef.current.delete(key);
-    })
-    .finally(() => {
-      const latest = refs.agentResizeStateRef.current.get(key);
-      if (!latest) return;
-      latest.inflight = false;
-      if (latest.pending) {
-        flushAgentRuntimeSize(refs, controller, tabId, sessionId);
-        return;
-      }
-      if (!refs.runningAgentKeysRef.current.has(key)) {
-        refs.agentResizeStateRef.current.delete(key);
-      }
-    });
-};
-
-export const syncAgentRuntimeSize = (
-  refs: AgentRuntimeRefs,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-  size: AgentSize,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  const last = refs.agentRuntimeSizeRef.current.get(key);
-  const current = refs.agentResizeStateRef.current.get(key) ?? { inflight: false };
-  if (last?.cols === size.cols && last?.rows === size.rows && !current.pending) return;
-  if (current.pending?.cols === size.cols && current.pending?.rows === size.rows) return;
-  current.pending = size;
-  refs.agentResizeStateRef.current.set(key, current);
-  flushAgentRuntimeSize(refs, controller, tabId, sessionId);
-};
-
-export const syncAgentPaneSize = (
-  refs: AgentRuntimeRefs,
-  paneId: string,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-) => {
-  const size = refs.agentPaneSizeRef.current.get(paneId)
-    ?? refs.agentTerminalRefs.current.get(paneId)?.size();
-  if (!size) return;
-  syncAgentRuntimeSize(refs, controller, tabId, sessionId, size);
 };
 
 export const armAgentStartupGate = (
@@ -181,21 +95,7 @@ export const clearAgentRuntimeTracking = (
   sessionId: string,
 ) => {
   const key = agentRuntimeKey(tabId, sessionId);
-  refs.runningAgentKeysRef.current.delete(key);
-  refs.agentRuntimeSizeRef.current.delete(key);
-  refs.agentResizeStateRef.current.delete(key);
   clearAgentStartupGate(refs, tabId, sessionId);
-};
-
-export const markAgentRuntimeStarted = (
-  refs: AgentRuntimeRefs,
-  tabId: string,
-  sessionId: string,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  refs.agentRuntimeSizeRef.current.delete(key);
-  refs.agentResizeStateRef.current.delete(key);
-  refs.runningAgentKeysRef.current.add(key);
 };
 
 export const setAgentTerminalRef = (

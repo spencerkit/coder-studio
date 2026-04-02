@@ -48,7 +48,6 @@ export type Session = {
   queue: QueueTask[];
   messages: AgentMessage[];
   stream: string;
-  liveTerminalStream?: string;
   terminalId?: string;
   unread: number;
   lastActiveAt: number;

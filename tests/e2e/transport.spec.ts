@@ -23,13 +23,12 @@ type WsEventFrame = {
 };
 
 type WsTransportBaseline = {
-  agentProbeMode: 'startup' | 'stdin';
   controlPlaneCommands: string[];
   websocketUrls: string[];
   workspaceId: string;
   sessionId: string;
   terminalFrame: WsEventFrame;
-  agentFrame: WsEventFrame;
+  lifecycleFrame: WsEventFrame;
 };
 
 type ReconnectBaseline = {
@@ -245,35 +244,23 @@ test.describe('workspace transport baseline', () => {
     expectPollCountsToAdvanceFrom(baseline.countsAfterNextPoll, baseline.initialCounts);
   });
 
-  test('terminal and agent streams still arrive over /ws', async ({ page }) => {
+  test('session startup and follow-up I/O use session_runtime_start plus terminal transport', async ({ page }) => {
     const baseline = await observeWsTransport(page);
 
-    expect(baseline.controlPlaneCommands).toEqual(
-      baseline.agentProbeMode === 'stdin'
-        ? [
-          'terminal_create',
-          'terminal_write',
-          'create_session',
-          'agent_start',
-          'agent_send',
-        ]
-        : [
-          'terminal_create',
-          'terminal_write',
-          'create_session',
-          'agent_start',
-        ],
-    );
+    expect(baseline.controlPlaneCommands).toContain('session_runtime_start');
+    expect(baseline.controlPlaneCommands).toContain('terminal_write');
+    expect(baseline.controlPlaneCommands).toContain('terminal_resize');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_start');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_send');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_resize');
     expect(baseline.websocketUrls.some((url) => url.includes('/ws'))).toBe(true);
     expect(baseline.terminalFrame.event).toBe('terminal://event');
     expect(baseline.terminalFrame.payload.workspace_id).toBe(baseline.workspaceId);
     expect(String(baseline.terminalFrame.payload.data ?? '')).toContain('transport-terminal');
-    expect(baseline.agentFrame.event).toBe('agent://event');
-    expect(baseline.agentFrame.payload.workspace_id).toBe(baseline.workspaceId);
-    expect(baseline.agentFrame.payload.session_id).toBe(baseline.sessionId);
-    expect(String(baseline.agentFrame.payload.data ?? '')).toContain(
-      baseline.agentProbeMode === 'stdin' ? 'transport-agent' : AGENT_START_SYSTEM_MESSAGE,
-    );
+    expect(baseline.lifecycleFrame.event).toBe('agent://lifecycle');
+    expect(baseline.lifecycleFrame.payload.workspace_id).toBe(baseline.workspaceId);
+    expect(baseline.lifecycleFrame.payload.session_id).toBe(baseline.sessionId);
+    expect(baseline.lifecycleFrame.payload.kind).toBe('tool_started');
   });
 
   test('high-frequency agent stdout is coalesced into fewer websocket frames', async ({ page }) => {
@@ -559,9 +546,11 @@ test.describe('workspace transport baseline', () => {
 
       const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
 
-      await invokeRpc(page, 'agent_start', {
+      await invokeRpc(page, 'session_runtime_start', {
         ...controller,
         sessionId,
+        cols: 120,
+        rows: 30,
       });
 
       await waitForLifecycleReplayEvent(
@@ -664,9 +653,11 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
-      await invokeRpc(page, 'agent_start', {
+      await invokeRpc(page, 'session_runtime_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
+        cols: 120,
+        rows: 30,
       });
 
       await waitForLifecycleReplayEvent(
@@ -1227,9 +1218,8 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await installTransportProbe(page);
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
-  const agentProbe = buildAgentProbe(workspace.target);
   await seedAppSettings(page, {
-    agentCommand: agentProbe.command,
+    agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 5000 transport-lifecycle`,
   });
 
   const controlPlaneCommands: string[] = [];
@@ -1259,47 +1249,50 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const sessionId = String(session.id);
   controlPlaneCommands.push('create_session');
 
-  await invokeRpc(page, 'agent_start', {
+  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
     rows: 30,
   });
-  controlPlaneCommands.push('agent_start');
+  controlPlaneCommands.push('session_runtime_start');
 
-  if (agentProbe.input) {
-    await invokeRpc(page, 'agent_send', {
-      ...controller,
-      sessionId,
-      input: agentProbe.input,
-      appendNewline: true,
-    });
-    controlPlaneCommands.push('agent_send');
-  }
+  await invokeRpc(page, 'terminal_resize', {
+    ...controller,
+    terminalId: started.terminal_id,
+    cols: 100,
+    rows: 24,
+  });
+  controlPlaneCommands.push('terminal_resize');
+
+  await invokeRpc(page, 'terminal_write', {
+    ...controller,
+    terminalId: started.terminal_id,
+    input: 'transport-followup\r',
+  });
+  controlPlaneCommands.push('terminal_write');
 
   const terminalFrame = await waitForWsEvent(
     page,
     'terminal://event',
     (payload) => payload.workspace_id === workspace.workspaceId && String(payload.data ?? '').includes('transport-terminal'),
   );
-  const agentFrame = await waitForWsEvent(
+  const lifecycleFrame = await waitForWsEvent(
     page,
-    'agent://event',
+    'agent://lifecycle',
     (payload) => payload.workspace_id === workspace.workspaceId
       && payload.session_id === sessionId
-      && payload.kind === agentProbe.expectedKind
-      && String(payload.data ?? '').includes(agentProbe.expectedText),
+      && payload.kind === 'tool_started',
   );
   const tracker = await readTransportTracker(page);
 
   return {
-    agentProbeMode: agentProbe.mode,
     controlPlaneCommands,
     websocketUrls: tracker.urls,
     workspaceId: workspace.workspaceId,
     sessionId,
     terminalFrame,
-    agentFrame,
+    lifecycleFrame,
   };
 }
 

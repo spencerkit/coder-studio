@@ -98,6 +98,7 @@ import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
   shouldAttachRouteRuntimeForExistingTab,
 } from "./workspace-route-runtime";
+import { filterWorkspacePanelTerminals } from "./session-runtime-bindings";
 import {
   createWorkspaceViewPatchFromTab,
   createWorkspaceViewPersistScheduler,
@@ -523,10 +524,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     agentTerminalRefs,
     agentTerminalQueueRef,
     agentPaneSizeRef,
-    agentRuntimeSizeRef,
-    agentResizeStateRef,
     agentTitleTrackerRef,
-    runningAgentKeysRef,
     agentStartupStateRef,
     agentStartupTokenRef
   }), []);
@@ -2164,7 +2162,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   };
 
-  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
+  const visiblePanelTerminals = filterWorkspacePanelTerminals(activeTab.terminals, activeTab.sessions);
+  const activeTerminal = visiblePanelTerminals.find((t) => t.id === activeTab.activeTerminalId) ?? visiblePanelTerminals[0];
   const showAgentPanel = !isCodeExpanded;
 
   const toggleCodeExpanded = async () => {
@@ -2913,7 +2912,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       progressPercent={terminalProgressPercent}
       progressTone={terminalProgressTone}
       activeTerminal={activeTerminal ? { id: activeTerminal.id, output: activeTerminal.output ?? "" } : undefined}
-      terminals={activeTab.terminals.map((term) => ({
+      terminals={visiblePanelTerminals.map((term) => ({
         id: term.id,
         title: displayTerminalTitle(term.title)
       }))}

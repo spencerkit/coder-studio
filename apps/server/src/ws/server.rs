@@ -287,30 +287,6 @@ fn handle_ws_client_envelope(
     match envelope {
         WsClientEnvelope::Ping { ts } => Ok(Some(WsEnvelope::Pong { ts })),
         WsClientEnvelope::Pong { .. } => Ok(None),
-        WsClientEnvelope::AgentSend {
-            workspace_id,
-            session_id,
-            input,
-            append_newline,
-            fencing_token,
-        } => {
-            require_ws_workspace_controller_mutation(
-                &workspace_id,
-                fencing_token,
-                workspace_client,
-                app,
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
-            agent_send(
-                workspace_id.clone(),
-                session_id,
-                input,
-                append_newline,
-                app.state(),
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
-            Ok(None)
-        }
         WsClientEnvelope::TerminalWrite {
             workspace_id,
             terminal_id,
@@ -346,24 +322,6 @@ fn handle_ws_client_envelope(
             terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state()).map_err(
                 |error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error),
             )?;
-            Ok(None)
-        }
-        WsClientEnvelope::AgentResize {
-            workspace_id,
-            session_id,
-            cols,
-            rows,
-            fencing_token,
-        } => {
-            require_ws_workspace_controller_mutation(
-                &workspace_id,
-                fencing_token,
-                workspace_client,
-                app,
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
-            agent_resize(workspace_id.clone(), session_id, cols, rows, app.state())
-                .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
             Ok(None)
         }
         WsClientEnvelope::SessionUpdate {

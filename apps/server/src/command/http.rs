@@ -260,38 +260,10 @@ struct SessionRuntimeStartRequest {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentStartRequest {
-    #[serde(flatten)]
-    controller: WorkspaceControllerMutationRequest,
-    session_id: String,
-    cols: Option<u16>,
-    rows: Option<u16>,
-}
-
-#[derive(Deserialize)]
-struct AgentSendRequest {
-    #[serde(flatten)]
-    controller: WorkspaceControllerMutationRequest,
-    session_id: String,
-    input: String,
-    append_newline: Option<bool>,
-}
-
-#[derive(Deserialize)]
 struct AgentStopRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
-}
-
-#[derive(Deserialize)]
-struct AgentResizeRequest {
-    #[serde(flatten)]
-    controller: WorkspaceControllerMutationRequest,
-    session_id: String,
-    cols: u16,
-    rows: u16,
 }
 
 #[derive(Deserialize)]
@@ -1341,55 +1313,11 @@ fn dispatch_rpc(
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
-        "agent_start" => {
-            let req: AgentStartRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            serde_json::to_value(
-                agent_start(
-                    crate::services::agent::AgentStartParams {
-                        workspace_id: req.controller.workspace_id,
-                        session_id: req.session_id,
-                        cols: req.cols,
-                        rows: req.rows,
-                    },
-                    app.clone(),
-                    app.state(),
-                )
-                .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "agent_send" => {
-            let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            agent_send(
-                req.controller.workspace_id,
-                req.session_id,
-                req.input,
-                req.append_newline,
-                app.state(),
-            )
-            .map_err(rpc_bad_request)?;
-            Ok(Value::Null)
-        }
         "agent_stop" => {
             let req: AgentStopRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             agent_stop(req.controller.workspace_id, req.session_id, app.state())
                 .map_err(rpc_bad_request)?;
-            Ok(Value::Null)
-        }
-        "agent_resize" => {
-            let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            agent_resize(
-                req.controller.workspace_id,
-                req.session_id,
-                req.cols,
-                req.rows,
-                app.state(),
-            )
-            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         _ => Err(rpc_bad_request(format!("unsupported_command:{command}"))),

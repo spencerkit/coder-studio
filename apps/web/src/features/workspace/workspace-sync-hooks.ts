@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
-  subscribeAgentEvents,
   subscribeAgentLifecycleEvents,
   subscribeTerminalEvents,
   subscribeWorkspaceArtifactsDirty,
   subscribeWorkspaceController,
   subscribeWorkspaceRuntimeState,
 } from "../../command";
-import { createId, type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
+import { type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
 import {
@@ -15,15 +14,11 @@ import {
   applyWorkspaceRuntimeStateEvent,
 } from "../../shared/utils/workspace";
 import {
-  AGENT_START_SYSTEM_MESSAGE,
-  AGENT_STREAM_BUFFER_LIMIT,
-  SESSION_MESSAGE_LIMIT,
   TERMINAL_STREAM_BUFFER_LIMIT,
   WS_STREAM_FLUSH_INTERVAL_MS,
 } from "../../shared/app/constants";
-import { stripAnsi } from "../../shared/utils/ansi";
 import { pathsIntersect } from "../../shared/utils/path";
-import { nowLabel, resolveVisibleStatus } from "../../shared/utils/session";
+import { resolveVisibleStatus } from "../../shared/utils/session";
 import type {
   AgentLifecycleEvent,
   ArtifactsDirtyEvent,
@@ -35,15 +30,10 @@ import type {
 import { subscribeWsConnectionState } from "../../ws/client";
 import {
   clearAgentRuntimeTracking,
-  noteAgentStartupEvent,
   noteAgentStartupLifecycle,
   type AgentRuntimeRefs,
 } from "../agents";
 import type { Translator } from "../../i18n";
-import {
-  appendBoundedMessage,
-  appendBufferedText,
-} from "./workspace-stream-buffer";
 import {
   FULL_ARTIFACT_REFRESH_SCOPE,
   hasArtifactRefreshWork,
@@ -58,7 +48,6 @@ import {
   createPendingStreamIndex,
   drainPendingStreamIndex,
   hasPendingStreamIndex,
-  recordPendingAgentStream,
   recordPendingTerminalStream,
 } from "./workspace-stream-index";
 import {
@@ -221,66 +210,6 @@ export const useWorkspaceTransportSync = ({
   }, [flushPendingStreams]);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data, raw_data }) => {
-      noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
-      const cleaned = stripAnsi(data);
-      const isStream = kind === "stdout" || kind === "stderr";
-      const isSystem = kind === "system";
-      const isExit = kind === "exit";
-
-      if (isStream) {
-        const currentTab = stateRef.current.tabs.find((tab) => tab.id === workspace_id);
-        recordPendingAgentStream(pendingStreamIndexRef.current, {
-          workspaceId: workspace_id,
-          sessionId: session_id,
-          chunk: data,
-          liveChunk: raw_data ?? data,
-          unreadDelta: currentTab?.activeSessionId === session_id ? 0 : 1,
-        });
-        schedulePendingStreamFlush();
-      } else {
-        updateStateRef.current((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id) return session;
-                const nextStatus = isExit ? "idle" : session.status;
-                const streamChunk = isExit
-                  ? "\n[agent exited]\n"
-                  : isSystem
-                    ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
-                    : "";
-                const message = isExit
-                  ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
-                  : isSystem
-                    ? { id: createId("msg"), role: "system" as const, content: cleaned, time: nowLabel() }
-                    : null;
-                const unread = tab.activeSessionId === session.id ? 0 : session.unread + (isSystem || isExit ? 1 : 0);
-                return {
-                  ...session,
-                  status: nextStatus,
-                  unread,
-                  stream: appendBufferedText(session.stream, streamChunk, AGENT_STREAM_BUFFER_LIMIT),
-                  messages: appendBoundedMessage(session.messages, message, SESSION_MESSAGE_LIMIT),
-                };
-              }),
-            };
-          }),
-        }));
-      }
-
-      if (kind === "exit") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-        void settleSessionAfterExitRef.current(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [agentRuntimeRefs, schedulePendingStreamFlush, settleSessionAfterExitRef, stateRef, t, updateStateRef]);
-
-  useEffect(() => {
     const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }: AgentLifecycleEvent) => {
       noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
       let nextStatus: SessionStatus | null = null;
@@ -352,13 +281,14 @@ export const useWorkspaceTransportSync = ({
 
   useEffect(() => {
     const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
-      if (!data) return;
-      recordPendingTerminalStream(pendingStreamIndexRef.current, {
+      const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
         workspaceId: workspace_id,
         terminalId: `term-${terminal_id}`,
         chunk: data,
       });
-      schedulePendingStreamFlush();
+      if (recorded) {
+        schedulePendingStreamFlush();
+      }
     });
     return unsubscribe;
   }, [schedulePendingStreamFlush]);
