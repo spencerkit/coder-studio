@@ -49,6 +49,7 @@ export type Session = {
   messages: AgentMessage[];
   stream: string;
   liveTerminalStream?: string;
+  terminalId?: string;
   unread: number;
   lastActiveAt: number;
   resumeId?: string;

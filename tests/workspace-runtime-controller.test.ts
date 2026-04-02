@@ -304,6 +304,46 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
   }
 });
 
+test("runtime snapshot hydrates session terminal bindings from runtime payload", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-a",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{ session_id: "1", terminal_id: "7" }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(next.tabs[0]?.sessions[0]?.terminalId, "term-7");
+});
+
 test("runtime snapshot keeps newer takeover state from controller events on the same lease", () => {
   const staleSnapshot = createRuntimeSnapshot({
     workspace_id: "ws-1",

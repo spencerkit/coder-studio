@@ -5,14 +5,18 @@ import type {
   SessionHistoryRecord,
   TerminalCompatibilityMode,
 } from "../../types/app";
-import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
+import type { Session, SessionPaneNode, Tab, Terminal } from "../../state/workbench";
 import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
 import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry.ts";
 import { getProviderDisplayLabel } from "../providers/runtime-helpers.ts";
-import { resolveAgentPaneRenderState, resolveAgentPaneStream } from "./agent-pane-render";
+import {
+  resolveAgentPaneRenderState,
+  resolveAgentPaneStream,
+  resolveAgentPaneTerminalBinding,
+} from "./agent-pane-render";
 
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
@@ -52,6 +56,7 @@ type AgentWorkspaceFeatureProps = {
 type AgentPaneLeafProps = {
   paneId: string;
   session: Session;
+  terminals: readonly Terminal[];
   activeSessionId: string;
   tabId: string;
   locale: Locale;
@@ -83,6 +88,7 @@ type AgentPaneLeafProps = {
 const AgentPaneLeaf = memo(({
   paneId,
   session,
+  terminals,
   activeSessionId,
   tabId,
   locale,
@@ -126,7 +132,9 @@ const AgentPaneLeaf = memo(({
   const statusTone = sessionTone(visibleStatus);
   const headerTag = sessionHeaderTag(visibleStatus, locale);
   const renderState = resolveAgentPaneRenderState(session, isPaneActive);
-  const terminalStream = resolveAgentPaneStream(session);
+  const terminalBinding = renderState.kind === "terminal"
+    ? resolveAgentPaneTerminalBinding(session, renderState.terminalMode, terminals)
+    : null;
 
   const handleSetActivePane = useCallback(() => {
     onSetActivePane(paneId, session.id);
@@ -330,13 +338,13 @@ const AgentPaneLeaf = memo(({
               )}
             </div>
           </div>
-        ) : (!terminalStream.trim() && renderState.terminalMode === "readonly") ? (
+        ) : (!terminalBinding?.stream.trim() && renderState.terminalMode === "readonly") ? (
           <div className="terminal-empty">{t("noAgentOutputYet")}</div>
         ) : (
           <AgentStreamTerminal
             ref={handleTerminalRef}
-            streamId={`${session.id}:${session.liveTerminalStream ? "live" : "transcript"}`}
-            stream={terminalStream}
+            streamId={terminalBinding?.streamId ?? `${session.id}:transcript`}
+            stream={terminalBinding?.stream ?? ""}
             toneKey={isPaneActive ? "active" : "inactive"}
             theme={theme}
             fontSize={terminalFontSize}
@@ -424,6 +432,7 @@ export const AgentWorkspaceFeature = ({
         key={node.id}
         paneId={node.id}
         session={session}
+        terminals={activeTab.terminals}
         activeSessionId={activeTab.activeSessionId}
         tabId={activeTab.id}
         locale={locale}

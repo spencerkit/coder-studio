@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   resolveAgentPaneRenderState,
   resolveAgentPaneStream,
+  resolveAgentPaneTerminalBinding,
 } from "../apps/web/src/features/agents/agent-pane-render.ts";
 import type { Session } from "../apps/web/src/state/workbench.ts";
 
@@ -55,5 +56,26 @@ test("resolveAgentPaneStream prefers the live terminal stream over the transcrip
       stream: "transcript output",
     })),
     "transcript output",
+  );
+});
+
+test("resolveAgentPaneTerminalBinding prefers bound terminal output before transcript fallback", () => {
+  const session = createSession({
+    id: "session-live",
+    status: "running",
+    stream: "persisted transcript",
+    terminalId: "term-17",
+  });
+  const terminals = [
+    { id: "term-17", title: "Terminal 17", output: "live terminal output", recoverable: true },
+  ];
+
+  assert.deepEqual(
+    resolveAgentPaneTerminalBinding(session, "interactive", terminals as never),
+    {
+      stream: "live terminal output",
+      streamId: "term-17",
+      syncStrategy: "incremental",
+    },
   );
 });

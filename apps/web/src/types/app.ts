@@ -153,10 +153,21 @@ export type WorkspaceSnapshot = {
   terminals: { id: number; output: string; recoverable: boolean }[];
 };
 
+export type SessionRuntimeBindingInfo = {
+  session_id: string;
+  terminal_id: string;
+};
+
+export type SessionRuntimeStartResult = {
+  terminal_id: number;
+  started: boolean;
+};
+
 export type WorkspaceRuntimeSnapshot = {
   snapshot: WorkspaceSnapshot;
   controller: WorkspaceControllerLease;
   lifecycle_events?: AgentLifecycleHistoryEntry[];
+  session_runtime_bindings?: SessionRuntimeBindingInfo[];
 };
 
 export type WorkspaceRuntimeControllerEvent = {

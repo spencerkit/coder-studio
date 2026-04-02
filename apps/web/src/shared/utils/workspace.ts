@@ -34,6 +34,7 @@ import {
   isDraftSession,
   resolveVisibleStatus,
 } from "./session.ts";
+import { applySessionRuntimeBindings } from "../../features/workspace/session-runtime-bindings.ts";
 import { mergeMonotonicTextSnapshot } from "./stream-snapshot.ts";
 import {
   rememberWorkspaceViewBaseline,
@@ -562,6 +563,10 @@ export const applyWorkspaceRuntimeSnapshot = (
         ? {
             ...tab,
             controller: mergeWorkspaceControllerState(tab.controller, incomingController),
+            sessions: applySessionRuntimeBindings(
+              tab.sessions,
+              runtimeSnapshot.session_runtime_bindings ?? [],
+            ),
           }
         : tab
     )),
