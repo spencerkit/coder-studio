@@ -8,6 +8,21 @@ pub(crate) fn session_runtime_key(workspace_id: &str, session_id: &str) -> Strin
     format!("{workspace_id}:{session_id}")
 }
 
+fn resume_debug_enabled() -> bool {
+    std::env::var("CODER_STUDIO_DEBUG_RESUME")
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !normalized.is_empty() && normalized != "0" && normalized != "false"
+        })
+        .unwrap_or(false)
+}
+
+fn resume_debug_log(message: impl AsRef<str>) {
+    if resume_debug_enabled() {
+        eprintln!("[resume-debug] {}", message.as_ref());
+    }
+}
+
 pub(crate) fn choose_boot_command(
     resume_id: Option<&str>,
     start_command: String,
@@ -193,6 +208,10 @@ pub(crate) fn session_runtime_start(
             .map_err(|e| e.to_string())?
             .contains_key(&terminal_key);
         if is_live {
+            resume_debug_log(format!(
+                "session_runtime_start reused live terminal workspace_id={} session_id={} terminal_id={}",
+                params.workspace_id, params.session_id, existing_terminal_id
+            ));
             return Ok(SessionRuntimeStartResult {
                 terminal_id: existing_terminal_id,
                 started: false,
@@ -226,6 +245,18 @@ pub(crate) fn session_runtime_start(
         launch_spec_display_command(&start_launch.launch_spec),
         launch_spec_display_command(&resume_launch.launch_spec),
     );
+    resume_debug_log(format!(
+        "session_runtime_start prepared boot workspace_id={} session_id={} launch_mode={} resume_id={} boot_command={}",
+        params.workspace_id,
+        params.session_id,
+        if session.resume_id.is_some() {
+            "resume"
+        } else {
+            "start"
+        },
+        session.resume_id.as_deref().unwrap_or("-"),
+        boot_command
+    ));
     let runtime_env = if session.resume_id.is_some() {
         resolve_session_shell_env(
             &app,
@@ -259,6 +290,10 @@ pub(crate) fn session_runtime_start(
     )?;
 
     bind_session_runtime(&params.workspace_id, &params.session_id, terminal.id, state)?;
+    resume_debug_log(format!(
+        "session_runtime_start bound terminal workspace_id={} session_id={} terminal_id={}",
+        params.workspace_id, params.session_id, terminal.id
+    ));
 
     Ok(SessionRuntimeStartResult {
         terminal_id: terminal.id,

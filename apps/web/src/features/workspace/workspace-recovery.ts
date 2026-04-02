@@ -19,6 +19,9 @@ export const resolveAgentRecoveryAction = (
   if (session.status !== "interrupted") {
     return null;
   }
+  if (session.terminalId) {
+    return null;
+  }
   return {
     kind: session.resumeId ? "resume" : "restart",
   };

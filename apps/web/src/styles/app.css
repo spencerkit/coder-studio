@@ -556,9 +556,10 @@ div.v-resizer[data-resize="right"]:hover {
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: var(--danger);
-  color: var(--bg);
+  background: rgba(255, 158, 176, 0.10);
+  color: var(--text);
   border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
 }
 
 .btn-icon {
@@ -5836,22 +5837,14 @@ pre.diff,
 
 .btn.primary,
 .btn-primary {
-  color: var(--text-inverse);
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--accent-2));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent) 70%, var(--accent-2) 30%) 0%,
-    color-mix(in srgb, var(--accent) 56%, var(--accent-2) 44%) 100%
-  );
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .btn.primary:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent) 62%, var(--accent-2) 38%) 0%,
-    color-mix(in srgb, var(--accent) 50%, var(--accent-2) 50%) 100%
-  );
+  background: var(--accent-hover);
 }
 
 .agent-pane .xterm .xterm-scrollable-element > .scrollbar.vertical,

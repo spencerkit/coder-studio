@@ -18,6 +18,30 @@ pub(crate) struct ProviderHookEnvelope {
     pub(crate) payload: Value,
 }
 
+fn resume_debug_enabled() -> bool {
+    std::env::var("CODER_STUDIO_DEBUG_RESUME")
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !normalized.is_empty() && normalized != "0" && normalized != "false"
+        })
+        .unwrap_or(false)
+}
+
+fn resume_debug_log(message: impl AsRef<str>) {
+    if resume_debug_enabled() {
+        eprintln!("[resume-debug] {}", message.as_ref());
+    }
+}
+
+fn lifecycle_status_for_hook(kind: &str) -> Option<SessionStatus> {
+    match kind {
+        "session_started" | "tool_started" | "tool_finished" => Some(SessionStatus::Running),
+        "turn_waiting" | "approval_required" => Some(SessionStatus::Waiting),
+        "turn_completed" | "session_ended" => Some(SessionStatus::Idle),
+        _ => None,
+    }
+}
+
 fn respond_http(mut stream: TcpStream, status: &str, body: &str) {
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -76,6 +100,10 @@ pub(crate) fn process_provider_hook_payload(
 
     if let Some(resume_id) = adapter.extract_resume_id(&envelope.payload) {
         let _ = set_session_resume_id(state, &envelope.workspace_id, session_id_num, resume_id);
+        resume_debug_log(format!(
+            "provider_hook saved resume_id workspace_id={} session_id={} provider={}",
+            envelope.workspace_id, envelope.session_id, session.provider.as_str()
+        ));
     }
 
     let mut normalized = adapter
@@ -83,6 +111,28 @@ pub(crate) fn process_provider_hook_payload(
         .ok_or_else(|| "unsupported_hook_payload".to_string())?;
     normalized.workspace_id = envelope.workspace_id.clone();
     normalized.session_id = envelope.session_id.clone();
+
+    if let Some(status) = lifecycle_status_for_hook(normalized.kind.as_str()) {
+        let updated = set_session_status_if_not_archived(
+            state,
+            &normalized.workspace_id,
+            session_id_num,
+            status.clone(),
+        )?;
+        resume_debug_log(format!(
+            "provider_hook synced status workspace_id={} session_id={} kind={} status={} updated={}",
+            normalized.workspace_id,
+            normalized.session_id,
+            normalized.kind,
+            status_label(&status),
+            updated
+        ));
+    } else {
+        resume_debug_log(format!(
+            "provider_hook received lifecycle without status mapping workspace_id={} session_id={} kind={}",
+            normalized.workspace_id, normalized.session_id, normalized.kind
+        ));
+    }
 
     emit_agent_lifecycle(
         app,
@@ -243,5 +293,70 @@ mod tests {
         let normalized = process_provider_hook_payload(&app, payload).unwrap();
         assert_eq!(normalized.kind, "session_started");
         assert_eq!(normalized.session_id, session.id.to_string());
+    }
+
+    #[test]
+    fn shared_hook_processor_persists_resume_id_and_runtime_status() {
+        let app = test_app();
+        let workspace = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: "/tmp/ws-hook-status".to_string(),
+                target: ExecTarget::Native,
+            },
+            "/tmp/ws-hook-status".to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        let state: State<AppState> = app.state();
+        let workspace_id = workspace.snapshot.workspace.workspace_id;
+        let session = create_workspace_session(
+            state,
+            &workspace_id,
+            SessionMode::Branch,
+            ProviderId::codex(),
+        )
+        .unwrap();
+
+        let session_start_payload = json!({
+            "workspace_id": workspace_id,
+            "session_id": session.id.to_string(),
+            "payload": {
+                "hook_event_name": "SessionStart",
+                "session_id": "codex-resume-1"
+            }
+        });
+
+        let normalized = process_provider_hook_payload(&app, session_start_payload).unwrap();
+        assert_eq!(normalized.kind, "session_started");
+
+        let running = load_session(app.state(), &workspace_id, session.id).unwrap();
+        assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
+        assert_eq!(running.status, SessionStatus::Running);
+
+        let waiting_payload = json!({
+            "workspace_id": workspace_id,
+            "session_id": session.id.to_string(),
+            "payload": {
+                "hook_event_name": "UserPromptSubmit"
+            }
+        });
+
+        process_provider_hook_payload(&app, waiting_payload).unwrap();
+        let waiting = load_session(app.state(), &workspace_id, session.id).unwrap();
+        assert_eq!(waiting.status, SessionStatus::Waiting);
+
+        let stop_payload = json!({
+            "workspace_id": workspace_id,
+            "session_id": session.id.to_string(),
+            "payload": {
+                "hook_event_name": "Stop"
+            }
+        });
+
+        process_provider_hook_payload(&app, stop_payload).unwrap();
+        let stopped = load_session(app.state(), &workspace_id, session.id).unwrap();
+        assert_eq!(stopped.status, SessionStatus::Idle);
     }
 }

@@ -316,7 +316,90 @@ fn upsert_hook_groups(
     groups.push(build_hook_group(command, matcher));
 }
 
+fn native_codex_home_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("CODER_STUDIO_CODEX_HOME") {
+        return Some(PathBuf::from(root));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .or_else(|| {
+                let drive = std::env::var_os("HOMEDRIVE")?;
+                let path = std::env::var_os("HOMEPATH")?;
+                Some(PathBuf::from(format!(
+                    "{}{}",
+                    PathBuf::from(drive).display(),
+                    PathBuf::from(path).display()
+                )))
+            })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var_os("HOME").map(PathBuf::from)
+    }
+}
+
+fn upsert_codex_global_feature(root: &mut toml::Table, feature_name: &str) {
+    let features_entry = root
+        .entry("features".to_string())
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if !features_entry.is_table() {
+        *features_entry = toml::Value::Table(toml::Table::new());
+    }
+    let features = features_entry.as_table_mut().expect("table");
+    features.insert(feature_name.to_string(), toml::Value::Boolean(true));
+}
+
+fn ensure_codex_project_feature_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
+    let current = if matches!(target, ExecTarget::Wsl { .. }) {
+        run_cmd(
+            target,
+            cwd,
+            &[
+                "/bin/sh",
+                "-lc",
+                "if [ -f ~/.codex/config.toml ]; then cat ~/.codex/config.toml; else printf ''; fi",
+            ],
+        )
+        .unwrap_or_default()
+    } else {
+        let Some(root) = native_codex_home_root() else {
+            return Ok(());
+        };
+        let config_path = root.join(".codex").join("config.toml");
+        if config_path.exists() {
+            std::fs::read_to_string(config_path).map_err(|e| e.to_string())?
+        } else {
+            String::new()
+        }
+    };
+
+    let mut root = current.parse::<toml::Table>().unwrap_or_default();
+    upsert_codex_global_feature(&mut root, "codex_hooks");
+    let serialized = toml::to_string_pretty(&root).map_err(|e| e.to_string())?;
+
+    if matches!(target, ExecTarget::Wsl { .. }) {
+        let script = format!(
+            "mkdir -p ~/.codex && printf %s {} > ~/.codex/config.toml",
+            shell_escape(&serialized)
+        );
+        run_cmd(target, cwd, &["/bin/sh", "-lc", &script]).map(|_| ())
+    } else {
+        let Some(home_root) = native_codex_home_root() else {
+            return Ok(());
+        };
+        let config_dir = home_root.join(".codex");
+        std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+        std::fs::write(config_dir.join("config.toml"), serialized).map_err(|e| e.to_string())
+    }
+}
+
 pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
+    ensure_codex_project_feature_settings(cwd, target)?;
+
     let current = if matches!(target, ExecTarget::Wsl { .. }) {
         run_cmd(
             target,
@@ -377,6 +460,21 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should move forward")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "coder-studio-{prefix}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
 
     #[test]
     fn resolve_codex_runtime_profile_ignores_workspace_target() {
@@ -420,6 +518,69 @@ mod tests {
     }
 
     #[test]
+    fn ensure_codex_hook_settings_enables_codex_hooks_globally() {
+        let workspace_root = unique_temp_dir("codex-workspace");
+        let codex_home = unique_temp_dir("codex-home");
+        let config_dir = codex_home.join(".codex");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(
+            config_dir.join("config.toml"),
+            format!(
+                "[projects.\"{}\"]\ntrust_level = \"trusted\"\n",
+                workspace_root.display()
+            ),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
+        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
+
+        let result =
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
+
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
+        }
+
+        result.unwrap();
+
+        let raw = fs::read_to_string(config_dir.join("config.toml")).unwrap();
+        let parsed = raw.parse::<toml::Table>().unwrap();
+        assert_eq!(
+            parsed
+                .get("projects")
+                .and_then(toml::Value::as_table)
+                .and_then(|projects| projects.get(&workspace_root.display().to_string()))
+                .and_then(toml::Value::as_table)
+                .and_then(|project| project.get("trust_level"))
+                .and_then(toml::Value::as_str),
+            Some("trusted")
+        );
+        assert_eq!(
+            parsed
+                .get("features")
+                .and_then(toml::Value::as_table)
+                .and_then(|features| features.get("codex_hooks"))
+                .and_then(toml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            parsed
+                .get("projects")
+                .and_then(toml::Value::as_table)
+                .and_then(|projects| projects.get(&workspace_root.display().to_string()))
+                .and_then(toml::Value::as_table)
+                .and_then(|project| project.get("features")),
+            None
+        );
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
     fn build_codex_commands_split_start_and_resume() {
         let profile = CodexRuntimeProfile {
             executable: "codex".into(),
@@ -434,11 +595,11 @@ mod tests {
 
         assert_eq!(
             build_codex_start_command(&ExecTarget::Native, &profile),
-            "codex --full-auto --enable codex_hooks"
+            "codex --full-auto"
         );
         assert_eq!(
             build_codex_resume_command(&ExecTarget::Native, &profile, "resume-123"),
-            "codex resume resume-123 --full-auto --enable codex_hooks"
+            "codex resume resume-123 --full-auto"
         );
     }
 
@@ -484,11 +645,11 @@ mod tests {
 
         assert_eq!(
             build_codex_start_command(&target, &profile),
-            format!("codex --full-auto {expected_config} --enable codex_hooks")
+            format!("codex --full-auto {expected_config}")
         );
         assert_eq!(
             build_codex_resume_command(&target, &profile, "resume-123"),
-            format!("codex resume resume-123 --full-auto {expected_config} --enable codex_hooks")
+            format!("codex resume resume-123 --full-auto {expected_config}")
         );
     }
 
@@ -521,8 +682,6 @@ mod tests {
                     "web_search=\"live\"".to_string(),
                     "--config".to_string(),
                     "model_reasoning_effort=\"high\"".to_string(),
-                    "--enable".to_string(),
-                    "codex_hooks".to_string(),
                 ],
             )
         );
@@ -544,8 +703,6 @@ mod tests {
                     "web_search=\"live\"".to_string(),
                     "--config".to_string(),
                     "model_reasoning_effort=\"high\"".to_string(),
-                    "--enable".to_string(),
-                    "codex_hooks".to_string(),
                 ],
             )
         );

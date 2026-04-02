@@ -1563,6 +1563,13 @@ pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Res
     let rows = stmt
         .query_map([], session_row_from_query)
         .map_err(|e| e.to_string())?;
+    let debug_resume = std::env::var("CODER_STUDIO_DEBUG_RESUME")
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !normalized.is_empty() && normalized != "0" && normalized != "false"
+        })
+        .unwrap_or(false);
+    let mut interrupted_count = 0usize;
     for row in rows {
         let row = row.map_err(|e| e.to_string())?;
         let mut session = session_from_payload(&row.payload)?;
@@ -1574,6 +1581,12 @@ pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Res
             row.archived_at,
             row.sort_order,
         )?;
+        interrupted_count += 1;
+    }
+    if debug_resume {
+        eprintln!(
+            "[resume-debug] mark_active_sessions_interrupted_on_boot interrupted_count={interrupted_count}"
+        );
     }
     Ok(())
 }

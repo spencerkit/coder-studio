@@ -59,6 +59,34 @@ test("controller gets restart action for interrupted session without resume id",
   assert.equal(action?.kind, "restart");
 });
 
+test("controller does not get recovery action once interrupted session is rebound to a live terminal", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "codex",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      stream: "",
+      unread: 0,
+      lastActiveAt: 1,
+      resumeId: "resume-77",
+      terminalId: "term-1",
+    },
+  );
+
+  assert.equal(action, null);
+});
+
 test("observer does not get agent recovery action", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
