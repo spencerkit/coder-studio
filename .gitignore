@@ -38,5 +38,6 @@ Thumbs.db
 output
 .tmp
 .playwright-cli
+.playwright-mcp
 .artifacts/
 .worktrees/

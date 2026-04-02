@@ -1134,6 +1134,37 @@ div.v-resizer[data-resize="right"]:hover {
   height: 100%;
 }
 
+.agent-pane-transcript-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.agent-pane-transcript-shell .agent-pane-xterm {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.agent-pane-transcript-output {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  color: var(--terminal-fg);
+  font-family: "JetBrains Mono", "Symbols Nerd Font Mono", "MesloLGS NF", "CaskaydiaMono Nerd Font Mono", "SauceCodePro Nerd Font Mono", "DejaVu Sans Mono", "Noto Sans Mono", "Noto Sans Mono CJK SC", "Noto Sans Symbols 2", "Noto Color Emoji", "Cascadia Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+}
+
+.agent-pane-transcript-output.archive {
+  position: relative;
+}
+
 /* ==========================================================================
    Editor
    ========================================================================== */
