@@ -52,7 +52,6 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
         time: nowLabel()
       }
   ]),
-  stream: sanitizeAgentSessionStream(source.stream ?? existing?.stream ?? ""),
   terminalId: existing?.terminalId,
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
@@ -105,7 +104,6 @@ export const createDraftSessionPlaceholder = ({
             time: nowLabel(),
           },
         ],
-    stream: existing?.stream ?? "",
     terminalId: existing?.terminalId,
     unread: existing?.unread ?? 0,
     lastActiveAt: existing?.lastActiveAt ?? Date.now(),
@@ -117,7 +115,6 @@ export const isDraftSession = (session: Session | undefined | null) => Boolean(s
 
 export const isHiddenDraftPlaceholder = (session: Session | undefined | null) => Boolean(
   session
-  && !session.stream.trim()
   && session.queue.length === 0
   && session.messages.every((message) => message.role === "system")
 );

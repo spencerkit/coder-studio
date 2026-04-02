@@ -33,7 +33,7 @@ fn build_codex_config_override_args(profile: &CodexRuntimeProfile) -> Vec<String
 }
 
 fn build_codex_feature_args() -> Vec<String> {
-    vec!["--enable".to_string(), "codex_hooks".to_string()]
+    Vec::new()
 }
 
 pub(crate) fn resolve_codex_runtime_profile(

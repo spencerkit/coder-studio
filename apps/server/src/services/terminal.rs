@@ -58,27 +58,6 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
     }
 }
 
-fn mirror_bound_terminal_output(
-    workspace_id: &str,
-    terminal_id: u64,
-    text: &str,
-    state: State<'_, AppState>,
-) {
-    if text.is_empty() {
-        return;
-    }
-    if let Ok(Some((binding_workspace_id, session_id))) =
-        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
-    {
-        if binding_workspace_id != workspace_id {
-            return;
-        }
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = append_session_stream(state, workspace_id, session_id_num, text);
-        }
-    }
-}
-
 fn mark_bound_terminal_interrupted(
     workspace_id: &str,
     terminal_id: u64,
@@ -96,7 +75,6 @@ fn mark_bound_terminal_interrupted(
             return;
         }
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = append_session_stream(state, workspace_id, session_id_num, exit_text);
             let _ = set_session_status_if_not_archived(
                 state,
                 workspace_id,
@@ -184,8 +162,6 @@ pub(crate) fn create_terminal_runtime(
                                 &text,
                             );
                         }
-                        let state: State<AppState> = state_handle.state();
-                        mirror_bound_terminal_output(&workspace_id_out, terminal_id, &text, state);
                     }
                     break;
                 }
@@ -205,8 +181,6 @@ pub(crate) fn create_terminal_runtime(
                             &text,
                         );
                     }
-                    let state: State<AppState> = state_handle.state();
-                    mirror_bound_terminal_output(&workspace_id_out, terminal_id, &text, state);
                 }
                 Err(_) => break,
             }

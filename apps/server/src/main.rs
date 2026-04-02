@@ -52,7 +52,7 @@ pub(crate) use command::http::start_transport_server;
 #[cfg(test)]
 pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
-    activate_workspace_ui, append_agent_lifecycle_event, append_session_stream,
+    activate_workspace_ui, append_agent_lifecycle_event,
     append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
     close_workspace_ui, create_workspace_session, delete_workspace_session,
     delete_workspace_terminal, init_db, launch_workspace_record_scoped, load_session,

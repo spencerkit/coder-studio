@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(test)]
 use std::thread::ThreadId;
 
-const SESSION_STREAM_LIMIT: usize = 200_000;
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
@@ -1812,7 +1811,6 @@ pub(crate) fn create_workspace_session(
                 content: format!("{} ready", workspace.title),
                 time: now_label(),
             }],
-            stream: String::new(),
             unread: 0,
             last_active_at: now_ts(),
             resume_id: None,
@@ -1847,9 +1845,6 @@ pub(crate) fn update_workspace_session(
         }
         if let Some(messages) = patch.messages {
             session.messages = messages;
-        }
-        if let Some(stream) = patch.stream {
-            session.stream = truncate_tail(&stream, SESSION_STREAM_LIMIT);
         }
         if let Some(unread) = patch.unread {
             session.unread = unread;
@@ -2188,30 +2183,6 @@ pub(crate) fn delete_workspace_terminal(
 ) -> Result<(), String> {
     with_db(state, |conn| {
         delete_persisted_terminal(conn, workspace_id, terminal_id)
-    })
-}
-
-pub(crate) fn append_session_stream(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-    chunk: &str,
-) -> Result<(), String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.stream = truncate_tail(
-            &format!("{}{}", session.stream, chunk),
-            SESSION_STREAM_LIMIT,
-        );
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )
     })
 }
 

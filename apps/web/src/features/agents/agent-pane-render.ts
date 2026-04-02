@@ -32,7 +32,6 @@ export const resolveAgentPaneRenderState = (
   };
 };
 
-export const resolveAgentPaneStream = (session: Session) => session.stream;
 export const resolveAgentPaneTerminalBinding = (
   session: Session,
   _terminalMode: "interactive" | "readonly",
@@ -43,8 +42,8 @@ export const resolveAgentPaneTerminalBinding = (
     : undefined;
 
   return {
-    stream: boundTerminal?.output ?? session.stream,
-    streamId: boundTerminal?.id ?? `${session.id}:transcript`,
+    stream: boundTerminal?.output ?? "",
+    streamId: boundTerminal?.id ?? session.id,
     syncStrategy: boundTerminal ? "snapshot" : "incremental",
     renderMode: "terminal",
   };

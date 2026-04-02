@@ -159,7 +159,6 @@ export const createWorkspaceSessionActions = ({
         isDraft: false,
         queue: draftSession.queue,
         messages: draftSession.messages,
-        stream: draftSession.stream,
         unread: 0,
         lastActiveAt: Date.now(),
         resumeId: baseSession.resumeId,

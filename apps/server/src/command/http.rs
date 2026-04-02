@@ -3129,7 +3129,76 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(150));
         let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
-        assert!(refreshed.stream.contains("resume-77"));
+        assert!(refreshed.resume_id.is_some());
+    }
+
+    #[test]
+    fn session_runtime_start_returns_codex_resume_boot_input_when_resume_id_exists() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-codex-resume");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "codex": {
+                        "global": {
+                            "executable": "codex",
+                            "extra_args": ["--full-auto"]
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string())
+            .unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        assert!(started.terminal_id > 0);
+        assert_eq!(
+            started.boot_input.as_deref(),
+            Some("codex resume resume-77 --full-auto\r")
+        );
     }
 
     #[test]

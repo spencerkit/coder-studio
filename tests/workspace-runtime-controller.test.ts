@@ -304,6 +304,44 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
   }
 });
 
+test("runtime snapshot lifecycle replay does not override interrupted session state", () => {
+  const snapshot = createRuntimeSnapshot({
+    workspace_id: "ws-1",
+    controller_device_id: "device-a",
+    controller_client_id: "client-a",
+    lease_expires_at: Date.now() + 30_000,
+    fencing_token: 1,
+    takeover_request_id: null,
+    takeover_requested_by_device_id: null,
+    takeover_requested_by_client_id: null,
+    takeover_deadline_at: null,
+  });
+  snapshot.snapshot.sessions[0].status = "interrupted";
+  snapshot.lifecycle_events = [
+    {
+      workspace_id: "ws-1",
+      session_id: "1",
+      seq: 1,
+      kind: "turn_completed",
+      source_event: "Stop",
+      data: "{\"session_id\":\"claude-replay\"}",
+    },
+  ];
+
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    snapshot,
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const session = next.tabs[0]?.sessions[0];
+  assert.equal(session?.status, "interrupted");
+  assert.equal(session?.resumeId, "claude-replay");
+});
+
 test("runtime snapshot hydrates session terminal bindings from runtime payload", () => {
   const next = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),

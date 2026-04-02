@@ -387,7 +387,7 @@ fn load_or_default_app_settings_from_conn_hydrated(
 ) -> Result<AppSettingsPayload, String> {
     let settings = load_or_default_app_settings_from_conn(conn)?;
     let settings = hydrate_settings_from_claude_home(&settings, None);
-    Ok(hydrate_settings_from_codex_home(&settings, None))
+    Ok(settings)
 }
 
 fn save_app_settings_to_conn(

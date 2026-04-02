@@ -1152,7 +1152,6 @@ mod tests {
                 auto_feed: None,
                 queue: None,
                 messages: None,
-                stream: None,
                 unread: None,
                 last_active_at: None,
                 resume_id: Some("claude-runtime-attach".to_string()),

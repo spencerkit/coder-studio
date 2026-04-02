@@ -47,7 +47,6 @@ export type Session = {
   isDraft?: boolean;
   queue: QueueTask[];
   messages: AgentMessage[];
-  stream: string;
   terminalId?: string;
   unread: number;
   lastActiveAt: number;
@@ -244,7 +243,6 @@ export const createSession = (
   messages: [
     { id: createId("msg"), role: "system", content: formatSessionReadyMessage(index, locale), time: nowLabel() }
   ],
-  stream: "",
   unread: 0,
   lastActiveAt: Date.now()
 });
@@ -457,7 +455,6 @@ export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | 
   const hasHistory = tabs.some((tab) =>
     tab.status === "ready"
     || (tab.sessions?.length ?? 0) > 1
-    || Boolean(tab.sessions?.[0]?.stream)
     || (tab.archive?.length ?? 0) > 0
   );
   const legacyLayout = input.layout as (LayoutState & { rightTopHeight?: number; rightCollapsed?: boolean }) | undefined;

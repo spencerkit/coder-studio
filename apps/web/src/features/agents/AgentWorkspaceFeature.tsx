@@ -374,7 +374,6 @@ export const AgentWorkspaceFeature = ({
 }: AgentWorkspaceFeatureProps) => {
   if (!visible) return null;
 
-  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
   const viewedHeaderTag = sessionHeaderTag(viewedSession.status, locale);
   const archiveTerminalBinding = resolveAgentPaneTerminalBinding(viewedSession, "readonly", activeTab.terminals);
 
@@ -459,7 +458,7 @@ export const AgentWorkspaceFeature = ({
                   </div>
                 </div>
                 <div className="agent-pane-body">
-                  {viewedSessionPlainStream.trim() ? (
+                  {archiveTerminalBinding.stream.trim() ? (
                     archiveTerminalBinding.renderMode === "transcript" ? (
                       <pre className="agent-pane-transcript-output archive" aria-hidden="true">
                         {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}

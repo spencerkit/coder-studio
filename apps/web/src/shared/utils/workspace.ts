@@ -162,7 +162,11 @@ const applyLifecycleReplayToState = (
             const resumeId = readResumeId(event.data);
             return {
               ...session,
-              status: nextStatus ? resolveVisibleStatus(tab, session, nextStatus) : session.status,
+              status: (
+                session.status === "interrupted" || !nextStatus
+                  ? session.status
+                  : resolveVisibleStatus(tab, session, nextStatus)
+              ),
               resumeId: resumeId ?? session.resumeId,
             };
           }),
@@ -338,15 +342,7 @@ export const createTabFromWorkspaceSnapshot = (
 ): Tab => {
   const backendSessions = snapshot.sessions.map((session) => {
     const current = existing?.sessions.find((item) => item.id === String(session.id));
-    const hydrated = createSessionFromBackend(session, locale, current);
-    return {
-      ...hydrated,
-      stream: mergeMonotonicTextSnapshot(
-        current?.stream ?? "",
-        session.stream ?? current?.stream ?? "",
-        AGENT_STREAM_BUFFER_LIMIT,
-      ),
-    };
+    return createSessionFromBackend(session, locale, current);
   });
 
   const existingDraftSessions = existing?.sessions.filter((session) => isDraftSession(session)) ?? [];

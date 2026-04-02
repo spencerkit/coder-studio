@@ -2329,6 +2329,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onAgentTerminalData = async (paneId: string, data: string) => {
     if (isArchiveView || !data) return;
     if (isAgentFocusTransitionSequence(data)) return;
+    // Filter out terminal response sequences (cursor position reports, color queries, etc.)
+    // These come from xterm initialization and should not be sent to the backend
+    if (/^\x1B\[[0-9;]*[R?AHFGSTIcJJKMSXh]/.test(data) || /^\x1B\]10;[^\x07]*(?:\x07|\x1B\\)/.test(data) || /^\x1B\]11;[^\x07]*(?:\x07|\x1B\\)/.test(data)) return;
     if (!guardWorkspaceMutation("agent_input")) return;
     const ready = await ensureAgentPaneSessionReady(paneId);
     if (!ready) return;

@@ -105,10 +105,6 @@ fn dispatch_agent_output(
         transcript_text,
         Some(raw_text),
     );
-    let state: State<AppState> = state_handle.state();
-    if !transcript_text.is_empty() {
-        let _ = append_session_stream(state, workspace_id, session_id_num, transcript_text);
-    }
 }
 
 fn write_agent_input<F>(
@@ -432,7 +428,6 @@ pub(crate) fn agent_send(
                     auto_feed: None,
                     queue: None,
                     messages: None,
-                    stream: None,
                     unread: None,
                     last_active_at: Some(now_ts()),
                     resume_id: None,
