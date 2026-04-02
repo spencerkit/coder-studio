@@ -124,7 +124,7 @@ test("resolveAgentPaneTerminalBinding keeps bound codex terminals on the live te
     {
       stream: "\u001b[1;1H>\u001b[1;3HYou are in /tmp/demo",
       streamId: "term-17",
-      syncStrategy: "incremental",
+      syncStrategy: "snapshot",
       renderMode: "terminal",
     },
   );

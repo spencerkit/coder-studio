@@ -45,9 +45,7 @@ export const resolveAgentPaneTerminalBinding = (
   return {
     stream: boundTerminal?.output ?? session.stream,
     streamId: boundTerminal?.id ?? `${session.id}:transcript`,
-    syncStrategy: boundTerminal
-      ? (session.provider === "codex" ? "incremental" : "snapshot")
-      : "incremental",
+    syncStrategy: boundTerminal ? "snapshot" : "incremental",
     renderMode: "terminal",
   };
 };
