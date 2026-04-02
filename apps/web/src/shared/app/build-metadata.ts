@@ -14,13 +14,22 @@ const readBuildConstant = (value: string | undefined, fallback: string) => {
 
 const padDatePart = (value: number) => String(value).padStart(2, "0");
 
+const formatUtcOffset = (value: Date) => {
+  const offsetMinutes = -value.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  return `UTC${sign}${padDatePart(hours)}:${padDatePart(minutes)}`;
+};
+
 export const formatBuildPublishedAt = (value: string) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return readBuildConstant(value, FALLBACK_PUBLISHED_AT);
   }
 
-  return `${parsed.getUTCFullYear()}-${padDatePart(parsed.getUTCMonth() + 1)}-${padDatePart(parsed.getUTCDate())} ${padDatePart(parsed.getUTCHours())}:${padDatePart(parsed.getUTCMinutes())}:${padDatePart(parsed.getUTCSeconds())} UTC`;
+  return `${parsed.getFullYear()}-${padDatePart(parsed.getMonth() + 1)}-${padDatePart(parsed.getDate())} ${padDatePart(parsed.getHours())}:${padDatePart(parsed.getMinutes())}:${padDatePart(parsed.getSeconds())} ${formatUtcOffset(parsed)}`;
 };
 
 export type AppBuildMetadata = {

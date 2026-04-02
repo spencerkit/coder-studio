@@ -372,7 +372,14 @@ pub(crate) fn agent_start(
                 );
             }
         }
-        emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited", None);
+        emit_agent(
+            &app_handle,
+            &workspace_id,
+            &session_id,
+            "exit",
+            "exited",
+            None,
+        );
         let state: State<AppState> = state_handle.state();
         let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
             agents.remove(&key).is_some()

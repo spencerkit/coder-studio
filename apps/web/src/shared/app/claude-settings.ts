@@ -1,12 +1,12 @@
-import type { Locale } from "../../i18n.ts";
-import type { ExecTarget } from "../../state/workbench.ts";
+import type { Locale } from "../../i18n";
+import type { ExecTarget } from "../../state/workbench";
 import type {
   AppSettings,
   AppSettingsPayload,
   ClaudeRuntimeProfile,
   CodexRuntimeProfile,
   LegacyAppSettings,
-} from "../../types/app.ts";
+} from "../../types/app";
 import {
   applyAgentDefaultsPatch,
   applyGeneralSettingsPatch,
@@ -16,7 +16,7 @@ import {
   normalizeAppSettings,
   resolveRuntimeCommandFromSettings,
   toAppSettingsPayload,
-} from "./provider-settings.ts";
+} from "./provider-settings";
 
 const DEFAULT_CLAUDE_EXECUTABLE = "claude";
 

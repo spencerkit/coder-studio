@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import type { Locale, Translator } from "../../i18n.ts";
-import type { AppSettings, AppSettingsUpdater } from "../../types/app.ts";
+import type { Locale, Translator } from "../../i18n";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app";
 import {
   formatCodexRuntimeCommand,
   patchCodexStructuredSettings,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 
 type CodexSettingsPanelProps = {
   locale: Locale;

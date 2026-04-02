@@ -372,6 +372,7 @@ pub struct SessionRuntimeBindingInfo {
 pub struct SessionRuntimeStartResult {
     pub terminal_id: u64,
     pub started: bool,
+    pub boot_input: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

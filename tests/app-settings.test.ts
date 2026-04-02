@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTranslator } from '../apps/web/src/i18n.ts';
+import { createTranslator } from '../apps/web/src/i18n';
 import {
   cloneAppSettings,
   defaultAppSettings,
   readStoredAppSettings,
-} from '../apps/web/src/shared/app/settings.ts';
+} from '../apps/web/src/shared/app/settings';
 
 type LocalStorageMock = {
   getItem: (key: string) => string | null;

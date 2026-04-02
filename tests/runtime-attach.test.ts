@@ -5,7 +5,7 @@ import {
   ATTACH_RUNTIME_SUCCESS_REUSE_MS,
   createWorkspaceRuntimeAttachDeduper,
   runAttachWithRetry,
-} from "../apps/web/src/features/workspace/runtime-attach.ts";
+} from "../apps/web/src/features/workspace/runtime-attach";
 
 test("runAttachWithRetry keeps retrying until attach succeeds", async () => {
   const snapshot = { workspace: "ws-1" };

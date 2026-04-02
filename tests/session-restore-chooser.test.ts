@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listRestoreCandidatesForWorkspace } from "../apps/web/src/features/workspace/session-restore-chooser.ts";
-import type { SessionHistoryRecord } from "../apps/web/src/types/app.ts";
+import { listRestoreCandidatesForWorkspace } from "../apps/web/src/features/workspace/session-restore-chooser";
+import type { SessionHistoryRecord } from "../apps/web/src/types/app";
 
 const createRecord = (overrides: Partial<SessionHistoryRecord>): SessionHistoryRecord => ({
   workspaceId: "ws-1",

@@ -1,6 +1,6 @@
-import { claudeProviderManifest } from "./manifests/claude.ts";
-import { codexProviderManifest } from "./manifests/codex.ts";
-import type { ProviderId, ProviderManifest } from "./types.ts";
+import { claudeProviderManifest } from "./manifests/claude";
+import { codexProviderManifest } from "./manifests/codex";
+import type { ProviderId, ProviderManifest } from "./types";
 
 export const BUILTIN_PROVIDER_MANIFESTS: readonly ProviderManifest[] = [
   claudeProviderManifest,

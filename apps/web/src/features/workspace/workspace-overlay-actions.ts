@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type { ExecTarget, WorkbenchState } from "../../state/workbench";
-import { listFilesystem } from "../../services/http/system.service.ts";
-import { looksLikeWindowsPath } from "../../shared/utils/path.ts";
+import { listFilesystem } from "../../services/http/system.service";
+import { looksLikeWindowsPath } from "../../shared/utils/path";
 import type { FilesystemListResponse, FolderBrowserState } from "../../types/app";
 
 export const selectWorkspaceOverlayMode = (

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {
   resolveAgentRecoveryAction,
   resolveTerminalRecoveryAction,
-} from "../apps/web/src/features/workspace/workspace-recovery.ts";
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
+} from "../apps/web/src/features/workspace/workspace-recovery";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
 
 test("controller gets resume action for interrupted session with resume id", () => {
   const action = resolveAgentRecoveryAction(
@@ -33,7 +33,7 @@ test("controller gets resume action for interrupted session with resume id", () 
   assert.equal(action?.kind, "resume");
 });
 
-test("controller gets restart action for interrupted non-claude session", () => {
+test("controller gets restart action for interrupted session without resume id", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
       role: "controller",

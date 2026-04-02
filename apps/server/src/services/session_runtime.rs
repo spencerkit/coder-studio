@@ -196,6 +196,7 @@ pub(crate) fn session_runtime_start(
             return Ok(SessionRuntimeStartResult {
                 terminal_id: existing_terminal_id,
                 started: false,
+                boot_input: None,
             });
         }
         let _ = unbind_session_runtime_by_terminal(existing_terminal_id, state);
@@ -259,20 +260,10 @@ pub(crate) fn session_runtime_start(
 
     bind_session_runtime(&params.workspace_id, &params.session_id, terminal.id, state)?;
 
-    if let Err(error) = terminal_write(
-        params.workspace_id.clone(),
-        terminal.id,
-        format!("{boot_command}\r"),
-        state,
-    ) {
-        let _ = unbind_session_runtime_by_terminal(terminal.id, state);
-        let _ = terminal_close(params.workspace_id, terminal.id, state);
-        return Err(error);
-    }
-
     Ok(SessionRuntimeStartResult {
         terminal_id: terminal.id,
         started: true,
+        boot_input: Some(format!("{boot_command}\r")),
     })
 }
 

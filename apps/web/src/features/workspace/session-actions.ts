@@ -9,8 +9,8 @@ import {
   createId,
   createPaneLeaf,
   createSession,
-} from "../../state/workbench-core.ts";
-import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n.ts";
+} from "../../state/workbench-core";
+import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
   archiveSession as archiveSessionRequest,
   createSession as createSessionRequest,
@@ -18,8 +18,8 @@ import {
   restoreSession as restoreSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
-} from "../../services/http/session.service.ts";
-import { getWorkspaceSnapshot } from "../../services/http/workspace.service.ts";
+} from "../../services/http/session.service";
+import { getWorkspaceSnapshot } from "../../services/http/workspace.service";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -27,7 +27,7 @@ import {
   remapPaneSession,
   removePaneNode,
   replacePaneNode,
-} from "../../shared/utils/panes.ts";
+} from "../../shared/utils/panes";
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
@@ -38,12 +38,12 @@ import {
   restoreVisibleStatus,
   sessionTitleFromInput,
   toBackgroundStatus,
-} from "../../shared/utils/session.ts";
-import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace.ts";
-import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app.ts";
+} from "../../shared/utils/session";
+import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
+import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
 
-import type { CompletionReminderTarget } from "./completion-reminders.ts";
-import { advanceWorkspaceSyncVersion } from "./workspace-sync-version.ts";
+import type { CompletionReminderTarget } from "./completion-reminders";
+import { advanceWorkspaceSyncVersion } from "./workspace-sync-version";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
@@ -124,6 +124,7 @@ export const createWorkspaceSessionActions = ({
     }
 
     let nextSession: Session | null = null;
+    advanceWorkspaceSyncVersion(tabId);
     const created = await withServiceFallback<BackendSession | null>(
       () => createSessionRequest(
         tabId,
@@ -145,7 +146,9 @@ export const createWorkspaceSessionActions = ({
       if (!draftSession) return tab;
       const baseSession = nextSession
         ?? createSession(tab.sessions.length + 1, draftSession.mode, locale, draftSession.provider);
-      const title = sessionTitleFromInput(firstInput) || draftSession.title || formatSessionTitle(baseSession.id, locale);
+      const draftTitle = draftSession.title.trim();
+      const title = sessionTitleFromInput(firstInput)
+        || (draftTitle && draftTitle !== t("draftSessionTitle") ? draftTitle : (baseSession.title || formatSessionTitle(baseSession.id, locale)));
       const preparedSession: Session = {
         ...baseSession,
         title,

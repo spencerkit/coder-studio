@@ -21,7 +21,7 @@ import {
 } from "../../shared/app/settings";
 import {
   defaultAppSettings,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 import {
   applyAppSettingsUpdater,
   createAppSettingsDraftStore,
@@ -29,7 +29,7 @@ import {
   createPersistableAppSettings,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
-} from "../../services/http/settings.service.ts";
+} from "../../services/http/settings.service";
 
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());

@@ -2,14 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createDefaultWorkbenchState,
-  createSession,
   createTab,
-} from "../apps/web/src/state/workbench-core.ts";
+} from "../apps/web/src/state/workbench-core";
 import {
   applyPendingStreamIndex,
   createPendingStreamIndex,
   recordPendingTerminalStream,
-} from "../apps/web/src/features/workspace/workspace-stream-index.ts";
+} from "../apps/web/src/features/workspace/workspace-stream-index";
 
 test("applyPendingStreamIndex only appends terminal output after agent stream removal", () => {
   const state = createDefaultWorkbenchState();

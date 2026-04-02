@@ -1,5 +1,5 @@
-import { attachWorkspaceRuntime } from "../../services/http/workspace.service.ts";
-import type { WorkspaceRuntimeSnapshot } from "../../types/app.ts";
+import { attachWorkspaceRuntime } from "../../services/http/workspace.service";
+import type { WorkspaceRuntimeSnapshot } from "../../types/app";
 
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
 

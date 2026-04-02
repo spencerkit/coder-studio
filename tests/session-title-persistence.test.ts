@@ -2,17 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import type { MutableRefObject } from "react";
-import { createTranslator } from "../apps/web/src/i18n.ts";
+import { createTranslator } from "../apps/web/src/i18n";
 import {
   commitAgentSessionTitle,
   trackAgentInitialTitleInput,
   type AgentRuntimeRefs,
-} from "../apps/web/src/features/agents/agent-runtime-actions.ts";
-import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions.ts";
-import { createSessionFromBackend } from "../apps/web/src/shared/utils/session.ts";
-import type { Session } from "../apps/web/src/state/workbench.ts";
-import type { AppSettings, Toast } from "../apps/web/src/types/app.ts";
-import type { WorkbenchState } from "../apps/web/src/state/workbench.ts";
+} from "../apps/web/src/features/agents/agent-runtime-actions";
+import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
+import { createSessionFromBackend } from "../apps/web/src/shared/utils/session";
+import type { Session } from "../apps/web/src/state/workbench";
+import type { AppSettings, Toast } from "../apps/web/src/types/app";
+import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",

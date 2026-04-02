@@ -1,6 +1,6 @@
-import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
-import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
-import { invokeRpc } from "./client.ts";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
+import { invokeRpc } from "./client";
 
 export const stopAgent = (
   workspaceId: string,

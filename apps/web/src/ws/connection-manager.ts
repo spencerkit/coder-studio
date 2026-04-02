@@ -1,12 +1,12 @@
-import { healthUrl, websocketUrl } from "../shared/runtime/backend.ts";
-import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service.ts";
+import { healthUrl, websocketUrl } from "../shared/runtime/backend";
+import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service";
 import {
   getOrCreateClientId,
   getOrCreateDeviceId,
-} from "../features/workspace/workspace-controller.ts";
-import { WsHeartbeat } from "./heartbeat.ts";
-import { parseWsEnvelope, type WsClientEnvelope, type WsEventEnvelope } from "./protocol.ts";
-import { getReconnectDelayMs } from "./reconnect-policy.ts";
+} from "../features/workspace/workspace-controller";
+import { WsHeartbeat } from "./heartbeat";
+import { parseWsEnvelope, type WsClientEnvelope, type WsEventEnvelope } from "./protocol";
+import { getReconnectDelayMs } from "./reconnect-policy";
 
 type EventHandler<T = unknown> = (payload: T) => void;
 export type WsConnectionState = {

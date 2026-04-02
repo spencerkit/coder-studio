@@ -6,7 +6,7 @@ import {
   getProviderBadgeLabel,
   getProviderManifest,
   getProviderPanelId,
-} from "../apps/web/src/features/providers/registry.ts";
+} from "../apps/web/src/features/providers/registry";
 
 test("registry exposes builtin providers in fixed manifest order", () => {
   assert.deepEqual(

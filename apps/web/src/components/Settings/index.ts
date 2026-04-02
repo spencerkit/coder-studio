@@ -1,2 +1,2 @@
-export { Settings } from "./Settings.tsx";
-export { ProviderSettingsPanel } from "./ProviderSettingsPanel.tsx";
+export { Settings } from "./Settings";
+export { ProviderSettingsPanel } from "./ProviderSettingsPanel";

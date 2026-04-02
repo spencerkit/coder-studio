@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
+import { defaultAppSettings } from '../apps/web/src/shared/app/settings';
 import {
   applyGeneralSettingsPatch,
   forceClaudeExecutableDefaults,
   patchClaudeStructuredSettings,
-} from '../apps/web/src/shared/app/claude-settings.ts';
+} from '../apps/web/src/shared/app/claude-settings';
 import {
   applyAppSettingsUpdater,
   createAppSettingsDraftStore,
@@ -15,7 +15,7 @@ import {
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
-} from '../apps/web/src/services/http/settings.service.ts';
+} from '../apps/web/src/services/http/settings.service';
 
 test('persistConfirmedAppSettings returns the backend-confirmed settings on success', async () => {
   const confirmed = defaultAppSettings();

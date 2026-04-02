@@ -4,7 +4,7 @@ import {
   resolveAgentStartupDiscoveryMs,
   resolveAgentStartupQuietMs,
   shouldReleaseAgentStartupGate,
-} from "../apps/web/src/features/agents/agent-runtime-actions.ts";
+} from "../apps/web/src/features/agents/agent-runtime-actions";
 
 test("resolveAgentStartupQuietMs keeps codex startup drain longer than claude", () => {
   assert.equal(resolveAgentStartupQuietMs("claude"), 240);

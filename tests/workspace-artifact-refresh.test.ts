@@ -5,7 +5,7 @@ import {
   mergeArtifactRefreshScopes,
   resolveInitialArtifactRefreshScope,
   resolveArtifactRefreshScope,
-} from "../apps/web/src/features/workspace/workspace-artifact-refresh.ts";
+} from "../apps/web/src/features/workspace/workspace-artifact-refresh";
 
 test("resolveArtifactRefreshScope falls back to a full refresh when categories are missing", () => {
   assert.deepEqual(

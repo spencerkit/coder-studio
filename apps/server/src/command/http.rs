@@ -3012,6 +3012,29 @@ mod tests {
 
         assert!(started.started);
         assert!(started.terminal_id > 0);
+        assert!(
+            started
+                .boot_input
+                .as_deref()
+                .unwrap_or_default()
+                .contains(".session-runtime-start-marker")
+        );
+        assert!(!marker_path.exists());
+
+        dispatch_rpc(
+            &app,
+            "terminal_write",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+                "input": started.boot_input,
+            }),
+            &authorized,
+        )
+        .unwrap();
 
         let mut marker_value = String::new();
         for _ in 0..100 {
@@ -3087,6 +3110,22 @@ mod tests {
         .unwrap();
         let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
         assert!(started.terminal_id > 0);
+        assert!(started.boot_input.is_some());
+
+        dispatch_rpc(
+            &app,
+            "terminal_write",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+                "input": started.boot_input,
+            }),
+            &authorized,
+        )
+        .unwrap();
 
         std::thread::sleep(Duration::from_millis(150));
         let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();

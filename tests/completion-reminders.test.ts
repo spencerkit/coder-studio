@@ -5,7 +5,7 @@ import {
   isCompletionReminderBackgroundCase,
   notifyCompletionReminder,
   playCompletionReminderSound,
-} from '../apps/web/src/features/workspace/completion-reminders.ts';
+} from '../apps/web/src/features/workspace/completion-reminders';
 
 const withMockWindow = <T>(mockWindow: Window, run: () => Promise<T> | T) => {
   const originalWindow = globalThis.window;

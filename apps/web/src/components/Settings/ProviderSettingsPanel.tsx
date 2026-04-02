@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
-import type { Translator } from "../../i18n.ts";
-import { getProviderManifest } from "../../features/providers/registry.ts";
-import type { ProviderSettingsField } from "../../features/providers/types.ts";
+import type { Translator } from "../../i18n";
+import { getProviderManifest } from "../../features/providers/registry";
+import type { ProviderSettingsField } from "../../features/providers/types";
 import {
   applyProviderGlobalPatch,
   resolveProviderGlobalSettings,
-} from "../../shared/app/provider-settings.ts";
-import type { AppSettings, AppSettingsUpdater } from "../../types/app.ts";
+} from "../../shared/app/provider-settings";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app";
 
 type ProviderSettingsPanelProps = {
   providerId: string;

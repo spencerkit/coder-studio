@@ -1,4 +1,4 @@
-import type { Tab } from "../../state/workbench-core.ts";
+import type { Tab } from "../../state/workbench-core";
 
 export const READY_TAB_RUNTIME_RECOVERY_DELAYS_MS = [0, 3_000] as const;
 

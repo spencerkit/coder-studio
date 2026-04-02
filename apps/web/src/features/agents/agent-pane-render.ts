@@ -1,5 +1,6 @@
-import type { Session, Terminal } from "../../state/workbench.ts";
-import { isDraftSession } from "../../shared/utils/session.ts";
+import type { Session, Terminal } from "../../state/workbench";
+import { isDraftSession } from "../../shared/utils/session";
+import { resolveTerminalInteractionMode } from "../../shared/utils/terminal-interaction";
 
 export type AgentPaneRenderState =
   | { kind: "draft" }
@@ -8,12 +9,18 @@ export type AgentPaneRenderState =
 export type AgentPaneTerminalBinding = {
   stream: string;
   streamId: string;
-  syncStrategy: "incremental";
+  syncStrategy: "incremental" | "snapshot" | "replace";
+  renderMode: "terminal" | "transcript";
 };
+
+export const shouldRenderAgentPaneTranscript = (
+  _provider: Session["provider"],
+) => false;
 
 export const resolveAgentPaneRenderState = (
   session: Session,
   isPaneActive: boolean,
+  inputEnabled = true,
 ): AgentPaneRenderState => {
   if (isDraftSession(session)) {
     return { kind: "draft" };
@@ -21,12 +28,11 @@ export const resolveAgentPaneRenderState = (
 
   return {
     kind: "terminal",
-    terminalMode: isPaneActive ? "interactive" : "readonly",
+    terminalMode: resolveTerminalInteractionMode(isPaneActive, inputEnabled),
   };
 };
 
 export const resolveAgentPaneStream = (session: Session) => session.stream;
-
 export const resolveAgentPaneTerminalBinding = (
   session: Session,
   _terminalMode: "interactive" | "readonly",
@@ -39,6 +45,9 @@ export const resolveAgentPaneTerminalBinding = (
   return {
     stream: boundTerminal?.output ?? session.stream,
     streamId: boundTerminal?.id ?? `${session.id}:transcript`,
-    syncStrategy: "incremental",
+    syncStrategy: boundTerminal
+      ? (session.provider === "codex" ? "incremental" : "snapshot")
+      : "incremental",
+    renderMode: "terminal",
   };
 };

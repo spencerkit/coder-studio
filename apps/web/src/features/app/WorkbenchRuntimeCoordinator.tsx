@@ -1,21 +1,21 @@
 import taskCompleteSoundUrl from "../../assets/task-complete.wav";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import { useNavigate } from "react-router-dom";
 import type { XtermBaseHandle } from "../../components/terminal";
 import { createTranslator, type Locale } from "../../i18n";
-import { withFallback } from "../../services/http/client.ts";
+import { withFallback } from "../../services/http/client";
 import {
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
   updateIdlePolicy as updateIdlePolicyRequest,
-} from "../../services/http/session.service.ts";
+} from "../../services/http/session.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
   heartbeatWorkspaceController,
   releaseWorkspaceControllerKeepalive,
   requestWorkspaceTakeover,
-} from "../../services/http/workspace.service.ts";
+} from "../../services/http/workspace.service";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
   parseNumericId,
@@ -28,13 +28,17 @@ import {
   applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
 import {
+  syncWorkbenchStateSnapshot,
+  updateWorkbenchStateSnapshot,
+} from "../../shared/utils/workbench-state-snapshot";
+import {
   getIdlePolicySyncWorkspaceIds,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
   WorkbenchState,
-} from "../../state/workbench-core.ts";
+} from "../../state/workbench-core";
 import type { AppSettings, SessionPatch } from "../../types/app";
 import {
   type AgentRuntimeRefs,
@@ -64,7 +68,7 @@ import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import {
   isWorkspaceSyncVersionCurrent,
   readWorkspaceSyncVersion,
-} from "../workspace/workspace-sync-version.ts";
+} from "../workspace/workspace-sync-version";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 
 const withServiceFallback = async <T,>(
@@ -91,7 +95,8 @@ export const WorkbenchRuntimeCoordinator = ({
   settingsConfirmed,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
-  const [state, setState] = useRelaxState(workbenchState);
+  const [storeState, setStoreState] = useRelaxState(workbenchState);
+  const [state, setRenderState] = useState(storeState);
   const stateRef = useRef(state);
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === "undefined" ? true : navigator.onLine !== false
@@ -144,9 +149,11 @@ export const WorkbenchRuntimeCoordinator = ({
     agentStartupTokenRef,
   }), []);
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useLayoutEffect(() => {
+    stateRef.current = storeState;
+    syncWorkbenchStateSnapshot(storeState);
+    setRenderState((current) => (current === storeState ? current : storeState));
+  }, [storeState]);
 
   useEffect(() => {
     const audio = new Audio(taskCompleteSoundUrl);
@@ -220,10 +227,11 @@ export const WorkbenchRuntimeCoordinator = ({
   }, []);
 
   const updateState = useCallback((updater: (current: WorkbenchState) => WorkbenchState) => {
-    const next = updater(stateRef.current);
+    const next = updateWorkbenchStateSnapshot(updater);
     stateRef.current = next;
-    setState(next);
-  }, [setState]);
+    setRenderState(next);
+    setStoreState(next);
+  }, [setStoreState]);
 
   const hasLiveWorkspaceTab = useCallback((workspaceId: string) => (
     stateRef.current.tabs.some((tab) => tab.id === workspaceId)

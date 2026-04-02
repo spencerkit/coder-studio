@@ -1,6 +1,6 @@
 import type { WorkbenchState } from "../../state/workbench";
-import { TERMINAL_STREAM_BUFFER_LIMIT } from "../../shared/app/constants.ts";
-import { appendBufferedChunks } from "./workspace-stream-buffer.ts";
+import { TERMINAL_STREAM_BUFFER_LIMIT } from "../../shared/app/constants";
+import { appendBufferedChunks } from "./workspace-stream-buffer";
 
 export type PendingTerminalStream = {
   workspaceId: string;

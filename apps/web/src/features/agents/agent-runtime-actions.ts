@@ -1,19 +1,20 @@
 import type { MutableRefObject } from "react";
-import type { Locale, Translator } from "../../i18n.ts";
-import type { Session, Tab } from "../../state/workbench.ts";
+import type { Locale, Translator } from "../../i18n";
+import type { Session, Tab } from "../../state/workbench";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STARTUP_DISCOVERY_MS,
   AGENT_STARTUP_MAX_WAIT_MS,
   AGENT_STARTUP_QUIET_MS,
   AGENT_TITLE_TRACK_LIMIT,
-} from "../../shared/app/constants.ts";
-import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi.ts";
-import { isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session.ts";
-import type { AgentEvent, AgentLifecycleEvent } from "../../types/app.ts";
-import type { XtermBaseHandle } from "../../components/terminal/XtermBase.tsx";
-import { getProviderStartupBehavior } from "../providers/runtime-helpers.ts";
-import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
+} from "../../shared/app/constants";
+import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi";
+import { findPaneSessionId } from "../../shared/utils/panes";
+import { isDraftSession, isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session";
+import type { AgentEvent, AgentLifecycleEvent } from "../../types/app";
+import type { XtermBaseHandle } from "../../components/terminal/XtermBase";
+import { getProviderStartupBehavior } from "../providers/runtime-helpers";
+import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit";
 
 type AgentSize = { cols: number; rows: number };
 
@@ -112,6 +113,21 @@ export const setAgentTerminalRef = (
   refs.agentTerminalQueueRef.current.delete(paneId);
   refs.agentPaneSizeRef.current.delete(paneId);
   refs.agentTitleTrackerRef.current.delete(paneId);
+};
+
+export const waitForAgentTerminalMount = async (
+  refs: AgentRuntimeRefs,
+  paneId: string,
+  timeoutMs = 1200,
+) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (refs.agentTerminalRefs.current.get(paneId)) {
+      return true;
+    }
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+  }
+  return false;
 };
 
 export const setDraftPromptInputRef = (

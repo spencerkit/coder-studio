@@ -84,15 +84,16 @@ pub(crate) use infra::support::{
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
-    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry, CodexRuntimeProfile,
-    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry, FilesystemListResponse,
-    FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId,
-    SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
-    SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult, SessionStatus,
-    TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
-    WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
-    WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree,
-    WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
+    CodexRuntimeProfile, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
+    IdlePolicy, ProviderId, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
+    SessionMode, SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo,
+    SessionRuntimeStartResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
+    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
+    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
+    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{

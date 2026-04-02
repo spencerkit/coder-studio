@@ -1,3 +1,3 @@
-import { sanitizeAnsiStream } from "./ansi.ts";
+import { sanitizeAnsiStream } from "./ansi";
 
 export const sanitizeAgentSessionStream = (value: string) => sanitizeAnsiStream(value);

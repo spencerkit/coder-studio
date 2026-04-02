@@ -6,8 +6,8 @@ import {
   mapSessionHistoryRecord,
   selectHistoryPrimaryActionBadge,
   selectHistoryPrimaryAction,
-} from "../apps/web/src/features/workspace/session-history.ts";
-import type { BackendSessionHistoryRecord, SessionHistoryRecord } from "../apps/web/src/types/app.ts";
+} from "../apps/web/src/features/workspace/session-history";
+import type { BackendSessionHistoryRecord, SessionHistoryRecord } from "../apps/web/src/types/app";
 
 const createRecord = (overrides: Partial<SessionHistoryRecord>): SessionHistoryRecord => ({
   workspaceId: "ws-1",

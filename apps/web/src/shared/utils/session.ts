@@ -1,7 +1,7 @@
-import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n.ts";
-import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench-core.ts";
-import type { BackendSession } from "../../types/app.ts";
-import { sanitizeAgentSessionStream } from "./agent-session-stream.ts";
+import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n";
+import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench-core";
+import type { BackendSession } from "../../types/app";
+import { sanitizeAgentSessionStream } from "./agent-session-stream";
 
 export const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
 
@@ -56,7 +56,8 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
   terminalId: existing?.terminalId,
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
-  resumeId: source.resume_id ?? existing?.resumeId
+  resumeId: source.resume_id ?? existing?.resumeId,
+  terminalId: existing?.terminalId
 });
 
 type CreateDraftSessionArgs = {

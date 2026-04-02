@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createHistoryRefreshController } from "../apps/web/src/features/workspace/history-refresh-controller.ts";
+import { createHistoryRefreshController } from "../apps/web/src/features/workspace/history-refresh-controller";
 
 test("createHistoryRefreshController replays a forced refresh after an inflight load settles", async () => {
   const resolvers: Array<(value: string[] | null) => void> = [];

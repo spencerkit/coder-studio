@@ -1,4 +1,4 @@
-import type { ProviderManifest } from "../types.ts";
+import type { ProviderManifest } from "../types";
 
 export const claudeProviderManifest: ProviderManifest = {
   id: "claude",

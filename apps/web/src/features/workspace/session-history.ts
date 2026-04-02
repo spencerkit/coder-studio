@@ -3,7 +3,7 @@ import type {
   SessionHistoryExpansionState,
   SessionHistoryGroup,
   SessionHistoryRecord,
-} from "../../types/app.ts";
+} from "../../types/app";
 
 export const mapSessionHistoryRecord = (
   record: BackendSessionHistoryRecord,

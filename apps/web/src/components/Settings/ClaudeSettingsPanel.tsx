@@ -1,18 +1,18 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { HTMLAttributes } from "react";
-import type { Locale, Translator } from "../../i18n.ts";
-import { EyeIcon, EyeOffIcon } from "../icons.tsx";
+import type { Locale, Translator } from "../../i18n";
+import { EyeIcon, EyeOffIcon } from "../icons";
 import type {
   AppSettings,
   AppSettingsUpdater,
   ClaudeRuntimeProfile,
-} from "../../types/app.ts";
+} from "../../types/app";
 import {
   forceClaudeExecutableDefaults,
   formatClaudeLaunchPreview,
   patchClaudeStructuredSettings,
   replaceClaudeAdvancedJson,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 
 const RESERVED_ENV_KEYS = [
   "ANTHROPIC_API_KEY",

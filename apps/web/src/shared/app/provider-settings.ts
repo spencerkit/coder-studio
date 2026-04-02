@@ -1,5 +1,5 @@
-import type { Locale } from "../../i18n.ts";
-import { BUILTIN_PROVIDER_MANIFESTS } from "../../features/providers/registry.ts";
+import type { Locale } from "../../i18n";
+import { BUILTIN_PROVIDER_MANIFESTS } from "../../features/providers/registry";
 import type {
   AppSettings,
   AppSettingsPayload,
@@ -9,7 +9,7 @@ import type {
   LegacyAppSettings,
   ProviderSettingsPayload,
   TerminalCompatibilityMode,
-} from "../../types/app.ts";
+} from "../../types/app";
 
 const DEFAULT_LOCALE: Locale = "en";
 const DEFAULT_TERMINAL_COMPATIBILITY_MODE: TerminalCompatibilityMode = "standard";

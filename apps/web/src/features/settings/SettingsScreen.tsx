@@ -6,7 +6,7 @@ import { TopBar } from "../../components/TopBar";
 import {
   applyAgentDefaultsPatch,
   applyGeneralSettingsPatch,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 import { workbenchState } from "../../state/workbench";
 import type {
   AppSettings,

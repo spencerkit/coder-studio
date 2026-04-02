@@ -33,6 +33,7 @@ import {
   noteAgentStartupLifecycle,
   type AgentRuntimeRefs,
 } from "../agents";
+import { appendLiveTerminalChunkToBoundAgentPanes } from "../agents/agent-live-terminal";
 import type { Translator } from "../../i18n";
 import {
   FULL_ARTIFACT_REFRESH_SCOPE,
@@ -281,17 +282,27 @@ export const useWorkspaceTransportSync = ({
 
   useEffect(() => {
     const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
+      const mappedTerminalId = `term-${terminal_id}`;
       const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
         workspaceId: workspace_id,
-        terminalId: `term-${terminal_id}`,
+        terminalId: mappedTerminalId,
         chunk: data,
       });
+      const tab = stateRef.current.tabs.find((entry) => entry.id === workspace_id);
+      if (tab) {
+        appendLiveTerminalChunkToBoundAgentPanes(
+          agentRuntimeRefs,
+          tab,
+          mappedTerminalId,
+          data,
+        );
+      }
       if (recorded) {
         schedulePendingStreamFlush();
       }
     });
     return unsubscribe;
-  }, [schedulePendingStreamFlush]);
+  }, [agentRuntimeRefs, schedulePendingStreamFlush, stateRef]);
 
   useEffect(() => {
     const unsubscribe = subscribeWorkspaceController((payload) => {

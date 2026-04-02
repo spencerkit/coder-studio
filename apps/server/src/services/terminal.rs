@@ -106,7 +106,6 @@ fn mark_bound_terminal_interrupted(
         }
     }
 }
-
 pub(crate) fn create_terminal_runtime(
     workspace_id: &str,
     cwd: &str,
@@ -118,7 +117,6 @@ pub(crate) fn create_terminal_runtime(
     state: State<'_, AppState>,
 ) -> Result<TerminalInfo, String> {
     let terminal_id = next_terminal_id(state)?;
-
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))

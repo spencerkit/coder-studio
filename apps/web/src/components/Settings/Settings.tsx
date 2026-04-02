@@ -3,11 +3,11 @@ import type { AppSettings, AppSettingsUpdater, SettingsPanel } from "../../types
 import {
   BUILTIN_PROVIDER_MANIFESTS,
   getProviderPanelId,
-} from "../../features/providers/registry.ts";
-import { readAppBuildMetadata } from "../../shared/app/build-metadata.ts";
-import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
+} from "../../features/providers/registry";
+import { readAppBuildMetadata } from "../../shared/app/build-metadata";
+import { getSettingsDraftLocale } from "../../shared/app/claude-settings";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
-import { ProviderSettingsPanel } from "./ProviderSettingsPanel.tsx";
+import { ProviderSettingsPanel } from "./ProviderSettingsPanel";
 
 type SettingsProps = {
   locale: Locale;

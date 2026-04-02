@@ -1,13 +1,13 @@
-import type { Locale } from "../../i18n.ts";
-import type { AppSettings, AppSettingsUpdater } from "../../types/app.ts";
+import type { Locale } from "../../i18n";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app";
 import {
   appSettingsPayloadEquals,
   cloneAppSettings,
   mergeLegacySettingsIntoAppSettings,
   normalizeAppSettings,
   toAppSettingsPayload,
-} from "../../shared/app/claude-settings.ts";
-import { invokeRpc } from "./client.ts";
+} from "../../shared/app/claude-settings";
+import { invokeRpc } from "./client";
 
 export const getAppSettings = async (): Promise<AppSettings> => (
   normalizeAppSettings(await invokeRpc<unknown>("app_settings_get", {}))

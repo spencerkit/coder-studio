@@ -5,11 +5,11 @@ import fs from "node:fs/promises";
 import {
   BUILTIN_PROVIDER_MANIFESTS,
   getProviderPanelId,
-} from "../apps/web/src/features/providers/registry.ts";
+} from "../apps/web/src/features/providers/registry";
 import {
   buildRuntimeRequirementStatusesFromManifest,
   getProviderStartupBehavior,
-} from "../apps/web/src/features/providers/runtime-helpers.ts";
+} from "../apps/web/src/features/providers/runtime-helpers";
 
 test("settings navigation can derive provider panel ids from builtin manifests", () => {
   const panelIds = BUILTIN_PROVIDER_MANIFESTS.map((manifest) => getProviderPanelId(manifest.id));

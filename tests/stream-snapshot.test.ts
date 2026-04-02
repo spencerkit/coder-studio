@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   mergeMonotonicTextSnapshot,
   planTerminalSnapshotUpdate,
-} from "../apps/web/src/shared/utils/stream-snapshot.ts";
+} from "../apps/web/src/shared/utils/stream-snapshot";
 
 test("mergeMonotonicTextSnapshot keeps the richer local snapshot when replay is shorter", () => {
   assert.equal(

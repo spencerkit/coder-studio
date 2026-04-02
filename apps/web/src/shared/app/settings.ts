@@ -1,9 +1,9 @@
-import type { AppSettings } from "../../types/app.ts";
+import type { AppSettings } from "../../types/app";
 import {
   cloneAppSettings,
   defaultAppSettings,
   normalizeAppSettings,
-} from "./claude-settings.ts";
+} from "./claude-settings";
 
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
 

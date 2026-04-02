@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
 import {
   startWorkspacePaneSplitResize,
   startWorkspacePanelResize,
-} from "../apps/web/src/features/workspace/workspace-layout-actions.ts";
+} from "../apps/web/src/features/workspace/workspace-layout-actions";
 
 const installResizeEnvironment = () => {
   const root = globalThis as typeof globalThis & {

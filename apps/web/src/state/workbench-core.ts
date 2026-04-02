@@ -4,8 +4,8 @@ import {
   formatWorkspaceTitle,
   getPreferredLocale,
   type Locale,
-} from "../i18n.ts";
-import type { WorkspaceControllerState } from "../features/workspace/workspace-controller.ts";
+} from "../i18n";
+import type { WorkspaceControllerState } from "../features/workspace/workspace-controller";
 
 export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued" | "interrupted";
 export type SessionMode = "branch" | "git_tree";
@@ -52,6 +52,7 @@ export type Session = {
   unread: number;
   lastActiveAt: number;
   resumeId?: string;
+  terminalId?: string;
 };
 
 export type GitStatus = {

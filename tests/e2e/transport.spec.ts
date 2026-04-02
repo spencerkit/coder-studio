@@ -546,11 +546,17 @@ test.describe('workspace transport baseline', () => {
 
       const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
 
-      await invokeRpc(page, 'session_runtime_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
         ...controller,
         sessionId,
         cols: 120,
         rows: 30,
+      });
+      expect(started.boot_input).toBeTruthy();
+      await invokeRpc(page, 'terminal_write', {
+        ...controller,
+        terminalId: started.terminal_id,
+        input: started.boot_input,
       });
 
       await waitForLifecycleReplayEvent(
@@ -653,11 +659,17 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
-      await invokeRpc(page, 'session_runtime_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
         cols: 120,
         rows: 30,
+      });
+      expect(started.boot_input).toBeTruthy();
+      await invokeRpc(page, 'terminal_write', {
+        ...controllerAfterReload,
+        terminalId: started.terminal_id,
+        input: started.boot_input,
       });
 
       await waitForLifecycleReplayEvent(
@@ -914,6 +926,76 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
+  test('observer terminal stays unfocused and read-only even after clicking the pane', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-readonly-a', clientId: 'client-readonly-a' };
+    const observerIds = { deviceId: 'device-readonly-b', clientId: 'client-readonly-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-readonly-focus-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
+      await waitForBackendSocket(controller);
+      await seedAppSettings(controller, {
+        agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
+      });
+
+      const startButton = controller.locator('[data-testid^="draft-start-claude-"]').first();
+      await expect(startButton).toBeVisible();
+      await startButton.click();
+      await expect(controller.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+
+      await controller.locator('.agent-pane-xterm').click();
+      await controller.keyboard.type('observer focus guard');
+      await controller.keyboard.press('Enter');
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await waitForWorkspaceTopbar(observer);
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+      await expect(observer.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+
+      await expect.poll(() => observer.evaluate(() => {
+        const helper = document.querySelector('.xterm-helper-textarea');
+        return {
+          textboxActive: document.activeElement?.classList?.contains('xterm-helper-textarea') ?? false,
+          helperInteractive: helper instanceof HTMLTextAreaElement
+            ? (!helper.readOnly || helper.tabIndex !== -1)
+            : false,
+        };
+      })).toEqual({
+        textboxActive: false,
+        helperInteractive: false,
+      });
+
+      await observer.locator('.agent-pane-xterm').click();
+
+      await expect.poll(() => observer.evaluate(() => (
+        document.activeElement?.classList?.contains('xterm-helper-textarea') ?? false
+      ))).toBe(false);
+    } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
   test('observer takeover button surfaces loading and error feedback when takeover request fails', async ({ browser }) => {
     test.setTimeout(45000);
     const controllerContext = await browser.newContext();
@@ -974,7 +1056,7 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
-  test('first draft prompt becomes the session title', async ({ browser }) => {
+  test('draft provider button starts a session immediately with a generated title', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     const titleWorkspacePath = await createExternalTempWorkspace('coder-studio-transport-title-');
@@ -989,16 +1071,13 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
       });
 
-      const firstPrompt = 'title derived from first prompt';
-      const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
-      await expect(draftInput).toBeVisible();
+      const startButton = page.locator('[data-testid^="draft-start-claude-"]').first();
+      await expect(startButton).toBeVisible();
 
-      await draftInput.fill(firstPrompt);
-      await draftInput.press('Enter');
+      await startButton.click();
 
-      await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
-        timeout: 10000,
-      });
+      await expect(page.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('.agent-pane-title').first()).not.toHaveText('New Session');
     } finally {
       if (workspace && !page.isClosed()) {
         await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
@@ -1249,13 +1328,22 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const sessionId = String(session.id);
   controlPlaneCommands.push('create_session');
 
-  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
+  const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
     rows: 30,
   });
   controlPlaneCommands.push('session_runtime_start');
+
+  expect(started.boot_input).toBeTruthy();
+
+  await invokeRpc(page, 'terminal_write', {
+    ...controller,
+    terminalId: started.terminal_id,
+    input: started.boot_input,
+  });
+  controlPlaneCommands.push('terminal_write');
 
   await invokeRpc(page, 'terminal_resize', {
     ...controller,
@@ -1264,13 +1352,6 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     rows: 24,
   });
   controlPlaneCommands.push('terminal_resize');
-
-  await invokeRpc(page, 'terminal_write', {
-    ...controller,
-    terminalId: started.terminal_id,
-    input: 'transport-followup\r',
-  });
-  controlPlaneCommands.push('terminal_write');
 
   const terminalFrame = await waitForWsEvent(
     page,

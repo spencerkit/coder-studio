@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTranslator } from '../apps/web/src/i18n.ts';
+import { createTranslator } from '../apps/web/src/i18n';
 import {
   applyGeneralSettingsPatch,
   cloneAppSettings,
@@ -17,7 +17,7 @@ import {
   mergeLegacySettingsIntoAppSettings,
   resolveClaudeRuntimeProfile,
   resolveCodexRuntimeProfile,
-} from '../apps/web/src/shared/app/claude-settings.ts';
+} from '../apps/web/src/shared/app/claude-settings';
 
 test('formatClaudeLaunchPreview always starts with claude and omits blank args', () => {
   assert.equal(

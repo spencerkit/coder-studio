@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sortTreeNodes } from "../apps/web/src/shared/utils/tree.ts";
+import { sortTreeNodes } from "../apps/web/src/shared/utils/tree";
 
 test("sortTreeNodes memoizes sorted output for the same input identity and locale", () => {
   const nodes = [

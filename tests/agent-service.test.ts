@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
-import { startSessionRuntime } from "../apps/web/src/services/http/session-runtime.service.ts";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
+import { startSessionRuntime } from "../apps/web/src/services/http/session-runtime.service";
 
 type MockFetchCall = {
   input: string | URL | Request;
@@ -42,12 +42,12 @@ test("startSessionRuntime posts to session_runtime_start without any client-supp
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, data: { terminal_id: 9, started: true } }),
+      json: async () => ({ ok: true, data: { terminal_id: 9, started: true, boot_input: "claude\r" } }),
     } as Response;
   }) as typeof fetch;
 
   try {
-    await withMockWindow(
+    const result = await withMockWindow(
       {
         location: {
           origin: "http://127.0.0.1:41033",
@@ -57,21 +57,24 @@ test("startSessionRuntime posts to session_runtime_start without any client-supp
           search: "",
         },
       } as Window & typeof globalThis,
-      async () => {
-        await startSessionRuntime({
-          workspaceId: "ws-1",
-          controller: createWorkspaceControllerState({
-            role: "controller",
-            deviceId: "device-a",
-            clientId: "client-a",
-            fencingToken: 7,
-          }),
-          sessionId: "42",
-          cols: 120,
-          rows: 30,
-        });
-      },
+      async () => startSessionRuntime({
+        workspaceId: "ws-1",
+        controller: createWorkspaceControllerState({
+          role: "controller",
+          deviceId: "device-a",
+          clientId: "client-a",
+          fencingToken: 7,
+        }),
+        sessionId: "42",
+        cols: 120,
+        rows: 30,
+      }),
     );
+    assert.deepEqual(result, {
+      terminal_id: 9,
+      started: true,
+      boot_input: "claude\r",
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

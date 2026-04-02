@@ -8,13 +8,13 @@ import {
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
   shouldRecoverWorkspaceController,
-} from "../apps/web/src/features/workspace/workspace-controller.ts";
+} from "../apps/web/src/features/workspace/workspace-controller";
 import {
   applyWorkspaceControllerEvent,
   applyWorkspaceBootstrapResult,
   applyWorkspaceRuntimeSnapshot,
-} from "../apps/web/src/shared/utils/workspace.ts";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+} from "../apps/web/src/shared/utils/workspace";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
 
 const APP_SETTINGS = {
   agentProvider: "claude" as const,

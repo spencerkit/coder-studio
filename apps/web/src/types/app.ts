@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Locale } from "../i18n.ts";
+import type { Locale } from "../i18n";
 import type {
   AgentMessage,
   AgentProvider,
@@ -12,7 +12,7 @@ import type {
   Tab,
   Terminal,
   TreeNode,
-} from "../state/workbench.ts";
+} from "../state/workbench";
 
 export type Toast = { id: string; text: string; sessionId: string };
 
@@ -133,6 +133,17 @@ export type BackendWorkspaceViewState = {
   file_preview: FilePreview;
 };
 
+export type SessionRuntimeBindingInfo = {
+  session_id: string;
+  terminal_id: string;
+};
+
+export type SessionRuntimeStartResult = {
+  terminal_id: number;
+  started: boolean;
+  boot_input?: string | null;
+};
+
 export type WorkspaceControllerLease = {
   workspace_id: string;
   controller_device_id?: string | null;
@@ -161,6 +172,7 @@ export type SessionRuntimeBindingInfo = {
 export type SessionRuntimeStartResult = {
   terminal_id: number;
   started: boolean;
+  boot_input?: string | null;
 };
 
 export type WorkspaceRuntimeSnapshot = {

@@ -8,8 +8,8 @@ import {
   defaultAppSettings,
   normalizeAppSettings,
   toAppSettingsPayload,
-} from "../apps/web/src/shared/app/provider-settings.ts";
-import { resolveAgentRuntimeCommand } from "../apps/web/src/shared/app/claude-settings.ts";
+} from "../apps/web/src/shared/app/provider-settings";
+import { resolveAgentRuntimeCommand } from "../apps/web/src/shared/app/claude-settings";
 
 test("normalizeAppSettings migrates legacy top-level provider globals into providers map", () => {
   const settings = normalizeAppSettings({

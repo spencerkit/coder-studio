@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceArtifactRefreshQueue } from "../apps/web/src/features/workspace/workspace-artifact-refresh-queue.ts";
+import { createWorkspaceArtifactRefreshQueue } from "../apps/web/src/features/workspace/workspace-artifact-refresh-queue";
 
 const createFakeTimeouts = () => {
   const timers = new Map<number, { callback: () => void; delayMs: number }>();

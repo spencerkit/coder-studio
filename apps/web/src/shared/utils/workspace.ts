@@ -1,9 +1,9 @@
-import { formatTerminalTitle, type Locale } from "../../i18n.ts";
+import { formatTerminalTitle, type Locale } from "../../i18n";
 import {
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
   type WorkspaceControllerState,
-} from "../../features/workspace/workspace-controller.ts";
+} from "../../features/workspace/workspace-controller";
 import {
   createDefaultWorkbenchState,
   createEmptyPreview,
@@ -14,7 +14,7 @@ import {
   type Tab,
   type Terminal,
   type WorkbenchState,
-} from "../../state/workbench-core.ts";
+} from "../../state/workbench-core";
 import type {
   AgentLifecycleHistoryEntry,
   AppSettings,
@@ -27,24 +27,24 @@ import type {
   WorkspaceRuntimeSnapshot,
   WorkspaceRuntimeStateEvent,
   WorkspaceSnapshot,
-} from "../../types/app.ts";
+} from "../../types/app";
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
   isDraftSession,
   resolveVisibleStatus,
-} from "./session.ts";
-import { applySessionRuntimeBindings } from "../../features/workspace/session-runtime-bindings.ts";
-import { mergeMonotonicTextSnapshot } from "./stream-snapshot.ts";
+} from "./session";
+import { applySessionRuntimeBindings } from "../../features/workspace/session-runtime-bindings";
+import { mergeMonotonicTextSnapshot } from "./stream-snapshot";
 import {
   rememberWorkspaceViewBaseline,
   rememberWorkspaceViewBaselines,
   shouldIgnoreIncomingWorkspaceViewPatch,
-} from "../../features/workspace/workspace-view-persistence.ts";
+} from "../../features/workspace/workspace-view-persistence";
 import {
   AGENT_STREAM_BUFFER_LIMIT,
   TERMINAL_STREAM_BUFFER_LIMIT,
-} from "../app/constants.ts";
+} from "../app/constants";
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 
@@ -350,11 +350,12 @@ export const createTabFromWorkspaceSnapshot = (
   });
 
   const existingDraftSessions = existing?.sessions.filter((session) => isDraftSession(session)) ?? [];
+  const existingSessions = existing?.sessions ?? [];
   const sessions = backendSessions.length > 0
     ? [...existingDraftSessions, ...backendSessions]
     : (
-      existingDraftSessions.length > 0
-        ? existingDraftSessions
+      existingSessions.length > 0
+        ? existingSessions
         : [
             createDraftSessionPlaceholder({
               locale,

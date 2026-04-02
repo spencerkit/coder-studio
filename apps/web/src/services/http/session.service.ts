@@ -1,16 +1,16 @@
-import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
-import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
-import type { AgentProvider, SessionMode } from "../../state/workbench.ts";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
+import type { AgentProvider, SessionMode } from "../../state/workbench";
 import type {
   BackendArchiveEntry,
   BackendSession,
   BackendSessionRestoreResult,
   SessionPatch,
   SessionRestoreResult,
-} from "../../types/app.ts";
-import { invokeRpc } from "./client.ts";
-import { sendWsMessage } from "../../ws/client.ts";
-import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback.ts";
+} from "../../types/app";
+import { invokeRpc } from "./client";
+import { sendWsMessage } from "../../ws/client";
+import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback";
 
 type ScheduleTimeout = (callback: () => void, delayMs: number) => unknown;
 type CancelTimeout = (handle: unknown) => void;

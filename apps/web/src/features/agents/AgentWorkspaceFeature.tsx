@@ -1,25 +1,23 @@
-import { memo, useCallback, type FormEvent, type PointerEventHandler, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, type PointerEventHandler, type ReactNode, type RefObject } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type {
   AppTheme,
   SessionHistoryRecord,
   TerminalCompatibilityMode,
 } from "../../types/app";
-import type { Session, SessionPaneNode, Tab, Terminal } from "../../state/workbench";
-import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
-import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
+import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
+import { AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
+import { ShellTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
-import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry.ts";
-import { getProviderDisplayLabel } from "../providers/runtime-helpers.ts";
-import {
-  resolveAgentPaneRenderState,
-  resolveAgentPaneStream,
-  resolveAgentPaneTerminalBinding,
-} from "./agent-pane-render";
+import { sanitizeAnsiTranscript } from "../../shared/utils/ansi-transcript";
+import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry";
+import { getProviderDisplayLabel } from "../providers/runtime-helpers";
+import { resolveAgentPaneRenderState, resolveAgentPaneTerminalBinding } from "./agent-pane-render";
 
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
+  agentInputEnabled: boolean;
   locale: Locale;
   activeTab: Tab;
   activePaneSession: Session;
@@ -29,7 +27,6 @@ type AgentWorkspaceFeatureProps = {
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPromptInputs: Record<string, string>;
   draftPaneModes: Record<string, "new" | "restore">;
   historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
@@ -39,11 +36,8 @@ type AgentWorkspaceFeatureProps = {
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
-  onDraftProviderChange: (paneId: string, provider: Session["provider"]) => void;
+  onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
-  onDraftPromptChange: (paneId: string, value: string) => void;
-  setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
@@ -56,15 +50,15 @@ type AgentWorkspaceFeatureProps = {
 type AgentPaneLeafProps = {
   paneId: string;
   session: Session;
-  terminals: readonly Terminal[];
   activeSessionId: string;
   tabId: string;
+  terminals: Tab["terminals"];
+  agentInputEnabled: boolean;
   locale: Locale;
   isPaneActive: boolean;
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPromptValue: string;
   draftPaneMode: "new" | "restore";
   historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
@@ -73,13 +67,9 @@ type AgentPaneLeafProps = {
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
-  onDraftProviderChange: (paneId: string, provider: Session["provider"]) => void;
+  onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
-  onDraftPromptChange: (paneId: string, value: string) => void;
-  setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
-  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
   t: Translator;
@@ -88,15 +78,15 @@ type AgentPaneLeafProps = {
 const AgentPaneLeaf = memo(({
   paneId,
   session,
-  terminals,
   activeSessionId,
   tabId,
+  terminals,
+  agentInputEnabled,
   locale,
   isPaneActive,
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPromptValue,
   draftPaneMode,
   historyLoading,
   restoreCandidates,
@@ -105,13 +95,9 @@ const AgentPaneLeaf = memo(({
   onSplitPane,
   onCloseAgentPane,
   onDraftPaneModeChange,
-  onDraftProviderChange,
+  onStartDraftSession,
   onRestoreDraftSession,
-  onSubmitDraftPrompt,
-  onDraftPromptChange,
-  setDraftPromptInputRef,
   setAgentTerminalRef,
-  archiveTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
   t,
@@ -131,10 +117,9 @@ const AgentPaneLeaf = memo(({
       : "idle";
   const statusTone = sessionTone(visibleStatus);
   const headerTag = sessionHeaderTag(visibleStatus, locale);
-  const renderState = resolveAgentPaneRenderState(session, isPaneActive);
-  const terminalBinding = renderState.kind === "terminal"
-    ? resolveAgentPaneTerminalBinding(session, renderState.terminalMode, terminals)
-    : null;
+  const renderState = resolveAgentPaneRenderState(session, isPaneActive, agentInputEnabled);
+  const terminalMode = renderState.kind === "draft" ? "interactive" : renderState.terminalMode;
+  const terminalBinding = resolveAgentPaneTerminalBinding(session, terminalMode, terminals);
 
   const handleSetActivePane = useCallback(() => {
     onSetActivePane(paneId, session.id);
@@ -160,24 +145,13 @@ const AgentPaneLeaf = memo(({
     onDraftPaneModeChange(paneId, "restore");
   }, [onDraftPaneModeChange, paneId]);
 
-  const handleSetDraftProvider = useCallback((provider: Session["provider"]) => {
-    onDraftProviderChange(paneId, provider);
-  }, [onDraftProviderChange, paneId]);
+  const handleStartDraftSession = useCallback((provider: Session["provider"]) => {
+    onStartDraftSession(paneId, provider);
+  }, [onStartDraftSession, paneId]);
 
   const handleRestoreDraftSession = useCallback((sessionId: string) => {
     onRestoreDraftSession(paneId, sessionId);
   }, [onRestoreDraftSession, paneId]);
-
-  const handleSubmitDraftPrompt = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const field = event.currentTarget.elements.namedItem("draftPrompt");
-    const value = field instanceof HTMLInputElement ? field.value : undefined;
-    onSubmitDraftPrompt(paneId, value);
-  }, [onSubmitDraftPrompt, paneId]);
-
-  const handleDraftPromptRef = useCallback((element: HTMLInputElement | null) => {
-    setDraftPromptInputRef(paneId, element);
-  }, [paneId, setDraftPromptInputRef]);
 
   const handleTerminalRef = useCallback((handle: XtermBaseHandle | null) => {
     setAgentTerminalRef(paneId, handle);
@@ -270,50 +244,20 @@ const AgentPaneLeaf = memo(({
                 </button>
               </div>
               {draftPaneMode === "new" ? (
-                <form
-                  className="agent-pane-input agent-draft-launcher-form"
-                  onSubmit={handleSubmitDraftPrompt}
-                >
-                  <div className="agent-draft-launcher-tabs">
-                    {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
-                      <button
-                        key={manifest.id}
-                        type="button"
-                        className={`agent-draft-launcher-tab ${session.provider === manifest.id ? "active" : ""}`}
-                        onClick={() => handleSetDraftProvider(manifest.id)}
-                      >
-                        {manifest.badgeLabel}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="agent-compose">
-                    <input
-                      ref={handleDraftPromptRef}
-                      name="draftPrompt"
-                      className="agent-compose-field agent-draft-launcher-field"
-                      value={draftPromptValue}
-                      onChange={(event) => onDraftPromptChange(paneId, event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && (event.nativeEvent as KeyboardEvent).isComposing) {
-                          event.preventDefault();
-                        }
-                      }}
-                      placeholder={t("draftTaskPlaceholder")}
-                      aria-label={t("draftTaskPlaceholder")}
-                      data-testid={`agent-draft-input-${paneId}`}
-                      autoFocus={isPaneActive}
-                    />
+                <div className="agent-draft-restore-list">
+                  {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
                     <button
-                      type="submit"
-                      className="agent-send-button"
-                      disabled={!draftPromptValue.trim()}
-                      title={t("send")}
-                      aria-label={t("send")}
+                      key={manifest.id}
+                      type="button"
+                      className="agent-draft-restore-item"
+                      onClick={() => handleStartDraftSession(manifest.id)}
+                      data-testid={`draft-start-${manifest.id}-${paneId}`}
                     >
-                      <AgentSendIcon />
+                      <strong>{manifest.badgeLabel}</strong>
+                      <span>{getProviderDisplayLabel(manifest.id)}</span>
                     </button>
-                  </div>
-                </form>
+                  ))}
+                </div>
               ) : (
                 <div className="agent-draft-restore-list">
                   {historyLoading ? (
@@ -338,20 +282,41 @@ const AgentPaneLeaf = memo(({
               )}
             </div>
           </div>
-        ) : (!terminalBinding?.stream.trim() && renderState.terminalMode === "readonly") ? (
+        ) : (!terminalBinding.stream.trim() && terminalMode === "readonly") ? (
           <div className="terminal-empty">{t("noAgentOutputYet")}</div>
+        ) : terminalBinding.renderMode === "transcript" ? (
+          <div className={`agent-pane-transcript-shell ${terminalMode}`}>
+            <ShellTerminal
+              ref={handleTerminalRef}
+              terminalId={session.id}
+              outputIdentity={terminalBinding.streamId}
+              outputSyncStrategy={terminalBinding.syncStrategy}
+              output={terminalBinding.stream}
+              theme={theme}
+              fontSize={terminalFontSize}
+              compatibilityMode={terminalCompatibilityMode}
+              mode={terminalMode}
+              autoFocus={terminalMode === "interactive"}
+              onData={terminalMode === "interactive" ? handleTerminalData : undefined}
+              onSize={handleTerminalSize}
+            />
+            <pre className="agent-pane-transcript-output" aria-hidden="true">
+              {sanitizeAnsiTranscript(terminalBinding.stream)}
+            </pre>
+          </div>
         ) : (
-          <AgentStreamTerminal
+          <ShellTerminal
             ref={handleTerminalRef}
-            streamId={terminalBinding?.streamId ?? `${session.id}:transcript`}
-            stream={terminalBinding?.stream ?? ""}
-            toneKey={isPaneActive ? "active" : "inactive"}
+            terminalId={session.id}
+            outputIdentity={terminalBinding.streamId}
+            outputSyncStrategy={terminalBinding.syncStrategy}
+            output={terminalBinding.stream}
             theme={theme}
             fontSize={terminalFontSize}
             compatibilityMode={terminalCompatibilityMode}
-            mode={renderState.terminalMode}
-            autoFocus={renderState.terminalMode === "interactive"}
-            onData={renderState.terminalMode === "interactive" ? handleTerminalData : undefined}
+            mode={terminalMode}
+            autoFocus={terminalMode === "interactive"}
+            onData={terminalMode === "interactive" ? handleTerminalData : undefined}
             onSize={handleTerminalSize}
           />
         )}
@@ -362,12 +327,13 @@ const AgentPaneLeaf = memo(({
   previous.paneId === next.paneId
   && previous.session === next.session
   && previous.tabId === next.tabId
+  && previous.terminals === next.terminals
+  && previous.agentInputEnabled === next.agentInputEnabled
   && previous.locale === next.locale
   && previous.isPaneActive === next.isPaneActive
   && previous.theme === next.theme
   && previous.terminalFontSize === next.terminalFontSize
   && previous.terminalCompatibilityMode === next.terminalCompatibilityMode
-  && previous.draftPromptValue === next.draftPromptValue
   && previous.draftPaneMode === next.draftPaneMode
   && previous.historyLoading === next.historyLoading
   && previous.restoreCandidates === next.restoreCandidates
@@ -377,6 +343,7 @@ AgentPaneLeaf.displayName = "AgentPaneLeaf";
 
 export const AgentWorkspaceFeature = ({
   visible,
+  agentInputEnabled,
   locale,
   activeTab,
   activePaneSession,
@@ -386,7 +353,6 @@ export const AgentWorkspaceFeature = ({
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPromptInputs,
   draftPaneModes,
   historyLoading,
   restoreCandidates,
@@ -396,12 +362,10 @@ export const AgentWorkspaceFeature = ({
   onSplitPane,
   onCloseAgentPane,
   onDraftPaneModeChange,
-  onDraftProviderChange,
+  onStartDraftSession,
   onRestoreDraftSession,
-  onSubmitDraftPrompt,
-  onDraftPromptChange,
-  setDraftPromptInputRef,
   setAgentTerminalRef,
+  archiveTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
   onPaneSplitResizeStart,
@@ -412,6 +376,7 @@ export const AgentWorkspaceFeature = ({
 
   const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
   const viewedHeaderTag = sessionHeaderTag(viewedSession.status, locale);
+  const archiveTerminalBinding = resolveAgentPaneTerminalBinding(viewedSession, "readonly", activeTab.terminals);
 
   const renderAgentPane = (node: SessionPaneNode): ReactNode => {
     if (node.type === "split") {
@@ -432,15 +397,15 @@ export const AgentWorkspaceFeature = ({
         key={node.id}
         paneId={node.id}
         session={session}
-        terminals={activeTab.terminals}
         activeSessionId={activeTab.activeSessionId}
         tabId={activeTab.id}
+        terminals={activeTab.terminals}
+        agentInputEnabled={agentInputEnabled}
         locale={locale}
         isPaneActive={isPaneActive}
         theme={theme}
         terminalFontSize={terminalFontSize}
         terminalCompatibilityMode={terminalCompatibilityMode}
-        draftPromptValue={draftPromptInputs[node.id] ?? ""}
         draftPaneMode={draftPaneModes[node.id] ?? "new"}
         historyLoading={historyLoading}
         restoreCandidates={restoreCandidates}
@@ -449,11 +414,8 @@ export const AgentWorkspaceFeature = ({
         onSplitPane={onSplitPane}
         onCloseAgentPane={onCloseAgentPane}
         onDraftPaneModeChange={onDraftPaneModeChange}
-        onDraftProviderChange={onDraftProviderChange}
+        onStartDraftSession={onStartDraftSession}
         onRestoreDraftSession={onRestoreDraftSession}
-        onSubmitDraftPrompt={onSubmitDraftPrompt}
-        onDraftPromptChange={onDraftPromptChange}
-        setDraftPromptInputRef={setDraftPromptInputRef}
         setAgentTerminalRef={setAgentTerminalRef}
         onAgentTerminalData={onAgentTerminalData}
         onAgentTerminalSize={onAgentTerminalSize}
@@ -498,15 +460,22 @@ export const AgentWorkspaceFeature = ({
                 </div>
                 <div className="agent-pane-body">
                   {viewedSessionPlainStream.trim() ? (
-                    <AgentStreamTerminal
+                    archiveTerminalBinding.renderMode === "transcript" ? (
+                      <pre className="agent-pane-transcript-output archive" aria-hidden="true">
+                        {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
+                      </pre>
+                    ) : (
+                    <ShellTerminal
                       ref={archiveTerminalRef}
-                      streamId={viewedSession.id}
-                      stream={resolveAgentPaneStream(viewedSession)}
-                      toneKey="active"
+                      terminalId={viewedSession.id}
+                      outputIdentity={archiveTerminalBinding.streamId}
+                      outputSyncStrategy={archiveTerminalBinding.syncStrategy}
+                      output={archiveTerminalBinding.stream}
                       theme={theme}
                       fontSize={terminalFontSize}
                       compatibilityMode={terminalCompatibilityMode}
                     />
+                    )
                   ) : (
                     <div className="terminal-empty">{t("archiveViewReadonly")}</div>
                   )}

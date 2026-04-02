@@ -1,6 +1,6 @@
-import type { RuntimeRequirementStatus } from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay.tsx";
-import type { ProviderStartupBehavior } from "./types.ts";
-import { getProviderBadgeLabel, getProviderManifest } from "./registry.ts";
+import type { RuntimeRequirementStatus } from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay";
+import type { ProviderStartupBehavior } from "./types";
+import { getProviderBadgeLabel, getProviderManifest } from "./registry";
 
 const DEFAULT_PROVIDER_STARTUP_BEHAVIOR: ProviderStartupBehavior = {
   startupQuietMs: 400,

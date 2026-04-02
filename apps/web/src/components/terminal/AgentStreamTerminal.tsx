@@ -5,6 +5,7 @@ import { XtermBase, type XtermBaseHandle } from "./XtermBase";
 export type AgentStreamTerminalProps = {
   streamId: string;
   stream: string;
+  syncStrategy?: "incremental" | "snapshot" | "replace";
   toneKey: string;
   theme: "dark";
   fontSize: number;
@@ -18,6 +19,7 @@ export type AgentStreamTerminalProps = {
 export const AgentStreamTerminal = forwardRef<XtermBaseHandle, AgentStreamTerminalProps>(({
   streamId,
   stream,
+  syncStrategy = "snapshot",
   toneKey,
   theme,
   fontSize,
@@ -30,6 +32,7 @@ export const AgentStreamTerminal = forwardRef<XtermBaseHandle, AgentStreamTermin
   <XtermBase
     ref={ref}
     outputIdentity={streamId}
+    outputSyncStrategy={syncStrategy}
     themeIdentity={toneKey}
     output={stream}
     theme={theme}

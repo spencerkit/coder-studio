@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import {
   applyWorkspaceRuntimeStateEvent,
   buildWorkbenchStateFromBootstrap,
-} from "../apps/web/src/shared/utils/workspace.ts";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+} from "../apps/web/src/shared/utils/workspace";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
 import {
   noteWorkspaceViewPersistRequest,
   resetWorkspaceViewBaselines,
   shouldPersistWorkspaceView,
-} from "../apps/web/src/features/workspace/workspace-view-persistence.ts";
+} from "../apps/web/src/features/workspace/workspace-view-persistence";
 
 const APP_SETTINGS = {
   agentProvider: "claude" as const,

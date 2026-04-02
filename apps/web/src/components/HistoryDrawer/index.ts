@@ -1,1 +1,1 @@
-export { HistoryDrawer } from "./HistoryDrawer.tsx";
+export { HistoryDrawer } from "./HistoryDrawer";

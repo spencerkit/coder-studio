@@ -6,15 +6,15 @@ import {
   type WorkbenchState,
   createId,
   createPaneLeaf,
-} from "../../state/workbench-core.ts";
+} from "../../state/workbench-core";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
   findPaneSessionId,
   replacePaneNode,
   updateSplitRatio,
-} from "../../shared/utils/panes.ts";
-import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session.ts";
+} from "../../shared/utils/panes";
+import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session";
 
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;

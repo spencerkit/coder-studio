@@ -1,4 +1,4 @@
-import type { AgentMessage } from "../../state/workbench-core.ts";
+import type { AgentMessage } from "../../state/workbench-core";
 
 const trimBufferedText = (value: string, limit: number) => {
   if (limit <= 0) {

@@ -706,6 +706,17 @@ test('welcome screen can open and close the launch flow', async ({ page }) => {
   await expectWelcomeScreenVisible(page);
 });
 
+test('launch overlay keeps the welcome screen mounted when no workspace is open', async ({ page }) => {
+  await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('workspace-welcome-screen')).toBeVisible();
+  await expect(page.getByTestId('workspace-status-strip')).toHaveCount(0);
+});
+
 test('local workspace flow opens the workspace shell', async ({ page }) => {
   const expectedLabel = await launchLocalWorkspace(page);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);

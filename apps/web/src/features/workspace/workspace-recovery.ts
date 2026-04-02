@@ -1,5 +1,5 @@
-import type { Session, Terminal } from "../../state/workbench-core.ts";
-import type { WorkspaceControllerState } from "./workspace-controller.ts";
+import type { Session, Terminal } from "../../state/workbench-core";
+import type { WorkspaceControllerState } from "./workspace-controller";
 
 export type AgentRecoveryAction = {
   kind: "resume" | "restart";

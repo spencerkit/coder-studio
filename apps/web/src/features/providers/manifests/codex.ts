@@ -1,4 +1,4 @@
-import type { ProviderManifest } from "../types.ts";
+import type { ProviderManifest } from "../types";
 
 const CODEX_APPROVAL_POLICY_OPTIONS = [
   { value: "", labelKey: "codexSelectUnsetOption" },

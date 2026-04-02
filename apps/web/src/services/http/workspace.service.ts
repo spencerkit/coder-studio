@@ -1,4 +1,4 @@
-import type { ExecTarget, WorktreeInfo } from "../../state/workbench.ts";
+import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
 import type {
   BackendSessionHistoryRecord,
   ClaudeSlashSkillEntry,
@@ -14,13 +14,13 @@ import type {
   WorkspaceTree,
   WorkspaceControllerLease,
   WorkspaceViewPatch,
-} from "../../types/app.ts";
-import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
-import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
-import { mapSessionHistoryRecord } from "../../features/workspace/session-history.ts";
-import { fireAndForgetRpc, invokeRpc } from "./client.ts";
-import { sendWsMessage } from "../../ws/client.ts";
-import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback.ts";
+} from "../../types/app";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
+import { mapSessionHistoryRecord } from "../../features/workspace/session-history";
+import { fireAndForgetRpc, invokeRpc } from "./client";
+import { sendWsMessage } from "../../ws/client";
+import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback";
 
 export const launchWorkspace = (source: {
   kind: "remote" | "local";

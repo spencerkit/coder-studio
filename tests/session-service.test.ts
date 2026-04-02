@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
 import {
   createSessionActivityPersistScheduler,
   updateSession,
-} from "../apps/web/src/services/http/session.service.ts";
-import { WsConnectionManager } from "../apps/web/src/ws/connection-manager.ts";
+} from "../apps/web/src/services/http/session.service";
+import { WsConnectionManager } from "../apps/web/src/ws/connection-manager";
 
 const createFakeTimeouts = () => {
   const timers = new Map<number, { callback: () => void; delayMs: number }>();

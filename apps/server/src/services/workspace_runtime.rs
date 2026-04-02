@@ -382,6 +382,12 @@ pub(crate) fn workspace_runtime_attach(
         emit_workspace_controller_change(&app, &lease);
     }
 
+    let session_runtime_bindings =
+        crate::services::session_runtime::collect_workspace_session_runtime_bindings(
+            &workspace_id,
+            state,
+        )?;
+
     Ok(WorkspaceRuntimeSnapshot {
         snapshot,
         controller: lease,

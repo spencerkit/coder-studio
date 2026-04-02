@@ -4,7 +4,7 @@ import {
   appendBoundedMessage,
   appendBufferedChunks,
   appendBufferedText,
-} from "../apps/web/src/features/workspace/workspace-stream-buffer.ts";
+} from "../apps/web/src/features/workspace/workspace-stream-buffer";
 
 test("appendBufferedText keeps the latest tail within the limit", () => {
   assert.equal(

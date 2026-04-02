@@ -1,5 +1,5 @@
-import { WsConnectionManager, type WsConnectionState } from "./connection-manager.ts";
-import type { WsClientEnvelope } from "./protocol.ts";
+import { WsConnectionManager, type WsConnectionState } from "./connection-manager";
+import type { WsClientEnvelope } from "./protocol";
 
 const manager = new WsConnectionManager();
 
