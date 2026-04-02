@@ -3095,4 +3095,134 @@ mod tests {
         }
         assert_eq!(marker_value, "session-runtime-started");
     }
+
+    #[test]
+    fn session_runtime_start_mirrors_bound_terminal_output_into_session_stream() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-transcript");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": test_agent_launch_profile().0,
+                            "startup_args": test_agent_launch_profile().1,
+                            "env": {
+                                "TEST_MARKER": "resume-77"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string()).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 100,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+        assert!(started.terminal_id > 0);
+
+        std::thread::sleep(Duration::from_millis(150));
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert!(refreshed.stream.contains("resume-77"));
+    }
+
+    #[test]
+    fn bound_terminal_exit_marks_session_interrupted_and_clears_binding() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-exit");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 80,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        dispatch_rpc(
+            &app,
+            "terminal_close",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        std::thread::sleep(Duration::from_millis(150));
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert_eq!(refreshed.status, SessionStatus::Interrupted);
+    }
 }

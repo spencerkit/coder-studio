@@ -335,7 +335,7 @@ pub(crate) fn workspace_runtime_attach(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceRuntimeSnapshot, String> {
-    let (lease, snapshot, lifecycle_events, controller_changed) = with_db(state, |conn| {
+    let (lease, mut snapshot, lifecycle_events, controller_changed) = with_db(state, |conn| {
         ensure_workspace_exists_from_conn(conn, &workspace_id)?;
         let now = now_ts();
         let mut lease = load_workspace_controller_lease_from_conn(conn, &workspace_id)?;
@@ -361,6 +361,23 @@ pub(crate) fn workspace_runtime_attach(
         Ok((lease, snapshot, lifecycle_events, controller_changed))
     })?;
 
+    let runtime_terminals =
+        crate::services::session_runtime::collect_workspace_runtime_terminals(&workspace_id, state)?;
+    for runtime_terminal in runtime_terminals {
+        if !snapshot
+            .terminals
+            .iter()
+            .any(|terminal| terminal.id == runtime_terminal.id)
+        {
+            snapshot.terminals.push(runtime_terminal);
+        }
+    }
+    let session_runtime_bindings =
+        crate::services::session_runtime::collect_workspace_session_runtime_bindings(
+            &workspace_id,
+            state,
+        )?;
+
     if controller_changed {
         emit_workspace_controller_change(&app, &lease);
     }
@@ -369,7 +386,7 @@ pub(crate) fn workspace_runtime_attach(
         snapshot,
         controller: lease,
         lifecycle_events,
-        session_runtime_bindings: Vec::new(),
+        session_runtime_bindings,
     })
 }
 
@@ -526,6 +543,40 @@ mod tests {
         )
         .unwrap();
         result.snapshot.workspace.workspace_id
+    }
+
+    fn start_bound_session_for_test(
+        app: &AppHandle,
+        workspace_id: &str,
+        session_id: u64,
+    ) -> SessionRuntimeStartResult {
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.to_string(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        session_runtime_start(
+            SessionRuntimeStartParams {
+                workspace_id: workspace_id.to_string(),
+                session_id: session_id.to_string(),
+                cols: Some(100),
+                rows: Some(24),
+            },
+            app.clone(),
+            app.state(),
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "start failed with fencing token {}: {error}",
+                runtime.controller.fencing_token
+            )
+        })
     }
 
     #[test]
@@ -1132,5 +1183,33 @@ mod tests {
             runtime.snapshot.view_state.pane_layout["sessionId"].as_str(),
             Some(session.id.to_string().as_str())
         );
+    }
+
+    #[test]
+    fn workspace_runtime_attach_includes_runtime_bound_terminal_and_binding() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding");
+        let session = create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::claude(),
+        )
+        .unwrap();
+
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id);
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(runtime.session_runtime_bindings.len(), 1);
+        assert_eq!(runtime.session_runtime_bindings[0].session_id, session.id.to_string());
+        assert_eq!(runtime.session_runtime_bindings[0].terminal_id, started.terminal_id.to_string());
+        assert!(runtime.snapshot.terminals.iter().any(|terminal| terminal.id == started.terminal_id));
     }
 }

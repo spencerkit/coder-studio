@@ -58,6 +58,55 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
     }
 }
 
+fn mirror_bound_terminal_output(
+    workspace_id: &str,
+    terminal_id: u64,
+    text: &str,
+    state: State<'_, AppState>,
+) {
+    if text.is_empty() {
+        return;
+    }
+    if let Ok(Some((binding_workspace_id, session_id))) =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+    {
+        if binding_workspace_id != workspace_id {
+            return;
+        }
+        if let Ok(session_id_num) = session_id.parse::<u64>() {
+            let _ = append_session_stream(state, workspace_id, session_id_num, text);
+        }
+    }
+}
+
+fn mark_bound_terminal_interrupted(
+    workspace_id: &str,
+    terminal_id: u64,
+    exit_text: &str,
+    state: State<'_, AppState>,
+) {
+    if let Ok(Some((binding_workspace_id, session_id))) =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+    {
+        let _ = crate::services::session_runtime::unbind_session_runtime_by_terminal(
+            terminal_id,
+            state,
+        );
+        if binding_workspace_id != workspace_id {
+            return;
+        }
+        if let Ok(session_id_num) = session_id.parse::<u64>() {
+            let _ = append_session_stream(state, workspace_id, session_id_num, exit_text);
+            let _ = set_session_status_if_not_archived(
+                state,
+                workspace_id,
+                session_id_num,
+                SessionStatus::Interrupted,
+            );
+        }
+    }
+}
+
 pub(crate) fn create_terminal_runtime(
     workspace_id: &str,
     cwd: &str,
@@ -137,6 +186,8 @@ pub(crate) fn create_terminal_runtime(
                                 &text,
                             );
                         }
+                        let state: State<AppState> = state_handle.state();
+                        mirror_bound_terminal_output(&workspace_id_out, terminal_id, &text, state);
                     }
                     break;
                 }
@@ -156,6 +207,8 @@ pub(crate) fn create_terminal_runtime(
                             &text,
                         );
                     }
+                    let state: State<AppState> = state_handle.state();
+                    mirror_bound_terminal_output(&workspace_id_out, terminal_id, &text, state);
                 }
                 Err(_) => break,
             }
@@ -178,6 +231,7 @@ pub(crate) fn create_terminal_runtime(
             let _ = append_workspace_terminal_output(state, &workspace_id_out, terminal_id, exit_text);
             let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
+        mark_bound_terminal_interrupted(&workspace_id_out, terminal_id, exit_text, state);
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);
         }
@@ -270,6 +324,7 @@ pub(crate) fn terminal_close(
     if let Some(runtime) = runtime {
         terminate_terminal_runtime(runtime);
     }
+    mark_bound_terminal_interrupted(&workspace_id, terminal_id, "\n[terminal exited]\n", state);
     let _ = delete_workspace_terminal(state, &workspace_id, terminal_id);
 
     Ok(())
@@ -297,6 +352,7 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
 
     for (terminal_id, runtime) in runtimes {
         terminate_terminal_runtime(runtime);
+        mark_bound_terminal_interrupted(workspace_id, terminal_id, "\n[terminal exited]\n", state);
         let _ = delete_workspace_terminal(state, workspace_id, terminal_id);
     }
 }

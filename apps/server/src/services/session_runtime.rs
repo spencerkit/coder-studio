@@ -76,6 +76,68 @@ pub(crate) fn unbind_session_runtime_by_terminal(
     Ok(session_key)
 }
 
+pub(crate) fn session_runtime_binding_for_terminal(
+    terminal_id: u64,
+    state: State<'_, AppState>,
+) -> Result<Option<(String, String)>, String> {
+    let key = state
+        .terminal_runtime_bindings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&terminal_id)
+        .cloned();
+    let Some(key) = key else {
+        return Ok(None);
+    };
+    let Some((workspace_id, session_id)) = key.split_once(':') else {
+        return Err("invalid_session_runtime_key".to_string());
+    };
+    Ok(Some((workspace_id.to_string(), session_id.to_string())))
+}
+
+pub(crate) fn collect_workspace_session_runtime_bindings(
+    workspace_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionRuntimeBindingInfo>, String> {
+    let prefix = format!("{workspace_id}:");
+    let bindings = state
+        .session_runtime_bindings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .filter_map(|(key, terminal_id)| {
+            let session_id = key.strip_prefix(&prefix)?;
+            Some(SessionRuntimeBindingInfo {
+                session_id: session_id.to_string(),
+                terminal_id: terminal_id.to_string(),
+            })
+        })
+        .collect();
+    Ok(bindings)
+}
+
+pub(crate) fn collect_workspace_runtime_terminals(
+    workspace_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalInfo>, String> {
+    let bindings = collect_workspace_session_runtime_bindings(workspace_id, state)?;
+    let runtimes = state.terminals.lock().map_err(|e| e.to_string())?;
+    let terminals = bindings
+        .into_iter()
+        .filter_map(|binding| {
+            let terminal_id = binding.terminal_id.parse::<u64>().ok()?;
+            let runtime = runtimes.get(&terminal_key(workspace_id, terminal_id))?.clone();
+            let output = runtime.output.lock().ok()?.clone();
+            Some(TerminalInfo {
+                id: terminal_id,
+                output,
+                recoverable: true,
+            })
+        })
+        .collect();
+    Ok(terminals)
+}
+
 fn resolve_session_shell_env(
     app: &AppHandle,
     workspace_id: &str,
@@ -115,25 +177,28 @@ pub(crate) fn session_runtime_start(
     state: State<'_, AppState>,
 ) -> Result<SessionRuntimeStartResult, String> {
     let binding_key = session_runtime_key(&params.workspace_id, &params.session_id);
-    if let Some(existing_terminal_id) = state
-        .session_runtime_bindings
-        .lock()
-        .map_err(|e| e.to_string())?
-        .get(&binding_key)
-        .copied()
-    {
+    let existing_terminal_id = {
+        state
+            .session_runtime_bindings
+            .lock()
+            .map_err(|e| e.to_string())?
+            .get(&binding_key)
+            .copied()
+    };
+    if let Some(existing_terminal_id) = existing_terminal_id {
         let terminal_key = terminal_key(&params.workspace_id, existing_terminal_id);
-        if state
+        let is_live = state
             .terminals
             .lock()
             .map_err(|e| e.to_string())?
-            .contains_key(&terminal_key)
-        {
+            .contains_key(&terminal_key);
+        if is_live {
             return Ok(SessionRuntimeStartResult {
                 terminal_id: existing_terminal_id,
                 started: false,
             });
         }
+        let _ = unbind_session_runtime_by_terminal(existing_terminal_id, state);
     }
 
     let session_id_num = params

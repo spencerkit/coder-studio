@@ -88,7 +88,7 @@ pub(crate) use models::{
     CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry, FilesystemListResponse,
     FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId,
     SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode, SessionPatch,
-    SessionRestoreResult, SessionRuntimeStartResult, SessionStatus,
+    SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult, SessionStatus,
     TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState,
     WorkspaceControllerLease, WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
     WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree,
