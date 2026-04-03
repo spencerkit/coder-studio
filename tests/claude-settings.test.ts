@@ -32,7 +32,7 @@ test('formatClaudeLaunchPreview always starts with claude and omits blank args',
   );
 });
 
-test('formatCodexRuntimeCommand includes generated config overrides and codex hooks feature', () => {
+test('formatCodexRuntimeCommand includes generated config overrides without explicit codex hooks feature args', () => {
   assert.equal(
     formatCodexRuntimeCommand({
       executable: 'codex',
@@ -44,7 +44,7 @@ test('formatCodexRuntimeCommand includes generated config overrides and codex ho
       modelReasoningEffort: '',
       env: {},
     }),
-    'codex --full-auto --config model="gpt-5.4" --config approval_policy="on-request" --enable codex_hooks',
+    'codex --full-auto --config model="gpt-5.4" --config approval_policy="on-request"',
   );
 });
 

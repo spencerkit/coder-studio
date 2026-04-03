@@ -353,7 +353,7 @@ fn upsert_codex_global_feature(root: &mut toml::Table, feature_name: &str) {
     features.insert(feature_name.to_string(), toml::Value::Boolean(true));
 }
 
-fn ensure_codex_project_feature_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
+fn ensure_codex_global_feature_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
     let current = if matches!(target, ExecTarget::Wsl { .. }) {
         run_cmd(
             target,
@@ -398,7 +398,7 @@ fn ensure_codex_project_feature_settings(cwd: &str, target: &ExecTarget) -> Resu
 }
 
 pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
-    ensure_codex_project_feature_settings(cwd, target)?;
+    ensure_codex_global_feature_settings(cwd, target)?;
 
     let current = if matches!(target, ExecTarget::Wsl { .. }) {
         run_cmd(

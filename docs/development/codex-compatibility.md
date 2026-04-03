@@ -2,18 +2,20 @@
 
 ## 真实验证结论
 
-- 验证时间：2026-03-30
-- 验证版本：`codex-cli 0.117.0`
+- 验证时间：2026-04-03
+- 当前本机版本：`codex-cli 0.118.0`
 - 已在真实 CLI 上验证通过的链路：
-  - `codex --enable codex_hooks ...` 可以触发 workspace 级 `.codex/hooks.json`
+  - 在 `~/.codex/config.toml` 含 `[features] codex_hooks = true` 时，`codex ...` 可以触发 workspace 级 `.codex/hooks.json`
   - `SessionStart` / `UserPromptSubmit` hook payload 会真实包含 `session_id`
-  - `codex resume <session_id> --enable codex_hooks ...` 会继续写回同一个 `session_id`
-  - 当前后端采用的参数顺序 `codex resume <id> ...` 对 Codex CLI 0.117.0 是可工作的
+  - `codex resume <session_id> ...` 会继续写回同一个 `session_id`
+  - 当前后端采用的参数顺序 `codex resume <id> ...` 对 Codex CLI 0.118.0 是可工作的
   - 新 workspace 现在不会再被后端预写一个默认 `claude` session，首个 draft session 的 provider 选择可以真实生效
 - 已确认的真实差异：
-  - 如果不显式打开 `codex_hooks` feature，`.codex/hooks.json` 即使存在也不会触发
+  - 在空 `HOME`（没有 `~/.codex/config.toml`）下，`codex features list` 会显示 `codex_hooks = false`，不能假设这个 feature 默认常开
+  - 如果 `codex_hooks` feature 未开启，`.codex/hooks.json` 即使存在也不会触发
+  - `SessionStart` 不会在 TUI 仅仅启动时立刻触发；它会在第一条真正 turn 开始时才触发，所以启动后立刻可能还没有 `resume_id`
   - 首次进入一个未信任 repo 时，Codex 会先弹目录信任确认，这一点和 Claude 不对齐
-  - `codex-cli 0.117.0` 的交互式 TUI 在受控 PTY 下对 stdin 驱动并不稳定：
+  - `codex-cli 0.118.0` 的交互式 TUI 在受控 PTY 下对 stdin 驱动并不稳定：
     - 在 Coder Studio 真实 UI 联调里，首条 prompt 可以被写入 Codex 输入框，但不会稳定触发一次真正的提交，因此 `resume_id` 不会回填
     - 直接对真实 PTY 注入 prompt 时，Codex 还可能在 `tui_app_server/src/wrapping.rs` 崩溃
   - 结论上，当前版本的 Codex 不能像 Claude 一样可靠地依赖“启动一个常驻 TUI + 后续通过 stdin 持续喂输入”这条链路
@@ -34,9 +36,9 @@
   - 公共链路只负责读取 session 真值、启动 PTY、注入共享环境变量
   - `claude-client` / `codex-client` 各自负责 `start` / `resume` 命令差异和 workspace hooks
 - Codex 启动命令规则已与既定方案对齐：
-  - 无 `resume_id` 时：`codex ... --enable codex_hooks`
-  - 有 `resume_id` 时：`codex resume <resume_id> ... --enable codex_hooks`
-- workspace 级 `.codex/hooks.json` 会在启动前自动写入或更新，且启动命令会显式打开 `codex_hooks` feature，Codex hook 回传的 `session_id` 会统一写入 session 的 `resume_id`。
+  - 无 `resume_id` 时：`codex ...`
+  - 有 `resume_id` 时：`codex resume <resume_id> ...`
+- workspace 级 `.codex/hooks.json` 会在启动前自动写入或更新；后端会确保全局 `~/.codex/config.toml` 含 `[features] codex_hooks = true`，但不会向启动命令再拼 `--enable codex_hooks`。Codex hook 回传的 `session_id` 会统一写入 session 的 `resume_id`。
 - 前端会话链路已 provider-aware：
   - session/history/recovery 全部改为使用 `provider + resumeId`
   - 历史列表和会话 pane 会显示 provider
@@ -77,13 +79,13 @@
   - `profiles.*`
   - 更复杂的 `approval_policy` object 形态
   - 各类嵌套 table / provider transport 细项
-- 当前不会替用户写入或改写 `~/.codex/config.toml` / workspace `.codex/config.toml`：
+- 当前不会写 workspace `.codex/config.toml`：
   - 读取会做 hydrate
   - 启动覆盖通过 `--config` 完成
-  - 这样可以避免 Coder Studio 去篡改用户自己的 Codex 配置文件
+  - 但运行前会确保全局 `~/.codex/config.toml` 含 `[features] codex_hooks = true`，因为当前 Codex CLI 在空 `HOME` 下不会默认打开这个 feature
 - Codex hooks 目前仍然是实验特性：
-  - 需要启动命令显式追加 `--enable codex_hooks`
-  - 当前实现已经在运行时强制打开这个 feature，但这仍然是对实验能力的依赖
+  - 当前实现依赖全局 feature flag 生效
+  - 启动命令本身不会再显式追加 `--enable codex_hooks`，但这仍然是对实验能力的依赖
 - slash / skills 相关逻辑仍然是 Claude-only，这一轮没有给 Codex 做同级支持。
 - 没有做 Codex native Windows 的专门兼容增强；Windows 下如果 CLI 或 hooks 行为不同，当前按降级处理。
 - Windows 宿主 + WSL workspace 的场景，现在不再走专门的 WSL agent 通道：

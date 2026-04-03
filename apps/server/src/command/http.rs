@@ -3261,4 +3261,50 @@ mod tests {
         let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
         assert_eq!(refreshed.status, SessionStatus::Interrupted);
     }
+
+    #[test]
+    fn session_runtime_start_marks_session_running_before_hooks_arrive() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-running");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert_eq!(refreshed.status, SessionStatus::Running);
+        assert!(refreshed.resume_id.is_none());
+    }
 }

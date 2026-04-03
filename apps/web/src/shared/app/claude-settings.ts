@@ -122,8 +122,6 @@ const buildCodexConfigOverrideArgs = (
   return parts;
 };
 
-const buildCodexFeatureArgs = (): string[] => ["--enable", "codex_hooks"];
-
 export const formatClaudeRuntimeCommand = (profile: ClaudeRuntimeProfile): string => (
   [profile.executable.trim(), ...profile.startupArgs.map((arg) => arg.trim()).filter(Boolean)]
     .filter(Boolean)
@@ -135,7 +133,6 @@ export const formatCodexRuntimeCommand = (profile: CodexRuntimeProfile): string 
     profile.executable.trim(),
     ...profile.extraArgs.map((arg) => arg.trim()).filter(Boolean),
     ...buildCodexConfigOverrideArgs(profile),
-    ...buildCodexFeatureArgs(),
   ]
     .filter(Boolean)
     .join(" ")

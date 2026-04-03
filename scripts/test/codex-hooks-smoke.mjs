@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -109,6 +109,26 @@ function runScriptCommand(workspace, command) {
   return { child, getTranscript: () => transcript };
 }
 
+function codexHooksFeatureEnabled() {
+  const result = spawnSync('codex', ['features', 'list'], {
+    encoding: 'utf8',
+  });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(`failed to inspect codex features\n${(result.stderr || result.stdout || '').trim()}`.trim());
+  }
+
+  const line = result.stdout
+    .split('\n')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith('codex_hooks'));
+
+  if (!line) {
+    throw new Error('codex features list did not report codex_hooks');
+  }
+
+  return line.split(/\s+/).at(-1) === 'true';
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
 
@@ -119,6 +139,9 @@ async function main() {
   const workspaceStat = await fs.stat(options.workspace).catch(() => null);
   if (!workspaceStat?.isDirectory()) {
     throw new Error(`workspace does not exist: ${options.workspace}`);
+  }
+  if (!codexHooksFeatureEnabled()) {
+    throw new Error('codex_hooks is disabled for the current HOME; enable it globally in ~/.codex/config.toml before running this smoke test');
   }
 
   const hooksDir = path.join(options.workspace, '.codex');
@@ -164,7 +187,6 @@ async function main() {
   try {
     const startCommand = [
       'codex',
-      '--enable', 'codex_hooks',
       '--no-alt-screen',
       '--full-auto',
       quoteForSingleShell(startPrompt),
@@ -200,7 +222,6 @@ async function main() {
       'codex',
       'resume',
       startState.sessionId,
-      '--enable', 'codex_hooks',
       '--no-alt-screen',
       '--full-auto',
       quoteForSingleShell(resumePrompt),

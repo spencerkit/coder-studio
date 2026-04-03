@@ -97,6 +97,23 @@ test("resolveAgentRuntimeCommand uses generic provider settings for unknown prov
   );
 });
 
+test("resolveAgentRuntimeCommand omits explicit codex hooks feature args for codex provider", () => {
+  const configured = applyProviderGlobalPatch(defaultAppSettings(), "codex", {
+    executable: "codex",
+    extraArgs: ["--full-auto"],
+    model: "gpt-5.4",
+    approvalPolicy: "on-request",
+  });
+  const settings = applyAgentDefaultsPatch(configured, {
+    provider: "codex",
+  });
+
+  assert.equal(
+    resolveAgentRuntimeCommand(settings, { type: "native" }, "codex"),
+    'codex --full-auto --config model="gpt-5.4" --config approval_policy="on-request"',
+  );
+});
+
 test("unknown provider fallback stays stable across normalize clone and patch flows", () => {
   const base = applyAgentDefaultsPatch(defaultAppSettings(), {
     provider: "unknown-provider",
