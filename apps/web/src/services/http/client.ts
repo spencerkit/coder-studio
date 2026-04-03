@@ -1,5 +1,5 @@
-import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend.ts";
-import { isPublicModeActive, markUnauthorized } from "./auth.service.ts";
+import { applyRuntimeQuery, backendBaseUrl } from "../../shared/runtime/backend";
+import { isPublicModeActive, markUnauthorized } from "./auth.service";
 
 const rpcEndpoint = (command: string) => {
   const base = backendBaseUrl();

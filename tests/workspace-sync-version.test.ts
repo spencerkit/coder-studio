@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createWorkspaceSyncVersionTracker } from "../apps/web/src/features/workspace/workspace-sync-version.ts";
+import { createWorkspaceSyncVersionTracker } from "../apps/web/src/features/workspace/workspace-sync-version";
 
 test("later sync versions invalidate earlier in-flight syncs for the same workspace", () => {
   const tracker = createWorkspaceSyncVersionTracker();

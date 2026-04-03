@@ -2,17 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import type { MutableRefObject } from "react";
-import { createTranslator } from "../apps/web/src/i18n.ts";
+import { createTranslator } from "../apps/web/src/i18n";
 import {
   commitAgentSessionTitle,
   trackAgentInitialTitleInput,
   type AgentRuntimeRefs,
-} from "../apps/web/src/features/agents/agent-runtime-actions.ts";
-import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions.ts";
-import { createSessionFromBackend } from "../apps/web/src/shared/utils/session.ts";
-import type { Session } from "../apps/web/src/state/workbench.ts";
-import type { AppSettings, Toast } from "../apps/web/src/types/app.ts";
-import type { WorkbenchState } from "../apps/web/src/state/workbench.ts";
+} from "../apps/web/src/features/agents/agent-runtime-actions";
+import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
+import { createSessionFromBackend } from "../apps/web/src/shared/utils/session";
+import type { Session } from "../apps/web/src/state/workbench";
+import type { AppSettings, Toast } from "../apps/web/src/types/app";
+import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
@@ -289,6 +289,27 @@ test("createSessionFromBackend preserves an existing custom title over a generic
   );
 
   assert.equal(session.title, "test session duplication");
+});
+
+test("createSessionFromBackend sanitizes persisted agent stream control sequences", () => {
+  const session = createSessionFromBackend(
+    {
+      id: 5,
+      title: "Session 5",
+      status: "idle",
+      mode: "branch",
+      auto_feed: true,
+      queue: [],
+      messages: [],
+      stream: "hello\n\x1b[1A\x1b[2K\rworking\x1b[31m red\x1b[0m\n",
+      unread: 0,
+      last_active_at: 1,
+      claude_session_id: null,
+    },
+    "en",
+  );
+
+  assert.equal(session.stream, "hello\nworking\x1b[31m red\x1b[0m\n");
 });
 
 test("materializeSession persists the derived first-input title to the backend session", async () => {

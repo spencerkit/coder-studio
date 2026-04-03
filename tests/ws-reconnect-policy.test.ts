@@ -4,7 +4,7 @@ import {
   getReconnectDelayMs,
   WS_RECONNECT_BASE_DELAY_MS,
   WS_RECONNECT_MAX_DELAY_MS,
-} from "../apps/web/src/ws/reconnect-policy.ts";
+} from "../apps/web/src/ws/reconnect-policy";
 
 test("reconnect policy starts at the base delay", () => {
   assert.equal(getReconnectDelayMs(0), WS_RECONNECT_BASE_DELAY_MS);

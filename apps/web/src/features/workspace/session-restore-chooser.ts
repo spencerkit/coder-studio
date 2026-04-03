@@ -1,4 +1,4 @@
-import type { SessionHistoryRecord } from "../../types/app.ts";
+import type { SessionHistoryRecord } from "../../types/app";
 
 export const listRestoreCandidatesForWorkspace = ({
   workspaceId,

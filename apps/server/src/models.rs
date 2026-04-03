@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -27,6 +27,41 @@ pub enum SessionStatus {
     Suspended,
     Queued,
     Interrupted,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct ProviderId(String);
+
+pub type AgentProvider = ProviderId;
+
+impl Default for ProviderId {
+    fn default() -> Self {
+        Self::claude()
+    }
+}
+
+impl ProviderId {
+    pub fn new(value: impl Into<String>) -> Result<Self, String> {
+        let raw = value.into();
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err("invalid_provider_id".to_string());
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn claude() -> Self {
+        Self("claude".to_string())
+    }
+
+    pub fn codex() -> Self {
+        Self("codex".to_string())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -66,6 +101,10 @@ fn default_idle_policy_settings() -> IdlePolicy {
 
 fn default_claude_executable() -> String {
     "claude".to_string()
+}
+
+fn default_codex_executable() -> String {
+    "codex".to_string()
 }
 
 fn default_json_object() -> Value {
@@ -147,30 +186,136 @@ impl Default for ClaudeRuntimeProfile {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
-pub struct TargetClaudeOverride {
-    pub enabled: bool,
-    pub profile: ClaudeRuntimeProfile,
+pub struct AgentDefaultsPayload {
+    pub provider: ProviderId,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
-pub struct ClaudeTargetOverrides {
-    pub native: Option<TargetClaudeOverride>,
-    pub wsl: Option<TargetClaudeOverride>,
+pub struct CodexRuntimeProfile {
+    #[serde(default = "default_codex_executable")]
+    pub executable: String,
+    #[serde(alias = "extraArgs")]
+    pub extra_args: Vec<String>,
+    pub model: String,
+    #[serde(alias = "approvalPolicy")]
+    pub approval_policy: String,
+    #[serde(alias = "sandboxMode")]
+    pub sandbox_mode: String,
+    #[serde(alias = "webSearch")]
+    pub web_search: String,
+    #[serde(alias = "modelReasoningEffort")]
+    pub model_reasoning_effort: String,
+    pub env: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+impl Default for CodexRuntimeProfile {
+    fn default() -> Self {
+        Self {
+            executable: default_codex_executable(),
+            extra_args: Vec::new(),
+            model: String::new(),
+            approval_policy: String::new(),
+            sandbox_mode: String::new(),
+            web_search: String::new(),
+            model_reasoning_effort: String::new(),
+            env: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
-pub struct ClaudeSettingsPayload {
-    pub global: ClaudeRuntimeProfile,
-    pub overrides: ClaudeTargetOverrides,
+pub struct ProviderSettingsPayload {
+    pub global: Value,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+impl Default for ProviderSettingsPayload {
+    fn default() -> Self {
+        Self {
+            global: default_json_object(),
+        }
+    }
+}
+
+fn default_provider_settings() -> BTreeMap<String, ProviderSettingsPayload> {
+    BTreeMap::from([
+        (
+            "claude".to_string(),
+            ProviderSettingsPayload {
+                global: serde_json::to_value(ClaudeRuntimeProfile::default())
+                    .unwrap_or_else(|_| default_json_object()),
+            },
+        ),
+        (
+            "codex".to_string(),
+            ProviderSettingsPayload {
+                global: serde_json::to_value(CodexRuntimeProfile::default())
+                    .unwrap_or_else(|_| default_json_object()),
+            },
+        ),
+    ])
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(default)]
 pub struct AppSettingsPayload {
     pub general: GeneralSettingsPayload,
-    pub claude: ClaudeSettingsPayload,
+    #[serde(alias = "agentDefaults")]
+    pub agent_defaults: AgentDefaultsPayload,
+    pub providers: BTreeMap<String, ProviderSettingsPayload>,
+}
+
+impl Default for AppSettingsPayload {
+    fn default() -> Self {
+        Self {
+            general: GeneralSettingsPayload::default(),
+            agent_defaults: AgentDefaultsPayload::default(),
+            providers: default_provider_settings(),
+        }
+    }
+}
+
+impl AppSettingsPayload {
+    pub fn provider_global(&self, provider_id: &str) -> Option<&Value> {
+        self.providers
+            .get(provider_id)
+            .map(|payload| &payload.global)
+    }
+
+    pub fn provider_profile<T>(&self, provider_id: &str) -> Option<T>
+    where
+        T: DeserializeOwned,
+    {
+        self.provider_global(provider_id)
+            .and_then(|value| serde_json::from_value::<T>(value.clone()).ok())
+    }
+
+    pub fn set_provider_global(&mut self, provider_id: impl Into<String>, global: Value) {
+        self.providers
+            .insert(provider_id.into(), ProviderSettingsPayload { global });
+    }
+
+    pub fn set_provider_profile<T>(
+        &mut self,
+        provider_id: impl Into<String>,
+        profile: &T,
+    ) -> Result<(), String>
+    where
+        T: Serialize,
+    {
+        self.set_provider_global(
+            provider_id,
+            serde_json::to_value(profile).map_err(|error| error.to_string())?,
+        );
+        Ok(())
+    }
+
+    pub fn ensure_builtin_provider_defaults(&mut self) {
+        for (provider_id, payload) in default_provider_settings() {
+            self.providers.entry(provider_id).or_insert(payload);
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -202,18 +347,31 @@ pub struct SessionInfo {
     pub title: String,
     pub status: SessionStatus,
     pub mode: SessionMode,
+    pub provider: AgentProvider,
     pub auto_feed: bool,
     pub queue: Vec<QueueTask>,
     pub messages: Vec<SessionMessage>,
-    pub stream: String,
     pub unread: u32,
     pub last_active_at: i64,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct AgentStartResult {
     pub started: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct SessionRuntimeBindingInfo {
+    pub session_id: String,
+    pub terminal_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct SessionRuntimeStartResult {
+    pub terminal_id: u64,
+    pub started: bool,
+    pub boot_input: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -267,12 +425,13 @@ pub struct SessionHistoryRecord {
     pub session_id: u64,
     pub title: String,
     pub status: SessionStatus,
+    pub provider: AgentProvider,
     pub archived: bool,
     pub mounted: bool,
     pub recoverable: bool,
     pub last_active_at: i64,
     pub archived_at: Option<i64>,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -340,6 +499,8 @@ pub struct AgentEvent {
     pub session_id: String,
     pub kind: String,
     pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_data: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -468,6 +629,8 @@ pub struct WorkspaceRuntimeSnapshot {
     pub controller: WorkspaceControllerLease,
     #[serde(default)]
     pub lifecycle_events: Vec<AgentLifecycleHistoryEntry>,
+    #[serde(default)]
+    pub session_runtime_bindings: Vec<SessionRuntimeBindingInfo>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -514,10 +677,9 @@ pub struct SessionPatch {
     pub auto_feed: Option<bool>,
     pub queue: Option<Vec<QueueTask>>,
     pub messages: Option<Vec<SessionMessage>>,
-    pub stream: Option<String>,
     pub unread: Option<u32>,
     pub last_active_at: Option<i64>,
-    pub claude_session_id: Option<String>,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Debug)]

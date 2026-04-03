@@ -9,8 +9,8 @@ import {
   createId,
   createPaneLeaf,
   createSession,
-} from "../../state/workbench-core.ts";
-import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n.ts";
+} from "../../state/workbench-core";
+import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
   archiveSession as archiveSessionRequest,
   createSession as createSessionRequest,
@@ -18,8 +18,8 @@ import {
   restoreSession as restoreSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
-} from "../../services/http/session.service.ts";
-import { getWorkspaceSnapshot } from "../../services/http/workspace.service.ts";
+} from "../../services/http/session.service";
+import { getWorkspaceSnapshot } from "../../services/http/workspace.service";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -27,7 +27,7 @@ import {
   remapPaneSession,
   removePaneNode,
   replacePaneNode,
-} from "../../shared/utils/panes.ts";
+} from "../../shared/utils/panes";
 import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
@@ -38,12 +38,12 @@ import {
   restoreVisibleStatus,
   sessionTitleFromInput,
   toBackgroundStatus,
-} from "../../shared/utils/session.ts";
-import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace.ts";
-import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app.ts";
+} from "../../shared/utils/session";
+import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
+import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
 
-import type { CompletionReminderTarget } from "./completion-reminders.ts";
-import { advanceWorkspaceSyncVersion } from "./workspace-sync-version.ts";
+import type { CompletionReminderTarget } from "./completion-reminders";
+import { advanceWorkspaceSyncVersion } from "./workspace-sync-version";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
@@ -75,12 +75,20 @@ export const createWorkspaceSessionActions = ({
     branch: tab.git.branch,
   }).messages;
 
-  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => createDraftSessionPlaceholder({
-    locale,
-    workspacePath: tab.project?.path ?? t("noWorkspace"),
-    branch: tab.git.branch,
-    mode,
-  });
+  const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => {
+    const inheritedProvider = tab.sessions.find((session) => session.id === tab.activeSessionId)?.provider
+      ?? appSettings.agentDefaults.provider;
+    const draft = createDraftSessionPlaceholder({
+      locale,
+      workspacePath: tab.project?.path ?? t("noWorkspace"),
+      branch: tab.git.branch,
+      mode,
+    });
+    return {
+      ...draft,
+      provider: inheritedProvider,
+    };
+  };
 
   const controllerForTab = (tabId: string) =>
     stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
@@ -116,8 +124,14 @@ export const createWorkspaceSessionActions = ({
     }
 
     let nextSession: Session | null = null;
+    advanceWorkspaceSyncVersion(tabId);
     const created = await withServiceFallback<BackendSession | null>(
-      () => createSessionRequest(tabId, currentSession.mode, currentTab.controller),
+      () => createSessionRequest(
+        tabId,
+        currentSession.mode,
+        currentSession.provider,
+        currentTab.controller,
+      ),
       null,
     );
     if (created) {
@@ -130,21 +144,24 @@ export const createWorkspaceSessionActions = ({
     updateTab(tabId, (tab) => {
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
-      const baseSession = nextSession ?? createSession(tab.sessions.length + 1, draftSession.mode, locale);
-      const title = sessionTitleFromInput(firstInput) || draftSession.title || formatSessionTitle(baseSession.id, locale);
+      const baseSession = nextSession
+        ?? createSession(tab.sessions.length + 1, draftSession.mode, locale, draftSession.provider);
+      const draftTitle = draftSession.title.trim();
+      const title = sessionTitleFromInput(firstInput)
+        || (draftTitle && draftTitle !== t("draftSessionTitle") ? draftTitle : (baseSession.title || formatSessionTitle(baseSession.id, locale)));
       const preparedSession: Session = {
         ...baseSession,
         title,
         status: baseSession.status === "queued" ? "queued" : "idle",
         mode: draftSession.mode,
+        provider: draftSession.provider,
         autoFeed: draftSession.autoFeed,
         isDraft: false,
         queue: draftSession.queue,
         messages: draftSession.messages,
-        stream: draftSession.stream,
         unread: 0,
         lastActiveAt: Date.now(),
-        claudeSessionId: baseSession.claudeSessionId,
+        resumeId: baseSession.resumeId,
       };
       const remainingSessions = tab.sessions.filter((session) => session.id !== sessionId);
       tabSnapshot = {
@@ -168,8 +185,9 @@ export const createWorkspaceSessionActions = ({
     });
 
     if (!tabSnapshot || !sessionSnapshot) return null;
-    if (titlePatch) {
-      await syncSessionPatch(tabId, titlePatch.sessionId, { title: titlePatch.title });
+    const pendingTitlePatch = titlePatch;
+    if (pendingTitlePatch) {
+      await syncSessionPatch(tabId, pendingTitlePatch.sessionId, { title: pendingTitlePatch.title });
     }
     return { tab: tabSnapshot, session: sessionSnapshot };
   };

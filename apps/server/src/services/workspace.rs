@@ -158,9 +158,10 @@ pub(crate) fn workspace_view_update(
 pub(crate) fn create_session(
     workspace_id: String,
     mode: SessionMode,
+    provider: AgentProvider,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    create_workspace_session(state, &workspace_id, mode)
+    create_workspace_session(state, &workspace_id, mode, provider)
 }
 
 pub(crate) fn session_update(
@@ -333,8 +334,13 @@ mod tests {
     fn archive_session_keeps_suspended_status_after_runtime_stop() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-archive-test");
-        let created =
-            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
         set_session_status(
             app.state(),
             &workspace_id,
@@ -358,8 +364,13 @@ mod tests {
     fn restore_and_delete_session_round_trip_history_records() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-restore-test");
-        let created =
-            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
         archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
 
         let history_before = list_session_history(app.state()).unwrap();
@@ -382,7 +393,13 @@ mod tests {
     fn close_workspace_archives_all_sessions_but_keeps_workspace_history_visible() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-close-test");
-        let extra = create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let extra = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
         let live_ids = workspace_snapshot(workspace_id.clone(), app.state())
             .unwrap()
             .sessions
@@ -403,5 +420,50 @@ mod tests {
         for live_id in live_ids {
             assert!(records.iter().any(|record| record.session_id == live_id));
         }
+    }
+
+    #[test]
+    fn create_session_persists_provider_as_session_truth() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-provider-persist-test");
+
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::codex(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert_eq!(created.provider, AgentProvider::codex());
+        assert_eq!(created.resume_id, None);
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let restored = snapshot
+            .sessions
+            .into_iter()
+            .find(|session| session.id == created.id)
+            .expect("session should exist in snapshot");
+        assert_eq!(restored.provider, AgentProvider::codex());
+        assert_eq!(restored.resume_id, None);
+    }
+
+    #[test]
+    fn launch_workspace_starts_without_persisted_sessions() {
+        let app = test_app();
+
+        let result = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: "/tmp/ws-empty-session-launch-test".to_string(),
+                target: ExecTarget::Native,
+            },
+            "/tmp/ws-empty-session-launch-test".to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+
+        assert!(result.snapshot.sessions.is_empty());
     }
 }

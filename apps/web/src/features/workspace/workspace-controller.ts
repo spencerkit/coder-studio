@@ -1,4 +1,4 @@
-import type { WorkspaceControllerLease } from "../../types/app.ts";
+import type { WorkspaceControllerLease } from "../../types/app";
 
 const DEVICE_ID_STORAGE_KEY = "coder-studio.workspace-device-id";
 const CLIENT_ID_STORAGE_KEY = "coder-studio.workspace-client-id";

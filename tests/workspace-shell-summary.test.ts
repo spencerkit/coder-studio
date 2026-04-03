@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkspaceShellSummary } from "../apps/web/src/features/workspace/workspace-shell-summary.ts";
+import { buildWorkspaceShellSummary } from "../apps/web/src/features/workspace/workspace-shell-summary";
 
 test("buildWorkspaceShellSummary returns branch runtime changes and queue items", () => {
   const summary = buildWorkspaceShellSummary({

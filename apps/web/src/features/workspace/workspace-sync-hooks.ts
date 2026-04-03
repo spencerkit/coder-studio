@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
-  subscribeAgentEvents,
   subscribeAgentLifecycleEvents,
   subscribeTerminalEvents,
   subscribeWorkspaceArtifactsDirty,
   subscribeWorkspaceController,
   subscribeWorkspaceRuntimeState,
 } from "../../command";
-import { createId, type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
+import { type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
 import {
@@ -15,15 +14,11 @@ import {
   applyWorkspaceRuntimeStateEvent,
 } from "../../shared/utils/workspace";
 import {
-  AGENT_START_SYSTEM_MESSAGE,
-  AGENT_STREAM_BUFFER_LIMIT,
-  SESSION_MESSAGE_LIMIT,
   TERMINAL_STREAM_BUFFER_LIMIT,
   WS_STREAM_FLUSH_INTERVAL_MS,
 } from "../../shared/app/constants";
-import { stripAnsi } from "../../shared/utils/ansi";
 import { pathsIntersect } from "../../shared/utils/path";
-import { nowLabel, resolveVisibleStatus } from "../../shared/utils/session";
+import { resolveVisibleStatus } from "../../shared/utils/session";
 import type {
   AgentLifecycleEvent,
   ArtifactsDirtyEvent,
@@ -35,15 +30,30 @@ import type {
 import { subscribeWsConnectionState } from "../../ws/client";
 import {
   clearAgentRuntimeTracking,
-  noteAgentStartupEvent,
   noteAgentStartupLifecycle,
   type AgentRuntimeRefs,
 } from "../agents";
 import type { Translator } from "../../i18n";
 import {
-  appendBoundedMessage,
-  appendBufferedText,
-} from "./workspace-stream-buffer";
+  FULL_ARTIFACT_REFRESH_SCOPE,
+  hasArtifactRefreshWork,
+  mergeArtifactRefreshScopes,
+  resolveInitialArtifactRefreshScope,
+  resolveArtifactRefreshScope,
+  type ArtifactRefreshScope,
+} from "./workspace-artifact-refresh";
+import { createWorkspaceArtifactRefreshQueue } from "./workspace-artifact-refresh-queue";
+import {
+  applyPendingStreamIndex,
+  createPendingStreamIndex,
+  drainPendingStreamIndex,
+  hasPendingStreamIndex,
+  recordPendingTerminalStream,
+} from "./workspace-stream-index";
+import {
+  type WorkspaceRuntimeAttachRequestOptions,
+  WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
+} from "./runtime-attach";
 
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
@@ -55,7 +65,10 @@ type UseWorkspaceTransportSyncArgs = {
   clientId: string;
   deviceId: string;
   markSessionIdle: (workspaceId: string, sessionId: string) => Promise<void>;
-  reattachWorkspaceRuntime: (workspaceId: string) => Promise<void>;
+  reattachWorkspaceRuntime: (
+    workspaceId: string,
+    options?: WorkspaceRuntimeAttachRequestOptions,
+  ) => Promise<void>;
   settleSessionAfterExit: (workspaceId: string, sessionId: string) => Promise<void>;
   syncSessionPatch: (tabId: string, sessionId: string, patch: SessionPatch) => Promise<void>;
   stateRef: MutableRefObject<WorkbenchState>;
@@ -67,7 +80,8 @@ type UseWorkspaceArtifactsSyncArgs = {
   activeTabId: string;
   activeProjectPath?: string;
   bootstrapReady: boolean;
-  codeSidebarView: string;
+  codeSidebarView: "files" | "git";
+  showCodePanel: boolean;
   stateRef: MutableRefObject<WorkbenchState>;
   updateTab: UpdateTab;
   withServiceFallback: WithServiceFallback;
@@ -99,19 +113,6 @@ const useLatestRef = <T,>(value: T) => {
   return ref;
 };
 
-type PendingAgentStream = {
-  workspaceId: string;
-  sessionId: string;
-  chunk: string;
-  unreadDelta: number;
-};
-
-type PendingTerminalStream = {
-  workspaceId: string;
-  terminalId: string;
-  chunk: string;
-};
-
 const sameExecTarget = (left: ExecTarget | undefined, right: ExecTarget | undefined) => {
   if (!left || !right) return false;
   if (left.type !== right.type) return false;
@@ -126,7 +127,7 @@ const matchesWorkspaceArtifactsEvent = (tab: Tab, event: ArtifactsDirtyEvent) =>
   return pathsIntersect(workspacePath, event.path);
 };
 
-const readClaudeSessionId = (data: string) => {
+const readResumeId = (data: string) => {
   try {
     const payload = JSON.parse(data) as { session_id?: string };
     return typeof payload.session_id === "string" && payload.session_id.trim()
@@ -156,11 +157,10 @@ export const useWorkspaceTransportSync = ({
   const settleSessionAfterExitRef = useLatestRef(settleSessionAfterExit);
   const syncSessionPatchRef = useLatestRef(syncSessionPatch);
   const transportResyncPromiseRef = useRef<Promise<void> | null>(null);
-  const pendingAgentStreamsRef = useRef(new Map<string, PendingAgentStream>());
-  const pendingTerminalStreamsRef = useRef(new Map<string, PendingTerminalStream>());
+  const pendingStreamIndexRef = useRef(createPendingStreamIndex());
   const streamFlushTimerRef = useRef<number | null>(null);
 
-  const resyncWorkspaceSnapshots = useCallback(async () => {
+  const resyncWorkspaceSnapshots = useCallback(async (force = false) => {
     if (transportResyncPromiseRef.current) {
       await transportResyncPromiseRef.current;
       return;
@@ -171,7 +171,10 @@ export const useWorkspaceTransportSync = ({
 
     const task = (async () => {
       await Promise.all(workspaceIds.map(async (workspaceId) => {
-        await reattachWorkspaceRuntimeRef.current(workspaceId);
+        await reattachWorkspaceRuntimeRef.current(workspaceId, {
+          force,
+          successReuseMs: force ? 0 : WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     })().finally(() => {
       transportResyncPromiseRef.current = null;
@@ -183,60 +186,12 @@ export const useWorkspaceTransportSync = ({
 
   const flushPendingStreams = useCallback(() => {
     streamFlushTimerRef.current = null;
-    const pendingAgentStreams = Array.from(pendingAgentStreamsRef.current.values());
-    const pendingTerminalStreams = Array.from(pendingTerminalStreamsRef.current.values());
-    pendingAgentStreamsRef.current.clear();
-    pendingTerminalStreamsRef.current.clear();
-
-    if (pendingAgentStreams.length === 0 && pendingTerminalStreams.length === 0) {
+    if (!hasPendingStreamIndex(pendingStreamIndexRef.current)) {
       return;
     }
+    const pendingStreams = drainPendingStreamIndex(pendingStreamIndexRef.current);
 
-    updateStateRef.current((current) => ({
-      ...current,
-      tabs: current.tabs.map((tab) => {
-        const agentEntries = pendingAgentStreams.filter((entry) => entry.workspaceId === tab.id);
-        const terminalEntries = pendingTerminalStreams.filter((entry) => entry.workspaceId === tab.id);
-        if (agentEntries.length === 0 && terminalEntries.length === 0) {
-          return tab;
-        }
-
-        const nextSessions = agentEntries.length === 0
-          ? tab.sessions
-          : tab.sessions.map((session) => {
-              const entry = agentEntries.find((item) => item.sessionId === session.id);
-              if (!entry) {
-                return session;
-              }
-              return {
-                ...session,
-                unread: tab.activeSessionId === session.id
-                  ? 0
-                  : session.unread + entry.unreadDelta,
-                stream: appendBufferedText(session.stream, entry.chunk, AGENT_STREAM_BUFFER_LIMIT),
-              };
-            });
-
-        const nextTerminals = terminalEntries.length === 0
-          ? tab.terminals
-          : tab.terminals.map((term) => {
-              const entry = terminalEntries.find((item) => item.terminalId === term.id);
-              if (!entry) {
-                return term;
-              }
-              return {
-                ...term,
-                output: appendBufferedText(term.output, entry.chunk, TERMINAL_STREAM_BUFFER_LIMIT),
-              };
-            });
-
-        return {
-          ...tab,
-          sessions: nextSessions,
-          terminals: nextTerminals,
-        };
-      }),
-    }));
+    updateStateRef.current((current) => applyPendingStreamIndex(current, pendingStreams));
   }, [updateStateRef]);
 
   const schedulePendingStreamFlush = useCallback(() => {
@@ -253,68 +208,6 @@ export const useWorkspaceTransportSync = ({
     }
     flushPendingStreams();
   }, [flushPendingStreams]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeAgentEvents(({ workspace_id, session_id, kind, data }) => {
-      noteAgentStartupEvent(agentRuntimeRefs, workspace_id, session_id, kind, data);
-      const cleaned = stripAnsi(data);
-      const isStream = kind === "stdout" || kind === "stderr";
-      const isSystem = kind === "system";
-      const isExit = kind === "exit";
-
-      if (isStream) {
-        const key = `${workspace_id}:${session_id}`;
-        const currentTab = stateRef.current.tabs.find((tab) => tab.id === workspace_id);
-        const previous = pendingAgentStreamsRef.current.get(key);
-        pendingAgentStreamsRef.current.set(key, {
-          workspaceId: workspace_id,
-          sessionId: session_id,
-          chunk: `${previous?.chunk ?? ""}${data}`,
-          unreadDelta: (previous?.unreadDelta ?? 0)
-            + (currentTab?.activeSessionId === session_id ? 0 : 1),
-        });
-        schedulePendingStreamFlush();
-      } else {
-        updateStateRef.current((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id) return session;
-                const nextStatus = isExit ? "idle" : session.status;
-                const streamChunk = isExit
-                  ? "\n[agent exited]\n"
-                  : isSystem
-                    ? (cleaned && cleaned !== AGENT_START_SYSTEM_MESSAGE ? `\n[${cleaned}]\n` : "")
-                    : "";
-                const message = isExit
-                  ? { id: createId("msg"), role: "system" as const, content: t("agentExited"), time: nowLabel() }
-                  : isSystem
-                    ? { id: createId("msg"), role: "system" as const, content: cleaned, time: nowLabel() }
-                    : null;
-                const unread = tab.activeSessionId === session.id ? 0 : session.unread + (isSystem || isExit ? 1 : 0);
-                return {
-                  ...session,
-                  status: nextStatus,
-                  unread,
-                  stream: appendBufferedText(session.stream, streamChunk, AGENT_STREAM_BUFFER_LIMIT),
-                  messages: appendBoundedMessage(session.messages, message, SESSION_MESSAGE_LIMIT),
-                };
-              }),
-            };
-          }),
-        }));
-      }
-
-      if (kind === "exit") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-        void settleSessionAfterExitRef.current(workspace_id, session_id);
-      }
-    });
-    return unsubscribe;
-  }, [agentRuntimeRefs, schedulePendingStreamFlush, settleSessionAfterExitRef, stateRef, t, updateStateRef]);
 
   useEffect(() => {
     const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }: AgentLifecycleEvent) => {
@@ -352,8 +245,8 @@ export const useWorkspaceTransportSync = ({
         }));
       }
 
-      const claudeSessionId = readClaudeSessionId(data);
-      if (claudeSessionId) {
+      const resumeId = readResumeId(data);
+      if (resumeId) {
         let changed = false;
         updateStateRef.current((current) => ({
           ...current,
@@ -362,20 +255,20 @@ export const useWorkspaceTransportSync = ({
             return {
               ...tab,
               sessions: tab.sessions.map((session) => {
-                if (session.id !== session_id || session.claudeSessionId === claudeSessionId) {
+                if (session.id !== session_id || session.resumeId === resumeId) {
                   return session;
                 }
                 changed = true;
                 return {
                   ...session,
-                  claudeSessionId,
+                  resumeId,
                 };
               }),
             };
           }),
         }));
         if (changed) {
-          void syncSessionPatchRef.current(workspace_id, session_id, { claude_session_id: claudeSessionId });
+          void syncSessionPatchRef.current(workspace_id, session_id, { resume_id: resumeId });
         }
       }
 
@@ -388,19 +281,18 @@ export const useWorkspaceTransportSync = ({
 
   useEffect(() => {
     const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
-      if (!data) return;
-      const termId = `term-${terminal_id}`;
-      const key = `${workspace_id}:${termId}`;
-      const previous = pendingTerminalStreamsRef.current.get(key);
-      pendingTerminalStreamsRef.current.set(key, {
+      const mappedTerminalId = `term-${terminal_id}`;
+      const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
         workspaceId: workspace_id,
-        terminalId: termId,
-        chunk: `${previous?.chunk ?? ""}${data}`,
+        terminalId: mappedTerminalId,
+        chunk: data,
       });
-      schedulePendingStreamFlush();
+      if (recorded) {
+        schedulePendingStreamFlush();
+      }
     });
     return unsubscribe;
-  }, [schedulePendingStreamFlush]);
+  }, [agentRuntimeRefs, schedulePendingStreamFlush, stateRef]);
 
   useEffect(() => {
     const unsubscribe = subscribeWorkspaceController((payload) => {
@@ -421,7 +313,7 @@ export const useWorkspaceTransportSync = ({
   useEffect(() => {
     const unsubscribe = subscribeWsConnectionState(({ kind }) => {
       if ((kind !== "connected" && kind !== "reconnected") || !bootstrapReady) return;
-      void resyncWorkspaceSnapshots();
+      void resyncWorkspaceSnapshots(kind === "reconnected");
     });
     return unsubscribe;
   }, [bootstrapReady, resyncWorkspaceSnapshots]);
@@ -432,11 +324,16 @@ export const useWorkspaceArtifactsSync = ({
   activeProjectPath,
   bootstrapReady,
   codeSidebarView,
+  showCodePanel,
   stateRef,
   updateTab,
   withServiceFallback,
 }: UseWorkspaceArtifactsSyncArgs) => {
-  const pendingRefreshesRef = useRef(new Map<string, Promise<WorkspaceTree | null>>());
+  const queuedRefreshScopesRef = useRef(new Map<string, ArtifactRefreshScope>());
+  const refreshQueueRunnerRef = useRef<(tabId: string) => Promise<WorkspaceTree | null>>(
+    async () => null,
+  );
+  const refreshQueueRef = useRef<ReturnType<typeof createWorkspaceArtifactRefreshQueue<WorkspaceTree | null>> | null>(null);
   const updateTabRef = useLatestRef(updateTab);
   const withServiceFallbackRef = useLatestRef(withServiceFallback);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() => (
@@ -445,6 +342,19 @@ export const useWorkspaceArtifactsSync = ({
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === "undefined" ? true : navigator.onLine !== false
   ));
+
+  if (!refreshQueueRef.current) {
+    refreshQueueRef.current = createWorkspaceArtifactRefreshQueue<WorkspaceTree | null>(
+      (tabId) => refreshQueueRunnerRef.current(tabId),
+      (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+      (handle) => globalThis.clearTimeout(handle as number),
+      120,
+    );
+  }
+
+  useEffect(() => () => {
+    refreshQueueRef.current?.dispose();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
@@ -466,62 +376,121 @@ export const useWorkspaceArtifactsSync = ({
     };
   }, []);
 
-  const runWorkspaceArtifactsRefresh = useCallback(async (tabId: string): Promise<WorkspaceTree | null> => {
+  const runWorkspaceArtifactsRefresh = useCallback(async (
+    tabId: string,
+    scope: ArtifactRefreshScope,
+  ): Promise<WorkspaceTree | null> => {
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const path = tab?.project?.path;
     const target = tab?.project?.target;
     if (!tab || !path || !target) return null;
 
-    const [git, gitChanges, worktrees, tree] = await Promise.all([
-      withServiceFallbackRef.current<GitStatus>(() => getGitStatus(path, target), {
-        branch: tab.git.branch || "main",
-        changes: tab.git.changes ?? 0,
-        last_commit: tab.git.lastCommit || "—",
-      }),
-      withServiceFallbackRef.current<GitChangeEntry[]>(() => getGitChanges(path, target), tab.gitChanges ?? []),
-      withServiceFallbackRef.current<WorktreeInfo[]>(() => getWorktreeList(path, target), tab.worktrees),
-      withServiceFallbackRef.current<WorkspaceTree>(() => getWorkspaceTree(path, target, 4), {
-        root: { name: ".", path, kind: "dir", children: [] },
-        changes: [],
-      }),
-    ]);
+    let git: GitStatus | null = null;
+    let gitChanges: GitChangeEntry[] | null = null;
+    let worktrees: WorktreeInfo[] | null = null;
+    let tree: WorkspaceTree | null = null;
+
+    const refreshes: Array<Promise<void>> = [];
+
+    if (scope.git) {
+      refreshes.push((async () => {
+        const [nextGit, nextGitChanges] = await Promise.all([
+          withServiceFallbackRef.current<GitStatus>(() => getGitStatus(path, target), {
+            branch: tab.git.branch || "main",
+            changes: tab.git.changes ?? 0,
+            last_commit: tab.git.lastCommit || "—",
+          }),
+          withServiceFallbackRef.current<GitChangeEntry[]>(() => getGitChanges(path, target), tab.gitChanges ?? []),
+        ]);
+        git = nextGit;
+        gitChanges = nextGitChanges;
+      })());
+    }
+
+    if (scope.worktrees) {
+      refreshes.push((async () => {
+        worktrees = await withServiceFallbackRef.current<WorktreeInfo[]>(
+          () => getWorktreeList(path, target),
+          tab.worktrees,
+        );
+      })());
+    }
+
+    if (scope.tree) {
+      refreshes.push((async () => {
+        tree = await withServiceFallbackRef.current<WorkspaceTree>(() => getWorkspaceTree(path, target, 4), {
+          root: { name: ".", path, kind: "dir", children: [] },
+          changes: [],
+        });
+      })());
+    }
+
+    await Promise.all(refreshes);
 
     updateTabRef.current(tabId, (currentTab) => ({
       ...currentTab,
-      git: {
-        branch: git.branch || currentTab.git.branch || "main",
-        changes: git.changes ?? currentTab.git.changes ?? 0,
-        lastCommit: git.last_commit || currentTab.git.lastCommit || "—",
-      },
-      gitChanges,
-      worktrees,
-      fileTree: tree.root.children ?? [],
-      changesTree: tree.changes ?? [],
+      git: git
+        ? {
+            branch: git.branch || currentTab.git.branch || "main",
+            changes: git.changes ?? currentTab.git.changes ?? 0,
+            lastCommit: git.last_commit || currentTab.git.lastCommit || "—",
+          }
+        : currentTab.git,
+      gitChanges: gitChanges ?? currentTab.gitChanges,
+      worktrees: worktrees ?? currentTab.worktrees,
+      fileTree: tree?.root.children ?? currentTab.fileTree,
+      changesTree: tree?.changes ?? currentTab.changesTree,
     }));
     return tree;
   }, [stateRef, updateTabRef, withServiceFallbackRef]);
 
-  const refreshWorkspaceArtifacts = useCallback(async (tabId: string): Promise<WorkspaceTree | null> => {
-    const pending = pendingRefreshesRef.current.get(tabId);
-    if (pending) {
-      return pending;
+  const flushWorkspaceArtifactsRefresh = useCallback(async (
+    tabId: string,
+  ): Promise<WorkspaceTree | null> => {
+    const queuedScope = queuedRefreshScopesRef.current.get(tabId);
+    if (!queuedScope || !hasArtifactRefreshWork(queuedScope)) {
+      return null;
+    }
+    queuedRefreshScopesRef.current.delete(tabId);
+
+    try {
+      return await runWorkspaceArtifactsRefresh(tabId, queuedScope);
+    } finally {
+      if (queuedRefreshScopesRef.current.has(tabId)) {
+        void refreshQueueRef.current?.request(tabId);
+      }
+    }
+  }, [runWorkspaceArtifactsRefresh]);
+  refreshQueueRunnerRef.current = flushWorkspaceArtifactsRefresh;
+
+  const refreshWorkspaceArtifacts = useCallback(async (
+    tabId: string,
+    scope: ArtifactRefreshScope = FULL_ARTIFACT_REFRESH_SCOPE,
+    immediate = false,
+  ): Promise<WorkspaceTree | null> => {
+    const queuedScope = queuedRefreshScopesRef.current.get(tabId) ?? {
+      git: false,
+      worktrees: false,
+      tree: false,
+    };
+    queuedRefreshScopesRef.current.set(tabId, mergeArtifactRefreshScopes(queuedScope, scope));
+
+    if (immediate) {
+      return refreshQueueRef.current?.request(tabId, true) ?? flushWorkspaceArtifactsRefresh(tabId);
     }
 
-    const task = runWorkspaceArtifactsRefresh(tabId).finally(() => {
-      pendingRefreshesRef.current.delete(tabId);
-    });
-    pendingRefreshesRef.current.set(tabId, task);
-    return task;
-  }, [runWorkspaceArtifactsRefresh]);
+    return refreshQueueRef.current?.request(tabId) ?? Promise.resolve(null);
+  }, [flushWorkspaceArtifactsRefresh]);
 
   useEffect(() => {
     if (!bootstrapReady) return;
     const unsubscribe = subscribeWorkspaceArtifactsDirty((event) => {
+      const scope = resolveArtifactRefreshScope(event);
       const matchingTabs = stateRef.current.tabs
         .filter((tab) => matchesWorkspaceArtifactsEvent(tab, event))
         .map((tab) => tab.id);
       matchingTabs.forEach((workspaceId) => {
-        void refreshWorkspaceArtifacts(workspaceId);
+        void refreshWorkspaceArtifacts(workspaceId, scope);
       });
     });
     return unsubscribe;
@@ -529,16 +498,32 @@ export const useWorkspaceArtifactsSync = ({
 
   useEffect(() => {
     if (!activeProjectPath) return;
-    void refreshWorkspaceArtifacts(activeTabId);
-  }, [activeProjectPath, activeTabId, bootstrapReady, codeSidebarView, refreshWorkspaceArtifacts]);
+    void refreshWorkspaceArtifacts(
+      activeTabId,
+      resolveInitialArtifactRefreshScope(showCodePanel, codeSidebarView),
+      true,
+    );
+  }, [
+    activeProjectPath,
+    activeTabId,
+    bootstrapReady,
+    codeSidebarView,
+    refreshWorkspaceArtifacts,
+    showCodePanel,
+  ]);
 
   useEffect(() => {
     if (!activeProjectPath || !isDocumentVisible || !isOnline) return;
     const timer = window.setInterval(() => {
-      void refreshWorkspaceArtifacts(activeTabId);
+      void refreshWorkspaceArtifacts(activeTabId, FULL_ARTIFACT_REFRESH_SCOPE, true);
     }, resolveArtifactFallbackPollIntervalMs());
     return () => window.clearInterval(timer);
   }, [activeProjectPath, activeTabId, isDocumentVisible, isOnline, refreshWorkspaceArtifacts]);
+
+  useEffect(() => () => {
+    refreshQueueRef.current?.dispose();
+    queuedRefreshScopesRef.current.clear();
+  }, []);
 
   return {
     refreshWorkspaceArtifacts,

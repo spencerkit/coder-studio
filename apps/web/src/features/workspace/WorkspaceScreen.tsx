@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -29,7 +29,6 @@ import {
   AgentSplitHorizontalIcon,
   AgentSplitVerticalIcon,
   AgentPlusIcon,
-  AgentSendIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   HeaderCloseIcon,
@@ -42,30 +41,19 @@ import {
 } from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay";
 import { TopBar } from "../../components/TopBar";
 import { HistoryDrawer } from "../../components/HistoryDrawer";
-import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
+import type { XtermBaseHandle } from "../../components/terminal";
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
 import { WorkspaceWelcomeScreen } from "../../components/WorkspaceWelcomeScreen";
 import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
-  armAgentStartupGate,
   buildSlashMenuItems,
   buildSlashMenuSections,
-  clearAgentStartupGate,
-  commitAgentSessionTitle,
   createAgentTerminalFitScheduler,
   focusAgentTerminal,
   fitAgentTerminals,
-  isAgentRuntimeRunning,
-  markAgentRuntimeStarted,
-  previewAgentSessionTitle,
   setAgentTerminalRef,
-  setDraftPromptInputRef,
-  syncAgentPaneSize,
-  syncAgentRuntimeSize,
-  trackAgentInitialTitleInput,
-  waitForAgentStartupDrain
 } from "../../features/agents";
 import { buildCommandPaletteActions, filterCommandPaletteActions } from "../../features/command-palette";
 import { WorkspaceCodeFeature } from "../../features/editor";
@@ -100,10 +88,12 @@ import {
   resolveAgentRecoveryAction,
   resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
+import { buildRuntimeRequirementStatusesFromManifest } from "../providers/runtime-helpers";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
   shouldAttachRouteRuntimeForExistingTab,
 } from "./workspace-route-runtime";
+import { filterWorkspacePanelTerminals } from "./session-runtime-bindings";
 import {
   createWorkspaceViewPatchFromTab,
   createWorkspaceViewPersistScheduler,
@@ -118,6 +108,7 @@ import {
   groupSessionHistory,
   selectHistoryPrimaryAction,
 } from "./session-history";
+import { createHistoryRefreshController } from "./history-refresh-controller";
 import { listRestoreCandidatesForWorkspace } from "./session-restore-chooser";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
@@ -130,7 +121,7 @@ import {
 import {
   advanceWorkspaceSyncVersion,
   isWorkspaceSyncVersionCurrent,
-} from "./workspace-sync-version.ts";
+} from "./workspace-sync-version";
 import {
   buildWorkspaceFileSearchResults,
   closeWorkspaceFileSearch,
@@ -146,7 +137,7 @@ import {
   updateWorkspaceFileSearchQuery,
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
-import { startAgent, sendAgentInput } from "../../services/http/agent.service";
+import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
 import { withFallback } from "../../services/http/client";
 import {
   commitGitChanges,
@@ -157,8 +148,6 @@ import {
   unstageAllGitChanges,
   unstageGitFile
 } from "../../services/http/git.service";
-import {
-} from "../../services/http/session.service";
 import { checkCommandAvailability } from "../../services/http/system.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
@@ -181,16 +170,21 @@ import {
   workbenchLayoutToBackend
 } from "../../shared/utils/workspace";
 import {
+  getWorkbenchStateSnapshot,
+  syncWorkbenchStateSnapshot,
+  updateWorkbenchStateSnapshot,
+} from "../../shared/utils/workbench-state-snapshot";
+import {
   AGENT_SPECIAL_KEY_MAP,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
 import {
-  formatClaudeRuntimeCommand,
-  resolveClaudeRuntimeProfile,
-} from "../../shared/app/claude-settings.ts";
+  resolveDefaultAgentRuntimeCommand,
+} from "../../shared/app/claude-settings";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
+import { resolveTerminalInteractionMode } from "../../shared/utils/terminal-interaction";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -205,28 +199,24 @@ import {
   sanitizeGitRelativePath,
 } from "../../shared/utils/path";
 import {
-  createSessionFromBackend,
   formatRelativeSessionTime,
   isForegroundActiveStatus,
   isDraftSession,
   isHiddenDraftPlaceholder,
   nowLabel,
   parseNumericId,
-  resolveVisibleStatus,
   restoreVisibleStatus,
   sessionCompletionRatio,
   sessionTone,
   toBackgroundStatus
 } from "../../shared/utils/session";
-import { sortTreeNodes } from "../../shared/utils/tree";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
+import { ConfirmDialog, type ConfirmDialogState } from "../../components/ConfirmDialog";
 import type {
-  AgentStartResult,
   AppSettings,
   AppTheme,
   ClaudeSlashMenuItem,
   ClaudeSlashSkillEntry,
-  CommandAvailability,
   CommandPaletteAction,
   FolderBrowserState,
   GitChangeAction,
@@ -261,88 +251,6 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
       : "WSL"
     : t("nativeTarget");
 
-const resolveTargetClaudeCommand = (
-  settings: AppSettings,
-  target: ExecTarget,
-) => formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target));
-
-const REQUIRED_RUNTIME_COMMANDS = [
-  { id: "git", command: "git" },
-] as const satisfies ReadonlyArray<{
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-}>;
-type RuntimeRequirementSpec = {
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-  deferred?: boolean;
-  detailText?: string;
-};
-
-const parseRuntimeCommandBinary = (command: string) => {
-  const trimmed = command.trim();
-  if (!trimmed) return "";
-
-  let token = "";
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-
-  for (const ch of trimmed) {
-    if (escaped) {
-      token += ch;
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\" && !inSingle) {
-      escaped = true;
-      continue;
-    }
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-      continue;
-    }
-    if (ch === "\"" && !inSingle) {
-      inDouble = !inDouble;
-      continue;
-    }
-    if (/\s/.test(ch) && !inSingle && !inDouble) {
-      if (token) break;
-      continue;
-    }
-    token += ch;
-  }
-
-  return token.trim();
-};
-
-const commandUsesWorkspaceRelativePath = (binary: string) => {
-  return binary.startsWith("./")
-    || binary.startsWith("../")
-    || binary.startsWith(".\\")
-    || binary.startsWith("..\\");
-};
-
-const buildRuntimeRequirementSpecs = (
-  agentCommand: string,
-  t: ReturnType<typeof createTranslator>,
-): RuntimeRequirementSpec[] => {
-  const trimmedAgentCommand = agentCommand.trim();
-  const commandBinary = parseRuntimeCommandBinary(trimmedAgentCommand);
-  const claudeRequirement: RuntimeRequirementSpec = {
-    id: "claude",
-    command: trimmedAgentCommand,
-  };
-
-  if (commandBinary.includes("{path}") || commandUsesWorkspaceRelativePath(commandBinary)) {
-    claudeRequirement.deferred = true;
-    claudeRequirement.detailText = t("runtimeCheckClaudeDeferredHint");
-  }
-
-  return [claudeRequirement, ...REQUIRED_RUNTIME_COMMANDS];
-};
-
 const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
   target.type === "wsl"
     ? `wsl:${target.distro?.trim() ?? ""}:${agentCommand.trim()}`
@@ -350,24 +258,25 @@ const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string)
 
 const createRuntimeRequirementStatus = (
   agentCommand: string,
+  provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
 ): RuntimeRequirementStatus[] =>
-  buildRuntimeRequirementSpecs(agentCommand, t).map(({ id, command, deferred, detailText }) => ({
-    id,
-    command,
-    available: deferred ? true : null,
-    detailText,
-  }));
+  buildRuntimeRequirementStatusesFromManifest(
+    provider,
+    agentCommand,
+    (key, params) => t(key as never, params),
+  );
 
 const createRuntimeValidationState = (
   agentCommand: string,
+  provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
   targetKey = "",
   status: RuntimeValidationState["status"] = "idle",
 ): RuntimeValidationState => ({
   status,
   targetKey,
-  requirements: createRuntimeRequirementStatus(agentCommand, t),
+  requirements: createRuntimeRequirementStatus(agentCommand, provider, t),
 });
 
 const isTextInputTarget = (target: EventTarget | null) => {
@@ -379,7 +288,8 @@ const isTextInputTarget = (target: EventTarget | null) => {
 const isAgentFocusTransitionSequence = (value: string) => value === "\u001b[I" || value === "\u001b[O";
 
 export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
-  const [state, setState] = useRelaxState(workbenchState);
+  const [storeState, setStoreState] = useRelaxState(workbenchState);
+  const [state, setRenderState] = useState(storeState);
   const navigate = useNavigate();
   const location = useLocation();
   const { workspaceId: routeWorkspaceParam } = useParams<{ workspaceId?: string }>();
@@ -414,7 +324,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
   const [fileSearchState, setFileSearchState] = useState(createInitialWorkspaceFileSearchState);
-  const [draftPromptInputs, setDraftPromptInputs] = useState<Record<string, string>>({});
   const [draftPaneModes, setDraftPaneModes] = useState<Record<string, "new" | "restore">>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -435,12 +344,24 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     kind: "resume" | "restart";
   } | null>(null);
   const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    visible: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
   const t = useMemo(() => createTranslator(locale), [locale]);
+  const hasRestoreDraftModeSelected = useMemo(
+    () => Object.values(draftPaneModes).some((mode) => mode === "restore"),
+    [draftPaneModes],
+  );
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
   const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
   const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
-    resolveTargetClaudeCommand(appSettings, { type: "native" }),
+    resolveDefaultAgentRuntimeCommand(appSettings, { type: "native" }),
+    appSettings.agentDefaults.provider,
     t,
   ));
   const stateRef = useRef(state);
@@ -449,6 +370,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const historyRefreshControllerRef = useRef(createHistoryRefreshController(
+    () => withServiceFallback(() => listSessionHistory(), null),
+  ));
+  const historyLoadingRequestCountRef = useRef(0);
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -476,6 +401,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const runtimeValidationRequestIdRef = useRef(0);
   const overlayBrowseRequestIdRef = useRef(0);
   const persistedLayoutRef = useRef<string>("");
+  const workbenchStateVersionRef = useRef(0);
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
@@ -485,44 +411,43 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
-  const getTargetClaudeCommand = useCallback(
-    (target: ExecTarget) => resolveTargetClaudeCommand(appSettings, target),
+  const getTargetDefaultAgentCommand = useCallback(
+    (target: ExecTarget) => resolveDefaultAgentRuntimeCommand(appSettings, target),
     [appSettings],
   );
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
-    const command = getTargetClaudeCommand(target);
+    const command = getTargetDefaultAgentCommand(target);
     const targetKey = serializeRuntimeValidationKey(target, command);
-    const requirementSpecs = buildRuntimeRequirementSpecs(command, t);
+    const requirements = createRuntimeRequirementStatus(
+      command,
+      appSettings.agentDefaults.provider,
+      t,
+    );
     const requestId = ++runtimeValidationRequestIdRef.current;
-    setRuntimeValidation(createRuntimeValidationState(command, t, targetKey, "checking"));
+    setRuntimeValidation({
+      status: "checking",
+      targetKey,
+      requirements,
+    });
 
     const results = await Promise.all(
-      requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
-        if (deferred) {
-          return {
-            id,
-            command,
-            available: true,
-            detailText,
-          } satisfies RuntimeRequirementStatus;
+      requirements.map(async (requirement) => {
+        if (requirement.available === true) {
+          return requirement;
         }
         try {
-          const result = await checkCommandAvailability(command, target);
+          const result = await checkCommandAvailability(requirement.command, target);
           return {
-            id,
-            command,
+            ...requirement,
             available: result.available,
             resolvedPath: result.resolved_path ?? undefined,
             error: result.error ?? undefined,
-            detailText,
           } satisfies RuntimeRequirementStatus;
         } catch (error) {
           return {
-            id,
-            command,
+            ...requirement,
             available: false,
             error: error instanceof Error ? error.message : String(error),
-            detailText,
           } satisfies RuntimeRequirementStatus;
         }
       }),
@@ -543,7 +468,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       targetKey,
       requirements: results,
     });
-  }, [getTargetClaudeCommand, t]);
+  }, [appSettings.agentDefaults.provider, getTargetDefaultAgentCommand, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -587,9 +512,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [editorMetrics.terminalFontSize, terminalCompatibilityMode]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
-    const next = updater(stateRef.current);
+    const current = getWorkbenchStateSnapshot();
+    const next = updateWorkbenchStateSnapshot(updater);
+    if (
+      next !== current
+      && (
+        next.tabs !== current.tabs
+        || next.activeTabId !== current.activeTabId
+        || next.layout !== current.layout
+      )
+    ) {
+      workbenchStateVersionRef.current += 1;
+    }
     stateRef.current = next;
-    setState(next);
+    setRenderState(next);
+    setStoreState(next);
   };
 
   const agentRuntimeRefs = useMemo(() => ({
@@ -597,10 +534,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     agentTerminalRefs,
     agentTerminalQueueRef,
     agentPaneSizeRef,
-    agentRuntimeSizeRef,
-    agentResizeStateRef,
     agentTitleTrackerRef,
-    runningAgentKeysRef,
     agentStartupStateRef,
     agentStartupTokenRef
   }), []);
@@ -657,27 +591,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setAgentTerminalRef(agentRuntimeRefs, paneId, handle);
   };
 
-  const registerDraftPromptInputRef = (paneId: string, element: HTMLInputElement | null) => {
-    setDraftPromptInputRef(agentRuntimeRefs, paneId, element);
-  };
-
   const focusWorkspaceAgentPane = (paneId = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId)?.activePaneId) => {
     focusAgentTerminal(agentRuntimeRefs, paneId);
-  };
-
-  const commitTrackedAgentSessionTitle = (paneId: string, tabId: string, sessionId: string, rawInput: string) => {
-    const appliedTitle = commitAgentSessionTitle({
-      refs: agentRuntimeRefs,
-      paneId,
-      tabId,
-      sessionId,
-      rawInput,
-      locale,
-      t,
-      updateTab
-    });
-    if (!appliedTitle) return;
-    void syncSessionPatch(tabId, sessionId, { title: appliedTitle });
   };
 
   const openCommandPalette = () => {
@@ -692,9 +607,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setCommandPaletteActiveIndex(0);
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useLayoutEffect(() => {
+    stateRef.current = storeState;
+    syncWorkbenchStateSnapshot(storeState);
+    setRenderState((current) => (current === storeState ? current : storeState));
+  }, [storeState]);
 
   useEffect(() => () => {
     workspaceViewPersistSchedulerRef.current?.flush();
@@ -704,6 +621,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     let cancelled = false;
+    const bootstrapStateVersion = workbenchStateVersionRef.current;
     void (async () => {
       const bootstrap = await withServiceFallback(() => getWorkbenchBootstrap(deviceId, clientId), null);
       if (cancelled || !bootstrap) {
@@ -728,6 +646,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           : null;
 
         if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
+          return;
+        }
+        if (workbenchStateVersionRef.current !== bootstrapStateVersion) {
+          setBootstrapReady(true);
           return;
         }
 
@@ -881,24 +803,60 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.layout.showTerminalPanel,
   ]);
 
-  const refreshHistoryRecords = useCallback(async () => {
+  const requestHistoryRecords = useCallback(async (force = false) => {
+    historyLoadingRequestCountRef.current += 1;
     setHistoryLoading(true);
-    const records = await withServiceFallback(() => listSessionHistory(), null);
-    if (records) {
-      setHistoryRecords(records);
+    try {
+      const records = await historyRefreshControllerRef.current.request(force);
+      if (records) {
+        setHistoryRecords(records);
+      }
+    } finally {
+      historyLoadingRequestCountRef.current = Math.max(
+        0,
+        historyLoadingRequestCountRef.current - 1,
+      );
+      setHistoryLoading(historyLoadingRequestCountRef.current > 0);
     }
-    setHistoryLoading(false);
   }, []);
 
+  const loadHistoryRecords = useCallback(async () => {
+    await requestHistoryRecords(false);
+  }, [requestHistoryRecords]);
+
+  const refreshHistoryRecords = useCallback(async () => {
+    await requestHistoryRecords(true);
+  }, [requestHistoryRecords]);
+
+  const refreshHistoryRecordsIfNeeded = useCallback(async () => {
+    const shouldRefreshImmediately = (
+      historyOpen
+      || hasRestoreDraftModeSelected
+      || stateRef.current.tabs.length === 0
+    );
+    if (shouldRefreshImmediately) {
+      await refreshHistoryRecords();
+      return;
+    }
+    if (historyRefreshControllerRef.current.hasLoaded()) {
+      historyRefreshControllerRef.current.markDirty();
+    }
+  }, [hasRestoreDraftModeSelected, historyOpen, refreshHistoryRecords]);
+
   useEffect(() => {
-    if (!bootstrapReady) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, refreshHistoryRecords]);
+    if (!bootstrapReady || routeWorkspaceId || state.tabs.length > 0) return;
+    void loadHistoryRecords();
+  }, [bootstrapReady, loadHistoryRecords, routeWorkspaceId, state.tabs.length]);
 
   useEffect(() => {
     if (!bootstrapReady || !historyOpen) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, historyOpen, refreshHistoryRecords]);
+    void loadHistoryRecords();
+  }, [bootstrapReady, historyOpen, loadHistoryRecords]);
+
+  useEffect(() => {
+    if (!bootstrapReady || !hasRestoreDraftModeSelected) return;
+    void loadHistoryRecords();
+  }, [bootstrapReady, hasRestoreDraftModeSelected, loadHistoryRecords]);
 
   useEffect(() => {
     if (!bootstrapReady) return;
@@ -993,7 +951,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!bootstrapReady || !state.overlay.visible) return;
-    const command = getTargetClaudeCommand(state.overlay.target);
+    const command = getTargetDefaultAgentCommand(state.overlay.target);
     const targetKey = serializeRuntimeValidationKey(state.overlay.target, command);
     if (validatedRuntimeTargetsRef.current.has(targetKey)) {
       return;
@@ -1001,7 +959,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     void runRuntimeValidation(state.overlay.target);
   }, [
     bootstrapReady,
-    getTargetClaudeCommand,
+    getTargetDefaultAgentCommand,
     runRuntimeValidation,
     state.overlay.target.type,
     state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
@@ -1015,24 +973,25 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       const fallback = createTab(1, locale);
       emptyTabRef.current = {
         ...fallback,
-        agent: {
-          ...fallback.agent,
-          provider: appSettings.agentProvider,
-          command: resolveTargetClaudeCommand(appSettings, { type: "native" }),
-        },
         idlePolicy: { ...appSettings.idlePolicy },
       };
     }
     return emptyTabRef.current;
   }, [appSettings, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
-  const showWelcomeScreen = bootstrapReady && state.tabs.length === 0 && !state.overlay.visible;
-  const overlayCommand = getTargetClaudeCommand(state.overlay.target);
+  const showWelcomeScreen = bootstrapReady && state.tabs.length === 0;
+  const overlayCommand = getTargetDefaultAgentCommand(state.overlay.target);
   const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, overlayCommand);
   const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
   const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
     ? runtimeValidation
-    : createRuntimeValidationState(overlayCommand, t, runtimeValidationTargetKey, "checking");
+    : createRuntimeValidationState(
+      overlayCommand,
+      appSettings.agentDefaults.provider,
+      t,
+      runtimeValidationTargetKey,
+      "checking",
+    );
   const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;
   const showWorkspaceLaunchOverlay = overlayVisible && runtimeValidatedForTarget;
   const hasOpenWorkspace = state.tabs.length > 0;
@@ -1333,6 +1292,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     activeProjectPath: activeTab.project?.path,
     bootstrapReady,
     codeSidebarView,
+    showCodePanel,
     stateRef,
     updateTab,
     withServiceFallback,
@@ -1454,12 +1414,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       };
     });
     if (uiState.active_workspace_id) {
-      void refreshHistoryRecords();
+      void refreshHistoryRecordsIfNeeded();
       navigate(`/workspace/${uiState.active_workspace_id}`);
       void ensureWorkspaceTerminal(uiState.active_workspace_id);
       return;
     }
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
     navigate("/workspace");
   };
 
@@ -1581,20 +1541,26 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
     const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId);
     if (!restored) return;
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
     setHistoryOpen(false);
   };
 
   const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
-    const confirmed = typeof window === "undefined"
-      ? true
-      : window.confirm(t("historyDeleteConfirm", { title: record.title }));
-    if (!confirmed) return;
-
-    const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
-    if (!deleted) return;
-
-    await refreshHistoryRecords();
+    setConfirmDialog({
+      visible: true,
+      title: t("historyDeleteTitle"),
+      message: t("historyDeleteConfirm", { title: record.title }),
+      confirmLabel: t("delete"),
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, visible: false }));
+        const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
+        if (!deleted) return;
+        await refreshHistoryRecordsIfNeeded();
+      },
+      onCancel: () => {
+        setConfirmDialog((prev) => ({ ...prev, visible: false }));
+      },
+    });
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -1697,73 +1663,107 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
   };
 
-  const buildAgentCommand = (tab: Tab) => (
-    resolveTargetClaudeCommand(appSettings, tab.project?.target ?? { type: "native" })
-  );
-
-  const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
+  const startSessionRuntimeInPane = async (paneId: string | null | undefined, tab: Tab, session: Session) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const project = tab.project;
-    if (!project?.path) return false;
-    const command = buildAgentCommand(tab);
-    const target = project.target;
+    const syncVersion = advanceWorkspaceSyncVersion(tab.id);
     const initialSize = resolveAgentInitialSize(paneId);
-    const availability = await withServiceFallback<CommandAvailability | null>(
-      () => checkCommandAvailability(command, target, project.path),
-      null
-    );
-    if (availability && !availability.available) {
-      addToast({
-        id: createId("toast"),
-        text: `${t("agentStartFailed")}: ${availability.error ?? t("launchCommandMissing", { runtime: formatExecTargetLabel(target, t) })}`,
-        sessionId: session.id
-      });
-      return false;
-    }
-    const startupToken = armAgentStartupGate(agentRuntimeRefs, tab.id, session.id);
-    const result = await invokeAgent<AgentStartResult>(() => startAgent({
+    const result = await invokeAgent(() => startSessionRuntime({
       workspaceId: tab.id,
       controller: tab.controller,
       sessionId: session.id,
-      provider: tab.agent.provider,
       cols: initialSize?.cols,
       rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));
     if (!result) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-      return false;
+      return null;
     }
-    markAgentRuntimeStarted(agentRuntimeRefs, tab.id, session.id);
-    if (!result.started) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-    }
-    return {
-      ok: true,
-      started: result.started,
-      startupToken: result.started ? startupToken : null
+    const terminalId = `term-${result.terminal_id}`;
+    let nextSession = { ...session, terminalId };
+    let nextTab = {
+      ...tab,
+      terminals: tab.terminals.some((terminal) => terminal.id === terminalId)
+        ? tab.terminals
+        : [
+            ...tab.terminals,
+            {
+              id: terminalId,
+              title: formatTerminalTitle(tab.terminals.length + 1, locale),
+              output: "",
+              recoverable: true,
+            },
+          ],
+      sessions: tab.sessions.map((item) => (
+        item.id === session.id
+          ? nextSession
+          : item
+      )),
     };
-  };
-
-  const agentSend = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((s) =>
-        s.id === session.id ? { ...s, status: resolveVisibleStatus(current, s, "waiting"), lastActiveAt } : s
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { status: "waiting", last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, true),
-      session.id,
-      t("agentSendFailed")
+    updateTab(tab.id, (current) => {
+      nextTab = {
+        ...current,
+        terminals: current.terminals.some((terminal) => terminal.id === terminalId)
+          ? current.terminals
+          : [
+              ...current.terminals,
+              {
+                id: terminalId,
+                title: formatTerminalTitle(current.terminals.length + 1, locale),
+                output: "",
+                recoverable: true,
+              },
+            ],
+        sessions: current.sessions.map((item) => (
+          item.id === session.id
+            ? { ...item, terminalId }
+            : item
+        )),
+      };
+      nextSession = nextTab.sessions.find((item) => item.id === session.id) ?? nextSession;
+      return nextTab;
+    });
+    if (typeof window !== "undefined") {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    }
+    if (result.boot_input) {
+      writeWorkspaceTerminalData(tab.id, tab.controller, terminalId, result.boot_input);
+    }
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      tab.id,
+      deviceId,
+      clientId,
+      withServiceFallback,
+      {
+        force: true,
+        successReuseMs: 0,
+      },
     );
-    return sent !== null;
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(tab.id, syncVersion)) {
+      updateState((current) => {
+        const next = applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        );
+        nextTab = next.tabs.find((item) => item.id === tab.id) ?? nextTab;
+        nextSession = nextTab.sessions.find((item) => item.id === session.id) ?? nextSession;
+        return next;
+      });
+    }
+    if (!isWorkspaceSyncVersionCurrent(tab.id, syncVersion)) {
+      return null;
+    }
+    focusAgentTerminal(agentRuntimeRefs, paneId);
+    return { tab: nextTab, session: nextSession };
   };
 
   const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
+    if (!session.terminalId) return false;
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
       ...current,
@@ -1772,30 +1772,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, false),
-      session.id,
-      t("agentKeySendFailed")
-    );
-    return sent !== null;
-  };
-
-  const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((item) =>
-        item.id === session.id ? { ...item, lastActiveAt } : item
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const started = await agentStartMaybe(tab, session);
-    if (!started) return;
-    if (started.started && started.startupToken !== null) {
-      await waitForAgentStartupDrain(agentRuntimeRefs, tab.id, session.id, started.startupToken);
-    }
-    await sendAgentRawChunk(tab, session, input);
+    writeWorkspaceTerminalData(tab.id, tab.controller, session.terminalId, input);
+    return true;
   };
 
   const onRecoverActiveSession = async () => {
@@ -1822,9 +1800,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         nextTab = next.tabs.find((tab) => tab.id === currentTab.id) ?? null;
         return next;
       });
-      if (nextTab) {
-        currentTab = nextTab;
-        session = nextTab.sessions.find((item) => item.id === session.id) ?? session;
+      const refreshedTab = nextTab;
+      if (refreshedTab) {
+        currentTab = refreshedTab;
+        session = refreshedTab.sessions.find((item) => item.id === session.id) ?? session;
       }
     }
     if (!isWorkspaceSyncVersionCurrent(currentTab.id, syncVersion)) return;
@@ -1835,11 +1814,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       kind: recoveryAction.kind,
     });
     try {
-      const started = await agentStartMaybe(currentTab, session, currentTab.activePaneId);
-      if (!started) return;
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(agentRuntimeRefs, currentTab.id, session.id, started.startupToken);
-      }
+      await startSessionRuntimeInPane(currentTab.activePaneId, currentTab, session);
     } finally {
       setAgentRecoveryBusy((current) => (
         current?.sessionId === session.id ? null : current
@@ -1856,14 +1831,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     closeAgentPaneSession(activeTab, paneId, sessionId);
     window.setTimeout(() => {
-      void refreshHistoryRecords();
+      void refreshHistoryRecordsIfNeeded();
     }, 0);
   };
 
   const onArchiveSession = async (sessionId: string) => {
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     await archiveSessionForTab(activeTab.id, sessionId);
-    void refreshHistoryRecords();
+    void refreshHistoryRecordsIfNeeded();
   };
 
   const onDraftPaneModeChange = (paneId: string, mode: "new" | "restore") => {
@@ -1873,10 +1848,52 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }));
   };
 
+  const onDraftProviderChange = (paneId: string, provider: Session["provider"]) => {
+    const sessionId = findPaneSessionId(activeTab.paneLayout, paneId);
+    if (!sessionId) return;
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      sessions: tab.sessions.map((session) => (
+        session.id === sessionId && session.isDraft
+          ? { ...session, provider }
+          : session
+      )),
+    }));
+  };
+
+  const startAgentSessionInPane = async (paneId: string, tab: Tab, session: Session) => {
+    const started = await startSessionRuntimeInPane(paneId, tab, session);
+    if (!started) return false;
+    touchSession(started.tab.id, started.session.id);
+    focusWorkspaceAgentPane(paneId);
+    return true;
+  };
+
+  const onStartDraftSession = async (paneId: string, provider: Session["provider"]) => {
+    if (!guardWorkspaceMutation("agent_input")) return;
+    if (isArchiveView) return;
+
+    onDraftProviderChange(paneId, provider);
+    const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    if (!tabSnapshot) return;
+    const paneSessionId = findPaneSessionId(tabSnapshot.paneLayout, paneId) ?? tabSnapshot.activeSessionId;
+    const sessionSnapshot = tabSnapshot.sessions.find((session) => session.id === paneSessionId);
+    if (!sessionSnapshot || !isDraftSession(sessionSnapshot)) return;
+
+    const materialized = await materializeSession(tabSnapshot.id, sessionSnapshot.id, "");
+    if (!materialized) return;
+    await startAgentSessionInPane(paneId, materialized.tab, materialized.session);
+  };
+
   const onRestoreDraftSession = (paneId: string, sessionId: string) => {
     void restoreSessionIntoPane(activeTab.id, sessionId, paneId).then((restored) => {
       if (!restored) return;
-      void refreshHistoryRecords();
+      const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
+      const restoredSession = currentTab?.sessions.find((session) => session.id === sessionId);
+      if (currentTab && restoredSession) {
+        void startAgentSessionInPane(paneId, currentTab, restoredSession);
+      }
+      void refreshHistoryRecordsIfNeeded();
     });
   };
 
@@ -2227,7 +2244,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   };
 
-  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
+  const visiblePanelTerminals = filterWorkspacePanelTerminals(activeTab.terminals, activeTab.sessions);
+  const activeTerminal = visiblePanelTerminals.find((t) => t.id === activeTab.activeTerminalId) ?? visiblePanelTerminals[0];
   const showAgentPanel = !isCodeExpanded;
 
   const toggleCodeExpanded = async () => {
@@ -2296,7 +2314,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     action.run();
   };
 
-  const ensureAgentPaneSessionReady = async (paneId: string, firstInput = "") => {
+  const ensureAgentPaneSessionReady = async (paneId: string) => {
     if (isArchiveView) return null;
     const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     if (!activeTabSnapshot) return null;
@@ -2305,36 +2323,19 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!activeSessionSnapshot) return null;
 
     const materialized = isDraftSession(activeSessionSnapshot)
-      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, firstInput)
+      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
       : { tab: activeTabSnapshot, session: activeSessionSnapshot };
-    const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
-    const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
+    let tabSnapshot = materialized?.tab ?? activeTabSnapshot;
+    let sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return null;
 
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot, paneId);
+    if (!sessionSnapshot.terminalId) {
+      const started = await startSessionRuntimeInPane(paneId, tabSnapshot, sessionSnapshot);
       if (!started) return null;
-      if (started.started) {
-        syncAgentPaneSize(
-          agentRuntimeRefs,
-          paneId,
-          tabSnapshot.controller,
-          tabSnapshot.id,
-          sessionSnapshot.id,
-        );
-      }
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id, started.startupToken);
-      }
+      tabSnapshot = started.tab;
+      sessionSnapshot = started.session;
     }
 
-    syncAgentPaneSize(
-      agentRuntimeRefs,
-      paneId,
-      tabSnapshot.controller,
-      tabSnapshot.id,
-      sessionSnapshot.id,
-    );
     touchSession(tabSnapshot.id, sessionSnapshot.id);
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
@@ -2342,63 +2343,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onAgentTerminalData = async (paneId: string, data: string) => {
     if (isArchiveView || !data) return;
     if (isAgentFocusTransitionSequence(data)) return;
+    // Filter out terminal response sequences (cursor position reports, color queries, etc.)
+    // These come from xterm initialization and should not be sent to the backend
+    if (/^\x1B\[[0-9;]*[R?AHFGSTIcJJKMSXh]/.test(data) || /^\x1B\]10;[^\x07]*(?:\x07|\x1B\\)/.test(data) || /^\x1B\]11;[^\x07]*(?:\x07|\x1B\\)/.test(data)) return;
     if (!guardWorkspaceMutation("agent_input")) return;
-    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const paneSessionId = activeTabSnapshot
-      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
-      : null;
-    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
-      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
-      : null;
-    const titleTracking = currentSessionSnapshot
-      ? trackAgentInitialTitleInput(agentRuntimeRefs, paneId, currentSessionSnapshot, data)
-      : { committedTitle: null, materializeTitle: "" };
-    const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
-    const nextQueue = currentQueue
-      .catch(() => undefined)
-      .then(async () => {
-        const ready = await ensureAgentPaneSessionReady(paneId, titleTracking.materializeTitle);
-        if (!ready) return;
-        if (titleTracking.committedTitle) {
-          commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, titleTracking.committedTitle);
-        }
-        await sendAgentRawChunk(ready.tab, ready.session, data);
-      });
-    agentTerminalQueueRef.current.set(paneId, nextQueue);
-    await nextQueue;
-  };
-
-  const onSubmitDraftPrompt = async (paneId: string, submittedValue?: string) => {
-    if (!guardWorkspaceMutation("agent_input")) return;
-    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const paneSessionId = activeTabSnapshot
-      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
-      : null;
-    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
-      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
-      : null;
-    const content = (
-      submittedValue
-      ?? draftPromptInputRefs.current.get(paneId)?.value
-      ?? draftPromptInputs[paneId]
-      ?? ""
-    ).trim();
-    if (!content) return;
-    if (activeTabSnapshot && currentSessionSnapshot) {
-      previewAgentSessionTitle({
-        tabId: activeTabSnapshot.id,
-        sessionId: currentSessionSnapshot.id,
-        rawInput: content,
-        locale,
-        t,
-        updateTab,
-      });
-    }
-    setDraftPromptInputs((current) => ({
-      ...current,
-      [paneId]: ""
-    }));
-    await onAgentTerminalData(paneId, `${content}\r`);
+    const ready = await ensureAgentPaneSessionReady(paneId);
+    if (!ready) return;
+    await sendAgentRawChunk(ready.tab, ready.session, data);
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
@@ -2541,10 +2492,18 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     size: { cols: number; rows: number }
   ) => {
     agentPaneSizeRef.current.set(paneId, size);
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabId, sessionId)) return;
-    const controller = stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
-    if (!controller || controller.role !== "controller") return;
-    syncAgentRuntimeSize(agentRuntimeRefs, controller, tabId, sessionId, size);
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!tab || !session?.terminalId) return;
+    if (!canMutateWorkspace(tab.controller, "resize_terminal")) return;
+    syncWorkspaceTerminalSize(
+      terminalSizeRef,
+      tab.id,
+      tab.controller,
+      session.terminalId,
+      size.cols,
+      size.rows,
+    );
   }, []);
 
   useEffect(() => {
@@ -2662,6 +2621,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     : null;
   const visibleAgentRecoveryAction = agentRecoveryAction ?? activeAgentRecoveryBusy;
   const terminalRecoveryAction = resolveTerminalRecoveryAction(activeTab.controller, activeTerminal);
+  const shellTerminalMode = resolveTerminalInteractionMode(
+    showTerminalPanel && !isCodeExpanded,
+    canMutateWorkspace(activeTab.controller, "shell_input"),
+  );
+  const agentInputEnabled = canMutateWorkspace(activeTab.controller, "agent_input");
   const workspaceStatusBanner = isObserverMode ? (
     <div
       className="workspace-status-banner read-only"
@@ -2775,6 +2739,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const workspaceAgentPanel = (
     <AgentWorkspaceFeature
       visible={showAgentPanel}
+      agentInputEnabled={agentInputEnabled}
       locale={locale}
       activeTab={activeTab}
       activePaneSession={activePaneSession}
@@ -2784,8 +2749,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
       terminalCompatibilityMode={terminalCompatibilityMode}
-      draftPromptInputs={draftPromptInputs}
       draftPaneModes={draftPaneModes}
+      historyLoading={historyLoading}
       restoreCandidates={restoreCandidates}
       displaySessionTitle={displaySessionTitle}
       onExitArchive={onExitArchive}
@@ -2793,17 +2758,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       onSplitPane={splitPane}
       onCloseAgentPane={onCloseAgentPane}
       onDraftPaneModeChange={onDraftPaneModeChange}
+      onStartDraftSession={(paneId, provider) => {
+        void onStartDraftSession(paneId, provider);
+      }}
       onRestoreDraftSession={onRestoreDraftSession}
-      onSubmitDraftPrompt={(paneId) => {
-        void onSubmitDraftPrompt(paneId);
-      }}
-      onDraftPromptChange={(paneId, value) => {
-        setDraftPromptInputs((current) => ({
-          ...current,
-          [paneId]: value
-        }));
-      }}
-      setDraftPromptInputRef={registerDraftPromptInputRef}
       setAgentTerminalRef={registerAgentTerminalRef}
       archiveTerminalRef={archiveTerminalRef}
       onAgentTerminalData={(paneId, data) => {
@@ -2983,7 +2941,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       progressPercent={terminalProgressPercent}
       progressTone={terminalProgressTone}
       activeTerminal={activeTerminal ? { id: activeTerminal.id, output: activeTerminal.output ?? "" } : undefined}
-      terminals={activeTab.terminals.map((term) => ({
+      mode={shellTerminalMode}
+      terminals={visiblePanelTerminals.map((term) => ({
         id: term.id,
         title: displayTerminalTitle(term.title)
       }))}
@@ -2992,7 +2951,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       theme={theme}
       fontSize={editorMetrics.terminalFontSize}
       compatibilityMode={terminalCompatibilityMode}
-      autoFocus={showTerminalPanel && !isCodeExpanded}
+      autoFocus={shellTerminalMode === "interactive"}
       onTerminalData={onShellTerminalData}
       onTerminalSize={onShellTerminalSize}
       onResizeStart={onResizeStart("right-split")}
@@ -3049,6 +3008,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             t={t}
           />
 
+          <ConfirmDialog state={confirmDialog} locale={locale} t={t} />
+
           {showWelcomeScreen ? (
             <WorkspaceWelcomeScreen
               hasHistory={historyRecords.length > 0}
@@ -3057,7 +3018,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               onOpenSettings={onOpenSettings}
               t={t}
             />
-          ) : (
+          ) : hasOpenWorkspace ? (
             <WorkspaceShell
               isFocusMode={isFocusMode}
               isCodeExpanded={isCodeExpanded}
@@ -3074,7 +3035,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               onToggleRightPane={toggleRightPane}
               t={t}
             />
-          )}
+          ) : null}
 
           {commandPaletteOpen && (
             <CommandPalette

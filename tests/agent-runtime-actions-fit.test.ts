@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fitAgentTerminalHandles } from "../apps/web/src/features/agents/agent-terminal-ref-fit.ts";
+import { fitAgentTerminalHandles } from "../apps/web/src/features/agents/agent-terminal-ref-fit";
 
 test("fitAgentTerminalHandles fits each registered terminal immediately", () => {
   const calls: string[] = [];

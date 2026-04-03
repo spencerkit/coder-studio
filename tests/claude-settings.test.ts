@@ -1,21 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTranslator } from '../apps/web/src/i18n.ts';
+import { createTranslator } from '../apps/web/src/i18n';
 import {
   applyGeneralSettingsPatch,
   cloneAppSettings,
   defaultAppSettings,
   forceClaudeExecutableDefaults,
   formatClaudeLaunchPreview,
+  formatCodexRuntimeCommand,
   getIdlePolicySyncWorkspaceIds,
-  getClaudeScopeProfile,
   getSettingsDraftLocale,
+  normalizeAppSettings,
   patchClaudeStructuredSettings,
+  patchCodexStructuredSettings,
   replaceClaudeAdvancedJson,
   mergeLegacySettingsIntoAppSettings,
   resolveClaudeRuntimeProfile,
-  setClaudeScopeOverrideEnabled,
-} from '../apps/web/src/shared/app/claude-settings.ts';
+  resolveCodexRuntimeProfile,
+} from '../apps/web/src/shared/app/claude-settings';
 
 test('formatClaudeLaunchPreview always starts with claude and omits blank args', () => {
   assert.equal(
@@ -30,23 +32,32 @@ test('formatClaudeLaunchPreview always starts with claude and omits blank args',
   );
 });
 
-test('forceClaudeExecutableDefaults resets hidden executable overrides back to claude', () => {
+test('formatCodexRuntimeCommand includes generated config overrides without explicit codex hooks feature args', () => {
+  assert.equal(
+    formatCodexRuntimeCommand({
+      executable: 'codex',
+      extraArgs: ['--full-auto', '   '],
+      model: 'gpt-5.4',
+      approvalPolicy: 'on-request',
+      sandboxMode: '',
+      webSearch: '',
+      modelReasoningEffort: '',
+      env: {},
+    }),
+    'codex --full-auto --config model="gpt-5.4" --config approval_policy="on-request"',
+  );
+});
+
+test('forceClaudeExecutableDefaults only resets the single Claude executable back to claude', () => {
   const settings = cloneAppSettings(defaultAppSettings());
   settings.claude.global.executable = 'claude-nightly';
-  settings.claude.overrides.native = {
-    enabled: true,
-    profile: {
-      ...settings.claude.global,
-      executable: 'claude-native',
-      startupArgs: ['--verbose'],
-    },
-  };
+  settings.codex.global.executable = 'codex-nightly';
 
   const next = forceClaudeExecutableDefaults(settings);
 
   assert.equal(next.claude.global.executable, 'claude');
-  assert.equal(next.claude.overrides.native?.profile.executable, 'claude');
-  assert.deepEqual(next.claude.overrides.native?.profile.startupArgs, ['--verbose']);
+  assert.equal(next.codex.global.executable, 'codex-nightly');
+  assert.ok(!('overrides' in next.claude));
 });
 
 test('mergeLegacySettingsIntoAppSettings migrates launch command into claude global executable', () => {
@@ -82,22 +93,56 @@ test('mergeLegacySettingsIntoAppSettings preserves unquoted windows paths with b
   assert.deepEqual(merged.claude.global.startupArgs, ['--verbose']);
 });
 
-test('resolveClaudeRuntimeProfile only uses target override when enabled', () => {
-  const settings = defaultAppSettings();
-  settings.claude.overrides.native = {
-    enabled: true,
-    profile: {
-      ...settings.claude.global,
-      executable: 'claude-native',
-      startupArgs: ['--dangerously-skip-permissions'],
+test('normalizeAppSettings drops incoming Claude target overrides and keeps one runtime profile', () => {
+  const settings = normalizeAppSettings({
+    ...defaultAppSettings(),
+    claude: {
+      global: {
+        executable: 'claude-global',
+        startupArgs: ['--verbose'],
+        env: {},
+        settingsJson: {
+          model: 'sonnet',
+        },
+        globalConfigJson: {},
+      },
+      overrides: {
+        native: {
+          enabled: true,
+          profile: {
+            executable: 'claude-native',
+            startupArgs: ['--dangerously-skip-permissions'],
+            env: {},
+            settingsJson: {
+              model: 'opus',
+            },
+            globalConfigJson: {},
+          },
+        },
+        wsl: {
+          enabled: true,
+          profile: {
+            executable: 'claude-wsl',
+            startupArgs: ['--print'],
+            env: {},
+            settingsJson: {
+              model: 'haiku',
+            },
+            globalConfigJson: {},
+          },
+        },
+      },
     },
-  };
+  });
 
   const native = resolveClaudeRuntimeProfile(settings, { type: 'native' });
   const wsl = resolveClaudeRuntimeProfile(settings, { type: 'wsl', distro: 'Ubuntu' });
 
-  assert.equal(native.executable, 'claude-native');
-  assert.equal(wsl.executable, 'claude');
+  assert.deepEqual(native, wsl);
+  assert.equal(native.executable, 'claude-global');
+  assert.deepEqual(native.startupArgs, ['--verbose']);
+  assert.equal(native.settingsJson.model, 'sonnet');
+  assert.ok(!('overrides' in settings.claude));
 });
 
 test('applyGeneralSettingsPatch updates nested general settings and compatibility mirrors', () => {
@@ -121,34 +166,47 @@ test('applyGeneralSettingsPatch updates nested general settings and compatibilit
   assert.equal(next.terminalCompatibilityMode, 'compatibility');
 });
 
-test('resolveClaudeRuntimeProfile inherits global startup args for enabled target overrides', () => {
-  const settings = cloneAppSettings({
+test('normalizeAppSettings drops incoming Codex target overrides and keeps one runtime profile', () => {
+  const settings = normalizeAppSettings({
     ...defaultAppSettings(),
-    claude: {
-      ...defaultAppSettings().claude,
+    codex: {
       global: {
-        ...defaultAppSettings().claude.global,
-        executable: 'claude-global',
-        startupArgs: ['--verbose'],
+        executable: 'codex-global',
+        extraArgs: ['--full-auto'],
+        model: 'gpt-5.4',
+        approvalPolicy: 'on-request',
+        sandboxMode: 'workspace-write',
+        webSearch: '',
+        modelReasoningEffort: '',
+        env: {},
       },
       overrides: {
-        ...defaultAppSettings().claude.overrides,
+        native: {
+          enabled: true,
+          profile: {
+            executable: 'codex-native',
+            extraArgs: ['--search'],
+            model: '',
+            approvalPolicy: 'never',
+            sandboxMode: '',
+            webSearch: 'live',
+            modelReasoningEffort: 'high',
+            env: {},
+          },
+        },
+        wsl: null,
       },
     },
   });
-  settings.claude.overrides.native = {
-    enabled: true,
-    profile: {
-      ...settings.claude.global,
-      executable: 'claude-native',
-      startupArgs: [],
-    },
-  };
 
-  const resolved = resolveClaudeRuntimeProfile(settings, { type: 'native' });
+  const native = resolveCodexRuntimeProfile(settings, { type: 'native' });
+  const wsl = resolveCodexRuntimeProfile(settings, { type: 'wsl', distro: 'Ubuntu' });
 
-  assert.equal(resolved.executable, 'claude-native');
-  assert.deepEqual(resolved.startupArgs, ['--verbose']);
+  assert.deepEqual(native, wsl);
+  assert.equal(native.executable, 'codex-global');
+  assert.deepEqual(native.extraArgs, ['--full-auto']);
+  assert.equal(native.approvalPolicy, 'on-request');
+  assert.ok(!('overrides' in settings.codex));
 });
 
 test('getIdlePolicySyncWorkspaceIds waits for confirmed settings hydration', () => {
@@ -174,40 +232,50 @@ test('getSettingsDraftLocale follows the shared draft locale', () => {
   assert.equal(getSettingsDraftLocale(settings), 'zh');
 });
 
-test('setClaudeScopeOverrideEnabled materializes a target override from global defaults', () => {
-  const settings = defaultAppSettings();
-  settings.claude.global.executable = 'claude-global';
-  settings.claude.global.startupArgs = ['--verbose'];
-
-  const next = setClaudeScopeOverrideEnabled(settings, 'native', true);
-  const nativeOverride = next.claude.overrides.native;
-
-  assert.equal(nativeOverride?.enabled, true);
-  assert.equal(nativeOverride?.profile.executable, 'claude-global');
-  assert.deepEqual(nativeOverride?.profile.startupArgs, ['--verbose']);
-});
-
-test('patchClaudeStructuredSettings only updates the requested target scope', () => {
+test('patchClaudeStructuredSettings updates the single Claude profile directly', () => {
   const settings = defaultAppSettings();
 
   const next = patchClaudeStructuredSettings(settings, {
-    scope: 'native',
-    executable: 'claude-native',
+    executable: 'claude-nightly',
     startupArgs: ['--dangerously-skip-permissions'],
     env: { ANTHROPIC_API_KEY: 'secret' },
   });
 
-  assert.equal(next.claude.global.executable, 'claude');
-  assert.equal(next.claude.overrides.native?.profile.executable, 'claude-native');
-  assert.deepEqual(next.claude.overrides.native?.profile.startupArgs, ['--dangerously-skip-permissions']);
-  assert.deepEqual(next.claude.overrides.native?.profile.env, { ANTHROPIC_API_KEY: 'secret' });
+  assert.equal(next.claude.global.executable, 'claude-nightly');
+  assert.deepEqual(next.claude.global.startupArgs, ['--dangerously-skip-permissions']);
+  assert.deepEqual(next.claude.global.env, { ANTHROPIC_API_KEY: 'secret' });
+  assert.ok(!('overrides' in next.claude));
 });
 
-test('replaceClaudeAdvancedJson updates nested advanced json for a single scope', () => {
+test('patchCodexStructuredSettings updates the single Codex profile directly', () => {
+  const settings = defaultAppSettings();
+
+  const next = patchCodexStructuredSettings(settings, {
+    executable: 'codex-nightly',
+    extraArgs: ['--full-auto'],
+    model: 'gpt-5.4',
+    approvalPolicy: 'on-request',
+    sandboxMode: 'workspace-write',
+    webSearch: 'live',
+    modelReasoningEffort: 'high',
+    env: { OPENAI_API_KEY: 'secret' },
+  });
+
+  assert.equal(next.codex.global.executable, 'codex-nightly');
+  assert.deepEqual(next.codex.global.extraArgs, ['--full-auto']);
+  assert.equal(next.codex.global.model, 'gpt-5.4');
+  assert.equal(next.codex.global.approvalPolicy, 'on-request');
+  assert.equal(next.codex.global.sandboxMode, 'workspace-write');
+  assert.equal(next.codex.global.webSearch, 'live');
+  assert.equal(next.codex.global.modelReasoningEffort, 'high');
+  assert.deepEqual(next.codex.global.env, { OPENAI_API_KEY: 'secret' });
+  assert.ok(!('overrides' in next.codex));
+});
+
+test('replaceClaudeAdvancedJson updates nested advanced json on the single Claude profile', () => {
   const settings = defaultAppSettings();
 
   const next = replaceClaudeAdvancedJson(settings, {
-    scope: 'wsl',
     field: 'settingsJson',
     value: {
       model: 'claude-opus',
@@ -217,13 +285,13 @@ test('replaceClaudeAdvancedJson updates nested advanced json for a single scope'
     },
   });
 
-  assert.deepEqual(getClaudeScopeProfile(next, 'wsl').settingsJson, {
+  assert.deepEqual(next.claude.global.settingsJson, {
     model: 'claude-opus',
     sandbox: {
       enabled: true,
     },
   });
-  assert.deepEqual(next.claude.global.settingsJson, {});
+  assert.ok(!('overrides' in next.claude));
 });
 
 test('translator exposes the new history and Claude settings keys', () => {

@@ -132,13 +132,14 @@ a {
   --bg-elevated: #121b1e;
   --bg-secondary: #141f24;
   --bg-tertiary: #1c2a31;
-  --bg-hover: rgba(180, 216, 225, 0.09);
+  --bg-hover: #162530;
   --bg-active: rgba(90, 200, 250, 0.14);
 
   --surface: #141f24;
   --surface-elevated: #1a2830;
   --surface-overlay: rgba(20, 31, 36, 0.95);
   --surface-glass: rgba(16, 26, 31, 0.9);
+  --surface-chip: #1a2830;
 
   --text: #e7f3f7;
   --text-secondary: #b4cad3;
@@ -312,7 +313,7 @@ a {
   --bg-elevated: #0f151b;
   --bg-secondary: #0d141a;
   --bg-tertiary: #131b23;
-  --bg-hover: rgba(156, 176, 188, 0.08);
+  --bg-hover: #121a21;
   --bg-active: rgba(108, 182, 255, 0.14);
 
   --surface: #11181f;

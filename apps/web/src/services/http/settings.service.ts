@@ -1,13 +1,13 @@
-import type { Locale } from "../../i18n.ts";
-import type { AppSettings } from "../../types/app.ts";
+import type { Locale } from "../../i18n";
+import type { AppSettings, AppSettingsUpdater } from "../../types/app";
 import {
   appSettingsPayloadEquals,
   cloneAppSettings,
   mergeLegacySettingsIntoAppSettings,
   normalizeAppSettings,
   toAppSettingsPayload,
-} from "../../shared/app/claude-settings.ts";
-import { invokeRpc } from "./client.ts";
+} from "../../shared/app/claude-settings";
+import { invokeRpc } from "./client";
 
 export const getAppSettings = async (): Promise<AppSettings> => (
   normalizeAppSettings(await invokeRpc<unknown>("app_settings_get", {}))
@@ -38,6 +38,11 @@ export const createAppSettingsDraftStore = (initialSettings: AppSettings) => {
     },
   };
 };
+
+export const applyAppSettingsUpdater = (
+  store: ReturnType<typeof createAppSettingsDraftStore>,
+  updater: AppSettingsUpdater,
+): AppSettings => store.replace(cloneAppSettings(updater(store.get())));
 
 type HydrateConfirmedAppSettingsArgs = {
   fallbackSettings: AppSettings;
@@ -195,6 +200,7 @@ export const createSequencedAppSettingsSaver = () => {
   let lastAppliedRequestId = 0;
   const pendingRequestIds = new Set<number>();
   const settledRequests = new Map<number, SequencedSaveState>();
+  let persistChain = Promise.resolve();
 
   const pruneSettledRequests = () => {
     for (const requestId of settledRequests.keys()) {
@@ -217,23 +223,31 @@ export const createSequencedAppSettingsSaver = () => {
     }> => {
       latestRequestId += 1;
       const requestId = latestRequestId;
+      const confirmedSnapshot = cloneAppSettings(confirmedSettings);
+      const draftSnapshot = cloneAppSettings(draftSettings);
       pendingRequestIds.add(requestId);
 
-      try {
-        settledRequests.set(requestId, {
-          settings: cloneAppSettings(await persist(cloneAppSettings(draftSettings))),
-          success: true,
-          backendConfirmed: true,
-        });
-      } catch {
-        settledRequests.set(requestId, {
-          settings: cloneAppSettings(confirmedSettings),
-          success: false,
-          backendConfirmed: confirmedSettingsAreBackendConfirmed,
-        });
-      } finally {
-        pendingRequestIds.delete(requestId);
-      }
+      const runPersist = async () => {
+        try {
+          settledRequests.set(requestId, {
+            settings: cloneAppSettings(await persist(cloneAppSettings(draftSnapshot))),
+            success: true,
+            backendConfirmed: true,
+          });
+        } catch {
+          settledRequests.set(requestId, {
+            settings: cloneAppSettings(confirmedSnapshot),
+            success: false,
+            backendConfirmed: confirmedSettingsAreBackendConfirmed,
+          });
+        } finally {
+          pendingRequestIds.delete(requestId);
+        }
+      };
+
+      const persistTask = persistChain.then(runPersist, runPersist);
+      persistChain = persistTask.then(() => undefined, () => undefined);
+      await persistTask;
 
       const visibleSave = findLatestVisibleSave(latestRequestId, pendingRequestIds, settledRequests);
       if (!visibleSave || visibleSave.requestId === lastAppliedRequestId) {
@@ -241,7 +255,7 @@ export const createSequencedAppSettingsSaver = () => {
         return {
           settings: visibleSave
             ? cloneAppSettings(visibleSave.settings)
-            : cloneAppSettings(confirmedSettings),
+            : cloneAppSettings(confirmedSnapshot),
           backendConfirmed: visibleSave?.backendConfirmed ?? confirmedSettingsAreBackendConfirmed,
           shouldApply: false,
         };

@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createTranslator } from "../apps/web/src/i18n.ts";
-import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions.ts";
-import { displaySessionStatus } from "../apps/web/src/shared/utils/session.ts";
-import type { AppSettings } from "../apps/web/src/types/app.ts";
-import type { WorkbenchState } from "../apps/web/src/state/workbench.ts";
+import { createTranslator } from "../apps/web/src/i18n";
+import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
+import { displaySessionStatus } from "../apps/web/src/shared/utils/session";
+import type { AppSettings } from "../apps/web/src/types/app";
+import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",

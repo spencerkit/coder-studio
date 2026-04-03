@@ -4,15 +4,6 @@ export type WsEventEnvelope = {
   payload: unknown;
 };
 
-export type WsAgentSendEnvelope = {
-  type: "agent_send";
-  workspace_id: string;
-  session_id: string;
-  input: string;
-  append_newline?: boolean;
-  fencing_token: number;
-};
-
 export type WsTerminalWriteEnvelope = {
   type: "terminal_write";
   workspace_id: string;
@@ -25,15 +16,6 @@ export type WsTerminalResizeEnvelope = {
   type: "terminal_resize";
   workspace_id: string;
   terminal_id: number;
-  cols: number;
-  rows: number;
-  fencing_token: number;
-};
-
-export type WsAgentResizeEnvelope = {
-  type: "agent_resize";
-  workspace_id: string;
-  session_id: string;
   cols: number;
   rows: number;
   fencing_token: number;
@@ -66,8 +48,6 @@ export type WsEnvelope = WsEventEnvelope | WsPingEnvelope | WsPongEnvelope;
 export type WsClientEnvelope =
   | WsPingEnvelope
   | WsPongEnvelope
-  | WsAgentSendEnvelope
-  | WsAgentResizeEnvelope
   | WsSessionUpdateEnvelope
   | WsTerminalWriteEnvelope
   | WsTerminalResizeEnvelope

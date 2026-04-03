@@ -1,3 +1,11 @@
+use crate::infra::db::{
+    load_workspace_controller_lease_from_conn, save_workspace_controller_lease_to_conn,
+    with_db_mapped, workspace_access_context_from_conn,
+};
+use crate::services::workspace_runtime::{
+    emit_workspace_controller_change, reconcile_workspace_controller_lease,
+    validate_workspace_controller_mutation,
+};
 use crate::ws::server::ws_handler;
 use crate::*;
 
@@ -46,6 +54,7 @@ struct SessionCreateRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     mode: SessionMode,
+    provider: AgentProvider,
 }
 
 #[derive(Deserialize)]
@@ -242,23 +251,12 @@ struct TerminalCloseRequest {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentStartRequest {
+struct SessionRuntimeStartRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
-    provider: String,
     cols: Option<u16>,
     rows: Option<u16>,
-}
-
-#[derive(Deserialize)]
-struct AgentSendRequest {
-    #[serde(flatten)]
-    controller: WorkspaceControllerMutationRequest,
-    session_id: String,
-    input: String,
-    append_newline: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -266,15 +264,6 @@ struct AgentStopRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
-}
-
-#[derive(Deserialize)]
-struct AgentResizeRequest {
-    #[serde(flatten)]
-    controller: WorkspaceControllerMutationRequest,
-    session_id: String,
-    cols: u16,
-    rows: u16,
 }
 
 #[derive(Deserialize)]
@@ -414,8 +403,55 @@ fn require_workspace_access(
     workspace_id: &str,
     authorized: &AuthorizedRequest,
 ) -> Result<(String, ExecTarget), RpcError> {
-    let context = workspace_access_context(app.state(), workspace_id).map_err(rpc_bad_request)?;
-    require_path_access(&context.0, &context.1, authorized)?;
+    require_workspace_context(app, workspace_id, None, authorized, |_, _| Ok(()))
+}
+
+fn require_workspace_context<F>(
+    app: &AppHandle,
+    workspace_id: &str,
+    controller: Option<(&str, &str, i64)>,
+    authorized: &AuthorizedRequest,
+    extra_check: F,
+) -> Result<(String, ExecTarget), RpcError>
+where
+    F: FnOnce(&str, &ExecTarget) -> Result<(), RpcError>,
+{
+    let mut changed_lease = None;
+    let context = with_db_mapped(app.state(), rpc_bad_request, |conn| {
+        let context =
+            workspace_access_context_from_conn(conn, workspace_id).map_err(rpc_bad_request)?;
+        require_path_access(&context.0, &context.1, authorized)?;
+        extra_check(&context.0, &context.1)?;
+
+        if let Some((device_id, client_id, fencing_token)) = controller {
+            let now = now_ts();
+            let mut lease = load_workspace_controller_lease_from_conn(conn, workspace_id)
+                .map_err(rpc_bad_request)?;
+            let before = lease.clone();
+            reconcile_workspace_controller_lease(&mut lease, now);
+
+            if lease != before {
+                save_workspace_controller_lease_to_conn(conn, &lease).map_err(rpc_bad_request)?;
+                changed_lease = Some(lease.clone());
+            }
+
+            validate_workspace_controller_mutation(
+                &lease,
+                device_id,
+                client_id,
+                fencing_token,
+                now,
+            )
+            .map_err(rpc_forbidden)?;
+        }
+
+        Ok(context)
+    })?;
+
+    if let Some(lease) = changed_lease.as_ref() {
+        emit_workspace_controller_change(app, lease);
+    }
+
     Ok(context)
 }
 
@@ -424,16 +460,18 @@ fn require_workspace_controller_mutation(
     controller: &WorkspaceControllerMutationRequest,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    require_workspace_access(app, &controller.workspace_id, authorized)?;
-    assert_workspace_controller_can_mutate(
-        &controller.workspace_id,
-        &controller.device_id,
-        &controller.client_id,
-        controller.fencing_token,
+    require_workspace_context(
         app,
-        app.state(),
+        &controller.workspace_id,
+        Some((
+            &controller.device_id,
+            &controller.client_id,
+            controller.fencing_token,
+        )),
+        authorized,
+        |_, _| Ok(()),
     )
-    .map_err(rpc_forbidden)?;
+    .map(|_| ())?;
     Ok(())
 }
 
@@ -442,25 +480,26 @@ fn require_optional_workspace_history_mutation(
     request: &SessionHistoryMutationRequest,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    require_workspace_access(app, &request.workspace_id, authorized)?;
     match (
         request.device_id.as_deref(),
         request.client_id.as_deref(),
         request.fencing_token,
     ) {
         (Some(device_id), Some(client_id), Some(fencing_token)) => {
-            assert_workspace_controller_can_mutate(
-                &request.workspace_id,
-                device_id,
-                client_id,
-                fencing_token,
+            require_workspace_context(
                 app,
-                app.state(),
+                &request.workspace_id,
+                Some((device_id, client_id, fencing_token)),
+                authorized,
+                |_, _| Ok(()),
             )
-            .map_err(rpc_forbidden)?;
+            .map(|_| ())?;
             Ok(())
         }
-        (None, None, None) => Ok(()),
+        (None, None, None) => {
+            require_workspace_access(app, &request.workspace_id, authorized)?;
+            Ok(())
+        }
         _ => Err(rpc_bad_request(
             "incomplete_workspace_controller".to_string(),
         )),
@@ -474,28 +513,32 @@ fn require_workspace_path_controller_mutation(
     target: &ExecTarget,
     authorized: &AuthorizedRequest,
 ) -> Result<(), RpcError> {
-    let (workspace_path, workspace_target) =
-        require_workspace_access(app, &controller.workspace_id, authorized)?;
-    if workspace_target != *target {
-        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
-    }
-
-    let normalized_path = normalize_path_for_target(path, target).map_err(rpc_bad_request)?;
-    let normalized_workspace =
-        normalize_path_for_target(&workspace_path, &workspace_target).map_err(rpc_bad_request)?;
-    if !path_within_root(&normalized_path, &normalized_workspace, target) {
-        return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
-    }
-
-    assert_workspace_controller_can_mutate(
-        &controller.workspace_id,
-        &controller.device_id,
-        &controller.client_id,
-        controller.fencing_token,
+    require_workspace_context(
         app,
-        app.state(),
+        &controller.workspace_id,
+        Some((
+            &controller.device_id,
+            &controller.client_id,
+            controller.fencing_token,
+        )),
+        authorized,
+        |workspace_path, workspace_target| {
+            if *workspace_target != *target {
+                return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+            }
+
+            let normalized_path =
+                normalize_path_for_target(path, target).map_err(rpc_bad_request)?;
+            let normalized_workspace = normalize_path_for_target(workspace_path, workspace_target)
+                .map_err(rpc_bad_request)?;
+            if !path_within_root(&normalized_path, &normalized_workspace, target) {
+                return Err(rpc_bad_request("workspace_path_mismatch".to_string()));
+            }
+
+            Ok(())
+        },
     )
-    .map_err(rpc_forbidden)?;
+    .map(|_| ())?;
     Ok(())
 }
 
@@ -797,8 +840,13 @@ fn dispatch_rpc(
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
-                create_session(req.controller.workspace_id, req.mode, app.state())
-                    .map_err(rpc_bad_request)?,
+                create_session(
+                    req.controller.workspace_id,
+                    req.mode,
+                    req.provider,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -863,7 +911,8 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result = git_status(req.path, req.target).map_err(rpc_bad_request);
+            let result = git_status_cached(req.path, req.target, &app.state().artifact_caches)
+                .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -879,7 +928,8 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result = git_changes(req.path, req.target).map_err(rpc_bad_request);
+            let result = git_changes_cached(req.path, req.target, &app.state().artifact_caches)
+                .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -912,6 +962,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_stage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_stage_all");
             Ok(Value::Null)
         }
@@ -931,6 +983,16 @@ fn dispatch_rpc(
                 req.file_path,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -950,6 +1012,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_unstage_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_unstage_all");
             Ok(Value::Null)
         }
@@ -969,6 +1033,16 @@ fn dispatch_rpc(
                 req.file_path,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -988,6 +1062,8 @@ fn dispatch_rpc(
                 authorized,
             )?;
             git_discard_all(req.path.clone(), req.target.clone()).map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(&app.state().artifact_caches, &req.path, &req.target);
+            invalidate_workspace_tree_cache(&app.state().artifact_caches, &req.path, &req.target);
             emit_workspace_artifacts_dirty(app, &req.path, &req.target, "git_discard_all");
             Ok(Value::Null)
         }
@@ -1008,6 +1084,16 @@ fn dispatch_rpc(
                 req.section,
             )
             .map_err(rpc_bad_request)?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -1035,6 +1121,16 @@ fn dispatch_rpc(
                 .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.mutation.path,
+                &req.mutation.target,
+            );
             emit_workspace_artifacts_dirty(
                 app,
                 &req.mutation.path,
@@ -1047,7 +1143,9 @@ fn dispatch_rpc(
             let req: PathTargetRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let worktrees = worktree_list(req.path, req.target.clone()).map_err(rpc_bad_request);
+            let worktrees =
+                worktree_list_cached(req.path, req.target.clone(), &app.state().artifact_caches)
+                    .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             let worktrees = worktrees?;
             let filtered = if authorized.request.public_mode {
@@ -1070,8 +1168,13 @@ fn dispatch_rpc(
             let req: WorkspaceTreeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_path_access(&req.path, &req.target, authorized)?;
             let suppressed = begin_workspace_watch_suppression(app.state(), &req.path, &req.target);
-            let result =
-                workspace_tree(req.path, req.target, Some(req.depth)).map_err(rpc_bad_request);
+            let result = workspace_tree_cached(
+                req.path,
+                req.target,
+                Some(req.depth),
+                &app.state().artifact_caches,
+            )
+            .map_err(rpc_bad_request);
             end_workspace_watch_suppression(app.state(), &suppressed);
             serde_json::to_value(result?).map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -1088,6 +1191,16 @@ fn dispatch_rpc(
                 file_save(req.path.clone(), req.content).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))?;
+            invalidate_git_artifact_caches(
+                &app.state().artifact_caches,
+                &req.path,
+                &ExecTarget::Native,
+            );
+            invalidate_workspace_tree_cache(
+                &app.state().artifact_caches,
+                &req.path,
+                &ExecTarget::Native,
+            );
             emit_workspace_artifacts_dirty(app, &req.path, &ExecTarget::Native, "file_save");
             Ok(saved)
         }
@@ -1149,6 +1262,25 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "session_runtime_start" => {
+            let req: SessionRuntimeStartRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                session_runtime_start(
+                    SessionRuntimeStartParams {
+                        workspace_id: req.controller.workspace_id,
+                        session_id: req.session_id,
+                        cols: req.cols,
+                        rows: req.rows,
+                    },
+                    app.clone(),
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "terminal_write" => {
             let req: TerminalWriteRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
@@ -1181,56 +1313,11 @@ fn dispatch_rpc(
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
-        "agent_start" => {
-            let req: AgentStartRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            serde_json::to_value(
-                agent_start(
-                    crate::services::agent::AgentStartParams {
-                        workspace_id: req.controller.workspace_id,
-                        session_id: req.session_id,
-                        provider: req.provider,
-                        cols: req.cols,
-                        rows: req.rows,
-                    },
-                    app.clone(),
-                    app.state(),
-                )
-                .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "agent_send" => {
-            let req: AgentSendRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            agent_send(
-                req.controller.workspace_id,
-                req.session_id,
-                req.input,
-                req.append_newline,
-                app.state(),
-            )
-            .map_err(rpc_bad_request)?;
-            Ok(Value::Null)
-        }
         "agent_stop" => {
             let req: AgentStopRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             agent_stop(req.controller.workspace_id, req.session_id, app.state())
                 .map_err(rpc_bad_request)?;
-            Ok(Value::Null)
-        }
-        "agent_resize" => {
-            let req: AgentResizeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            agent_resize(
-                req.controller.workspace_id,
-                req.session_id,
-                req.cols,
-                req.rows,
-                app.state(),
-            )
-            .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
         _ => Err(rpc_bad_request(format!("unsupported_command:{command}"))),
@@ -1609,7 +1696,19 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::sync::OnceLock;
     use std::time::Duration;
+
+    fn with_db_count_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn lock_with_db_count_tests() -> std::sync::MutexGuard<'static, ()> {
+        with_db_count_test_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -1617,6 +1716,14 @@ mod tests {
         init_db(&conn).unwrap();
         *app.state().db.lock().unwrap() = Some(conn);
         app
+    }
+
+    fn claude_profile(settings: &AppSettingsPayload) -> ClaudeRuntimeProfile {
+        settings.provider_profile("claude").unwrap_or_default()
+    }
+
+    fn codex_profile(settings: &AppSettingsPayload) -> CodexRuntimeProfile {
+        settings.provider_profile("codex").unwrap_or_default()
     }
 
     fn authorized_request() -> AuthorizedRequest {
@@ -1655,6 +1762,26 @@ mod tests {
         let root = std::env::temp_dir().join(format!("coder-studio-{name}-{unique}"));
         std::fs::create_dir_all(&root).unwrap();
         root.to_string_lossy().to_string()
+    }
+
+    fn attach_controller(
+        app: &AppHandle,
+        authorized: &AuthorizedRequest,
+        workspace_id: &str,
+    ) -> WorkspaceRuntimeSnapshot {
+        let value = dispatch_rpc(
+            app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            authorized,
+        )
+        .unwrap();
+
+        serde_json::from_value(value).unwrap()
     }
 
     fn test_agent_launch_profile() -> (String, Vec<String>) {
@@ -1731,6 +1858,106 @@ mod tests {
             snapshot.controller.controller_client_id.as_deref(),
             Some("client-a")
         );
+    }
+
+    #[test]
+    fn require_workspace_controller_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-http-controller-guard-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_workspace_controller_mutation(
+            &app,
+            &WorkspaceControllerMutationRequest {
+                workspace_id,
+                device_id: "device-a".to_string(),
+                client_id: "client-a".to_string(),
+                fencing_token: runtime.controller.fencing_token,
+            },
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn require_workspace_path_controller_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("http-path-guard-db-count");
+        let workspace_id = launch_test_workspace(&app, &root);
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_workspace_path_controller_mutation(
+            &app,
+            &WorkspaceControllerMutationRequest {
+                workspace_id,
+                device_id: "device-a".to_string(),
+                client_id: "client-a".to_string(),
+                fencing_token: runtime.controller.fencing_token,
+            },
+            &root,
+            &ExecTarget::Native,
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn require_optional_workspace_history_mutation_uses_single_with_db_critical_section() {
+        let _guard = lock_with_db_count_tests();
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-http-history-guard-db-count");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        reset_with_db_call_count();
+        require_optional_workspace_history_mutation(
+            &app,
+            &SessionHistoryMutationRequest {
+                workspace_id,
+                session_id: 1,
+                device_id: Some("device-a".to_string()),
+                client_id: Some("client-a".to_string()),
+                fencing_token: Some(runtime.controller.fencing_token),
+            },
+            &authorized,
+        )
+        .unwrap();
+
+        assert_eq!(read_with_db_call_count(), 1);
     }
 
     #[test]
@@ -2108,8 +2335,13 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-rpc-test");
-        let created =
-            create_session(workspace_id.clone(), SessionMode::Branch, app.state()).unwrap();
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
         archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
 
         let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
@@ -2159,9 +2391,16 @@ mod tests {
 
         let initial = dispatch_rpc(&app, "app_settings_get", json!({}), &authorized)
             .expect("default settings should load");
-        let initial: AppSettingsPayload = serde_json::from_value(initial).unwrap();
-        assert_eq!(initial.general.terminal_compatibility_mode, "standard");
-        assert_eq!(initial.claude.global.executable, "claude");
+        assert_eq!(
+            initial["general"]["terminal_compatibility_mode"],
+            "standard"
+        );
+        assert_eq!(
+            initial["providers"]["claude"]["global"]["executable"],
+            "claude"
+        );
+        assert!(initial.get("claude").is_none());
+        assert!(initial.get("codex").is_none());
 
         let saved = dispatch_rpc(
             &app,
@@ -2195,10 +2434,6 @@ mod tests {
                             "global_config_json": {
                                 "showTurnDuration": true
                             }
-                        },
-                        "overrides": {
-                            "native": null,
-                            "wsl": null
                         }
                     }
                 }
@@ -2207,18 +2442,17 @@ mod tests {
         )
         .expect("settings update should succeed");
 
-        let saved: AppSettingsPayload = serde_json::from_value(saved).unwrap();
-        assert_eq!(saved.general.locale, "zh");
-        assert_eq!(saved.claude.global.executable, "claude-nightly");
+        assert_eq!(saved["general"]["locale"], "zh");
         assert_eq!(
-            saved
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
-            Some("https://anthropic.example")
+            saved["providers"]["claude"]["global"]["executable"],
+            "claude-nightly"
         );
+        assert_eq!(
+            saved["providers"]["claude"]["global"]["env"]["ANTHROPIC_BASE_URL"],
+            "https://anthropic.example"
+        );
+        assert!(saved.get("claude").is_none());
+        assert!(saved.get("codex").is_none());
     }
 
     #[test]
@@ -2271,18 +2505,14 @@ mod tests {
         )
         .expect("partial settings update should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert_eq!(updated.general.locale, "zh");
         assert_eq!(
-            updated
-                .claude
-                .global
-                .env
-                .get("TEST_MARKER")
-                .map(String::as_str),
+            claude.env.get("TEST_MARKER").map(String::as_str),
             Some("persisted-value")
         );
-        assert_eq!(updated.claude.global.settings_json["model"], "opus");
+        assert_eq!(claude.settings_json["model"], "opus");
     }
 
     #[test]
@@ -2347,6 +2577,7 @@ mod tests {
         )
         .expect("camelCase settings update should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert!(!updated.general.completion_notifications.enabled);
         assert!(
@@ -2355,17 +2586,34 @@ mod tests {
                 .completion_notifications
                 .only_when_background
         );
-        assert_eq!(updated.claude.global.startup_args, vec!["--verbose"]);
-        assert_eq!(updated.claude.global.settings_json["model"], "opus");
-        assert_eq!(
-            updated.claude.global.settings_json["permissionMode"],
-            "acceptEdits"
-        );
-        assert_eq!(updated.claude.global.global_config_json["theme"], "dark");
-        assert_eq!(
-            updated.claude.global.global_config_json["showTurnDuration"],
-            true
-        );
+        assert_eq!(claude.startup_args, vec!["--verbose"]);
+        assert_eq!(claude.settings_json["model"], "opus");
+        assert_eq!(claude.settings_json["permissionMode"], "acceptEdits");
+        assert_eq!(claude.global_config_json["theme"], "dark");
+        assert_eq!(claude.global_config_json["showTurnDuration"], true);
+    }
+
+    #[test]
+    fn app_settings_update_normalizes_root_agent_defaults_camel_case_key() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "agentDefaults": {
+                        "provider": "codex"
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("camelCase root agent defaults update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+
+        assert_eq!(updated.agent_defaults.provider, AgentProvider::codex());
     }
 
     #[test]
@@ -2421,31 +2669,61 @@ mod tests {
         )
         .expect("object field replacement should succeed");
         let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let claude = claude_profile(&updated);
 
         assert_eq!(
-            updated
-                .claude
-                .global
-                .env
-                .get("ANTHROPIC_BASE_URL")
-                .map(String::as_str),
+            claude.env.get("ANTHROPIC_BASE_URL").map(String::as_str),
             Some("https://next.example")
         );
-        assert_eq!(updated.claude.global.env.get("TEST_MARKER"), None);
+        assert_eq!(claude.env.get("TEST_MARKER"), None);
         assert_eq!(
-            updated.claude.global.settings_json.get("permissionMode"),
+            claude.settings_json.get("permissionMode"),
             Some(&json!("plan"))
         );
-        assert_eq!(updated.claude.global.settings_json.get("model"), None);
+        assert_eq!(claude.settings_json.get("model"), None);
         assert_eq!(
-            updated
-                .claude
-                .global
+            claude
                 .global_config_json
                 .as_object()
                 .map(|value| value.is_empty()),
             Some(true)
         );
+    }
+
+    #[test]
+    fn app_settings_update_normalizes_camel_case_codex_payloads_before_merge() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let updated = dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "codex": {
+                        "global": {
+                            "model": "gpt-5.4",
+                            "approvalPolicy": "on-request",
+                            "sandboxMode": "workspace-write",
+                            "webSearch": "live",
+                            "modelReasoningEffort": "high",
+                            "extraArgs": ["--full-auto"]
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .expect("camelCase codex settings update should succeed");
+        let updated: AppSettingsPayload = serde_json::from_value(updated).unwrap();
+        let codex = codex_profile(&updated);
+
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.approval_policy, "on-request");
+        assert_eq!(codex.sandbox_mode, "workspace-write");
+        assert_eq!(codex.web_search, "live");
+        assert_eq!(codex.model_reasoning_effort, "high");
+        assert_eq!(codex.extra_args, vec!["--full-auto"]);
     }
 
     #[test]
@@ -2510,12 +2788,21 @@ mod tests {
         )
         .unwrap();
         let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
-        let session_id = load_workspace_snapshot(app.state(), &workspace_id)
-            .unwrap()
-            .sessions
-            .first()
-            .unwrap()
-            .id;
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .expect("create_session should succeed for marker launch test");
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
 
         let started = dispatch_rpc(
             &app,
@@ -2525,8 +2812,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": session_id.to_string(),
-                "provider": "claude",
+                "session_id": created.id.to_string(),
                 "cols": 80,
                 "rows": 24,
             }),
@@ -2564,7 +2850,6 @@ mod tests {
                 "client_id": "client-a",
                 "fencing_token": 1,
                 "session_id": "1",
-                "provider": "claude",
                 "command": "claude"
             }),
             &authorized,
@@ -2572,5 +2857,454 @@ mod tests {
         .expect_err("agent_start should reject legacy command payloads");
 
         assert_eq!(error.status, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn agent_start_uses_session_provider_from_storage() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("agent-start-provider");
+        let workspace_id = launch_test_workspace(&app, &root);
+        let marker_path = PathBuf::from(&root).join(".agent-start-provider-marker");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "codex": {
+                        "global": {
+                            "executable": test_agent_marker_profile(".agent-start-provider-marker").0,
+                            "extra_args": test_agent_marker_profile(".agent-start-provider-marker").1,
+                            "env": {
+                                "TEST_MARKER": "codex-provider"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let attach = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
+
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .expect("create_session should persist codex provider");
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        assert_eq!(created.provider, AgentProvider::codex());
+
+        let started = dispatch_rpc(
+            &app,
+            "agent_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 80,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .expect("agent_start should read provider from stored session");
+        let started: AgentStartResult = serde_json::from_value(started).unwrap();
+        assert!(started.started);
+
+        let mut marker_value = String::new();
+        for _ in 0..100 {
+            if let Ok(value) = std::fs::read_to_string(&marker_path) {
+                marker_value = value;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(marker_value, "codex-provider");
+    }
+
+    #[test]
+    fn dispatches_session_runtime_start_and_returns_terminal_id() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-start");
+        let workspace_id = launch_test_workspace(&app, &root);
+        let marker_path = PathBuf::from(&root).join(".session-runtime-start-marker");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": test_agent_marker_profile(".session-runtime-start-marker").0,
+                            "startup_args": test_agent_marker_profile(".session-runtime-start-marker").1,
+                            "env": {
+                                "TEST_MARKER": "session-runtime-started"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        assert!(started.terminal_id > 0);
+        assert!(
+            started
+                .boot_input
+                .as_deref()
+                .unwrap_or_default()
+                .contains(".session-runtime-start-marker")
+        );
+        assert!(!marker_path.exists());
+
+        dispatch_rpc(
+            &app,
+            "terminal_write",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+                "input": started.boot_input,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let mut marker_value = String::new();
+        for _ in 0..100 {
+            if let Ok(value) = std::fs::read_to_string(&marker_path) {
+                marker_value = value;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(marker_value, "session-runtime-started");
+    }
+
+    #[test]
+    fn session_runtime_start_mirrors_bound_terminal_output_into_session_stream() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-transcript");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "claude": {
+                        "global": {
+                            "executable": test_agent_launch_profile().0,
+                            "startup_args": test_agent_launch_profile().1,
+                            "env": {
+                                "TEST_MARKER": "resume-77"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string()).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 100,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+        assert!(started.terminal_id > 0);
+        assert!(started.boot_input.is_some());
+
+        dispatch_rpc(
+            &app,
+            "terminal_write",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+                "input": started.boot_input,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        std::thread::sleep(Duration::from_millis(150));
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert!(refreshed.resume_id.is_some());
+    }
+
+    #[test]
+    fn session_runtime_start_returns_codex_resume_boot_input_when_resume_id_exists() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-codex-resume");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "codex": {
+                        "global": {
+                            "executable": "codex",
+                            "extra_args": ["--full-auto"]
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string())
+            .unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        assert!(started.started);
+        assert!(started.terminal_id > 0);
+        assert_eq!(
+            started.boot_input.as_deref(),
+            Some("codex resume resume-77 --full-auto\r")
+        );
+    }
+
+    #[test]
+    fn bound_terminal_exit_marks_session_interrupted_and_clears_binding() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-exit");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "claude",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 80,
+                "rows": 24,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        dispatch_rpc(
+            &app,
+            "terminal_close",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        std::thread::sleep(Duration::from_millis(150));
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert_eq!(refreshed.status, SessionStatus::Interrupted);
+    }
+
+    #[test]
+    fn session_runtime_start_marks_session_running_before_hooks_arrive() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-running");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert_eq!(refreshed.status, SessionStatus::Running);
+        assert!(refreshed.resume_id.is_none());
     }
 }

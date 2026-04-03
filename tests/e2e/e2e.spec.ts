@@ -145,14 +145,25 @@ const launchLocalWorkspace = async (page: Page) => {
 
   await page.getByRole('button', { name: 'Home' }).click();
   const selectedPath = ((await page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong').textContent()) ?? '').trim();
+  const expectedLabel = workspaceLabelForPath(selectedPath);
   await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
-  await expect(page.getByTestId('overlay')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-  return workspaceLabelForPath(selectedPath);
+  await expect.poll(() => countWorkspaceTabs(page)).toBe(1);
+  await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(expectedLabel);
+  await expect(page).toHaveURL(/\/workspace\/.+/);
+  await expect(page.getByTestId('workspace-welcome-screen')).toHaveCount(0);
+  return expectedLabel;
 };
 
 const closeActiveWorkspaceFromTopBar = async (page: Page) => {
+  const { bootstrap, controllerIds } = await readScopedWorkbenchBootstrap(page);
+  const workspaceIdMatch = new URL(page.url()).pathname.match(/^\/workspace\/([^/]+)$/);
+  const activeWorkspaceId = bootstrap.ui_state.active_workspace_id
+    ?? bootstrap.ui_state.open_workspace_ids[0]
+    ?? (workspaceIdMatch?.[1] ? decodeURIComponent(workspaceIdMatch[1]) : '');
+  expect(activeWorkspaceId).toBeTruthy();
+  await currentWorkspaceController(page, activeWorkspaceId, controllerIds);
+
   const activeWorkspaceTab = page.locator('.workspace-top-tab.active');
   await expect(activeWorkspaceTab).toBeVisible();
   await activeWorkspaceTab.hover();
@@ -165,6 +176,36 @@ const invokeRpc = async <T>(page: Page, command: string, payload: Record<string,
   const body = await response.json();
   expect(body.ok).not.toBe(false);
   return body.data as T;
+};
+
+const readScopedWorkbenchBootstrap = async (page: Page) => {
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+      active_workspace_id?: string | null;
+    };
+    workspaces: ReminderWorkspaceSnapshot[];
+  }>(page, 'workbench_bootstrap', controllerIds);
+  return {
+    bootstrap,
+    controllerIds,
+  };
 };
 
 const resetAppSettings = async (page: Page) => {
@@ -226,13 +267,33 @@ const readSystemConfig = async (request: APIRequestContext) => {
 };
 
 const launchWorkspaceByPath = async (page: Page, workspacePath: string) => {
+  await gotoWorkspaceRoot(page);
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
   await invokeRpc(page, 'launch_workspace', {
     source: {
       kind: 'local',
       pathOrUrl: workspacePath,
       target: { type: 'native' },
     },
+    ...controllerIds,
   });
+  await page.goto('/');
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
 };
 
 const readWorkspaceTabLabels = async (page: Page) =>
@@ -411,12 +472,7 @@ type ReminderWorkspaceSnapshot = {
 };
 
 const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      active_workspace_id?: string | null;
-    };
-    workspaces: ReminderWorkspaceSnapshot[];
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   return {
     activeWorkspaceId: bootstrap.ui_state.active_workspace_id ?? null,
@@ -427,6 +483,7 @@ const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
 const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
   const backgroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-background-`));
   const foregroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-foreground-`));
+  const foregroundWorkspaceLabel = path.basename(foregroundWorkspaceDir);
 
   try {
     await closeAllOpenWorkspaces(page);
@@ -440,11 +497,41 @@ const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
     const foreground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
     expect(background.workspace).toBeTruthy();
     expect(foreground.workspace).toBeTruthy();
-    expect(foreground.activeWorkspaceId).toBe(foreground.workspace!.workspace.workspace_id);
+
+    await createActiveSessionForWorkspace(
+      page,
+      background.workspace!.workspace.workspace_id,
+      'Background Reminder Session',
+    );
+    await createActiveSessionForWorkspace(
+      page,
+      foreground.workspace!.workspace.workspace_id,
+      'Foreground Reminder Session',
+    );
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    const { controllerIds } = await readScopedWorkbenchBootstrap(page);
+    await invokeRpc(page, 'activate_workspace', {
+      workspaceId: foreground.workspace!.workspace.workspace_id,
+      ...controllerIds,
+    });
+    await page.goto('/');
+    await expect(page.locator('.workspace-top-tab.active')).toContainText(foregroundWorkspaceLabel);
+    await waitForReminderSocket(page);
+    await expect.poll(async () => {
+      const snapshot = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+      return snapshot.activeWorkspaceId;
+    }).toBe(foreground.workspace!.workspace.workspace_id);
+
+    const hydratedBackground = await readWorkspaceByPath(page, backgroundWorkspaceDir);
+    const hydratedForeground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+    expect(hydratedBackground.workspace).toBeTruthy();
+    expect(hydratedForeground.workspace).toBeTruthy();
+    expect(hydratedForeground.activeWorkspaceId).toBe(hydratedForeground.workspace!.workspace.workspace_id);
 
     return {
-      background: background.workspace as ReminderWorkspaceSnapshot,
-      foreground: foreground.workspace as ReminderWorkspaceSnapshot,
+      background: hydratedBackground.workspace as ReminderWorkspaceSnapshot,
+      foreground: hydratedForeground.workspace as ReminderWorkspaceSnapshot,
       cleanup: async () => {
         await Promise.all([
           fs.rm(backgroundWorkspaceDir, { recursive: true, force: true }),
@@ -501,11 +588,7 @@ const currentWorkspaceController = async (
 };
 
 const closeAllOpenWorkspaces = async (page: Page) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId);
@@ -522,6 +605,7 @@ const createArchivedSessionForWorkspace = async (
   const session = await invokeRpc<{ id: number }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
+    provider: 'claude',
   });
   await invokeRpc(page, 'session_update', {
     ...controller,
@@ -538,6 +622,41 @@ const createArchivedSessionForWorkspace = async (
   return String(session.id);
 };
 
+const createActiveSessionForWorkspace = async (
+  page: Page,
+  workspaceId: string,
+  title: string,
+) => {
+  const controller = await currentWorkspaceController(page, workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  await invokeRpc(page, 'session_update', {
+    ...controller,
+    sessionId: session.id,
+    patch: {
+      title,
+      status: 'idle',
+    },
+  });
+  await invokeRpc(page, 'workspace_view_update', {
+    ...controller,
+    patch: {
+      active_session_id: sessionId,
+      active_pane_id: `pane-${session.id}`,
+      pane_layout: {
+        type: 'leaf',
+        id: `pane-${session.id}`,
+        sessionId,
+      },
+    },
+  });
+  return sessionId;
+};
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!window.sessionStorage.getItem('coder-studio.test-init')) {
@@ -550,11 +669,7 @@ test.beforeEach(async ({ page }) => {
   await installTransportTracker(page);
   await installRuntimeCommandMock(page);
   await resetAppSettings(page);
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId, {
       deviceId: 'cleanup-device',
@@ -591,6 +706,17 @@ test('welcome screen can open and close the launch flow', async ({ page }) => {
   await expectWelcomeScreenVisible(page);
 });
 
+test('launch overlay keeps the welcome screen mounted when no workspace is open', async ({ page }) => {
+  await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('workspace-welcome-screen')).toBeVisible();
+  await expect(page.getByTestId('workspace-status-strip')).toHaveCount(0);
+});
+
 test('local workspace flow opens the workspace shell', async ({ page }) => {
   const expectedLabel = await launchLocalWorkspace(page);
   await expect(page.getByTestId('workspace-topbar')).toContainText(expectedLabel);
@@ -619,16 +745,20 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Changes');
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Queue');
   await expect(page.locator('.agent-pane-header').first()).toHaveAttribute('data-density', 'compact');
-  await expect(page.locator('.agent-pane-state-tag').first()).toBeVisible();
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveText(/Ready|Queued|Suspended|Running|Background/);
+  const stateTags = page.locator('.agent-pane-header').first().locator('.agent-pane-state-tag');
+  await expect(stateTags.nth(0)).toBeVisible();
+  await expect(stateTags.nth(0)).toHaveAttribute('data-tone', 'muted');
+  await expect(stateTags.nth(0)).toHaveText(/Claude|Codex/);
+  await expect(stateTags.nth(1)).toBeVisible();
+  await expect(stateTags.nth(1)).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
+  await expect(stateTags.nth(1)).toHaveText(/Ready|Queued|Suspended|Running|Background/);
 
   await page.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByTestId('command-palette-shell')).toBeVisible();
   await expect(page.getByTestId('command-palette-shell')).toHaveAttribute('data-density', 'compact');
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Code' }).click();
+  await page.getByTestId('workspace-status-strip').getByRole('button', { name: 'Code' }).click();
   await page.getByRole('button', { name: 'Expand code area' }).click();
   await expect(page.getByTestId('workspace-review-dock')).toBeVisible();
   await expect(page.getByTestId('workspace-review-dock-tabs')).toBeVisible();

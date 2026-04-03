@@ -13,7 +13,8 @@ use tokio::sync::broadcast;
 
 use crate::{
     auth::{ip_guard::IpGuardMap, AuthRuntime},
-    models::{ExecTarget, TransportEvent},
+    models::{ExecTarget, GitChangeEntry, GitStatus, TransportEvent, WorkspaceTree, WorktreeInfo},
+    services::artifact_cache::TimedCache,
     AppHandle,
 };
 
@@ -26,6 +27,7 @@ pub(crate) struct AgentRuntime {
     pub child: Mutex<Box<dyn Child + Send>>,
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
+    pub input_policy: Mutex<crate::services::provider_registry::ProviderInputPolicy>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
     pub process_id: Option<u32>,
     pub process_group_leader: Option<i32>,
@@ -36,6 +38,8 @@ pub(crate) struct TerminalRuntime {
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Mutex<Option<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub output: Mutex<String>,
+    pub persist_workspace_terminal: bool,
     pub process_id: Option<u32>,
     pub process_group_leader: Option<i32>,
 }
@@ -52,11 +56,32 @@ pub(crate) struct WorkspaceWatchSuppression {
     pub until: Instant,
 }
 
+#[derive(Clone)]
+pub(crate) struct ArtifactCaches {
+    pub git_status: TimedCache<GitStatus>,
+    pub git_changes: TimedCache<Vec<GitChangeEntry>>,
+    pub workspace_tree: TimedCache<WorkspaceTree>,
+    pub worktree_list: TimedCache<Vec<WorktreeInfo>>,
+}
+
+impl Default for ArtifactCaches {
+    fn default() -> Self {
+        Self {
+            git_status: Arc::new(Mutex::new(HashMap::new())),
+            git_changes: Arc::new(Mutex::new(HashMap::new())),
+            workspace_tree: Arc::new(Mutex::new(HashMap::new())),
+            worktree_list: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
 pub(crate) struct AppState {
     pub db: Mutex<Option<Connection>>,
     pub auth: Mutex<AuthRuntime>,
     pub agents: Mutex<HashMap<String, Arc<AgentRuntime>>>,
     pub terminals: Mutex<HashMap<String, Arc<TerminalRuntime>>>,
+    pub session_runtime_bindings: Mutex<HashMap<String, u64>>,
+    pub terminal_runtime_bindings: Mutex<HashMap<u64, String>>,
     pub workspace_client_connections: Mutex<HashMap<String, usize>>,
     pub workspace_watches: Mutex<HashMap<String, WorkspaceWatch>>,
     pub workspace_watch_suppressions: Arc<Mutex<HashMap<String, WorkspaceWatchSuppression>>>,
@@ -64,6 +89,7 @@ pub(crate) struct AppState {
     pub ip_guard: Mutex<IpGuardMap>,
     pub hook_endpoint: Mutex<Option<String>>,
     pub http_endpoint: Mutex<Option<String>>,
+    pub artifact_caches: ArtifactCaches,
     pub transport_events: broadcast::Sender<TransportEvent>,
 }
 
@@ -75,6 +101,8 @@ impl Default for AppState {
             auth: Mutex::new(AuthRuntime::default()),
             agents: Mutex::new(HashMap::new()),
             terminals: Mutex::new(HashMap::new()),
+            session_runtime_bindings: Mutex::new(HashMap::new()),
+            terminal_runtime_bindings: Mutex::new(HashMap::new()),
             workspace_client_connections: Mutex::new(HashMap::new()),
             workspace_watches: Mutex::new(HashMap::new()),
             workspace_watch_suppressions: Arc::new(Mutex::new(HashMap::new())),
@@ -82,6 +110,7 @@ impl Default for AppState {
             ip_guard: Mutex::new(HashMap::new()),
             hook_endpoint: Mutex::new(None),
             http_endpoint: Mutex::new(None),
+            artifact_caches: ArtifactCaches::default(),
             transport_events,
         }
     }

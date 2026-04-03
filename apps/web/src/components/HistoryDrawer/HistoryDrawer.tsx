@@ -1,11 +1,12 @@
-import type { Translator } from "../../i18n.ts";
+import type { Translator } from "../../i18n";
 import type {
   SessionHistoryExpansionState,
   SessionHistoryGroup,
   SessionHistoryRecord,
-} from "../../types/app.ts";
-import { ChevronDownIcon, ChevronRightIcon, HeaderCloseIcon } from "../icons.tsx";
-import { selectHistoryPrimaryActionBadge } from "../../features/workspace/session-history.ts";
+} from "../../types/app";
+import { getProviderDisplayLabel } from "../../features/providers/runtime-helpers";
+import { ChevronDownIcon, ChevronRightIcon, HeaderCloseIcon } from "../icons";
+import { selectHistoryPrimaryActionBadge } from "../../features/workspace/session-history";
 
 type HistoryDrawerProps = {
   open: boolean;
@@ -123,6 +124,7 @@ export const HistoryDrawer = ({
                               ) : null}
                             </div>
                             <div className="history-record-meta">
+                              <span>{getProviderDisplayLabel(record.provider)}</span>
                               <span>{recordMetaLabel(record, t)}</span>
                               <span>{record.status}</span>
                               <span>{new Date(record.lastActiveAt).toLocaleString()}</span>

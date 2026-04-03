@@ -17,13 +17,6 @@ pub(crate) enum WsClientEnvelope {
     Pong {
         ts: i64,
     },
-    AgentSend {
-        workspace_id: String,
-        session_id: String,
-        input: String,
-        append_newline: Option<bool>,
-        fencing_token: i64,
-    },
     TerminalWrite {
         workspace_id: String,
         terminal_id: u64,
@@ -33,13 +26,6 @@ pub(crate) enum WsClientEnvelope {
     TerminalResize {
         workspace_id: String,
         terminal_id: u64,
-        cols: u16,
-        rows: u16,
-        fencing_token: i64,
-    },
-    AgentResize {
-        workspace_id: String,
-        session_id: String,
         cols: u16,
         rows: u16,
         fencing_token: i64,

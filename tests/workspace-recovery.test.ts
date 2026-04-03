@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import {
   resolveAgentRecoveryAction,
   resolveTerminalRecoveryAction,
-} from "../apps/web/src/features/workspace/workspace-recovery.ts";
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
+} from "../apps/web/src/features/workspace/workspace-recovery";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
 
-test("controller gets resume action for interrupted claude session", () => {
+test("controller gets resume action for interrupted session with resume id", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
       role: "controller",
@@ -19,20 +19,21 @@ test("controller gets resume action for interrupted claude session", () => {
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "claude",
       autoFeed: true,
       queue: [],
       messages: [],
       stream: "",
       unread: 0,
       lastActiveAt: 1,
-      claudeSessionId: "claude-123",
+      resumeId: "resume-77",
     },
   );
 
   assert.equal(action?.kind, "resume");
 });
 
-test("controller gets restart action for interrupted non-claude session", () => {
+test("controller gets restart action for interrupted session without resume id", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
       role: "controller",
@@ -45,6 +46,7 @@ test("controller gets restart action for interrupted non-claude session", () => 
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "codex",
       autoFeed: true,
       queue: [],
       messages: [],
@@ -55,6 +57,34 @@ test("controller gets restart action for interrupted non-claude session", () => 
   );
 
   assert.equal(action?.kind, "restart");
+});
+
+test("controller does not get recovery action once interrupted session is rebound to a live terminal", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "codex",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      stream: "",
+      unread: 0,
+      lastActiveAt: 1,
+      resumeId: "resume-77",
+      terminalId: "term-1",
+    },
+  );
+
+  assert.equal(action, null);
 });
 
 test("observer does not get agent recovery action", () => {
@@ -70,13 +100,14 @@ test("observer does not get agent recovery action", () => {
       title: "Session 1",
       status: "interrupted",
       mode: "branch",
+      provider: "claude",
       autoFeed: true,
       queue: [],
       messages: [],
       stream: "",
       unread: 0,
       lastActiveAt: 1,
-      claudeSessionId: "claude-123",
+      resumeId: "resume-77",
     },
   );
 

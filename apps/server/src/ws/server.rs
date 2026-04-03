@@ -1,5 +1,15 @@
+use std::{pin::Pin, time::Duration};
+
+use futures_util::{Sink, SinkExt, StreamExt};
+use tokio::sync::{oneshot, Mutex as AsyncMutex, Notify};
+
+use crate::ws::outbound_batcher::{OutboundBatcher, OutboundSendQueue};
 use crate::ws::protocol::{WsClientEnvelope, WsEnvelope};
 use crate::*;
+
+const WS_OUTBOUND_BATCH_INTERVAL_MS: u64 = 16;
+const WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES: usize = 32 * 1024;
+const WS_OUTBOUND_PENDING_STREAM_CAP_BYTES: usize = 256 * 1024;
 
 fn request_forces_public_mode(uri: &axum::http::Uri) -> bool {
     uri.query()
@@ -49,7 +59,7 @@ pub(crate) async fn ws_handler(
 }
 
 pub(crate) async fn ws_session(
-    mut socket: WebSocket,
+    socket: WebSocket,
     app: AppHandle,
     workspace_client: Option<(String, String)>,
 ) {
@@ -57,11 +67,32 @@ pub(crate) async fn ws_session(
     if let Some((device_id, client_id)) = workspace_client.as_ref() {
         let _ = register_workspace_client_connection(device_id, client_id, state);
     }
+    let (socket_tx, mut socket_rx) = socket.split();
     let mut rx = state.transport_events.subscribe();
+    let mut batcher = OutboundBatcher::new(WS_OUTBOUND_BATCH_FLUSH_THRESHOLD_BYTES);
+    let outbound_queue = Arc::new(AsyncMutex::new(OutboundSendQueue::new(
+        WS_OUTBOUND_PENDING_STREAM_CAP_BYTES,
+    )));
+    let outbound_notify = Arc::new(Notify::new());
+    let (sender_done_tx, mut sender_done_rx) = oneshot::channel();
+    let sender_queue = outbound_queue.clone();
+    let sender_notify = outbound_notify.clone();
+    let sender_task = tokio::spawn(async move {
+        run_ws_sender(socket_tx, sender_queue, sender_notify).await;
+        let _ = sender_done_tx.send(());
+    });
+    let mut flush_timer: Pin<Box<tokio::time::Sleep>> =
+        Box::pin(tokio::time::sleep(Duration::from_secs(24 * 60 * 60)));
+    let mut flush_timer_armed = false;
+    let mut sender_running = true;
 
     loop {
         tokio::select! {
-            message = socket.recv() => {
+            _ = &mut sender_done_rx, if sender_running => {
+                sender_running = false;
+                break;
+            }
+            message = socket_rx.next() => {
                 match message {
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(Message::Text(text))) => {
@@ -77,12 +108,15 @@ pub(crate) async fn ws_session(
                             Err(response) => Some(response),
                         };
                         if let Some(response) = response {
-                            let Ok(body) = serde_json::to_string(&response) else {
-                                continue;
-                            };
-                            if socket.send(Message::Text(body)).await.is_err() {
-                                break;
+                            if flush_timer_armed {
+                                enqueue_transport_events(
+                                    &outbound_queue,
+                                    &outbound_notify,
+                                    batcher.flush(),
+                                ).await;
                             }
+                            flush_timer_armed = false;
+                            enqueue_ws_envelope(&outbound_queue, &outbound_notify, response).await;
                         }
                     }
                     Some(Ok(_)) => {}
@@ -92,27 +126,128 @@ pub(crate) async fn ws_session(
             event = rx.recv() => {
                 match event {
                     Ok(event) => {
-                        let envelope = WsEnvelope::Event {
-                            event: event.event,
-                            payload: event.payload,
-                        };
-                        let Ok(text) = serde_json::to_string(&envelope) else {
-                            continue;
-                        };
-                        if socket.send(Message::Text(text)).await.is_err() {
-                            break;
+                        let outbound = batcher.push(event);
+                        if batcher.has_pending() && !flush_timer_armed {
+                            flush_timer.as_mut().reset(tokio::time::Instant::now() + Duration::from_millis(WS_OUTBOUND_BATCH_INTERVAL_MS));
+                            flush_timer_armed = true;
+                        }
+                        if !outbound.is_empty() {
+                            flush_timer_armed = false;
+                            enqueue_transport_events(&outbound_queue, &outbound_notify, outbound).await;
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(_) => break,
                 }
             }
+            _ = &mut flush_timer, if flush_timer_armed => {
+                flush_timer_armed = false;
+                enqueue_transport_events(&outbound_queue, &outbound_notify, batcher.flush()).await;
+            }
         }
+    }
+
+    if sender_running {
+        if batcher.has_pending() {
+            enqueue_transport_events(&outbound_queue, &outbound_notify, batcher.flush()).await;
+        }
+        let stats = {
+            let mut queue = outbound_queue.lock().await;
+            queue.close();
+            let mut stats = queue.stats();
+            stats.pending_stream_bytes = stats
+                .pending_stream_bytes
+                .saturating_add(batcher.pending_stream_bytes());
+            stats
+        };
+        outbound_notify.notify_waiters();
+        let _ = sender_task.await;
+        if stats.collapse_count > 0 || stats.drop_count > 0 {
+            eprintln!(
+                "ws outbound backpressure: flushes={} collapses={} drops={} pending_stream_bytes={}",
+                stats.flush_count,
+                stats.collapse_count,
+                stats.drop_count,
+                stats.pending_stream_bytes
+            );
+        }
+    } else {
+        let _ = sender_task.await;
     }
 
     if let Some((device_id, client_id)) = workspace_client {
         let _ = unregister_workspace_client_connection(&device_id, &client_id, &app, app.state());
     }
+}
+
+async fn enqueue_transport_events(
+    queue: &Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: &Notify,
+    events: Vec<TransportEvent>,
+) {
+    if events.is_empty() {
+        return;
+    }
+    {
+        let mut queue = queue.lock().await;
+        queue.enqueue_transport_events(events);
+    }
+    notify.notify_one();
+}
+
+async fn enqueue_ws_envelope(
+    queue: &Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: &Notify,
+    envelope: WsEnvelope,
+) {
+    {
+        let mut queue = queue.lock().await;
+        queue.enqueue_ws_envelope(envelope);
+    }
+    notify.notify_one();
+}
+
+async fn run_ws_sender<S>(
+    mut socket_tx: S,
+    queue: Arc<AsyncMutex<OutboundSendQueue>>,
+    notify: Arc<Notify>,
+) where
+    S: Sink<Message> + Unpin,
+{
+    loop {
+        let next = {
+            let mut queue = queue.lock().await;
+            if let Some(envelope) = queue.pop_front() {
+                Some(envelope)
+            } else if queue.is_closed() {
+                None
+            } else {
+                drop(queue);
+                notify.notified().await;
+                continue;
+            }
+        };
+
+        let Some(envelope) = next else {
+            return;
+        };
+        if send_ws_envelope(&mut socket_tx, envelope).await.is_err() {
+            return;
+        }
+    }
+}
+
+async fn send_ws_envelope<S>(socket: &mut S, envelope: WsEnvelope) -> Result<(), ()>
+where
+    S: Sink<Message> + Unpin,
+{
+    let Ok(body) = serde_json::to_string(&envelope) else {
+        return Ok(());
+    };
+    if socket.send(Message::Text(body)).await.is_err() {
+        return Err(());
+    }
+    Ok(())
 }
 
 fn require_ws_workspace_controller_mutation(
@@ -152,30 +287,6 @@ fn handle_ws_client_envelope(
     match envelope {
         WsClientEnvelope::Ping { ts } => Ok(Some(WsEnvelope::Pong { ts })),
         WsClientEnvelope::Pong { .. } => Ok(None),
-        WsClientEnvelope::AgentSend {
-            workspace_id,
-            session_id,
-            input,
-            append_newline,
-            fencing_token,
-        } => {
-            require_ws_workspace_controller_mutation(
-                &workspace_id,
-                fencing_token,
-                workspace_client,
-                app,
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
-            agent_send(
-                workspace_id.clone(),
-                session_id,
-                input,
-                append_newline,
-                app.state(),
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_send", &error))?;
-            Ok(None)
-        }
         WsClientEnvelope::TerminalWrite {
             workspace_id,
             terminal_id,
@@ -211,24 +322,6 @@ fn handle_ws_client_envelope(
             terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state()).map_err(
                 |error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error),
             )?;
-            Ok(None)
-        }
-        WsClientEnvelope::AgentResize {
-            workspace_id,
-            session_id,
-            cols,
-            rows,
-            fencing_token,
-        } => {
-            require_ws_workspace_controller_mutation(
-                &workspace_id,
-                fencing_token,
-                workspace_client,
-                app,
-            )
-            .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
-            agent_resize(workspace_id.clone(), session_id, cols, rows, app.state())
-                .map_err(|error| ws_input_error_envelope(&workspace_id, "agent_resize", &error))?;
             Ok(None)
         }
         WsClientEnvelope::SessionUpdate {
@@ -294,6 +387,7 @@ pub(crate) fn emit_agent(
     session_id: &str,
     kind: &str,
     data: &str,
+    raw_data: Option<&str>,
 ) {
     emit_transport_event(
         app,
@@ -303,6 +397,7 @@ pub(crate) fn emit_agent(
             "session_id": session_id,
             "kind": kind,
             "data": data,
+            "raw_data": raw_data,
         }),
     );
     let _ = app.emit(
@@ -312,6 +407,7 @@ pub(crate) fn emit_agent(
             session_id: session_id.to_string(),
             kind: kind.to_string(),
             data: data.to_string(),
+            raw_data: raw_data.map(str::to_string),
         },
     );
 }
@@ -375,6 +471,7 @@ pub(crate) fn emit_workspace_artifacts_dirty(
     target: &ExecTarget,
     reason: &str,
 ) {
+    let categories = artifact_dirty_categories(reason);
     emit_transport_event(
         app,
         "workspace://artifacts_dirty",
@@ -382,6 +479,48 @@ pub(crate) fn emit_workspace_artifacts_dirty(
             "path": path,
             "target": target,
             "reason": reason,
+            "categories": categories,
         }),
     );
+}
+
+fn artifact_dirty_categories(reason: &str) -> Vec<&'static str> {
+    match reason {
+        "git_stage_all" | "git_stage_file" | "git_unstage_all" | "git_unstage_file" => {
+            vec!["git", "worktrees"]
+        }
+        "git_discard_all" | "git_discard_file" | "git_commit" => {
+            vec!["git", "worktrees", "tree"]
+        }
+        _ => vec!["full"],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::artifact_dirty_categories;
+
+    #[test]
+    fn artifact_dirty_categories_keep_tree_off_for_index_only_git_changes() {
+        assert_eq!(
+            artifact_dirty_categories("git_stage_all"),
+            vec!["git", "worktrees"]
+        );
+    }
+
+    #[test]
+    fn artifact_dirty_categories_include_tree_for_git_mutations_that_change_sidebar_paths() {
+        assert_eq!(
+            artifact_dirty_categories("git_commit"),
+            vec!["git", "worktrees", "tree"]
+        );
+        assert_eq!(
+            artifact_dirty_categories("git_discard_all"),
+            vec!["git", "worktrees", "tree"]
+        );
+        assert_eq!(
+            artifact_dirty_categories("git_discard_file"),
+            vec!["git", "worktrees", "tree"]
+        );
+    }
 }

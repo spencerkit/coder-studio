@@ -1,8 +1,13 @@
 import type { Locale, Translator } from "../../i18n";
-import type { AppSettings, SettingsPanel } from "../../types/app";
-import { getSettingsDraftLocale } from "../../shared/app/claude-settings.ts";
+import type { AppSettings, AppSettingsUpdater, SettingsPanel } from "../../types/app";
+import {
+  BUILTIN_PROVIDER_MANIFESTS,
+  getProviderPanelId,
+} from "../../features/providers/registry";
+import { readAppBuildMetadata } from "../../shared/app/build-metadata";
+import { getSettingsDraftLocale } from "../../shared/app/claude-settings";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
-import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel.tsx";
+import { ProviderSettingsPanel } from "./ProviderSettingsPanel";
 
 type SettingsProps = {
   locale: Locale;
@@ -11,17 +16,27 @@ type SettingsProps = {
   notificationPermissionText: string;
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
+  onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
-  onClaudeSettingsChange: (settings: AppSettings) => void;
+  onProviderSettingsChange: (updater: AppSettingsUpdater) => void;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
 
 const settingsNavItems = (t: Translator) => [
-  { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon /> },
-  { id: "claude" as const, label: t("claudeSettingsTitle"), icon: <SettingsConfigIcon /> },
-  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon /> },
+  { id: "general" as const, label: t("settingsGeneral"), icon: <SettingsGeneralIcon />, testId: "general" },
+  ...BUILTIN_PROVIDER_MANIFESTS.map((manifest) => ({
+    id: getProviderPanelId(manifest.id) as SettingsPanel,
+    label: t(manifest.settingsTitleKey),
+    icon: <SettingsConfigIcon />,
+    testId: manifest.id,
+  })),
+  { id: "appearance" as const, label: t("settingsAppearance"), icon: <SettingsAppearanceIcon />, testId: "appearance" },
 ];
+
+const getActiveProviderId = (panel: SettingsPanel): string | null => (
+  panel.startsWith("provider:") ? panel.slice("provider:".length) : null
+);
 
 export const Settings = ({
   locale,
@@ -30,12 +45,15 @@ export const Settings = ({
   notificationPermissionText,
   onSettingsPanelChange,
   onGeneralSettingsChange,
+  onAgentDefaultsChange,
   onSettingsIdlePolicyChange,
-  onClaudeSettingsChange,
+  onProviderSettingsChange,
   onSelectLocale,
   t,
 }: SettingsProps) => {
   const selectedLocale = getSettingsDraftLocale(settingsDraft);
+  const activeProviderId = getActiveProviderId(activeSettingsPanel);
+  const buildMetadata = readAppBuildMetadata();
 
   return (
     <main className="settings-route" data-testid="settings-page" data-density="compact">
@@ -50,7 +68,7 @@ export const Settings = ({
                   type="button"
                   className={`settings-nav-item ${isActive ? "active" : ""}`}
                   onClick={() => onSettingsPanelChange(item.id)}
-                  data-testid={`settings-nav-${item.id}`}
+                  data-testid={`settings-nav-${item.testId}`}
                 >
                   <span className="settings-nav-icon">{item.icon}</span>
                   <span>{item.label}</span>
@@ -66,6 +84,28 @@ export const Settings = ({
               {activeSettingsPanel === "general" ? (
                 <>
                   <div className="settings-group-card settings-group-card--document">
+                    <div className="settings-row">
+                      <div className="settings-row-copy">
+                        <strong>{t("defaultProvider")}</strong>
+                        <span>{t("defaultProviderHint")}</span>
+                      </div>
+                      <div className="settings-row-control">
+                        <div className="settings-pill-select">
+                          {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
+                            <button
+                              key={manifest.id}
+                              type="button"
+                              className={`settings-pill-option ${settingsDraft.agentDefaults.provider === manifest.id ? "active" : ""}`}
+                              onClick={() => onAgentDefaultsChange({ provider: manifest.id })}
+                              data-testid={`settings-default-provider-${manifest.id}`}
+                            >
+                              {manifest.badgeLabel}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="settings-row">
                       <div className="settings-row-copy">
                         <strong>{t("autoSuspend")}</strong>
@@ -192,11 +232,11 @@ export const Settings = ({
                     </div>
                   </div>
                 </>
-              ) : activeSettingsPanel === "claude" ? (
-                <ClaudeSettingsPanel
-                  locale={locale}
+              ) : activeSettingsPanel.startsWith("provider:") ? (
+                <ProviderSettingsPanel
+                  providerId={activeProviderId ?? ""}
                   settings={settingsDraft}
-                  onChange={onClaudeSettingsChange}
+                  onChange={onProviderSettingsChange}
                   t={t}
                 />
               ) : (
@@ -272,6 +312,20 @@ export const Settings = ({
           <div className="settings-footer-bar">
             <div className="settings-page-status">
               {t("settingsAutoSave")}
+            </div>
+            <div className="settings-page-meta">
+              <div className="settings-build-meta">
+                <span className="settings-build-meta-label">{t("buildVersionLabel")}</span>
+                <span className="settings-build-meta-value" data-testid="settings-build-version">
+                  {buildMetadata.version}
+                </span>
+              </div>
+              <div className="settings-build-meta">
+                <span className="settings-build-meta-label">{t("buildPublishedLabel")}</span>
+                <span className="settings-build-meta-value" data-testid="settings-build-published-at">
+                  {buildMetadata.publishedAtDisplay}
+                </span>
+              </div>
             </div>
           </div>
         </section>

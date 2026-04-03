@@ -50,28 +50,29 @@ pub(crate) use auth::{
 };
 pub(crate) use command::http::start_transport_server;
 #[cfg(test)]
-pub(crate) use infra::db::launch_workspace_record;
-#[cfg(test)]
 pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
-    activate_workspace_ui, append_agent_lifecycle_event, append_session_stream,
+    activate_workspace_ui, append_agent_lifecycle_event,
     append_workspace_terminal_output, archive_workspace_session, archive_workspace_sessions,
     close_workspace_ui, create_workspace_session, delete_workspace_session,
-    delete_workspace_terminal, init_db, launch_workspace_record_scoped,
-    list_workspace_ids_for_workspace_client, load_agent_lifecycle_events, load_session,
+    delete_workspace_terminal, init_db, launch_workspace_record_scoped, load_session,
     load_session_history_records, load_workspace_controller_lease,
-    mark_active_sessions_interrupted_on_boot, mark_workspace_client_detached,
-    patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_claude_id, set_session_status_if_not_archived,
-    set_workspace_terminal_recoverable, switch_workspace_session,
-    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session, upsert_workspace_attachment,
+    mark_active_sessions_interrupted_on_boot, patch_workspace_view_state,
+    persist_workspace_terminal, restore_workspace_session, save_workspace_controller_lease,
+    set_session_resume_id, set_session_status_if_not_archived, set_workspace_terminal_recoverable,
+    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
+    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
     workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
     workspace_snapshot as load_workspace_snapshot,
 };
+#[cfg(test)]
+pub(crate) use infra::db::{
+    launch_workspace_record, read_with_db_call_count, read_workspace_session_query_count,
+    reset_with_db_call_count, reset_workspace_session_query_count,
+};
 pub(crate) use infra::runtime::{
-    build_agent_pty_command, build_claude_resume_command, build_terminal_pty_command,
-    repo_name_from_url, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
+    build_agent_pty_command, build_terminal_pty_command, repo_name_from_url,
+    resolve_agent_runtime_cwd, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
     summarize_status, temp_root, terminate_process_tree, trim_branch_name,
 };
 pub(crate) use infra::support::{
@@ -82,42 +83,39 @@ pub(crate) use infra::support::{
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
 pub(crate) use models::{
-    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentStartResult,
+    AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
     AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, ClaudeSlashSkillEntry,
-    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
+    CodexRuntimeProfile, CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
     FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
-    SessionPatch, SessionRestoreResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
+    IdlePolicy, ProviderId, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
+    SessionMode, SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo,
+    SessionRuntimeStartResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
     WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
     WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
     WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
     WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
-#[cfg(test)]
-pub(crate) use models::{
-    ClaudeSettingsPayload, ClaudeTargetOverrides, CompletionNotificationSettings,
-    GeneralSettingsPayload, TargetClaudeOverride,
-};
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
-    agent_resize, agent_send, agent_start, agent_stop, stop_agent_runtime_without_status_update,
-    stop_workspace_agents,
+    agent_stop, stop_agent_runtime_without_status_update, stop_workspace_agents,
 };
 pub(crate) use services::app_settings::{
     app_settings_get, app_settings_update, load_or_default_app_settings,
 };
-pub(crate) use services::claude::{
-    current_app_bin_for_target, current_hook_endpoint, ensure_claude_hook_settings,
-    resolve_claude_runtime_profile, run_claude_hook_helper, start_claude_hook_receiver,
-};
 pub(crate) use services::filesystem::{
-    file_preview, file_save, filesystem_list, filesystem_roots, workspace_tree,
+    file_preview, file_save, filesystem_list, filesystem_roots, invalidate_workspace_tree_cache,
+    workspace_tree, workspace_tree_cached,
 };
 pub(crate) use services::git::{
-    git_changes, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
-    git_file_diff_payload, git_stage_all, git_stage_file, git_status, git_status_label,
-    git_unstage_all, git_unstage_file, worktree_list,
+    git_changes_cached, git_commit, git_diff, git_diff_file, git_discard_all, git_discard_file,
+    git_file_diff_payload, git_stage_all, git_stage_file, git_status_cached, git_status_label,
+    git_unstage_all, git_unstage_file, invalidate_git_artifact_caches, worktree_list_cached,
 };
+pub(crate) use services::provider_hooks::{
+    current_app_bin_for_target, current_hook_endpoint, run_provider_hook_helper,
+    start_provider_hook_receiver,
+};
+pub(crate) use services::session_runtime::{session_runtime_start, SessionRuntimeStartParams};
 pub(crate) use services::system::{claude_slash_skills, command_exists};
 pub(crate) use services::terminal::{
     close_workspace_terminals, terminal_close, terminal_create, terminal_resize, terminal_write,
@@ -211,8 +209,8 @@ fn resolve_app_data_dir() -> Result<PathBuf, std::io::Error> {
 
 #[tokio::main]
 async fn main() {
-    if std::env::args().any(|arg| arg == "--coder-studio-claude-hook") {
-        run_claude_hook_helper();
+    if std::env::args().any(|arg| arg == "--coder-studio-agent-hook") {
+        run_provider_hook_helper();
         return;
     }
 
@@ -233,7 +231,7 @@ async fn run() -> Result<(), String> {
     mark_active_sessions_interrupted_on_boot(&conn)?;
 
     let (app, mut shutdown_rx) = RuntimeHandle::new();
-    start_claude_hook_receiver(&app)?;
+    start_provider_hook_receiver(&app)?;
 
     let state: State<AppState> = app.state();
     {

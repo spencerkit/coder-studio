@@ -1,21 +1,21 @@
 import taskCompleteSoundUrl from "../../assets/task-complete.wav";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import { useNavigate } from "react-router-dom";
 import type { XtermBaseHandle } from "../../components/terminal";
 import { createTranslator, type Locale } from "../../i18n";
-import { withFallback } from "../../services/http/client.ts";
+import { withFallback } from "../../services/http/client";
 import {
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
   updateIdlePolicy as updateIdlePolicyRequest,
-} from "../../services/http/session.service.ts";
+} from "../../services/http/session.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
   heartbeatWorkspaceController,
   releaseWorkspaceControllerKeepalive,
   requestWorkspaceTakeover,
-} from "../../services/http/workspace.service.ts";
+} from "../../services/http/workspace.service";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
   parseNumericId,
@@ -28,14 +28,18 @@ import {
   applyWorkspaceRuntimeSnapshot,
 } from "../../shared/utils/workspace";
 import {
+  syncWorkbenchStateSnapshot,
+  updateWorkbenchStateSnapshot,
+} from "../../shared/utils/workbench-state-snapshot";
+import {
   getIdlePolicySyncWorkspaceIds,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
   WorkbenchState,
-} from "../../state/workbench-core.ts";
-import type { AppSettings } from "../../types/app";
+} from "../../state/workbench-core";
+import type { AppSettings, SessionPatch } from "../../types/app";
 import {
   type AgentRuntimeRefs,
 } from "../agents";
@@ -50,7 +54,12 @@ import {
   getOrCreateDeviceId as getWorkspaceDeviceId,
   shouldRecoverWorkspaceController,
 } from "../workspace/workspace-controller";
-import { attachWorkspaceRuntimeWithRetry } from "../workspace/runtime-attach";
+import {
+  attachWorkspaceRuntimeWithRetry,
+  CONTROLLER_RECOVERY_ATTACH_SUCCESS_REUSE_MS,
+  READY_TAB_ATTACH_SUCCESS_REUSE_MS,
+  type WorkspaceRuntimeAttachRequestOptions,
+} from "../workspace/runtime-attach";
 import {
   READY_TAB_RUNTIME_RECOVERY_DELAYS_MS,
   collectReadyTabRuntimeRecoveryWorkspaceIds,
@@ -59,7 +68,7 @@ import { createWorkspaceSessionActions } from "../workspace/session-actions";
 import {
   isWorkspaceSyncVersionCurrent,
   readWorkspaceSyncVersion,
-} from "../workspace/workspace-sync-version.ts";
+} from "../workspace/workspace-sync-version";
 import { useWorkspaceTransportSync } from "../workspace/workspace-sync-hooks";
 
 const withServiceFallback = async <T,>(
@@ -86,7 +95,8 @@ export const WorkbenchRuntimeCoordinator = ({
   settingsConfirmed,
 }: WorkbenchRuntimeCoordinatorProps) => {
   const navigate = useNavigate();
-  const [state, setState] = useRelaxState(workbenchState);
+  const [storeState, setStoreState] = useRelaxState(workbenchState);
+  const [state, setRenderState] = useState(storeState);
   const stateRef = useRef(state);
   const [isOnline, setIsOnline] = useState(() => (
     typeof navigator === "undefined" ? true : navigator.onLine !== false
@@ -134,17 +144,16 @@ export const WorkbenchRuntimeCoordinator = ({
     agentTerminalRefs,
     agentTerminalQueueRef,
     agentPaneSizeRef,
-    agentRuntimeSizeRef,
-    agentResizeStateRef,
     agentTitleTrackerRef,
-    runningAgentKeysRef,
     agentStartupStateRef,
     agentStartupTokenRef,
   }), []);
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useLayoutEffect(() => {
+    stateRef.current = storeState;
+    syncWorkbenchStateSnapshot(storeState);
+    setRenderState((current) => (current === storeState ? current : storeState));
+  }, [storeState]);
 
   useEffect(() => {
     const audio = new Audio(taskCompleteSoundUrl);
@@ -218,10 +227,11 @@ export const WorkbenchRuntimeCoordinator = ({
   }, []);
 
   const updateState = useCallback((updater: (current: WorkbenchState) => WorkbenchState) => {
-    const next = updater(stateRef.current);
+    const next = updateWorkbenchStateSnapshot(updater);
     stateRef.current = next;
-    setState(next);
-  }, [setState]);
+    setRenderState(next);
+    setStoreState(next);
+  }, [setStoreState]);
 
   const hasLiveWorkspaceTab = useCallback((workspaceId: string) => (
     stateRef.current.tabs.some((tab) => tab.id === workspaceId)
@@ -237,11 +247,7 @@ export const WorkbenchRuntimeCoordinator = ({
   const syncSessionPatch = useCallback(async (
     tabId: string,
     sessionId: string,
-    patch: {
-      status?: string;
-      last_active_at?: number;
-      claude_session_id?: string;
-    },
+    patch: Pick<SessionPatch, "status" | "last_active_at" | "resume_id">,
   ) => {
     const backendSessionId = parseNumericId(sessionId);
     if (backendSessionId === null) return;
@@ -400,7 +406,10 @@ export const WorkbenchRuntimeCoordinator = ({
     onCompletionReminder,
   });
 
-  const reattachWorkspaceRuntime = useCallback(async (workspaceId: string) => {
+  const reattachWorkspaceRuntime = useCallback(async (
+    workspaceId: string,
+    options: WorkspaceRuntimeAttachRequestOptions = {},
+  ) => {
     const inflight = runtimeAttachInflightRef.current.get(workspaceId);
     if (inflight) {
       await inflight;
@@ -414,6 +423,7 @@ export const WorkbenchRuntimeCoordinator = ({
         deviceId,
         clientId,
         withServiceFallback,
+        options,
       );
       if (
         !runtimeSnapshot
@@ -480,7 +490,9 @@ export const WorkbenchRuntimeCoordinator = ({
       }
       const workspaceIds = collectReadyTabRuntimeRecoveryWorkspaceIds(stateRef.current.tabs);
       void Promise.all(workspaceIds.map(async (workspaceId) => {
-        await reattachWorkspaceRuntime(workspaceId);
+        await reattachWorkspaceRuntime(workspaceId, {
+          successReuseMs: READY_TAB_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     };
 
@@ -576,7 +588,9 @@ export const WorkbenchRuntimeCoordinator = ({
       // Observer tabs can miss an initial runtime attach/controller event during reloads.
       // Reattaching until the tab converges keeps recovery/replay flows stable across slower environments.
       void Promise.all(recoverableWorkspaceIds().map(async (workspaceId) => {
-        await reattachWorkspaceRuntime(workspaceId);
+        await reattachWorkspaceRuntime(workspaceId, {
+          successReuseMs: CONTROLLER_RECOVERY_ATTACH_SUCCESS_REUSE_MS,
+        });
       }));
     };
 

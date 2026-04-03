@@ -1,5 +1,5 @@
-import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
-import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
 import type { ExecTarget } from "../../state/workbench";
 import type { GitChangeEntry, GitFileDiffPayload } from "../../types/app";
 import { invokeRpc } from "./client";

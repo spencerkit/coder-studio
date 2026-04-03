@@ -12,7 +12,7 @@ import {
 } from "../../i18n";
 import { SettingsScreen } from "../../features/settings";
 import WorkspaceScreen from "../../features/workspace/WorkspaceScreen";
-import type { AppRoute, AppSettings } from "../../types/app";
+import type { AppRoute, AppSettings, AppSettingsUpdater } from "../../types/app";
 import { WorkbenchRuntimeCoordinator } from "./WorkbenchRuntimeCoordinator";
 import {
   clearStoredAppSettings,
@@ -21,14 +21,15 @@ import {
 } from "../../shared/app/settings";
 import {
   defaultAppSettings,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/claude-settings";
 import {
+  applyAppSettingsUpdater,
   createAppSettingsDraftStore,
   createSequencedAppSettingsSaver,
   createPersistableAppSettings,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
-} from "../../services/http/settings.service.ts";
+} from "../../services/http/settings.service";
 
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
@@ -141,8 +142,8 @@ export default function AppController() {
       });
   };
 
-  const onCommitSettings = (nextSettings: AppSettings) => {
-    const normalized = draftSettingsRef.current.replace(cloneAppSettings(nextSettings));
+  const onCommitSettings = (updater: AppSettingsUpdater) => {
+    const normalized = applyAppSettingsUpdater(draftSettingsRef.current, updater);
     setSettingsDraft(normalized);
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,

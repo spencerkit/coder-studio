@@ -1,8 +1,15 @@
 pub(crate) mod agent;
+pub(crate) mod agent_client;
+pub(crate) mod ansi_stream;
 pub(crate) mod app_settings;
+pub(crate) mod artifact_cache;
 pub(crate) mod claude;
+pub(crate) mod codex;
 pub(crate) mod filesystem;
 pub(crate) mod git;
+pub(crate) mod provider_hooks;
+pub(crate) mod provider_registry;
+pub(crate) mod session_runtime;
 pub(crate) mod system;
 pub(crate) mod terminal;
 pub(crate) mod utf8_stream;

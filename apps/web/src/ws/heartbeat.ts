@@ -1,4 +1,4 @@
-import type { WsPingEnvelope } from "./protocol.ts";
+import type { WsPingEnvelope } from "./protocol";
 
 const PING_INTERVAL_MS = 15000;
 const PONG_TIMEOUT_MS = 10000;

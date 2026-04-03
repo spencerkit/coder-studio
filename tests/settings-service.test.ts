@@ -1,15 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
+import { defaultAppSettings } from '../apps/web/src/shared/app/settings';
 import {
+  applyGeneralSettingsPatch,
+  forceClaudeExecutableDefaults,
+  patchClaudeStructuredSettings,
+} from '../apps/web/src/shared/app/claude-settings';
+import {
+  applyAppSettingsUpdater,
   createAppSettingsDraftStore,
   createPersistableAppSettings,
   createSequencedAppSettingsSaver,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
-} from '../apps/web/src/services/http/settings.service.ts';
+} from '../apps/web/src/services/http/settings.service';
 
 test('persistConfirmedAppSettings returns the backend-confirmed settings on success', async () => {
   const confirmed = defaultAppSettings();
@@ -58,6 +64,49 @@ test('createAppSettingsDraftStore composes new saves from the latest in-memory d
   assert.equal(mixedDraft.general.idlePolicy.idleMinutes, 25);
 });
 
+test('applyAppSettingsUpdater preserves consecutive general changes created from stale UI snapshots', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  const disableCompletionNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        enabled: false,
+      },
+    })
+  );
+  const disableBackgroundOnlyNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        onlyWhenBackground: false,
+      },
+    })
+  );
+
+  applyAppSettingsUpdater(store, disableCompletionNotifications);
+  const updated = applyAppSettingsUpdater(store, disableBackgroundOnlyNotifications);
+
+  assert.equal(updated.general.completionNotifications.enabled, false);
+  assert.equal(updated.general.completionNotifications.onlyWhenBackground, false);
+});
+
+test('applyAppSettingsUpdater preserves general changes when a later claude update is committed', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  applyAppSettingsUpdater(store, (current) => applyGeneralSettingsPatch(current, {
+    idlePolicy: {
+      maxActive: 5,
+    },
+  }));
+  const updated = applyAppSettingsUpdater(store, (current) => (
+    patchClaudeStructuredSettings(forceClaudeExecutableDefaults(current), {
+      startupArgs: ['--verbose', '--debug'],
+    })
+  ));
+
+  assert.equal(updated.general.idlePolicy.maxActive, 5);
+  assert.deepEqual(updated.claude.global.startupArgs, ['--verbose', '--debug']);
+});
+
 test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {
   const confirmed = defaultAppSettings();
   const draft = defaultAppSettings();
@@ -93,7 +142,7 @@ test('deriveRuntimeAppSettings prefers the stored explicit locale over backend l
   assert.equal(runtime.general.locale, 'zh');
 });
 
-test('createSequencedAppSettingsSaver ignores stale save responses', async () => {
+test('createSequencedAppSettingsSaver defers applying an earlier save while a newer save is pending', async () => {
   const saver = createSequencedAppSettingsSaver();
   const confirmed = defaultAppSettings();
   const firstDraft = defaultAppSettings();
@@ -121,14 +170,14 @@ test('createSequencedAppSettingsSaver ignores stale save responses', async () =>
     async () => secondPersist,
   );
 
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
   resolveSecond?.(secondDraft);
   const secondResult = await secondSave;
   assert.equal(secondResult.shouldApply, true);
   assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
-
-  resolveFirst?.(firstDraft);
-  const firstResult = await firstSave;
-  assert.equal(firstResult.shouldApply, false);
 });
 
 test('createSequencedAppSettingsSaver applies the latest confirmed save after a newer request fails', async () => {
@@ -167,6 +216,58 @@ test('createSequencedAppSettingsSaver applies the latest confirmed save after a 
   const secondResult = await secondSave;
   assert.equal(secondResult.shouldApply, true);
   assert.equal(secondResult.settings.general.locale, 'zh');
+});
+
+test('createSequencedAppSettingsSaver serializes backend saves to preserve request order', async () => {
+  const saver = createSequencedAppSettingsSaver();
+  const confirmed = defaultAppSettings();
+  const firstDraft = defaultAppSettings();
+  const secondDraft = defaultAppSettings();
+  firstDraft.general.locale = 'zh';
+  secondDraft.general.idlePolicy.idleMinutes = 25;
+
+  const started: number[] = [];
+  let resolveFirst: ((settings: typeof firstDraft) => void) | undefined;
+  let resolveSecond: ((settings: typeof secondDraft) => void) | undefined;
+  const firstPersist = new Promise<typeof firstDraft>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const secondPersist = new Promise<typeof secondDraft>((resolve) => {
+    resolveSecond = resolve;
+  });
+
+  const firstSave = saver.save(
+    confirmed,
+    firstDraft,
+    async () => {
+      started.push(1);
+      return firstPersist;
+    },
+  );
+  const secondSave = saver.save(
+    confirmed,
+    secondDraft,
+    async () => {
+      started.push(2);
+      return secondPersist;
+    },
+  );
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(started, [1]);
+
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
+  await Promise.resolve();
+  assert.deepEqual(started, [1, 2]);
+
+  resolveSecond?.(secondDraft);
+  const secondResult = await secondSave;
+  assert.equal(secondResult.shouldApply, true);
+  assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
 });
 
 test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy migration save fails', async () => {

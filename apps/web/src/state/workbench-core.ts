@@ -4,13 +4,14 @@ import {
   formatWorkspaceTitle,
   getPreferredLocale,
   type Locale,
-} from "../i18n.ts";
-import type { WorkspaceControllerState } from "../features/workspace/workspace-controller.ts";
+} from "../i18n";
+import type { WorkspaceControllerState } from "../features/workspace/workspace-controller";
 
 export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued" | "interrupted";
 export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";
+export type AgentProvider = string;
 
 export type ExecTarget =
   | { type: "native" }
@@ -41,14 +42,16 @@ export type Session = {
   title: string;
   status: SessionStatus;
   mode: SessionMode;
+  provider: AgentProvider;
   autoFeed: boolean;
   isDraft?: boolean;
   queue: QueueTask[];
   messages: AgentMessage[];
-  stream: string;
+  terminalId?: string;
   unread: number;
   lastActiveAt: number;
-  claudeSessionId?: string;
+  resumeId?: string;
+  terminalId?: string;
 };
 
 export type GitStatus = {
@@ -145,12 +148,6 @@ export type Tab = {
   status: "init" | "ready";
   controller: WorkspaceControllerState;
   project?: Project;
-  agent: {
-    provider: "claude";
-    command: string;
-    useWsl: boolean;
-    distro?: string;
-  };
   git: GitStatus;
   gitChanges: GitChange[];
   worktrees: WorktreeInfo[];
@@ -229,18 +226,23 @@ export const createPaneLeaf = (sessionId: string): SessionPaneLeaf => ({
 
 export const createPaneLayout = (sessionId: string): SessionPaneNode => createPaneLeaf(sessionId);
 
-export const createSession = (index: number, mode: SessionMode = "branch", locale: Locale = getPreferredLocale()): Session => ({
+export const createSession = (
+  index: number,
+  mode: SessionMode = "branch",
+  locale: Locale = getPreferredLocale(),
+  provider: AgentProvider = "claude",
+): Session => ({
   id: createId("session"),
   title: formatSessionTitle(index, locale),
   status: "idle",
   mode,
+  provider,
   autoFeed: true,
   isDraft: false,
   queue: [],
   messages: [
     { id: createId("msg"), role: "system", content: formatSessionReadyMessage(index, locale), time: nowLabel() }
   ],
-  stream: "",
   unread: 0,
   lastActiveAt: Date.now()
 });
@@ -260,11 +262,6 @@ export const createTab = (index: number, locale: Locale = getPreferredLocale()):
       fencingToken: 0,
       takeoverPending: false,
       takeoverRequestedBySelf: false,
-    },
-    agent: {
-      provider: "claude",
-      command: "claude",
-      useWsl: false
     },
     git: { branch: "—", changes: 0, lastCommit: "—" },
     gitChanges: [],
@@ -458,7 +455,6 @@ export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | 
   const hasHistory = tabs.some((tab) =>
     tab.status === "ready"
     || (tab.sessions?.length ?? 0) > 1
-    || Boolean(tab.sessions?.[0]?.stream)
     || (tab.archive?.length ?? 0) > 0
   );
   const legacyLayout = input.layout as (LayoutState & { rightTopHeight?: number; rightCollapsed?: boolean }) | undefined;

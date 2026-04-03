@@ -27,12 +27,12 @@ export const TreeView = ({
 }: TreeViewProps) => {
   if (!nodes?.length) return null;
   const sortedNodes = sortTreeNodes(nodes, locale);
+  const comparableSelectedPath = selectedPath ? normalizeComparablePath(selectedPath) : "";
   return (
     <div className="tree tree-list">
       {sortedNodes.map((node) => {
         const isDirectory = node.kind === "dir";
         const isExpanded = isDirectory ? collapsedPaths?.has(node.path) ?? false : false;
-        const comparableSelectedPath = selectedPath ? normalizeComparablePath(selectedPath) : "";
         const isSelected = !isDirectory
           && Boolean(selectedPath)
           && normalizeComparablePath(rootPath ? resolvePath(rootPath, node.path) : node.path) === comparableSelectedPath;

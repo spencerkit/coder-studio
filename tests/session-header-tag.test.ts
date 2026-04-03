@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sessionHeaderTag } from "../apps/web/src/shared/utils/session.ts";
+import { sessionHeaderTag } from "../apps/web/src/shared/utils/session";
 
 test("sessionHeaderTag returns a running badge for active sessions", () => {
   assert.deepEqual(sessionHeaderTag("running", "en"), {
