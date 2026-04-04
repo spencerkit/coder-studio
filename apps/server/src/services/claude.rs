@@ -415,7 +415,6 @@ mod tests {
                     startup_args: vec!["--verbose".into()],
                     env: BTreeMap::new(),
                     settings_json: json!({ "model": "sonnet" }),
-                    global_config_json: json!({}),
                 },
             )
             .unwrap();
@@ -441,7 +440,6 @@ mod tests {
             startup_args: vec!["--model".into(), "claude-sonnet-4-5".into()],
             env: BTreeMap::new(),
             settings_json: Value::Object(Map::new()),
-            global_config_json: Value::Object(Map::new()),
         };
 
         assert_eq!(
@@ -461,7 +459,6 @@ mod tests {
             startup_args: vec!["--model".into(), "claude-sonnet-4-5".into()],
             env: BTreeMap::new(),
             settings_json: Value::Object(Map::new()),
-            global_config_json: Value::Object(Map::new()),
         };
 
         assert_eq!(

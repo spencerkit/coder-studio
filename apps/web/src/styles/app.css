@@ -4083,15 +4083,20 @@ body.is-resizing-panels .agent-pane-card .pulse {
 
 /* --- Agent Pane Workspace --- */
 
-.agent-pane-workspace {
+.workspace-agent-shell.studio-panel {
   display: flex;
-  flex: 1;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-.agent-pane-workspace > .agent-pane-card,
-.agent-pane-workspace > .agent-split-pane {
+.workspace-agent-shell.studio-panel > .archive-banner {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+
+.workspace-agent-shell.studio-panel > .agent-pane-card,
+.workspace-agent-shell.studio-panel > .agent-split-pane {
   flex: 1;
   min-height: 0;
 }
@@ -4639,14 +4644,6 @@ body.is-resizing-panels .agent-pane-card .pulse {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
 }
 
-.agent-pane-workspace {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-secondary) 92%, var(--accent-2) 8%) 0%,
-    color-mix(in srgb, var(--bg) 96%, var(--accent) 4%) 100%
-  );
-}
-
 .agent-pane,
 .agent-pane-card {
   background: color-mix(in srgb, var(--surface) 90%, var(--accent-2) 10%);
@@ -4840,7 +4837,7 @@ pre.diff,
   width: 100%;
 }
 
-.workspace-layout.focus-mode .agent-pane-workspace {
+.workspace-layout.focus-mode .workspace-agent-shell.studio-panel {
   border-right: none;
 }
 
@@ -5915,10 +5912,6 @@ pre.diff,
   background: var(--right-pane-surface, color-mix(in srgb, var(--surface) 96%, var(--accent-2) 4%)) !important;
 }
 
-.agent-pane-workspace {
-  padding: 10px 12px 12px;
-}
-
 .agent-split-divider {
   flex-basis: 16px;
   touch-action: none;
@@ -5964,7 +5957,7 @@ pre.diff,
 }
 
 .agent-split-child > .agent-pane-card::after,
-.agent-pane-workspace > .agent-pane-card::after {
+.workspace-agent-shell.studio-panel > .agent-pane-card::after {
   display: block;
 }
 

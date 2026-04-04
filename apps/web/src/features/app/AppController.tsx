@@ -20,6 +20,7 @@ import {
   readStoredAppSettings,
 } from "../../shared/app/settings-storage";
 import {
+  buildAppSettingsPatch,
   defaultAppSettings,
 } from "../../shared/app/app-settings";
 import {
@@ -29,6 +30,7 @@ import {
   createPersistableAppSettings,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
+  updateAppSettingsPatch,
 } from "../../services/http/settings.service";
 
 export default function AppController() {
@@ -122,16 +124,31 @@ export default function AppController() {
   const onSelectLocale = (nextLocale: Locale) => {
     persistLocale(nextLocale);
     localePreferenceExplicitRef.current = true;
+    const previousSettings = draftSettingsRef.current.get();
     const nextSettings = draftSettingsRef.current.update((draft) => {
       draft.general.locale = nextLocale;
     });
     setAppSettings(nextSettings);
     setSettingsDraft(nextSettings);
     setLocale(nextLocale);
+    const previousPersistable = createPersistableAppSettings(
+      previousSettings,
+      confirmedSettingsRef.current,
+      true,
+    );
+    const nextPersistable = createPersistableAppSettings(
+      nextSettings,
+      confirmedSettingsRef.current,
+      true,
+    );
+    const patch = buildAppSettingsPatch(previousPersistable, nextPersistable);
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
-      createPersistableAppSettings(nextSettings, confirmedSettingsRef.current, true),
-      undefined,
+      nextPersistable,
+      async () => updateAppSettingsPatch(patch),
       backendSettingsConfirmedRef.current,
     )
       .then((result) => {
@@ -143,16 +160,26 @@ export default function AppController() {
   };
 
   const onCommitSettings = (updater: AppSettingsUpdater) => {
+    const previousSettings = draftSettingsRef.current.get();
     const normalized = applyAppSettingsUpdater(draftSettingsRef.current, updater);
     setSettingsDraft(normalized);
-    void saveCoordinatorRef.current.save(
+    const previousPersistable = createPersistableAppSettings(
+      previousSettings,
       confirmedSettingsRef.current,
-      createPersistableAppSettings(
-        normalized,
-        confirmedSettingsRef.current,
-        localePreferenceExplicitRef.current,
-      ),
-      undefined,
+      localePreferenceExplicitRef.current,
+    );
+    const nextPersistable = createPersistableAppSettings(
+      normalized,
+      confirmedSettingsRef.current,
+      localePreferenceExplicitRef.current,
+    );
+    const patch = buildAppSettingsPatch(previousPersistable, nextPersistable);
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+    void saveCoordinatorRef.current.saveWithPersist(
+      confirmedSettingsRef.current,
+      async () => updateAppSettingsPatch(patch),
       backendSettingsConfirmedRef.current,
     )
       .then((result) => {

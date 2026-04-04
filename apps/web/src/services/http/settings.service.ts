@@ -21,6 +21,16 @@ export const updateAppSettings = async (settings: AppSettings): Promise<AppSetti
   )
 );
 
+export const updateAppSettingsPatch = async (
+  patch: Record<string, unknown>,
+): Promise<AppSettings> => (
+  normalizeAppSettings(
+    await invokeRpc<unknown>("app_settings_update", {
+      settings: patch,
+    }),
+  )
+);
+
 export const createAppSettingsDraftStore = (initialSettings: AppSettings) => {
   let draftSettings = cloneAppSettings(initialSettings);
 
@@ -210,7 +220,65 @@ export const createSequencedAppSettingsSaver = () => {
     }
   };
 
+  const saveWithPersist = async (
+    confirmedSettings: AppSettings,
+    persist: () => Promise<AppSettings>,
+    confirmedSettingsAreBackendConfirmed = true,
+  ): Promise<{
+    settings: AppSettings;
+    backendConfirmed: boolean;
+    shouldApply: boolean;
+  }> => {
+    latestRequestId += 1;
+    const requestId = latestRequestId;
+    const confirmedSnapshot = cloneAppSettings(confirmedSettings);
+    pendingRequestIds.add(requestId);
+
+    const runPersist = async () => {
+      try {
+        settledRequests.set(requestId, {
+          settings: cloneAppSettings(await persist()),
+          success: true,
+          backendConfirmed: true,
+        });
+      } catch {
+        settledRequests.set(requestId, {
+          settings: cloneAppSettings(confirmedSnapshot),
+          success: false,
+          backendConfirmed: confirmedSettingsAreBackendConfirmed,
+        });
+      } finally {
+        pendingRequestIds.delete(requestId);
+      }
+    };
+
+    const persistTask = persistChain.then(runPersist, runPersist);
+    persistChain = persistTask.then(() => undefined, () => undefined);
+    await persistTask;
+
+    const visibleSave = findLatestVisibleSave(latestRequestId, pendingRequestIds, settledRequests);
+    if (!visibleSave || visibleSave.requestId === lastAppliedRequestId) {
+      pruneSettledRequests();
+      return {
+        settings: visibleSave
+          ? cloneAppSettings(visibleSave.settings)
+          : cloneAppSettings(confirmedSnapshot),
+        backendConfirmed: visibleSave?.backendConfirmed ?? confirmedSettingsAreBackendConfirmed,
+        shouldApply: false,
+      };
+    }
+
+    lastAppliedRequestId = visibleSave.requestId;
+    pruneSettledRequests();
+    return {
+      settings: cloneAppSettings(visibleSave.settings),
+      backendConfirmed: visibleSave.backendConfirmed,
+      shouldApply: true,
+    };
+  };
+
   return {
+    saveWithPersist,
     save: async (
       confirmedSettings: AppSettings,
       draftSettings: AppSettings,
@@ -221,53 +289,12 @@ export const createSequencedAppSettingsSaver = () => {
       backendConfirmed: boolean;
       shouldApply: boolean;
     }> => {
-      latestRequestId += 1;
-      const requestId = latestRequestId;
-      const confirmedSnapshot = cloneAppSettings(confirmedSettings);
       const draftSnapshot = cloneAppSettings(draftSettings);
-      pendingRequestIds.add(requestId);
-
-      const runPersist = async () => {
-        try {
-          settledRequests.set(requestId, {
-            settings: cloneAppSettings(await persist(cloneAppSettings(draftSnapshot))),
-            success: true,
-            backendConfirmed: true,
-          });
-        } catch {
-          settledRequests.set(requestId, {
-            settings: cloneAppSettings(confirmedSnapshot),
-            success: false,
-            backendConfirmed: confirmedSettingsAreBackendConfirmed,
-          });
-        } finally {
-          pendingRequestIds.delete(requestId);
-        }
-      };
-
-      const persistTask = persistChain.then(runPersist, runPersist);
-      persistChain = persistTask.then(() => undefined, () => undefined);
-      await persistTask;
-
-      const visibleSave = findLatestVisibleSave(latestRequestId, pendingRequestIds, settledRequests);
-      if (!visibleSave || visibleSave.requestId === lastAppliedRequestId) {
-        pruneSettledRequests();
-        return {
-          settings: visibleSave
-            ? cloneAppSettings(visibleSave.settings)
-            : cloneAppSettings(confirmedSnapshot),
-          backendConfirmed: visibleSave?.backendConfirmed ?? confirmedSettingsAreBackendConfirmed,
-          shouldApply: false,
-        };
-      }
-
-      lastAppliedRequestId = visibleSave.requestId;
-      pruneSettledRequests();
-      return {
-        settings: cloneAppSettings(visibleSave.settings),
-        backendConfirmed: visibleSave.backendConfirmed,
-        shouldApply: true,
-      };
+      return await saveWithPersist(
+        confirmedSettings,
+        () => persist(cloneAppSettings(draftSnapshot)),
+        confirmedSettingsAreBackendConfirmed,
+      );
     },
   };
 };

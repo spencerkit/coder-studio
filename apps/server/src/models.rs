@@ -170,9 +170,6 @@ pub struct ClaudeRuntimeProfile {
     #[serde(default = "default_json_object")]
     #[serde(alias = "settingsJson")]
     pub settings_json: Value,
-    #[serde(default = "default_json_object")]
-    #[serde(alias = "globalConfigJson")]
-    pub global_config_json: Value,
 }
 
 impl Default for ClaudeRuntimeProfile {
@@ -182,7 +179,6 @@ impl Default for ClaudeRuntimeProfile {
             startup_args: Vec::new(),
             env: BTreeMap::new(),
             settings_json: default_json_object(),
-            global_config_json: default_json_object(),
         }
     }
 }

@@ -5,6 +5,7 @@ import { defaultAppSettings } from '../apps/web/src/shared/app/settings-storage'
 import {
   applyGeneralSettingsPatch,
   applyProviderGlobalPatch,
+  buildAppSettingsPatch,
 } from '../apps/web/src/shared/app/app-settings';
 import {
   applyAppSettingsUpdater,
@@ -105,6 +106,50 @@ test('applyAppSettingsUpdater preserves general changes when a later claude upda
 
   assert.equal(updated.general.idlePolicy.maxActive, 5);
   assert.deepEqual(updated.providers.claude.global.startupArgs, ['--verbose', '--debug']);
+});
+
+test('buildAppSettingsPatch only emits the changed provider field', () => {
+  const before = defaultAppSettings();
+  const after = applyProviderGlobalPatch(before, 'claude', ['settingsJson', 'model'], 'claude-sonnet-4-5');
+
+  assert.deepEqual(buildAppSettingsPatch(before, after), {
+    providers: {
+      claude: {
+        global: {
+          settingsJson: {
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    },
+  });
+});
+
+test('buildAppSettingsPatch emits the full claude env object when one env field changes', () => {
+  const before = applyProviderGlobalPatch(defaultAppSettings(), 'claude', {
+    env: {
+      ANTHROPIC_BASE_URL: 'https://old.example',
+      ANTHROPIC_AUTH_TOKEN: 'token-old',
+    },
+  });
+  const after = applyProviderGlobalPatch(before, 'claude', {
+    env: {
+      ANTHROPIC_BASE_URL: 'https://next.example',
+    },
+  });
+
+  assert.deepEqual(buildAppSettingsPatch(before, after), {
+    providers: {
+      claude: {
+        global: {
+          env: {
+            ANTHROPIC_BASE_URL: 'https://next.example',
+            ANTHROPIC_AUTH_TOKEN: 'token-old',
+          },
+        },
+      },
+    },
+  });
 });
 
 test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {

@@ -231,7 +231,6 @@ const resetAppSettings = async (page: Page) => {
           startupArgs: [],
           env: {},
           settingsJson: {},
-          globalConfigJson: {},
         },
         overrides: {
           native: null,

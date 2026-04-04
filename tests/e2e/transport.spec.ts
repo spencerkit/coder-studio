@@ -198,7 +198,6 @@ async function seedAppSettings(
           startupArgs,
           env: {},
           settingsJson: {},
-          globalConfigJson: {},
         },
         overrides: {
           native: null,

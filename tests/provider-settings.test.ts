@@ -22,7 +22,6 @@ test("normalizeAppSettings migrates legacy top-level provider globals into provi
         startupArgs: ["--verbose"],
         env: {},
         settingsJson: { model: "sonnet" },
-        globalConfigJson: {},
       },
     },
     codex: {

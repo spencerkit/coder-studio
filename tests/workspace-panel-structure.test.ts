@@ -23,5 +23,6 @@ test("workspace code and terminal panels avoid redundant panel-inner wrappers", 
   assert.match(terminalPanel, /className="panel workspace-terminal-shell terminal-card workspace-terminal-panel"/);
 
   assert.doesNotMatch(agentPanel, /className="panel-inner studio-panel compact"/);
+  assert.doesNotMatch(agentPanel, /className="agent-pane-workspace"/);
   assert.match(agentPanel, /className="panel center-panel workspace-agent-shell studio-panel compact"/);
 });

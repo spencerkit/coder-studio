@@ -71,7 +71,6 @@ test("normalizeAppSettings drops incoming Claude target overrides and keeps one 
         settingsJson: {
           model: "sonnet",
         },
-        globalConfigJson: {},
       },
       overrides: {
         native: {
@@ -83,7 +82,6 @@ test("normalizeAppSettings drops incoming Claude target overrides and keeps one 
             settingsJson: {
               model: "opus",
             },
-            globalConfigJson: {},
           },
         },
         wsl: {
@@ -95,7 +93,6 @@ test("normalizeAppSettings drops incoming Claude target overrides and keeps one 
             settingsJson: {
               model: "haiku",
             },
-            globalConfigJson: {},
           },
         },
       },
@@ -250,9 +247,9 @@ test("translator exposes the new history and provider settings keys", () => {
   assert.match(en("claudeAuthTokenHelp"), /ANTHROPIC_AUTH_TOKEN/);
   assert.match(en("claudeAuthTokenMeta"), /Secret string/);
   assert.equal(en("claudeModelPlaceholder"), "claude-sonnet-4-5");
-  assert.equal(en("codexApiKey"), "API Key");
+  assert.equal(en("codexApiKey"), "API key");
   assert.match(en("codexApiKeyHint"), /OpenAI auth/i);
-  assert.equal(zh("codexBaseUrl"), "Base URL");
+  assert.equal(zh("codexBaseUrl"), "base URL");
   assert.equal(en("claudeSelectUnsetOption"), "Not set");
   assert.equal(en("claudeEditorModeVimOption"), "vim");
   assert.equal(en("claudeShowSecret"), "Show secret");

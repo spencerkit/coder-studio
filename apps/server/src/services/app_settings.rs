@@ -96,7 +96,6 @@ fn resolve_codex_home_root(root_override: Option<&Path>) -> Option<PathBuf> {
 #[derive(Default)]
 struct ClaudeJsonSources {
     settings_json: Option<Map<String, Value>>,
-    global_config_json: Option<Map<String, Value>>,
 }
 
 type CodexTomlSource = toml::Table;
@@ -131,7 +130,6 @@ fn read_toml_table_file(path: &Path) -> Option<CodexTomlSource> {
 fn load_native_claude_json_sources(root: &Path) -> ClaudeJsonSources {
     ClaudeJsonSources {
         settings_json: read_json_object_file(&root.join(".claude/settings.json")),
-        global_config_json: read_json_object_file(&root.join(".claude.json")),
     }
 }
 
@@ -320,12 +318,6 @@ fn hydrate_runtime_profile_from_claude_sources(
         hydrated.settings_json = Value::Object(settings_json);
     }
 
-    hydrated.global_config_json = sources
-        .global_config_json
-        .clone()
-        .map(Value::Object)
-        .unwrap_or_else(|| Value::Object(Map::new()));
-
     hydrated
 }
 
@@ -355,7 +347,7 @@ fn hydrate_settings_from_claude_home(
     };
 
     let sources = load_native_claude_json_sources(&root);
-    if sources.settings_json.is_none() && sources.global_config_json.is_none() {
+    if sources.settings_json.is_none() {
         return settings.clone();
     }
 
@@ -467,6 +459,60 @@ fn write_json_object_file(path: &Path, object: &Map<String, Value>) -> Result<()
     write_text_file_atomic(path, &serialized)
 }
 
+fn apply_json_value_diff(target: &mut Value, before: &Value, after: &Value) {
+    if before == after {
+        return;
+    }
+
+    if let (Value::Object(before_map), Value::Object(after_map)) = (before, after) {
+        if let Value::Object(target_map) = target {
+            let mut keys = std::collections::BTreeSet::new();
+            keys.extend(before_map.keys().cloned());
+            keys.extend(after_map.keys().cloned());
+
+            for key in keys {
+                match (before_map.get(&key), after_map.get(&key)) {
+                    (Some(previous), Some(next)) if previous == next => {}
+                    (Some(_), None) => {
+                        target_map.remove(&key);
+                    }
+                    (None, Some(next)) => {
+                        target_map.insert(key, next.clone());
+                    }
+                    (Some(previous), Some(next)) => {
+                        if let Some(existing) = target_map.get_mut(&key) {
+                            apply_json_value_diff(existing, previous, next);
+                        } else {
+                            target_map.insert(key, next.clone());
+                        }
+                    }
+                    (None, None) => {}
+                }
+            }
+            return;
+        }
+    }
+
+    *target = after.clone();
+}
+
+fn apply_json_object_diff(
+    target: &mut Map<String, Value>,
+    before: &Map<String, Value>,
+    after: &Map<String, Value>,
+) {
+    let mut target_value = Value::Object(target.clone());
+    apply_json_value_diff(
+        &mut target_value,
+        &Value::Object(before.clone()),
+        &Value::Object(after.clone()),
+    );
+    *target = match target_value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+}
+
 fn update_toml_string_field(table: &mut toml::Table, key: &str, value: &str) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -477,45 +523,77 @@ fn update_toml_string_field(table: &mut toml::Table, key: &str, value: &str) {
 }
 
 fn write_claude_provider_settings(
-    profile: &ClaudeRuntimeProfile,
+    current_profile: &ClaudeRuntimeProfile,
+    next_profile: &ClaudeRuntimeProfile,
     root_override: Option<&Path>,
 ) -> Result<(), String> {
     let Some(root) = resolve_claude_home_root(root_override) else {
         return Ok(());
     };
 
+    let current_env = env_map_to_json_object(&current_profile.env);
+    let next_env = env_map_to_json_object(&next_profile.env);
+    let current_settings_json = value_object_or_empty(&current_profile.settings_json);
+    let next_settings_json = value_object_or_empty(&next_profile.settings_json);
+
+    if current_env == next_env && current_settings_json == next_settings_json {
+        return Ok(());
+    }
+
     let settings_path = root.join(".claude/settings.json");
-    let global_config_path = root.join(".claude.json");
-    let existing_settings = read_json_object_file(&settings_path);
-    let existing_global = read_json_object_file(&global_config_path);
+    let mut latest_settings = read_json_object_file(&settings_path).unwrap_or_default();
 
-    let mut settings_json = value_object_or_empty(&profile.settings_json);
-    let env_json = env_map_to_json_object(&profile.env);
-    if env_json.is_empty() {
-        settings_json.remove("env");
-    } else {
-        settings_json.insert("env".to_string(), Value::Object(env_json));
+    if current_settings_json != next_settings_json {
+        apply_json_object_diff(
+            &mut latest_settings,
+            &current_settings_json,
+            &next_settings_json,
+        );
     }
 
-    if existing_settings.is_some() || !settings_json.is_empty() {
-        write_json_object_file(&settings_path, &settings_json)?;
+    if current_env != next_env {
+        let mut latest_env = latest_settings
+            .remove("env")
+            .and_then(|value| match value {
+                Value::Object(map) => Some(map),
+                _ => None,
+            })
+            .unwrap_or_default();
+        apply_json_object_diff(&mut latest_env, &current_env, &next_env);
+        if latest_env.is_empty() {
+            latest_settings.remove("env");
+        } else {
+            latest_settings.insert("env".to_string(), Value::Object(latest_env));
+        }
     }
 
-    let global_config_json = value_object_or_empty(&profile.global_config_json);
-    if existing_global.is_some() || !global_config_json.is_empty() {
-        write_json_object_file(&global_config_path, &global_config_json)?;
-    }
-
+    write_json_object_file(&settings_path, &latest_settings)?;
     Ok(())
 }
 
 fn write_codex_provider_settings(
-    profile: &CodexRuntimeProfile,
+    current_profile: &CodexRuntimeProfile,
+    next_profile: &CodexRuntimeProfile,
     root_override: Option<&Path>,
 ) -> Result<(), String> {
     let Some(root) = resolve_codex_home_root(root_override) else {
         return Ok(());
     };
+
+    let current_model = current_profile.model.trim();
+    let next_model = next_profile.model.trim();
+    let current_base_url = current_profile.base_url.trim();
+    let next_base_url = next_profile.base_url.trim();
+    let current_api_key = current_profile.api_key.trim();
+    let next_api_key = next_profile.api_key.trim();
+
+    let model_changed = current_model != next_model;
+    let base_url_changed = current_base_url != next_base_url;
+    let api_key_changed = current_api_key != next_api_key;
+
+    if !model_changed && !base_url_changed && !api_key_changed {
+        return Ok(());
+    }
 
     let config_path = root.join(".codex/config.toml");
     let auth_path = root.join(".codex/auth.json");
@@ -524,61 +602,75 @@ fn write_codex_provider_settings(
     let had_existing_auth = existing_auth.is_some();
 
     let mut config = existing_config.clone().unwrap_or_default();
-    if !profile.api_key.trim().is_empty() {
+    if api_key_changed && !next_api_key.is_empty() {
         if let Some(error) = codex_api_key_write_error(&config) {
             return Err(error);
         }
     }
 
-    update_toml_string_field(&mut config, "model", &profile.model);
+    let mut config_changed = false;
+    if model_changed {
+        update_toml_string_field(&mut config, "model", next_model);
+        config_changed = true;
+    }
 
-    match codex_active_provider_id(&config).as_deref() {
-        Some("openai") | None => {
-            update_toml_string_field(&mut config, "openai_base_url", &profile.base_url)
+    if base_url_changed {
+        match codex_active_provider_id(&config).as_deref() {
+            Some("openai") | None => update_toml_string_field(&mut config, "openai_base_url", next_base_url),
+            Some(provider_id) => {
+                let provider = codex_provider_table_mut(&mut config, provider_id);
+                update_toml_string_field(provider, "base_url", next_base_url);
+            }
         }
-        Some(provider_id) => {
-            let provider = codex_provider_table_mut(&mut config, provider_id);
-            update_toml_string_field(provider, "base_url", &profile.base_url);
-            if !profile.api_key.trim().is_empty() {
+        config_changed = true;
+    }
+
+    if api_key_changed && !next_api_key.is_empty() {
+        match codex_active_provider_id(&config).as_deref() {
+            Some("openai") | None => {}
+            Some(provider_id) => {
+                let provider = codex_provider_table_mut(&mut config, provider_id);
                 provider.insert(
                     "requires_openai_auth".to_string(),
                     toml::Value::Boolean(true),
                 );
+                config_changed = true;
             }
         }
     }
 
-    if existing_config.is_some()
-        || !profile.model.trim().is_empty()
-        || !profile.base_url.trim().is_empty()
-        || !profile.api_key.trim().is_empty()
-    {
-        if codex_active_provider_uses_openai_auth(&config)
-            && (!profile.api_key.trim().is_empty() || had_existing_auth)
-        {
+    if codex_active_provider_uses_openai_auth(&config) && api_key_changed && (!next_api_key.is_empty() || had_existing_auth) {
+        let needs_file_store = config
+            .get("cli_auth_credentials_store")
+            .and_then(toml::Value::as_str)
+            != Some("file");
+        if needs_file_store {
             config.insert(
                 "cli_auth_credentials_store".to_string(),
                 toml::Value::String("file".to_string()),
             );
+            config_changed = true;
         }
+    }
+
+    if config_changed {
         let serialized = toml::to_string_pretty(&config).map_err(|e| e.to_string())?;
         write_text_file_atomic(&config_path, &serialized)?;
     }
 
     let mut auth_json = existing_auth.unwrap_or_default();
-    let trimmed_api_key = profile.api_key.trim();
     let uses_openai_auth = codex_active_provider_uses_openai_auth(&config);
-    if uses_openai_auth {
-        if trimmed_api_key.is_empty() {
+    if uses_openai_auth && api_key_changed {
+        if next_api_key.is_empty() {
             auth_json.remove("OPENAI_API_KEY");
         } else {
             auth_json.insert(
                 "OPENAI_API_KEY".to_string(),
-                Value::String(trimmed_api_key.to_string()),
+                Value::String(next_api_key.to_string()),
             );
         }
 
-        if had_existing_auth || !trimmed_api_key.is_empty() {
+        if had_existing_auth || !next_api_key.is_empty() {
             write_json_object_file(&auth_path, &auth_json)?;
         }
     }
@@ -587,25 +679,35 @@ fn write_codex_provider_settings(
 }
 
 fn write_provider_settings_to_real_files_with_roots(
-    settings: &AppSettingsPayload,
+    current_settings: &AppSettingsPayload,
+    next_settings: &AppSettingsPayload,
     claude_root_override: Option<&Path>,
     codex_root_override: Option<&Path>,
 ) -> Result<(), String> {
-    let claude = settings
+    let current_claude = current_settings
         .provider_profile::<ClaudeRuntimeProfile>("claude")
         .unwrap_or_default();
-    write_claude_provider_settings(&claude, claude_root_override)?;
+    let next_claude = next_settings
+        .provider_profile::<ClaudeRuntimeProfile>("claude")
+        .unwrap_or_default();
+    write_claude_provider_settings(&current_claude, &next_claude, claude_root_override)?;
 
-    let codex = settings
+    let current_codex = current_settings
         .provider_profile::<CodexRuntimeProfile>("codex")
         .unwrap_or_default();
-    write_codex_provider_settings(&codex, codex_root_override)?;
+    let next_codex = next_settings
+        .provider_profile::<CodexRuntimeProfile>("codex")
+        .unwrap_or_default();
+    write_codex_provider_settings(&current_codex, &next_codex, codex_root_override)?;
 
     Ok(())
 }
 
-fn write_provider_settings_to_real_files(settings: &AppSettingsPayload) -> Result<(), String> {
-    write_provider_settings_to_real_files_with_roots(settings, None, None)
+fn write_provider_settings_to_real_files(
+    current_settings: &AppSettingsPayload,
+    next_settings: &AppSettingsPayload,
+) -> Result<(), String> {
+    write_provider_settings_to_real_files_with_roots(current_settings, next_settings, None, None)
 }
 
 fn save_app_settings_to_conn(
@@ -636,7 +738,6 @@ fn should_replace_object_patch(path: &[String]) -> bool {
         path.as_slice(),
         ["providers", "claude", "global", "env"]
             | ["providers", "claude", "global", "settings_json"]
-            | ["providers", "claude", "global", "global_config_json"]
     )
 }
 
@@ -691,7 +792,6 @@ fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
         ["providers", "claude", "global"] => match key {
             "startupArgs" => "startup_args".to_string(),
             "settingsJson" => "settings_json".to_string(),
-            "globalConfigJson" => "global_config_json".to_string(),
             _ => key.to_string(),
         },
         ["providers", "codex", "global"] => match key {
@@ -741,12 +841,13 @@ fn app_settings_update_in_conn(
     before_save: impl FnOnce() -> Result<(), String>,
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
-    let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
+    let current_settings = load_or_default_app_settings_from_conn_hydrated(conn)?;
+    let mut current = serde_json::to_value(current_settings.clone())
         .map_err(|e| e.to_string())?;
     merge_settings_value(&mut current, normalized_patch, &[]);
     before_save()?;
     let merged = normalize_app_settings_payload(current)?;
-    write_provider_settings_to_real_files(&merged)?;
+    write_provider_settings_to_real_files(&current_settings, &merged)?;
     save_app_settings_to_conn(conn, &merged)
 }
 
@@ -758,17 +859,17 @@ fn app_settings_update_in_conn_with_roots(
     codex_root_override: Option<&Path>,
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
-    let mut current =
-        serde_json::to_value(load_or_default_app_settings_from_conn_hydrated_with_roots(
-            conn,
-            claude_root_override,
-            codex_root_override,
-        )?)
-        .map_err(|e| e.to_string())?;
+    let current_settings = load_or_default_app_settings_from_conn_hydrated_with_roots(
+        conn,
+        claude_root_override,
+        codex_root_override,
+    )?;
+    let mut current = serde_json::to_value(current_settings.clone()).map_err(|e| e.to_string())?;
     merge_settings_value(&mut current, normalized_patch, &[]);
     before_save()?;
     let merged = normalize_app_settings_payload(current)?;
     write_provider_settings_to_real_files_with_roots(
+        &current_settings,
         &merged,
         claude_root_override,
         codex_root_override,
@@ -875,7 +976,6 @@ mod tests {
         );
         assert_eq!(claude.settings_json["model"], "sonnet");
         assert_eq!(claude.settings_json["permissionMode"], "auto");
-        assert_eq!(claude.global_config_json["showTurnDuration"], true);
 
         let _ = fs::remove_dir_all(root);
     }
@@ -983,12 +1083,6 @@ mod tests {
                     }))
                     .unwrap(),
                 ),
-                global_config_json: Some(
-                    serde_json::from_value(json!({
-                        "showTurnDuration": true
-                    }))
-                    .unwrap(),
-                ),
             }),
         );
         let claude = claude_profile(&hydrated);
@@ -1006,7 +1100,6 @@ mod tests {
             Some("https://wsl.example")
         );
         assert_eq!(claude.settings_json["model"], "wsl-sonnet");
-        assert_eq!(claude.global_config_json["showTurnDuration"], true);
     }
 
     #[test]
@@ -1234,7 +1327,6 @@ mod tests {
             .env
             .insert("ANTHROPIC_API_KEY".into(), "claude-key".into());
         claude.settings_json = json!({ "model": "sonnet" });
-        claude.global_config_json = json!({ "showTurnDuration": true });
         settings.set_provider_profile("claude", &claude).unwrap();
 
         let mut codex = codex_profile(&settings);
@@ -1255,7 +1347,6 @@ mod tests {
         assert_eq!(stored_claude.startup_args, vec!["--verbose"]);
         assert!(stored_claude.env.is_empty());
         assert_eq!(stored_claude.settings_json, json!({}));
-        assert_eq!(stored_claude.global_config_json, json!({}));
 
         assert_eq!(stored_codex.executable, "codex-nightly");
         assert_eq!(stored_codex.extra_args, vec!["--full-auto"]);
@@ -1283,9 +1374,6 @@ mod tests {
                             },
                             "settings_json": {
                                 "model": "sonnet"
-                            },
-                            "global_config_json": {
-                                "showTurnDuration": true
                             }
                         }
                     },
@@ -1328,13 +1416,7 @@ mod tests {
             Some("sonnet")
         );
 
-        let claude_global = read_json_object_file(&root.join(".claude.json")).unwrap();
-        assert_eq!(
-            claude_global
-                .get("showTurnDuration")
-                .and_then(Value::as_bool),
-            Some(true)
-        );
+        assert!(!root.join(".claude.json").exists());
 
         let codex_config = read_toml_table_file(&root.join(".codex/config.toml")).unwrap();
         assert_eq!(
@@ -1370,6 +1452,174 @@ mod tests {
         assert!(stored_codex.model.is_empty());
         assert!(stored_codex.api_key.is_empty());
         assert!(stored_codex.base_url.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_claude_provider_settings_reloads_latest_file_and_patches_only_changed_fields() {
+        let root = unique_temp_dir("claude-settings-patch-latest");
+
+        write_json(
+            &root.join(".claude/settings.json"),
+            json!({
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://old.example",
+                    "UNCHANGED_ENV": "keep"
+                },
+                "model": "old-model",
+                "permissionMode": "plan"
+            }),
+        );
+
+        let current = ClaudeRuntimeProfile {
+            executable: "claude".into(),
+            startup_args: Vec::new(),
+            env: std::collections::BTreeMap::from([
+                ("ANTHROPIC_BASE_URL".into(), "https://old.example".into()),
+                ("UNCHANGED_ENV".into(), "keep".into()),
+            ]),
+            settings_json: json!({
+                "model": "old-model",
+                "permissionMode": "plan"
+            }),
+        };
+
+        write_json(
+            &root.join(".claude/settings.json"),
+            json!({
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://old.example",
+                    "UNCHANGED_ENV": "keep",
+                    "LATEST_ONLY_ENV": "preserve"
+                },
+                "model": "old-model",
+                "permissionMode": "plan",
+                "cleanupPeriodDays": 30
+            }),
+        );
+
+        let mut next = current.clone();
+        next.settings_json = json!({
+            "model": "new-model",
+            "permissionMode": "plan"
+        });
+
+        write_claude_provider_settings(&current, &next, Some(root.as_path())).unwrap();
+
+        let saved = read_json_object_file(&root.join(".claude/settings.json")).unwrap();
+        assert_eq!(saved.get("model").and_then(Value::as_str), Some("new-model"));
+        assert_eq!(
+            saved.get("permissionMode").and_then(Value::as_str),
+            Some("plan")
+        );
+        assert_eq!(
+            saved.get("cleanupPeriodDays").and_then(Value::as_i64),
+            Some(30)
+        );
+        assert_eq!(
+            saved.get("env")
+                .and_then(Value::as_object)
+                .and_then(|env| env.get("UNCHANGED_ENV"))
+                .and_then(Value::as_str),
+            Some("keep")
+        );
+        assert_eq!(
+            saved.get("env")
+                .and_then(Value::as_object)
+                .and_then(|env| env.get("LATEST_ONLY_ENV"))
+                .and_then(Value::as_str),
+            Some("preserve")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_codex_provider_settings_reloads_latest_files_and_patches_only_changed_fields() {
+        let root = unique_temp_dir("codex-settings-patch-latest");
+        if let Some(parent) = root.join(".codex/config.toml").parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+
+        fs::write(
+            root.join(".codex/config.toml"),
+            r#"
+model = "old-model"
+openai_base_url = "https://old.example/v1"
+service_tier = "fast"
+"#,
+        )
+        .unwrap();
+        write_json(
+            &root.join(".codex/auth.json"),
+            json!({
+                "OPENAI_API_KEY": "old-key"
+            }),
+        );
+
+        let current = CodexRuntimeProfile {
+            executable: "codex".into(),
+            extra_args: Vec::new(),
+            model: "old-model".into(),
+            api_key: "old-key".into(),
+            base_url: "https://old.example/v1".into(),
+        };
+
+        fs::write(
+            root.join(".codex/config.toml"),
+            r#"
+model = "old-model"
+openai_base_url = "https://old.example/v1"
+service_tier = "fast"
+disable_response_storage = true
+"#,
+        )
+        .unwrap();
+        write_json(
+            &root.join(".codex/auth.json"),
+            json!({
+                "OPENAI_API_KEY": "old-key",
+                "LATEST_ONLY": "preserve"
+            }),
+        );
+
+        let mut next = current.clone();
+        next.model = "new-model".into();
+
+        write_codex_provider_settings(&current, &next, Some(root.as_path())).unwrap();
+
+        let saved_config = read_toml_table_file(&root.join(".codex/config.toml")).unwrap();
+        assert_eq!(
+            saved_config.get("model").and_then(toml::Value::as_str),
+            Some("new-model")
+        );
+        assert_eq!(
+            saved_config
+                .get("openai_base_url")
+                .and_then(toml::Value::as_str),
+            Some("https://old.example/v1")
+        );
+        assert_eq!(
+            saved_config.get("service_tier").and_then(toml::Value::as_str),
+            Some("fast")
+        );
+        assert_eq!(
+            saved_config
+                .get("disable_response_storage")
+                .and_then(toml::Value::as_bool),
+            Some(true)
+        );
+
+        let saved_auth = read_json_object_file(&root.join(".codex/auth.json")).unwrap();
+        assert_eq!(
+            saved_auth.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("old-key")
+        );
+        assert_eq!(
+            saved_auth.get("LATEST_ONLY").and_then(Value::as_str),
+            Some("preserve")
+        );
 
         let _ = fs::remove_dir_all(root);
     }

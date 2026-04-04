@@ -32,6 +32,8 @@ const cloneJsonRecord = (value: Record<string, unknown>): Record<string, unknown
   structuredClone(value)
 );
 
+const cloneJsonValue = <T>(value: T): T => structuredClone(value);
+
 const readBoolean = (value: unknown, fallback: boolean) => (
   typeof value === "boolean" ? value : fallback
 );
@@ -95,6 +97,48 @@ const normalizeJsonRecord = (
     return cloneJsonRecord(fallback);
   }
   return cloneJsonRecord(value);
+};
+
+const isReplaceObjectPatchPath = (path: readonly string[]): boolean => (
+  path.length === 4
+  && path[0] === "providers"
+  && path[2] === "global"
+  && (
+    (path[1] === "claude" && (path[3] === "env" || path[3] === "settingsJson"))
+    || (path[1] === "claude" && (path[3] === "env" || path[3] === "settings_json"))
+  )
+);
+
+const diffSettingsValue = (
+  before: unknown,
+  after: unknown,
+  path: readonly string[],
+): unknown | undefined => {
+  if (JSON.stringify(before) === JSON.stringify(after)) {
+    return undefined;
+  }
+
+  if (isReplaceObjectPatchPath(path)) {
+    return cloneJsonValue(after);
+  }
+
+  if (isRecord(before) && isRecord(after)) {
+    const patch: Record<string, unknown> = {};
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    for (const key of keys) {
+      const childPatch = diffSettingsValue(
+        before[key],
+        after[key],
+        [...path, key],
+      );
+      if (childPatch !== undefined) {
+        patch[key] = childPatch;
+      }
+    }
+    return Object.keys(patch).length > 0 ? patch : undefined;
+  }
+
+  return cloneJsonValue(after);
 };
 
 const mergeJsonObjects = (
@@ -236,10 +280,6 @@ const normalizeClaudeRuntimeProfile = (
     startupArgs,
     env: normalizeEnv(source.env ?? fallback.env),
     settingsJson: normalizeJsonRecord(source.settingsJson ?? source.settings_json, fallback.settingsJson),
-    globalConfigJson: normalizeJsonRecord(
-      source.globalConfigJson ?? source.global_config_json,
-      fallback.globalConfigJson,
-    ),
   };
 };
 
@@ -274,7 +314,6 @@ const DEFAULT_CLAUDE_RUNTIME_PROFILE: ClaudeRuntimeProfile = {
   startupArgs: [],
   env: {},
   settingsJson: {},
-  globalConfigJson: {},
 };
 
 const DEFAULT_CODEX_RUNTIME_PROFILE: CodexRuntimeProfile = {
@@ -404,6 +443,18 @@ const withLegacyProviderSections = (
 export const toAppSettingsPayload = (settings: AppSettings): AppSettingsPayload => (
   cloneAppSettingsPayload(settings)
 );
+
+export const buildAppSettingsPatch = (
+  before: AppSettings,
+  after: AppSettings,
+): Record<string, unknown> => {
+  const patch = diffSettingsValue(
+    toAppSettingsPayload(before),
+    toAppSettingsPayload(after),
+    [],
+  );
+  return isRecord(patch) ? patch : {};
+};
 
 export const defaultAppSettings = (): AppSettings => cloneAppSettingsPayload({
   general: {

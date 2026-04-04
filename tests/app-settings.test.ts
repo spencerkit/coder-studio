@@ -60,7 +60,6 @@ test('cloneAppSettings creates independent nested settings objects', () => {
     ...original.providers.claude.global,
     env: { ANTHROPIC_BASE_URL: 'https://anthropic.example' },
     settingsJson: { model: 'sonnet' },
-    globalConfigJson: { showTurnDuration: true },
   };
   const cloned = cloneAppSettings(original);
 
@@ -135,9 +134,6 @@ test('readStoredAppSettings hydrates canonical provider settings from legacy bro
               },
               settingsJson: {
                 model: 'sonnet',
-              },
-              globalConfigJson: {
-                showTurnDuration: true,
               },
             },
           },

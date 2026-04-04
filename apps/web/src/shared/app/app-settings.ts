@@ -2,6 +2,7 @@ import type { Locale } from "../../i18n";
 import type { AppSettings, LegacyAppSettings } from "../../types/app";
 export {
   applyAgentDefaultsPatch,
+  buildAppSettingsPatch,
   applyGeneralSettingsPatch,
   applyProviderGlobalPatch,
   cloneAppSettings,

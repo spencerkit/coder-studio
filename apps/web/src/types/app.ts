@@ -402,7 +402,6 @@ export type ClaudeRuntimeProfile = {
   startupArgs: string[];
   env: Record<string, string>;
   settingsJson: Record<string, unknown>;
-  globalConfigJson: Record<string, unknown>;
 };
 
 export type CodexRuntimeProfile = {

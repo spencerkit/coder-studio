@@ -2450,9 +2450,6 @@ mod tests {
                                 },
                                 "settings_json": {
                                     "model": "sonnet"
-                                },
-                                "global_config_json": {
-                                    "showTurnDuration": true
                                 }
                             }
                         }
@@ -2551,9 +2548,6 @@ mod tests {
                                 "startup_args": ["--existing"],
                                 "settings_json": {
                                     "model": "opus"
-                                },
-                                "global_config_json": {
-                                    "showTurnDuration": true
                                 }
                             }
                         }
@@ -2581,10 +2575,6 @@ mod tests {
                                 "settingsJson": {
                                     "model": "opus",
                                     "permissionMode": "acceptEdits"
-                                },
-                                "globalConfigJson": {
-                                    "showTurnDuration": true,
-                                    "theme": "dark"
                                 }
                             }
                         }
@@ -2607,8 +2597,6 @@ mod tests {
         assert_eq!(claude.startup_args, vec!["--verbose"]);
         assert_eq!(claude.settings_json["model"], "opus");
         assert_eq!(claude.settings_json["permissionMode"], "acceptEdits");
-        assert_eq!(claude.global_config_json["theme"], "dark");
-        assert_eq!(claude.global_config_json["showTurnDuration"], true);
     }
 
     #[test]
@@ -2654,9 +2642,6 @@ mod tests {
                                 "settings_json": {
                                     "model": "opus",
                                     "permissionMode": "acceptEdits"
-                                },
-                                "global_config_json": {
-                                    "showTurnDuration": true
                                 }
                             }
                         }
@@ -2680,8 +2665,7 @@ mod tests {
                                 },
                                 "settings_json": {
                                     "permissionMode": "plan"
-                                },
-                                "global_config_json": {}
+                                }
                             }
                         }
                     }
@@ -2703,13 +2687,6 @@ mod tests {
             Some(&json!("plan"))
         );
         assert_eq!(claude.settings_json.get("model"), None);
-        assert_eq!(
-            claude
-                .global_config_json
-                .as_object()
-                .map(|value| value.is_empty()),
-            Some(true)
-        );
     }
 
     #[test]

@@ -434,31 +434,30 @@ export const AgentWorkspaceFeature = ({
             <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
           </div>
         )}
-        <div className="agent-pane-workspace">
-          {isArchiveView ? (
-            <section
-              className="agent-pane-card archive-only"
-              data-session-id={viewedSession.id}
-              data-session-status={viewedSession.status}
-            >
-              <div className="agent-pane-header" data-density="compact" data-active="true">
-                <div className="agent-pane-header-copy">
-                  <span className={`session-top-dot ${sessionTone(viewedDisplayStatus)} ${sessionTone(viewedDisplayStatus) === "active" ? "pulse" : ""}`} />
-                  <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
-                </div>
-                <div className="agent-pane-meta">
-                  <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
-                    {viewedHeaderTag.label}
-                  </span>
-                </div>
+        {isArchiveView ? (
+          <section
+            className="agent-pane-card archive-only"
+            data-session-id={viewedSession.id}
+            data-session-status={viewedSession.status}
+          >
+            <div className="agent-pane-header" data-density="compact" data-active="true">
+              <div className="agent-pane-header-copy">
+                <span className={`session-top-dot ${sessionTone(viewedDisplayStatus)} ${sessionTone(viewedDisplayStatus) === "active" ? "pulse" : ""}`} />
+                <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
               </div>
-              <div className="agent-pane-body">
-                {archiveTerminalBinding.stream.trim() ? (
-                  archiveTerminalBinding.renderMode === "transcript" ? (
-                    <pre className="agent-pane-transcript-output archive" aria-hidden="true">
-                      {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
-                    </pre>
-                  ) : (
+              <div className="agent-pane-meta">
+                <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
+                  {viewedHeaderTag.label}
+                </span>
+              </div>
+            </div>
+            <div className="agent-pane-body">
+              {archiveTerminalBinding.stream.trim() ? (
+                archiveTerminalBinding.renderMode === "transcript" ? (
+                  <pre className="agent-pane-transcript-output archive" aria-hidden="true">
+                    {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
+                  </pre>
+                ) : (
                   <ShellTerminal
                     ref={archiveTerminalRef}
                     terminalId={viewedSession.id}
@@ -469,16 +468,15 @@ export const AgentWorkspaceFeature = ({
                     fontSize={terminalFontSize}
                     compatibilityMode={terminalCompatibilityMode}
                   />
-                  )
-                ) : (
-                  <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-                )}
-              </div>
-            </section>
-          ) : (
-            renderAgentPane(activeTab.paneLayout)
-          )}
-        </div>
+                )
+              ) : (
+                <div className="terminal-empty">{t("archiveViewReadonly")}</div>
+              )}
+            </div>
+          </section>
+        ) : (
+          renderAgentPane(activeTab.paneLayout)
+        )}
       </section>
 
       {showCodePanel && <div className="v-resizer" data-resize="left" onPointerDown={onCodeResizeStart} />}
