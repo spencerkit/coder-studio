@@ -1,7 +1,8 @@
 // @ts-nocheck
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { DEFAULT_HOST, DEFAULT_PORT, resolveDataDir, resolveLogPath, resolveServiceDir, resolveStateDir } from './config.mjs';
+import path from 'node:path';
+import { DEFAULT_HOST, DEFAULT_PORT, resolveDataDir, resolveLogPath, resolveServiceDir, resolveServiceLauncherPath, resolveStateDir } from './config.mjs';
 import { assertRuntimeBundle, resolvePlatformPackage } from './platform.mjs';
 import { writeServiceLauncher } from './service-launcher.mjs';
 import { createLinuxSystemdUserServiceAdapter } from './service-adapters/linux-systemd-user.mjs';
@@ -9,6 +10,191 @@ import { createMacosLaunchdAgentServiceAdapter } from './service-adapters/macos-
 import { clearServiceState, readPackageVersion, readServiceState, writeServiceState } from './state.mjs';
 
 export const DEFAULT_SERVICE_NAME = 'com.spencer-kit.coder-studio';
+
+const TEST_MANAGED_SERVICE_PLATFORM = 'test-managed-service';
+const TEST_MANAGED_SERVICE_FILENAME = 'test-managed-service.json';
+
+function resolveTestManagedServicePath(stateDir) {
+  return path.join(stateDir, TEST_MANAGED_SERVICE_FILENAME);
+}
+
+async function readTestManagedServiceRecord(stateDir) {
+  try {
+    const raw = await fs.readFile(resolveTestManagedServicePath(stateDir), 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function writeTestManagedServiceRecord(stateDir, record) {
+  await fs.mkdir(stateDir, { recursive: true });
+  await fs.writeFile(resolveTestManagedServicePath(stateDir), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+}
+
+async function removeTestManagedServiceRecord(stateDir) {
+  await fs.rm(resolveTestManagedServicePath(stateDir), { force: true });
+}
+
+function buildTestManagedServiceState(stateDir, serviceName, record, version) {
+  if (!record?.installed) {
+    return null;
+  }
+
+  return {
+    mode: 'managed',
+    platform: TEST_MANAGED_SERVICE_PLATFORM,
+    serviceName,
+    launcherPath: resolveServiceLauncherPath(stateDir),
+    installedAt: record.installedAt,
+    lastInstallVersion: version,
+  };
+}
+
+function createTestManagedServiceController({ env = process.env, readVersion = () => readPackageVersion(), now = () => new Date().toISOString() } = {}) {
+  async function resolveRecord(input = {}) {
+    const stateDir = input.stateDir || resolveStateDir(input.env || env);
+    const serviceName = input.serviceName || DEFAULT_SERVICE_NAME;
+    const version = await readVersion();
+    let record = await readTestManagedServiceRecord(stateDir);
+    if (!record) {
+      record = {
+        installed: true,
+        active: false,
+        installedAt: now(),
+        lastInstallVersion: version,
+      };
+      await writeTestManagedServiceRecord(stateDir, record);
+    }
+    return { stateDir, serviceName, version, record };
+  }
+
+  async function buildStatus(input = {}) {
+    const { stateDir, serviceName, version, record } = await resolveRecord(input);
+    const active = Boolean(record.installed && record.active);
+    const serviceState = buildTestManagedServiceState(stateDir, serviceName, record, version);
+
+    return {
+      platform: TEST_MANAGED_SERVICE_PLATFORM,
+      supported: true,
+      installed: Boolean(record.installed),
+      active,
+      loaded: active,
+      enabled: Boolean(record.installed),
+      stale: false,
+      state: active ? 'running' : record.installed ? 'stopped' : 'not-installed',
+      serviceName,
+      definitionPath: null,
+      serviceTarget: serviceName,
+      serviceState,
+      details: {
+        test: true,
+      },
+    };
+  }
+
+  return {
+    id: TEST_MANAGED_SERVICE_PLATFORM,
+    platform: TEST_MANAGED_SERVICE_PLATFORM,
+    supported: true,
+
+    async install(input = {}) {
+      const { stateDir, serviceName, version } = await resolveRecord(input);
+      const record = {
+        installed: true,
+        active: false,
+        installedAt: now(),
+        lastInstallVersion: version,
+      };
+      await writeTestManagedServiceRecord(stateDir, record);
+      await writeServiceState(stateDir, buildTestManagedServiceState(stateDir, serviceName, record, version));
+      return {
+        changed: true,
+        ...(await buildStatus({ ...input, stateDir, serviceName })),
+      };
+    },
+
+    async uninstall(input = {}) {
+      const { stateDir, serviceName, version } = await resolveRecord(input);
+      const record = {
+        installed: false,
+        active: false,
+        installedAt: now(),
+        lastInstallVersion: version,
+      };
+      await writeTestManagedServiceRecord(stateDir, record);
+      await clearServiceState(stateDir);
+      await removeServiceArtifacts(stateDir);
+      return {
+        changed: true,
+        ...(await buildStatus({ ...input, stateDir, serviceName })),
+      };
+    },
+
+    async start(input = {}) {
+      const { stateDir, serviceName, version, record } = await resolveRecord(input);
+      if (!record.installed) {
+        throw new Error('service_not_installed');
+      }
+      const updated = {
+        ...record,
+        active: true,
+      };
+      await writeTestManagedServiceRecord(stateDir, updated);
+      await writeServiceState(stateDir, buildTestManagedServiceState(stateDir, serviceName, updated, version));
+      return {
+        changed: !record.active,
+        ...(await buildStatus({ ...input, stateDir, serviceName })),
+      };
+    },
+
+    async stop(input = {}) {
+      const { stateDir, serviceName, version, record } = await resolveRecord(input);
+      if (!record.installed) {
+        throw new Error('service_not_installed');
+      }
+      const updated = {
+        ...record,
+        active: false,
+      };
+      await writeTestManagedServiceRecord(stateDir, updated);
+      await writeServiceState(stateDir, buildTestManagedServiceState(stateDir, serviceName, updated, version));
+      return {
+        changed: Boolean(record.active),
+        ...(await buildStatus({ ...input, stateDir, serviceName })),
+      };
+    },
+
+    async restart(input = {}) {
+      const { stateDir, serviceName, version, record } = await resolveRecord(input);
+      if (!record.installed) {
+        throw new Error('service_not_installed');
+      }
+      const updated = {
+        ...record,
+        active: true,
+      };
+      await writeTestManagedServiceRecord(stateDir, updated);
+      await writeServiceState(stateDir, buildTestManagedServiceState(stateDir, serviceName, updated, version));
+      return {
+        changed: true,
+        ...(await buildStatus({ ...input, stateDir, serviceName })),
+      };
+    },
+
+    async status(input = {}) {
+      return buildStatus(input);
+    },
+
+    async isInstalled(input = {}) {
+      const status = await buildStatus(input);
+      return status.installed;
+    },
+  };
+}
 
 function createUnsupportedServiceController({ platform }) {
   return {
@@ -73,6 +259,10 @@ export function createPlatformServiceController({
   readVersion = () => readPackageVersion(),
   now = () => new Date().toISOString(),
 } = {}) {
+  if (env.CODER_STUDIO_TEST_MANAGED_SERVICE === '1') {
+    return createTestManagedServiceController({ env, readVersion, now });
+  }
+
   const adapter =
     platform === 'linux'
       ? createLinuxSystemdUserServiceAdapter({ execute, homeDir })
