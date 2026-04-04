@@ -125,6 +125,20 @@ test('settings shell styles define baseline panel and section selectors', async 
   assert.match(stylesSource, /\.settings-section-body\b/);
 });
 
+test('settings shell styles define the final workspace visual selectors', async () => {
+  const stylesSource = await fs.readFile(
+    new URL('../apps/web/src/styles/app.css', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(stylesSource, /\.provider-settings-summary\b/);
+  assert.match(stylesSource, /\.provider-settings-section\b/);
+  assert.match(stylesSource, /\.settings-panel-heading\b/);
+  assert.match(stylesSource, /\.settings-section-copy\b/);
+  assert.match(stylesSource, /\.settings-row--multiline\s+\.settings-row-copy\b/);
+  assert.match(stylesSource, /\.settings-row--multiline\s+\.settings-command-field\b/);
+});
+
 test('settings footer exposes build version and published time metadata', async () => {
   const settingsSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),
