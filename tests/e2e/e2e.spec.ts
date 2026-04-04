@@ -938,9 +938,29 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await page.getByTestId('provider-settings-claude-startup-args').fill('--debug');
+  await page.getByTestId('provider-settings-claude-model').fill('claude-3-7-sonnet');
   await page.getByTestId('provider-settings-claude-auth-token').fill('token-demo-value');
   await page.getByTestId('provider-settings-claude-base-url').fill('https://example.test/claude');
-  await page.waitForTimeout(250);
+  await expect.poll(async () => {
+    const savedSettings = await invokeRpc<Record<string, unknown>>(page, 'app_settings_get');
+    const providers = savedSettings.providers as Record<string, { global?: Record<string, unknown> }> | undefined;
+    const claudeGlobal = providers?.claude?.global ?? {};
+    const settingsJson = (claudeGlobal.settingsJson ?? claudeGlobal.settings_json) as Record<string, unknown> | undefined;
+    const env = claudeGlobal.env as Record<string, unknown> | undefined;
+
+    return {
+      startupArgs: claudeGlobal.startupArgs ?? claudeGlobal.startup_args,
+      model: settingsJson?.model,
+      authToken: env?.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: env?.ANTHROPIC_BASE_URL,
+    };
+  }).toEqual({
+    startupArgs: ['--debug'],
+    model: 'claude-3-7-sonnet',
+    authToken: 'token-demo-value',
+    baseUrl: 'https://example.test/claude',
+  });
 
   await page.getByRole('button', { name: 'Back to app' }).click();
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -949,10 +969,31 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
+  await expect.poll(async () => {
+    const savedSettings = await invokeRpc<Record<string, unknown>>(page, 'app_settings_get');
+    const providers = savedSettings.providers as Record<string, { global?: Record<string, unknown> }> | undefined;
+    const claudeGlobal = providers?.claude?.global ?? {};
+    const settingsJson = (claudeGlobal.settingsJson ?? claudeGlobal.settings_json) as Record<string, unknown> | undefined;
+    const env = claudeGlobal.env as Record<string, unknown> | undefined;
+
+    return {
+      startupArgs: claudeGlobal.startupArgs ?? claudeGlobal.startup_args,
+      model: settingsJson?.model,
+      authToken: env?.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: env?.ANTHROPIC_BASE_URL,
+    };
+  }).toEqual({
+    startupArgs: ['--debug'],
+    model: 'claude-3-7-sonnet',
+    authToken: 'token-demo-value',
+    baseUrl: 'https://example.test/claude',
+  });
   await page.getByTestId('settings-nav-claude').click();
   await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-claude-startup-args')).toHaveValue('--debug');
+  await expect(page.getByTestId('provider-settings-claude-model')).toHaveValue('claude-3-7-sonnet');
   await expect(page.getByTestId('provider-settings-claude-auth-token')).toHaveValue('token-demo-value');
   await expect(page.getByTestId('provider-settings-claude-base-url')).toHaveValue('https://example.test/claude');
 });

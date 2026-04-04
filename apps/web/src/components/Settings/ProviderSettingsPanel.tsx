@@ -23,7 +23,20 @@ const readPathValue = (source: Record<string, unknown>, path: readonly string[])
     if (!current || typeof current !== "object" || Array.isArray(current)) {
       return undefined;
     }
-    current = (current as Record<string, unknown>)[segment];
+    const currentRecord = current as Record<string, unknown>;
+    if (segment in currentRecord) {
+      current = currentRecord[segment];
+      continue;
+    }
+
+    const snakeCaseSegment = segment.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+    if (snakeCaseSegment in currentRecord) {
+      current = currentRecord[snakeCaseSegment];
+      continue;
+    }
+
+    const camelCaseSegment = segment.replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase());
+    current = currentRecord[camelCaseSegment];
   }
   return current;
 };

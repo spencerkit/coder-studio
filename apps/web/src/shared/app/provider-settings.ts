@@ -357,10 +357,13 @@ const normalizeProvidersMap = (
   for (const [providerId, providerValue] of Object.entries(value)) {
     const source = isRecord(providerValue) ? providerValue : {};
     const fallbackGlobal = next[providerId]?.global ?? {};
+    const sourceGlobal = isRecord(source.global) ? source.global : {};
     next[providerId] = {
       global: normalizeKnownProviderGlobalSettings(
         providerId,
-        mergeJsonObjects(fallbackGlobal, isRecord(source.global) ? source.global : {}),
+        providerId === "claude" || providerId === "codex"
+          ? sourceGlobal
+          : mergeJsonObjects(fallbackGlobal, sourceGlobal),
         fallbackGlobal,
       ),
     };
