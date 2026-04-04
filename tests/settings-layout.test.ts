@@ -139,6 +139,18 @@ test('settings shell styles define the final workspace visual selectors', async 
   assert.match(stylesSource, /\.settings-row--multiline\s+\.settings-command-field\b/);
 });
 
+test('settings shell compact path keeps the new surface treatment and excludes unrelated session dot styles', async () => {
+  const stylesSource = await fs.readFile(
+    new URL('../apps/web/src/styles/app.css', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(stylesSource, /\.settings-route\[data-density="compact"\]\s+\.settings-sidebar-v2\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--surface-strip\) 92%, var\(--bg\) 8%\);/);
+  assert.doesNotMatch(stylesSource, /\.settings-route\[data-density="compact"\]\s+\.settings-content-v2\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--bg\) 96%, var\(--surface\) 4%\);/);
+  assert.doesNotMatch(stylesSource, /\.session-top-dot\.interrupted\b/);
+  assert.doesNotMatch(stylesSource, /\.session-top-dot\.archived\b/);
+});
+
 test('settings footer exposes build version and published time metadata', async () => {
   const settingsSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),

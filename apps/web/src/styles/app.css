@@ -6128,20 +6128,6 @@ pre.diff,
     0 0 0 2px color-mix(in srgb, var(--danger-soft) 42%, transparent);
 }
 
-.session-top-dot.interrupted {
-  background: color-mix(in srgb, var(--danger) 56%, var(--text-tertiary) 44%) !important;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent),
-    0 0 0 2px color-mix(in srgb, var(--danger-soft) 42%, transparent);
-}
-
-.session-top-dot.archived {
-  background: color-mix(in srgb, var(--text-tertiary) 70%, var(--bg) 30%) !important;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--text-tertiary) 22%, transparent),
-    0 0 0 2px color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-}
-
 .session-top-dot.idle {
   background: color-mix(in srgb, var(--text-tertiary) 82%, var(--bg) 18%) !important;
   box-shadow:
@@ -8447,14 +8433,6 @@ pre.diff,
 
 .settings-document-shell {
   min-height: 0;
-}
-
-.settings-route[data-density="compact"] .settings-sidebar-v2 {
-  background: color-mix(in srgb, var(--surface-strip) 92%, var(--bg) 8%);
-}
-
-.settings-route[data-density="compact"] .settings-content-v2 {
-  background: color-mix(in srgb, var(--bg) 96%, var(--surface) 4%);
 }
 
 .settings-route[data-density="compact"] .settings-scroll-panel {
