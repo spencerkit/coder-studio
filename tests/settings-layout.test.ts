@@ -91,6 +91,25 @@ test('generic settings styles no longer keep Claude-named textarea residue', asy
   assert.doesNotMatch(stylesSource, /\.claude-settings-panel/);
 });
 
+test('settings shell styles define baseline panel and section selectors', async () => {
+  const stylesSource = await fs.readFile(
+    new URL('../apps/web/src/styles/app.css', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(stylesSource, /\.settings-panel-header\b/);
+  assert.match(stylesSource, /\.settings-panel-kicker\b/);
+  assert.match(stylesSource, /\.settings-panel-title\b/);
+  assert.match(stylesSource, /\.settings-panel-intro\b/);
+  assert.match(stylesSource, /\.settings-panel-summary\b/);
+  assert.match(stylesSource, /\.settings-section-slab\b/);
+  assert.match(stylesSource, /\.settings-section-header\b/);
+  assert.match(stylesSource, /\.settings-section-kicker\b/);
+  assert.match(stylesSource, /\.settings-section-title\b/);
+  assert.match(stylesSource, /\.settings-section-description\b/);
+  assert.match(stylesSource, /\.settings-section-body\b/);
+});
+
 test('settings footer exposes build version and published time metadata', async () => {
   const settingsSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),

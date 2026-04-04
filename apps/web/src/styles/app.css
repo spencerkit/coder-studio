@@ -8100,6 +8100,109 @@ pre.diff,
   gap: 28px;
 }
 
+.settings-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 0 18px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 74%, transparent);
+}
+
+.settings-panel-kicker,
+.settings-section-kicker {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.settings-panel-heading,
+.settings-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-panel-title,
+.settings-section-title {
+  margin: 0;
+  color: var(--text);
+}
+
+.settings-panel-title {
+  font-size: clamp(24px, 2.6vw, 30px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 1.3;
+}
+
+.settings-panel-intro,
+.settings-section-description {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.settings-panel-intro {
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.settings-section-description {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-panel-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-panel-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle) 80%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent) 22%);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-panel-summary-copy {
+  color: inherit;
+}
+
+.settings-section-slab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section-header {
+  padding-bottom: 2px;
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .settings-group-card {
   border: none !important;
   background: transparent !important;
