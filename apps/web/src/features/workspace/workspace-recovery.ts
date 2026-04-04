@@ -1,12 +1,8 @@
-import type { Session, Terminal } from "../../state/workbench-core";
+import type { Session } from "../../state/workbench-core";
 import type { WorkspaceControllerState } from "./workspace-controller";
 
 export type AgentRecoveryAction = {
   kind: "resume" | "restart";
-};
-
-export type TerminalRecoveryAction = {
-  kind: "new_terminal";
 };
 
 export const resolveAgentRecoveryAction = (
@@ -24,20 +20,5 @@ export const resolveAgentRecoveryAction = (
   }
   return {
     kind: session.resumeId ? "resume" : "restart",
-  };
-};
-
-export const resolveTerminalRecoveryAction = (
-  controller: WorkspaceControllerState | null | undefined,
-  terminal: Terminal | null | undefined,
-): TerminalRecoveryAction | null => {
-  if (!controller || controller.role !== "controller" || !terminal) {
-    return null;
-  }
-  if (terminal.recoverable) {
-    return null;
-  }
-  return {
-    kind: "new_terminal",
   };
 };

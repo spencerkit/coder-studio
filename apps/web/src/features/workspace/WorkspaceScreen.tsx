@@ -73,6 +73,7 @@ import {
   openWorkspacePreviewPath,
   openWorkspaceWorktree,
   performWorkspaceGitOperation,
+  replaceWorkspaceTerminal,
   resolveWorkspacePreviewPathLabel,
   saveWorkspacePreview,
   selectWorkspaceTerminal,
@@ -85,7 +86,6 @@ import {
 } from "./";
 import {
   resolveAgentRecoveryAction,
-  resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
 import { buildRuntimeRequirementStatusesFromManifest } from "../providers/runtime-helpers";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
@@ -373,6 +373,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     () => withServiceFallback(() => listSessionHistory(), null),
   ));
   const historyLoadingRequestCountRef = useRef(0);
+  const terminalRecoveryAttemptsRef = useRef(new Set<string>());
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
   const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -2264,6 +2265,42 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const activeTerminal = visiblePanelTerminals.find((t) => t.id === activeTab.activeTerminalId) ?? visiblePanelTerminals[0];
   const showAgentPanel = !isCodeExpanded;
 
+  useEffect(() => {
+    if (isArchiveView || !activeTerminal || activeTerminal.recoverable) {
+      return;
+    }
+    if (!canMutateWorkspace(activeTab.controller, "create_terminal")) {
+      return;
+    }
+
+    const attemptKey = `${activeTab.id}:${activeTerminal.id}`;
+    if (terminalRecoveryAttemptsRef.current.has(attemptKey)) {
+      return;
+    }
+    terminalRecoveryAttemptsRef.current.add(attemptKey);
+
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const initialSize = measureWorkspaceTerminalSize();
+    void replaceWorkspaceTerminal({
+      tab: currentTab,
+      terminalId: activeTerminal.id,
+      updateTab,
+      addToast,
+      activeSessionId: activeSession.id,
+      createToastId: () => createId("toast"),
+      t,
+      initialSize,
+    });
+  }, [
+    activeSession.id,
+    activeTab,
+    activeTerminal,
+    addToast,
+    isArchiveView,
+    measureWorkspaceTerminalSize,
+    t,
+  ]);
+
   const toggleCodeExpanded = async () => {
     if (isCodeExpanded) {
       if (codeSidebarView === "git" && activeTab.filePreview.mode === "diff" && activeTab.filePreview.path) {
@@ -2628,7 +2665,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     ? agentRecoveryBusy
     : null;
   const visibleAgentRecoveryAction = agentRecoveryAction ?? activeAgentRecoveryBusy;
-  const terminalRecoveryAction = resolveTerminalRecoveryAction(activeTab.controller, activeTerminal);
   const shellTerminalMode = resolveTerminalInteractionMode(
     showTerminalPanel && !isCodeExpanded,
     canMutateWorkspace(activeTab.controller, "shell_input"),
@@ -2686,7 +2722,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         </button>
       </div>
     </div>
-  ) : (visibleAgentRecoveryAction || terminalRecoveryAction) ? (
+  ) : visibleAgentRecoveryAction ? (
     <>
       {visibleAgentRecoveryAction && (
         <div
@@ -2714,30 +2750,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               {visibleAgentRecoveryAction.kind === "resume"
                 ? t("workspaceAgentResumeAction")
                 : t("workspaceAgentRestartAction")}
-            </button>
-          </div>
-        </div>
-      )}
-      {terminalRecoveryAction && (
-        <div
-          className="workspace-status-banner recovery"
-          data-testid="workspace-terminal-recovery-banner"
-        >
-          <div className="workspace-status-banner-copy">
-            <span className="workspace-status-banner-title">{t("workspaceTerminalRecoveryTitle")}</span>
-            <span className="workspace-status-banner-text">{t("workspaceTerminalRecoveryBody")}</span>
-          </div>
-          <div className="workspace-status-banner-actions">
-            <button
-              type="button"
-              className="workspace-status-banner-btn"
-              data-testid="workspace-terminal-recovery-action"
-              onClick={() => {
-                void onAddTerminal();
-              }}
-              disabled={controllerActionBusy !== null}
-            >
-              {t("workspaceTerminalRecoveryAction")}
             </button>
           </div>
         </div>
