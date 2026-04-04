@@ -181,7 +181,9 @@ fn value_object_or_empty(value: &Value) -> Map<String, Value> {
     }
 }
 
-fn json_object_to_env_map(source: &Map<String, Value>) -> std::collections::BTreeMap<String, String> {
+fn json_object_to_env_map(
+    source: &Map<String, Value>,
+) -> std::collections::BTreeMap<String, String> {
     source
         .iter()
         .filter_map(|(key, value)| {
@@ -194,9 +196,7 @@ fn json_object_to_env_map(source: &Map<String, Value>) -> std::collections::BTre
         .collect()
 }
 
-fn env_map_to_json_object(
-    env: &std::collections::BTreeMap<String, String>,
-) -> Map<String, Value> {
+fn env_map_to_json_object(env: &std::collections::BTreeMap<String, String>) -> Map<String, Value> {
     env.iter()
         .filter_map(|(key, value)| {
             let trimmed = value.trim();
@@ -295,11 +295,9 @@ fn codex_provider_table_mut<'a>(
 
 fn codex_base_url_from_sources(source: &CodexTomlSource) -> String {
     match codex_active_provider_id(source).as_deref() {
-        Some("openai") | None => trimmed_string(
-            source
-                .get("openai_base_url")
-                .and_then(toml::Value::as_str),
-        ),
+        Some("openai") | None => {
+            trimmed_string(source.get("openai_base_url").and_then(toml::Value::as_str))
+        }
         Some(provider_id) => trimmed_string(
             codex_provider_table(source, provider_id)
                 .and_then(|provider| provider.get("base_url"))
@@ -382,9 +380,8 @@ fn hydrate_runtime_profile_from_codex_sources(
 
     if uses_openai_auth {
         if let Some(auth_json) = &sources.auth_json {
-            hydrated.api_key = trimmed_string(
-                auth_json.get("OPENAI_API_KEY").and_then(Value::as_str),
-            );
+            hydrated.api_key =
+                trimmed_string(auth_json.get("OPENAI_API_KEY").and_then(Value::as_str));
         }
     }
 
@@ -429,7 +426,8 @@ fn load_or_default_app_settings_from_conn_hydrated_with_roots(
     claude_root_override: Option<&Path>,
     codex_root_override: Option<&Path>,
 ) -> Result<AppSettingsPayload, String> {
-    let settings = strip_provider_owned_fields_for_storage(&load_or_default_app_settings_from_conn(conn)?);
+    let settings =
+        strip_provider_owned_fields_for_storage(&load_or_default_app_settings_from_conn(conn)?);
     let settings = hydrate_settings_from_claude_home(&settings, claude_root_override);
     let settings = hydrate_settings_from_codex_home(&settings, codex_root_override);
     Ok(settings)
@@ -535,7 +533,9 @@ fn write_codex_provider_settings(
     update_toml_string_field(&mut config, "model", &profile.model);
 
     match codex_active_provider_id(&config).as_deref() {
-        Some("openai") | None => update_toml_string_field(&mut config, "openai_base_url", &profile.base_url),
+        Some("openai") | None => {
+            update_toml_string_field(&mut config, "openai_base_url", &profile.base_url)
+        }
         Some(provider_id) => {
             let provider = codex_provider_table_mut(&mut config, provider_id);
             update_toml_string_field(provider, "base_url", &profile.base_url);
@@ -741,9 +741,8 @@ fn app_settings_update_in_conn(
     before_save: impl FnOnce() -> Result<(), String>,
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
-    let mut current =
-        serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
-            .map_err(|e| e.to_string())?;
+    let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
+        .map_err(|e| e.to_string())?;
     merge_settings_value(&mut current, normalized_patch, &[]);
     before_save()?;
     let merged = normalize_app_settings_payload(current)?;
@@ -759,12 +758,13 @@ fn app_settings_update_in_conn_with_roots(
     codex_root_override: Option<&Path>,
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
-    let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated_with_roots(
-        conn,
-        claude_root_override,
-        codex_root_override,
-    )?)
-    .map_err(|e| e.to_string())?;
+    let mut current =
+        serde_json::to_value(load_or_default_app_settings_from_conn_hydrated_with_roots(
+            conn,
+            claude_root_override,
+            codex_root_override,
+        )?)
+        .map_err(|e| e.to_string())?;
     merge_settings_value(&mut current, normalized_patch, &[]);
     before_save()?;
     let merged = normalize_app_settings_payload(current)?;
@@ -781,7 +781,9 @@ fn app_settings_update_with_before_save_hook(
     state: State<'_, AppState>,
     before_save: impl FnOnce() -> Result<(), String>,
 ) -> Result<AppSettingsPayload, String> {
-    with_db(state, |conn| app_settings_update_in_conn(conn, patch, before_save))
+    with_db(state, |conn| {
+        app_settings_update_in_conn(conn, patch, before_save)
+    })
 }
 
 pub(crate) fn app_settings_update(
@@ -949,7 +951,8 @@ mod tests {
             }),
         );
 
-        let hydrated = hydrate_settings_from_claude_home(&AppSettingsPayload::default(), Some(root.as_path()));
+        let hydrated =
+            hydrate_settings_from_claude_home(&AppSettingsPayload::default(), Some(root.as_path()));
         let claude = claude_profile(&hydrated);
 
         assert_eq!(
@@ -1320,11 +1323,16 @@ mod tests {
                 .and_then(Value::as_str),
             Some("claude-key")
         );
-        assert_eq!(claude_settings.get("model").and_then(Value::as_str), Some("sonnet"));
+        assert_eq!(
+            claude_settings.get("model").and_then(Value::as_str),
+            Some("sonnet")
+        );
 
         let claude_global = read_json_object_file(&root.join(".claude.json")).unwrap();
         assert_eq!(
-            claude_global.get("showTurnDuration").and_then(Value::as_bool),
+            claude_global
+                .get("showTurnDuration")
+                .and_then(Value::as_bool),
             Some(true)
         );
 
@@ -1448,7 +1456,8 @@ mod tests {
         );
         drop(db_guard);
 
-        let error = result.expect_err("env_key providers should reject auth.json OPENAI_API_KEY writes");
+        let error =
+            result.expect_err("env_key providers should reject auth.json OPENAI_API_KEY writes");
         assert!(error.contains("env_key"));
 
         let loaded = read_json_object_file(&root.join(".codex/auth.json"));

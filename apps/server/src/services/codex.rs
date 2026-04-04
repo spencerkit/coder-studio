@@ -218,8 +218,8 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
     }
 }
 
-fn build_codex_hook_command(target: &ExecTarget) -> String {
-    crate::services::provider_hooks::build_shared_hook_command(target)
+fn build_codex_hook_command() -> String {
+    crate::services::provider_hooks::build_shared_hook_command_for_current_env()
 }
 
 fn is_coder_studio_codex_group(group: &Value) -> bool {
@@ -274,6 +274,55 @@ fn upsert_hook_groups(
     groups.push(build_hook_group(command, matcher));
 }
 
+fn cleanup_legacy_codex_workspace_hook_settings(cwd: &str) -> Result<(), String> {
+    let hooks_dir = PathBuf::from(cwd).join(".codex");
+    let hooks_path = hooks_dir.join("hooks.json");
+    if !hooks_path.exists() {
+        return Ok(());
+    }
+
+    let raw = std::fs::read_to_string(&hooks_path).map_err(|e| e.to_string())?;
+    let mut root = match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(map)) => map,
+        _ => return Ok(()),
+    };
+
+    if let Some(hooks_value) = root.get_mut("hooks") {
+        if let Some(hooks_obj) = hooks_value.as_object_mut() {
+            for groups_value in hooks_obj.values_mut() {
+                if let Some(groups) = groups_value.as_array_mut() {
+                    groups.retain(|group| !is_coder_studio_codex_group(group));
+                }
+            }
+            hooks_obj.retain(|_, groups_value| {
+                groups_value
+                    .as_array()
+                    .map(|groups| !groups.is_empty())
+                    .unwrap_or(true)
+            });
+        }
+    }
+
+    let remove_hooks = root
+        .get("hooks")
+        .and_then(Value::as_object)
+        .map(|hooks| hooks.is_empty())
+        .unwrap_or(false);
+    if remove_hooks {
+        root.remove("hooks");
+    }
+
+    if root.is_empty() {
+        let _ = std::fs::remove_file(&hooks_path);
+        let _ = std::fs::remove_dir(&hooks_dir);
+        return Ok(());
+    }
+
+    let serialized =
+        serde_json::to_string_pretty(&Value::Object(root)).map_err(|e| e.to_string())?;
+    std::fs::write(hooks_path, serialized).map_err(|e| e.to_string())
+}
+
 fn native_codex_home_root() -> Option<PathBuf> {
     if let Some(root) = std::env::var_os("CODER_STUDIO_CODEX_HOME") {
         return Some(PathBuf::from(root));
@@ -311,71 +360,37 @@ fn upsert_codex_global_feature(root: &mut toml::Table, feature_name: &str) {
     features.insert(feature_name.to_string(), toml::Value::Boolean(true));
 }
 
-fn ensure_codex_global_feature_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
-    let current = if matches!(target, ExecTarget::Wsl { .. }) {
-        run_cmd(
-            target,
-            cwd,
-            &[
-                "/bin/sh",
-                "-lc",
-                "if [ -f ~/.codex/config.toml ]; then cat ~/.codex/config.toml; else printf ''; fi",
-            ],
-        )
-        .unwrap_or_default()
+fn ensure_codex_global_feature_settings(_cwd: &str, _target: &ExecTarget) -> Result<(), String> {
+    let Some(home_root) = native_codex_home_root() else {
+        return Ok(());
+    };
+    let config_path = home_root.join(".codex").join("config.toml");
+    let current = if config_path.exists() {
+        std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?
     } else {
-        let Some(root) = native_codex_home_root() else {
-            return Ok(());
-        };
-        let config_path = root.join(".codex").join("config.toml");
-        if config_path.exists() {
-            std::fs::read_to_string(config_path).map_err(|e| e.to_string())?
-        } else {
-            String::new()
-        }
+        String::new()
     };
 
-    let mut root = current.parse::<toml::Table>().unwrap_or_default();
-    upsert_codex_global_feature(&mut root, "codex_hooks");
-    let serialized = toml::to_string_pretty(&root).map_err(|e| e.to_string())?;
+    let mut config = current.parse::<toml::Table>().unwrap_or_default();
+    upsert_codex_global_feature(&mut config, "codex_hooks");
+    let serialized = toml::to_string_pretty(&config).map_err(|e| e.to_string())?;
 
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        let script = format!(
-            "mkdir -p ~/.codex && printf %s {} > ~/.codex/config.toml",
-            shell_escape(&serialized)
-        );
-        run_cmd(target, cwd, &["/bin/sh", "-lc", &script]).map(|_| ())
-    } else {
-        let Some(home_root) = native_codex_home_root() else {
-            return Ok(());
-        };
-        let config_dir = home_root.join(".codex");
-        std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-        std::fs::write(config_dir.join("config.toml"), serialized).map_err(|e| e.to_string())
-    }
+    let config_dir = home_root.join(".codex");
+    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    std::fs::write(config_dir.join("config.toml"), serialized).map_err(|e| e.to_string())
 }
 
 pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
     ensure_codex_global_feature_settings(cwd, target)?;
 
-    let current = if matches!(target, ExecTarget::Wsl { .. }) {
-        run_cmd(
-            target,
-            cwd,
-            &[
-                "/bin/sh",
-                "-lc",
-                "if [ -f .codex/hooks.json ]; then cat .codex/hooks.json; else printf '{}'; fi",
-            ],
-        )
-        .unwrap_or_else(|_| "{}".to_string())
+    let Some(home_root) = native_codex_home_root() else {
+        return Ok(());
+    };
+    let hooks_path = home_root.join(".codex").join("hooks.json");
+    let current = if hooks_path.exists() {
+        std::fs::read_to_string(&hooks_path).map_err(|e| e.to_string())?
     } else {
-        let hooks_path = PathBuf::from(cwd).join(".codex").join("hooks.json");
-        if hooks_path.exists() {
-            std::fs::read_to_string(&hooks_path).map_err(|e| e.to_string())?
-        } else {
-            "{}".to_string()
-        }
+        "{}".to_string()
     };
 
     let mut root =
@@ -391,7 +406,7 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
         *hooks_value = Value::Object(Map::new());
     }
     let hooks_obj = hooks_value.as_object_mut().expect("object");
-    let command = build_codex_hook_command(target);
+    let command = build_codex_hook_command();
 
     upsert_hook_groups(hooks_obj, "SessionStart", Some("startup|resume"), &command);
     upsert_hook_groups(hooks_obj, "UserPromptSubmit", None, &command);
@@ -400,18 +415,11 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
     upsert_hook_groups(hooks_obj, "Stop", None, &command);
 
     let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        let script = format!(
-            "mkdir -p .codex && printf %s {} > .codex/hooks.json",
-            shell_escape(&serialized)
-        );
-        run_cmd(target, cwd, &["/bin/sh", "-lc", &script]).map(|_| ())
-    } else {
-        let hooks_dir = PathBuf::from(cwd).join(".codex");
-        std::fs::create_dir_all(&hooks_dir).map_err(|e| e.to_string())?;
-        let hooks_path = hooks_dir.join("hooks.json");
-        std::fs::write(hooks_path, serialized).map_err(|e| e.to_string())
-    }
+    let hooks_dir = home_root.join(".codex");
+    std::fs::create_dir_all(&hooks_dir).map_err(|e| e.to_string())?;
+    std::fs::write(hooks_dir.join("hooks.json"), serialized).map_err(|e| e.to_string())?;
+    let _ = cleanup_legacy_codex_workspace_hook_settings(cwd);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -535,6 +543,113 @@ mod tests {
                 .and_then(|project| project.get("features")),
             None
         );
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn ensure_codex_hook_settings_write_global_hooks_without_workspace_file() {
+        let workspace_root = unique_temp_dir("codex-workspace");
+        let codex_home = unique_temp_dir("codex-home");
+        let config_dir = codex_home.join(".codex");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(
+            config_dir.join("hooks.json"),
+            serde_json::to_string_pretty(&json!({
+                "hooks": {
+                    "Notification": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "echo existing"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
+        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
+
+        let result =
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
+
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
+        }
+
+        result.unwrap();
+
+        assert!(!workspace_root.join(".codex").join("hooks.json").exists());
+
+        let raw = fs::read_to_string(config_dir.join("hooks.json")).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            parsed["hooks"]["Notification"][0]["hooks"][0]["command"],
+            Value::String("echo existing".into())
+        );
+        assert_eq!(
+            parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"],
+            Value::String("command".into())
+        );
+        assert!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("--coder-studio-agent-hook"));
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn ensure_codex_hook_settings_remove_legacy_workspace_hook_file() {
+        let workspace_root = unique_temp_dir("codex-workspace");
+        let codex_home = unique_temp_dir("codex-home");
+        let workspace_codex_dir = workspace_root.join(".codex");
+        fs::create_dir_all(&workspace_codex_dir).unwrap();
+        fs::write(
+            workspace_codex_dir.join("hooks.json"),
+            serde_json::to_string_pretty(&json!({
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "/bin/sh -lc 'coder-studio --coder-studio-agent-hook'"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
+        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
+
+        let result =
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
+
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
+        }
+
+        result.unwrap();
+
+        assert!(!workspace_codex_dir.join("hooks.json").exists());
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(codex_home);

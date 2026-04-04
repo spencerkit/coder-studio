@@ -144,7 +144,7 @@ async function main() {
     throw new Error('codex_hooks is disabled for the current HOME; enable it globally in ~/.codex/config.toml before running this smoke test');
   }
 
-  const hooksDir = path.join(options.workspace, '.codex');
+  const hooksDir = path.join(os.homedir(), '.codex');
   const hooksPath = path.join(hooksDir, 'hooks.json');
   const existingHooks = await fs.readFile(hooksPath, 'utf8').catch(() => null);
   const hookLog = path.join(os.tmpdir(), `coder-studio-codex-hooks-${Date.now()}.jsonl`);
@@ -180,6 +180,7 @@ async function main() {
 
   process.stdout.write(`[codex-hooks-smoke] workspace: ${options.workspace}\n`);
   process.stdout.write('[codex-hooks-smoke] requires a trusted workspace plus working Codex auth\n');
+  process.stdout.write(`[codex-hooks-smoke] global hooks: ${hooksPath}\n`);
 
   await fs.mkdir(hooksDir, { recursive: true });
   await fs.writeFile(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);

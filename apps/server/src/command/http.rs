@@ -3122,13 +3122,11 @@ mod tests {
 
         assert!(started.started);
         assert!(started.terminal_id > 0);
-        assert!(
-            started
-                .boot_input
-                .as_deref()
-                .unwrap_or_default()
-                .contains(".session-runtime-start-marker")
-        );
+        assert!(started
+            .boot_input
+            .as_deref()
+            .unwrap_or_default()
+            .contains(".session-runtime-start-marker"));
         assert!(!marker_path.exists());
 
         dispatch_rpc(
@@ -3203,7 +3201,13 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
-        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string()).unwrap();
+        set_session_resume_id(
+            app.state(),
+            &workspace_id,
+            created.id,
+            "resume-77".to_string(),
+        )
+        .unwrap();
 
         let started = dispatch_rpc(
             &app,
@@ -3287,8 +3291,13 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
-        set_session_resume_id(app.state(), &workspace_id, created.id, "resume-77".to_string())
-            .unwrap();
+        set_session_resume_id(
+            app.state(),
+            &workspace_id,
+            created.id,
+            "resume-77".to_string(),
+        )
+        .unwrap();
 
         let started = dispatch_rpc(
             &app,

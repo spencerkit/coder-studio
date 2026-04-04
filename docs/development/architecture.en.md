@@ -160,7 +160,7 @@ The app starts a local hook receiver during startup.
 The flow is:
 
 1. The backend opens a local HTTP hook endpoint.
-2. `agent_start` injects environment variables and `.claude/settings.local.json` in Claude mode.
+2. `agent_start` injects environment variables and ensures hooks are present in `~/.claude/settings.json` for the current runtime environment.
 3. Claude runs the configured hook command.
 4. The hook helper posts events back to the local endpoint.
 5. The app normalizes the raw Claude hook event and broadcasts it as `agent://lifecycle`.

@@ -206,8 +206,8 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
     }
 }
 
-fn build_claude_hook_command(target: &ExecTarget) -> String {
-    crate::services::provider_hooks::build_shared_hook_command(target)
+fn build_claude_hook_command() -> String {
+    crate::services::provider_hooks::build_shared_hook_command_for_current_env()
 }
 
 fn is_coder_studio_hook_group(group: &Value) -> bool {
@@ -262,27 +262,90 @@ fn upsert_hook_groups(
     groups.push(build_hook_group(command, matcher));
 }
 
-pub(crate) fn ensure_claude_hook_settings(cwd: &str, target: &ExecTarget) -> Result<(), String> {
-    let current = if matches!(target, ExecTarget::Wsl { .. }) {
-        run_cmd(
-            target,
-            cwd,
-            &[
-                "/bin/sh",
-                "-lc",
-                "if [ -f .claude/settings.local.json ]; then cat .claude/settings.local.json; else printf '{}'; fi",
-            ],
-        )
-        .unwrap_or_else(|_| "{}".to_string())
-    } else {
-        let settings_path = PathBuf::from(cwd)
-            .join(".claude")
-            .join("settings.local.json");
-        if settings_path.exists() {
-            std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?
-        } else {
-            "{}".to_string()
+fn cleanup_legacy_claude_workspace_hook_settings(cwd: &str) -> Result<(), String> {
+    let settings_dir = PathBuf::from(cwd).join(".claude");
+    let settings_path = settings_dir.join("settings.local.json");
+    if !settings_path.exists() {
+        return Ok(());
+    }
+
+    let raw = std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
+    let mut root = match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(map)) => map,
+        _ => return Ok(()),
+    };
+
+    if let Some(hooks_value) = root.get_mut("hooks") {
+        if let Some(hooks_obj) = hooks_value.as_object_mut() {
+            for groups_value in hooks_obj.values_mut() {
+                if let Some(groups) = groups_value.as_array_mut() {
+                    groups.retain(|group| !is_coder_studio_hook_group(group));
+                }
+            }
+            hooks_obj.retain(|_, groups_value| {
+                groups_value
+                    .as_array()
+                    .map(|groups| !groups.is_empty())
+                    .unwrap_or(true)
+            });
         }
+    }
+
+    let remove_hooks = root
+        .get("hooks")
+        .and_then(Value::as_object)
+        .map(|hooks| hooks.is_empty())
+        .unwrap_or(false);
+    if remove_hooks {
+        root.remove("hooks");
+    }
+
+    if root.is_empty() {
+        let _ = std::fs::remove_file(&settings_path);
+        let _ = std::fs::remove_dir(&settings_dir);
+        return Ok(());
+    }
+
+    let serialized =
+        serde_json::to_string_pretty(&Value::Object(root)).map_err(|e| e.to_string())?;
+    std::fs::write(settings_path, serialized).map_err(|e| e.to_string())
+}
+
+fn current_claude_home_root() -> Option<PathBuf> {
+    if let Some(root) = std::env::var_os("CODER_STUDIO_CLAUDE_HOME") {
+        return Some(PathBuf::from(root));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .or_else(|| {
+                let drive = std::env::var_os("HOMEDRIVE")?;
+                let path = std::env::var_os("HOMEPATH")?;
+                Some(PathBuf::from(format!(
+                    "{}{}",
+                    PathBuf::from(drive).display(),
+                    PathBuf::from(path).display()
+                )))
+            })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var_os("HOME").map(PathBuf::from)
+    }
+}
+
+pub(crate) fn ensure_claude_hook_settings(cwd: &str, _target: &ExecTarget) -> Result<(), String> {
+    let Some(home_root) = current_claude_home_root() else {
+        return Ok(());
+    };
+    let settings_path = home_root.join(".claude").join("settings.json");
+    let current = if settings_path.exists() {
+        std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?
+    } else {
+        "{}".to_string()
     };
 
     let mut root =
@@ -298,7 +361,7 @@ pub(crate) fn ensure_claude_hook_settings(cwd: &str, target: &ExecTarget) -> Res
         *hooks_value = Value::Object(Map::new());
     }
     let hooks_obj = hooks_value.as_object_mut().expect("object");
-    let command = build_claude_hook_command(target);
+    let command = build_claude_hook_command();
 
     upsert_hook_groups(hooks_obj, "SessionStart", Some(".*"), &command);
     upsert_hook_groups(hooks_obj, "UserPromptSubmit", None, &command);
@@ -314,24 +377,32 @@ pub(crate) fn ensure_claude_hook_settings(cwd: &str, target: &ExecTarget) -> Res
     upsert_hook_groups(hooks_obj, "SessionEnd", Some(".*"), &command);
 
     let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        let script = format!(
-            "mkdir -p .claude && printf %s {} > .claude/settings.local.json",
-            shell_escape(&serialized)
-        );
-        run_cmd(target, cwd, &["/bin/sh", "-lc", &script]).map(|_| ())
-    } else {
-        let settings_dir = PathBuf::from(cwd).join(".claude");
-        std::fs::create_dir_all(&settings_dir).map_err(|e| e.to_string())?;
-        let settings_path = settings_dir.join("settings.local.json");
-        std::fs::write(settings_path, serialized).map_err(|e| e.to_string())
-    }
+    let settings_dir = home_root.join(".claude");
+    std::fs::create_dir_all(&settings_dir).map_err(|e| e.to_string())?;
+    std::fs::write(settings_dir.join("settings.json"), serialized).map_err(|e| e.to_string())?;
+    let _ = cleanup_legacy_claude_workspace_hook_settings(cwd);
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should move forward")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "coder-studio-{prefix}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
 
     #[test]
     fn resolve_claude_runtime_profile_ignores_workspace_target() {
@@ -412,5 +483,103 @@ mod tests {
                 ],
             )
         );
+    }
+
+    #[test]
+    fn ensure_claude_hook_settings_write_global_settings_without_workspace_file() {
+        let workspace_root = unique_temp_dir("claude-workspace");
+        let claude_home = unique_temp_dir("claude-home");
+        let claude_dir = claude_home.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            claude_dir.join("settings.json"),
+            serde_json::to_string_pretty(&json!({
+                "permissions": {
+                    "allow": ["Read"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", &claude_home);
+
+        let result =
+            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
+
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+
+        result.unwrap();
+
+        assert!(!workspace_root
+            .join(".claude")
+            .join("settings.local.json")
+            .exists());
+
+        let raw = fs::read_to_string(claude_dir.join("settings.json")).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed["permissions"]["allow"], json!(["Read"]));
+        assert_eq!(
+            parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"],
+            Value::String("command".into())
+        );
+        assert!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("--coder-studio-agent-hook"));
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn ensure_claude_hook_settings_remove_legacy_workspace_hook_file() {
+        let workspace_root = unique_temp_dir("claude-workspace");
+        let claude_home = unique_temp_dir("claude-home");
+        let workspace_claude_dir = workspace_root.join(".claude");
+        fs::create_dir_all(&workspace_claude_dir).unwrap();
+        fs::write(
+            workspace_claude_dir.join("settings.local.json"),
+            serde_json::to_string_pretty(&json!({
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "/bin/sh -lc 'coder-studio --coder-studio-agent-hook'"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", &claude_home);
+
+        let result =
+            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
+
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+
+        result.unwrap();
+
+        assert!(!workspace_claude_dir.join("settings.local.json").exists());
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
     }
 }

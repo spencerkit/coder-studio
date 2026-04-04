@@ -160,7 +160,7 @@ lifecycle 事件用于：
 流程是：
 
 1. 后端启动本地 HTTP hook endpoint。
-2. `agent_start` 在 Claude 模式下写入环境变量和 `.claude/settings.local.json`。
+2. `agent_start` 在 Claude 模式下注入环境变量，并确保当前运行环境的 `~/.claude/settings.json` 含有 hooks 配置。
 3. Claude 执行 hook 命令。
 4. hook helper 把事件回传到本地 endpoint。
 5. 应用把原始 hook event 归一化并广播为 `agent://lifecycle`。

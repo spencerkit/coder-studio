@@ -20,6 +20,10 @@ playwright-report/
 !.env.example
 !.env.sample
 
+# Local provider config
+.claude/
+.codex/
+
 # Logs
 *.log
 npm-debug.log*

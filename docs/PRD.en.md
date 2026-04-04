@@ -116,7 +116,7 @@ The current product position is:
 
 ### 5.5 Claude-Specific Enhancements
 
-- The app automatically writes or updates `.claude/settings.local.json` hook configuration in the working directory.
+- The app automatically writes or updates Claude hook configuration in `~/.claude/settings.json` for the current runtime environment.
 - Claude lifecycle events are received and mapped into app-level session updates.
 - The normalized lifecycle categories currently include:
   - `session_started`

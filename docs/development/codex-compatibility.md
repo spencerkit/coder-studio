@@ -5,14 +5,14 @@
 - 验证时间：2026-04-03
 - 当前本机版本：`codex-cli 0.118.0`
 - 已在真实 CLI 上验证通过的链路：
-  - 在 `~/.codex/config.toml` 含 `[features] codex_hooks = true` 时，`codex ...` 可以触发 workspace 级 `.codex/hooks.json`
+  - 在 `~/.codex/config.toml` 含 `[features] codex_hooks = true` 时，`codex ...` 可以触发全局 `~/.codex/hooks.json`
   - `SessionStart` / `UserPromptSubmit` hook payload 会真实包含 `session_id`
   - `codex resume <session_id> ...` 会继续写回同一个 `session_id`
   - 当前后端采用的参数顺序 `codex resume <id> ...` 对 Codex CLI 0.118.0 是可工作的
   - 新 workspace 现在不会再被后端预写一个默认 `claude` session，首个 draft session 的 provider 选择可以真实生效
 - 已确认的真实差异：
   - 在空 `HOME`（没有 `~/.codex/config.toml`）下，`codex features list` 会显示 `codex_hooks = false`，不能假设这个 feature 默认常开
-  - 如果 `codex_hooks` feature 未开启，`.codex/hooks.json` 即使存在也不会触发
+  - 如果 `codex_hooks` feature 未开启，`~/.codex/hooks.json` 即使存在也不会触发
   - `SessionStart` 不会在 TUI 仅仅启动时立刻触发；它会在第一条真正 turn 开始时才触发，所以启动后立刻可能还没有 `resume_id`
   - 首次进入一个未信任 repo 时，Codex 会先弹目录信任确认，这一点和 Claude 不对齐
   - `codex-cli 0.118.0` 的交互式 TUI 在受控 PTY 下对 stdin 驱动并不稳定：
@@ -34,11 +34,11 @@
   - 没有 `resume_id` 时走 restart
 - 后端现在有一个通用的 agent-client adapter 层：
   - 公共链路只负责读取 session 真值、启动 PTY、注入共享环境变量
-  - `claude-client` / `codex-client` 各自负责 `start` / `resume` 命令差异和 workspace hooks
+  - `claude-client` / `codex-client` 各自负责 `start` / `resume` 命令差异和 provider 全局 hooks 集成
 - Codex 启动命令规则已与既定方案对齐：
   - 无 `resume_id` 时：`codex ...`
   - 有 `resume_id` 时：`codex resume <resume_id> ...`
-- workspace 级 `.codex/hooks.json` 会在启动前自动写入或更新；后端会确保全局 `~/.codex/config.toml` 含 `[features] codex_hooks = true`，但不会向启动命令再拼 `--enable codex_hooks`。Codex hook 回传的 `session_id` 会统一写入 session 的 `resume_id`。
+- 当前运行环境的 `~/.codex/hooks.json` 会在启动前自动写入或更新；后端会确保全局 `~/.codex/config.toml` 含 `[features] codex_hooks = true`，但不会向启动命令再拼 `--enable codex_hooks`。Codex hook 回传的 `session_id` 会统一写入 session 的 `resume_id`。
 - 前端会话链路已 provider-aware：
   - session/history/recovery 全部改为使用 `provider + resumeId`
   - 历史列表和会话 pane 会显示 provider

@@ -145,7 +145,9 @@ pub(crate) fn collect_workspace_runtime_terminals(
         .into_iter()
         .filter_map(|binding| {
             let terminal_id = binding.terminal_id.parse::<u64>().ok()?;
-            let runtime = runtimes.get(&terminal_key(workspace_id, terminal_id))?.clone();
+            let runtime = runtimes
+                .get(&terminal_key(workspace_id, terminal_id))?
+                .clone();
             let output = runtime.output.lock().ok()?.clone();
             Some(TerminalInfo {
                 id: terminal_id,

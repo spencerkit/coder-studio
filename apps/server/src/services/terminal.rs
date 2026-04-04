@@ -200,8 +200,10 @@ pub(crate) fn create_terminal_runtime(
         emit_terminal(&app_handle, &workspace_id_out, terminal_id, exit_text);
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
-            let _ = append_workspace_terminal_output(state, &workspace_id_out, terminal_id, exit_text);
-            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+            let _ =
+                append_workspace_terminal_output(state, &workspace_id_out, terminal_id, exit_text);
+            let _ =
+                set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
         mark_bound_terminal_interrupted(&workspace_id_out, terminal_id, exit_text, state);
         if let Ok(mut terms) = state.terminals.lock() {

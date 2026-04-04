@@ -102,7 +102,9 @@ pub(crate) fn process_provider_hook_payload(
         let _ = set_session_resume_id(state, &envelope.workspace_id, session_id_num, resume_id);
         resume_debug_log(format!(
             "provider_hook saved resume_id workspace_id={} session_id={} provider={}",
-            envelope.workspace_id, envelope.session_id, session.provider.as_str()
+            envelope.workspace_id,
+            envelope.session_id,
+            session.provider.as_str()
         ));
     }
 
@@ -204,6 +206,10 @@ pub(crate) fn build_shared_hook_command(target: &ExecTarget) -> String {
             "/bin/sh -lc '[ -n \"${CODER_STUDIO_APP_BIN:-}\" ] || exit 0; exec \"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook'".to_string()
         }
     }
+}
+
+pub(crate) fn build_shared_hook_command_for_current_env() -> String {
+    build_shared_hook_command(&ExecTarget::Native)
 }
 
 pub(crate) fn current_app_bin_for_target(target: &ExecTarget) -> Result<String, String> {
@@ -372,6 +378,9 @@ mod tests {
             .status()
             .expect("shell should run hook command");
 
-        assert!(status.success(), "hook command should no-op when app bin is missing");
+        assert!(
+            status.success(),
+            "hook command should no-op when app bin is missing"
+        );
     }
 }

@@ -361,8 +361,10 @@ pub(crate) fn workspace_runtime_attach(
         Ok((lease, snapshot, lifecycle_events, controller_changed))
     })?;
 
-    let runtime_terminals =
-        crate::services::session_runtime::collect_workspace_runtime_terminals(&workspace_id, state)?;
+    let runtime_terminals = crate::services::session_runtime::collect_workspace_runtime_terminals(
+        &workspace_id,
+        state,
+    )?;
     for runtime_terminal in runtime_terminals {
         if !snapshot
             .terminals
@@ -1213,8 +1215,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(runtime.session_runtime_bindings.len(), 1);
-        assert_eq!(runtime.session_runtime_bindings[0].session_id, session.id.to_string());
-        assert_eq!(runtime.session_runtime_bindings[0].terminal_id, started.terminal_id.to_string());
-        assert!(runtime.snapshot.terminals.iter().any(|terminal| terminal.id == started.terminal_id));
+        assert_eq!(
+            runtime.session_runtime_bindings[0].session_id,
+            session.id.to_string()
+        );
+        assert_eq!(
+            runtime.session_runtime_bindings[0].terminal_id,
+            started.terminal_id.to_string()
+        );
+        assert!(runtime
+            .snapshot
+            .terminals
+            .iter()
+            .any(|terminal| terminal.id == started.terminal_id));
     }
 }
