@@ -25,7 +25,7 @@
     "test:smoke:windows:transport": "node scripts/test/windows-transport-smoke.mjs",
     "profile:ws:transport": "node scripts/test/ws-transport-profile.mjs",
     "test:smoke:codex": "node scripts/test/codex-hooks-smoke.mjs",
-    "test:cli": "pnpm build:cli && node --test tests/cli/config.test.mjs tests/cli/platform.test.mjs tests/cli/service-state.test.mjs tests/release/release.test.mjs",
+    "test:cli": "pnpm build:cli && node --test tests/cli/config.test.mjs tests/cli/platform.test.mjs tests/cli/service-state.test.mjs tests/cli/service-launcher.test.mjs tests/cli/service-controller.test.mjs tests/cli/runtime-service-proxy.test.mjs tests/cli/service-cli.test.mjs tests/release/release.test.mjs",
     "test:smoke": "node --test tests/smoke/cli-smoke.test.mjs",
     "pack:local": "pnpm release:check && node scripts/release/pack-local.mjs",
     "pack:global": "pnpm pack:local && node scripts/release/install-global-local.mjs",
