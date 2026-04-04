@@ -42,6 +42,12 @@ export async function clearRuntimeState(stateDir) {
   ]);
 }
 
+export {
+  clearServiceState,
+  readServiceState,
+  writeServiceState
+} from './service-state.mjs';
+
 export function buildRuntimeState({ version, pid, endpoint, binaryPath, logPath }) {
   return {
     version,
