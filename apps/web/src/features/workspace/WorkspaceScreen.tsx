@@ -49,8 +49,6 @@ import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
   applyTrackedAgentSessionTitle,
-  buildSlashMenuItems,
-  buildSlashMenuSections,
   createAgentTerminalFitScheduler,
   focusAgentTerminal,
   fitAgentTerminals,
@@ -159,7 +157,6 @@ import {
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
   listSessionHistory,
-  listClaudeSlashSkills,
   rejectWorkspaceTakeover,
   requestWorkspaceTakeover,
   updateWorkbenchLayout,
@@ -178,10 +175,7 @@ import {
   syncWorkbenchStateSnapshot,
   updateWorkbenchStateSnapshot,
 } from "../../shared/utils/workbench-state-snapshot";
-import {
-  AGENT_SPECIAL_KEY_MAP,
-  replaceLeadingSlashToken
-} from "../../shared/app/constants";
+import { AGENT_SPECIAL_KEY_MAP } from "../../shared/app/constants";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
 import { resolveTerminalInteractionMode } from "../../shared/utils/terminal-interaction";
@@ -215,8 +209,6 @@ import { ConfirmDialog, type ConfirmDialogState } from "../../components/Confirm
 import type {
   AppSettings,
   AppTheme,
-  ClaudeSlashMenuItem,
-  ClaudeSlashSkillEntry,
   CommandPaletteAction,
   FolderBrowserState,
   GitChangeAction,
@@ -348,10 +340,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [selectedGitChangeKey, setSelectedGitChangeKey] = useState<string>("");
-  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
-  const [slashMenuPaneId, setSlashMenuPaneId] = useState<string | null>(null);
-  const [slashMenuLoading, setSlashMenuLoading] = useState(false);
-  const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
   const [controllerActionBusy, setControllerActionBusy] = useState<"takeover" | "reject" | null>(null);
   const [agentRecoveryBusy, setAgentRecoveryBusy] = useState<{
@@ -384,7 +372,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const appRef = useRef<HTMLDivElement | null>(null);
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const historyRefreshControllerRef = useRef(createHistoryRefreshController(
     () => withServiceFallback(() => listSessionHistory(), null),
@@ -941,28 +928,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [bootstrapReady, persistWorkspaceView, state.tabs]);
 
   useEffect(() => {
-    if (!slashMenuOpen) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!slashMenuRef.current?.contains(event.target as Node)) {
-        setSlashMenuOpen(false);
-        setSlashMenuPaneId(null);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSlashMenuOpen(false);
-        setSlashMenuPaneId(null);
-      }
-    };
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [slashMenuOpen]);
-
-  useEffect(() => {
     if (!commandPaletteOpen) return;
     requestAnimationFrame(() => {
       commandPaletteInputRef.current?.focus();
@@ -1282,16 +1247,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       });
       return null;
     }
-  };
-
-  const loadSlashSkills = async (cwd?: string) => {
-    setSlashMenuLoading(true);
-    const items = await withServiceFallback(
-      () => listClaudeSlashSkills(cwd ?? activeTab.project?.path ?? ""),
-      []
-    );
-    setSlashSkillItems(items);
-    setSlashMenuLoading(false);
   };
 
   const updateTab = (tabId: string, updater: (tab: Tab) => Tab) => {
@@ -2366,22 +2321,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   };
 
-  const onToggleSlashMenu = async (paneId: string) => {
-    const nextOpen = !(slashMenuOpen && slashMenuPaneId === paneId);
-    setSlashMenuPaneId(nextOpen ? paneId : null);
-    setSlashMenuOpen(nextOpen);
-    if (nextOpen) {
-      await loadSlashSkills(activeTab.project?.path);
-    }
-  };
-
-  const onSelectSlashMenuItem = (item: ClaudeSlashMenuItem) => {
-    setSlashMenuOpen(false);
-    setSlashMenuPaneId(null);
-    void onAgentTerminalData(activeTab.activePaneId, `${item.command} `);
-    focusWorkspaceAgentPane(activeTab.activePaneId);
-  };
-
   const onRunCommandPaletteAction = (action: CommandPaletteAction | undefined) => {
     if (!action) return;
     closeCommandPalette();
@@ -2460,8 +2399,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           closeCommandPalette();
         } else {
           openCommandPalette();
-          setSlashMenuOpen(false);
-          setSlashMenuPaneId(null);
         }
         return;
       }
@@ -2521,8 +2458,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       event.preventDefault();
       const splitAxis: "horizontal" | "vertical" = event.shiftKey ? "horizontal" : "vertical";
       splitPane(activeTab.activePaneId, splitAxis);
-      setSlashMenuOpen(false);
-      setSlashMenuPaneId(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -2546,8 +2481,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   useEffect(() => {
     setCommitMessage("");
     setSelectedGitChangeKey("");
-    setSlashMenuOpen(false);
-    setSlashMenuPaneId(null);
   }, [activeTab.id]);
 
   useEffect(() => {

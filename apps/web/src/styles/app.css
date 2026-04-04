@@ -1823,112 +1823,6 @@ div.v-resizer[data-resize="right"]:hover {
 }
 
 /* ==========================================================================
-   Slash Menu
-   ========================================================================== */
-
-.agent-slash-menu {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  max-height: 320px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
-  overflow: hidden;
-  margin-bottom: var(--space-2);
-}
-
-.agent-slash-menu-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
-}
-
-.agent-slash-menu-status {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-}
-
-.agent-slash-menu-body {
-  overflow-y: auto;
-  max-height: 260px;
-}
-
-.agent-slash-group {
-  padding: var(--space-2);
-}
-
-.agent-slash-group-title {
-  font-size: var(--font-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: var(--space-2) var(--space-3);
-}
-
-.agent-slash-group-items {
-  display: flex;
-  flex-direction: column;
-}
-
-.agent-slash-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: 0;
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.agent-slash-item:hover,
-.agent-slash-item.selected {
-  background: var(--accent-soft);
-}
-
-.agent-slash-item-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agent-slash-item-command {
-  font-size: var(--font-md);
-  font-weight: var(--font-weight-medium);
-  color: var(--text);
-}
-
-.agent-slash-item-description {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-slash-item-meta {
-  font-size: var(--font-xs);
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 2px 6px;
-  border-radius: 0;
-}
-
-.agent-slash-empty {
-  padding: var(--space-8);
-  text-align: center;
-  font-size: var(--font-md);
-  color: var(--text-tertiary);
-}
-
-/* ==========================================================================
    Settings Page
    ========================================================================== */
 
@@ -4843,25 +4737,6 @@ body.is-resizing-panels .agent-pane-card .pulse {
     color-mix(in srgb, var(--accent) 70%, var(--accent-2) 30%) 0%,
     color-mix(in srgb, var(--accent) 56%, var(--accent-2) 44%) 100%
   );
-}
-
-.agent-slash-menu {
-  background: color-mix(in srgb, var(--surface-overlay) 90%, var(--accent) 10%);
-  border-color: color-mix(in srgb, var(--border-strong) 72%, var(--accent-2) 28%);
-}
-
-.agent-slash-menu-head {
-  background: color-mix(in srgb, var(--surface-elevated) 90%, var(--accent-2) 10%);
-}
-
-.agent-slash-item {
-  border: 1px solid transparent;
-}
-
-.agent-slash-item:hover,
-.agent-slash-item.selected {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-color: color-mix(in srgb, var(--accent-2) 30%, var(--border));
 }
 
 .editor-context-bar {

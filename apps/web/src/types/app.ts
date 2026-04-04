@@ -365,30 +365,6 @@ export type WorktreeModalState = {
 
 export type WorktreeView = "status" | "diff" | "tree";
 
-export type ClaudeSlashSkillEntry = {
-  id: string;
-  command: string;
-  description: string;
-  scope: "project" | "personal";
-  source_kind: "skill" | "command";
-  source_path: string;
-};
-
-export type ClaudeSlashMenuItem = {
-  id: string;
-  command: string;
-  description: string;
-  section: "builtin" | "bundled" | "project" | "personal";
-  sourcePath?: string;
-  sourceKind?: "skill" | "command";
-};
-
-export type ClaudeSlashMenuSection = {
-  id: ClaudeSlashMenuItem["section"];
-  label: string;
-  items: ClaudeSlashMenuItem[];
-};
-
 export type CommandPaletteAction = {
   id: string;
   label: string;

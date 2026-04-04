@@ -1,7 +1,6 @@
 import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
 import type {
   BackendSessionHistoryRecord,
-  ClaudeSlashSkillEntry,
   GitStatus,
   SessionHistoryRecord,
   WorkbenchBootstrap,
@@ -121,6 +120,3 @@ export const inspectWorktree = (path: string, target: ExecTarget, depth = 4) =>
 
 export const getGitStatus = (path: string, target: ExecTarget) =>
   invokeRpc<GitStatus>("git_status", { path, target });
-
-export const listClaudeSlashSkills = (cwd: string) =>
-  invokeRpc<ClaudeSlashSkillEntry[]>("claude_slash_skills", { cwd });

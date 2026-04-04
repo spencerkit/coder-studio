@@ -528,16 +528,6 @@ pub struct TerminalEvent {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ClaudeSlashSkillEntry {
-    pub id: String,
-    pub command: String,
-    pub description: String,
-    pub scope: String,
-    pub source_kind: String,
-    pub source_path: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FilesystemRoot {
     pub id: String,
     pub label: String,

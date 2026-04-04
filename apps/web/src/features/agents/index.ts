@@ -21,4 +21,3 @@ export {
   waitForAgentStartupDrain,
   type AgentRuntimeRefs,
 } from "./agent-runtime-actions";
-export { buildSlashMenuItems, buildSlashMenuSections } from "./slash-menu-actions";

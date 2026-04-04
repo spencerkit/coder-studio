@@ -218,11 +218,6 @@ struct CommandAvailabilityRequest {
 }
 
 #[derive(Deserialize)]
-struct ClaudeSlashSkillsRequest {
-    cwd: String,
-}
-
-#[derive(Deserialize)]
 struct TerminalCreateRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
@@ -1252,12 +1247,6 @@ fn dispatch_rpc(
                 command_exists(req.command, req.target, req.cwd).map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "claude_slash_skills" => {
-            let req: ClaudeSlashSkillsRequest = parse_payload(payload).map_err(rpc_bad_request)?;
-            require_path_access(&req.cwd, &ExecTarget::Native, authorized)?;
-            serde_json::to_value(claude_slash_skills(req.cwd).map_err(rpc_bad_request)?)
-                .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "terminal_create" => {
             let req: TerminalCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
