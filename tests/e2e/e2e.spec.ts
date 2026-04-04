@@ -937,9 +937,12 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('settings-panel-title')).toContainText('Claude');
   await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-behavior')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
   await page.getByTestId('provider-settings-claude-startup-args').fill('--debug');
-  await page.getByTestId('provider-settings-claude-model').fill('claude-3-7-sonnet');
+  await page.getByTestId('provider-settings-section-behavior')
+    .getByTestId('provider-settings-claude-model')
+    .fill('claude-3-7-sonnet');
   await page.getByTestId('provider-settings-claude-auth-token').fill('token-demo-value');
   await page.getByTestId('provider-settings-claude-base-url').fill('https://example.test/claude');
   await expect.poll(async () => {
@@ -991,9 +994,12 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await page.getByTestId('settings-nav-claude').click();
   await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-behavior')).toBeVisible();
   await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
   await expect(page.getByTestId('provider-settings-claude-startup-args')).toHaveValue('--debug');
-  await expect(page.getByTestId('provider-settings-claude-model')).toHaveValue('claude-3-7-sonnet');
+  await expect(
+    page.getByTestId('provider-settings-section-behavior').getByTestId('provider-settings-claude-model'),
+  ).toHaveValue('claude-3-7-sonnet');
   await expect(page.getByTestId('provider-settings-claude-auth-token')).toHaveValue('token-demo-value');
   await expect(page.getByTestId('provider-settings-claude-base-url')).toHaveValue('https://example.test/claude');
 });

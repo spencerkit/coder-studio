@@ -315,7 +315,6 @@ export const ProviderSettingsPanel = ({
           data-testid={`provider-settings-section-${section.id}`}
         >
           <header className="settings-section-header">
-            <span className="settings-section-kicker">{section.id}</span>
             <div className="settings-section-copy">
               <h2 className="settings-section-title">{t(section.titleKey)}</h2>
               {section.descriptionKey ? (
