@@ -6,6 +6,7 @@ export const codexProviderManifest: ProviderManifest = {
   badgeLabel: "Codex",
   description: "Codex CLI runtime with startup args plus real config-backed model and auth settings.",
   settingsTitleKey: "codexSettingsTitle",
+  settingsHintKey: "codexSettingsHint",
   settingsSections: [
     {
       id: "startup",

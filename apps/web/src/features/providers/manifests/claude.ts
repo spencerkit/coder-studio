@@ -6,6 +6,7 @@ export const claudeProviderManifest: ProviderManifest = {
   badgeLabel: "Claude",
   description: "Claude Code runtime with structured startup flags, auth, and settings.json-backed behavior.",
   settingsTitleKey: "claudeSettingsTitle",
+  settingsHintKey: "claudeSettingsHint",
   settingsSections: [
     {
       id: "startup",

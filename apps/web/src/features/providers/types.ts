@@ -44,5 +44,6 @@ export type ProviderManifest = {
   badgeLabel: string;
   description: string;
   settingsTitleKey: string;
+  settingsHintKey: string;
   settingsSections: readonly ProviderSettingsSection[];
 };
