@@ -9,8 +9,8 @@ test("buildWorkspaceShellSummary returns branch runtime changes and queue items"
     target: { type: "wsl", distro: "Ubuntu" },
     sessions: [
       { status: "running", queue: [] },
-      { status: "waiting", queue: [{ status: "queued" }, { status: "done" }] },
-      { status: "queued", queue: [{ status: "queued" }] },
+      { status: "idle", queue: [{ status: "queued" }, { status: "done" }] },
+      { status: "idle", queue: [{ status: "queued" }] },
     ],
     locale: "en",
   });
@@ -21,6 +21,6 @@ test("buildWorkspaceShellSummary returns branch runtime changes and queue items"
   );
   assert.deepEqual(
     summary.map((item) => item.value),
-    ["feature/mock-readme", "WSL (Ubuntu)", "7", "3"],
+    ["feature/mock-readme", "WSL (Ubuntu)", "7", "2"],
   );
 });

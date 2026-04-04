@@ -149,20 +149,20 @@ const createState = (): WorkbenchState => ({
   ],
 });
 
-test("displaySessionStatus derives background only for non-active running or waiting sessions", () => {
+test("displaySessionStatus returns the stored runtime status without deriving background", () => {
   const tab = createState().tabs[0];
   const active = tab.sessions[0];
   const inactive = {
     ...tab.sessions[0],
     id: "session-3",
-    status: "waiting" as const,
+    status: "running" as const,
   };
 
-  assert.equal(displaySessionStatus(tab, active), "running");
-  assert.equal(displaySessionStatus(tab, inactive), "background");
+  assert.equal(displaySessionStatus(active), "running");
+  assert.equal(displaySessionStatus(inactive), "running");
 });
 
-test("onSwitchSession does not persist a background status patch for the previous session", async () => {
+test("onSwitchSession does not persist a display-only status patch for the previous session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createState() };
@@ -254,6 +254,6 @@ test("onSwitchSession does not persist a background status patch for the previou
     .filter((entry) => entry.url.endsWith("/api/rpc/session_update"))
     .map((entry) => entry.body.patch as { status?: string });
 
-  assert.equal(persistedStatuses.some((patch) => patch.status === "background"), false);
+  assert.equal(persistedStatuses.some((patch) => patch.status === "running"), false);
   assert.equal(stateRef.current.tabs[0].sessions.find((session) => session.id === "session-1")?.status, "running");
 });

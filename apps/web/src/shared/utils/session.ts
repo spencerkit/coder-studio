@@ -1,5 +1,5 @@
 import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n";
-import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench-core";
+import { createId, type Session, type SessionMode, type SessionStatus } from "../../state/workbench-core";
 import type { BackendSession } from "../../types/app";
 
 export const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
@@ -127,63 +127,38 @@ export const sessionTitleFromInput = (value: string) => {
   return `${firstLine.slice(0, 45)}...`;
 };
 
-const isForegroundActiveStatus = (status: SessionStatus) => status === "running" || status === "waiting";
+export type SessionDisplayStatus = SessionStatus | "archived";
+
+const isForegroundActiveStatus = (status: SessionStatus) => status === "running";
 export { isForegroundActiveStatus };
 
-// `background` is treated as a display-only compatibility status for older persisted data.
-// New state updates keep the underlying runtime status (`running` / `waiting`) intact.
-export const toBackgroundStatus = (status: SessionStatus): SessionStatus => status;
+export const displaySessionStatus = (session: Session): SessionStatus => session.status;
 
-export const restoreVisibleStatus = (session: Session): SessionStatus => {
-  if (session.status !== "background") return session.status;
-  return "waiting";
-};
-
-export const resolveVisibleStatus = (_tab: Tab, _session: Session, nextStatus: SessionStatus): SessionStatus => {
-  return nextStatus;
-};
-
-export const displaySessionStatus = (tab: Pick<Tab, "activeSessionId">, session: Session): SessionStatus => {
-  if (session.status === "background") return "background";
-  if (session.id !== tab.activeSessionId && isForegroundActiveStatus(session.status)) {
-    return "background";
-  }
-  return session.status;
-};
-
-export const sessionTone = (status: SessionStatus) => {
-  if (status === "running" || status === "waiting" || status === "background") return "active";
-  if (status === "idle") return "idle";
-  if (status === "queued") return "queued";
-  return "suspended";
+export const sessionTone = (status: SessionDisplayStatus) => {
+  if (status === "running") return "active";
+  return "idle";
 };
 
 export const sessionHeaderTag = (
-  status: SessionStatus,
+  status: SessionDisplayStatus,
   locale: Locale,
 ): {
   label: string;
-  tone: "active" | "info" | "queue" | "idle" | "muted";
+  tone: "active" | "idle" | "muted";
 } => {
   const t = createTranslator(locale);
 
   if (status === "running") {
     return { label: t("running"), tone: "active" };
   }
-  if (status === "background") {
-    return { label: t("background"), tone: "info" };
-  }
-  if (status === "waiting") {
-    return { label: t("waiting"), tone: "active" };
-  }
-  if (status === "queued") {
-    return { label: t("queued"), tone: "queue" };
-  }
   if (status === "idle") {
     return { label: t("ready"), tone: "idle" };
   }
+  if (status === "archived") {
+    return { label: t("historyArchived"), tone: "muted" };
+  }
 
-  return { label: t("suspended"), tone: "muted" };
+  return { label: t("interrupted"), tone: "muted" };
 };
 
 export const formatRelativeSessionTime = (value: number, locale: Locale) => {

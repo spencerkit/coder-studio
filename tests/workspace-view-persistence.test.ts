@@ -59,7 +59,7 @@ const createWorkspaceSnapshot = (activeSessionId: string) => ({
     {
       id: 2,
       title: "Session 2",
-      status: "waiting" as const,
+      status: "running" as const,
       mode: "branch" as const,
       auto_feed: true,
       queue: [],

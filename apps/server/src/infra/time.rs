@@ -8,6 +8,15 @@ pub(crate) fn now_ts() -> i64 {
         .unwrap_or(0)
 }
 
+pub(crate) fn now_ts_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+        .unwrap_or(0)
+}
+
 pub(crate) fn now_label() -> String {
     use chrono::Local;
     Local::now().format("%H:%M").to_string()
@@ -26,10 +35,6 @@ pub(crate) fn status_label(status: &SessionStatus) -> &'static str {
     match status {
         SessionStatus::Idle => "idle",
         SessionStatus::Running => "running",
-        SessionStatus::Background => "background",
-        SessionStatus::Waiting => "waiting",
-        SessionStatus::Suspended => "suspended",
-        SessionStatus::Queued => "queued",
         SessionStatus::Interrupted => "interrupted",
     }
 }

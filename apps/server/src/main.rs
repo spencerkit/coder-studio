@@ -58,7 +58,8 @@ pub(crate) use infra::db::{
     launch_workspace_record_scoped, load_session, load_session_history_records,
     load_workspace_controller_lease, mark_active_sessions_interrupted_on_boot,
     patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_resume_id, set_session_status_if_not_archived,
+    save_workspace_controller_lease, set_session_resume_id,
+    set_session_runtime_state_if_not_archived, set_session_status_if_not_archived,
     set_workspace_terminal_recoverable, switch_workspace_session,
     update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
     update_workspace_session, upsert_workspace_attachment,
@@ -91,9 +92,10 @@ pub(crate) use models::{
     SessionMode, SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo,
     SessionRuntimeStartResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
     WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
-    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSnapshot,
-    WorkspaceSource, WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
-    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
+    WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
+    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
+    WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -123,9 +125,9 @@ pub(crate) use services::terminal::{
 pub(crate) use services::workspace::{
     activate_workspace_scoped, archive_session, close_workspace_scoped, create_session,
     delete_session, launch_workspace_internal_scoped, launch_workspace_scoped,
-    list_session_history, restore_session, session_update, switch_session, update_idle_policy,
-    update_workbench_layout_scoped, workbench_bootstrap_scoped, workspace_snapshot,
-    workspace_view_update, worktree_inspect,
+    list_session_history, restore_session, session_update, switch_session, sync_session_runtime_state,
+    sync_session_status, update_idle_policy, update_workbench_layout_scoped,
+    workbench_bootstrap_scoped, workspace_snapshot, workspace_view_update, worktree_inspect,
 };
 pub(crate) use services::workspace_runtime::{
     assert_workspace_controller_can_mutate, register_workspace_client_connection,

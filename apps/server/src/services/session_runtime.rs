@@ -36,7 +36,7 @@ pub(crate) fn choose_boot_command(
 }
 
 fn session_status_on_runtime_start() -> SessionStatus {
-    SessionStatus::Running
+    SessionStatus::Idle
 }
 
 pub(crate) fn launch_spec_display_command(spec: &AgentLaunchSpec) -> String {
@@ -305,11 +305,12 @@ pub(crate) fn session_runtime_start(
     )?;
 
     bind_session_runtime(&params.workspace_id, &params.session_id, terminal.id, state)?;
-    let updated = set_session_status_if_not_archived(
+    let updated = sync_session_runtime_state(
         state,
         &params.workspace_id,
         session_id_num,
         session_status_on_runtime_start(),
+        true,
     )?;
     resume_debug_log(format!(
         "session_runtime_start bound terminal workspace_id={} session_id={} terminal_id={} status={} updated={}",

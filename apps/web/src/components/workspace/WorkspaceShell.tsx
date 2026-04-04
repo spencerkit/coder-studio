@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import type { Translator } from "../../i18n";
 import type { WorkspaceShellSummaryItem } from "../../features/workspace/workspace-shell-summary";
-import { WorkspaceCodeIcon, WorkspaceTerminalIcon } from "../icons";
+import {
+  MaximizeIcon,
+  MinimizeIcon,
+  WorkspaceCodeIcon,
+  WorkspaceTerminalIcon,
+} from "../icons";
 
 type WorkspaceShellProps = {
   isFocusMode: boolean;
@@ -17,6 +22,7 @@ type WorkspaceShellProps = {
   codePanel: ReactNode;
   terminalPanel: ReactNode;
   onToggleRightPane: (pane: "code" | "terminal") => void;
+  onToggleCodeExpanded: () => void;
   t: Translator;
 };
 
@@ -34,6 +40,7 @@ export const WorkspaceShell = ({
   codePanel,
   terminalPanel,
   onToggleRightPane,
+  onToggleCodeExpanded,
   t
 }: WorkspaceShellProps) => (
   <main className="workspace-shell">
@@ -67,6 +74,18 @@ export const WorkspaceShell = ({
         >
           <WorkspaceTerminalIcon />
         </button>
+        {showCodePanel ? (
+          <button
+            type="button"
+            className={`workspace-panel-toggle icon-only ${isCodeExpanded ? "active" : ""}`}
+            onClick={onToggleCodeExpanded}
+            title={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+            aria-pressed={isCodeExpanded}
+            aria-label={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+          >
+            {isCodeExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+          </button>
+        ) : null}
         <span className="workspace-shortcut-hint">{runtimeHint}</span>
       </div>
     </div>

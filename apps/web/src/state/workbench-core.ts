@@ -7,7 +7,7 @@ import {
 } from "../i18n";
 import type { WorkspaceControllerState } from "../features/workspace/workspace-controller";
 
-export type SessionStatus = "idle" | "running" | "background" | "waiting" | "suspended" | "queued" | "interrupted";
+export type SessionStatus = "idle" | "running" | "interrupted";
 export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";

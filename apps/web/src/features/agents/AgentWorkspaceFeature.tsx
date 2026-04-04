@@ -102,19 +102,14 @@ const AgentPaneLeaf = memo(({
   onAgentTerminalSize,
   t,
 }: AgentPaneLeafProps) => {
-  const visibleStatus = displaySessionStatus({ activeSessionId }, session);
+  const visibleStatus = displaySessionStatus(session);
   const progress = (() => {
     const ratio = sessionCompletionRatio(session);
     if (ratio > 0) return Math.max(14, ratio);
-    if (visibleStatus === "running" || visibleStatus === "background") return 34;
-    if (visibleStatus === "waiting") return 22;
+    if (visibleStatus === "running") return 34;
     return 6;
   })();
-  const tone = visibleStatus === "running" || visibleStatus === "background"
-    ? "live"
-    : visibleStatus === "waiting"
-      ? "queued"
-      : "idle";
+  const tone = visibleStatus === "running" ? "live" : "idle";
   const statusTone = sessionTone(visibleStatus);
   const headerTag = sessionHeaderTag(visibleStatus, locale);
   const renderState = resolveAgentPaneRenderState(session, isPaneActive, agentInputEnabled);
@@ -374,7 +369,8 @@ export const AgentWorkspaceFeature = ({
 }: AgentWorkspaceFeatureProps) => {
   if (!visible) return null;
 
-  const viewedHeaderTag = sessionHeaderTag(viewedSession.status, locale);
+  const viewedDisplayStatus = isArchiveView ? "archived" as const : viewedSession.status;
+  const viewedHeaderTag = sessionHeaderTag(viewedDisplayStatus, locale);
   const archiveTerminalBinding = resolveAgentPaneTerminalBinding(viewedSession, "readonly", activeTab.terminals);
 
   const renderAgentPane = (node: SessionPaneNode): ReactNode => {
@@ -426,64 +422,62 @@ export const AgentWorkspaceFeature = ({
   return (
     <>
       <section
-        className="panel center-panel workspace-agent-shell"
+        className="panel center-panel workspace-agent-shell studio-panel compact"
         style={{ flex: "1 1 0%" }}
       >
-        <div className="panel-inner studio-panel compact">
-          {isArchiveView && (
-            <div className="archive-banner">
-              <div>
-                {t("viewingArchivedSession")}
-                <div className="hint">{t("exitArchiveHint")}</div>
-              </div>
-              <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
+        {isArchiveView && (
+          <div className="archive-banner">
+            <div>
+              {t("viewingArchivedSession")}
+              <div className="hint">{t("exitArchiveHint")}</div>
             </div>
-          )}
-          <div className="agent-pane-workspace">
-            {isArchiveView ? (
-              <section
-                className="agent-pane-card archive-only"
-                data-session-id={viewedSession.id}
-                data-session-status={viewedSession.status}
-              >
-                <div className="agent-pane-header" data-density="compact" data-active="true">
-                  <div className="agent-pane-header-copy">
-                    <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />
-                    <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
-                  </div>
-                  <div className="agent-pane-meta">
-                    <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
-                      {viewedHeaderTag.label}
-                    </span>
-                  </div>
-                </div>
-                <div className="agent-pane-body">
-                  {archiveTerminalBinding.stream.trim() ? (
-                    archiveTerminalBinding.renderMode === "transcript" ? (
-                      <pre className="agent-pane-transcript-output archive" aria-hidden="true">
-                        {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
-                      </pre>
-                    ) : (
-                    <ShellTerminal
-                      ref={archiveTerminalRef}
-                      terminalId={viewedSession.id}
-                      outputIdentity={archiveTerminalBinding.streamId}
-                      outputSyncStrategy={archiveTerminalBinding.syncStrategy}
-                      output={archiveTerminalBinding.stream}
-                      theme={theme}
-                      fontSize={terminalFontSize}
-                      compatibilityMode={terminalCompatibilityMode}
-                    />
-                    )
-                  ) : (
-                    <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-                  )}
-                </div>
-              </section>
-            ) : (
-              renderAgentPane(activeTab.paneLayout)
-            )}
+            <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
           </div>
+        )}
+        <div className="agent-pane-workspace">
+          {isArchiveView ? (
+            <section
+              className="agent-pane-card archive-only"
+              data-session-id={viewedSession.id}
+              data-session-status={viewedSession.status}
+            >
+              <div className="agent-pane-header" data-density="compact" data-active="true">
+                <div className="agent-pane-header-copy">
+                  <span className={`session-top-dot ${sessionTone(viewedDisplayStatus)} ${sessionTone(viewedDisplayStatus) === "active" ? "pulse" : ""}`} />
+                  <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
+                </div>
+                <div className="agent-pane-meta">
+                  <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
+                    {viewedHeaderTag.label}
+                  </span>
+                </div>
+              </div>
+              <div className="agent-pane-body">
+                {archiveTerminalBinding.stream.trim() ? (
+                  archiveTerminalBinding.renderMode === "transcript" ? (
+                    <pre className="agent-pane-transcript-output archive" aria-hidden="true">
+                      {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
+                    </pre>
+                  ) : (
+                  <ShellTerminal
+                    ref={archiveTerminalRef}
+                    terminalId={viewedSession.id}
+                    outputIdentity={archiveTerminalBinding.streamId}
+                    outputSyncStrategy={archiveTerminalBinding.syncStrategy}
+                    output={archiveTerminalBinding.stream}
+                    theme={theme}
+                    fontSize={terminalFontSize}
+                    compatibilityMode={terminalCompatibilityMode}
+                  />
+                  )
+                ) : (
+                  <div className="terminal-empty">{t("archiveViewReadonly")}</div>
+                )}
+              </div>
+            </section>
+          ) : (
+            renderAgentPane(activeTab.paneLayout)
+          )}
         </div>
       </section>
 

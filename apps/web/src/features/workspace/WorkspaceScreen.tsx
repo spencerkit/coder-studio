@@ -194,15 +194,11 @@ import {
 } from "../../shared/utils/path";
 import {
   formatRelativeSessionTime,
-  isForegroundActiveStatus,
   isDraftSession,
   isHiddenDraftPlaceholder,
   nowLabel,
   parseNumericId,
-  restoreVisibleStatus,
-  sessionCompletionRatio,
-  sessionTone,
-  toBackgroundStatus
+  sessionCompletionRatio
 } from "../../shared/utils/session";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
 import { ConfirmDialog, type ConfirmDialogState } from "../../components/ConfirmDialog";
@@ -1352,7 +1348,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateState((current) => {
       const targetTab = current.tabs.find((tab) => tab.id === workspaceId);
       if (!targetTab) return current;
-      const previousActiveTabId = current.activeTabId;
       return {
         ...current,
         activeTabId: workspaceId,
@@ -1366,16 +1361,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               ...tab,
               sessions: tab.sessions.map((session) =>
                 session.id === tab.activeSessionId
-                  ? { ...session, unread: 0, status: restoreVisibleStatus(session), lastActiveAt: Date.now() }
+                  ? { ...session, unread: 0, status: session.status, lastActiveAt: Date.now() }
                   : session
-              )
-            };
-          }
-          if (tab.id === previousActiveTabId) {
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === tab.activeSessionId ? { ...session, status: toBackgroundStatus(session.status) } : session
               )
             };
           }
@@ -2558,7 +2545,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }
       return right.lastActiveAt - left.lastActiveAt;
     });
-    const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
+    const hasRunning = sessions.some((session) => session.status === "running");
     const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
     return {
       id: tab.id,
@@ -2949,9 +2936,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }
       }}
       onSetSidebarView={setCodeSidebarView}
-      onToggleExpanded={() => {
-        void toggleCodeExpanded();
-      }}
       t={t}
     />
   ) : null;
@@ -3054,6 +3038,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               codePanel={workspaceCodePanel}
               terminalPanel={workspaceTerminalPanel}
               onToggleRightPane={toggleRightPane}
+              onToggleCodeExpanded={() => {
+                void toggleCodeExpanded();
+              }}
               t={t}
             />
           ) : null}

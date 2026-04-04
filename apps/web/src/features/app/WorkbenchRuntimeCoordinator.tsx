@@ -19,8 +19,6 @@ import {
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
   parseNumericId,
-  restoreVisibleStatus,
-  toBackgroundStatus,
 } from "../../shared/utils/session";
 import {
   applyWorkbenchUiState,
@@ -271,16 +269,15 @@ export const WorkbenchRuntimeCoordinator = ({
       return;
     }
 
-    const nextActiveAt = Date.now();
-    updateState((current) => {
-      const targetTab = current.tabs.find((tab) => tab.id === tabId);
-      if (!targetTab) return current;
+      const nextActiveAt = Date.now();
+      updateState((current) => {
+        const targetTab = current.tabs.find((tab) => tab.id === tabId);
+        if (!targetTab) return current;
 
-      const targetPaneId = findPaneIdBySessionId(targetTab.paneLayout, sessionId) ?? targetTab.activePaneId;
-      const previousActiveTabId = current.activeTabId;
-      return {
-        ...current,
-        activeTabId: tabId,
+        const targetPaneId = findPaneIdBySessionId(targetTab.paneLayout, sessionId) ?? targetTab.activePaneId;
+        return {
+          ...current,
+          activeTabId: tabId,
         overlay: {
           ...current.overlay,
           visible: false,
@@ -297,26 +294,12 @@ export const WorkbenchRuntimeCoordinator = ({
                   return {
                     ...session,
                     unread: 0,
-                    status: restoreVisibleStatus(session),
+                    status: session.status,
                     lastActiveAt: nextActiveAt,
                   };
                 }
-                if (session.id === tab.activeSessionId) {
-                  return { ...session, status: toBackgroundStatus(session.status) };
-                }
                 return session;
               }),
-            };
-          }
-
-          if (tab.id === previousActiveTabId) {
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) => (
-                session.id === tab.activeSessionId
-                  ? { ...session, status: toBackgroundStatus(session.status) }
-                  : session
-              )),
             };
           }
 
@@ -340,7 +323,7 @@ export const WorkbenchRuntimeCoordinator = ({
     }
 
     void syncSessionPatch(tabId, sessionId, {
-      status: restoreVisibleStatus(nextSession),
+      status: nextSession.status,
       last_active_at: nextActiveAt,
     });
 
@@ -400,7 +383,6 @@ export const WorkbenchRuntimeCoordinator = ({
 
   const {
     markSessionIdle,
-    settleSessionAfterExit,
   } = createWorkspaceSessionActions({
     appSettings,
     locale,
@@ -469,10 +451,8 @@ export const WorkbenchRuntimeCoordinator = ({
     deviceId,
     markSessionIdle,
     reattachWorkspaceRuntime,
-    settleSessionAfterExit,
     syncSessionPatch,
     stateRef,
-    t,
     updateState,
   });
 

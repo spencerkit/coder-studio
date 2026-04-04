@@ -20,12 +20,11 @@ pub enum SessionMode {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
+    #[serde(alias = "queued")]
     Idle,
+    #[serde(alias = "background", alias = "waiting")]
     Running,
-    Background,
-    Waiting,
-    Suspended,
-    Queued,
+    #[serde(alias = "suspended")]
     Interrupted,
 }
 
@@ -109,6 +108,10 @@ fn default_codex_executable() -> String {
 
 fn default_json_object() -> Value {
     Value::Object(Default::default())
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -352,6 +355,8 @@ pub struct SessionInfo {
     pub unread: u32,
     pub last_active_at: i64,
     pub resume_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub runtime_active: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -624,7 +629,18 @@ pub struct WorkspaceRuntimeSnapshot {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WorkspaceRuntimeStateEvent {
     pub workspace_id: String,
-    pub view_state: WorkspaceViewState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_state: Option<WorkspaceViewState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_state: Option<WorkspaceSessionState>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceSessionState {
+    pub session_id: String,
+    pub status: SessionStatus,
+    pub last_active_at: i64,
+    pub resume_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

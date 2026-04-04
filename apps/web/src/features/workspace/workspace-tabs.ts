@@ -17,6 +17,6 @@ export const buildWorkspaceTabItems = (
     id: tab.id,
     label: displayPathName(tab.project?.path) || localizeWorkspaceTitle(tab.title, locale),
     active: tab.id === activeTabId,
-    hasRunning: tab.sessions.some((session) => ["running", "waiting", "background"].includes(session.status)),
+    hasRunning: tab.sessions.some((session) => session.status === "running"),
     unread: tab.sessions.reduce((sum, session) => sum + session.unread, 0)
   }));

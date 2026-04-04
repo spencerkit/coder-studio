@@ -6,7 +6,7 @@ import {
   subscribeWorkspaceController,
   subscribeWorkspaceRuntimeState,
 } from "../../command";
-import { type ExecTarget, type SessionStatus, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
+import { type ExecTarget, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
 import {
@@ -18,7 +18,6 @@ import {
   WS_STREAM_FLUSH_INTERVAL_MS,
 } from "../../shared/app/constants";
 import { pathsIntersect } from "../../shared/utils/path";
-import { resolveVisibleStatus } from "../../shared/utils/session";
 import type {
   AgentLifecycleEvent,
   ArtifactsDirtyEvent,
@@ -33,7 +32,6 @@ import {
   noteAgentStartupLifecycle,
   type AgentRuntimeRefs,
 } from "../agents";
-import type { Translator } from "../../i18n";
 import {
   FULL_ARTIFACT_REFRESH_SCOPE,
   hasArtifactRefreshWork,
@@ -69,10 +67,8 @@ type UseWorkspaceTransportSyncArgs = {
     workspaceId: string,
     options?: WorkspaceRuntimeAttachRequestOptions,
   ) => Promise<void>;
-  settleSessionAfterExit: (workspaceId: string, sessionId: string) => Promise<void>;
   syncSessionPatch: (tabId: string, sessionId: string, patch: SessionPatch) => Promise<void>;
   stateRef: MutableRefObject<WorkbenchState>;
-  t: Translator;
   updateState: UpdateState;
 };
 
@@ -145,16 +141,13 @@ export const useWorkspaceTransportSync = ({
   deviceId,
   markSessionIdle,
   reattachWorkspaceRuntime,
-  settleSessionAfterExit,
   syncSessionPatch,
   stateRef,
-  t,
   updateState,
 }: UseWorkspaceTransportSyncArgs) => {
   const updateStateRef = useLatestRef(updateState);
   const markSessionIdleRef = useLatestRef(markSessionIdle);
   const reattachWorkspaceRuntimeRef = useLatestRef(reattachWorkspaceRuntime);
-  const settleSessionAfterExitRef = useLatestRef(settleSessionAfterExit);
   const syncSessionPatchRef = useLatestRef(syncSessionPatch);
   const transportResyncPromiseRef = useRef<Promise<void> | null>(null);
   const pendingStreamIndexRef = useRef(createPendingStreamIndex());
@@ -212,37 +205,9 @@ export const useWorkspaceTransportSync = ({
   useEffect(() => {
     const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }: AgentLifecycleEvent) => {
       noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
-      let nextStatus: SessionStatus | null = null;
-      if (kind === "turn_waiting" || kind === "approval_required") {
-        nextStatus = "waiting";
-      } else if (kind === "tool_started" || kind === "tool_finished") {
-        nextStatus = "running";
-      } else if (kind === "session_ended") {
-        nextStatus = "idle";
-      }
 
       if (kind === "session_ended") {
         clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-      }
-
-      if (nextStatus) {
-        updateStateRef.current((current) => ({
-          ...current,
-          tabs: current.tabs.map((tab) => {
-            if (tab.id !== workspace_id) return tab;
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === session_id
-                  ? {
-                      ...session,
-                      status: resolveVisibleStatus(tab, session, nextStatus),
-                    }
-                  : session,
-              ),
-            };
-          }),
-        }));
       }
 
       const resumeId = readResumeId(data);

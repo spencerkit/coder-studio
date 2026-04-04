@@ -32,7 +32,6 @@ import {
   createDraftSessionPlaceholder,
   createSessionFromBackend,
   isDraftSession,
-  resolveVisibleStatus,
 } from "./session";
 import { applySessionRuntimeBindings } from "../../features/workspace/session-runtime-bindings";
 import { mergeMonotonicTextSnapshot } from "./stream-snapshot";
@@ -134,13 +133,7 @@ const readResumeId = (data: string) => {
 const lifecycleStatusForReplay = (
   kind: AgentLifecycleHistoryEntry["kind"],
 ) => {
-  if (kind === "turn_waiting" || kind === "approval_required") {
-    return "waiting" as const;
-  }
-  if (kind === "tool_started" || kind === "tool_finished") {
-    return "running" as const;
-  }
-  if (kind === "turn_completed" || kind === "session_ended") {
+  if (kind === "turn_completed") {
     return "idle" as const;
   }
   return null;
@@ -164,7 +157,7 @@ const applyLifecycleReplayToState = (
               status: (
                 session.status === "interrupted" || !nextStatus
                   ? session.status
-                  : resolveVisibleStatus(tab, session, nextStatus)
+                  : nextStatus
               ),
               resumeId: resumeId ?? session.resumeId,
             };
@@ -607,22 +600,91 @@ export const applyWorkspaceRuntimeStateEvent = (
   }
 
   const currentTab = current.tabs[tabIndex];
-  if (shouldIgnoreIncomingWorkspaceViewPatch(currentTab, payload.view_state)) {
-    return current;
+  let nextTab = currentTab;
+
+  const sessionState = payload.session_state;
+  if (sessionState) {
+    let sessionChanged = false;
+    const nextSessions = nextTab.sessions.map((session) => {
+      if (session.id !== sessionState.session_id) return session;
+      sessionChanged = (
+        session.status !== sessionState.status
+        || session.lastActiveAt !== sessionState.last_active_at
+        || session.resumeId !== (sessionState.resume_id ?? session.resumeId)
+      );
+      if (!sessionChanged) {
+        return session;
+      }
+      return {
+        ...session,
+        status: sessionState.status,
+        lastActiveAt: sessionState.last_active_at,
+        resumeId: sessionState.resume_id ?? session.resumeId,
+      };
+    });
+    if (sessionChanged) {
+      nextTab = {
+        ...nextTab,
+        sessions: nextSessions,
+      };
+    }
   }
 
-  const nextActiveSessionId = currentTab.sessions.some((session) => session.id === payload.view_state.active_session_id)
-    ? payload.view_state.active_session_id
-    : currentTab.activeSessionId;
-  const nextActiveTerminalId = currentTab.terminals.some((terminal) => terminal.id === payload.view_state.active_terminal_id)
-    ? payload.view_state.active_terminal_id
-    : currentTab.activeTerminalId;
-  const nextActivePaneId = payload.view_state.active_pane_id || currentTab.activePaneId;
-  const nextPaneLayout = normalizePaneLayout(payload.view_state.pane_layout, nextActiveSessionId);
-  const nextFilePreview = normalizeFilePreview(payload.view_state.file_preview, currentTab.filePreview);
+  const viewState = payload.view_state;
+  if (!viewState) {
+    if (nextTab === currentTab) {
+      return current;
+    }
+    const tabs = [...current.tabs];
+    tabs[tabIndex] = nextTab;
+    return {
+      ...current,
+      tabs,
+    };
+  }
+
+  if (shouldIgnoreIncomingWorkspaceViewPatch(nextTab, viewState)) {
+    if (nextTab === currentTab) {
+      return current;
+    }
+    const tabs = [...current.tabs];
+    tabs[tabIndex] = nextTab;
+    return {
+      ...current,
+      tabs,
+    };
+  }
+
+  const nextActiveSessionId = nextTab.sessions.some((session) => session.id === viewState.active_session_id)
+    ? viewState.active_session_id
+    : nextTab.activeSessionId;
+  const nextActiveTerminalId = nextTab.terminals.some((terminal) => terminal.id === viewState.active_terminal_id)
+    ? viewState.active_terminal_id
+    : nextTab.activeTerminalId;
+  const nextActivePaneId = viewState.active_pane_id || nextTab.activePaneId;
+  const nextPaneLayout = normalizePaneLayout(viewState.pane_layout, nextActiveSessionId);
+  const nextFilePreview = normalizeFilePreview(viewState.file_preview, nextTab.filePreview);
 
   if (
-    nextActiveSessionId === currentTab.activeSessionId
+    nextTab !== currentTab
+    && nextActiveSessionId === nextTab.activeSessionId
+    && nextActivePaneId === nextTab.activePaneId
+    && nextActiveTerminalId === nextTab.activeTerminalId
+    && samePaneLayout(nextTab.paneLayout, nextPaneLayout)
+    && sameFilePreview(nextTab.filePreview, nextFilePreview)
+    && nextTab.viewingArchiveId === undefined
+  ) {
+    const tabs = [...current.tabs];
+    tabs[tabIndex] = nextTab;
+    return {
+      ...current,
+      tabs,
+    };
+  }
+
+  if (
+    nextTab === currentTab
+    && nextActiveSessionId === currentTab.activeSessionId
     && nextActivePaneId === currentTab.activePaneId
     && nextActiveTerminalId === currentTab.activeTerminalId
     && samePaneLayout(currentTab.paneLayout, nextPaneLayout)
@@ -632,8 +694,8 @@ export const applyWorkspaceRuntimeStateEvent = (
     return current;
   }
 
-  const nextTab = {
-    ...currentTab,
+  nextTab = {
+    ...nextTab,
     activeSessionId: nextActiveSessionId,
     activePaneId: nextActivePaneId,
     activeTerminalId: nextActiveTerminalId,

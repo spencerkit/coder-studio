@@ -70,7 +70,6 @@ type WorkspaceCodeFeatureProps = {
   sidebar: SidebarViewModel;
   fileSearch: FileSearchViewModel;
   onSetSidebarView: (view: "files" | "git") => void;
-  onToggleExpanded: () => void;
   t: Translator;
 };
 
@@ -87,7 +86,6 @@ export const WorkspaceCodeFeature = ({
   sidebar,
   fileSearch,
   onSetSidebarView,
-  onToggleExpanded,
   t,
 }: WorkspaceCodeFeatureProps) => {
   const sidebarContent = (
@@ -137,7 +135,6 @@ export const WorkspaceCodeFeature = ({
         onFileSearchFocus={fileSearch.onFocus}
         onFileSearchBlur={fileSearch.onBlur}
         onFileSearchKeyDown={fileSearch.onKeyDown}
-        onToggleExpanded={onToggleExpanded}
         t={t}
       />
 

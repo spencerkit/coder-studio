@@ -138,20 +138,88 @@ pub(crate) fn update_workbench_layout_scoped(
     persist_workbench_layout(state, layout, device_id, client_id)
 }
 
+fn emit_workspace_runtime_state(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    view_state: Option<WorkspaceViewState>,
+    session_state: Option<WorkspaceSessionState>,
+) -> Result<(), String> {
+    let payload = serde_json::to_value(WorkspaceRuntimeStateEvent {
+        workspace_id: workspace_id.to_string(),
+        view_state,
+        session_state,
+    })
+    .map_err(|e| e.to_string())?;
+    let _ = state.transport_events.send(TransportEvent {
+        event: "workspace://runtime_state".to_string(),
+        payload,
+    });
+    Ok(())
+}
+
+fn session_state_payload(session: &SessionInfo) -> WorkspaceSessionState {
+    WorkspaceSessionState {
+        session_id: session.id.to_string(),
+        status: session.status.clone(),
+        last_active_at: session.last_active_at,
+        resume_id: session.resume_id.clone(),
+    }
+}
+
+pub(crate) fn sync_session_status(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: u64,
+    status: SessionStatus,
+) -> Result<bool, String> {
+    let updated = set_session_status_if_not_archived(state, workspace_id, session_id, status)?;
+    if !updated {
+        return Ok(false);
+    }
+    let session = load_session(state, workspace_id, session_id)?;
+    emit_workspace_runtime_state(
+        state,
+        workspace_id,
+        None,
+        Some(session_state_payload(&session)),
+    )?;
+    Ok(true)
+}
+
+pub(crate) fn sync_session_runtime_state(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: u64,
+    status: SessionStatus,
+    runtime_active: bool,
+) -> Result<bool, String> {
+    let updated = set_session_runtime_state_if_not_archived(
+        state,
+        workspace_id,
+        session_id,
+        status,
+        runtime_active,
+    )?;
+    if !updated {
+        return Ok(false);
+    }
+    let session = load_session(state, workspace_id, session_id)?;
+    emit_workspace_runtime_state(
+        state,
+        workspace_id,
+        None,
+        Some(session_state_payload(&session)),
+    )?;
+    Ok(true)
+}
+
 pub(crate) fn workspace_view_update(
     workspace_id: String,
     patch: WorkspaceViewPatch,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceViewState, String> {
     let view_state = patch_workspace_view_state(state, &workspace_id, patch)?;
-    let _ = state.transport_events.send(TransportEvent {
-        event: "workspace://runtime_state".to_string(),
-        payload: serde_json::to_value(WorkspaceRuntimeStateEvent {
-            workspace_id,
-            view_state: view_state.clone(),
-        })
-        .map_err(|e| e.to_string())?,
-    });
+    emit_workspace_runtime_state(state, &workspace_id, Some(view_state.clone()), None)?;
     Ok(view_state)
 }
 
@@ -256,6 +324,8 @@ mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
 
+    const TIMESTAMP_MILLIS_THRESHOLD: i64 = 1_000_000_000_000;
+
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
         let conn = Connection::open_in_memory().unwrap();
@@ -304,7 +374,11 @@ mod tests {
         assert_eq!(event.event, "workspace://runtime_state");
         let payload: WorkspaceRuntimeStateEvent = serde_json::from_value(event.payload).unwrap();
         assert_eq!(payload.workspace_id, workspace_id);
-        assert_eq!(payload.view_state.active_terminal_id, "7");
+        assert_eq!(
+            payload.view_state.as_ref().map(|view_state| view_state.active_terminal_id.as_str()),
+            Some("7")
+        );
+        assert!(payload.session_state.is_none());
     }
 
     #[test]
@@ -331,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_session_keeps_suspended_status_after_runtime_stop() {
+    fn archive_session_keeps_an_idle_runtime_status_inside_archive_snapshot() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-history-archive-test");
         let created = create_session(
@@ -341,11 +415,12 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        set_session_status(
+        set_session_runtime_state_if_not_archived(
             app.state(),
             &workspace_id,
             created.id,
             SessionStatus::Running,
+            true,
         )
         .unwrap();
 
@@ -357,7 +432,8 @@ mod tests {
             .find(|entry| entry.session_id == created.id)
             .unwrap();
         let status = archived.snapshot["status"].as_str().unwrap();
-        assert_eq!(status, "suspended");
+        assert_eq!(status, "idle");
+        assert!(archived.snapshot.get("runtime_active").is_none());
     }
 
     #[test]
@@ -446,6 +522,57 @@ mod tests {
             .expect("session should exist in snapshot");
         assert_eq!(restored.provider, AgentProvider::codex());
         assert_eq!(restored.resume_id, None);
+    }
+
+    #[test]
+    fn session_last_active_at_is_persisted_in_millis_for_create_switch_archive_and_restore() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-last-active-ms-test");
+
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        assert!(
+            created.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
+            "create_session should use millisecond timestamps"
+        );
+
+        let switched = switch_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        assert!(
+            switched.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
+            "switch_session should use millisecond timestamps"
+        );
+
+        let archived = archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let archived_last_active_at = archived
+            .snapshot
+            .get("last_active_at")
+            .and_then(Value::as_i64)
+            .expect("archive snapshot should contain last_active_at");
+        assert!(
+            archived_last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
+            "archive_session should use millisecond timestamps"
+        );
+
+        let restored = restore_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        assert!(
+            restored.session.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
+            "restore_session should use millisecond timestamps"
+        );
+
+        let history = list_session_history(app.state()).unwrap();
+        let restored_record = history
+            .into_iter()
+            .find(|record| record.workspace_id == workspace_id && record.session_id == created.id)
+            .expect("history record should exist");
+        assert!(
+            restored_record.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
+            "history should read millisecond last_active_at values"
+        );
     }
 
     #[test]

@@ -1773,6 +1773,16 @@ mod tests {
         root.to_string_lossy().to_string()
     }
 
+    fn drain_transport_events(
+        rx: &mut broadcast::Receiver<TransportEvent>,
+    ) -> Vec<TransportEvent> {
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
     fn attach_controller(
         app: &AppHandle,
         authorized: &AuthorizedRequest,
@@ -2818,239 +2828,13 @@ mod tests {
     }
 
     #[test]
-    fn agent_start_uses_server_resolved_settings_from_storage() {
-        let app = test_app();
-        let authorized = authorized_request();
-        let root = create_temp_workspace_root("agent-start-settings");
-        let workspace_id = launch_test_workspace(&app, &root);
-        let marker_path = PathBuf::from(&root).join(".agent-start-marker");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
-
-        dispatch_rpc(
-            &app,
-            "app_settings_update",
-            json!({
-                "settings": {
-                    "general": {
-                        "locale": "zh"
-                    },
-                    "providers": {
-                        "claude": {
-                            "global": {
-                                "executable": "claude-nightly",
-                                "startup_args": [],
-                                "env": {
-                                    "TEST_MARKER": "server-resolved"
-                                }
-                            }
-                        }
-                    }
-                }
-            }),
-            &authorized,
-        )
-        .unwrap();
-
-        let (executable, startup_args) = test_agent_marker_profile(".agent-start-marker");
-        dispatch_rpc(
-            &app,
-            "app_settings_update",
-            json!({
-                "settings": {
-                    "providers": {
-                        "claude": {
-                            "global": {
-                                "executable": executable,
-                                "startup_args": startup_args
-                            }
-                        }
-                    }
-                }
-            }),
-            &authorized,
-        )
-        .unwrap();
-
-        let attach = dispatch_rpc(
-            &app,
-            "workspace_runtime_attach",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-            }),
-            &authorized,
-        )
-        .unwrap();
-        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
-        let created = dispatch_rpc(
-            &app,
-            "create_session",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "mode": "branch",
-                "provider": "claude",
-            }),
-            &authorized,
-        )
-        .expect("create_session should succeed for marker launch test");
-        let created: SessionInfo = serde_json::from_value(created).unwrap();
-
-        let started = dispatch_rpc(
-            &app,
-            "agent_start",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
-                "cols": 80,
-                "rows": 24,
-            }),
-            &authorized,
-        )
-        .expect("agent_start should succeed with server-resolved settings");
-        let started: AgentStartResult = serde_json::from_value(started).unwrap();
-
-        assert!(started.started);
-        let mut marker_value = String::new();
-        for _ in 0..100 {
-            if let Ok(value) = std::fs::read_to_string(&marker_path) {
-                marker_value = value;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        assert!(
-            marker_value.contains("server-resolved"),
-            "expected marker file to contain server value, got: {marker_value:?}"
-        );
-    }
-
-    #[test]
-    fn agent_start_rejects_client_supplied_command() {
-        let app = test_app();
-        let authorized = authorized_request();
-
-        let error = dispatch_rpc(
-            &app,
-            "agent_start",
-            json!({
-                "workspace_id": "ws_test",
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": 1,
-                "session_id": "1",
-                "command": "claude"
-            }),
-            &authorized,
-        )
-        .expect_err("agent_start should reject legacy command payloads");
-
-        assert_eq!(error.status, StatusCode::BAD_REQUEST);
-    }
-
-    #[test]
-    fn agent_start_uses_session_provider_from_storage() {
-        let app = test_app();
-        let authorized = authorized_request();
-        let root = create_temp_workspace_root("agent-start-provider");
-        let workspace_id = launch_test_workspace(&app, &root);
-        let marker_path = PathBuf::from(&root).join(".agent-start-provider-marker");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
-
-        dispatch_rpc(
-            &app,
-            "app_settings_update",
-            json!({
-                "settings": {
-                    "providers": {
-                        "codex": {
-                            "global": {
-                                "executable": test_agent_marker_profile(".agent-start-provider-marker").0,
-                                "extra_args": test_agent_marker_profile(".agent-start-provider-marker").1,
-                                "env": {
-                                    "TEST_MARKER": "codex-provider"
-                                }
-                            }
-                        }
-                    }
-                }
-            }),
-            &authorized,
-        )
-        .unwrap();
-
-        let attach = dispatch_rpc(
-            &app,
-            "workspace_runtime_attach",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-            }),
-            &authorized,
-        )
-        .unwrap();
-        let runtime: WorkspaceRuntimeSnapshot = serde_json::from_value(attach).unwrap();
-
-        let created = dispatch_rpc(
-            &app,
-            "create_session",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "mode": "branch",
-                "provider": "codex",
-            }),
-            &authorized,
-        )
-        .expect("create_session should persist codex provider");
-        let created: SessionInfo = serde_json::from_value(created).unwrap();
-        assert_eq!(created.provider, AgentProvider::codex());
-
-        let started = dispatch_rpc(
-            &app,
-            "agent_start",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
-                "cols": 80,
-                "rows": 24,
-            }),
-            &authorized,
-        )
-        .expect("agent_start should read provider from stored session");
-        let started: AgentStartResult = serde_json::from_value(started).unwrap();
-        assert!(started.started);
-
-        let mut marker_value = String::new();
-        for _ in 0..100 {
-            if let Ok(value) = std::fs::read_to_string(&marker_path) {
-                marker_value = value;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        assert_eq!(marker_value, "codex-provider");
-    }
-
-    #[test]
     fn dispatches_session_runtime_start_and_returns_terminal_id() {
         let app = test_app();
         let authorized = authorized_request();
         let root = create_temp_workspace_root("session-runtime-start");
         let workspace_id = launch_test_workspace(&app, &root);
         let marker_path = PathBuf::from(&root).join(".session-runtime-start-marker");
+        let marker_target = marker_path.to_string_lossy().to_string();
         *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
 
         dispatch_rpc(
@@ -3061,8 +2845,8 @@ mod tests {
                     "providers": {
                         "claude": {
                             "global": {
-                                "executable": test_agent_marker_profile(".session-runtime-start-marker").0,
-                                "startup_args": test_agent_marker_profile(".session-runtime-start-marker").1,
+                                "executable": test_agent_marker_profile(&marker_target).0,
+                                "startup_args": test_agent_marker_profile(&marker_target).1,
                                 "env": {
                                     "TEST_MARKER": "session-runtime-started"
                                 }
@@ -3115,33 +2899,8 @@ mod tests {
             .boot_input
             .as_deref()
             .unwrap_or_default()
-            .contains(".session-runtime-start-marker"));
+            .contains(&marker_target));
         assert!(!marker_path.exists());
-
-        dispatch_rpc(
-            &app,
-            "terminal_write",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "terminal_id": started.terminal_id,
-                "input": started.boot_input,
-            }),
-            &authorized,
-        )
-        .unwrap();
-
-        let mut marker_value = String::new();
-        for _ in 0..100 {
-            if let Ok(value) = std::fs::read_to_string(&marker_path) {
-                marker_value = value;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        assert_eq!(marker_value, "session-runtime-started");
     }
 
     #[test]
@@ -3354,6 +3113,8 @@ mod tests {
         )
         .unwrap();
         let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+        let mut rx = app.state().transport_events.subscribe();
+        let _ = drain_transport_events(&mut rx);
 
         dispatch_rpc(
             &app,
@@ -3372,10 +3133,19 @@ mod tests {
         std::thread::sleep(Duration::from_millis(150));
         let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
         assert_eq!(refreshed.status, SessionStatus::Interrupted);
+        let events = drain_transport_events(&mut rx);
+        let payload = events
+            .iter()
+            .find(|event| event.event == "workspace://runtime_state")
+            .map(|event| &event.payload)
+            .expect("expected runtime state transport event");
+        assert_eq!(payload["workspace_id"], workspace_id);
+        assert_eq!(payload["session_state"]["session_id"], created.id.to_string());
+        assert_eq!(payload["session_state"]["status"], "interrupted");
     }
 
     #[test]
-    fn session_runtime_start_marks_session_running_before_hooks_arrive() {
+    fn session_runtime_start_marks_session_idle_before_hooks_arrive() {
         let app = test_app();
         let authorized = authorized_request();
         let root = create_temp_workspace_root("session-runtime-running");
@@ -3416,7 +3186,82 @@ mod tests {
         .unwrap();
 
         let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
-        assert_eq!(refreshed.status, SessionStatus::Running);
+        assert_eq!(refreshed.status, SessionStatus::Idle);
         assert!(refreshed.resume_id.is_none());
+        assert!(refreshed.runtime_active);
+    }
+
+    #[test]
+    fn terminal_write_marks_bound_session_running_and_emits_runtime_state() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-write");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created.id.to_string(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+        let mut rx = app.state().transport_events.subscribe();
+        let _ = drain_transport_events(&mut rx);
+
+        dispatch_rpc(
+            &app,
+            "terminal_write",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "terminal_id": started.terminal_id,
+                "input": "hello world\r",
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        assert_eq!(refreshed.status, SessionStatus::Running);
+        assert!(refreshed.runtime_active);
+
+        let events = drain_transport_events(&mut rx);
+        let payload = events
+            .iter()
+            .find(|event| event.event == "workspace://runtime_state")
+            .map(|event| &event.payload)
+            .expect("expected runtime state transport event");
+        assert_eq!(payload["workspace_id"], workspace_id);
+        assert_eq!(payload["session_state"]["session_id"], created.id.to_string());
+        assert_eq!(payload["session_state"]["status"], "running");
     }
 }

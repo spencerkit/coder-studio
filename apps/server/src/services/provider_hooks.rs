@@ -35,9 +35,7 @@ fn resume_debug_log(message: impl AsRef<str>) {
 
 fn lifecycle_status_for_hook(kind: &str) -> Option<SessionStatus> {
     match kind {
-        "session_started" | "tool_started" | "tool_finished" => Some(SessionStatus::Running),
-        "turn_waiting" | "approval_required" => Some(SessionStatus::Waiting),
-        "turn_completed" | "session_ended" => Some(SessionStatus::Idle),
+        "turn_completed" => Some(SessionStatus::Idle),
         _ => None,
     }
 }
@@ -115,7 +113,7 @@ pub(crate) fn process_provider_hook_payload(
     normalized.session_id = envelope.session_id.clone();
 
     if let Some(status) = lifecycle_status_for_hook(normalized.kind.as_str()) {
-        let updated = set_session_status_if_not_archived(
+        let updated = sync_session_status(
             state,
             &normalized.workspace_id,
             session_id_num,
@@ -264,6 +262,16 @@ mod tests {
         app
     }
 
+    fn drain_transport_events(
+        rx: &mut broadcast::Receiver<TransportEvent>,
+    ) -> Vec<TransportEvent> {
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
     #[test]
     fn shared_hook_processor_uses_session_provider_to_normalize_payload() {
         let app = test_app();
@@ -340,7 +348,7 @@ mod tests {
 
         let running = load_session(app.state(), &workspace_id, session.id).unwrap();
         assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
-        assert_eq!(running.status, SessionStatus::Running);
+        assert_eq!(running.status, SessionStatus::Idle);
 
         let waiting_payload = json!({
             "workspace_id": workspace_id,
@@ -352,7 +360,11 @@ mod tests {
 
         process_provider_hook_payload(&app, waiting_payload).unwrap();
         let waiting = load_session(app.state(), &workspace_id, session.id).unwrap();
-        assert_eq!(waiting.status, SessionStatus::Waiting);
+        assert_eq!(waiting.status, SessionStatus::Idle);
+
+        set_session_status(app.state(), &workspace_id, session.id, SessionStatus::Running).unwrap();
+        let mut rx = app.state().transport_events.subscribe();
+        let _ = drain_transport_events(&mut rx);
 
         let stop_payload = json!({
             "workspace_id": workspace_id,
@@ -365,6 +377,15 @@ mod tests {
         process_provider_hook_payload(&app, stop_payload).unwrap();
         let stopped = load_session(app.state(), &workspace_id, session.id).unwrap();
         assert_eq!(stopped.status, SessionStatus::Idle);
+        let events = drain_transport_events(&mut rx);
+        let payload = events
+            .iter()
+            .find(|event| event.event == "workspace://runtime_state")
+            .map(|event| &event.payload)
+            .expect("expected runtime state transport event");
+        assert_eq!(payload["workspace_id"], workspace_id);
+        assert_eq!(payload["session_state"]["session_id"], session.id.to_string());
+        assert_eq!(payload["session_state"]["status"], "idle");
     }
 
     #[test]

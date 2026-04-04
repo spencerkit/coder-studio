@@ -58,10 +58,11 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
     }
 }
 
-fn mark_bound_terminal_interrupted(
+fn sync_bound_terminal_runtime_state(
     workspace_id: &str,
     terminal_id: u64,
-    _exit_text: &str,
+    status: SessionStatus,
+    runtime_active: bool,
     state: State<'_, AppState>,
 ) {
     if let Ok(Some((binding_workspace_id, session_id))) =
@@ -71,11 +72,12 @@ fn mark_bound_terminal_interrupted(
             return;
         }
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = set_session_status_if_not_archived(
+            let _ = sync_session_runtime_state(
                 state,
                 workspace_id,
                 session_id_num,
-                SessionStatus::Interrupted,
+                status,
+                runtime_active,
             );
         }
     }
@@ -201,7 +203,13 @@ pub(crate) fn create_terminal_runtime(
             let _ =
                 set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
-        mark_bound_terminal_interrupted(&workspace_id_out, terminal_id, exit_text, state);
+        sync_bound_terminal_runtime_state(
+            &workspace_id_out,
+            terminal_id,
+            SessionStatus::Interrupted,
+            false,
+            state,
+        );
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);
         }
@@ -253,6 +261,13 @@ pub(crate) fn terminal_write(
             .write_all(input.as_bytes())
             .map_err(|e| e.to_string())?;
         handle.flush().map_err(|e| e.to_string())?;
+        sync_bound_terminal_runtime_state(
+            &workspace_id,
+            terminal_id,
+            SessionStatus::Running,
+            true,
+            state,
+        );
         Ok(())
     } else {
         Err("terminal_stdin_closed".to_string())
@@ -297,7 +312,13 @@ pub(crate) fn terminal_close(
     let is_bound_session_terminal =
         crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)?
             .is_some_and(|(binding_workspace_id, _)| binding_workspace_id == workspace_id);
-    mark_bound_terminal_interrupted(&workspace_id, terminal_id, "\n[terminal exited]\n", state);
+    sync_bound_terminal_runtime_state(
+        &workspace_id,
+        terminal_id,
+        SessionStatus::Interrupted,
+        false,
+        state,
+    );
     if is_bound_session_terminal {
         let _ = set_workspace_terminal_recoverable(state, &workspace_id, terminal_id, false);
     } else {
@@ -329,7 +350,13 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
 
     for (terminal_id, runtime) in runtimes {
         terminate_terminal_runtime(runtime);
-        mark_bound_terminal_interrupted(workspace_id, terminal_id, "\n[terminal exited]\n", state);
+        sync_bound_terminal_runtime_state(
+            workspace_id,
+            terminal_id,
+            SessionStatus::Interrupted,
+            false,
+            state,
+        );
         let _ = delete_workspace_terminal(state, workspace_id, terminal_id);
     }
 }

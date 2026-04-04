@@ -34,10 +34,7 @@ import {
   isDraftSession,
   nowLabel,
   parseNumericId,
-  resolveVisibleStatus,
-  restoreVisibleStatus,
   sessionTitleFromInput,
-  toBackgroundStatus,
 } from "../../shared/utils/session";
 import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
 import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
@@ -152,7 +149,7 @@ export const createWorkspaceSessionActions = ({
       const preparedSession: Session = {
         ...baseSession,
         title,
-        status: baseSession.status === "queued" ? "queued" : "idle",
+        status: "idle",
         mode: draftSession.mode,
         provider: draftSession.provider,
         autoFeed: draftSession.autoFeed,
@@ -275,14 +272,9 @@ export const createWorkspaceSessionActions = ({
     updateTab(currentTab.id, (tab) => {
       const newSession = createDraftSessionForTab(tab, "branch");
       const nextLeaf = createPaneLeaf(newSession.id);
-      const updatedSessions = tab.sessions.map((session) => (
-        session.id === tab.activeSessionId
-          ? { ...session, status: toBackgroundStatus(session.status) }
-          : session
-      ));
       return {
         ...tab,
-        sessions: [newSession, ...updatedSessions],
+        sessions: [newSession, ...tab.sessions],
         activeSessionId: newSession.id,
         activePaneId: nextLeaf.id,
         paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
@@ -316,12 +308,9 @@ export const createWorkspaceSessionActions = ({
             return {
               ...session,
               unread: 0,
-              status: restoreVisibleStatus(session),
+              status: session.status,
               lastActiveAt: nextActiveAt,
             };
-          }
-          if (session.id === currentTab.activeSessionId) {
-            return { ...session, status: toBackgroundStatus(session.status) };
           }
           return session;
         }),
@@ -334,7 +323,7 @@ export const createWorkspaceSessionActions = ({
         // The active session already changed locally.
       });
     }
-    const nextStatus = restoreVisibleStatus(nextSession);
+    const nextStatus = nextSession.status;
     void syncSessionPatch(tab.id, sessionId, {
       status: nextStatus,
       last_active_at: nextActiveAt,
@@ -371,7 +360,7 @@ export const createWorkspaceSessionActions = ({
         ...currentTab,
         sessions: sessions.map((item) => (
           item.id === nextActiveId
-            ? { ...item, unread: 0, status: restoreVisibleStatus(item), lastActiveAt: nextActiveAt }
+            ? { ...item, unread: 0, status: item.status, lastActiveAt: nextActiveAt }
             : item
         )),
         paneLayout: nextLayout,
@@ -418,8 +407,8 @@ export const createWorkspaceSessionActions = ({
         return {
           ...tab,
           sessions: remaining.map((item) => (
-            item.id === nextActiveId && item.status === "background"
-              ? { ...item, status: restoreVisibleStatus(item), unread: 0, lastActiveAt: Date.now() }
+            item.id === nextActiveId
+              ? { ...item, unread: 0, lastActiveAt: Date.now() }
               : item
           )),
           paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActiveId),
@@ -428,7 +417,7 @@ export const createWorkspaceSessionActions = ({
         };
       });
       if (nextSession) {
-        const nextStatus = restoreVisibleStatus(nextSession);
+        const nextStatus = nextSession.status;
         void syncSessionPatch(tabId, nextSession.id, {
           status: nextStatus,
           last_active_at: nextActiveAt,
@@ -458,9 +447,7 @@ export const createWorkspaceSessionActions = ({
         mode: archived?.mode ?? session.mode,
         snapshot: session,
       };
-      const existingSessions = tab.sessions
-        .filter((item) => item.id !== sessionId)
-        .map((item) => ({ ...item, status: toBackgroundStatus(item.status) }));
+      const existingSessions = tab.sessions.filter((item) => item.id !== sessionId);
       let remaining = existingSessions;
       if (wasActiveSession) {
         const draftSession = createDraftSessionForTab(tab, "branch");
@@ -470,15 +457,13 @@ export const createWorkspaceSessionActions = ({
       }
       const nextActive = remaining[0]?.id ?? sessionId;
       nextActiveSessionId = nextActive;
-      nextActiveStatus = remaining[0] ? restoreVisibleStatus(remaining[0]) : null;
+      nextActiveStatus = remaining[0] ? remaining[0].status : null;
       return {
         ...tab,
         sessions: remaining.map((item) => (
-          item.id === nextActive && item.status === "background"
-            ? { ...item, status: restoreVisibleStatus(item), unread: 0, lastActiveAt: nextActiveAt }
-            : item.id === nextActive && wasActiveSession
-              ? { ...item, unread: 0, lastActiveAt: nextActiveAt }
-              : item
+          item.id === nextActive
+            ? { ...item, unread: 0, lastActiveAt: nextActiveAt }
+            : item
         )),
         archive: [entry, ...tab.archive],
         paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActive),
@@ -542,16 +527,11 @@ export const createWorkspaceSessionActions = ({
         .filter((session) => (
           session.id !== target.replacedSessionId
           && session.id !== nextSession.id
-        ))
-        .map((session) => (
-          session.id === tab.activeSessionId
-            ? { ...session, status: toBackgroundStatus(session.status) }
-            : session
         ));
       return {
         ...tab,
         sessions: [
-          { ...nextSession, status: restoreVisibleStatus(nextSession) },
+          { ...nextSession, status: nextSession.status },
           ...remainingSessions,
         ],
         paneLayout: replacePaneNode(tab.paneLayout, target.paneId, (leaf) => ({
@@ -644,16 +624,6 @@ export const createWorkspaceSessionActions = ({
     }
   };
 
-  const settleSessionAfterExit = async (tabId: string, sessionId: string) => {
-    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
-    const session = tab?.sessions.find((item) => item.id === sessionId);
-    if (!tab || !session) return;
-
-    if (session.status !== "idle") {
-      await markSessionIdle(tabId, sessionId, t("agentExited"));
-    }
-  };
-
   return {
     buildDraftSessionMessages,
     createDraftSessionForTab,
@@ -668,7 +638,6 @@ export const createWorkspaceSessionActions = ({
     restoreSessionIntoPane,
     deleteSessionFromHistory,
     markSessionIdle,
-    settleSessionAfterExit,
   };
 };
 

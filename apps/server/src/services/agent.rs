@@ -264,6 +264,13 @@ pub(crate) fn agent_start(
         let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
         agents.insert(key.clone(), runtime.clone());
     }
+    let _ = sync_session_runtime_state(
+        state,
+        &workspace_id,
+        session_id_num,
+        SessionStatus::Idle,
+        true,
+    );
 
     emit_agent(
         &app,
@@ -358,17 +365,18 @@ pub(crate) fn agent_start(
             None,
         );
         let state: State<AppState> = state_handle.state();
-        let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
+        let should_mark_interrupted = if let Ok(mut agents) = state.agents.lock() {
             agents.remove(&key).is_some()
         } else {
             false
         };
-        if should_mark_idle {
-            let _ = set_session_status_if_not_archived(
+        if should_mark_interrupted {
+            let _ = sync_session_runtime_state(
                 state,
                 &workspace_id,
                 session_id_num,
-                SessionStatus::Idle,
+                SessionStatus::Interrupted,
+                false,
             );
         }
     });
@@ -391,21 +399,12 @@ pub(crate) fn agent_send(
     if let Some(handle) = writer.as_mut() {
         write_agent_input(&mut **handle, &input, append_newline.unwrap_or(true))?;
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = update_workspace_session(
+            let _ = sync_session_runtime_state(
                 state,
                 &workspace_id,
                 session_id_num,
-                SessionPatch {
-                    title: None,
-                    status: Some(SessionStatus::Waiting),
-                    mode: None,
-                    auto_feed: None,
-                    queue: None,
-                    messages: None,
-                    unread: None,
-                    last_active_at: Some(now_ts()),
-                    resume_id: None,
-                },
+                SessionStatus::Running,
+                true,
             );
         }
         Ok(())
@@ -421,11 +420,12 @@ pub(crate) fn agent_stop(
 ) -> Result<(), String> {
     stop_agent_runtime_without_status_update(&workspace_id, &session_id, state)?;
     if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = set_session_status_if_not_archived(
+        let _ = sync_session_runtime_state(
             state,
             &workspace_id,
             session_id_num,
             SessionStatus::Interrupted,
+            false,
         );
     }
     Ok(())
@@ -454,11 +454,12 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
     for (session_id, runtime) in runtimes {
         terminate_agent_runtime(runtime);
         if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = set_session_status_if_not_archived(
+            let _ = sync_session_runtime_state(
                 state,
                 workspace_id,
                 session_id_num,
                 SessionStatus::Interrupted,
+                false,
             );
         }
     }

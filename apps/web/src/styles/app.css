@@ -2876,14 +2876,6 @@ div.v-resizer[data-resize="right"]:hover {
   background: var(--accent);
 }
 
-.session-top-dot.waiting {
-  background: var(--warning);
-}
-
-.session-top-dot.suspended {
-  background: var(--text-tertiary);
-}
-
 .session-top-dot.idle {
   background: var(--text-tertiary);
 }
@@ -3133,14 +3125,6 @@ div.v-resizer[data-resize="right"]:hover {
 
 .panel.center-panel {
   background: var(--bg);
-}
-
-.panel-inner {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .sidebar-workbench {
@@ -6113,21 +6097,6 @@ pre.diff,
     0 0 10px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
-.session-top-dot.waiting,
-.session-top-dot.queued {
-  background: color-mix(in srgb, var(--warning) 84%, var(--accent-3) 16%) !important;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--warning) 34%, transparent),
-    0 0 0 2px color-mix(in srgb, var(--warning) 14%, transparent);
-}
-
-.session-top-dot.suspended {
-  background: color-mix(in srgb, var(--danger) 56%, var(--text-tertiary) 44%) !important;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent),
-    0 0 0 2px color-mix(in srgb, var(--danger-soft) 42%, transparent);
-}
-
 .session-top-dot.idle {
   background: color-mix(in srgb, var(--text-tertiary) 82%, var(--bg) 18%) !important;
   box-shadow:
@@ -6364,7 +6333,7 @@ pre.diff,
 
 .workspace-code-panel,
 .workspace-terminal-panel,
-.workspace-agent-shell .studio-panel {
+.workspace-agent-shell.studio-panel {
   min-height: 0;
   height: 100%;
 }
@@ -6976,7 +6945,7 @@ pre.diff,
   color: var(--text);
 }
 
-.workspace-agent-shell .studio-panel,
+.workspace-agent-shell.studio-panel,
 .workspace-code-panel,
 .workspace-terminal-panel {
   border-radius: 0 !important;
@@ -6997,7 +6966,7 @@ pre.diff,
   padding: 28px 18px;
 }
 
-.workspace-agent-shell .studio-panel {
+.workspace-agent-shell.studio-panel {
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--line) 84%, var(--accent) 16%);
   background: linear-gradient(
@@ -7009,7 +6978,7 @@ pre.diff,
 
 .workspace-code-panel,
 .workspace-terminal-panel,
-.workspace-agent-shell .studio-panel,
+.workspace-agent-shell.studio-panel,
 .workspace-code-editor,
 .workspace-code-sidebar {
   margin: 0;
@@ -7476,7 +7445,7 @@ pre.diff,
   border-bottom: 1px solid var(--border-muted);
 }
 
-.workspace-agent-shell .studio-panel,
+.workspace-agent-shell.studio-panel,
 .workspace-code-panel,
 .workspace-terminal-panel {
   padding: 8px !important;

@@ -186,9 +186,17 @@ export type WorkspaceRuntimeControllerEvent = {
   controller: WorkspaceControllerLease;
 };
 
+export type WorkspaceSessionState = {
+  session_id: string;
+  status: SessionStatus;
+  last_active_at: number;
+  resume_id?: string | null;
+};
+
 export type WorkspaceRuntimeStateEvent = {
   workspace_id: string;
-  view_state: BackendWorkspaceViewState;
+  view_state?: BackendWorkspaceViewState;
+  session_state?: WorkspaceSessionState;
 };
 
 export type WorkbenchLayout = {

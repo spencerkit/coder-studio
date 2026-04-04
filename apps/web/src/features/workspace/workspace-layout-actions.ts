@@ -14,8 +14,6 @@ import {
   replacePaneNode,
   updateSplitRatio,
 } from "../../shared/utils/panes";
-import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session";
-
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 
@@ -44,16 +42,13 @@ export const activateWorkspacePane = (
     activeSessionId: sessionId,
     sessions: tab.sessions.map((session) => {
       if (session.id === sessionId) {
-        return {
-          ...session,
-          unread: 0,
-          status: restoreVisibleStatus(session),
-          lastActiveAt: nextActiveAt,
-        };
-      }
-      if (session.id === tab.activeSessionId) {
-        return { ...session, status: toBackgroundStatus(session.status) };
-      }
+          return {
+            ...session,
+            unread: 0,
+            status: session.status,
+            lastActiveAt: nextActiveAt,
+          };
+        }
       return session;
     }),
   }));
