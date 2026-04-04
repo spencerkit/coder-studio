@@ -1609,6 +1609,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
     const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId);
     if (!restored) return;
+    if (action === "restore") {
+      const latestTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId);
+      const restoredSession = latestTab?.sessions.find((session) => session.id === record.sessionId);
+      if (latestTab && restoredSession) {
+        await startAgentSessionInPane(latestTab.activePaneId, latestTab, restoredSession);
+      }
+    }
     void refreshHistoryRecordsIfNeeded();
     setHistoryOpen(false);
   };

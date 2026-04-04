@@ -13,3 +13,15 @@ test("starting a session runtime reattaches the workspace runtime snapshot so te
     /const startSessionRuntimeInPane = async[\s\S]*?advanceWorkspaceSyncVersion\(tab\.id\);[\s\S]*?startSessionRuntime\([\s\S]*?attachWorkspaceRuntimeWithRetry\([\s\S]*?applyWorkspaceRuntimeSnapshot\(/,
   );
 });
+
+test("history restore starts the recovered session immediately on first click", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(record\.workspaceId, record\.sessionId\);[\s\S]*?if \(action === "restore"\)[\s\S]*?startAgentSessionInPane\(/,
+  );
+});
