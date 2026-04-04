@@ -1,5 +1,4 @@
 import type { Locale } from "../../i18n";
-import { BUILTIN_PROVIDER_MANIFESTS } from "../../features/providers/registry";
 import type {
   AppSettings,
   AppSettingsPayload,
@@ -23,6 +22,7 @@ const DEFAULT_IDLE_POLICY: AppSettingsPayload["general"]["idlePolicy"] = {
   maxActive: 3,
   pressure: true,
 };
+const DEFAULT_CLAUDE_EXECUTABLE = "claude";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -136,18 +136,75 @@ const setJsonPath = (
   return next;
 };
 
-const defaultProviderSettingsMap = (): Record<string, ProviderSettingsPayload> => (
-  Object.fromEntries(
-    BUILTIN_PROVIDER_MANIFESTS.map((manifest) => [
-      manifest.id,
-      { global: cloneJsonRecord(manifest.settingsDefaults) },
-    ]),
-  )
-);
+const tokenizeLegacyCommand = (command: string): string[] => {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
 
-const getDefaultProviderGlobalSettings = (providerId: string): Record<string, unknown> | null => {
-  const defaults = defaultProviderSettingsMap()[providerId]?.global;
-  return defaults ? cloneJsonRecord(defaults) : null;
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+
+    if (quote === null) {
+      if (/\s/.test(char)) {
+        if (current) {
+          tokens.push(current);
+          current = "";
+        }
+        continue;
+      }
+      if (char === "'" || char === "\"") {
+        quote = char;
+        continue;
+      }
+      if (char === "\\") {
+        const next = command[index + 1];
+        if (next && (/\s/.test(next) || next === "'" || next === "\"" || next === "\\")) {
+          current += next;
+          index += 1;
+          continue;
+        }
+        current += char;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (quote === "'") {
+      if (char === "'") {
+        quote = null;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (char === "\"") {
+      quote = null;
+      continue;
+    }
+    if (char === "\\") {
+      const next = command[index + 1];
+      if (next === "\"" || next === "\\" || next === "$" || next === "`") {
+        current += next;
+        index += 1;
+        continue;
+      }
+    }
+    current += char;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens;
+};
+
+const splitLegacyCommand = (command: string): { executable: string; startupArgs: string[] } => {
+  const tokens = tokenizeLegacyCommand(command.trim());
+  const [executable = DEFAULT_CLAUDE_EXECUTABLE, ...startupArgs] = tokens;
+  return { executable, startupArgs };
 };
 
 const cloneProviderSettingsMap = (
@@ -160,29 +217,6 @@ const cloneProviderSettingsMap = (
     ]),
   )
 );
-
-const cloneClaudeRuntimeProfile = (
-  profile: ClaudeRuntimeProfile,
-): ClaudeRuntimeProfile => ({
-  executable: profile.executable,
-  startupArgs: [...profile.startupArgs],
-  env: { ...profile.env },
-  settingsJson: cloneJsonRecord(profile.settingsJson),
-  globalConfigJson: cloneJsonRecord(profile.globalConfigJson),
-});
-
-const cloneCodexRuntimeProfile = (
-  profile: CodexRuntimeProfile,
-): CodexRuntimeProfile => ({
-  executable: profile.executable,
-  extraArgs: [...profile.extraArgs],
-  model: profile.model,
-  approvalPolicy: profile.approvalPolicy,
-  sandboxMode: profile.sandboxMode,
-  webSearch: profile.webSearch,
-  modelReasoningEffort: profile.modelReasoningEffort,
-  env: { ...profile.env },
-});
 
 const normalizeClaudeRuntimeProfile = (
   value: unknown,
@@ -226,114 +260,76 @@ const normalizeCodexRuntimeProfile = (
     executable,
     extraArgs,
     model: typeof source.model === "string" ? source.model : fallback.model,
-    approvalPolicy: typeof (source.approvalPolicy ?? source.approval_policy) === "string"
-      ? String(source.approvalPolicy ?? source.approval_policy)
-      : fallback.approvalPolicy,
-    sandboxMode: typeof (source.sandboxMode ?? source.sandbox_mode) === "string"
-      ? String(source.sandboxMode ?? source.sandbox_mode)
-      : fallback.sandboxMode,
-    webSearch: typeof (source.webSearch ?? source.web_search) === "string"
-      ? String(source.webSearch ?? source.web_search)
-      : fallback.webSearch,
-    modelReasoningEffort: typeof (
-      source.modelReasoningEffort ?? source.model_reasoning_effort
-    ) === "string"
-      ? String(source.modelReasoningEffort ?? source.model_reasoning_effort)
-      : fallback.modelReasoningEffort,
-    env: normalizeEnv(source.env ?? fallback.env),
+    apiKey: typeof (source.apiKey ?? source.api_key) === "string"
+      ? String(source.apiKey ?? source.api_key)
+      : fallback.apiKey,
+    baseUrl: typeof (source.baseUrl ?? source.base_url) === "string"
+      ? String(source.baseUrl ?? source.base_url)
+      : fallback.baseUrl,
   };
 };
 
-const formatCodexTomlString = (value: string) => JSON.stringify(value.trim());
-
-const buildCodexConfigOverrideArgs = (
-  profile: Pick<
-    CodexRuntimeProfile,
-    "model" | "approvalPolicy" | "sandboxMode" | "webSearch" | "modelReasoningEffort"
-  >,
-): string[] => {
-  const parts: string[] = [];
-
-  const append = (key: string, value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return;
-    }
-    parts.push("--config", `${key}=${formatCodexTomlString(trimmed)}`);
-  };
-
-  append("model", profile.model);
-  append("approval_policy", profile.approvalPolicy);
-  append("sandbox_mode", profile.sandboxMode);
-  append("web_search", profile.webSearch);
-  append("model_reasoning_effort", profile.modelReasoningEffort);
-
-  return parts;
+const DEFAULT_CLAUDE_RUNTIME_PROFILE: ClaudeRuntimeProfile = {
+  executable: "claude",
+  startupArgs: [],
+  env: {},
+  settingsJson: {},
+  globalConfigJson: {},
 };
 
-const formatClaudeRuntimeCommand = (profile: ClaudeRuntimeProfile): string => (
-  [profile.executable.trim(), ...profile.startupArgs.map((arg) => arg.trim()).filter(Boolean)]
-    .filter(Boolean)
-    .join(" ")
+const DEFAULT_CODEX_RUNTIME_PROFILE: CodexRuntimeProfile = {
+  executable: "codex",
+  extraArgs: [],
+  model: "",
+  apiKey: "",
+  baseUrl: "",
+};
+
+const getDefaultClaudeRuntimeProfile = (): ClaudeRuntimeProfile => (
+  structuredClone(DEFAULT_CLAUDE_RUNTIME_PROFILE)
 );
 
-const formatCodexRuntimeCommand = (profile: CodexRuntimeProfile): string => (
-  [
-    profile.executable.trim(),
-    ...profile.extraArgs.map((arg) => arg.trim()).filter(Boolean),
-    ...buildCodexConfigOverrideArgs(profile),
-  ]
-    .filter(Boolean)
-    .join(" ")
+const getDefaultCodexRuntimeProfile = (): CodexRuntimeProfile => (
+  structuredClone(DEFAULT_CODEX_RUNTIME_PROFILE)
 );
 
-const formatGenericRuntimeCommand = (globalSettings: Record<string, unknown>): string => {
-  const executable = typeof globalSettings.executable === "string"
-    ? globalSettings.executable.trim()
-    : "";
-  const argsSource = Array.isArray(globalSettings.startupArgs)
-    ? globalSettings.startupArgs
-    : Array.isArray(globalSettings.extraArgs)
-      ? globalSettings.extraArgs
-      : Array.isArray(globalSettings.args)
-        ? globalSettings.args
-        : [];
-  const args = argsSource.filter((entry): entry is string => typeof entry === "string")
-    .map((arg) => arg.trim())
-    .filter(Boolean);
-
-  return [executable, ...args].filter(Boolean).join(" ");
+const getDefaultProviderGlobalSettings = (providerId: string): Record<string, unknown> | null => {
+  if (providerId === "claude") {
+    return cloneJsonRecord(getDefaultClaudeRuntimeProfile());
+  }
+  if (providerId === "codex") {
+    return cloneJsonRecord(getDefaultCodexRuntimeProfile());
+  }
+  return null;
 };
 
-const resolveClaudeCompatibilityProfile = (payload: AppSettingsPayload): ClaudeRuntimeProfile => {
-  const fallbackProviders = defaultProviderSettingsMap();
-  return normalizeClaudeRuntimeProfile(
-    payload.providers.claude?.global,
-    normalizeClaudeRuntimeProfile(fallbackProviders.claude?.global, {
-      executable: "claude",
-      startupArgs: [],
-      env: {},
-      settingsJson: {},
-      globalConfigJson: {},
-    }),
-  );
-};
+const defaultProviderSettingsMap = (): Record<string, ProviderSettingsPayload> => ({
+  claude: {
+    global: cloneJsonRecord(getDefaultClaudeRuntimeProfile()),
+  },
+  codex: {
+    global: cloneJsonRecord(getDefaultCodexRuntimeProfile()),
+  },
+});
 
-const resolveCodexCompatibilityProfile = (payload: AppSettingsPayload): CodexRuntimeProfile => {
-  const fallbackProviders = defaultProviderSettingsMap();
-  return normalizeCodexRuntimeProfile(
-    payload.providers.codex?.global,
-    normalizeCodexRuntimeProfile(fallbackProviders.codex?.global, {
-      executable: "codex",
-      extraArgs: [],
-      model: "",
-      approvalPolicy: "",
-      sandboxMode: "",
-      webSearch: "",
-      modelReasoningEffort: "",
-      env: {},
-    }),
-  );
+const normalizeKnownProviderGlobalSettings = (
+  providerId: string,
+  value: unknown,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (providerId === "claude") {
+    return normalizeClaudeRuntimeProfile(
+      value,
+      normalizeClaudeRuntimeProfile(fallback, getDefaultClaudeRuntimeProfile()),
+    );
+  }
+  if (providerId === "codex") {
+    return normalizeCodexRuntimeProfile(
+      value,
+      normalizeCodexRuntimeProfile(fallback, getDefaultCodexRuntimeProfile()),
+    );
+  }
+  return normalizeJsonRecord(value, fallback);
 };
 
 const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPayload => ({
@@ -349,118 +345,6 @@ const cloneAppSettingsPayload = (settings: AppSettingsPayload): AppSettingsPaylo
   providers: cloneProviderSettingsMap(settings.providers),
 });
 
-export const canonicalizeProviders = (
-  settings: Pick<AppSettings, "providers" | "claude" | "codex">,
-): Record<string, ProviderSettingsPayload> => {
-  const providers = cloneProviderSettingsMap(settings.providers);
-  providers.claude = {
-    global: cloneJsonRecord(settings.claude.global),
-  };
-  providers.codex = {
-    global: cloneJsonRecord(settings.codex.global),
-  };
-  return providers;
-};
-
-const resolveRuntimeCommandForProvider = (
-  providerId: string,
-  providers: Record<string, ProviderSettingsPayload>,
-): string => {
-  const globalSettings = providers[providerId]?.global ?? getDefaultProviderGlobalSettings(providerId);
-  if (!globalSettings) {
-    return "";
-  }
-
-  if (providerId === "claude") {
-    return formatClaudeRuntimeCommand(
-      normalizeClaudeRuntimeProfile(globalSettings, resolveClaudeCompatibilityProfile({
-        general: {
-          locale: DEFAULT_LOCALE,
-          terminalCompatibilityMode: DEFAULT_TERMINAL_COMPATIBILITY_MODE,
-          completionNotifications: DEFAULT_COMPLETION_NOTIFICATIONS,
-          idlePolicy: DEFAULT_IDLE_POLICY,
-        },
-        agentDefaults: { provider: "claude" },
-        providers: defaultProviderSettingsMap(),
-      })),
-    );
-  }
-  if (providerId === "codex") {
-    return formatCodexRuntimeCommand(
-      normalizeCodexRuntimeProfile(globalSettings, resolveCodexCompatibilityProfile({
-        general: {
-          locale: DEFAULT_LOCALE,
-          terminalCompatibilityMode: DEFAULT_TERMINAL_COMPATIBILITY_MODE,
-          completionNotifications: DEFAULT_COMPLETION_NOTIFICATIONS,
-          idlePolicy: DEFAULT_IDLE_POLICY,
-        },
-        agentDefaults: { provider: "claude" },
-        providers: defaultProviderSettingsMap(),
-      })),
-    );
-  }
-
-  return formatGenericRuntimeCommand(globalSettings);
-};
-
-export const resolveRuntimeCommandFromPayload = (
-  payload: AppSettingsPayload,
-  providerId = payload.agentDefaults.provider,
-): string => resolveRuntimeCommandForProvider(providerId, payload.providers);
-
-export const resolveRuntimeCommandFromSettings = (
-  settings: Pick<AppSettings, "providers" | "claude" | "codex" | "agentDefaults">,
-  providerId = settings.agentDefaults.provider,
-): string => resolveRuntimeCommandForProvider(
-  providerId,
-  canonicalizeProviders(settings as Pick<AppSettings, "providers" | "claude" | "codex">),
-);
-
-const syncCompatibilityFields = (payload: AppSettingsPayload): AppSettings => {
-  const cloned = cloneAppSettingsPayload(payload);
-  const claudeGlobal = resolveClaudeCompatibilityProfile(cloned);
-  const codexGlobal = resolveCodexCompatibilityProfile(cloned);
-
-  cloned.providers.claude = {
-    global: claudeGlobal,
-  };
-  cloned.providers.codex = {
-    global: codexGlobal,
-  };
-
-  return {
-    ...cloned,
-    claude: {
-      global: claudeGlobal,
-    },
-    codex: {
-      global: codexGlobal,
-    },
-    agentCommand: resolveRuntimeCommandFromPayload(cloned),
-    idlePolicy: { ...cloned.general.idlePolicy },
-    completionNotifications: { ...cloned.general.completionNotifications },
-    terminalCompatibilityMode: cloned.general.terminalCompatibilityMode,
-  };
-};
-
-const refreshDerivedCompatibilityFields = (settings: AppSettings): AppSettings => {
-  const providers = canonicalizeProviders(settings);
-  const payload: AppSettingsPayload = cloneAppSettingsPayload({
-    general: {
-      locale: settings.general.locale,
-      terminalCompatibilityMode: settings.general.terminalCompatibilityMode,
-      completionNotifications: { ...settings.general.completionNotifications },
-      idlePolicy: { ...settings.general.idlePolicy },
-    },
-    agentDefaults: {
-      provider: settings.agentDefaults.provider,
-    },
-    providers,
-  });
-
-  return syncCompatibilityFields(payload);
-};
-
 const normalizeProvidersMap = (
   value: unknown,
   fallback: Record<string, ProviderSettingsPayload>,
@@ -474,9 +358,10 @@ const normalizeProvidersMap = (
     const source = isRecord(providerValue) ? providerValue : {};
     const fallbackGlobal = next[providerId]?.global ?? {};
     next[providerId] = {
-      global: mergeJsonObjects(
+      global: normalizeKnownProviderGlobalSettings(
+        providerId,
+        mergeJsonObjects(fallbackGlobal, isRecord(source.global) ? source.global : {}),
         fallbackGlobal,
-        isRecord(source.global) ? source.global : {},
       ),
     };
   }
@@ -492,36 +377,20 @@ const withLegacyProviderSections = (
 
   if (legacy.claude?.global) {
     next.claude = {
-      global: normalizeClaudeRuntimeProfile(
+      global: normalizeKnownProviderGlobalSettings(
+        "claude",
         legacy.claude.global,
-        resolveClaudeCompatibilityProfile({
-          general: {
-            locale: DEFAULT_LOCALE,
-            terminalCompatibilityMode: DEFAULT_TERMINAL_COMPATIBILITY_MODE,
-            completionNotifications: DEFAULT_COMPLETION_NOTIFICATIONS,
-            idlePolicy: DEFAULT_IDLE_POLICY,
-          },
-          agentDefaults: { provider: "claude" },
-          providers: next,
-        }),
+        next.claude?.global ?? {},
       ),
     };
   }
 
   if (legacy.codex?.global) {
     next.codex = {
-      global: normalizeCodexRuntimeProfile(
+      global: normalizeKnownProviderGlobalSettings(
+        "codex",
         legacy.codex.global,
-        resolveCodexCompatibilityProfile({
-          general: {
-            locale: DEFAULT_LOCALE,
-            terminalCompatibilityMode: DEFAULT_TERMINAL_COMPATIBILITY_MODE,
-            completionNotifications: DEFAULT_COMPLETION_NOTIFICATIONS,
-            idlePolicy: DEFAULT_IDLE_POLICY,
-          },
-          agentDefaults: { provider: "claude" },
-          providers: next,
-        }),
+        next.codex?.global ?? {},
       ),
     };
   }
@@ -530,14 +399,10 @@ const withLegacyProviderSections = (
 };
 
 export const toAppSettingsPayload = (settings: AppSettings): AppSettingsPayload => (
-  cloneAppSettingsPayload({
-    general: settings.general,
-    agentDefaults: settings.agentDefaults,
-    providers: canonicalizeProviders(settings),
-  })
+  cloneAppSettingsPayload(settings)
 );
 
-export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
+export const defaultAppSettings = (): AppSettings => cloneAppSettingsPayload({
   general: {
     locale: DEFAULT_LOCALE,
     terminalCompatibilityMode: DEFAULT_TERMINAL_COMPATIBILITY_MODE,
@@ -551,7 +416,7 @@ export const defaultAppSettings = (): AppSettings => syncCompatibilityFields({
 });
 
 export const cloneAppSettings = (settings: AppSettings): AppSettings => (
-  refreshDerivedCompatibilityFields(settings)
+  cloneAppSettingsPayload(settings)
 );
 
 export const normalizeAppSettings = (
@@ -598,7 +463,22 @@ export const normalizeAppSettings = (
     providers,
   };
 
-  return syncCompatibilityFields(payload);
+  if (typeof legacy.agentCommand === "string" && legacy.agentCommand.trim()) {
+    const { executable, startupArgs } = splitLegacyCommand(legacy.agentCommand);
+    payload.providers.claude = {
+      global: normalizeKnownProviderGlobalSettings(
+        "claude",
+        {
+          ...(payload.providers.claude?.global ?? {}),
+          executable,
+          startupArgs,
+        },
+        payload.providers.claude?.global ?? {},
+      ),
+    };
+  }
+
+  return cloneAppSettingsPayload(payload);
 };
 
 export const applyGeneralSettingsPatch = (
@@ -635,7 +515,7 @@ export const applyGeneralSettingsPatch = (
     };
   }
 
-  return refreshDerivedCompatibilityFields(next);
+  return next;
 };
 
 export const applyAgentDefaultsPatch = (
@@ -648,7 +528,7 @@ export const applyAgentDefaultsPatch = (
     ...patch,
     provider: typeof patch.provider === "string" && patch.provider ? patch.provider : next.agentDefaults.provider,
   };
-  return refreshDerivedCompatibilityFields(next);
+  return next;
 };
 
 export const resolveProviderGlobalSettings = (
@@ -669,22 +549,13 @@ export const applyProviderGlobalPatch = (
   const next = cloneAppSettings(settings);
   const currentGlobal = next.providers[providerId]?.global ?? resolveProviderGlobalSettings(next, providerId);
 
+  const nextGlobal = Array.isArray(pathOrPatch)
+    ? setJsonPath(currentGlobal, pathOrPatch, value)
+    : mergeJsonObjects(currentGlobal, pathOrPatch);
+
   next.providers[providerId] = {
-    global: Array.isArray(pathOrPatch)
-      ? setJsonPath(currentGlobal, pathOrPatch, value)
-      : mergeJsonObjects(currentGlobal, pathOrPatch),
+    global: normalizeKnownProviderGlobalSettings(providerId, nextGlobal, currentGlobal),
   };
 
-  if (providerId === "claude") {
-    next.claude = {
-      global: normalizeClaudeRuntimeProfile(next.providers.claude.global, next.claude.global),
-    };
-  }
-  if (providerId === "codex") {
-    next.codex = {
-      global: normalizeCodexRuntimeProfile(next.providers.codex.global, next.codex.global),
-    };
-  }
-
-  return refreshDerivedCompatibilityFields(next);
+  return next;
 };

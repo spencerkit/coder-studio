@@ -18,10 +18,10 @@ import {
   clearStoredAppSettings,
   cloneAppSettings,
   readStoredAppSettings,
-} from "../../shared/app/settings";
+} from "../../shared/app/settings-storage";
 import {
   defaultAppSettings,
-} from "../../shared/app/claude-settings";
+} from "../../shared/app/app-settings";
 import {
   applyAppSettingsUpdater,
   createAppSettingsDraftStore,

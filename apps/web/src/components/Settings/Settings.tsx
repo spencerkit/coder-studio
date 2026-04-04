@@ -5,7 +5,7 @@ import {
   getProviderPanelId,
 } from "../../features/providers/registry";
 import { readAppBuildMetadata } from "../../shared/app/build-metadata";
-import { getSettingsDraftLocale } from "../../shared/app/claude-settings";
+import { getSettingsLocale } from "../../shared/app/app-settings";
 import { SettingsAppearanceIcon, SettingsConfigIcon, SettingsGeneralIcon } from "../icons";
 import { ProviderSettingsPanel } from "./ProviderSettingsPanel";
 
@@ -51,7 +51,7 @@ export const Settings = ({
   onSelectLocale,
   t,
 }: SettingsProps) => {
-  const selectedLocale = getSettingsDraftLocale(settingsDraft);
+  const selectedLocale = getSettingsLocale(settingsDraft);
   const activeProviderId = getActiveProviderId(activeSettingsPanel);
   const buildMetadata = readAppBuildMetadata();
 

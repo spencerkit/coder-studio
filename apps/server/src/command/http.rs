@@ -115,6 +115,12 @@ struct AppSettingsUpdateRequest {
 }
 
 #[derive(Deserialize)]
+struct ProviderRuntimePreviewRequest {
+    provider: ProviderId,
+    target: ExecTarget,
+}
+
+#[derive(Deserialize)]
 struct PathTargetRequest {
     path: String,
     target: ExecTarget,
@@ -637,6 +643,20 @@ fn dispatch_rpc(
                 serde_json::from_value(payload).map_err(|e| rpc_bad_request(e.to_string()))?;
             serde_json::to_value(
                 app_settings_update(req.settings, app.state()).map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "provider_runtime_preview" => {
+            let req: ProviderRuntimePreviewRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            let settings = load_or_default_app_settings(app.state()).map_err(rpc_bad_request)?;
+            serde_json::to_value(
+                crate::services::provider_registry::provider_runtime_preview(
+                    &settings,
+                    &req.provider,
+                    &req.target,
+                )
+                .map_err(rpc_bad_request)?,
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
@@ -2421,18 +2441,20 @@ mod tests {
                             "pressure": true
                         }
                     },
-                    "claude": {
-                        "global": {
-                            "executable": "claude-nightly",
-                            "startup_args": ["--dangerously-skip-permissions"],
-                            "env": {
-                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
-                            },
-                            "settings_json": {
-                                "model": "sonnet"
-                            },
-                            "global_config_json": {
-                                "showTurnDuration": true
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": "claude-nightly",
+                                "startup_args": ["--dangerously-skip-permissions"],
+                                "env": {
+                                    "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                                },
+                                "settings_json": {
+                                    "model": "sonnet"
+                                },
+                                "global_config_json": {
+                                    "showTurnDuration": true
+                                }
                             }
                         }
                     }
@@ -2469,17 +2491,12 @@ mod tests {
                     "general": {
                         "locale": "zh"
                     },
-                    "claude": {
-                        "global": {
-                            "executable": "claude-nightly",
-                            "startup_args": [],
-                            "env": {
-                                "TEST_MARKER": "persisted-value"
-                            },
-                            "settings_json": {
-                                "model": "opus"
-                            },
-                            "global_config_json": {}
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": "claude-nightly",
+                                "startup_args": ["--dangerously-skip-permissions"]
+                            }
                         }
                     }
                 }
@@ -2493,10 +2510,12 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "executable": executable,
-                            "startup_args": startup_args
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": executable,
+                                "startup_args": startup_args
+                            }
                         }
                     }
                 }
@@ -2508,11 +2527,7 @@ mod tests {
         let claude = claude_profile(&updated);
 
         assert_eq!(updated.general.locale, "zh");
-        assert_eq!(
-            claude.env.get("TEST_MARKER").map(String::as_str),
-            Some("persisted-value")
-        );
-        assert_eq!(claude.settings_json["model"], "opus");
+        assert_eq!(claude.startup_args, startup_args);
     }
 
     #[test]
@@ -2531,14 +2546,16 @@ mod tests {
                             "only_when_background": false
                         }
                     },
-                    "claude": {
-                        "global": {
-                            "startup_args": ["--existing"],
-                            "settings_json": {
-                                "model": "opus"
-                            },
-                            "global_config_json": {
-                                "showTurnDuration": true
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "startup_args": ["--existing"],
+                                "settings_json": {
+                                    "model": "opus"
+                                },
+                                "global_config_json": {
+                                    "showTurnDuration": true
+                                }
                             }
                         }
                     }
@@ -2558,16 +2575,18 @@ mod tests {
                             "enabled": false
                         }
                     },
-                    "claude": {
-                        "global": {
-                            "startupArgs": ["--verbose"],
-                            "settingsJson": {
-                                "model": "opus",
-                                "permissionMode": "acceptEdits"
-                            },
-                            "globalConfigJson": {
-                                "showTurnDuration": true,
-                                "theme": "dark"
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "startupArgs": ["--verbose"],
+                                "settingsJson": {
+                                    "model": "opus",
+                                    "permissionMode": "acceptEdits"
+                                },
+                                "globalConfigJson": {
+                                    "showTurnDuration": true,
+                                    "theme": "dark"
+                                }
                             }
                         }
                     }
@@ -2626,18 +2645,20 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "env": {
-                                "TEST_MARKER": "persisted-value",
-                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
-                            },
-                            "settings_json": {
-                                "model": "opus",
-                                "permissionMode": "acceptEdits"
-                            },
-                            "global_config_json": {
-                                "showTurnDuration": true
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "env": {
+                                    "TEST_MARKER": "persisted-value",
+                                    "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                                },
+                                "settings_json": {
+                                    "model": "opus",
+                                    "permissionMode": "acceptEdits"
+                                },
+                                "global_config_json": {
+                                    "showTurnDuration": true
+                                }
                             }
                         }
                     }
@@ -2652,15 +2673,17 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "env": {
-                                "ANTHROPIC_BASE_URL": "https://next.example"
-                            },
-                            "settings_json": {
-                                "permissionMode": "plan"
-                            },
-                            "global_config_json": {}
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "env": {
+                                    "ANTHROPIC_BASE_URL": "https://next.example"
+                                },
+                                "settings_json": {
+                                    "permissionMode": "plan"
+                                },
+                                "global_config_json": {}
+                            }
                         }
                     }
                 }
@@ -2700,14 +2723,14 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "codex": {
-                        "global": {
-                            "model": "gpt-5.4",
-                            "approvalPolicy": "on-request",
-                            "sandboxMode": "workspace-write",
-                            "webSearch": "live",
-                            "modelReasoningEffort": "high",
-                            "extraArgs": ["--full-auto"]
+                    "providers": {
+                        "codex": {
+                            "global": {
+                                "model": "gpt-5.4",
+                                "apiKey": "codex-key",
+                                "baseUrl": "https://codex.example/v1",
+                                "extraArgs": ["--full-auto"]
+                            }
                         }
                     }
                 }
@@ -2719,11 +2742,90 @@ mod tests {
         let codex = codex_profile(&updated);
 
         assert_eq!(codex.model, "gpt-5.4");
-        assert_eq!(codex.approval_policy, "on-request");
-        assert_eq!(codex.sandbox_mode, "workspace-write");
-        assert_eq!(codex.web_search, "live");
-        assert_eq!(codex.model_reasoning_effort, "high");
+        assert_eq!(codex.api_key, "codex-key");
+        assert_eq!(codex.base_url, "https://codex.example/v1");
         assert_eq!(codex.extra_args, vec!["--full-auto"]);
+    }
+
+    #[test]
+    fn provider_runtime_preview_returns_claude_display_command_from_adapter() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": "claude-nightly",
+                                "startup_args": ["--verbose"]
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let preview = dispatch_rpc(
+            &app,
+            "provider_runtime_preview",
+            json!({
+                "provider": "claude",
+                "target": { "type": "native" }
+            }),
+            &authorized,
+        )
+        .expect("preview rpc should succeed");
+
+        assert_eq!(preview["provider"], "claude");
+        assert_eq!(preview["display_command"], "claude-nightly --verbose");
+    }
+
+    #[test]
+    fn provider_runtime_preview_returns_codex_display_command_from_adapter() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "providers": {
+                        "codex": {
+                            "global": {
+                                "executable": "codex",
+                                "extra_args": ["--full-auto"],
+                                "model": "gpt-5.4",
+                                "api_key": "codex-key",
+                                "base_url": "https://codex.example/v1"
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let preview = dispatch_rpc(
+            &app,
+            "provider_runtime_preview",
+            json!({
+                "provider": "codex",
+                "target": { "type": "native" }
+            }),
+            &authorized,
+        )
+        .expect("preview rpc should succeed");
+
+        assert_eq!(preview["provider"], "codex");
+        assert_eq!(preview["display_command"], "codex --full-auto");
     }
 
     #[test]
@@ -2743,12 +2845,14 @@ mod tests {
                     "general": {
                         "locale": "zh"
                     },
-                    "claude": {
-                        "global": {
-                            "executable": "claude-nightly",
-                            "startup_args": [],
-                            "env": {
-                                "TEST_MARKER": "server-resolved"
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": "claude-nightly",
+                                "startup_args": [],
+                                "env": {
+                                    "TEST_MARKER": "server-resolved"
+                                }
                             }
                         }
                     }
@@ -2764,10 +2868,12 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "executable": executable,
-                            "startup_args": startup_args
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": executable,
+                                "startup_args": startup_args
+                            }
                         }
                     }
                 }
@@ -2873,12 +2979,14 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "codex": {
-                        "global": {
-                            "executable": test_agent_marker_profile(".agent-start-provider-marker").0,
-                            "extra_args": test_agent_marker_profile(".agent-start-provider-marker").1,
-                            "env": {
-                                "TEST_MARKER": "codex-provider"
+                    "providers": {
+                        "codex": {
+                            "global": {
+                                "executable": test_agent_marker_profile(".agent-start-provider-marker").0,
+                                "extra_args": test_agent_marker_profile(".agent-start-provider-marker").1,
+                                "env": {
+                                    "TEST_MARKER": "codex-provider"
+                                }
                             }
                         }
                     }
@@ -2961,12 +3069,14 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "executable": test_agent_marker_profile(".session-runtime-start-marker").0,
-                            "startup_args": test_agent_marker_profile(".session-runtime-start-marker").1,
-                            "env": {
-                                "TEST_MARKER": "session-runtime-started"
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": test_agent_marker_profile(".session-runtime-start-marker").0,
+                                "startup_args": test_agent_marker_profile(".session-runtime-start-marker").1,
+                                "env": {
+                                    "TEST_MARKER": "session-runtime-started"
+                                }
                             }
                         }
                     }
@@ -3060,12 +3170,14 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "claude": {
-                        "global": {
-                            "executable": test_agent_launch_profile().0,
-                            "startup_args": test_agent_launch_profile().1,
-                            "env": {
-                                "TEST_MARKER": "resume-77"
+                    "providers": {
+                        "claude": {
+                            "global": {
+                                "executable": test_agent_launch_profile().0,
+                                "startup_args": test_agent_launch_profile().1,
+                                "env": {
+                                    "TEST_MARKER": "resume-77"
+                                }
                             }
                         }
                     }
@@ -3145,10 +3257,12 @@ mod tests {
             "app_settings_update",
             json!({
                 "settings": {
-                    "codex": {
-                        "global": {
-                            "executable": "codex",
-                            "extra_args": ["--full-auto"]
+                    "providers": {
+                        "codex": {
+                            "global": {
+                                "executable": "codex",
+                                "extra_args": ["--full-auto"]
+                            }
                         }
                     }
                 }

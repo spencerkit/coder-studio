@@ -4,8 +4,10 @@ import { createTranslator } from '../apps/web/src/i18n';
 import {
   cloneAppSettings,
   defaultAppSettings,
+  getSettingsLocale,
   readStoredAppSettings,
-} from '../apps/web/src/shared/app/settings';
+} from '../apps/web/src/shared/app/settings-storage';
+import { appSettingsPayloadEquals, toAppSettingsPayload } from '../apps/web/src/shared/app/app-settings';
 
 type LocalStorageMock = {
   getItem: (key: string) => string | null;
@@ -42,15 +44,24 @@ test('defaultAppSettings enables background-only completion notifications', () =
   assert.equal(settings.general.locale, 'en');
   assert.equal(settings.general.completionNotifications.enabled, true);
   assert.equal(settings.general.completionNotifications.onlyWhenBackground, true);
-  assert.equal(settings.claude.global.executable, 'claude');
-  assert.equal(settings.agentCommand, 'claude');
+  assert.equal(settings.providers.claude.global.executable, 'claude');
+  assert.deepEqual(settings, toAppSettingsPayload(settings));
+  assert.equal(Reflect.has(settings, 'claude'), false);
+  assert.equal(Reflect.has(settings, 'codex'), false);
+  assert.equal(Reflect.has(settings, 'agentCommand'), false);
+  assert.equal(Reflect.has(settings, 'idlePolicy'), false);
+  assert.equal(Reflect.has(settings, 'completionNotifications'), false);
+  assert.equal(Reflect.has(settings, 'terminalCompatibilityMode'), false);
 });
 
 test('cloneAppSettings creates independent nested settings objects', () => {
   const original = defaultAppSettings();
-  original.claude.global.env.ANTHROPIC_BASE_URL = 'https://anthropic.example';
-  original.claude.global.settingsJson = { model: 'sonnet' };
-  original.claude.global.globalConfigJson = { showTurnDuration: true };
+  original.providers.claude.global = {
+    ...original.providers.claude.global,
+    env: { ANTHROPIC_BASE_URL: 'https://anthropic.example' },
+    settingsJson: { model: 'sonnet' },
+    globalConfigJson: { showTurnDuration: true },
+  };
   const cloned = cloneAppSettings(original);
 
   assert.notStrictEqual(cloned, original);
@@ -60,16 +71,11 @@ test('cloneAppSettings creates independent nested settings objects', () => {
     cloned.general.completionNotifications,
     original.general.completionNotifications,
   );
-  assert.notStrictEqual(cloned.claude, original.claude);
-  assert.notStrictEqual(cloned.claude.global, original.claude.global);
-  assert.notStrictEqual(cloned.claude.global.env, original.claude.global.env);
-  assert.notStrictEqual(cloned.claude.global.settingsJson, original.claude.global.settingsJson);
-  assert.notStrictEqual(
-    cloned.claude.global.globalConfigJson,
-    original.claude.global.globalConfigJson,
-  );
+  assert.notStrictEqual(cloned.providers, original.providers);
+  assert.notStrictEqual(cloned.providers.claude, original.providers.claude);
+  assert.notStrictEqual(cloned.providers.claude.global, original.providers.claude.global);
   assert.deepEqual(cloned, original);
-  assert.ok(!('overrides' in cloned.claude));
+  assert.equal(Reflect.has(cloned, 'claude'), false);
 });
 
 test('readStoredAppSettings returns null without browser storage', () => {
@@ -101,7 +107,7 @@ test('readStoredAppSettings falls back cleanly for malformed JSON', () => {
   );
 });
 
-test('readStoredAppSettings hydrates backend-shaped settings and derived compatibility fields', () => {
+test('readStoredAppSettings hydrates canonical provider settings from legacy browser storage', () => {
   withMockWindow(
     {
       getItem: () =>
@@ -144,11 +150,11 @@ test('readStoredAppSettings hydrates backend-shaped settings and derived compati
       assert.ok(settings);
       assert.equal(settings.general.locale, 'zh');
       assert.equal(settings.general.terminalCompatibilityMode, 'compatibility');
-      assert.equal(settings.claude.global.executable, 'claude-nightly');
-      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
-      assert.ok(!('overrides' in settings.claude));
-      assert.equal(settings.agentCommand, 'claude-nightly --verbose');
-      assert.deepEqual(settings.completionNotifications, {
+      assert.equal(settings.providers.claude.global.executable, 'claude-nightly');
+      assert.deepEqual(settings.providers.claude.global.startupArgs, ['--verbose']);
+      assert.equal(Reflect.has(settings, 'claude'), false);
+      assert.equal(Reflect.has(settings, 'agentCommand'), false);
+      assert.deepEqual(settings.general.completionNotifications, {
         enabled: false,
         onlyWhenBackground: false,
       });
@@ -174,8 +180,8 @@ test('readStoredAppSettings migrates legacy launch command into backend-backed s
       const settings = readStoredAppSettings();
 
       assert.ok(settings);
-      assert.equal(settings.claude.global.executable, 'custom-claude');
-      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
+      assert.equal(settings.providers.claude.global.executable, 'custom-claude');
+      assert.deepEqual(settings.providers.claude.global.startupArgs, ['--verbose']);
       assert.deepEqual(settings.general.completionNotifications, {
         enabled: false,
         onlyWhenBackground: false,
@@ -209,6 +215,23 @@ test('readStoredAppSettings preserves valid values and falls back for missing or
       });
     },
   );
+});
+
+test('getSettingsLocale reads locale from general settings', () => {
+  const settings = defaultAppSettings();
+  settings.general.locale = 'zh';
+
+  assert.equal(getSettingsLocale(settings), 'zh');
+});
+
+test('appSettingsPayloadEquals compares canonical payload changes', () => {
+  const left = defaultAppSettings();
+  const right = cloneAppSettings(left);
+
+  assert.equal(appSettingsPayloadEquals(left, right), true);
+
+  right.general.idlePolicy.idleMinutes = left.general.idlePolicy.idleMinutes + 10;
+  assert.equal(appSettingsPayloadEquals(left, right), false);
 });
 
 test('translator exposes completion reminder copy in English and Chinese', () => {

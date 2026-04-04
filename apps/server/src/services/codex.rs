@@ -1,36 +1,8 @@
 use crate::*;
 
-const CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS: u64 = 120;
-
 pub(crate) struct CodexProviderAdapter;
 
 static CODEX_PROVIDER_ADAPTER: CodexProviderAdapter = CodexProviderAdapter;
-
-fn push_codex_config_override(parts: &mut Vec<String>, key: &str, value: &str) {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-    parts.push("--config".to_string());
-    parts.push(format!(
-        "{key}={}",
-        toml::Value::String(trimmed.to_string())
-    ));
-}
-
-fn build_codex_config_override_args(profile: &CodexRuntimeProfile) -> Vec<String> {
-    let mut parts = Vec::new();
-    push_codex_config_override(&mut parts, "model", &profile.model);
-    push_codex_config_override(&mut parts, "approval_policy", &profile.approval_policy);
-    push_codex_config_override(&mut parts, "sandbox_mode", &profile.sandbox_mode);
-    push_codex_config_override(&mut parts, "web_search", &profile.web_search);
-    push_codex_config_override(
-        &mut parts,
-        "model_reasoning_effort",
-        &profile.model_reasoning_effort,
-    );
-    parts
-}
 
 fn build_codex_feature_args() -> Vec<String> {
     Vec::new()
@@ -82,7 +54,6 @@ pub(crate) fn build_codex_start_invocation(profile: &CodexRuntimeProfile) -> (St
         .filter(|arg| !arg.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    args.extend(build_codex_config_override_args(profile));
     args.extend(build_codex_feature_args());
     (program, args)
 }
@@ -127,7 +98,6 @@ pub(crate) fn build_codex_resume_invocation(
             .filter(|arg| !arg.is_empty())
             .map(ToString::to_string),
     );
-    args.extend(build_codex_config_override_args(profile));
     args.extend(build_codex_feature_args());
     (program, args)
 }
@@ -191,13 +161,7 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
-            runtime_env: profile.env,
-            input_policy: crate::services::provider_registry::ProviderInputPolicy {
-                first_submit_strategy:
-                    crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
-                        delay_ms: CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS,
-                    },
-            },
+            runtime_env: Default::default(),
         })
     }
 
@@ -232,13 +196,7 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
-            runtime_env: profile.env,
-            input_policy: crate::services::provider_registry::ProviderInputPolicy {
-                first_submit_strategy:
-                    crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
-                        delay_ms: CODEX_FIRST_SUBMIT_NEWLINE_DELAY_MS,
-                    },
-            },
+            runtime_env: Default::default(),
         })
     }
 
@@ -459,7 +417,6 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -486,11 +443,8 @@ mod tests {
                     executable: "codex-current".into(),
                     extra_args: vec!["--full-auto".into()],
                     model: "gpt-5.4".into(),
-                    approval_policy: "on-request".into(),
-                    sandbox_mode: "workspace-write".into(),
-                    web_search: "live".into(),
-                    model_reasoning_effort: "high".into(),
-                    env: BTreeMap::from([("OPENAI_API_KEY".into(), "secret".into())]),
+                    api_key: "codex-key".into(),
+                    base_url: "https://codex.example/v1".into(),
                 },
             )
             .unwrap();
@@ -507,14 +461,20 @@ mod tests {
         assert_eq!(native.executable, "codex-current");
         assert_eq!(native.extra_args, vec!["--full-auto"]);
         assert_eq!(native.model, "gpt-5.4");
-        assert_eq!(native.approval_policy, "on-request");
-        assert_eq!(native.sandbox_mode, "workspace-write");
-        assert_eq!(native.web_search, "live");
-        assert_eq!(native.model_reasoning_effort, "high");
-        assert_eq!(
-            native.env.get("OPENAI_API_KEY").map(String::as_str),
-            Some("secret")
-        );
+        assert_eq!(native.api_key, "codex-key");
+        assert_eq!(native.base_url, "https://codex.example/v1");
+    }
+
+    #[test]
+    fn codex_adapter_uses_immediate_newline_for_first_submit() {
+        let launch = adapter()
+            .build_start(&AppSettingsPayload::default(), &ExecTarget::Native)
+            .expect("codex launch config");
+
+        let display_command =
+            crate::services::session_runtime::launch_spec_display_command(&launch.launch_spec);
+
+        assert_eq!(display_command, "codex");
     }
 
     #[test]
@@ -586,11 +546,8 @@ mod tests {
             executable: "codex".into(),
             extra_args: vec!["--full-auto".into()],
             model: String::new(),
-            approval_policy: String::new(),
-            sandbox_mode: String::new(),
-            web_search: String::new(),
-            model_reasoning_effort: String::new(),
-            env: BTreeMap::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         };
 
         assert_eq!(
@@ -603,87 +560,19 @@ mod tests {
         );
     }
 
-    fn expected_config_args(target: &ExecTarget, values: &[(&str, &str)]) -> String {
-        values
-            .iter()
-            .flat_map(|(key, value)| {
-                [
-                    crate::services::agent_client::escape_agent_command_part(target, "--config"),
-                    crate::services::agent_client::escape_agent_command_part(
-                        target,
-                        &format!("{key}={}", toml::Value::String((*value).to_string())),
-                    ),
-                ]
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
     #[test]
-    fn build_codex_commands_append_structured_config_overrides() {
-        let target = ExecTarget::Native;
+    fn build_codex_invocations_only_include_startup_args() {
         let profile = CodexRuntimeProfile {
             executable: "codex".into(),
             extra_args: vec!["--full-auto".into()],
             model: "gpt-5.4".into(),
-            approval_policy: "on-request".into(),
-            sandbox_mode: "workspace-write".into(),
-            web_search: "live".into(),
-            model_reasoning_effort: "high".into(),
-            env: BTreeMap::new(),
-        };
-        let expected_config = expected_config_args(
-            &target,
-            &[
-                ("model", "gpt-5.4"),
-                ("approval_policy", "on-request"),
-                ("sandbox_mode", "workspace-write"),
-                ("web_search", "live"),
-                ("model_reasoning_effort", "high"),
-            ],
-        );
-
-        assert_eq!(
-            build_codex_start_command(&target, &profile),
-            format!("codex --full-auto {expected_config}")
-        );
-        assert_eq!(
-            build_codex_resume_command(&target, &profile, "resume-123"),
-            format!("codex resume resume-123 --full-auto {expected_config}")
-        );
-    }
-
-    #[test]
-    fn build_codex_invocations_split_program_and_args() {
-        let profile = CodexRuntimeProfile {
-            executable: "codex".into(),
-            extra_args: vec!["--full-auto".into()],
-            model: "gpt-5.4".into(),
-            approval_policy: "on-request".into(),
-            sandbox_mode: "workspace-write".into(),
-            web_search: "live".into(),
-            model_reasoning_effort: "high".into(),
-            env: BTreeMap::new(),
+            api_key: "codex-key".into(),
+            base_url: "https://codex.example/v1".into(),
         };
 
         assert_eq!(
             build_codex_start_invocation(&profile),
-            (
-                "codex".to_string(),
-                vec![
-                    "--full-auto".to_string(),
-                    "--config".to_string(),
-                    "model=\"gpt-5.4\"".to_string(),
-                    "--config".to_string(),
-                    "approval_policy=\"on-request\"".to_string(),
-                    "--config".to_string(),
-                    "sandbox_mode=\"workspace-write\"".to_string(),
-                    "--config".to_string(),
-                    "web_search=\"live\"".to_string(),
-                    "--config".to_string(),
-                    "model_reasoning_effort=\"high\"".to_string(),
-                ],
-            )
+            ("codex".to_string(), vec!["--full-auto".to_string()])
         );
         assert_eq!(
             build_codex_resume_invocation(&profile, "resume-123"),
@@ -693,16 +582,6 @@ mod tests {
                     "resume".to_string(),
                     "resume-123".to_string(),
                     "--full-auto".to_string(),
-                    "--config".to_string(),
-                    "model=\"gpt-5.4\"".to_string(),
-                    "--config".to_string(),
-                    "approval_policy=\"on-request\"".to_string(),
-                    "--config".to_string(),
-                    "sandbox_mode=\"workspace-write\"".to_string(),
-                    "--config".to_string(),
-                    "web_search=\"live\"".to_string(),
-                    "--config".to_string(),
-                    "model_reasoning_effort=\"high\"".to_string(),
                 ],
             )
         );

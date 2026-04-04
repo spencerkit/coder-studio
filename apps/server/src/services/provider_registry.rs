@@ -1,21 +1,10 @@
 use crate::*;
+use crate::models::ProviderRuntimePreview;
 use std::collections::BTreeMap;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum FirstSubmitStrategy {
-    ImmediateNewline,
-    FlushThenDelayedNewline { delay_ms: u64 },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ProviderInputPolicy {
-    pub(crate) first_submit_strategy: FirstSubmitStrategy,
-}
 
 pub(crate) struct ProviderLaunchConfig {
     pub(crate) launch_spec: crate::services::agent_client::AgentLaunchSpec,
     pub(crate) runtime_env: BTreeMap<String, String>,
-    pub(crate) input_policy: ProviderInputPolicy,
 }
 
 pub(crate) trait ProviderAdapter: Sync {
@@ -42,6 +31,22 @@ pub(crate) fn resolve_provider_adapter(provider_id: &str) -> Option<&'static dyn
         "codex" => Some(crate::services::codex::adapter()),
         _ => None,
     }
+}
+
+pub(crate) fn provider_runtime_preview(
+    settings: &AppSettingsPayload,
+    provider: &ProviderId,
+    target: &ExecTarget,
+) -> Result<ProviderRuntimePreview, String> {
+    let adapter = resolve_provider_adapter(provider.as_str())
+        .ok_or_else(|| format!("unknown_provider:{}", provider.as_str()))?;
+    let launch = adapter.build_start(settings, target)?;
+    Ok(ProviderRuntimePreview {
+        provider: provider.clone(),
+        display_command: crate::services::session_runtime::launch_spec_display_command(
+            &launch.launch_spec,
+        ),
+    })
 }
 
 #[cfg(test)]

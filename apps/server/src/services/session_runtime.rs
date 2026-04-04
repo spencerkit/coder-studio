@@ -39,7 +39,7 @@ fn session_status_on_runtime_start() -> SessionStatus {
     SessionStatus::Running
 }
 
-fn launch_spec_display_command(spec: &AgentLaunchSpec) -> String {
+pub(crate) fn launch_spec_display_command(spec: &AgentLaunchSpec) -> String {
     match spec {
         AgentLaunchSpec::ShellCommand(command) => command.clone(),
         AgentLaunchSpec::Direct {

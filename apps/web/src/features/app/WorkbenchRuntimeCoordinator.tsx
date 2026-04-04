@@ -33,7 +33,7 @@ import {
 } from "../../shared/utils/workbench-state-snapshot";
 import {
   getIdlePolicySyncWorkspaceIds,
-} from "../../shared/app/claude-settings";
+} from "../../shared/app/app-settings";
 import { workbenchState } from "../../state/workbench";
 import type {
   Tab,
@@ -358,7 +358,7 @@ export const WorkbenchRuntimeCoordinator = ({
     sessionId: string;
     sessionTitle: string;
   }) => {
-    if (!appSettings.completionNotifications.enabled) {
+    if (!appSettings.general.completionNotifications.enabled) {
       return;
     }
 
@@ -378,7 +378,7 @@ export const WorkbenchRuntimeCoordinator = ({
       },
     );
 
-    if (appSettings.completionNotifications.onlyWhenBackground && !isBackgroundCase) {
+    if (appSettings.general.completionNotifications.onlyWhenBackground && !isBackgroundCase) {
       return;
     }
 
@@ -390,7 +390,13 @@ export const WorkbenchRuntimeCoordinator = ({
         switchWorkspaceSessionFromReminder(workspaceId, sessionId);
       },
     });
-  }, [appSettings.completionNotifications, isDocumentVisible, isWindowFocused, switchWorkspaceSessionFromReminder, t]);
+  }, [
+    appSettings.general.completionNotifications,
+    isDocumentVisible,
+    isWindowFocused,
+    switchWorkspaceSessionFromReminder,
+    t,
+  ]);
 
   const {
     markSessionIdle,
@@ -675,7 +681,7 @@ export const WorkbenchRuntimeCoordinator = ({
   useEffect(() => {
     const idlePolicyWorkspaceIds = getIdlePolicySyncWorkspaceIds(
       stateRef.current.tabs,
-      appSettings.idlePolicy,
+      appSettings.general.idlePolicy,
       settingsConfirmed,
     );
 
@@ -689,7 +695,7 @@ export const WorkbenchRuntimeCoordinator = ({
         idlePolicyWorkspaceIds.includes(tab.id)
           ? {
               ...tab,
-              idlePolicy: { ...appSettings.idlePolicy },
+              idlePolicy: { ...appSettings.general.idlePolicy },
             }
           : tab
       )),
@@ -700,11 +706,15 @@ export const WorkbenchRuntimeCoordinator = ({
       if (!tab || tab.controller.role !== "controller") {
         return;
       }
-      void updateIdlePolicyRequest(workspaceId, appSettings.idlePolicy, tab.controller).catch(() => {
+      void updateIdlePolicyRequest(
+        workspaceId,
+        appSettings.general.idlePolicy,
+        tab.controller,
+      ).catch(() => {
         // Best effort sync; in-memory settings remain source of truth if backend lags.
       });
     });
-  }, [appSettings.idlePolicy, idlePolicyFingerprint, settingsConfirmed, updateState]);
+  }, [appSettings.general.idlePolicy, idlePolicyFingerprint, settingsConfirmed, updateState]);
 
   return null;
 };

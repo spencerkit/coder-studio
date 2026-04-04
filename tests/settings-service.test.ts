@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultAppSettings } from '../apps/web/src/shared/app/settings';
+import { defaultAppSettings } from '../apps/web/src/shared/app/settings-storage';
 import {
   applyGeneralSettingsPatch,
-  forceClaudeExecutableDefaults,
-  patchClaudeStructuredSettings,
-} from '../apps/web/src/shared/app/claude-settings';
+  applyProviderGlobalPatch,
+} from '../apps/web/src/shared/app/app-settings';
 import {
   applyAppSettingsUpdater,
   createAppSettingsDraftStore,
@@ -98,13 +97,14 @@ test('applyAppSettingsUpdater preserves general changes when a later claude upda
     },
   }));
   const updated = applyAppSettingsUpdater(store, (current) => (
-    patchClaudeStructuredSettings(forceClaudeExecutableDefaults(current), {
+    applyProviderGlobalPatch(current, 'claude', {
+      executable: 'claude',
       startupArgs: ['--verbose', '--debug'],
     })
   ));
 
   assert.equal(updated.general.idlePolicy.maxActive, 5);
-  assert.deepEqual(updated.claude.global.startupArgs, ['--verbose', '--debug']);
+  assert.deepEqual(updated.providers.claude.global.startupArgs, ['--verbose', '--debug']);
 });
 
 test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {
@@ -273,8 +273,12 @@ test('createSequencedAppSettingsSaver serializes backend saves to preserve reque
 test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy migration save fails', async () => {
   const confirmed = defaultAppSettings();
   confirmed.general.locale = 'en';
-  const legacy = defaultAppSettings();
-  legacy.general.locale = 'zh';
+  const legacy = {
+    agentCommand: 'claude-nightly --verbose',
+    general: {
+      locale: 'zh',
+    },
+  };
 
   const hydrated = await hydrateConfirmedAppSettings({
     fallbackSettings: defaultAppSettings(),
@@ -292,9 +296,14 @@ test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy m
 });
 
 test('hydrateConfirmedAppSettings ignores legacy local settings when backend hydrate fails', async () => {
-  const legacy = defaultAppSettings();
-  legacy.general.locale = 'zh';
-  legacy.general.idlePolicy.idleMinutes = 25;
+  const legacy = {
+    general: {
+      locale: 'zh',
+      idlePolicy: {
+        idleMinutes: 25,
+      },
+    },
+  };
 
   const hydrated = await hydrateConfirmedAppSettings({
     fallbackSettings: defaultAppSettings(),

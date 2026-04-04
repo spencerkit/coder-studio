@@ -17,7 +17,7 @@ import {
 } from "../apps/web/src/shared/utils/workspace";
 import {
   defaultAppSettings,
-} from "../apps/web/src/shared/app/settings";
+} from "../apps/web/src/shared/app/settings-storage";
 import {
   getWorkbenchStateSnapshot,
   syncWorkbenchStateSnapshot,

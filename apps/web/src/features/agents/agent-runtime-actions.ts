@@ -13,7 +13,6 @@ import { findPaneSessionId } from "../../shared/utils/panes";
 import { isDraftSession, isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session";
 import type { AgentEvent, AgentLifecycleEvent } from "../../types/app";
 import type { XtermBaseHandle } from "../../components/terminal/XtermBase";
-import { getProviderStartupBehavior } from "../providers/runtime-helpers";
 import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit";
 
 type AgentSize = { cols: number; rows: number };
@@ -46,14 +45,6 @@ export type AgentRuntimeRefs = {
 };
 
 export const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
-
-export const resolveAgentStartupQuietMs = (provider: Session["provider"]) => (
-  Math.max(AGENT_STARTUP_QUIET_MS, getProviderStartupBehavior(provider).startupQuietMs)
-);
-
-export const resolveAgentStartupDiscoveryMs = (provider: Session["provider"]) => (
-  Math.max(AGENT_STARTUP_DISCOVERY_MS, getProviderStartupBehavior(provider).startupDiscoveryMs)
-);
 
 export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
   fitAgentTerminalHandles(refs.agentTerminalRefs.current);
@@ -95,7 +86,6 @@ export const clearAgentRuntimeTracking = (
   tabId: string,
   sessionId: string,
 ) => {
-  const key = agentRuntimeKey(tabId, sessionId);
   clearAgentStartupGate(refs, tabId, sessionId);
 };
 
@@ -357,15 +347,12 @@ export const noteAgentStartupLifecycle = (
 export const shouldReleaseAgentStartupGate = (
   state: Pick<AgentStartupState, "startedAt" | "lastEventAt" | "sawOutput" | "sawReady" | "exited">,
   now: number,
-  provider: Session["provider"],
 ) => {
   if (state.exited) return true;
   if (state.sawReady && now - state.lastEventAt >= 120) return true;
 
-  const quietMs = resolveAgentStartupQuietMs(provider);
-  const discoveryMs = resolveAgentStartupDiscoveryMs(provider);
-  if (state.sawOutput && now - state.lastEventAt >= quietMs) return true;
-  if (!state.sawOutput && now - state.startedAt >= discoveryMs) return true;
+  if (state.sawOutput && now - state.lastEventAt >= AGENT_STARTUP_QUIET_MS) return true;
+  if (!state.sawOutput && now - state.startedAt >= AGENT_STARTUP_DISCOVERY_MS) return true;
 
   return now - state.startedAt >= AGENT_STARTUP_MAX_WAIT_MS;
 };
@@ -375,7 +362,6 @@ export const waitForAgentStartupDrain = async (
   tabId: string,
   sessionId: string,
   token: number,
-  provider: Session["provider"],
 ) => {
   const key = agentRuntimeKey(tabId, sessionId);
   while (true) {
@@ -383,7 +369,7 @@ export const waitForAgentStartupDrain = async (
     if (!current || current.token !== token) return;
 
     const now = Date.now();
-    if (shouldReleaseAgentStartupGate(current, now, provider)) {
+    if (shouldReleaseAgentStartupGate(current, now)) {
       clearAgentStartupGate(refs, tabId, sessionId, token);
       return;
     }

@@ -1,7 +1,6 @@
 use crate::services::ansi_stream::AnsiTranscriptSanitizer;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
-use std::time::Duration;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
@@ -107,32 +106,16 @@ fn dispatch_agent_output(
     );
 }
 
-fn write_agent_input<F>(
+fn write_agent_input(
     writer: &mut dyn Write,
     input: &str,
     append_newline: bool,
-    input_policy: &mut crate::services::provider_registry::ProviderInputPolicy,
-    mut delay: F,
-) -> Result<(), String>
-where
-    F: FnMut(Duration),
-{
+) -> Result<(), String> {
     writer
         .write_all(input.as_bytes())
         .map_err(|e| e.to_string())?;
 
     if append_newline {
-        if let crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
-            delay_ms,
-        } = input_policy.first_submit_strategy.clone()
-        {
-            if !input.is_empty() {
-                writer.flush().map_err(|e| e.to_string())?;
-                delay(Duration::from_millis(delay_ms));
-            }
-            input_policy.first_submit_strategy =
-                crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline;
-        }
         writer.write_all(b"\r").map_err(|e| e.to_string())?;
     }
 
@@ -203,7 +186,6 @@ pub(crate) fn agent_start(
         Some(resume_id) => adapter.build_resume(&settings, &agent_target, resume_id)?,
         None => adapter.build_start(&settings, &agent_target)?,
     };
-    let input_policy = launch.input_policy.clone();
     let launch_spec = launch.launch_spec;
     adapter.ensure_workspace_integration(&agent_cwd, &agent_target)?;
 
@@ -273,7 +255,6 @@ pub(crate) fn agent_start(
         child: Mutex::new(child),
         killer: Mutex::new(killer),
         writer: Mutex::new(Some(writer)),
-        input_policy: Mutex::new(input_policy),
         master: Mutex::new(pair.master),
         process_id,
         process_group_leader,
@@ -407,15 +388,8 @@ pub(crate) fn agent_send(
     let runtime = agents.get(&key).ok_or("agent_not_running")?.clone();
     drop(agents);
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
-    let mut input_policy = runtime.input_policy.lock().map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
-        write_agent_input(
-            &mut **handle,
-            &input,
-            append_newline.unwrap_or(true),
-            &mut input_policy,
-            std::thread::sleep,
-        )?;
+        write_agent_input(&mut **handle, &input, append_newline.unwrap_or(true))?;
         if let Ok(session_id_num) = session_id.parse::<u64>() {
             let _ = update_workspace_session(
                 state,
@@ -545,61 +519,28 @@ mod tests {
     }
 
     #[test]
-    fn codex_first_submit_flushes_before_enter() {
+    fn first_submit_writes_enter_without_provider_specific_delay() {
         let mut writer = RecordingWriter::default();
-        let mut input_policy = crate::services::provider_registry::ProviderInputPolicy {
-            first_submit_strategy:
-                crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
-                    delay_ms: 120,
-                },
-        };
-        let mut delays = Vec::new();
-
-        write_agent_input(&mut writer, "hello", true, &mut input_policy, |duration| {
-            delays.push(duration)
-        })
-        .unwrap();
+        write_agent_input(&mut writer, "hello", true).unwrap();
 
         assert_eq!(
             writer.operations(),
             vec![
                 "write:hello".to_string(),
-                "flush".to_string(),
                 "write:<CR>".to_string(),
                 "flush".to_string(),
             ]
         );
-        assert_eq!(delays, vec![Duration::from_millis(120)]);
-        assert_eq!(
-            input_policy.first_submit_strategy,
-            crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline
-        );
     }
 
     #[test]
-    fn codex_follow_up_enter_submits_buffered_prompt_without_extra_delay() {
+    fn follow_up_enter_submits_buffered_prompt_without_extra_delay() {
         let mut writer = RecordingWriter::default();
-        let mut input_policy = crate::services::provider_registry::ProviderInputPolicy {
-            first_submit_strategy:
-                crate::services::provider_registry::FirstSubmitStrategy::FlushThenDelayedNewline {
-                    delay_ms: 120,
-                },
-        };
-        let mut delays = Vec::new();
-
-        write_agent_input(&mut writer, "", true, &mut input_policy, |duration| {
-            delays.push(duration)
-        })
-        .unwrap();
+        write_agent_input(&mut writer, "", true).unwrap();
 
         assert_eq!(
             writer.operations(),
             vec!["write:<CR>".to_string(), "flush".to_string()]
-        );
-        assert!(delays.is_empty());
-        assert_eq!(
-            input_policy.first_submit_strategy,
-            crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline
         );
     }
 

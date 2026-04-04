@@ -6,37 +6,6 @@ export const claudeProviderManifest: ProviderManifest = {
   badgeLabel: "Claude",
   description: "Claude Code runtime with structured startup flags, auth, and settings.json-backed behavior.",
   settingsTitleKey: "claudeSettingsTitle",
-  capabilities: {
-    supportsResume: true,
-    supportsHooks: "required",
-    emitsApprovalEvents: true,
-  },
-  startupBehavior: {
-    startupQuietMs: 400,
-    startupDiscoveryMs: 1200,
-    firstSubmitStrategy: "immediate_newline",
-  },
-  runtimeValidation: {
-    commandFieldPath: ["executable"],
-    commandLabelKey: "runtimeCheckClaudeLabel",
-    commandHintKey: "runtimeCheckClaudeHint",
-    deferredHintKey: "runtimeCheckClaudeDeferredHint",
-    requiredCommands: [
-      {
-        id: "git",
-        command: "git",
-        labelKey: "runtimeCheckGitLabel",
-        hintKey: "runtimeCheckGitHint",
-      },
-    ],
-  },
-  settingsDefaults: {
-    executable: "claude",
-    startupArgs: [],
-    env: {},
-    settingsJson: {},
-    globalConfigJson: {},
-  },
   settingsSections: [
     {
       id: "startup",
@@ -59,12 +28,12 @@ export const claudeProviderManifest: ProviderManifest = {
       descriptionKey: "claudeLaunchSectionHint",
       fields: [
         {
-          id: "api-key",
+          id: "auth-token",
           kind: "text",
-          path: ["env", "ANTHROPIC_API_KEY"],
-          labelKey: "claudeApiKey",
-          hintKey: "claudeApiKeyHelp",
-          placeholderKey: "claudeApiKeyPlaceholder",
+          path: ["env", "ANTHROPIC_AUTH_TOKEN"],
+          labelKey: "claudeAuthToken",
+          hintKey: "claudeAuthTokenHelp",
+          placeholderKey: "claudeAuthTokenPlaceholder",
         },
         {
           id: "base-url",

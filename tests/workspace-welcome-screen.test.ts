@@ -10,7 +10,7 @@ import {
 } from "../apps/web/src/shared/utils/workspace";
 import {
   defaultAppSettings,
-} from "../apps/web/src/shared/app/settings";
+} from "../apps/web/src/shared/app/settings-storage";
 import {
   browseWorkspaceOverlayDirectory,
 } from "../apps/web/src/features/workspace/workspace-overlay-actions";

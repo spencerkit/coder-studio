@@ -148,7 +148,10 @@ import {
   unstageAllGitChanges,
   unstageGitFile
 } from "../../services/http/git.service";
-import { checkCommandAvailability } from "../../services/http/system.service";
+import {
+  checkCommandAvailability,
+  getProviderRuntimePreview,
+} from "../../services/http/system.service";
 import {
   activateWorkspace as activateWorkspaceRequest,
   closeWorkspace as closeWorkspaceRequest,
@@ -178,9 +181,6 @@ import {
   AGENT_SPECIAL_KEY_MAP,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
-import {
-  resolveDefaultAgentRuntimeCommand,
-} from "../../shared/app/claude-settings";
 import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
@@ -256,6 +256,19 @@ const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string)
     ? `wsl:${target.distro?.trim() ?? ""}:${agentCommand.trim()}`
     : `native:${agentCommand.trim()}`;
 
+const serializeRuntimeValidationRequestKey = (
+  target: ExecTarget,
+  settings: Pick<AppSettings, "agentDefaults" | "providers">,
+) => JSON.stringify({
+  target,
+  provider: settings.agentDefaults.provider,
+  global: settings.providers[settings.agentDefaults.provider]?.global ?? null,
+});
+
+type RuntimeValidationModel = RuntimeValidationState & {
+  requestKey: string;
+};
+
 const createRuntimeRequirementStatus = (
   agentCommand: string,
   provider: Session["provider"],
@@ -271,9 +284,11 @@ const createRuntimeValidationState = (
   agentCommand: string,
   provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
+  requestKey = "",
   targetKey = "",
   status: RuntimeValidationState["status"] = "idle",
-): RuntimeValidationState => ({
+): RuntimeValidationModel => ({
+  requestKey,
   status,
   targetKey,
   requirements: createRuntimeRequirementStatus(agentCommand, provider, t),
@@ -359,10 +374,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
   const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
-  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
-    resolveDefaultAgentRuntimeCommand(appSettings, { type: "native" }),
+  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationModel>(() => createRuntimeValidationState(
+    appSettings.agentDefaults.provider,
     appSettings.agentDefaults.provider,
     t,
+    serializeRuntimeValidationRequestKey({ type: "native" }, appSettings),
   ));
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -411,20 +427,57 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
-  const getTargetDefaultAgentCommand = useCallback(
-    (target: ExecTarget) => resolveDefaultAgentRuntimeCommand(appSettings, target),
+  const getRuntimeValidationRequestKey = useCallback(
+    (target: ExecTarget) => serializeRuntimeValidationRequestKey(target, appSettings),
     [appSettings],
   );
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
-    const command = getTargetDefaultAgentCommand(target);
-    const targetKey = serializeRuntimeValidationKey(target, command);
-    const requirements = createRuntimeRequirementStatus(
-      command,
-      appSettings.agentDefaults.provider,
-      t,
-    );
+    const provider = appSettings.agentDefaults.provider;
+    const requestKey = getRuntimeValidationRequestKey(target);
     const requestId = ++runtimeValidationRequestIdRef.current;
+    setRuntimeValidation(createRuntimeValidationState(
+      provider,
+      provider,
+      t,
+      requestKey,
+      "",
+      "checking",
+    ));
+
+    let command = provider;
+
+    try {
+      const preview = await getProviderRuntimePreview(provider, target);
+      command = preview.display_command.trim() || provider;
+    } catch (error) {
+      if (runtimeValidationRequestIdRef.current !== requestId) return;
+
+      const message = error instanceof Error ? error.message : String(error);
+      const requirements = createRuntimeRequirementStatus(provider, provider, t).map((requirement, index) => (
+        index === 0
+          ? {
+            ...requirement,
+            available: false,
+            error: message,
+          } satisfies RuntimeRequirementStatus
+          : requirement
+      ));
+
+      setRuntimeValidation({
+        requestKey,
+        status: "failed",
+        targetKey: serializeRuntimeValidationKey(target, provider),
+        requirements,
+      });
+      return;
+    }
+
+    if (runtimeValidationRequestIdRef.current !== requestId) return;
+
+    const targetKey = serializeRuntimeValidationKey(target, command);
+    const requirements = createRuntimeRequirementStatus(command, provider, t);
     setRuntimeValidation({
+      requestKey,
       status: "checking",
       targetKey,
       requirements,
@@ -464,11 +517,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
 
     setRuntimeValidation({
+      requestKey,
       status: nextStatus,
       targetKey,
       requirements: results,
     });
-  }, [appSettings.agentDefaults.provider, getTargetDefaultAgentCommand, t]);
+  }, [appSettings, getRuntimeValidationRequestKey, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -949,18 +1003,30 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }));
   }, [state.overlay.mode, state.overlay.visible]);
 
+  const currentRuntimeValidationRequestKey = getRuntimeValidationRequestKey(state.overlay.target);
+
   useEffect(() => {
     if (!bootstrapReady || !state.overlay.visible) return;
-    const command = getTargetDefaultAgentCommand(state.overlay.target);
-    const targetKey = serializeRuntimeValidationKey(state.overlay.target, command);
-    if (validatedRuntimeTargetsRef.current.has(targetKey)) {
-      return;
+    if (runtimeValidation.requestKey === currentRuntimeValidationRequestKey) {
+      if (runtimeValidation.status === "checking" || runtimeValidation.status === "failed") {
+        return;
+      }
+      if (
+        runtimeValidation.status === "ready"
+        && runtimeValidation.targetKey
+        && validatedRuntimeTargetsRef.current.has(runtimeValidation.targetKey)
+      ) {
+        return;
+      }
     }
     void runRuntimeValidation(state.overlay.target);
   }, [
     bootstrapReady,
-    getTargetDefaultAgentCommand,
+    currentRuntimeValidationRequestKey,
     runRuntimeValidation,
+    runtimeValidation.requestKey,
+    runtimeValidation.status,
+    runtimeValidation.targetKey,
     state.overlay.target.type,
     state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
     state.overlay.visible,
@@ -973,23 +1039,25 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       const fallback = createTab(1, locale);
       emptyTabRef.current = {
         ...fallback,
-        idlePolicy: { ...appSettings.idlePolicy },
+        idlePolicy: { ...appSettings.general.idlePolicy },
       };
     }
     return emptyTabRef.current;
   }, [appSettings, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
   const showWelcomeScreen = bootstrapReady && state.tabs.length === 0;
-  const overlayCommand = getTargetDefaultAgentCommand(state.overlay.target);
-  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, overlayCommand);
-  const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
-  const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
+  const runtimeValidatedForTarget = runtimeValidation.requestKey === currentRuntimeValidationRequestKey
+    && runtimeValidation.status === "ready"
+    && runtimeValidation.targetKey.length > 0
+    && validatedRuntimeTargetsRef.current.has(runtimeValidation.targetKey);
+  const runtimeValidationView = runtimeValidation.requestKey === currentRuntimeValidationRequestKey
     ? runtimeValidation
     : createRuntimeValidationState(
-      overlayCommand,
+      appSettings.agentDefaults.provider,
       appSettings.agentDefaults.provider,
       t,
-      runtimeValidationTargetKey,
+      currentRuntimeValidationRequestKey,
+      "",
       "checking",
     );
   const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;

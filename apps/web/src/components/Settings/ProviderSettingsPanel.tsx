@@ -183,7 +183,7 @@ export const ProviderSettingsPanel = ({
           <FieldCopy label={t(field.labelKey)} hint={hint} />
           <div className="settings-row-control">
             <textarea
-              className="settings-command-field claude-textarea"
+              className="settings-command-field provider-settings-textarea"
               rows={5}
               value={fieldDrafts[field.id] ?? listToText(value)}
               onChange={(event) => onTextAreaChange(field, event.target.value, textToList)}
@@ -201,7 +201,7 @@ export const ProviderSettingsPanel = ({
           <FieldCopy label={t(field.labelKey)} hint={hint} />
           <div className="settings-row-control">
             <textarea
-              className="settings-command-field claude-textarea"
+              className="settings-command-field provider-settings-textarea"
               rows={6}
               value={fieldDrafts[field.id] ?? envMapToText(value)}
               onChange={(event) => onTextAreaChange(field, event.target.value, textToEnvMap)}
@@ -219,7 +219,7 @@ export const ProviderSettingsPanel = ({
           <FieldCopy label={t(field.labelKey)} hint={hint} />
           <div className="settings-row-control">
             <textarea
-              className="settings-command-field claude-textarea"
+              className="settings-command-field provider-settings-textarea"
               rows={8}
               value={fieldDrafts[field.id] ?? formatJson(value)}
               onChange={(event) => onJsonChange(field, event)}

@@ -193,15 +193,15 @@ pub(crate) fn current_hook_endpoint(app: &AppHandle) -> Result<String, String> {
 
 pub(crate) fn build_shared_hook_command(target: &ExecTarget) -> String {
     if matches!(target, ExecTarget::Wsl { .. }) {
-        "\"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook".to_string()
+        "/bin/sh -lc '[ -n \"${CODER_STUDIO_APP_BIN:-}\" ] || exit 0; exec \"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook'".to_string()
     } else {
         #[cfg(target_os = "windows")]
         {
-            "\"%CODER_STUDIO_APP_BIN%\" --coder-studio-agent-hook".to_string()
+            "cmd /d /c \"if not defined CODER_STUDIO_APP_BIN exit /b 0 & \\\"%CODER_STUDIO_APP_BIN%\\\" --coder-studio-agent-hook\"".to_string()
         }
         #[cfg(not(target_os = "windows"))]
         {
-            "\"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook".to_string()
+            "/bin/sh -lc '[ -n \"${CODER_STUDIO_APP_BIN:-}\" ] || exit 0; exec \"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook'".to_string()
         }
     }
 }
@@ -248,6 +248,7 @@ pub(crate) fn run_provider_hook_helper() {
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::process::Command;
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -358,5 +359,19 @@ mod tests {
         process_provider_hook_payload(&app, stop_payload).unwrap();
         let stopped = load_session(app.state(), &workspace_id, session.id).unwrap();
         assert_eq!(stopped.status, SessionStatus::Idle);
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn shared_hook_command_is_noop_when_app_bin_is_missing() {
+        let command = build_shared_hook_command(&ExecTarget::Native);
+        let status = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg(&command)
+            .env_remove("CODER_STUDIO_APP_BIN")
+            .status()
+            .expect("shell should run hook command");
+
+        assert!(status.success(), "hook command should no-op when app bin is missing");
     }
 }

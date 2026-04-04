@@ -323,6 +323,11 @@ export type CommandAvailability = {
   error?: string | null;
 };
 
+export type ProviderRuntimePreview = {
+  provider: string;
+  display_command: string;
+};
+
 export type AgentStartResult = {
   started: boolean;
 };
@@ -422,11 +427,8 @@ export type CodexRuntimeProfile = {
   executable: string;
   extraArgs: string[];
   model: string;
-  approvalPolicy: string;
-  sandboxMode: string;
-  webSearch: string;
-  modelReasoningEffort: string;
-  env: Record<string, string>;
+  apiKey: string;
+  baseUrl: string;
 };
 
 export type ProviderSettingsPayload = {
@@ -465,18 +467,7 @@ export type LegacyAppSettings = {
   terminalCompatibilityMode?: TerminalCompatibilityMode;
 };
 
-export type AppSettings = AppSettingsPayload & {
-  claude: {
-    global: ClaudeRuntimeProfile;
-  };
-  codex: {
-    global: CodexRuntimeProfile;
-  };
-  agentCommand: string;
-  idlePolicy: IdlePolicy;
-  completionNotifications: CompletionNotificationSettings;
-  terminalCompatibilityMode: TerminalCompatibilityMode;
-};
+export type AppSettings = AppSettingsPayload;
 
 export type AppSettingsUpdater = (settings: AppSettings) => AppSettings;
 

@@ -8,7 +8,6 @@ import {
 } from "../apps/web/src/features/providers/registry";
 import {
   buildRuntimeRequirementStatusesFromManifest,
-  getProviderStartupBehavior,
 } from "../apps/web/src/features/providers/runtime-helpers";
 
 test("settings navigation can derive provider panel ids from builtin manifests", () => {
@@ -61,10 +60,28 @@ test("runtime helpers fall back to generic requirement copy for removed builtin 
   );
 });
 
-test("provider startup behavior comes from the manifest registry", () => {
-  assert.equal(getProviderStartupBehavior("claude").firstSubmitStrategy, "immediate_newline");
-  assert.equal(getProviderStartupBehavior("codex").firstSubmitStrategy, "flush_then_newline");
-  assert.equal(getProviderStartupBehavior("unknown-provider").startupQuietMs, 400);
+test("runtime helpers provide builtin validation metadata outside the settings manifest", () => {
+  assert.deepEqual(
+    buildRuntimeRequirementStatusesFromManifest("claude", "claude", (key) => key),
+    [
+      {
+        id: "claude",
+        label: "runtimeCheckClaudeLabel",
+        hint: "runtimeCheckClaudeHint",
+        command: "claude",
+        available: null,
+        detailText: undefined,
+      },
+      {
+        id: "git",
+        label: "runtimeCheckGitLabel",
+        hint: "runtimeCheckGitHint",
+        command: "git",
+        available: null,
+        detailText: undefined,
+      },
+    ],
+  );
 });
 
 test("runtime helpers include the unknown provider id in fallback hint copy", () => {
@@ -123,7 +140,24 @@ test("workspace runtime surfaces use provider registry helpers instead of hardco
   assert.match(historyDrawer, /getProviderDisplayLabel/);
   assert.doesNotMatch(historyDrawer, /record\.provider === "codex" \? "Codex" : "Claude"/);
 
-  assert.match(agentRuntimeActions, /getProviderStartupBehavior/);
+  assert.doesNotMatch(agentRuntimeActions, /getProviderStartupBehavior/);
   assert.doesNotMatch(agentRuntimeActions, /provider === "codex"/);
   assert.doesNotMatch(agentRuntimeActions, /provider !== "codex"/);
+});
+
+test("workspace runtime validation fetches provider command previews through the backend RPC", async () => {
+  const workspaceScreen = await fs.readFile(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  const systemService = await fs.readFile(
+    new URL("../apps/web/src/services/http/system.service.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(systemService, /"provider_runtime_preview"/);
+  assert.match(systemService, /export const getProviderRuntimePreview =/);
+  assert.match(workspaceScreen, /getProviderRuntimePreview/);
+  assert.match(workspaceScreen, /preview\.display_command/);
+  assert.doesNotMatch(workspaceScreen, /resolveDefaultAgentRuntimeCommand/);
 });

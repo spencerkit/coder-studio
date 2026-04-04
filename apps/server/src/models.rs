@@ -198,15 +198,10 @@ pub struct CodexRuntimeProfile {
     #[serde(alias = "extraArgs")]
     pub extra_args: Vec<String>,
     pub model: String,
-    #[serde(alias = "approvalPolicy")]
-    pub approval_policy: String,
-    #[serde(alias = "sandboxMode")]
-    pub sandbox_mode: String,
-    #[serde(alias = "webSearch")]
-    pub web_search: String,
-    #[serde(alias = "modelReasoningEffort")]
-    pub model_reasoning_effort: String,
-    pub env: BTreeMap<String, String>,
+    #[serde(alias = "apiKey")]
+    pub api_key: String,
+    #[serde(alias = "baseUrl")]
+    pub base_url: String,
 }
 
 impl Default for CodexRuntimeProfile {
@@ -215,11 +210,8 @@ impl Default for CodexRuntimeProfile {
             executable: default_codex_executable(),
             extra_args: Vec::new(),
             model: String::new(),
-            approval_policy: String::new(),
-            sandbox_mode: String::new(),
-            web_search: String::new(),
-            model_reasoning_effort: String::new(),
-            env: BTreeMap::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         }
     }
 }
@@ -316,6 +308,12 @@ impl AppSettingsPayload {
             self.providers.entry(provider_id).or_insert(payload);
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct ProviderRuntimePreview {
+    pub provider: ProviderId,
+    pub display_command: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

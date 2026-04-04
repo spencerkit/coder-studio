@@ -40,6 +40,8 @@ test('provider settings panel uses shared settings card and row structure', asyn
   assert.match(providerSource, /settings-row-copy/);
   assert.match(providerSource, /settings-row-control/);
   assert.match(providerSource, /settings-command-field/);
+  assert.match(providerSource, /provider-settings-textarea/);
+  assert.doesNotMatch(providerSource, /claude-textarea/);
 });
 
 test('provider settings panel includes unknown provider fallback copy', async () => {
@@ -71,6 +73,18 @@ test('provider settings panel only resets draft state when the selected provider
 
   assert.match(providerSource, /\}, \[providerId\]\);/);
   assert.doesNotMatch(providerSource, /settings\.providers/);
+});
+
+test('generic settings styles no longer keep Claude-named textarea residue', async () => {
+  const stylesSource = await fs.readFile(
+    new URL('../apps/web/src/styles/app.css', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(stylesSource, /\.provider-settings-textarea/);
+  assert.doesNotMatch(stylesSource, /\.claude-textarea/);
+  assert.doesNotMatch(stylesSource, /\.claude-json-editor/);
+  assert.doesNotMatch(stylesSource, /\.claude-settings-panel/);
 });
 
 test('settings footer exposes build version and published time metadata', async () => {

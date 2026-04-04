@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createTabFromWorkspaceSnapshot } from "../apps/web/src/shared/utils/workspace";
 import { findPaneSessionId } from "../apps/web/src/shared/utils/panes";
-import { defaultAppSettings } from "../apps/web/src/shared/app/settings";
+import { defaultAppSettings } from "../apps/web/src/shared/app/settings-storage";
 
 test("createTabFromWorkspaceSnapshot remaps empty backend sessions to a draft pane session id", () => {
   const snapshot = {

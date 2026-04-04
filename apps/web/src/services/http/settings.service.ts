@@ -1,12 +1,12 @@
 import type { Locale } from "../../i18n";
-import type { AppSettings, AppSettingsUpdater } from "../../types/app";
+import type { AppSettings, AppSettingsUpdater, LegacyAppSettings } from "../../types/app";
 import {
   appSettingsPayloadEquals,
   cloneAppSettings,
   mergeLegacySettingsIntoAppSettings,
   normalizeAppSettings,
   toAppSettingsPayload,
-} from "../../shared/app/claude-settings";
+} from "../../shared/app/app-settings";
 import { invokeRpc } from "./client";
 
 export const getAppSettings = async (): Promise<AppSettings> => (
@@ -46,7 +46,7 @@ export const applyAppSettingsUpdater = (
 
 type HydrateConfirmedAppSettingsArgs = {
   fallbackSettings: AppSettings;
-  legacySettings: AppSettings | null;
+  legacySettings: AppSettings | LegacyAppSettings | null;
   preferredLocale: AppSettings["general"]["locale"];
   preferredLocaleIsExplicit?: boolean;
   load?: () => Promise<AppSettings>;

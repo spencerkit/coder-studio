@@ -2,12 +2,13 @@ import type { AppSettings } from "../../types/app";
 import {
   cloneAppSettings,
   defaultAppSettings,
+  getSettingsLocale,
   normalizeAppSettings,
-} from "./claude-settings";
+} from "./app-settings";
 
 const APP_SETTINGS_STORAGE_KEY = "coder-studio.app-settings";
 
-export { cloneAppSettings, defaultAppSettings };
+export { cloneAppSettings, defaultAppSettings, getSettingsLocale };
 
 export const readStoredAppSettings = (): AppSettings | null => {
   if (typeof window === "undefined") {

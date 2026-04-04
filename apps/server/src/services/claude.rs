@@ -148,10 +148,6 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
             runtime_env: profile.env,
-            input_policy: crate::services::provider_registry::ProviderInputPolicy {
-                first_submit_strategy:
-                    crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline,
-            },
         })
     }
 
@@ -189,10 +185,6 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
             runtime_env: profile.env,
-            input_policy: crate::services::provider_registry::ProviderInputPolicy {
-                first_submit_strategy:
-                    crate::services::provider_registry::FirstSubmitStrategy::ImmediateNewline,
-            },
         })
     }
 

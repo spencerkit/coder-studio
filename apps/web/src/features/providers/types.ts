@@ -38,27 +38,11 @@ export type ProviderRuntimeValidation = {
   requiredCommands: readonly ProviderRequiredCommand[];
 };
 
-export type ProviderCapabilities = {
-  supportsResume: boolean;
-  supportsHooks: "required" | "optional" | "none";
-  emitsApprovalEvents: boolean;
-};
-
-export type ProviderStartupBehavior = {
-  startupQuietMs: number;
-  startupDiscoveryMs: number;
-  firstSubmitStrategy: "immediate_newline" | "flush_then_newline";
-};
-
 export type ProviderManifest = {
   id: ProviderId;
   label: string;
   badgeLabel: string;
   description: string;
   settingsTitleKey: string;
-  capabilities: ProviderCapabilities;
-  startupBehavior: ProviderStartupBehavior;
-  runtimeValidation: ProviderRuntimeValidation;
-  settingsDefaults: Record<string, unknown>;
   settingsSections: readonly ProviderSettingsSection[];
 };

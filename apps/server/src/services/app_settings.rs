@@ -23,48 +23,9 @@ fn ensure_app_settings_row(conn: &Connection) -> Result<(), String> {
 }
 
 fn normalize_app_settings_payload(raw: Value) -> Result<AppSettingsPayload, String> {
-    let Value::Object(mut source) = raw else {
+    let Value::Object(source) = raw else {
         return Ok(default_app_settings());
     };
-
-    let mut providers = source
-        .remove("providers")
-        .unwrap_or_else(|| Value::Object(Map::new()));
-    if !providers.is_object() {
-        providers = Value::Object(Map::new());
-    }
-
-    if let Some(providers_object) = providers.as_object_mut() {
-        for provider_id in ["claude", "codex"] {
-            if let Some(global) = source
-                .get(provider_id)
-                .and_then(Value::as_object)
-                .and_then(|provider| provider.get("global"))
-            {
-                let provider_entry = providers_object
-                    .entry(provider_id.to_string())
-                    .or_insert_with(|| json!({ "global": {} }));
-                if !provider_entry.is_object() {
-                    *provider_entry = json!({ "global": {} });
-                }
-                let provider_object = provider_entry.as_object_mut().expect("object");
-                let global_entry = provider_object
-                    .entry("global".to_string())
-                    .or_insert_with(|| Value::Object(Map::new()));
-                merge_settings_value(
-                    global_entry,
-                    global.clone(),
-                    &[
-                        "providers".to_string(),
-                        provider_id.to_string(),
-                        "global".to_string(),
-                    ],
-                );
-            }
-        }
-    }
-
-    source.insert("providers".to_string(), providers);
 
     let mut normalized =
         serde_json::from_value::<AppSettingsPayload>(Value::Object(source)).unwrap_or_default();
@@ -135,11 +96,16 @@ fn resolve_codex_home_root(root_override: Option<&Path>) -> Option<PathBuf> {
 #[derive(Default)]
 struct ClaudeJsonSources {
     settings_json: Option<Map<String, Value>>,
-    config_json: Option<Map<String, Value>>,
     global_config_json: Option<Map<String, Value>>,
 }
 
 type CodexTomlSource = toml::Table;
+
+#[derive(Default)]
+struct CodexConfigSources {
+    config_toml: Option<CodexTomlSource>,
+    auth_json: Option<Map<String, Value>>,
+}
 
 fn parse_json_object_text(raw: &str) -> Option<Map<String, Value>> {
     match serde_json::from_str::<Value>(raw).ok()? {
@@ -165,99 +131,180 @@ fn read_toml_table_file(path: &Path) -> Option<CodexTomlSource> {
 fn load_native_claude_json_sources(root: &Path) -> ClaudeJsonSources {
     ClaudeJsonSources {
         settings_json: read_json_object_file(&root.join(".claude/settings.json")),
-        config_json: read_json_object_file(&root.join(".claude/config.json")),
         global_config_json: read_json_object_file(&root.join(".claude.json")),
     }
 }
 
-fn load_native_codex_toml_source(root: &Path) -> Option<CodexTomlSource> {
-    read_toml_table_file(&root.join(".codex/config.toml"))
-}
-
-fn merge_missing_env_value(
-    env: &mut std::collections::BTreeMap<String, String>,
-    key: &str,
-    value: &str,
-) {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-
-    match env.get(key) {
-        Some(existing) if !existing.trim().is_empty() => {}
-        _ => {
-            env.insert(key.to_string(), trimmed.to_string());
-        }
+fn load_native_codex_config_sources(root: &Path) -> CodexConfigSources {
+    CodexConfigSources {
+        config_toml: read_toml_table_file(&root.join(".codex/config.toml")),
+        auth_json: read_json_object_file(&root.join(".codex/auth.json")),
     }
 }
 
-fn merge_missing_env_map(
-    env: &mut std::collections::BTreeMap<String, String>,
-    source: &Map<String, Value>,
-) {
-    for (key, value) in source {
-        if let Some(text) = value.as_str() {
-            merge_missing_env_value(env, key, text);
-        }
+fn strip_claude_profile_for_storage(profile: &ClaudeRuntimeProfile) -> ClaudeRuntimeProfile {
+    ClaudeRuntimeProfile {
+        executable: profile.executable.clone(),
+        startup_args: profile.startup_args.clone(),
+        ..ClaudeRuntimeProfile::default()
     }
 }
 
-fn merge_missing_string(target: &mut String, source: Option<&str>) {
-    if !target.trim().is_empty() {
-        return;
+fn strip_codex_profile_for_storage(profile: &CodexRuntimeProfile) -> CodexRuntimeProfile {
+    CodexRuntimeProfile {
+        executable: profile.executable.clone(),
+        extra_args: profile.extra_args.clone(),
+        ..CodexRuntimeProfile::default()
     }
-    let Some(source) = source else {
-        return;
-    };
-    let trimmed = source.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-    *target = trimmed.to_string();
 }
 
-fn merge_missing_json(target: &mut Value, source: &Value) {
-    match source {
-        Value::Object(source_map) => {
-            let Value::Object(target_map) = target else {
-                if target.is_null() {
-                    *target = source.clone();
-                }
-                return;
-            };
-            for (key, source_value) in source_map {
-                match target_map.get_mut(key) {
-                    Some(target_value) => merge_missing_json(target_value, source_value),
-                    None => {
-                        target_map.insert(key.clone(), source_value.clone());
-                    }
-                }
+fn strip_provider_owned_fields_for_storage(settings: &AppSettingsPayload) -> AppSettingsPayload {
+    let mut stripped = settings.clone();
+
+    let claude = settings
+        .provider_profile::<ClaudeRuntimeProfile>("claude")
+        .unwrap_or_default();
+    let _ = stripped.set_provider_profile("claude", &strip_claude_profile_for_storage(&claude));
+
+    let codex = settings
+        .provider_profile::<CodexRuntimeProfile>("codex")
+        .unwrap_or_default();
+    let _ = stripped.set_provider_profile("codex", &strip_codex_profile_for_storage(&codex));
+
+    stripped
+}
+
+fn value_object_or_empty(value: &Value) -> Map<String, Value> {
+    match value {
+        Value::Object(map) => map.clone(),
+        _ => Map::new(),
+    }
+}
+
+fn json_object_to_env_map(source: &Map<String, Value>) -> std::collections::BTreeMap<String, String> {
+    source
+        .iter()
+        .filter_map(|(key, value)| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(|text| (key.clone(), text.to_string()))
+        })
+        .collect()
+}
+
+fn env_map_to_json_object(
+    env: &std::collections::BTreeMap<String, String>,
+) -> Map<String, Value> {
+    env.iter()
+        .filter_map(|(key, value)| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some((key.clone(), Value::String(trimmed.to_string())))
             }
-        }
-        Value::Array(source_values) => {
-            if let Value::Array(target_values) = target {
-                if target_values.is_empty() {
-                    *target_values = source_values.clone();
-                }
-            } else if target.is_null() {
-                *target = source.clone();
-            }
-        }
-        Value::String(source_value) => {
-            if let Value::String(target_value) = target {
-                if target_value.trim().is_empty() {
-                    *target_value = source_value.clone();
-                }
-            } else if target.is_null() {
-                *target = source.clone();
-            }
-        }
-        _ => {
-            if target.is_null() {
-                *target = source.clone();
-            }
-        }
+        })
+        .collect()
+}
+
+fn trimmed_string(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn codex_active_provider_id(source: &CodexTomlSource) -> Option<String> {
+    source
+        .get("model_provider")
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn codex_provider_table<'a>(
+    source: &'a CodexTomlSource,
+    provider_id: &str,
+) -> Option<&'a toml::Table> {
+    source
+        .get("model_providers")
+        .and_then(toml::Value::as_table)
+        .and_then(|providers| providers.get(provider_id))
+        .and_then(toml::Value::as_table)
+}
+
+fn codex_active_provider_uses_openai_auth(source: &CodexTomlSource) -> bool {
+    match codex_active_provider_id(source).as_deref() {
+        Some("openai") | None => true,
+        Some(provider_id) => codex_provider_table(source, provider_id)
+            .and_then(|provider| provider.get("requires_openai_auth"))
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(true),
+    }
+}
+
+fn codex_active_provider_env_key(source: &CodexTomlSource) -> Option<String> {
+    match codex_active_provider_id(source).as_deref() {
+        Some("openai") | None => None,
+        Some(provider_id) => codex_provider_table(source, provider_id)
+            .and_then(|provider| provider.get("env_key"))
+            .and_then(toml::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string),
+    }
+}
+
+fn codex_api_key_write_error(source: &CodexTomlSource) -> Option<String> {
+    if codex_active_provider_uses_openai_auth(source) {
+        return None;
+    }
+
+    Some(match codex_active_provider_env_key(source) {
+        Some(env_key) => format!(
+            "codex active provider uses env_key={env_key}; API key sync only supports OpenAI auth providers"
+        ),
+        None => "codex active provider does not use OpenAI auth; API key sync is unavailable"
+            .to_string(),
+    })
+}
+
+fn codex_provider_table_mut<'a>(
+    source: &'a mut CodexTomlSource,
+    provider_id: &str,
+) -> &'a mut toml::Table {
+    let providers_entry = source
+        .entry("model_providers".to_string())
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if !providers_entry.is_table() {
+        *providers_entry = toml::Value::Table(toml::Table::new());
+    }
+    let providers = providers_entry.as_table_mut().expect("table");
+    let provider_entry = providers
+        .entry(provider_id.to_string())
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if !provider_entry.is_table() {
+        *provider_entry = toml::Value::Table(toml::Table::new());
+    }
+    provider_entry.as_table_mut().expect("table")
+}
+
+fn codex_base_url_from_sources(source: &CodexTomlSource) -> String {
+    match codex_active_provider_id(source).as_deref() {
+        Some("openai") | None => trimmed_string(
+            source
+                .get("openai_base_url")
+                .and_then(toml::Value::as_str),
+        ),
+        Some(provider_id) => trimmed_string(
+            codex_provider_table(source, provider_id)
+                .and_then(|provider| provider.get("base_url"))
+                .and_then(toml::Value::as_str),
+        ),
     }
 }
 
@@ -265,27 +312,21 @@ fn hydrate_runtime_profile_from_claude_sources(
     profile: &ClaudeRuntimeProfile,
     sources: &ClaudeJsonSources,
 ) -> ClaudeRuntimeProfile {
-    let mut hydrated = profile.clone();
+    let mut hydrated = strip_claude_profile_for_storage(profile);
 
     if let Some(mut settings_json) = sources.settings_json.clone() {
-        if let Some(Value::Object(env_map)) = settings_json.remove("env") {
-            merge_missing_env_map(&mut hydrated.env, &env_map);
-        }
-        merge_missing_json(&mut hydrated.settings_json, &Value::Object(settings_json));
+        hydrated.env = match settings_json.remove("env") {
+            Some(Value::Object(env_map)) => json_object_to_env_map(&env_map),
+            _ => Default::default(),
+        };
+        hydrated.settings_json = Value::Object(settings_json);
     }
 
-    if let Some(config_json) = &sources.config_json {
-        if let Some(primary_api_key) = config_json.get("primaryApiKey").and_then(Value::as_str) {
-            merge_missing_env_value(&mut hydrated.env, "ANTHROPIC_API_KEY", primary_api_key);
-        }
-    }
-
-    if let Some(global_config_json) = &sources.global_config_json {
-        merge_missing_json(
-            &mut hydrated.global_config_json,
-            &Value::Object(global_config_json.clone()),
-        );
-    }
+    hydrated.global_config_json = sources
+        .global_config_json
+        .clone()
+        .map(Value::Object)
+        .unwrap_or_else(|| Value::Object(Map::new()));
 
     hydrated
 }
@@ -316,44 +357,43 @@ fn hydrate_settings_from_claude_home(
     };
 
     let sources = load_native_claude_json_sources(&root);
+    if sources.settings_json.is_none() && sources.global_config_json.is_none() {
+        return settings.clone();
+    }
+
     hydrate_settings_from_claude_sources(settings, Some(&sources))
 }
 
-fn hydrate_runtime_profile_from_codex_source(
+fn hydrate_runtime_profile_from_codex_sources(
     profile: &CodexRuntimeProfile,
-    source: &CodexTomlSource,
+    sources: &CodexConfigSources,
 ) -> CodexRuntimeProfile {
-    let mut hydrated = profile.clone();
+    let mut hydrated = strip_codex_profile_for_storage(profile);
+    let uses_openai_auth = sources
+        .config_toml
+        .as_ref()
+        .map(codex_active_provider_uses_openai_auth)
+        .unwrap_or(true);
 
-    merge_missing_string(
-        &mut hydrated.model,
-        source.get("model").and_then(toml::Value::as_str),
-    );
-    merge_missing_string(
-        &mut hydrated.approval_policy,
-        source.get("approval_policy").and_then(toml::Value::as_str),
-    );
-    merge_missing_string(
-        &mut hydrated.sandbox_mode,
-        source.get("sandbox_mode").and_then(toml::Value::as_str),
-    );
-    merge_missing_string(
-        &mut hydrated.web_search,
-        source.get("web_search").and_then(toml::Value::as_str),
-    );
-    merge_missing_string(
-        &mut hydrated.model_reasoning_effort,
-        source
-            .get("model_reasoning_effort")
-            .and_then(toml::Value::as_str),
-    );
+    if let Some(config_toml) = &sources.config_toml {
+        hydrated.model = trimmed_string(config_toml.get("model").and_then(toml::Value::as_str));
+        hydrated.base_url = codex_base_url_from_sources(config_toml);
+    }
+
+    if uses_openai_auth {
+        if let Some(auth_json) = &sources.auth_json {
+            hydrated.api_key = trimmed_string(
+                auth_json.get("OPENAI_API_KEY").and_then(Value::as_str),
+            );
+        }
+    }
 
     hydrated
 }
 
 fn hydrate_settings_from_codex_sources(
     settings: &AppSettingsPayload,
-    source: Option<&CodexTomlSource>,
+    source: Option<&CodexConfigSources>,
 ) -> AppSettingsPayload {
     let mut hydrated = settings.clone();
 
@@ -361,7 +401,7 @@ fn hydrate_settings_from_codex_sources(
         let profile = settings
             .provider_profile::<CodexRuntimeProfile>("codex")
             .unwrap_or_default();
-        let hydrated_profile = hydrate_runtime_profile_from_codex_source(&profile, source);
+        let hydrated_profile = hydrate_runtime_profile_from_codex_sources(&profile, source);
         let _ = hydrated.set_provider_profile("codex", &hydrated_profile);
     }
 
@@ -376,18 +416,196 @@ fn hydrate_settings_from_codex_home(
         return settings.clone();
     };
 
-    let Some(source) = load_native_codex_toml_source(&root) else {
+    let sources = load_native_codex_config_sources(&root);
+    if sources.config_toml.is_none() && sources.auth_json.is_none() {
         return settings.clone();
-    };
-    hydrate_settings_from_codex_sources(settings, Some(&source))
+    }
+
+    hydrate_settings_from_codex_sources(settings, Some(&sources))
+}
+
+fn load_or_default_app_settings_from_conn_hydrated_with_roots(
+    conn: &Connection,
+    claude_root_override: Option<&Path>,
+    codex_root_override: Option<&Path>,
+) -> Result<AppSettingsPayload, String> {
+    let settings = strip_provider_owned_fields_for_storage(&load_or_default_app_settings_from_conn(conn)?);
+    let settings = hydrate_settings_from_claude_home(&settings, claude_root_override);
+    let settings = hydrate_settings_from_codex_home(&settings, codex_root_override);
+    Ok(settings)
 }
 
 fn load_or_default_app_settings_from_conn_hydrated(
     conn: &Connection,
 ) -> Result<AppSettingsPayload, String> {
-    let settings = load_or_default_app_settings_from_conn(conn)?;
-    let settings = hydrate_settings_from_claude_home(&settings, None);
-    Ok(settings)
+    load_or_default_app_settings_from_conn_hydrated_with_roots(conn, None, None)
+}
+
+fn write_text_file_atomic(path: &Path, contents: &str) -> Result<(), String> {
+    let Some(parent) = path.parent() else {
+        return Err(format!("invalid path: {}", path.display()));
+    };
+
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "config".to_string());
+    let temp_path = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
+
+    fs::write(&temp_path, contents)
+        .map_err(|error| format!("failed to write {}: {error}", temp_path.display()))?;
+    fs::rename(&temp_path, path).map_err(|error| {
+        let _ = fs::remove_file(&temp_path);
+        format!("failed to replace {}: {error}", path.display())
+    })
+}
+
+fn write_json_object_file(path: &Path, object: &Map<String, Value>) -> Result<(), String> {
+    let serialized =
+        serde_json::to_string_pretty(&Value::Object(object.clone())).map_err(|e| e.to_string())?;
+    write_text_file_atomic(path, &serialized)
+}
+
+fn update_toml_string_field(table: &mut toml::Table, key: &str, value: &str) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        table.remove(key);
+    } else {
+        table.insert(key.to_string(), toml::Value::String(trimmed.to_string()));
+    }
+}
+
+fn write_claude_provider_settings(
+    profile: &ClaudeRuntimeProfile,
+    root_override: Option<&Path>,
+) -> Result<(), String> {
+    let Some(root) = resolve_claude_home_root(root_override) else {
+        return Ok(());
+    };
+
+    let settings_path = root.join(".claude/settings.json");
+    let global_config_path = root.join(".claude.json");
+    let existing_settings = read_json_object_file(&settings_path);
+    let existing_global = read_json_object_file(&global_config_path);
+
+    let mut settings_json = value_object_or_empty(&profile.settings_json);
+    let env_json = env_map_to_json_object(&profile.env);
+    if env_json.is_empty() {
+        settings_json.remove("env");
+    } else {
+        settings_json.insert("env".to_string(), Value::Object(env_json));
+    }
+
+    if existing_settings.is_some() || !settings_json.is_empty() {
+        write_json_object_file(&settings_path, &settings_json)?;
+    }
+
+    let global_config_json = value_object_or_empty(&profile.global_config_json);
+    if existing_global.is_some() || !global_config_json.is_empty() {
+        write_json_object_file(&global_config_path, &global_config_json)?;
+    }
+
+    Ok(())
+}
+
+fn write_codex_provider_settings(
+    profile: &CodexRuntimeProfile,
+    root_override: Option<&Path>,
+) -> Result<(), String> {
+    let Some(root) = resolve_codex_home_root(root_override) else {
+        return Ok(());
+    };
+
+    let config_path = root.join(".codex/config.toml");
+    let auth_path = root.join(".codex/auth.json");
+    let existing_config = read_toml_table_file(&config_path);
+    let existing_auth = read_json_object_file(&auth_path);
+    let had_existing_auth = existing_auth.is_some();
+
+    let mut config = existing_config.clone().unwrap_or_default();
+    if !profile.api_key.trim().is_empty() {
+        if let Some(error) = codex_api_key_write_error(&config) {
+            return Err(error);
+        }
+    }
+
+    update_toml_string_field(&mut config, "model", &profile.model);
+
+    match codex_active_provider_id(&config).as_deref() {
+        Some("openai") | None => update_toml_string_field(&mut config, "openai_base_url", &profile.base_url),
+        Some(provider_id) => {
+            let provider = codex_provider_table_mut(&mut config, provider_id);
+            update_toml_string_field(provider, "base_url", &profile.base_url);
+            if !profile.api_key.trim().is_empty() {
+                provider.insert(
+                    "requires_openai_auth".to_string(),
+                    toml::Value::Boolean(true),
+                );
+            }
+        }
+    }
+
+    if existing_config.is_some()
+        || !profile.model.trim().is_empty()
+        || !profile.base_url.trim().is_empty()
+        || !profile.api_key.trim().is_empty()
+    {
+        if codex_active_provider_uses_openai_auth(&config)
+            && (!profile.api_key.trim().is_empty() || had_existing_auth)
+        {
+            config.insert(
+                "cli_auth_credentials_store".to_string(),
+                toml::Value::String("file".to_string()),
+            );
+        }
+        let serialized = toml::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        write_text_file_atomic(&config_path, &serialized)?;
+    }
+
+    let mut auth_json = existing_auth.unwrap_or_default();
+    let trimmed_api_key = profile.api_key.trim();
+    let uses_openai_auth = codex_active_provider_uses_openai_auth(&config);
+    if uses_openai_auth {
+        if trimmed_api_key.is_empty() {
+            auth_json.remove("OPENAI_API_KEY");
+        } else {
+            auth_json.insert(
+                "OPENAI_API_KEY".to_string(),
+                Value::String(trimmed_api_key.to_string()),
+            );
+        }
+
+        if had_existing_auth || !trimmed_api_key.is_empty() {
+            write_json_object_file(&auth_path, &auth_json)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_provider_settings_to_real_files_with_roots(
+    settings: &AppSettingsPayload,
+    claude_root_override: Option<&Path>,
+    codex_root_override: Option<&Path>,
+) -> Result<(), String> {
+    let claude = settings
+        .provider_profile::<ClaudeRuntimeProfile>("claude")
+        .unwrap_or_default();
+    write_claude_provider_settings(&claude, claude_root_override)?;
+
+    let codex = settings
+        .provider_profile::<CodexRuntimeProfile>("codex")
+        .unwrap_or_default();
+    write_codex_provider_settings(&codex, codex_root_override)?;
+
+    Ok(())
+}
+
+fn write_provider_settings_to_real_files(settings: &AppSettingsPayload) -> Result<(), String> {
+    write_provider_settings_to_real_files_with_roots(settings, None, None)
 }
 
 fn save_app_settings_to_conn(
@@ -397,13 +615,14 @@ fn save_app_settings_to_conn(
     ensure_app_settings_row(conn)?;
     let normalized =
         normalize_app_settings_payload(serde_json::to_value(settings).map_err(|e| e.to_string())?)?;
+    let stored = strip_provider_owned_fields_for_storage(&normalized);
     conn.execute(
         "INSERT INTO app_settings (id, payload, updated_at)
          VALUES (?1, ?2, ?3)
          ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
         params![
             APP_SETTINGS_ROW_ID,
-            serde_json::to_string(&normalized).map_err(|e| e.to_string())?,
+            serde_json::to_string(&stored).map_err(|e| e.to_string())?,
             now_ts(),
         ],
     )
@@ -415,14 +634,9 @@ fn should_replace_object_patch(path: &[String]) -> bool {
     let path = path.iter().map(String::as_str).collect::<Vec<_>>();
     matches!(
         path.as_slice(),
-        ["claude", "global", "env"]
-            | ["claude", "global", "settings_json"]
-            | ["claude", "global", "global_config_json"]
-            | ["codex", "global", "env"]
-            | ["providers", "claude", "global", "env"]
+        ["providers", "claude", "global", "env"]
             | ["providers", "claude", "global", "settings_json"]
             | ["providers", "claude", "global", "global_config_json"]
-            | ["providers", "codex", "global", "env"]
     )
 }
 
@@ -474,21 +688,6 @@ fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
             "maxActive" => "max_active".to_string(),
             _ => key.to_string(),
         },
-        ["claude", "global"] => match key {
-            "startup_args" => "startup_args".to_string(),
-            "startupArgs" => "startup_args".to_string(),
-            "settingsJson" => "settings_json".to_string(),
-            "globalConfigJson" => "global_config_json".to_string(),
-            _ => key.to_string(),
-        },
-        ["codex", "global"] => match key {
-            "extraArgs" => "extra_args".to_string(),
-            "approvalPolicy" => "approval_policy".to_string(),
-            "sandboxMode" => "sandbox_mode".to_string(),
-            "webSearch" => "web_search".to_string(),
-            "modelReasoningEffort" => "model_reasoning_effort".to_string(),
-            _ => key.to_string(),
-        },
         ["providers", "claude", "global"] => match key {
             "startupArgs" => "startup_args".to_string(),
             "settingsJson" => "settings_json".to_string(),
@@ -497,10 +696,8 @@ fn normalize_settings_patch_key(path: &[String], key: &str) -> String {
         },
         ["providers", "codex", "global"] => match key {
             "extraArgs" => "extra_args".to_string(),
-            "approvalPolicy" => "approval_policy".to_string(),
-            "sandboxMode" => "sandbox_mode".to_string(),
-            "webSearch" => "web_search".to_string(),
-            "modelReasoningEffort" => "model_reasoning_effort".to_string(),
+            "apiKey" => "api_key".to_string(),
+            "baseUrl" => "base_url".to_string(),
             _ => key.to_string(),
         },
         _ => key.to_string(),
@@ -538,21 +735,53 @@ pub(crate) fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettings
     load_or_default_app_settings(state)
 }
 
+fn app_settings_update_in_conn(
+    conn: &Connection,
+    patch: Value,
+    before_save: impl FnOnce() -> Result<(), String>,
+) -> Result<AppSettingsPayload, String> {
+    let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
+    let mut current =
+        serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
+            .map_err(|e| e.to_string())?;
+    merge_settings_value(&mut current, normalized_patch, &[]);
+    before_save()?;
+    let merged = normalize_app_settings_payload(current)?;
+    write_provider_settings_to_real_files(&merged)?;
+    save_app_settings_to_conn(conn, &merged)
+}
+
+fn app_settings_update_in_conn_with_roots(
+    conn: &Connection,
+    patch: Value,
+    before_save: impl FnOnce() -> Result<(), String>,
+    claude_root_override: Option<&Path>,
+    codex_root_override: Option<&Path>,
+) -> Result<AppSettingsPayload, String> {
+    let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
+    let mut current = serde_json::to_value(load_or_default_app_settings_from_conn_hydrated_with_roots(
+        conn,
+        claude_root_override,
+        codex_root_override,
+    )?)
+    .map_err(|e| e.to_string())?;
+    merge_settings_value(&mut current, normalized_patch, &[]);
+    before_save()?;
+    let merged = normalize_app_settings_payload(current)?;
+    write_provider_settings_to_real_files_with_roots(
+        &merged,
+        claude_root_override,
+        codex_root_override,
+    )?;
+    save_app_settings_to_conn(conn, &merged)
+}
+
 fn app_settings_update_with_before_save_hook(
     patch: Value,
     state: State<'_, AppState>,
     before_save: impl FnOnce() -> Result<(), String>,
 ) -> Result<AppSettingsPayload, String> {
-    let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
-    with_db(state, |conn| {
-        let mut current =
-            serde_json::to_value(load_or_default_app_settings_from_conn_hydrated(conn)?)
-                .map_err(|e| e.to_string())?;
-        merge_settings_value(&mut current, normalized_patch, &[]);
-        before_save()?;
-        let merged = normalize_app_settings_payload(current)?;
-        save_app_settings_to_conn(conn, &merged)
-    })
+    with_db(state, |conn| app_settings_update_in_conn(conn, patch, before_save))
 }
 
 pub(crate) fn app_settings_update(
@@ -611,17 +840,12 @@ mod tests {
             &root.join(".claude/settings.json"),
             json!({
                 "env": {
+                    "ANTHROPIC_API_KEY": "primary-api-key-12345",
                     "ANTHROPIC_AUTH_TOKEN": "auth-token-12345",
                     "ANTHROPIC_BASE_URL": "https://anthropic.example"
                 },
                 "model": "sonnet",
                 "permissionMode": "auto"
-            }),
-        );
-        write_json(
-            &root.join(".claude/config.json"),
-            json!({
-                "primaryApiKey": "primary-api-key-12345"
             }),
         );
         write_json(
@@ -655,28 +879,25 @@ mod tests {
     }
 
     #[test]
-    fn hydrate_settings_from_claude_home_preserves_backend_values_over_local_files() {
+    fn hydrate_settings_from_claude_home_uses_file_values_as_canonical_provider_settings() {
         let root = unique_temp_dir("claude-settings-precedence");
 
         write_json(
             &root.join(".claude/settings.json"),
             json!({
                 "env": {
+                    "ANTHROPIC_API_KEY": "api-key-from-file",
                     "ANTHROPIC_AUTH_TOKEN": "auth-token-from-file",
                     "ANTHROPIC_BASE_URL": "https://file.example"
                 },
                 "model": "file-model"
             }),
         );
-        write_json(
-            &root.join(".claude/config.json"),
-            json!({
-                "primaryApiKey": "api-key-from-file"
-            }),
-        );
 
         let mut settings = AppSettingsPayload::default();
         let mut profile = claude_profile(&settings);
+        profile.executable = "claude-nightly".into();
+        profile.startup_args = vec!["--verbose".into()];
         profile
             .env
             .insert("ANTHROPIC_API_KEY".into(), "api-key-from-backend".into());
@@ -692,15 +913,53 @@ mod tests {
         let hydrated = hydrate_settings_from_claude_home(&settings, Some(root.as_path()));
         let claude = claude_profile(&hydrated);
 
+        assert_eq!(claude.executable, "claude-nightly");
+        assert_eq!(claude.startup_args, vec!["--verbose"]);
         assert_eq!(
             claude.env.get("ANTHROPIC_API_KEY").map(String::as_str),
-            Some("api-key-from-backend")
+            Some("api-key-from-file")
         );
         assert_eq!(
             claude.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
-            Some("auth-token-from-backend")
+            Some("auth-token-from-file")
         );
-        assert_eq!(claude.settings_json["model"], "backend-model");
+        assert_eq!(claude.settings_json["model"], "file-model");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_settings_from_claude_home_does_not_promote_primary_api_key_into_env() {
+        let root = unique_temp_dir("claude-settings-ignore-primary-api-key");
+
+        write_json(
+            &root.join(".claude/settings.json"),
+            json!({
+                "env": {
+                    "ANTHROPIC_AUTH_TOKEN": "auth-token-from-file",
+                    "ANTHROPIC_BASE_URL": "https://file.example"
+                },
+                "model": "file-model"
+            }),
+        );
+        write_json(
+            &root.join(".claude/config.json"),
+            json!({
+                "primaryApiKey": "any"
+            }),
+        );
+
+        let hydrated = hydrate_settings_from_claude_home(&AppSettingsPayload::default(), Some(root.as_path()));
+        let claude = claude_profile(&hydrated);
+
+        assert_eq!(
+            claude.env.get("ANTHROPIC_API_KEY").map(String::as_str),
+            None
+        );
+        assert_eq!(
+            claude.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
+            Some("auth-token-from-file")
+        );
 
         let _ = fs::remove_dir_all(root);
     }
@@ -713,16 +972,11 @@ mod tests {
                 settings_json: Some(
                     serde_json::from_value(json!({
                         "env": {
+                            "ANTHROPIC_API_KEY": "wsl-primary-api-key",
                             "ANTHROPIC_AUTH_TOKEN": "wsl-auth-token",
                             "ANTHROPIC_BASE_URL": "https://wsl.example"
                         },
                         "model": "wsl-sonnet"
-                    }))
-                    .unwrap(),
-                ),
-                config_json: Some(
-                    serde_json::from_value(json!({
-                        "primaryApiKey": "wsl-primary-api-key"
                     }))
                     .unwrap(),
                 ),
@@ -763,30 +1017,71 @@ mod tests {
             root.join(".codex/config.toml"),
             [
                 "model = \"gpt-5.4\"",
-                "approval_policy = \"on-request\"",
-                "sandbox_mode = \"workspace-write\"",
-                "web_search = \"live\"",
-                "model_reasoning_effort = \"high\"",
+                "model_provider = \"custom\"",
+                "cli_auth_credentials_store = \"file\"",
+                "",
+                "[model_providers.custom]",
+                "name = \"custom\"",
+                "base_url = \"https://codex.example/v1\"",
+                "requires_openai_auth = true",
+                "wire_api = \"responses\"",
             ]
             .join("\n"),
         )
         .unwrap();
+        write_json(
+            &root.join(".codex/auth.json"),
+            json!({
+                "OPENAI_API_KEY": "codex-key-12345"
+            }),
+        );
 
         let hydrated =
             hydrate_settings_from_codex_home(&AppSettingsPayload::default(), Some(root.as_path()));
         let codex = codex_profile(&hydrated);
 
         assert_eq!(codex.model, "gpt-5.4");
-        assert_eq!(codex.approval_policy, "on-request");
-        assert_eq!(codex.sandbox_mode, "workspace-write");
-        assert_eq!(codex.web_search, "live");
-        assert_eq!(codex.model_reasoning_effort, "high");
+        assert_eq!(codex.base_url, "https://codex.example/v1");
+        assert_eq!(codex.api_key, "codex-key-12345");
 
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn hydrate_settings_from_codex_home_preserves_backend_values_over_local_files() {
+    fn load_or_default_hydrates_codex_home_alongside_claude_home() {
+        let root = unique_temp_dir("codex-settings-load-path");
+        let codex_dir = root.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        fs::write(
+            codex_dir.join("config.toml"),
+            "model = \"gpt-5.4\"\nopenai_base_url = \"https://api.openai.example/v1\"\n",
+        )
+        .unwrap();
+        write_json(
+            &codex_dir.join("auth.json"),
+            json!({
+                "OPENAI_API_KEY": "codex-key-12345"
+            }),
+        );
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let loaded = load_or_default_app_settings_from_conn_hydrated_with_roots(
+            &conn,
+            None,
+            Some(root.as_path()),
+        )
+        .unwrap();
+        let codex = codex_profile(&loaded);
+
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.base_url, "https://api.openai.example/v1");
+        assert_eq!(codex.api_key, "codex-key-12345");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_settings_from_codex_home_uses_file_values_as_canonical_provider_settings() {
         let root = unique_temp_dir("codex-settings-precedence");
 
         if let Some(parent) = root.join(".codex/config.toml").parent() {
@@ -796,26 +1091,76 @@ mod tests {
             root.join(".codex/config.toml"),
             [
                 "model = \"gpt-5.4\"",
-                "approval_policy = \"never\"",
-                "sandbox_mode = \"danger-full-access\"",
+                "openai_base_url = \"https://file.example/v1\"",
             ]
             .join("\n"),
         )
         .unwrap();
+        write_json(
+            &root.join(".codex/auth.json"),
+            json!({
+                "OPENAI_API_KEY": "api-key-from-file"
+            }),
+        );
 
         let mut settings = AppSettingsPayload::default();
         let mut profile = codex_profile(&settings);
+        profile.executable = "codex-nightly".into();
+        profile.extra_args = vec!["--full-auto".into()];
         profile.model = "gpt-5.5".into();
-        profile.approval_policy = "on-request".into();
-        profile.sandbox_mode = "workspace-write".into();
+        profile.base_url = "https://backend.example/v1".into();
+        profile.api_key = "api-key-from-backend".into();
         settings.set_provider_profile("codex", &profile).unwrap();
 
         let hydrated = hydrate_settings_from_codex_home(&settings, Some(root.as_path()));
         let codex = codex_profile(&hydrated);
 
-        assert_eq!(codex.model, "gpt-5.5");
-        assert_eq!(codex.approval_policy, "on-request");
-        assert_eq!(codex.sandbox_mode, "workspace-write");
+        assert_eq!(codex.executable, "codex-nightly");
+        assert_eq!(codex.extra_args, vec!["--full-auto"]);
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.base_url, "https://file.example/v1");
+        assert_eq!(codex.api_key, "api-key-from-file");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_settings_from_codex_home_ignores_openai_api_key_for_env_key_provider() {
+        let root = unique_temp_dir("codex-settings-env-key-auth");
+
+        if let Some(parent) = root.join(".codex/config.toml").parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(
+            root.join(".codex/config.toml"),
+            [
+                "model = \"gpt-5.4\"",
+                "model_provider = \"custom\"",
+                "",
+                "[model_providers.custom]",
+                "name = \"custom\"",
+                "base_url = \"https://codex.example/v1\"",
+                "requires_openai_auth = false",
+                "env_key = \"CUSTOM_API_KEY\"",
+                "wire_api = \"responses\"",
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+        write_json(
+            &root.join(".codex/auth.json"),
+            json!({
+                "OPENAI_API_KEY": "codex-key-12345"
+            }),
+        );
+
+        let hydrated =
+            hydrate_settings_from_codex_home(&AppSettingsPayload::default(), Some(root.as_path()));
+        let codex = codex_profile(&hydrated);
+
+        assert_eq!(codex.model, "gpt-5.4");
+        assert_eq!(codex.base_url, "https://codex.example/v1");
+        assert_eq!(codex.api_key, "");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -824,28 +1169,292 @@ mod tests {
     fn hydrate_settings_from_codex_sources_imports_current_runtime_values_into_global_profile() {
         let hydrated = hydrate_settings_from_codex_sources(
             &AppSettingsPayload::default(),
-            Some(&toml::Table::from_iter([
-                ("model".to_string(), toml::Value::String("gpt-5.4".into())),
-                (
-                    "approval_policy".to_string(),
-                    toml::Value::String("on-request".into()),
+            Some(&CodexConfigSources {
+                config_toml: Some(toml::Table::from_iter([
+                    ("model".to_string(), toml::Value::String("gpt-5.4".into())),
+                    (
+                        "openai_base_url".to_string(),
+                        toml::Value::String("https://api.openai.example/v1".into()),
+                    ),
+                ])),
+                auth_json: Some(
+                    serde_json::from_value(json!({
+                        "OPENAI_API_KEY": "codex-key-12345"
+                    }))
+                    .unwrap(),
                 ),
-                (
-                    "sandbox_mode".to_string(),
-                    toml::Value::String("workspace-write".into()),
-                ),
-                (
-                    "model_reasoning_effort".to_string(),
-                    toml::Value::String("high".into()),
-                ),
-            ])),
+            }),
         );
         let codex = codex_profile(&hydrated);
 
         assert_eq!(codex.model, "gpt-5.4");
-        assert_eq!(codex.approval_policy, "on-request");
-        assert_eq!(codex.sandbox_mode, "workspace-write");
-        assert_eq!(codex.model_reasoning_effort, "high");
+        assert_eq!(codex.base_url, "https://api.openai.example/v1");
+        assert_eq!(codex.api_key, "codex-key-12345");
+    }
+
+    #[test]
+    fn normalize_app_settings_payload_ignores_root_legacy_provider_sections() {
+        let normalized = normalize_app_settings_payload(json!({
+            "claude": {
+                "global": {
+                    "executable": "claude-nightly",
+                    "startup_args": ["--verbose"]
+                }
+            },
+            "codex": {
+                "global": {
+                    "model": "gpt-5.4",
+                    "approval_policy": "on-request"
+                }
+            }
+        }))
+        .unwrap();
+
+        let claude = claude_profile(&normalized);
+        let codex = codex_profile(&normalized);
+        assert_eq!(claude.executable, "claude");
+        assert!(claude.startup_args.is_empty());
+        assert_eq!(codex.model, "");
+        assert_eq!(codex.api_key, "");
+    }
+
+    #[test]
+    fn save_app_settings_to_conn_strips_provider_owned_fields_from_db_storage() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        let mut settings = AppSettingsPayload::default();
+        let mut claude = claude_profile(&settings);
+        claude.executable = "claude-nightly".into();
+        claude.startup_args = vec!["--verbose".into()];
+        claude
+            .env
+            .insert("ANTHROPIC_API_KEY".into(), "claude-key".into());
+        claude.settings_json = json!({ "model": "sonnet" });
+        claude.global_config_json = json!({ "showTurnDuration": true });
+        settings.set_provider_profile("claude", &claude).unwrap();
+
+        let mut codex = codex_profile(&settings);
+        codex.executable = "codex-nightly".into();
+        codex.extra_args = vec!["--full-auto".into()];
+        codex.model = "gpt-5.4".into();
+        codex.api_key = "codex-key".into();
+        codex.base_url = "https://codex.example/v1".into();
+        settings.set_provider_profile("codex", &codex).unwrap();
+
+        save_app_settings_to_conn(&conn, &settings).unwrap();
+
+        let stored = load_or_default_app_settings_from_conn(&conn).unwrap();
+        let stored_claude = claude_profile(&stored);
+        let stored_codex = codex_profile(&stored);
+
+        assert_eq!(stored_claude.executable, "claude-nightly");
+        assert_eq!(stored_claude.startup_args, vec!["--verbose"]);
+        assert!(stored_claude.env.is_empty());
+        assert_eq!(stored_claude.settings_json, json!({}));
+        assert_eq!(stored_claude.global_config_json, json!({}));
+
+        assert_eq!(stored_codex.executable, "codex-nightly");
+        assert_eq!(stored_codex.extra_args, vec!["--full-auto"]);
+        assert_eq!(stored_codex.model, "");
+        assert_eq!(stored_codex.api_key, "");
+        assert_eq!(stored_codex.base_url, "");
+    }
+
+    #[test]
+    fn app_settings_update_writes_real_provider_files_and_keeps_db_for_startup_fields_only() {
+        let app = test_app();
+        let root = unique_temp_dir("provider-write-through");
+        let db_guard = app.state().db.lock().unwrap();
+        let updated = app_settings_update_in_conn_with_roots(
+            db_guard.as_ref().unwrap(),
+            json!({
+                "providers": {
+                    "claude": {
+                        "global": {
+                            "executable": "claude-nightly",
+                            "startup_args": ["--verbose"],
+                            "env": {
+                                "ANTHROPIC_API_KEY": "claude-key",
+                                "ANTHROPIC_BASE_URL": "https://anthropic.example"
+                            },
+                            "settings_json": {
+                                "model": "sonnet"
+                            },
+                            "global_config_json": {
+                                "showTurnDuration": true
+                            }
+                        }
+                    },
+                    "codex": {
+                        "global": {
+                            "executable": "codex-nightly",
+                            "extra_args": ["--full-auto"],
+                            "model": "gpt-5.4",
+                            "api_key": "codex-key",
+                            "base_url": "https://codex.example/v1"
+                        }
+                    }
+                }
+            }),
+            || Ok(()),
+            Some(root.as_path()),
+            Some(root.as_path()),
+        )
+        .unwrap();
+        drop(db_guard);
+
+        let claude = claude_profile(&updated);
+        let codex = codex_profile(&updated);
+        assert_eq!(claude.executable, "claude-nightly");
+        assert_eq!(codex.executable, "codex-nightly");
+        assert_eq!(codex.api_key, "codex-key");
+        assert_eq!(codex.base_url, "https://codex.example/v1");
+
+        let claude_settings = read_json_object_file(&root.join(".claude/settings.json")).unwrap();
+        assert_eq!(
+            claude_settings
+                .get("env")
+                .and_then(Value::as_object)
+                .and_then(|env| env.get("ANTHROPIC_API_KEY"))
+                .and_then(Value::as_str),
+            Some("claude-key")
+        );
+        assert_eq!(claude_settings.get("model").and_then(Value::as_str), Some("sonnet"));
+
+        let claude_global = read_json_object_file(&root.join(".claude.json")).unwrap();
+        assert_eq!(
+            claude_global.get("showTurnDuration").and_then(Value::as_bool),
+            Some(true)
+        );
+
+        let codex_config = read_toml_table_file(&root.join(".codex/config.toml")).unwrap();
+        assert_eq!(
+            codex_config.get("model").and_then(toml::Value::as_str),
+            Some("gpt-5.4")
+        );
+        assert_eq!(
+            codex_config
+                .get("openai_base_url")
+                .and_then(toml::Value::as_str),
+            Some("https://codex.example/v1")
+        );
+        assert_eq!(
+            codex_config
+                .get("cli_auth_credentials_store")
+                .and_then(toml::Value::as_str),
+            Some("file")
+        );
+
+        let codex_auth = read_json_object_file(&root.join(".codex/auth.json")).unwrap();
+        assert_eq!(
+            codex_auth.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("codex-key")
+        );
+
+        let db_guard = app.state().db.lock().unwrap();
+        let stored = load_or_default_app_settings_from_conn(db_guard.as_ref().unwrap()).unwrap();
+        let stored_claude = claude_profile(&stored);
+        let stored_codex = codex_profile(&stored);
+        assert_eq!(stored_claude.executable, "claude-nightly");
+        assert!(stored_claude.env.is_empty());
+        assert_eq!(stored_codex.executable, "codex-nightly");
+        assert!(stored_codex.model.is_empty());
+        assert!(stored_codex.api_key.is_empty());
+        assert!(stored_codex.base_url.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn app_settings_update_surfaces_provider_write_errors_without_persisting_db_changes() {
+        let app = test_app();
+        let broken_root = unique_temp_dir("provider-write-error");
+        fs::write(&broken_root, "not-a-directory").unwrap();
+        let db_guard = app.state().db.lock().unwrap();
+        let result = app_settings_update_in_conn_with_roots(
+            db_guard.as_ref().unwrap(),
+            json!({
+                "providers": {
+                    "codex": {
+                        "global": {
+                            "executable": "codex-nightly",
+                            "extra_args": ["--full-auto"],
+                            "model": "gpt-5.4",
+                            "api_key": "codex-key",
+                            "base_url": "https://codex.example/v1"
+                        }
+                    }
+                }
+            }),
+            || Ok(()),
+            None,
+            Some(broken_root.as_path()),
+        );
+        drop(db_guard);
+
+        let error = result.expect_err("provider write failure should bubble up");
+        assert!(error.contains("Not a directory") || error.contains("not a directory"));
+
+        let stored = load_or_default_app_settings(app.state()).unwrap();
+        let codex = codex_profile(&stored);
+        assert_eq!(codex.executable, "codex");
+        assert!(codex.extra_args.is_empty());
+
+        let _ = fs::remove_file(broken_root);
+    }
+
+    #[test]
+    fn app_settings_update_rejects_codex_api_key_for_env_key_provider() {
+        let app = test_app();
+        let root = unique_temp_dir("codex-settings-write-env-key-auth");
+        if let Some(parent) = root.join(".codex/config.toml").parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(
+            root.join(".codex/config.toml"),
+            [
+                "model = \"gpt-5.4\"",
+                "model_provider = \"custom\"",
+                "",
+                "[model_providers.custom]",
+                "name = \"custom\"",
+                "base_url = \"https://codex.example/v1\"",
+                "requires_openai_auth = false",
+                "env_key = \"CUSTOM_API_KEY\"",
+                "wire_api = \"responses\"",
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+
+        let db_guard = app.state().db.lock().unwrap();
+        let result = app_settings_update_in_conn_with_roots(
+            db_guard.as_ref().unwrap(),
+            json!({
+                "providers": {
+                    "codex": {
+                        "global": {
+                            "model": "gpt-5.4",
+                            "api_key": "codex-key",
+                            "base_url": "https://codex.example/v1"
+                        }
+                    }
+                }
+            }),
+            || Ok(()),
+            None,
+            Some(root.as_path()),
+        );
+        drop(db_guard);
+
+        let error = result.expect_err("env_key providers should reject auth.json OPENAI_API_KEY writes");
+        assert!(error.contains("env_key"));
+
+        let loaded = read_json_object_file(&root.join(".codex/auth.json"));
+        assert!(loaded.is_none());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -853,10 +1462,10 @@ mod tests {
         let app = test_app();
         let interleaved = Arc::new(AtomicBool::new(false));
         let env_patch = json!({
-            "claude": {
-                "global": {
-                    "env": {
-                        "TEST_MARKER": "persisted-value"
+            "providers": {
+                "claude": {
+                    "global": {
+                        "startup_args": ["--dangerously-skip-permissions"]
                     }
                 }
             }
@@ -892,9 +1501,6 @@ mod tests {
         let saved = load_or_default_app_settings(app.state()).unwrap();
         let claude = claude_profile(&saved);
         assert_eq!(saved.general.locale, "zh");
-        assert_eq!(
-            claude.env.get("TEST_MARKER").map(String::as_str),
-            Some("persisted-value")
-        );
+        assert_eq!(claude.startup_args, vec!["--dangerously-skip-permissions"]);
     }
 }
