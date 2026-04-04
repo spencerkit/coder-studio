@@ -8,6 +8,7 @@ export const DEFAULT_LOG_TAIL_LINES = 80;
 export const DEFAULT_SESSION_IDLE_MINUTES = 15;
 export const DEFAULT_SESSION_MAX_HOURS = 12;
 export const STATE_DIR_NAME = 'coder-studio';
+export const SERVICE_DIR_NAME = 'service';
 
 export function resolveStateDir(env = process.env, platform = process.platform) {
   if (env.CODER_STUDIO_HOME) {
@@ -53,6 +54,18 @@ export function resolvePidPath(stateDir) {
 
 export function resolveRuntimePath(stateDir) {
   return path.join(stateDir, 'runtime.json');
+}
+
+export function resolveServiceDir(stateDir) {
+  return path.join(stateDir, SERVICE_DIR_NAME);
+}
+
+export function resolveServiceLauncherPath(stateDir) {
+  return path.join(resolveServiceDir(stateDir), 'launch.sh');
+}
+
+export function resolveServiceBundleManifestPath(stateDir) {
+  return path.join(resolveServiceDir(stateDir), 'service-bundle.json');
 }
 
 function formatHostForUrl(host) {
