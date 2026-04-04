@@ -151,6 +151,16 @@ test('settings shell compact path keeps the new surface treatment and excludes u
   assert.doesNotMatch(stylesSource, /\.session-top-dot\.archived\b/);
 });
 
+test('settings shell scopes compact nav state and tablet multiline stacking rules', async () => {
+  const stylesSource = await fs.readFile(
+    new URL('../apps/web/src/styles/app.css', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(stylesSource, /\.settings-route\[data-density="compact"\]\s+\.settings-nav-item\.active\b/);
+  assert.match(stylesSource, /@media\s*\(max-width:\s*960px\)\s*\{[\s\S]*?\.settings-row--multiline\s*\{[\s\S]*?flex-direction:\s*column;/);
+});
+
 test('settings footer exposes build version and published time metadata', async () => {
   const settingsSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),
