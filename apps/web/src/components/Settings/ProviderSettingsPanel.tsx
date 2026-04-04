@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import type { Translator } from "../../i18n";
 import { getProviderManifest } from "../../features/providers/registry";
 import type { ProviderSettingsField } from "../../features/providers/types";
@@ -94,6 +95,10 @@ const FieldCopy = ({
   </div>
 );
 
+const isMultilineField = (field: ProviderSettingsField) => (
+  field.kind === "string_list" || field.kind === "env_map" || field.kind === "json"
+);
+
 export const ProviderSettingsPanel = ({
   providerId,
   settings,
@@ -154,102 +159,100 @@ export const ProviderSettingsPanel = ({
     commitValue(field.path, parsed.parsed);
   };
 
+  const renderFieldRow = (
+    field: ProviderSettingsField,
+    hint: string | undefined,
+    control: ReactNode,
+  ) => (
+    <div className={`settings-row${isMultilineField(field) ? " settings-row--multiline" : ""}`} key={field.id}>
+      <FieldCopy label={t(field.labelKey)} hint={hint} />
+      <div className="settings-row-control">
+        {control}
+      </div>
+    </div>
+  );
+
   const renderField = (field: ProviderSettingsField) => {
     const value = readPathValue(providerSettings, field.path);
     const hint = fieldErrors[field.id] || (field.hintKey ? t(field.hintKey) : undefined);
     const placeholder = field.placeholderKey ? t(field.placeholderKey) : field.placeholder;
 
     if (field.kind === "command" || field.kind === "text") {
-      return (
-        <div className="settings-row" key={field.id}>
-          <FieldCopy label={t(field.labelKey)} hint={hint} />
-          <div className="settings-row-control">
-            <input
-              className="settings-command-field"
-              type="text"
-              value={typeof value === "string" ? value : ""}
-              onChange={(event) => commitValue(field.path, event.target.value)}
-              placeholder={placeholder}
-              data-testid={`provider-settings-${providerId}-${field.id}`}
-            />
-          </div>
-        </div>
+      return renderFieldRow(
+        field,
+        hint,
+        <input
+          className="settings-command-field"
+          type="text"
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => commitValue(field.path, event.target.value)}
+          placeholder={placeholder}
+          data-testid={`provider-settings-${providerId}-${field.id}`}
+        />,
       );
     }
 
     if (field.kind === "string_list") {
-      return (
-        <div className="settings-row" key={field.id}>
-          <FieldCopy label={t(field.labelKey)} hint={hint} />
-          <div className="settings-row-control">
-            <textarea
-              className="settings-command-field provider-settings-textarea"
-              rows={5}
-              value={fieldDrafts[field.id] ?? listToText(value)}
-              onChange={(event) => onTextAreaChange(field, event.target.value, textToList)}
-              placeholder={placeholder}
-              data-testid={`provider-settings-${providerId}-${field.id}`}
-            />
-          </div>
-        </div>
+      return renderFieldRow(
+        field,
+        hint,
+        <textarea
+          className="settings-command-field provider-settings-textarea"
+          rows={5}
+          value={fieldDrafts[field.id] ?? listToText(value)}
+          onChange={(event) => onTextAreaChange(field, event.target.value, textToList)}
+          placeholder={placeholder}
+          data-testid={`provider-settings-${providerId}-${field.id}`}
+        />,
       );
     }
 
     if (field.kind === "env_map") {
-      return (
-        <div className="settings-row" key={field.id}>
-          <FieldCopy label={t(field.labelKey)} hint={hint} />
-          <div className="settings-row-control">
-            <textarea
-              className="settings-command-field provider-settings-textarea"
-              rows={6}
-              value={fieldDrafts[field.id] ?? envMapToText(value)}
-              onChange={(event) => onTextAreaChange(field, event.target.value, textToEnvMap)}
-              placeholder={placeholder}
-              data-testid={`provider-settings-${providerId}-${field.id}`}
-            />
-          </div>
-        </div>
+      return renderFieldRow(
+        field,
+        hint,
+        <textarea
+          className="settings-command-field provider-settings-textarea"
+          rows={6}
+          value={fieldDrafts[field.id] ?? envMapToText(value)}
+          onChange={(event) => onTextAreaChange(field, event.target.value, textToEnvMap)}
+          placeholder={placeholder}
+          data-testid={`provider-settings-${providerId}-${field.id}`}
+        />,
       );
     }
 
     if (field.kind === "json") {
-      return (
-        <div className="settings-row" key={field.id}>
-          <FieldCopy label={t(field.labelKey)} hint={hint} />
-          <div className="settings-row-control">
-            <textarea
-              className="settings-command-field provider-settings-textarea"
-              rows={8}
-              value={fieldDrafts[field.id] ?? formatJson(value)}
-              onChange={(event) => onJsonChange(field, event)}
-              placeholder={placeholder}
-              data-testid={`provider-settings-${providerId}-${field.id}`}
-            />
-          </div>
-        </div>
+      return renderFieldRow(
+        field,
+        hint,
+        <textarea
+          className="settings-command-field provider-settings-textarea"
+          rows={8}
+          value={fieldDrafts[field.id] ?? formatJson(value)}
+          onChange={(event) => onJsonChange(field, event)}
+          placeholder={placeholder}
+          data-testid={`provider-settings-${providerId}-${field.id}`}
+        />,
       );
     }
 
     if (field.kind === "select") {
-      return (
-        <div className="settings-row" key={field.id}>
-          <FieldCopy label={t(field.labelKey)} hint={hint} />
-          <div className="settings-row-control">
-            <select
-              className="settings-command-field"
-              value={typeof value === "string" ? value : ""}
-              onChange={(event) => commitValue(field.path, event.target.value)}
-              data-testid={`provider-settings-${providerId}-${field.id}`}
-            >
-              {(field.options ?? []).map((option) => (
-                <option key={option.value || "unset"} value={option.value}>
-                  {t(option.labelKey)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+      return renderFieldRow(
+        field,
+        hint,
+        <select
+          className="settings-command-field"
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => commitValue(field.path, event.target.value)}
+          data-testid={`provider-settings-${providerId}-${field.id}`}
+        >
+          {(field.options ?? []).map((option) => (
+            <option key={option.value || "unset"} value={option.value}>
+              {t(option.labelKey)}
+            </option>
+          ))}
+        </select>,
       );
     }
 
@@ -258,29 +261,59 @@ export const ProviderSettingsPanel = ({
 
   if (!manifest) {
     return (
-      <div className="settings-group-card settings-group-card--document">
-        <div className="settings-row">
-          <div className="settings-row-copy">
-            <strong>{providerId}</strong>
-            <span>{t("providerUnknownHint", { provider: providerId })}</span>
-          </div>
-        </div>
+      <div className="provider-settings-panel">
+        <section className="settings-section-slab" data-testid="provider-settings-section-unknown">
+          <header className="settings-section-header">
+            <span className="settings-section-kicker">{t("settingsProviderKicker")}</span>
+            <div className="settings-section-copy">
+              <h2 className="settings-section-title">{providerId}</h2>
+              <p className="settings-section-description">
+                {t("providerUnknownHint", { provider: providerId })}
+              </p>
+            </div>
+          </header>
+        </section>
       </div>
     );
   }
 
   return (
     <div className="provider-settings-panel">
-      {manifest.settingsSections.map((section) => (
-        <div className="settings-group-card settings-group-card--document" key={section.id}>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{t(section.titleKey)}</strong>
-              {section.descriptionKey ? <span>{t(section.descriptionKey)}</span> : null}
-            </div>
+      <section
+        className="settings-section-slab provider-settings-summary"
+        data-testid="provider-settings-summary"
+      >
+        <header className="settings-section-header">
+          <span className="settings-section-kicker">{t("settingsProviderKicker")}</span>
+          <div className="settings-section-copy">
+            <h2 className="settings-section-title">{t("settingsRuntimeSummaryTitle")}</h2>
+            <p className="settings-section-description">{t(manifest.settingsHintKey)}</p>
           </div>
-          {section.fields.map((field) => renderField(field))}
+        </header>
+        <div className="provider-settings-summary-body">
+          <span className="provider-settings-summary-badge">{manifest.badgeLabel}</span>
+          <p className="provider-settings-summary-note">{t("settingsProviderSummaryHint")}</p>
         </div>
+      </section>
+      {manifest.settingsSections.map((section) => (
+        <section
+          className="settings-section-slab provider-settings-section"
+          key={section.id}
+          data-testid={`provider-settings-section-${section.id}`}
+        >
+          <header className="settings-section-header">
+            <span className="settings-section-kicker">{section.id}</span>
+            <div className="settings-section-copy">
+              <h2 className="settings-section-title">{t(section.titleKey)}</h2>
+              {section.descriptionKey ? (
+                <p className="settings-section-description">{t(section.descriptionKey)}</p>
+              ) : null}
+            </div>
+          </header>
+          <div className="settings-section-body">
+            {section.fields.map((field) => renderField(field))}
+          </div>
+        </section>
       ))}
     </div>
   );

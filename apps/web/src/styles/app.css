@@ -8203,6 +8203,39 @@ pre.diff,
   gap: 0;
 }
 
+.provider-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.provider-settings-summary-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-settings-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle) 80%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent) 22%);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.provider-settings-summary-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .settings-group-card {
   border: none !important;
   background: transparent !important;
@@ -8228,6 +8261,11 @@ pre.diff,
 
 .settings-row:first-child {
   border-top: none;
+}
+
+.settings-row--multiline .settings-row-control {
+  align-items: stretch;
+  padding-top: 0;
 }
 
 .settings-row-copy {

@@ -34,13 +34,14 @@ test('settings page groups general and appearance content into named sections', 
   assert.match(source, /settings-section-appearance/);
 });
 
-test('provider settings panel uses shared settings card and row structure', async () => {
+test('provider settings panel uses shared section and row structure', async () => {
   const providerSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
     'utf8',
   );
 
-  assert.match(providerSource, /settings-group-card/);
+  assert.match(providerSource, /provider-settings-panel/);
+  assert.match(providerSource, /settings-section-slab/);
   assert.match(providerSource, /settings-row-copy/);
   assert.match(providerSource, /settings-row-control/);
   assert.match(providerSource, /settings-command-field/);
@@ -55,7 +56,8 @@ test('provider settings panel includes unknown provider fallback copy', async ()
   );
 
   assert.match(providerSource, /providerUnknownHint/);
-  assert.match(providerSource, /settings-group-card--document/);
+  assert.match(providerSource, /provider-settings-section-unknown/);
+  assert.match(providerSource, /settings-section-header/);
 });
 
 test('provider settings panel keeps multiline field draft state instead of reformatting on every keystroke', async () => {
@@ -67,6 +69,19 @@ test('provider settings panel keeps multiline field draft state instead of refor
   assert.match(providerSource, /fieldDrafts/);
   assert.match(providerSource, /value=\{fieldDrafts\[field\.id\] \?\? listToText\(value\)\}/);
   assert.match(providerSource, /value=\{fieldDrafts\[field\.id\] \?\? envMapToText\(value\)\}/);
+});
+
+test('provider settings panel exposes runtime summary, section slabs, and multiline row variants', async () => {
+  const providerSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(providerSource, /provider-settings-summary/);
+  assert.match(providerSource, /provider-settings-section-/);
+  assert.match(providerSource, /settings-section-header/);
+  assert.match(providerSource, /settings-row--multiline/);
+  assert.match(providerSource, /provider-settings-textarea/);
 });
 
 test('provider settings panel only resets draft state when the selected provider changes', async () => {

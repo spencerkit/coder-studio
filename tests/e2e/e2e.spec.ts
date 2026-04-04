@@ -927,21 +927,19 @@ test('background turn_completed still sends a reminder while viewing settings', 
 });
 
 test('claude settings persist across route changes and reloads', async ({ page }) => {
-  await launchLocalWorkspace(page);
+  await launchWorkspaceByPath(page, path.resolve('.'));
   await page.getByTestId('settings-open').click();
 
   await expect(page.getByTestId('settings-page')).toBeVisible();
   await page.getByTestId('settings-max-active').fill('5');
   await page.getByTestId('settings-nav-claude').click();
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude');
-  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
-  await page.getByTestId('claude-flag-dangerously-skip-permissions').check();
-  await page.getByTestId('claude-flag-verbose').check();
-  await page.getByTestId('claude-startup-permission-mode').click();
-  await page.getByTestId('claude-startup-permission-mode-option-auto').click();
-  await page.getByTestId('claude-startup-args').fill('--debug');
-  await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
+  await expect(page.getByTestId('settings-panel-header')).toBeVisible();
+  await expect(page.getByTestId('settings-panel-title')).toContainText('Claude');
+  await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await page.getByTestId('provider-settings-claude-auth-token').fill('token-demo-value');
+  await page.getByTestId('provider-settings-claude-base-url').fill('https://example.test/claude');
   await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: 'Back to app' }).click();
@@ -952,13 +950,11 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
   await page.getByTestId('settings-nav-claude').click();
-  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
-  await expect(page.getByTestId('claude-flag-dangerously-skip-permissions')).toBeChecked();
-  await expect(page.getByTestId('claude-flag-verbose')).toBeChecked();
-  await expect(page.getByTestId('claude-startup-permission-mode')).toContainText('auto');
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
-  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--debug');
-  await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
+  await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-claude-auth-token')).toHaveValue('token-demo-value');
+  await expect(page.getByTestId('provider-settings-claude-base-url')).toHaveValue('https://example.test/claude');
 });
 
 test('history drawer restores archived sessions and deletes records permanently', async ({ page }) => {
