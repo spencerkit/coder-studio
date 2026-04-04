@@ -221,6 +221,12 @@ type CommitAgentSessionTitleArgs = {
   updateTab: UpdateTab;
 };
 
+type ApplyTrackedAgentSessionTitleArgs = CommitAgentSessionTitleArgs & {
+  session: Session;
+  data: string;
+  persistTitle?: (title: string) => void;
+};
+
 export const commitAgentSessionTitle = ({
   refs,
   paneId,
@@ -257,6 +263,42 @@ export const commitAgentSessionTitle = ({
   }
 
   return title;
+};
+
+export const applyTrackedAgentSessionTitle = ({
+  refs,
+  paneId,
+  tabId,
+  sessionId,
+  session,
+  data,
+  locale,
+  t,
+  updateTab,
+  persistTitle,
+}: ApplyTrackedAgentSessionTitleArgs): string | null => {
+  const tracked = trackAgentInitialTitleInput(refs, paneId, session, data);
+  if (!tracked.committedTitle) {
+    return null;
+  }
+
+  const appliedTitle = commitAgentSessionTitle({
+    refs,
+    paneId,
+    tabId,
+    sessionId,
+    rawInput: tracked.committedTitle,
+    locale,
+    t,
+    updateTab,
+  });
+
+  if (!appliedTitle) {
+    return null;
+  }
+
+  persistTitle?.(appliedTitle);
+  return appliedTitle;
 };
 
 type PreviewAgentSessionTitleArgs = {

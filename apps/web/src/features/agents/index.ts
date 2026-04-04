@@ -4,6 +4,7 @@ export {
   type AgentTerminalFitScheduler,
 } from "./agent-terminal-fit-scheduler";
 export {
+  applyTrackedAgentSessionTitle,
   agentRuntimeKey,
   armAgentStartupGate,
   clearAgentRuntimeTracking,

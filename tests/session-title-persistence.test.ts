@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { MutableRefObject } from "react";
 import { createTranslator } from "../apps/web/src/i18n";
 import {
+  applyTrackedAgentSessionTitle,
   commitAgentSessionTitle,
   trackAgentInitialTitleInput,
   type AgentRuntimeRefs,
@@ -253,6 +254,73 @@ test("commitAgentSessionTitle replaces unpadded generated backend titles", () =>
 
   assert.equal(appliedTitle, "title derived from first prompt");
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "title derived from first prompt");
+});
+
+test("applyTrackedAgentSessionTitle commits and persists the first submitted terminal line", () => {
+  const locale = "en";
+  const t = createTranslator(locale);
+  const refs = createAgentRuntimeRefs();
+  const stateRef = {
+    current: {
+      ...createDraftState(),
+      tabs: [
+        {
+          ...createDraftState().tabs[0],
+          sessions: [createLiveSession("Session 4")],
+          activeSessionId: "4",
+        },
+      ],
+    },
+  };
+  const persisted: string[] = [];
+
+  const partial = applyTrackedAgentSessionTitle({
+    refs,
+    paneId: "pane-1",
+    tabId: "ws-1",
+    sessionId: "4",
+    session: stateRef.current.tabs[0]!.sessions[0]!,
+    data: "drafting a title",
+    locale,
+    t,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    persistTitle: (title) => {
+      persisted.push(title);
+    },
+  });
+
+  assert.equal(partial, null);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Session 4");
+  assert.deepEqual(persisted, []);
+
+  const applied = applyTrackedAgentSessionTitle({
+    refs,
+    paneId: "pane-1",
+    tabId: "ws-1",
+    sessionId: "4",
+    session: stateRef.current.tabs[0]!.sessions[0]!,
+    data: "\r",
+    locale,
+    t,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    persistTitle: (title) => {
+      persisted.push(title);
+    },
+  });
+
+  assert.equal(applied, "drafting a title");
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "drafting a title");
+  assert.deepEqual(persisted, ["drafting a title"]);
 });
 
 test("createSessionFromBackend preserves an existing custom title over a generic backend title", () => {

@@ -48,6 +48,7 @@ import { WorkspaceWelcomeScreen } from "../../components/WorkspaceWelcomeScreen"
 import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
+  applyTrackedAgentSessionTitle,
   buildSlashMenuItems,
   buildSlashMenuSections,
   createAgentTerminalFitScheduler,
@@ -2422,6 +2423,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!guardWorkspaceMutation("agent_input")) return;
     const ready = await ensureAgentPaneSessionReady(paneId);
     if (!ready) return;
+    applyTrackedAgentSessionTitle({
+      refs: agentRuntimeRefs,
+      paneId,
+      tabId: ready.tab.id,
+      sessionId: ready.session.id,
+      session: ready.session,
+      data,
+      locale,
+      t,
+      updateTab,
+      persistTitle: (title) => {
+        void syncSessionPatch(ready.tab.id, ready.session.id, { title });
+      },
+    });
     await sendAgentRawChunk(ready.tab, ready.session, data);
   };
 
