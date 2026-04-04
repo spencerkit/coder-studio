@@ -101,7 +101,6 @@ const createDraftState = (): WorkbenchState => ({
           isDraft: true,
           queue: [],
           messages: [],
-          stream: "",
           unread: 0,
           lastActiveAt: 1,
         },
@@ -159,7 +158,6 @@ const createLiveSession = (title = "Session 04"): Session => ({
   autoFeed: true,
   queue: [],
   messages: [],
-  stream: "",
   unread: 0,
   lastActiveAt: 1,
 });
@@ -267,7 +265,6 @@ test("createSessionFromBackend preserves an existing custom title over a generic
       auto_feed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       last_active_at: 1,
       claude_session_id: null,
@@ -281,7 +278,6 @@ test("createSessionFromBackend preserves an existing custom title over a generic
       autoFeed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       lastActiveAt: 1,
       claudeSessionId: undefined,
@@ -290,28 +286,6 @@ test("createSessionFromBackend preserves an existing custom title over a generic
 
   assert.equal(session.title, "test session duplication");
 });
-
-test("createSessionFromBackend sanitizes persisted agent stream control sequences", () => {
-  const session = createSessionFromBackend(
-    {
-      id: 5,
-      title: "Session 5",
-      status: "idle",
-      mode: "branch",
-      auto_feed: true,
-      queue: [],
-      messages: [],
-      stream: "hello\n\x1b[1A\x1b[2K\rworking\x1b[31m red\x1b[0m\n",
-      unread: 0,
-      last_active_at: 1,
-      claude_session_id: null,
-    },
-    "en",
-  );
-
-  assert.equal(session.stream, "hello\nworking\x1b[31m red\x1b[0m\n");
-});
-
 test("materializeSession persists the derived first-input title to the backend session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
@@ -339,7 +313,6 @@ test("materializeSession persists the derived first-input title to the backend s
             auto_feed: true,
             queue: [],
             messages: [],
-            stream: "",
             unread: 0,
             last_active_at: 1,
             claude_session_id: null,
@@ -362,7 +335,6 @@ test("materializeSession persists the derived first-input title to the backend s
             auto_feed: true,
             queue: [],
             messages: [],
-            stream: "",
             unread: 0,
             last_active_at: 1,
             claude_session_id: null,

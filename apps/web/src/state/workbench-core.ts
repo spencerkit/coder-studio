@@ -51,7 +51,6 @@ export type Session = {
   unread: number;
   lastActiveAt: number;
   resumeId?: string;
-  terminalId?: string;
 };
 
 export type GitStatus = {

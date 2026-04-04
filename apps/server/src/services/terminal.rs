@@ -61,16 +61,12 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
 fn mark_bound_terminal_interrupted(
     workspace_id: &str,
     terminal_id: u64,
-    exit_text: &str,
+    _exit_text: &str,
     state: State<'_, AppState>,
 ) {
     if let Ok(Some((binding_workspace_id, session_id))) =
         crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
     {
-        let _ = crate::services::session_runtime::unbind_session_runtime_by_terminal(
-            terminal_id,
-            state,
-        );
         if binding_workspace_id != workspace_id {
             return;
         }
@@ -298,8 +294,15 @@ pub(crate) fn terminal_close(
     if let Some(runtime) = runtime {
         terminate_terminal_runtime(runtime);
     }
+    let is_bound_session_terminal =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)?
+            .is_some_and(|(binding_workspace_id, _)| binding_workspace_id == workspace_id);
     mark_bound_terminal_interrupted(&workspace_id, terminal_id, "\n[terminal exited]\n", state);
-    let _ = delete_workspace_terminal(state, &workspace_id, terminal_id);
+    if is_bound_session_terminal {
+        let _ = set_workspace_terminal_recoverable(state, &workspace_id, terminal_id, false);
+    } else {
+        let _ = delete_workspace_terminal(state, &workspace_id, terminal_id);
+    }
 
     Ok(())
 }

@@ -68,7 +68,6 @@ const createRuntimeSnapshot = (controller: {
         auto_feed: true,
         queue: [],
         messages: [],
-        stream: "",
         unread: 0,
         last_active_at: 1,
         claude_session_id: null,
@@ -99,13 +98,7 @@ const createRuntimeSnapshot = (controller: {
   lifecycle_events: [],
 });
 
-const createOutputSnapshot = ({
-  sessionStream,
-  terminalOutput = "",
-}: {
-  sessionStream: string;
-  terminalOutput?: string;
-}) => {
+const createOutputSnapshot = (terminalOutput = "") => {
   const runtime = createRuntimeSnapshot({
     workspace_id: "ws-1",
     controller_device_id: "device-a",
@@ -117,7 +110,6 @@ const createOutputSnapshot = ({
     takeover_requested_by_client_id: null,
     takeover_deadline_at: null,
   });
-  runtime.snapshot.sessions[0].stream = sessionStream;
   runtime.snapshot.terminals = terminalOutput
     ? [{ id: 7, output: terminalOutput, recoverable: true }]
     : [];
@@ -629,10 +621,10 @@ test("controller events reuse the current state when the effective controller is
   assert.equal(next, current);
 });
 
-test("runtime snapshot does not overwrite a newer live session stream with a shorter replay", () => {
+test("runtime snapshot does not overwrite a newer live terminal snapshot with a shorter replay", () => {
   const attached = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "terminal-output" }),
+    createOutputSnapshot("terminal-output"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -641,21 +633,20 @@ test("runtime snapshot does not overwrite a newer live session stream with a sho
 
   const merged = applyWorkspaceRuntimeSnapshot(
     attached,
-    createOutputSnapshot({ sessionStream: "abc", terminalOutput: "term" }),
+    createOutputSnapshot("term"),
     "en",
     APP_SETTINGS,
     "device-a",
     "client-a",
   );
 
-  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdef");
   assert.equal(merged.tabs[0]?.terminals[0]?.output, "terminal-output");
 });
 
-test("runtime snapshot bridges truncated-head replays with newer appended output", () => {
+test("runtime snapshot bridges truncated-head terminal replays with newer appended output", () => {
   const attached = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    createOutputSnapshot("123456"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -664,21 +655,20 @@ test("runtime snapshot bridges truncated-head replays with newer appended output
 
   const merged = applyWorkspaceRuntimeSnapshot(
     attached,
-    createOutputSnapshot({ sessionStream: "cdefgh", terminalOutput: "345678" }),
+    createOutputSnapshot("345678"),
     "en",
     APP_SETTINGS,
     "device-a",
     "client-a",
   );
 
-  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdefgh");
   assert.equal(merged.tabs[0]?.terminals[0]?.output, "12345678");
 });
 
-test("bootstrap replay merges against the latest store state instead of replacing newer streams", () => {
+test("bootstrap replay merges against the latest store state instead of replacing newer terminal output", () => {
   const current = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    createOutputSnapshot("123456"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -701,7 +691,7 @@ test("bootstrap replay merges against the latest store state instead of replacin
       },
       workspaces: [
         {
-          ...createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }).snapshot,
+          ...createOutputSnapshot("123").snapshot,
         },
       ],
     },
@@ -721,10 +711,9 @@ test("bootstrap replay merges against the latest store state instead of replacin
           show_terminal_panel: false,
         },
       },
-      runtimeSnapshot: createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }),
+      runtimeSnapshot: createOutputSnapshot("123"),
     },
   );
 
-  assert.equal(next.tabs[0]?.sessions[0]?.stream, "abcdef");
   assert.equal(next.tabs[0]?.terminals[0]?.output, "123456");
 });

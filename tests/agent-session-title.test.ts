@@ -38,7 +38,6 @@ const makeTab = (title: string, isDraft = true): Tab => ({
     isDraft,
     queue: [],
     messages: [],
-    stream: "",
     unread: 0,
     lastActiveAt: 0,
   }],

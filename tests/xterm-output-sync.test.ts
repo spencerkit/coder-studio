@@ -132,3 +132,26 @@ test("syncXtermOutputState fully replaces the terminal contents in replace mode"
     hasImperativeWrites: false,
   });
 });
+
+test("syncXtermOutputState keeps appending snapshot output when a bounded buffer trims a large head chunk", () => {
+  const fake = createFakeTerm();
+  const previousOutput = `${"a".repeat(4096)}${"b".repeat(4096)}`;
+  const nextOutput = `${"b".repeat(4096)}${"c".repeat(4096)}`;
+
+  const result = syncXtermOutputState({
+    term: fake.term,
+    previousIdentity: "term-17",
+    nextIdentity: "term-17",
+    previousOutput,
+    nextOutput,
+    outputSyncStrategy: "snapshot",
+    hasImperativeWrites: false,
+  });
+
+  assert.equal(fake.resets, 0);
+  assert.deepEqual(fake.writes, ["c".repeat(4096)]);
+  assert.deepEqual(result, {
+    snapshot: nextOutput,
+    hasImperativeWrites: false,
+  });
+});

@@ -181,7 +181,6 @@ import {
   AGENT_SPECIAL_KEY_MAP,
   replaceLeadingSlashToken
 } from "../../shared/app/constants";
-import { stripAnsi } from "../../shared/utils/ansi";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
 import { resolveTerminalInteractionMode } from "../../shared/utils/terminal-interaction";
@@ -1238,7 +1237,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
   const isArchiveView = Boolean(archivedEntry);
   const viewedSession = isArchiveView ? sessionForView : activeSession;
-  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
 
   useEffect(() => {
     updateTab(activeTab.id, (tab) => {

@@ -38,7 +38,6 @@ const createSession = (
   isDraft,
   queue: [],
   messages: [],
-  stream: "",
   unread: 0,
   lastActiveAt: Date.now(),
 });

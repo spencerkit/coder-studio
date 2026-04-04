@@ -71,7 +71,6 @@ export type BackendSession = {
   auto_feed: boolean;
   queue: BackendQueueTask[];
   messages: BackendSessionMessage[];
-  stream: string;
   unread: number;
   last_active_at: number;
   resume_id?: string | null;
@@ -225,7 +224,6 @@ export type SessionPatch = {
   auto_feed?: boolean;
   queue?: BackendQueueTask[];
   messages?: BackendSessionMessage[];
-  stream?: string;
   unread?: number;
   last_active_at?: number;
   resume_id?: string;

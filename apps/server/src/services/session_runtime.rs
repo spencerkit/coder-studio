@@ -66,6 +66,15 @@ pub(crate) fn bind_session_runtime(
 
     if let Some(existing_terminal_id) = session_bindings.get(&key).copied() {
         terminal_bindings.remove(&existing_terminal_id);
+        let stale_terminal_key = terminal_key(workspace_id, existing_terminal_id);
+        let stale_terminal_is_live = state
+            .terminals
+            .lock()
+            .map_err(|e| e.to_string())?
+            .contains_key(&stale_terminal_key);
+        if !stale_terminal_is_live {
+            let _ = crate::delete_workspace_terminal(state, workspace_id, existing_terminal_id);
+        }
     }
     if let Some(existing_key) = terminal_bindings.get(&terminal_id).cloned() {
         session_bindings.remove(&existing_key);
@@ -288,7 +297,7 @@ pub(crate) fn session_runtime_start(
         params.cols,
         params.rows,
         TerminalCreateOptions {
-            persist_workspace_terminal: false,
+            persist_workspace_terminal: true,
             env: runtime_env,
         },
         &app,

@@ -5,7 +5,6 @@ import { readFileSync } from "node:fs";
 import {
   resolveAgentPaneRenderState,
   resolveAgentPaneTerminalBinding,
-  resolveAgentPaneStream,
 } from "../apps/web/src/features/agents/agent-pane-render";
 import { resolveTerminalInteractionMode } from "../apps/web/src/shared/utils/terminal-interaction";
 import type { Session, Terminal } from "../apps/web/src/state/workbench";
@@ -26,7 +25,6 @@ const createSession = (patch: Partial<Session> = {}): Session => ({
       time: "10:00",
     },
   ],
-  stream: "",
   unread: 0,
   lastActiveAt: 1,
   ...patch,
@@ -63,29 +61,10 @@ test("resolveTerminalInteractionMode disables focused terminals when workspace i
   assert.equal(resolveTerminalInteractionMode(false, true), "readonly");
 });
 
-test("resolveAgentPaneStream returns the persisted transcript for archive rendering", () => {
-  assert.equal(
-    resolveAgentPaneStream(createSession({
-      status: "running",
-      stream: "transcript output",
-    })),
-    "transcript output",
-  );
-
-  assert.equal(
-    resolveAgentPaneStream(createSession({
-      status: "running",
-      stream: "transcript output",
-    })),
-    "transcript output",
-  );
-});
-
 test("resolveAgentPaneTerminalBinding prefers bound terminal output before transcript fallback", () => {
   const session = createSession({
     id: "session-bound",
     status: "running",
-    stream: "transcript output",
     terminalId: "term-17",
   });
   const terminals = [
@@ -108,7 +87,6 @@ test("resolveAgentPaneTerminalBinding keeps bound codex terminals on the live te
     id: "session-codex",
     status: "running",
     provider: "codex",
-    stream: "transcript output",
     terminalId: "term-17",
   });
   const terminals = [

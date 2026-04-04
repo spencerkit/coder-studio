@@ -42,7 +42,6 @@ import {
   shouldIgnoreIncomingWorkspaceViewPatch,
 } from "../../features/workspace/workspace-view-persistence";
 import {
-  AGENT_STREAM_BUFFER_LIMIT,
   TERMINAL_STREAM_BUFFER_LIMIT,
 } from "../app/constants";
 

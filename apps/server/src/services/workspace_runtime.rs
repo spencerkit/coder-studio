@@ -1229,4 +1229,75 @@ mod tests {
             .iter()
             .any(|terminal| terminal.id == started.terminal_id));
     }
+
+    #[test]
+    fn workspace_runtime_attach_keeps_bound_terminal_output_after_runtime_close() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-persist");
+        let session = create_workspace_session(
+            app.state(),
+            &workspace_id,
+            SessionMode::Branch,
+            AgentProvider::claude(),
+        )
+        .unwrap();
+
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id);
+        #[cfg(target_os = "windows")]
+        let input = "echo bound-terminal-persist\r";
+        #[cfg(not(target_os = "windows"))]
+        let input = "printf 'bound-terminal-persist\\n'\r";
+
+        crate::services::terminal::terminal_write(
+            workspace_id.clone(),
+            started.terminal_id,
+            input.to_string(),
+            app.state(),
+        )
+        .unwrap();
+
+        let terminal_key = format!("{workspace_id}:{}", started.terminal_id);
+        let mut saw_output = false;
+        for _ in 0..40 {
+            if app
+                .state()
+                .terminals
+                .lock()
+                .unwrap()
+                .get(&terminal_key)
+                .and_then(|runtime| runtime.output.lock().ok().map(|output| output.clone()))
+                .is_some_and(|output| output.contains("bound-terminal-persist"))
+            {
+                saw_output = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(saw_output, "expected bound terminal output before close");
+
+        crate::services::terminal::terminal_close(
+            workspace_id.clone(),
+            started.terminal_id,
+            app.state(),
+        )
+        .unwrap();
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert!(runtime.snapshot.terminals.iter().any(|terminal| {
+            terminal.id == started.terminal_id
+                && terminal.output.contains("bound-terminal-persist")
+        }));
+        assert!(runtime.session_runtime_bindings.iter().any(|binding| {
+            binding.session_id == session.id.to_string()
+                && binding.terminal_id == started.terminal_id.to_string()
+        }));
+    }
 }

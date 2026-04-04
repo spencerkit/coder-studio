@@ -3,13 +3,38 @@ export type TerminalSnapshotUpdate =
   | { kind: "append"; data: string }
   | { kind: "replace"; data: string };
 
-const DEFAULT_OVERLAP_PROBE_LIMIT = 256;
-
 const trimTail = (value: string, limit: number) => {
   if (limit <= 0 || value.length <= limit) {
     return value;
   }
   return value.slice(-limit);
+};
+
+const OVERLAP_SEPARATOR = "\u0000";
+
+const resolveSuffixPrefixOverlapLength = (previous: string, next: string) => {
+  if (!previous || !next) {
+    return 0;
+  }
+
+  const previousTail = previous.length <= next.length
+    ? previous
+    : previous.slice(-next.length);
+  const combined = `${next}${OVERLAP_SEPARATOR}${previousTail}`;
+  const prefix = new Array<number>(combined.length).fill(0);
+
+  for (let index = 1; index < combined.length; index += 1) {
+    let candidateLength = prefix[index - 1] ?? 0;
+    while (candidateLength > 0 && combined[index] !== combined[candidateLength]) {
+      candidateLength = prefix[candidateLength - 1] ?? 0;
+    }
+    if (combined[index] === combined[candidateLength]) {
+      candidateLength += 1;
+    }
+    prefix[index] = candidateLength;
+  }
+
+  return Math.min(prefix[prefix.length - 1] ?? 0, previousTail.length, next.length);
 };
 
 const resolveAppendDelta = (previous: string, next: string) => {
@@ -18,15 +43,9 @@ const resolveAppendDelta = (previous: string, next: string) => {
     return next.slice(previous.length);
   }
 
-  const maxProbeLength = Math.min(DEFAULT_OVERLAP_PROBE_LIMIT, next.length);
-  for (let probeLength = maxProbeLength; probeLength >= 1; probeLength -= 1) {
-    const probe = next.slice(0, probeLength);
-    const overlapStart = previous.lastIndexOf(probe);
-    if (overlapStart === -1) continue;
-
-    const overlap = previous.slice(overlapStart);
-    if (!next.startsWith(overlap)) continue;
-    return next.slice(overlap.length);
+  const overlapLength = resolveSuffixPrefixOverlapLength(previous, next);
+  if (overlapLength > 0) {
+    return next.slice(overlapLength);
   }
 
   return null;
