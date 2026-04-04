@@ -36,7 +36,7 @@ const SettingsSection = ({ kicker, title, description, testId, children }: Setti
   <section className="settings-section-slab" data-testid={testId}>
     <header className="settings-section-header">
       <span className="settings-section-kicker">{kicker}</span>
-      <div className="settings-section-copy">
+      <div className="settings-section-copy settings-row-copy">
         <h2 className="settings-section-title">{title}</h2>
         {description ? <p className="settings-section-description">{description}</p> : null}
       </div>
@@ -91,6 +91,7 @@ const resolvePanelMeta = (
     title: manifest ? t(manifest.settingsTitleKey) : providerId,
     description: manifest ? t(manifest.settingsHintKey) : t("providerUnknownHint", { provider: providerId }),
     summary: manifest ? manifest.badgeLabel : providerId,
+    summaryCopy: t("settingsProviderSummaryHint"),
   };
 };
 
@@ -138,11 +139,11 @@ export const Settings = ({
         <section className="settings-content-v2">
           <div className="settings-scroll-panel">
             <div className="settings-section-stack">
-              <div className="settings-panel-header" data-testid="settings-panel-header">
+              <div className="settings-panel-header settings-group-card settings-group-card--document" data-testid="settings-panel-header">
                 <span className="settings-panel-kicker" data-testid="settings-panel-kicker">
                   {panelMeta.kicker}
                 </span>
-                <div className="settings-panel-heading">
+                <div className="settings-panel-heading settings-row-copy">
                   <h1 className="settings-panel-title" data-testid="settings-panel-title">
                     {panelMeta.title}
                   </h1>
@@ -151,9 +152,9 @@ export const Settings = ({
                   </p>
                 </div>
                 {panelMeta.summary ? (
-                  <div className="settings-panel-summary" data-testid="settings-panel-summary">
+                  <div className="settings-panel-summary settings-page-status" data-testid="settings-panel-summary">
                     <span className="settings-panel-summary-badge">{panelMeta.summary}</span>
-                    <span className="settings-panel-summary-copy">{t("changesAffectNextLaunch")}</span>
+                    <span className="settings-panel-summary-copy">{panelMeta.summaryCopy}</span>
                   </div>
                 ) : null}
               </div>

@@ -13,8 +13,10 @@ test('settings page declares the workspace panel header and section slab structu
   assert.match(source, /settings-panel-kicker/);
   assert.match(source, /settings-panel-title/);
   assert.match(source, /settings-panel-intro/);
+  assert.match(source, /settings-panel-summary/);
   assert.match(source, /settings-section-slab/);
   assert.match(source, /settings-section-header/);
+  assert.match(source, /settingsProviderSummaryHint/);
 });
 
 test('settings page groups general and appearance content into named sections', async () => {
@@ -26,7 +28,10 @@ test('settings page groups general and appearance content into named sections', 
   assert.match(source, /agentDefaults/);
   assert.match(source, /suspendStrategy/);
   assert.match(source, /completionNotifications/);
-  assert.match(source, /settings-panel-summary/);
+  assert.match(source, /settings-section-agent-defaults/);
+  assert.match(source, /settings-section-suspend-strategy/);
+  assert.match(source, /settings-section-notifications/);
+  assert.match(source, /settings-section-appearance/);
 });
 
 test('provider settings panel uses shared settings card and row structure', async () => {
