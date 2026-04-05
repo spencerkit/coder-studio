@@ -1542,6 +1542,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!targetTab) return;
 
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
+    const restorePaneId = currentTab.activePaneId;
     const action = selectHistoryPrimaryAction(record);
     if (action === "focus" && currentTab.sessions.some((session) => session.id === record.sessionId)) {
       switchSessionInActiveTab(currentTab, record.sessionId);
@@ -1549,13 +1550,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       return;
     }
 
-    const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId);
+    const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId, restorePaneId);
     if (!restored) return;
     if (action === "restore") {
       const latestTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId);
       const restoredSession = latestTab?.sessions.find((session) => session.id === record.sessionId);
       if (latestTab && restoredSession) {
-        await startAgentSessionInPane(latestTab.activePaneId, latestTab, restoredSession);
+        await startAgentSessionInPane(restorePaneId, latestTab, restoredSession);
       }
     }
     void refreshHistoryRecordsIfNeeded();

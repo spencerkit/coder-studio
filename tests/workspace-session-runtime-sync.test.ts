@@ -22,6 +22,18 @@ test("history restore starts the recovered session immediately on first click", 
 
   assert.match(
     source,
-    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(record\.workspaceId, record\.sessionId\);[\s\S]*?if \(action === "restore"\)[\s\S]*?startAgentSessionInPane\(/,
+    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(record\.workspaceId, record\.sessionId, restorePaneId\);[\s\S]*?if \(action === "restore"\)[\s\S]*?startAgentSessionInPane\(restorePaneId,/,
+  );
+});
+
+test("history restore pins the recovered session to the workspace's active pane", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const currentTab = stateRef\.current\.tabs\.find\(\(tab\) => tab\.id === record\.workspaceId\) \?\? targetTab;[\s\S]*?const restorePaneId = currentTab\.activePaneId;[\s\S]*?const restored = await restoreSessionIntoPane\(record\.workspaceId, record\.sessionId, restorePaneId\);/,
   );
 });

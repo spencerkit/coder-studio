@@ -328,3 +328,148 @@ test('restoreSessionIntoPane bumps the workspace sync version before applying th
   assert.equal(stateRef.current.tabs[0]?.activeSessionId, '7');
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, 'History Restore Session');
 });
+
+test('restoreSessionIntoPane prunes orphan draft panes that are no longer backed by sessions', async () => {
+  const locale = 'en';
+  const t = createTranslator(locale);
+  const workspaceId = 'ws-restore-prune';
+  const stateRef = {
+    current: {
+      activeTabId: workspaceId,
+      layout: {
+        leftWidth: 320,
+        rightWidth: 320,
+        rightSplit: 64,
+        showCodePanel: false,
+        showTerminalPanel: false,
+      },
+      overlay: {
+        visible: false,
+        mode: 'local' as const,
+        input: '',
+        target: { type: 'native' as const },
+      },
+      tabs: [
+        {
+          id: workspaceId,
+          title: 'Workspace Restore',
+          status: 'ready' as const,
+          controller: {
+            role: 'controller' as const,
+            deviceId: 'device-a',
+            clientId: 'client-a',
+            fencingToken: 1,
+            takeoverPending: false,
+            takeoverRequestedBySelf: false,
+          },
+          agent: {
+            provider: 'codex' as const,
+            command: 'codex',
+            useWsl: false,
+          },
+          git: { branch: 'main', changes: 0, lastCommit: 'abc123' },
+          gitChanges: [],
+          worktrees: [],
+          sessions: [
+            {
+              id: 'draft-current',
+              title: 'Session 1',
+              status: 'idle' as const,
+              mode: 'branch' as const,
+              provider: 'codex',
+              autoFeed: true,
+              queue: [],
+              messages: [],
+              unread: 0,
+              lastActiveAt: 1,
+              isDraft: true,
+            },
+          ],
+          activeSessionId: 'draft-current',
+          archive: [],
+          terminals: [],
+          activeTerminalId: '',
+          fileTree: [],
+          changesTree: [],
+          filePreview: {
+            path: '',
+            content: '',
+            mode: 'preview' as const,
+            originalContent: '',
+            modifiedContent: '',
+            dirty: false,
+          },
+          paneLayout: {
+            type: 'split' as const,
+            id: 'split-draft',
+            axis: 'vertical' as const,
+            ratio: 0.5,
+            first: {
+              type: 'leaf' as const,
+              id: 'pane-orphan',
+              sessionId: 'draft-orphan',
+            },
+            second: {
+              type: 'leaf' as const,
+              id: 'pane-current',
+              sessionId: 'draft-current',
+            },
+          },
+          activePaneId: 'pane-current',
+          idlePolicy: {
+            enabled: true,
+            idleMinutes: 10,
+            maxActive: 3,
+            pressure: true,
+          },
+        },
+      ],
+    } satisfies WorkbenchState,
+  };
+
+  const actions = createWorkspaceSessionActions({
+    appSettings: defaultAppSettings(),
+    locale,
+    t,
+    stateRef,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    withServiceFallback: async (_operation, fallback) => {
+      if (fallback === null) {
+        return {
+          session: {
+            id: 9,
+            title: 'Recovered Session',
+            status: 'idle' as const,
+            mode: 'branch' as const,
+            provider: 'codex' as const,
+            auto_feed: true,
+            queue: [],
+            messages: [],
+            unread: 0,
+            last_active_at: 10,
+            resume_id: null,
+          },
+          alreadyActive: false,
+        };
+      }
+      return fallback;
+    },
+    addToast: () => {},
+  });
+
+  await actions.restoreSessionIntoPane(workspaceId, '9');
+
+  const tab = stateRef.current.tabs[0];
+  assert.equal(tab?.sessions.length, 1);
+  assert.equal(tab?.sessions[0]?.id, '9');
+  assert.equal(tab?.paneLayout.type, 'leaf');
+  if (tab?.paneLayout.type === 'leaf') {
+    assert.equal(tab.paneLayout.sessionId, '9');
+    assert.equal(tab.activePaneId, tab.paneLayout.id);
+  }
+});

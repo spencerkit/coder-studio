@@ -6,9 +6,11 @@ import {
   type SessionStatus,
   type Tab,
   type WorkbenchState,
+  createDefaultWorkbenchState,
   createId,
   createPaneLeaf,
   createSession,
+  normalizeWorkbenchState,
 } from "../../state/workbench-core";
 import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
@@ -86,6 +88,13 @@ export const createWorkspaceSessionActions = ({
       provider: inheritedProvider,
     };
   };
+
+  const normalizeMutatedTab = (tab: Tab): Tab => normalizeWorkbenchState({
+    tabs: [tab],
+    activeTabId: tab.id,
+    layout: createDefaultWorkbenchState().layout,
+    overlay: createDefaultWorkbenchState().overlay,
+  }).tabs[0];
 
   const controllerForTab = (tabId: string) =>
     stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
@@ -528,7 +537,7 @@ export const createWorkspaceSessionActions = ({
           session.id !== target.replacedSessionId
           && session.id !== nextSession.id
         ));
-      return {
+      return normalizeMutatedTab({
         ...tab,
         sessions: [
           { ...nextSession, status: nextSession.status },
@@ -541,7 +550,7 @@ export const createWorkspaceSessionActions = ({
         activePaneId: target.paneId,
         activeSessionId: nextSession.id,
         viewingArchiveId: undefined,
-      };
+      });
     });
 
     return restored.session;

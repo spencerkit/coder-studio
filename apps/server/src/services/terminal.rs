@@ -58,6 +58,13 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
     }
 }
 
+fn format_terminal_exit_message(wait_result: std::io::Result<portable_pty::ExitStatus>) -> String {
+    match wait_result {
+        Ok(status) => format!("\n[terminal exited: {status}]\n"),
+        Err(error) => format!("\n[terminal exited: wait failed: {error}]\n"),
+    }
+}
+
 fn sync_bound_terminal_runtime_state(
     workspace_id: &str,
     terminal_id: u64,
@@ -190,16 +197,16 @@ pub(crate) fn create_terminal_runtime(
     let runtime_out = runtime.clone();
     let workspace_id_out = workspace_id.to_string();
     std::thread::spawn(move || {
-        if let Ok(mut child) = runtime_out.child.lock() {
-            let _ = child.wait();
-        }
-        let exit_text = "\n[terminal exited]\n";
-        append_runtime_output(&runtime_out, exit_text);
-        emit_terminal(&app_handle, &workspace_id_out, terminal_id, exit_text);
+        let exit_text = match runtime_out.child.lock() {
+            Ok(mut child) => format_terminal_exit_message(child.wait()),
+            Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+        };
+        append_runtime_output(&runtime_out, &exit_text);
+        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &exit_text);
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
             let _ =
-                append_workspace_terminal_output(state, &workspace_id_out, terminal_id, exit_text);
+                append_workspace_terminal_output(state, &workspace_id_out, terminal_id, &exit_text);
             let _ =
                 set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
@@ -358,5 +365,44 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
             state,
         );
         let _ = delete_workspace_terminal(state, workspace_id, terminal_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_terminal_exit_message;
+    use portable_pty::ExitStatus;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn format_terminal_exit_message_reports_success_status() {
+        assert_eq!(
+            format_terminal_exit_message(Ok(ExitStatus::with_exit_code(0))),
+            "\n[terminal exited: Success]\n"
+        );
+    }
+
+    #[test]
+    fn format_terminal_exit_message_reports_non_zero_exit_code() {
+        assert_eq!(
+            format_terminal_exit_message(Ok(ExitStatus::with_exit_code(7))),
+            "\n[terminal exited: Exited with code 7]\n"
+        );
+    }
+
+    #[test]
+    fn format_terminal_exit_message_reports_signal_termination() {
+        assert_eq!(
+            format_terminal_exit_message(Ok(ExitStatus::with_signal("Killed"))),
+            "\n[terminal exited: Terminated by Killed]\n"
+        );
+    }
+
+    #[test]
+    fn format_terminal_exit_message_reports_wait_errors() {
+        assert_eq!(
+            format_terminal_exit_message(Err(Error::new(ErrorKind::Other, "wait failed"))),
+            "\n[terminal exited: wait failed: wait failed]\n"
+        );
     }
 }
