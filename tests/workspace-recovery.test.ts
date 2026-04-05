@@ -85,6 +85,33 @@ test("controller does not get recovery action once interrupted session is reboun
   assert.equal(action, null);
 });
 
+test("controller does not get recovery action for unavailable missing sessions", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "claude",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      lastActiveAt: 1,
+      resumeId: "resume-77",
+      unavailableReason: "该会话已经被删除，无法恢复",
+    },
+  );
+
+  assert.equal(action, null);
+});
+
 test("observer does not get agent recovery action", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({

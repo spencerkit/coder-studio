@@ -9,6 +9,13 @@ pub(crate) struct ProviderLaunchConfig {
 
 pub(crate) trait ProviderAdapter: Sync {
     fn id(&self) -> &'static str;
+    fn list_workspace_sessions(
+        &self,
+        workspace_path: &str,
+    ) -> Result<Vec<ProviderWorkspaceSession>, String>;
+    fn session_exists(&self, workspace_path: &str, resume_id: &str) -> Result<bool, String>;
+    fn delete_workspace_session(&self, workspace_path: &str, resume_id: &str)
+        -> Result<(), String>;
     fn build_start(
         &self,
         settings: &AppSettingsPayload,
@@ -47,6 +54,12 @@ pub(crate) fn provider_runtime_preview(
             &launch.launch_spec,
         ),
     })
+}
+
+#[cfg(test)]
+pub(crate) fn provider_env_test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
 }
 
 #[cfg(test)]

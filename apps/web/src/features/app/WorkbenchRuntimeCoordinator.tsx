@@ -18,7 +18,7 @@ import {
 } from "../../services/http/workspace.service";
 import { findPaneIdBySessionId } from "../../shared/utils/panes";
 import {
-  parseNumericId,
+  isDraftSession,
 } from "../../shared/utils/session";
 import {
   applyWorkbenchUiState,
@@ -247,12 +247,12 @@ export const WorkbenchRuntimeCoordinator = ({
     sessionId: string,
     patch: Pick<SessionPatch, "status" | "last_active_at" | "resume_id">,
   ) => {
-    const backendSessionId = parseNumericId(sessionId);
-    if (backendSessionId === null) return;
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!session || isDraftSession(session)) return;
     if (!tab || tab.controller.role !== "controller") return;
     await withServiceFallback(
-      () => updateSessionRequest(tabId, backendSessionId, patch, tab.controller),
+      () => updateSessionRequest(tabId, sessionId, patch, tab.controller),
       null,
     );
   }, []);
@@ -288,7 +288,6 @@ export const WorkbenchRuntimeCoordinator = ({
               ...tab,
               activeSessionId: sessionId,
               activePaneId: targetPaneId,
-              viewingArchiveId: undefined,
               sessions: tab.sessions.map((session) => {
                 if (session.id === sessionId) {
                   return {
@@ -308,9 +307,8 @@ export const WorkbenchRuntimeCoordinator = ({
       };
     });
 
-    const backendSessionId = parseNumericId(sessionId);
-    if (backendSessionId !== null) {
-      void switchSessionRequest(tabId, backendSessionId, targetTabSnapshot.controller).catch(() => {
+    if (!isDraftSession(nextSession)) {
+      void switchSessionRequest(tabId, sessionId, targetTabSnapshot.controller).catch(() => {
         // Frontend state already switched optimistically.
       });
     }

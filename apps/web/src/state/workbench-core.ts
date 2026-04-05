@@ -51,6 +51,7 @@ export type Session = {
   unread: number;
   lastActiveAt: number;
   resumeId?: string;
+  unavailableReason?: string;
 };
 
 export type GitStatus = {
@@ -116,14 +117,6 @@ export type Project = {
   target: ExecTarget;
 };
 
-export type ArchiveEntry = {
-  id: string;
-  sessionId: string;
-  time: string;
-  mode: SessionMode;
-  snapshot: Session;
-};
-
 export type SessionPaneLeaf = {
   type: "leaf";
   id: string;
@@ -152,7 +145,6 @@ export type Tab = {
   worktrees: WorktreeInfo[];
   sessions: Session[];
   activeSessionId: string;
-  archive: ArchiveEntry[];
   terminals: Terminal[];
   activeTerminalId: string;
   fileTree: TreeNode[];
@@ -161,7 +153,6 @@ export type Tab = {
   paneLayout: SessionPaneNode;
   activePaneId: string;
   idlePolicy: IdlePolicy;
-  viewingArchiveId?: string;
 };
 
 export type LayoutState = {
@@ -267,7 +258,6 @@ export const createTab = (index: number, locale: Locale = getPreferredLocale()):
     worktrees: [],
     sessions: [session],
     activeSessionId: session.id,
-    archive: [],
     terminals: [],
     activeTerminalId: "",
     fileTree: [],
@@ -454,7 +444,6 @@ export const normalizeWorkbenchState = (input: Partial<WorkbenchState> | null | 
   const hasHistory = tabs.some((tab) =>
     tab.status === "ready"
     || (tab.sessions?.length ?? 0) > 1
-    || (tab.archive?.length ?? 0) > 0
   );
   const legacyLayout = input.layout as (LayoutState & { rightTopHeight?: number; rightCollapsed?: boolean }) | undefined;
 

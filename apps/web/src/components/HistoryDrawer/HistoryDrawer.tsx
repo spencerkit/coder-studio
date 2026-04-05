@@ -21,12 +21,14 @@ type HistoryDrawerProps = {
 };
 
 const recordMetaLabel = (record: SessionHistoryRecord, t: Translator) => {
+  if (record.availability === "missing") return t("historyUnavailable");
   if (record.archived) return t("historyArchived");
   if (record.mounted) return t("historyLive");
   return t("historyDetached");
 };
 
 const recordStateClassName = (record: SessionHistoryRecord) => {
+  if (record.availability === "missing") return "missing";
   if (record.archived) return "archived";
   if (record.mounted) return "live";
   return "detached";
@@ -136,7 +138,7 @@ export const HistoryDrawer = ({
                             onClick={() => onDeleteRecord(record)}
                             data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
                           >
-                            {t("historyDelete")}
+                            {record.availability === "missing" ? t("historyRemove") : t("historyDelete")}
                           </button>
                         </div>
                       );

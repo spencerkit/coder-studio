@@ -361,6 +361,49 @@ pub(crate) fn workspace_runtime_attach(
         Ok((lease, snapshot, lifecycle_events, controller_changed))
     })?;
 
+    if controller_changed {
+        emit_workspace_controller_change(&app, &lease);
+    }
+
+    let existing_runtime_bindings =
+        crate::services::session_runtime::collect_workspace_session_runtime_bindings(
+            &workspace_id,
+            state,
+        )?;
+    let mut runtime_bound_session_ids = existing_runtime_bindings
+        .iter()
+        .map(|binding| binding.session_id.clone())
+        .collect::<HashSet<_>>();
+    let auto_resume_bindings = snapshot.view_state.session_bindings.clone();
+    for binding in auto_resume_bindings {
+        if runtime_bound_session_ids.contains(&binding.session_id) {
+            continue;
+        }
+        let Some(session) = snapshot
+            .sessions
+            .iter()
+            .find(|session| session.id == binding.session_id)
+        else {
+            continue;
+        };
+        if session.unavailable_reason.is_some() {
+            continue;
+        }
+        let started = crate::services::session_runtime::session_runtime_start(
+            SessionRuntimeStartParams {
+                workspace_id: workspace_id.clone(),
+                session_id: binding.session_id.clone(),
+                cols: None,
+                rows: None,
+            },
+            app.clone(),
+            state,
+        )?;
+        if started.started {
+            runtime_bound_session_ids.insert(binding.session_id);
+        }
+    }
+
     let runtime_terminals = crate::services::session_runtime::collect_workspace_runtime_terminals(
         &workspace_id,
         state,
@@ -374,15 +417,7 @@ pub(crate) fn workspace_runtime_attach(
             snapshot.terminals.push(runtime_terminal);
         }
     }
-    let session_runtime_bindings =
-        crate::services::session_runtime::collect_workspace_session_runtime_bindings(
-            &workspace_id,
-            state,
-        )?;
-
-    if controller_changed {
-        emit_workspace_controller_change(&app, &lease);
-    }
+    snapshot = crate::services::workspace::hydrate_snapshot_with_live_sessions(state, snapshot)?;
 
     let session_runtime_bindings =
         crate::services::session_runtime::collect_workspace_session_runtime_bindings(
@@ -517,7 +552,9 @@ pub(crate) fn workspace_controller_reject_takeover(
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use std::fs;
     use std::sync::OnceLock;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn with_db_count_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -551,6 +588,78 @@ mod tests {
         )
         .unwrap();
         result.snapshot.workspace.workspace_id
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should move forward")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "coder-studio-{prefix}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
+
+    fn with_claude_home<T>(home_root: &Path, run: impl FnOnce() -> T) -> T {
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .unwrap();
+        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", home_root);
+        let result = run();
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+        result
+    }
+
+    fn replace_view_state_for_test(
+        app: &AppHandle,
+        workspace_id: &str,
+        mutate: impl FnOnce(&mut WorkspaceViewState),
+    ) {
+        let mut view_state = crate::load_workspace_snapshot(app.state(), workspace_id)
+            .map(|snapshot| snapshot.view_state)
+            .unwrap_or(WorkspaceViewState {
+                active_session_id: "slot-primary".to_string(),
+                active_pane_id: "pane-slot-primary".to_string(),
+                active_terminal_id: String::new(),
+                pane_layout: json!({
+                    "type": "leaf",
+                    "id": "pane-slot-primary",
+                    "sessionId": "slot-primary",
+                }),
+                file_preview: json!({
+                    "path": "",
+                    "content": "",
+                    "mode": "preview",
+                    "originalContent": "",
+                    "modifiedContent": "",
+                    "dirty": false
+                }),
+                session_bindings: Vec::new(),
+            });
+        mutate(&mut view_state);
+        with_db(app.state(), |conn| {
+            conn.execute(
+                "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(workspace_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+                params![
+                    workspace_id,
+                    serde_json::to_string(&view_state).map_err(|e| e.to_string())?,
+                    now_ts()
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(())
+        })
+        .expect("view state should persist");
     }
 
     fn start_bound_session_for_test<S: ToString>(
@@ -1232,6 +1341,134 @@ mod tests {
     }
 
     #[test]
+    fn workspace_runtime_attach_auto_resumes_bound_claude_session_from_binding() {
+        let app = test_app();
+        let workspace_root = unique_temp_dir("runtime-attach-provider-workspace");
+        let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
+        let claude_home = unique_temp_dir("runtime-attach-provider-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("resume-session.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Claude native title\",\"timestamp\":2,\"project\":\"{}\",\"sessionId\":\"resume-session\"}}\n",
+                workspace_root.to_string_lossy()
+            ),
+        )
+        .unwrap();
+        replace_view_state_for_test(&app, &workspace_id, |view_state| {
+            view_state.session_bindings = vec![WorkspaceSessionBinding {
+                session_id: "slot-primary".to_string(),
+                provider: AgentProvider::claude(),
+                resume_id: "resume-session".to_string(),
+                title_snapshot: "Old title".to_string(),
+                last_seen_at: 1,
+            }];
+        });
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        let runtime = with_claude_home(&claude_home, || {
+            workspace_runtime_attach(
+                workspace_id.clone(),
+                "device-a".to_string(),
+                "client-a".to_string(),
+                app.clone(),
+                app.state(),
+            )
+        })
+        .expect("runtime attach should succeed");
+
+        let restored = runtime
+            .snapshot
+            .sessions
+            .iter()
+            .find(|session| session.id == "slot-primary")
+            .expect("bound slot should resolve");
+        assert_eq!(restored.provider, AgentProvider::claude());
+        assert_eq!(restored.resume_id.as_deref(), Some("resume-session"));
+        assert_eq!(restored.title, "Claude native title");
+        assert!(restored.runtime_active);
+        assert_eq!(runtime.session_runtime_bindings.len(), 1);
+        assert_eq!(
+            runtime.session_runtime_bindings[0].session_id,
+            "slot-primary"
+        );
+        assert_eq!(runtime.snapshot.view_state.session_bindings.len(), 1);
+        assert_eq!(
+            runtime.snapshot.view_state.session_bindings[0].title_snapshot,
+            "Claude native title"
+        );
+        assert_eq!(
+            runtime.snapshot.view_state.session_bindings[0].last_seen_at,
+            1775386800000
+        );
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn workspace_runtime_attach_keeps_missing_binding_as_unavailable_placeholder() {
+        let app = test_app();
+        let workspace_root = unique_temp_dir("runtime-attach-missing-workspace");
+        let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
+        let claude_home = unique_temp_dir("runtime-attach-missing-home");
+        replace_view_state_for_test(&app, &workspace_id, |view_state| {
+            view_state.session_bindings = vec![WorkspaceSessionBinding {
+                session_id: "slot-primary".to_string(),
+                provider: AgentProvider::claude(),
+                resume_id: "missing-session".to_string(),
+                title_snapshot: "Deleted Session".to_string(),
+                last_seen_at: 123,
+            }];
+        });
+
+        let runtime = with_claude_home(&claude_home, || {
+            workspace_runtime_attach(
+                workspace_id.clone(),
+                "device-a".to_string(),
+                "client-a".to_string(),
+                app.clone(),
+                app.state(),
+            )
+        })
+        .expect("runtime attach should succeed");
+
+        let missing = runtime
+            .snapshot
+            .sessions
+            .iter()
+            .find(|session| session.id == "slot-primary")
+            .expect("missing placeholder should remain visible");
+        assert_eq!(missing.provider, AgentProvider::claude());
+        assert_eq!(missing.title, "Deleted Session");
+        assert_eq!(missing.resume_id.as_deref(), Some("missing-session"));
+        assert_eq!(missing.status, SessionStatus::Interrupted);
+        assert!(!missing.runtime_active);
+        assert_eq!(
+            missing.unavailable_reason.as_deref(),
+            Some("该会话已经被删除，无法恢复")
+        );
+        assert!(runtime.session_runtime_bindings.is_empty());
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
     fn workspace_runtime_attach_keeps_bound_terminal_output_after_runtime_close() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-persist");
@@ -1293,8 +1530,7 @@ mod tests {
         .unwrap();
 
         assert!(runtime.snapshot.terminals.iter().any(|terminal| {
-            terminal.id == started.terminal_id
-                && terminal.output.contains("bound-terminal-persist")
+            terminal.id == started.terminal_id && terminal.output.contains("bound-terminal-persist")
         }));
         assert!(runtime.session_runtime_bindings.iter().any(|binding| {
             binding.session_id == session.id.to_string()

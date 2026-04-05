@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import {
-  type ArchiveEntry,
   type Session,
   type SessionMode,
   type SessionStatus,
@@ -9,14 +8,15 @@ import {
   createDefaultWorkbenchState,
   createId,
   createPaneLeaf,
-  createSession,
   normalizeWorkbenchState,
 } from "../../state/workbench-core";
-import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
+import { formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
   archiveSession as archiveSessionRequest,
-  createSession as createSessionRequest,
+  deleteProviderSession as deleteProviderSessionRequest,
   deleteSession as deleteSessionRequest,
+  removeMissingBinding as removeMissingBindingRequest,
+  restoreProviderSession as restoreProviderSessionRequest,
   restoreSession as restoreSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
@@ -35,17 +35,23 @@ import {
   createSessionFromBackend,
   isDraftSession,
   nowLabel,
-  parseNumericId,
   sessionTitleFromInput,
 } from "../../shared/utils/session";
 import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
-import type { AppSettings, BackendArchiveEntry, BackendSession, SessionPatch, Toast, WorkspaceSnapshot } from "../../types/app";
+import type {
+  AppSettings,
+  SessionHistoryRecord,
+  SessionPatch,
+  Toast,
+  WorkspaceSnapshot,
+} from "../../types/app";
 
 import type { CompletionReminderTarget } from "./completion-reminders";
 import { advanceWorkspaceSyncVersion } from "./workspace-sync-version";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
+type RestorePaneStrategy = "reuse-draft" | "split-new";
 
 type WorkspaceSessionActionDeps = {
   appSettings: AppSettings;
@@ -75,8 +81,12 @@ export const createWorkspaceSessionActions = ({
   }).messages;
 
   const createDraftSessionForTab = (tab: Tab, mode: SessionMode = "branch"): Session => {
+    const defaultProvider = appSettings.agentDefaults?.provider
+      ?? (appSettings as { agentProvider?: string }).agentProvider
+      ?? "claude";
     const inheritedProvider = tab.sessions.find((session) => session.id === tab.activeSessionId)?.provider
-      ?? appSettings.agentDefaults.provider;
+      ?? tab.sessions[0]?.provider
+      ?? defaultProvider;
     const draft = createDraftSessionPlaceholder({
       locale,
       workspacePath: tab.project?.path ?? t("noWorkspace"),
@@ -100,12 +110,13 @@ export const createWorkspaceSessionActions = ({
     stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
 
   const syncSessionPatch = async (tabId: string, sessionId: string, patch: SessionPatch) => {
-    const backendSessionId = parseNumericId(sessionId);
-    if (backendSessionId === null) return;
-    const controller = controllerForTab(tabId);
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const controller = tab?.controller;
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!session || isDraftSession(session)) return;
     if (!controller || controller.role !== "controller") return;
     await withServiceFallback(
-      () => updateSessionRequest(tabId, backendSessionId, patch, controller),
+      () => updateSessionRequest(tabId, sessionId, patch, controller),
       null,
     );
   };
@@ -129,45 +140,22 @@ export const createWorkspaceSessionActions = ({
       return { tab: currentTab, session: currentSession };
     }
 
-    let nextSession: Session | null = null;
-    advanceWorkspaceSyncVersion(tabId);
-    const created = await withServiceFallback<BackendSession | null>(
-      () => createSessionRequest(
-        tabId,
-        currentSession.mode,
-        currentSession.provider,
-        currentTab.controller,
-      ),
-      null,
-    );
-    if (created) {
-      nextSession = createSessionFromBackend(created, locale);
-    }
-
     let tabSnapshot: Tab | null = null;
     let sessionSnapshot: Session | null = null;
-    let titlePatch: { sessionId: string; title: string } | null = null;
     updateTab(tabId, (tab) => {
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
-      const baseSession = nextSession
-        ?? createSession(tab.sessions.length + 1, draftSession.mode, locale, draftSession.provider);
       const draftTitle = draftSession.title.trim();
       const title = sessionTitleFromInput(firstInput)
-        || (draftTitle && draftTitle !== t("draftSessionTitle") ? draftTitle : (baseSession.title || formatSessionTitle(baseSession.id, locale)));
+        || draftTitle
+        || t("draftSessionTitle");
       const preparedSession: Session = {
-        ...baseSession,
+        ...draftSession,
         title,
         status: "idle",
-        mode: draftSession.mode,
-        provider: draftSession.provider,
-        autoFeed: draftSession.autoFeed,
         isDraft: false,
-        queue: draftSession.queue,
-        messages: draftSession.messages,
         unread: 0,
         lastActiveAt: Date.now(),
-        resumeId: baseSession.resumeId,
       };
       const remainingSessions = tab.sessions.filter((session) => session.id !== sessionId);
       tabSnapshot = {
@@ -178,23 +166,12 @@ export const createWorkspaceSessionActions = ({
           ...leaf,
           sessionId: preparedSession.id,
         })),
-        viewingArchiveId: undefined,
       };
-      if (title !== baseSession.title && parseNumericId(preparedSession.id) !== null) {
-        titlePatch = {
-          sessionId: preparedSession.id,
-          title,
-        };
-      }
       sessionSnapshot = preparedSession;
       return tabSnapshot;
     });
 
     if (!tabSnapshot || !sessionSnapshot) return null;
-    const pendingTitlePatch = titlePatch;
-    if (pendingTitlePatch) {
-      await syncSessionPatch(tabId, pendingTitlePatch.sessionId, { title: pendingTitlePatch.title });
-    }
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
 
@@ -208,34 +185,37 @@ export const createWorkspaceSessionActions = ({
   const ensureRestorePane = (
     tabId: string,
     preferredPaneId?: string,
+    strategy: RestorePaneStrategy = "reuse-draft",
   ): { paneId: string; replacedSessionId: string } | null => {
     let target: { paneId: string; replacedSessionId: string } | null = null;
 
     updateTab(tabId, (tab) => {
-      const preferredSessionId = preferredPaneId
-        ? findPaneSessionId(tab.paneLayout, preferredPaneId)
-        : null;
-      if (preferredPaneId && preferredSessionId) {
-        const preferredSession = tab.sessions.find((session) => session.id === preferredSessionId);
-        if (isDraftSession(preferredSession)) {
+      if (strategy === "reuse-draft") {
+        const preferredSessionId = preferredPaneId
+          ? findPaneSessionId(tab.paneLayout, preferredPaneId)
+          : null;
+        if (preferredPaneId && preferredSessionId) {
+          const preferredSession = tab.sessions.find((session) => session.id === preferredSessionId);
+          if (isDraftSession(preferredSession)) {
+            target = {
+              paneId: preferredPaneId,
+              replacedSessionId: preferredSessionId,
+            };
+            return tab;
+          }
+        }
+
+        const draftSession = tab.sessions.find((session) => isDraftSession(session));
+        const draftPaneId = draftSession
+          ? findPaneIdBySessionId(tab.paneLayout, draftSession.id)
+          : undefined;
+        if (draftSession && draftPaneId) {
           target = {
-            paneId: preferredPaneId,
-            replacedSessionId: preferredSessionId,
+            paneId: draftPaneId,
+            replacedSessionId: draftSession.id,
           };
           return tab;
         }
-      }
-
-      const draftSession = tab.sessions.find((session) => isDraftSession(session));
-      const draftPaneId = draftSession
-        ? findPaneIdBySessionId(tab.paneLayout, draftSession.id)
-        : undefined;
-      if (draftSession && draftPaneId) {
-        target = {
-          paneId: draftPaneId,
-          replacedSessionId: draftSession.id,
-        };
-        return tab;
       }
 
       const sourcePaneId = preferredPaneId
@@ -267,7 +247,6 @@ export const createWorkspaceSessionActions = ({
           first: leaf,
           second: nextLeaf,
         })),
-        viewingArchiveId: undefined,
       };
     });
 
@@ -294,7 +273,6 @@ export const createWorkspaceSessionActions = ({
           first: leaf,
           second: nextLeaf,
         })),
-        viewingArchiveId: undefined,
       };
     });
   };
@@ -323,12 +301,10 @@ export const createWorkspaceSessionActions = ({
           }
           return session;
         }),
-      viewingArchiveId: undefined,
     }));
 
-    const backendSessionId = parseNumericId(sessionId);
-    if (backendSessionId !== null) {
-      void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
+    if (!isDraftSession(nextSession)) {
+      void switchSessionRequest(tab.id, sessionId, tab.controller).catch(() => {
         // The active session already changed locally.
       });
     }
@@ -375,26 +351,22 @@ export const createWorkspaceSessionActions = ({
         paneLayout: nextLayout,
         activePaneId: nextPaneId,
         activeSessionId: nextActiveId,
-        viewingArchiveId: undefined,
       };
     });
 
     if (nextActiveSessionId) {
-      const backendSessionId = parseNumericId(nextActiveSessionId);
-      if (backendSessionId !== null) {
-        void switchSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
+      const nextActiveSession = tab.sessions.find((item) => item.id === nextActiveSessionId);
+      if (nextActiveSession && !isDraftSession(nextActiveSession)) {
+        void switchSessionRequest(tab.id, nextActiveSessionId, tab.controller).catch(() => {
           // The pane switch already happened locally.
         });
       }
     }
 
     if (!isDraftSession(session)) {
-      const backendSessionId = parseNumericId(session.id);
-      if (backendSessionId !== null) {
-        void archiveSessionRequest(tab.id, backendSessionId, tab.controller).catch(() => {
-          // Session has already been archived locally.
-        });
-      }
+      void archiveSessionRequest(tab.id, session.id, tab.controller).catch(() => {
+        // Session has already been archived locally.
+      });
     }
   };
 
@@ -403,114 +375,80 @@ export const createWorkspaceSessionActions = ({
     const session = currentTab?.sessions.find((item) => item.id === sessionId);
     if (!currentTab || !session) return;
 
-    const wasActiveSession = currentTab.activeSessionId === sessionId;
-    if (isDraftSession(session)) {
-      const nextSession = currentTab.sessions.find((item) => item.id !== sessionId);
-      const nextActiveAt = Date.now();
-      updateTab(tabId, (tab) => {
-        let remaining = tab.sessions.filter((item) => item.id !== sessionId);
-        if (remaining.length === 0) {
-          remaining = [createDraftSessionForTab(tab, "branch")];
-        }
-        const nextActiveId = remaining[0]?.id ?? sessionId;
-        return {
-          ...tab,
-          sessions: remaining.map((item) => (
-            item.id === nextActiveId
-              ? { ...item, unread: 0, lastActiveAt: Date.now() }
-              : item
-          )),
-          paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActiveId),
-          activeSessionId: nextActiveId,
-          viewingArchiveId: undefined,
-        };
-      });
-      if (nextSession) {
-        const nextStatus = nextSession.status;
-        void syncSessionPatch(tabId, nextSession.id, {
-          status: nextStatus,
-          last_active_at: nextActiveAt,
-        });
-      }
-      return;
-    }
-
-    const backendSessionId = parseNumericId(sessionId);
-    const archived = backendSessionId !== null
-      ? await withServiceFallback<BackendArchiveEntry | null>(
-        () => archiveSessionRequest(tabId, backendSessionId, currentTab.controller),
-        null,
-      )
-      : null;
-
     const nextActiveAt = Date.now();
-    let nextActiveSessionId: string | null = null;
-    let nextActiveStatus: SessionStatus | null = null;
+    const paneId = findPaneIdBySessionId(currentTab.paneLayout, sessionId) ?? currentTab.activePaneId;
+    if (!isDraftSession(session)) {
+      await withServiceFallback(
+        () => archiveSessionRequest(tabId, sessionId, currentTab.controller),
+        null,
+      );
+    }
     updateTab(tabId, (tab) => {
-      const index = tab.sessions.findIndex((item) => item.id === sessionId);
-      if (index === -1) return tab;
-      const entry: ArchiveEntry = {
-        id: archived ? String(archived.id) : createId("archive"),
-        sessionId: session.id,
-        time: archived?.time ?? nowLabel(),
-        mode: archived?.mode ?? session.mode,
-        snapshot: session,
+      const currentSession = tab.sessions.find((item) => item.id === sessionId);
+      if (!currentSession) return tab;
+      const replacement = {
+        ...createDraftSessionForTab(tab, currentSession.mode),
+        provider: currentSession.provider,
+        lastActiveAt: tab.activeSessionId === sessionId ? nextActiveAt : Date.now(),
       };
-      const existingSessions = tab.sessions.filter((item) => item.id !== sessionId);
-      let remaining = existingSessions;
-      if (wasActiveSession) {
-        const draftSession = createDraftSessionForTab(tab, "branch");
-        remaining = [draftSession, ...existingSessions];
-      } else if (remaining.length === 0) {
-        remaining = [createDraftSessionForTab(tab, "branch")];
-      }
-      const nextActive = remaining[0]?.id ?? sessionId;
-      nextActiveSessionId = nextActive;
-      nextActiveStatus = remaining[0] ? remaining[0].status : null;
+      const nextActiveId = tab.activeSessionId === sessionId
+        ? replacement.id
+        : tab.activeSessionId;
+      const nextSessions = tab.sessions.map((item) => {
+        if (item.id === sessionId) {
+          return {
+            ...replacement,
+            unread: 0,
+          };
+        }
+        if (item.id === nextActiveId) {
+          return {
+            ...item,
+            unread: 0,
+            lastActiveAt: nextActiveAt,
+          };
+        }
+        return item;
+      });
       return {
         ...tab,
-        sessions: remaining.map((item) => (
-          item.id === nextActive
-            ? { ...item, unread: 0, lastActiveAt: nextActiveAt }
-            : item
-        )),
-        archive: [entry, ...tab.archive],
-        paneLayout: remapPaneSession(tab.paneLayout, sessionId, nextActive),
-        activeSessionId: nextActive,
-        viewingArchiveId: undefined,
+        sessions: nextSessions,
+        paneLayout: remapPaneSession(tab.paneLayout, sessionId, replacement.id),
+        activePaneId: paneId,
+        activeSessionId: nextActiveId,
       };
     });
-
-    if (wasActiveSession && nextActiveSessionId) {
-      const nextBackendSessionId = parseNumericId(nextActiveSessionId);
-      if (nextBackendSessionId !== null) {
-        void switchSessionRequest(tabId, nextBackendSessionId, currentTab.controller).catch(() => {
-          // Active session already updated locally.
-        });
-      }
-      if (nextActiveStatus) {
-        void syncSessionPatch(tabId, nextActiveSessionId, {
-          status: nextActiveStatus,
-          last_active_at: nextActiveAt,
-        });
-      }
-    }
   };
 
   const restoreSessionIntoPane = async (
     tabId: string,
     sessionId: string,
     preferredPaneId?: string,
+    historyRecord?: Pick<SessionHistoryRecord, "provider" | "resumeId" | "availability"> | null,
+    options?: {
+      strategy?: RestorePaneStrategy;
+    },
   ) => {
-    const numericSessionId = parseNumericId(sessionId);
-    if (numericSessionId === null) return null;
-
-    const target = ensureRestorePane(tabId, preferredPaneId);
+    const strategy = options?.strategy ?? "reuse-draft";
+    const target = ensureRestorePane(tabId, preferredPaneId, strategy);
     if (!target) return null;
+    if (historyRecord?.availability === "missing") {
+      return null;
+    }
 
     advanceWorkspaceSyncVersion(tabId);
     const restored = await withServiceFallback(
-      () => restoreSessionRequest(tabId, numericSessionId, controllerForTab(tabId)),
+      () => (
+        historyRecord?.resumeId
+          ? restoreProviderSessionRequest(
+            tabId,
+            target.replacedSessionId,
+            historyRecord.provider,
+            historyRecord.resumeId,
+            controllerForTab(tabId),
+          )
+          : restoreSessionRequest(tabId, sessionId, controllerForTab(tabId))
+      ),
       null,
     );
     if (!restored) return null;
@@ -519,14 +457,16 @@ export const createWorkspaceSessionActions = ({
       await refreshTabFromBackend(tabId);
       const nextTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
       if (nextTab) {
-        onSwitchSession(nextTab, sessionId);
+        onSwitchSession(nextTab, restored.session.id);
       }
       return restored.session;
     }
 
     const nextActiveAt = Date.now();
     updateTab(tabId, (tab) => {
-      const existingSession = tab.sessions.find((session) => session.id === sessionId);
+      const existingSession = tab.sessions.find((session) => (
+        session.id === restored.session.id || session.id === target.replacedSessionId
+      ));
       const nextSession = {
         ...createSessionFromBackend(restored.session, locale, existingSession),
         unread: 0,
@@ -537,7 +477,7 @@ export const createWorkspaceSessionActions = ({
           session.id !== target.replacedSessionId
           && session.id !== nextSession.id
         ));
-      return normalizeMutatedTab({
+      const nextTab = {
         ...tab,
         sessions: [
           { ...nextSession, status: nextSession.status },
@@ -549,21 +489,35 @@ export const createWorkspaceSessionActions = ({
         })),
         activePaneId: target.paneId,
         activeSessionId: nextSession.id,
-        viewingArchiveId: undefined,
-      });
+      };
+      return strategy === "split-new"
+        ? nextTab
+        : normalizeMutatedTab(nextTab);
     });
 
     return restored.session;
   };
 
-  const deleteSessionFromHistory = async (workspaceId: string, sessionId: string) => {
-    const numericSessionId = parseNumericId(sessionId);
-    if (numericSessionId === null) return false;
-
+  const deleteSessionFromHistory = async (
+    workspaceId: string,
+    sessionId: string,
+    historyRecord?: Pick<SessionHistoryRecord, "provider" | "resumeId" | "availability"> | null,
+  ) => {
     const controller = controllerForTab(workspaceId);
     const deleted = await withServiceFallback(
       async () => {
-        await deleteSessionRequest(workspaceId, numericSessionId, controller);
+        if (historyRecord?.availability === "missing") {
+          await removeMissingBindingRequest(workspaceId, sessionId, controller);
+        } else if (historyRecord?.resumeId) {
+          await deleteProviderSessionRequest(
+            workspaceId,
+            historyRecord.provider,
+            historyRecord.resumeId,
+            controller,
+          );
+        } else {
+          await deleteSessionRequest(workspaceId, sessionId, controller);
+        }
         return true;
       },
       false,

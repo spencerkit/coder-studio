@@ -315,6 +315,15 @@ pub struct ProviderRuntimePreview {
     pub display_command: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct ProviderWorkspaceSession {
+    pub provider: AgentProvider,
+    pub resume_id: String,
+    pub title: String,
+    pub created_at: i64,
+    pub last_active_at: i64,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct QueueTask {
     pub id: u64,
@@ -351,6 +360,8 @@ pub struct SessionInfo {
     pub unread: u32,
     pub last_active_at: i64,
     pub resume_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_active: bool,
 }
@@ -407,6 +418,7 @@ pub struct WorktreeInfo {
     pub tree: String,
 }
 
+#[cfg(test)]
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ArchiveEntry {
     pub id: u64,
@@ -427,7 +439,9 @@ pub struct SessionHistoryRecord {
     pub provider: AgentProvider,
     pub archived: bool,
     pub mounted: bool,
+    pub availability: String,
     pub recoverable: bool,
+    pub created_at: i64,
     pub last_active_at: i64,
     pub archived_at: Option<i64>,
     pub resume_id: Option<String>,
@@ -654,7 +668,6 @@ pub struct WorkspaceSessionState {
 pub struct WorkspaceSnapshot {
     pub workspace: WorkspaceSummary,
     pub sessions: Vec<SessionInfo>,
-    pub archive: Vec<ArchiveEntry>,
     pub view_state: WorkspaceViewState,
     pub terminals: Vec<TerminalInfo>,
 }

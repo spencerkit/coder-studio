@@ -18,6 +18,9 @@ export const resolveAgentRecoveryAction = (
   if (session.terminalId) {
     return null;
   }
+  if (session.unavailableReason) {
+    return null;
+  }
   return {
     kind: session.resumeId ? "resume" : "restart",
   };

@@ -117,6 +117,27 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         "claude"
     }
 
+    fn list_workspace_sessions(
+        &self,
+        workspace_path: &str,
+    ) -> Result<Vec<ProviderWorkspaceSession>, String> {
+        list_claude_workspace_sessions(workspace_path)
+    }
+
+    fn session_exists(&self, workspace_path: &str, resume_id: &str) -> Result<bool, String> {
+        Ok(claude_transcript_path(workspace_path, resume_id)
+            .map(|path| path.exists())
+            .unwrap_or(false))
+    }
+
+    fn delete_workspace_session(
+        &self,
+        workspace_path: &str,
+        resume_id: &str,
+    ) -> Result<(), String> {
+        delete_claude_workspace_session(workspace_path, resume_id)
+    }
+
     fn build_start(
         &self,
         settings: &AppSettingsPayload,
@@ -337,6 +358,296 @@ fn current_claude_home_root() -> Option<PathBuf> {
     }
 }
 
+fn claude_data_root() -> Option<PathBuf> {
+    current_claude_home_root().map(|home_root| home_root.join(".claude"))
+}
+
+fn claude_workspace_path(workspace_path: &str) -> Option<String> {
+    let trimmed = workspace_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn claude_project_slug(workspace_path: &str) -> Option<String> {
+    claude_workspace_path(workspace_path).map(|path| path.replace(['/', '\\', ':'], "-"))
+}
+
+fn claude_project_dir(workspace_path: &str) -> Option<PathBuf> {
+    Some(
+        claude_data_root()?
+            .join("projects")
+            .join(claude_project_slug(workspace_path)?),
+    )
+}
+
+fn claude_transcript_path(workspace_path: &str, resume_id: &str) -> Option<PathBuf> {
+    let trimmed_resume_id = resume_id.trim();
+    if trimmed_resume_id.is_empty() {
+        return None;
+    }
+    Some(claude_project_dir(workspace_path)?.join(format!("{trimmed_resume_id}.jsonl")))
+}
+
+fn system_time_to_timestamp_ms(time: std::time::SystemTime) -> Option<i64> {
+    let duration = time.duration_since(std::time::UNIX_EPOCH).ok()?;
+    i64::try_from(duration.as_millis()).ok()
+}
+
+fn fallback_file_bounds(path: &Path) -> Option<(i64, i64)> {
+    let metadata = std::fs::metadata(path).ok()?;
+    let created_at = metadata
+        .created()
+        .ok()
+        .and_then(system_time_to_timestamp_ms);
+    let modified_at = metadata
+        .modified()
+        .ok()
+        .and_then(system_time_to_timestamp_ms);
+    match (created_at, modified_at) {
+        (Some(created_at), Some(modified_at)) => {
+            Some((created_at.min(modified_at), created_at.max(modified_at)))
+        }
+        (Some(timestamp), None) | (None, Some(timestamp)) => Some((timestamp, timestamp)),
+        (None, None) => None,
+    }
+}
+
+struct ClaudeTranscriptMetadata {
+    bounds: Option<(i64, i64)>,
+    is_sidechain: bool,
+}
+
+fn inspect_claude_transcript(path: &Path) -> Result<ClaudeTranscriptMetadata, String> {
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let reader = BufReader::new(file);
+    let mut created_at = None;
+    let mut last_active_at = None;
+    let mut is_sidechain = false;
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(payload) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        is_sidechain =
+            is_sidechain || payload.get("isSidechain").and_then(Value::as_bool) == Some(true);
+        let Some(timestamp) = payload
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| value.timestamp_millis())
+        else {
+            continue;
+        };
+        created_at = Some(created_at.map_or(timestamp, |current: i64| current.min(timestamp)));
+        last_active_at =
+            Some(last_active_at.map_or(timestamp, |current: i64| current.max(timestamp)));
+    }
+
+    Ok(ClaudeTranscriptMetadata {
+        bounds: created_at.zip(last_active_at),
+        is_sidechain,
+    })
+}
+
+fn read_claude_history_title(workspace_path: &str, resume_id: &str) -> Result<String, String> {
+    let Some(workspace_path) = claude_workspace_path(workspace_path) else {
+        return Ok(resume_id.trim().to_string());
+    };
+    let Some(history_path) = claude_data_root().map(|root| root.join("history.jsonl")) else {
+        return Ok(resume_id.trim().to_string());
+    };
+    if !history_path.exists() {
+        return Ok(resume_id.trim().to_string());
+    }
+
+    let file = std::fs::File::open(history_path).map_err(|e| e.to_string())?;
+    let reader = BufReader::new(file);
+    let mut latest_title = None;
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(payload) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        let matches_session = payload
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            == Some(resume_id.trim());
+        let matches_project = payload
+            .get("project")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            == Some(workspace_path.as_str());
+        if !matches_session || !matches_project {
+            continue;
+        }
+        if let Some(display) = payload
+            .get("display")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            latest_title = Some(display.to_string());
+        }
+    }
+
+    Ok(latest_title.unwrap_or_else(|| resume_id.trim().to_string()))
+}
+
+fn rewrite_claude_history_without_session(
+    workspace_path: &str,
+    resume_id: &str,
+) -> Result<(), String> {
+    let Some(workspace_path) = claude_workspace_path(workspace_path) else {
+        return Ok(());
+    };
+    let Some(history_path) = claude_data_root().map(|root| root.join("history.jsonl")) else {
+        return Ok(());
+    };
+    if !history_path.exists() {
+        return Ok(());
+    }
+
+    let file = std::fs::File::open(&history_path).map_err(|e| e.to_string())?;
+    let reader = BufReader::new(file);
+    let mut retained = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let should_drop = serde_json::from_str::<Value>(trimmed)
+            .ok()
+            .map(|payload| {
+                payload
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    == Some(resume_id.trim())
+                    && payload
+                        .get("project")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        == Some(workspace_path.as_str())
+            })
+            .unwrap_or(false);
+        if !should_drop {
+            retained.push(line);
+        }
+    }
+
+    let rewritten = if retained.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", retained.join("\n"))
+    };
+    std::fs::write(history_path, rewritten).map_err(|e| e.to_string())
+}
+
+fn list_claude_workspace_sessions(
+    workspace_path: &str,
+) -> Result<Vec<ProviderWorkspaceSession>, String> {
+    let Some(project_dir) = claude_project_dir(workspace_path) else {
+        return Ok(Vec::new());
+    };
+    if !project_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut sessions = Vec::new();
+    for entry in std::fs::read_dir(project_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if !entry.file_type().map_err(|e| e.to_string())?.is_file() {
+            continue;
+        }
+        if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let Some(resume_id) = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+
+        let transcript = inspect_claude_transcript(&path)?;
+        if transcript.is_sidechain {
+            continue;
+        }
+        let (created_at, last_active_at) = transcript
+            .bounds
+            .or_else(|| fallback_file_bounds(&path))
+            .unwrap_or((0, 0));
+        sessions.push(ProviderWorkspaceSession {
+            provider: AgentProvider::claude(),
+            resume_id: resume_id.clone(),
+            title: read_claude_history_title(workspace_path, &resume_id)?,
+            created_at,
+            last_active_at,
+        });
+    }
+
+    sessions.sort_by(|left, right| {
+        right
+            .last_active_at
+            .cmp(&left.last_active_at)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| left.resume_id.cmp(&right.resume_id))
+    });
+    Ok(sessions)
+}
+
+fn delete_claude_workspace_session(workspace_path: &str, resume_id: &str) -> Result<(), String> {
+    let trimmed_resume_id = resume_id.trim();
+    if trimmed_resume_id.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(transcript_path) = claude_transcript_path(workspace_path, trimmed_resume_id) {
+        match std::fs::remove_file(&transcript_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+
+    if let Some(project_dir) = claude_project_dir(workspace_path) {
+        let session_dir = project_dir.join(trimmed_resume_id);
+        match std::fs::remove_dir_all(&session_dir) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+        if session_dir.exists() {
+            match std::fs::remove_dir(&session_dir) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+    }
+
+    rewrite_claude_history_without_session(workspace_path, trimmed_resume_id)
+}
+
 pub(crate) fn ensure_claude_hook_settings(cwd: &str, _target: &ExecTarget) -> Result<(), String> {
     let Some(home_root) = current_claude_home_root() else {
         return Ok(());
@@ -402,6 +713,21 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("temp dir should be created");
         path
+    }
+
+    fn with_claude_home<T>(home_root: &Path, run: impl FnOnce() -> T) -> T {
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .unwrap();
+        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", home_root);
+        let result = run();
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+        result
     }
 
     #[test]
@@ -499,19 +825,10 @@ mod tests {
         )
         .unwrap();
 
-        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
-        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", &claude_home);
-
-        let result =
-            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
-        }
-
-        result.unwrap();
+        with_claude_home(&claude_home, || {
+            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native)
+        })
+        .unwrap();
 
         assert!(!workspace_root
             .join(".claude")
@@ -560,21 +877,171 @@ mod tests {
         )
         .unwrap();
 
-        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
-        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", &claude_home);
-
-        let result =
-            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
-        }
-
-        result.unwrap();
+        with_claude_home(&claude_home, || {
+            ensure_claude_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native)
+        })
+        .unwrap();
 
         assert!(!workspace_claude_dir.join("settings.local.json").exists());
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn claude_adapter_lists_workspace_sessions_with_latest_matching_history_title() {
+        let workspace_root = unique_temp_dir("claude-provider-workspace");
+        let claude_home = unique_temp_dir("claude-provider-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-a.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:30:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                concat!(
+                    "{{\"display\":\"older title\",\"timestamp\":1,\"project\":\"{workspace}\",\"sessionId\":\"session-a\"}}\n",
+                    "{{\"display\":\"wrong project\",\"timestamp\":9,\"project\":\"/tmp/other\",\"sessionId\":\"session-a\"}}\n",
+                    "{{\"display\":\"latest title\",\"timestamp\":2,\"project\":\"{workspace}\",\"sessionId\":\"session-a\"}}\n"
+                ),
+                workspace = workspace_root.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+
+        let sessions = with_claude_home(&claude_home, || {
+            adapter().list_workspace_sessions(workspace_root.to_str().unwrap())
+        })
+        .expect("claude workspace sessions");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].provider, AgentProvider::claude());
+        assert_eq!(sessions[0].resume_id, "session-a");
+        assert_eq!(sessions[0].title, "latest title");
+        assert_eq!(sessions[0].created_at, 1775383200000);
+        assert_eq!(sessions[0].last_active_at, 1775388600000);
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn claude_adapter_ignores_sidechain_workspace_sessions() {
+        let workspace_root = unique_temp_dir("claude-provider-workspace");
+        let claude_home = unique_temp_dir("claude-provider-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-parent.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\",\"isSidechain\":false}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("session-sidechain.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:05:00.000Z\",\"isSidechain\":true,\"parentUuid\":\"session-parent\"}\n",
+                "{\"timestamp\":\"2026-04-05T10:10:00.000Z\",\"isSidechain\":true,\"parentUuid\":\"session-parent\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                concat!(
+                    "{{\"display\":\"Parent Session\",\"timestamp\":1,\"project\":\"{workspace}\",\"sessionId\":\"session-parent\"}}\n",
+                    "{{\"display\":\"Sidechain Session\",\"timestamp\":2,\"project\":\"{workspace}\",\"sessionId\":\"session-sidechain\"}}\n"
+                ),
+                workspace = workspace_root.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+
+        let sessions = with_claude_home(&claude_home, || {
+            adapter().list_workspace_sessions(workspace_root.to_str().unwrap())
+        })
+        .expect("claude workspace sessions");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].resume_id, "session-parent");
+        assert_eq!(sessions[0].title, "Parent Session");
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn claude_adapter_checks_existence_and_deletes_real_storage() {
+        let workspace_root = unique_temp_dir("claude-provider-workspace");
+        let claude_home = unique_temp_dir("claude-provider-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        let session_dir = project_dir.join("session-a");
+        fs::create_dir_all(&session_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-a.jsonl"),
+            "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("session-b.jsonl"),
+            "{\"timestamp\":\"2026-04-05T10:05:00.000Z\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                concat!(
+                    "{{\"display\":\"delete me\",\"timestamp\":1,\"project\":\"{workspace}\",\"sessionId\":\"session-a\"}}\n",
+                    "{{\"display\":\"keep other session\",\"timestamp\":2,\"project\":\"{workspace}\",\"sessionId\":\"session-b\"}}\n",
+                    "{{\"display\":\"keep other project\",\"timestamp\":3,\"project\":\"/tmp/other\",\"sessionId\":\"session-a\"}}\n"
+                ),
+                workspace = workspace_root.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+
+        with_claude_home(&claude_home, || {
+            assert!(adapter()
+                .session_exists(workspace_root.to_str().unwrap(), "session-a")
+                .unwrap());
+            adapter()
+                .delete_workspace_session(workspace_root.to_str().unwrap(), "session-a")
+                .unwrap();
+            assert!(!adapter()
+                .session_exists(workspace_root.to_str().unwrap(), "session-a")
+                .unwrap());
+        });
+
+        assert!(!project_dir.join("session-a.jsonl").exists());
+        assert!(!session_dir.exists());
+        assert!(project_dir.join("session-b.jsonl").exists());
+        let history = fs::read_to_string(claude_dir.join("history.jsonl")).unwrap();
+        assert!(!history.contains("delete me"));
+        assert!(history.contains("keep other session"));
+        assert!(history.contains("keep other project"));
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);

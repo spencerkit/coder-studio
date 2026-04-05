@@ -53,23 +53,24 @@ pub(crate) use command::http::start_transport_server;
 pub(crate) use infra::db::set_session_status;
 pub(crate) use infra::db::{
     activate_workspace_ui, append_agent_lifecycle_event, append_workspace_terminal_output,
-    archive_workspace_session, archive_workspace_sessions, close_workspace_ui,
-    create_workspace_session, delete_workspace_session, delete_workspace_terminal, init_db,
-    launch_workspace_record_scoped, load_session, load_session_history_records,
-    load_workspace_controller_lease, mark_active_sessions_interrupted_on_boot,
-    patch_workspace_view_state, persist_workspace_terminal, restore_workspace_session,
-    save_workspace_controller_lease, set_session_resume_id,
-    set_session_runtime_state_if_not_archived, set_session_status_if_not_archived,
-    set_workspace_terminal_recoverable, switch_workspace_session,
-    update_workbench_layout as persist_workbench_layout, update_workspace_idle_policy,
-    update_workspace_session, upsert_workspace_attachment,
-    workbench_bootstrap as load_workbench_bootstrap, workspace_access_context,
-    workspace_snapshot as load_workspace_snapshot,
+    close_workspace_ui, create_workspace_session, delete_workspace_session,
+    delete_workspace_terminal, init_db, launch_workspace_record_scoped, load_session,
+    load_session_history_records, load_workspace_controller_lease, load_workspace_slot_session,
+    mark_active_sessions_interrupted_on_boot, patch_workspace_view_state,
+    persist_workspace_terminal, remove_workspace_bindings_for_provider_session,
+    remove_workspace_session_binding, restore_workspace_session, save_workspace_controller_lease,
+    set_session_resume_id, set_session_runtime_state_if_not_archived,
+    set_session_status_if_not_archived, set_workspace_terminal_recoverable,
+    switch_workspace_session, update_workbench_layout as persist_workbench_layout,
+    update_workspace_idle_policy, update_workspace_session, upsert_workspace_attachment,
+    upsert_workspace_session_binding, workbench_bootstrap as load_workbench_bootstrap,
+    workspace_access_context, workspace_snapshot as load_workspace_snapshot,
 };
 #[cfg(test)]
 pub(crate) use infra::db::{
-    launch_workspace_record, read_with_db_call_count, read_workspace_session_query_count,
-    reset_with_db_call_count, reset_workspace_session_query_count,
+    archive_workspace_session, launch_workspace_record, read_with_db_call_count,
+    read_workspace_session_query_count, reset_with_db_call_count,
+    reset_workspace_session_query_count,
 };
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_terminal_pty_command, repo_name_from_url,
@@ -83,19 +84,21 @@ pub(crate) use infra::support::{
     resolve_git_command_path, wsl_parent_path,
 };
 pub(crate) use infra::time::{default_idle_policy, now_label, now_ts, status_label};
+#[cfg(test)]
+pub(crate) use models::ArchiveEntry;
 pub(crate) use models::{
     AgentEvent, AgentLifecycleEvent, AgentLifecycleHistoryEntry, AgentProvider, AgentStartResult,
-    AppSettingsPayload, ArchiveEntry, ClaudeRuntimeProfile, CodexRuntimeProfile,
-    CommandAvailability, ExecTarget, FileNode, FilePreview, FilesystemEntry,
-    FilesystemListResponse, FilesystemRoot, GitChangeEntry, GitFileDiffPayload, GitStatus,
-    IdlePolicy, ProviderId, SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole,
-    SessionMode, SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo,
-    SessionRuntimeStartResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
-    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
-    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
-    WorkspaceSessionBinding, WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource,
-    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
-    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    AppSettingsPayload, ClaudeRuntimeProfile, CodexRuntimeProfile, CommandAvailability, ExecTarget,
+    FileNode, FilePreview, FilesystemEntry, FilesystemListResponse, FilesystemRoot, GitChangeEntry,
+    GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId, ProviderWorkspaceSession,
+    SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
+    SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult,
+    SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
+    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
+    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSessionBinding,
+    WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
+    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
+    WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -124,10 +127,12 @@ pub(crate) use services::terminal::{
 };
 pub(crate) use services::workspace::{
     activate_workspace_scoped, archive_session, close_workspace_scoped, create_session,
-    delete_session, launch_workspace_internal_scoped, launch_workspace_scoped,
-    list_session_history, restore_session, session_update, switch_session, sync_session_runtime_state,
-    sync_session_status, update_idle_policy, update_workbench_layout_scoped,
-    workbench_bootstrap_scoped, workspace_snapshot, workspace_view_update, worktree_inspect,
+    delete_provider_session, delete_session, launch_workspace_internal_scoped,
+    launch_workspace_scoped, list_session_history, remove_missing_binding,
+    restore_provider_session, restore_session, session_update, switch_session,
+    sync_session_runtime_state, sync_session_status, update_idle_policy,
+    update_workbench_layout_scoped, workbench_bootstrap_scoped, workspace_snapshot,
+    workspace_view_update, worktree_inspect,
 };
 pub(crate) use services::workspace_runtime::{
     assert_workspace_controller_can_mutate, register_workspace_client_connection,

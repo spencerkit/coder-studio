@@ -737,7 +737,8 @@ async function promptHiddenInput(label) {
 
 async function ensureInitialPasswordConfigured(context, flags) {
   const status = await getStatus(context.options);
-  if (runtimeIsActive(status)) {
+  const runtimeBelongsToCurrentState = Boolean(status.runtime || status.serviceState);
+  if (runtimeIsActive(status) && runtimeBelongsToCurrentState) {
     return context;
   }
 
@@ -1343,6 +1344,7 @@ export async function runCli(argv = process.argv.slice(2)) {
       options = context.options;
       const result = await startRuntime({
         ...options,
+        autoInstallManagedService: true,
         foreground: Boolean(flags.foreground),
         onReady: async ({ endpoint, pid }) => {
           if (!flags.json) {
@@ -1374,7 +1376,10 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (command === 'restart') {
       context = await ensureInitialPasswordConfigured(context, flags);
       options = context.options;
-      const result = await restartRuntime(options);
+      const result = await restartRuntime({
+        ...options,
+        autoInstallManagedService: true,
+      });
       if (flags.json) printJson(result);
       else {
         console.log('coder-studio restarted');

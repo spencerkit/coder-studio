@@ -1,3 +1,4 @@
+use crate::infra::time::now_ts_ms;
 use crate::*;
 
 pub(crate) fn parse_http_endpoint(endpoint: &str) -> Option<(String, u16, String)> {
@@ -86,18 +87,35 @@ pub(crate) fn process_provider_hook_payload(
 ) -> Result<AgentLifecycleEvent, String> {
     let envelope: ProviderHookEnvelope =
         serde_json::from_value(value).map_err(|e| e.to_string())?;
-    let session_id_num = envelope
-        .session_id
-        .parse::<u64>()
-        .map_err(|_| "invalid_session_id".to_string())?;
     let state: State<AppState> = app.state();
-    let session = load_session(state, &envelope.workspace_id, session_id_num)?;
+    let mut session = crate::services::workspace::resolve_session_for_slot(
+        state,
+        &envelope.workspace_id,
+        &envelope.session_id,
+    )?;
     let adapter =
         crate::services::provider_registry::resolve_provider_adapter(session.provider.as_str())
             .ok_or_else(|| format!("unknown_provider:{}", session.provider.as_str()))?;
 
     if let Some(resume_id) = adapter.extract_resume_id(&envelope.payload) {
-        let _ = set_session_resume_id(state, &envelope.workspace_id, session_id_num, resume_id);
+        session.resume_id = Some(resume_id.clone());
+        session.last_active_at = now_ts_ms();
+        let _ = upsert_workspace_session_binding(
+            state,
+            &envelope.workspace_id,
+            WorkspaceSessionBinding {
+                session_id: envelope.session_id.clone(),
+                provider: session.provider.clone(),
+                resume_id,
+                title_snapshot: session.title.clone(),
+                last_seen_at: session.last_active_at,
+            },
+        );
+        let _ = crate::services::workspace::remember_live_session(
+            state,
+            &envelope.workspace_id,
+            &session,
+        );
         resume_debug_log(format!(
             "provider_hook saved resume_id workspace_id={} session_id={} provider={}",
             envelope.workspace_id,
@@ -116,7 +134,7 @@ pub(crate) fn process_provider_hook_payload(
         let updated = sync_session_status(
             state,
             &normalized.workspace_id,
-            session_id_num,
+            &normalized.session_id,
             status.clone(),
         )?;
         resume_debug_log(format!(
@@ -251,6 +269,7 @@ pub(crate) fn run_provider_hook_helper() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infra::db::with_db;
     use crate::runtime::RuntimeHandle;
     use std::process::Command;
 
@@ -262,14 +281,26 @@ mod tests {
         app
     }
 
-    fn drain_transport_events(
-        rx: &mut broadcast::Receiver<TransportEvent>,
-    ) -> Vec<TransportEvent> {
+    fn drain_transport_events(rx: &mut broadcast::Receiver<TransportEvent>) -> Vec<TransportEvent> {
         let mut events = Vec::new();
         while let Ok(event) = rx.try_recv() {
             events.push(event);
         }
         events
+    }
+
+    fn load_view_state_for_test(app: &AppHandle, workspace_id: &str) -> WorkspaceViewState {
+        with_db(app.state(), |conn| {
+            let payload: String = conn
+                .query_row(
+                    "SELECT payload FROM workspace_view_state WHERE workspace_id = ?1",
+                    params![workspace_id],
+                    |row: &rusqlite::Row<'_>| row.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+            serde_json::from_str(&payload).map_err(|e| e.to_string())
+        })
+        .expect("view state should load")
     }
 
     #[test]
@@ -333,6 +364,22 @@ mod tests {
             ProviderId::codex(),
         )
         .unwrap();
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                active_session_id: Some(session.id.clone()),
+                active_pane_id: Some(format!("pane-{}", session.id)),
+                active_terminal_id: None,
+                pane_layout: Some(json!({
+                    "type": "leaf",
+                    "id": format!("pane-{}", session.id),
+                    "sessionId": session.id.clone(),
+                })),
+                file_preview: None,
+            },
+        )
+        .expect("view state should track the session slot");
 
         let session_start_payload = json!({
             "workspace_id": workspace_id,
@@ -348,8 +395,17 @@ mod tests {
 
         let session_id = session.id.clone();
         let running = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
+        assert_eq!(running.resume_id, None);
         assert_eq!(running.status, SessionStatus::Idle);
+        let view_state = load_view_state_for_test(&app, &workspace_id);
+        assert_eq!(view_state.session_bindings.len(), 1);
+        assert_eq!(view_state.session_bindings[0].session_id, session_id);
+        assert_eq!(
+            view_state.session_bindings[0].provider,
+            AgentProvider::codex()
+        );
+        assert_eq!(view_state.session_bindings[0].resume_id, "codex-resume-1");
+        assert_eq!(view_state.session_bindings[0].title_snapshot, running.title);
 
         let waiting_payload = json!({
             "workspace_id": workspace_id,

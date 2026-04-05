@@ -131,6 +131,25 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         "codex"
     }
 
+    fn list_workspace_sessions(
+        &self,
+        workspace_path: &str,
+    ) -> Result<Vec<ProviderWorkspaceSession>, String> {
+        list_codex_workspace_sessions(workspace_path)
+    }
+
+    fn session_exists(&self, workspace_path: &str, resume_id: &str) -> Result<bool, String> {
+        codex_session_exists(workspace_path, resume_id)
+    }
+
+    fn delete_workspace_session(
+        &self,
+        workspace_path: &str,
+        resume_id: &str,
+    ) -> Result<(), String> {
+        delete_codex_workspace_session(workspace_path, resume_id)
+    }
+
     fn build_start(
         &self,
         settings: &AppSettingsPayload,
@@ -349,6 +368,252 @@ fn native_codex_home_root() -> Option<PathBuf> {
     }
 }
 
+fn codex_data_root() -> Option<PathBuf> {
+    native_codex_home_root().map(|home_root| home_root.join(".codex"))
+}
+
+fn codex_workspace_path(workspace_path: &str) -> Option<String> {
+    let trimmed = workspace_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn codex_state_db_path() -> Option<PathBuf> {
+    Some(codex_data_root()?.join("state_5.sqlite"))
+}
+
+fn normalize_provider_timestamp_ms(value: i64) -> i64 {
+    if value.abs() >= 1_000_000_000_000 {
+        value
+    } else {
+        value.saturating_mul(1000)
+    }
+}
+
+fn codex_thread_source_is_subagent(source: &str) -> bool {
+    serde_json::from_str::<Value>(source)
+        .ok()
+        .and_then(|payload| payload.get("subagent").cloned())
+        .is_some()
+}
+
+fn list_codex_workspace_sessions(
+    workspace_path: &str,
+) -> Result<Vec<ProviderWorkspaceSession>, String> {
+    let Some(workspace_path) = codex_workspace_path(workspace_path) else {
+        return Ok(Vec::new());
+    };
+    let Some(db_path) = codex_state_db_path() else {
+        return Ok(Vec::new());
+    };
+    if !db_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, rollout_path, title, created_at, updated_at, source
+             FROM threads
+             WHERE cwd = ?1
+               AND COALESCE(TRIM(agent_nickname), '') = ''
+               AND COALESCE(TRIM(agent_role), '') = ''",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![workspace_path], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut sessions = Vec::new();
+    for row in rows {
+        let (resume_id, rollout_path, title, created_at, last_active_at, source) =
+            row.map_err(|e| e.to_string())?;
+        if codex_thread_source_is_subagent(&source) {
+            continue;
+        }
+        if !Path::new(&rollout_path).exists() {
+            continue;
+        }
+        sessions.push(ProviderWorkspaceSession {
+            provider: AgentProvider::codex(),
+            resume_id,
+            title,
+            created_at: normalize_provider_timestamp_ms(created_at),
+            last_active_at: normalize_provider_timestamp_ms(last_active_at),
+        });
+    }
+
+    sessions.sort_by(|left, right| {
+        right
+            .last_active_at
+            .cmp(&left.last_active_at)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| left.resume_id.cmp(&right.resume_id))
+    });
+    Ok(sessions)
+}
+
+fn codex_session_exists(workspace_path: &str, resume_id: &str) -> Result<bool, String> {
+    use rusqlite::OptionalExtension;
+
+    let Some(workspace_path) = codex_workspace_path(workspace_path) else {
+        return Ok(false);
+    };
+    let trimmed_resume_id = resume_id.trim();
+    if trimmed_resume_id.is_empty() {
+        return Ok(false);
+    }
+    let Some(db_path) = codex_state_db_path() else {
+        return Ok(false);
+    };
+    if !db_path.exists() {
+        return Ok(false);
+    }
+
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let rollout_path = conn
+        .query_row(
+            "SELECT rollout_path FROM threads WHERE id = ?1 AND cwd = ?2 LIMIT 1",
+            params![trimmed_resume_id, workspace_path],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(rollout_path
+        .map(|path| Path::new(&path).exists())
+        .unwrap_or(false))
+}
+
+fn rewrite_codex_history_without_session(resume_id: &str) -> Result<(), String> {
+    let Some(history_path) = codex_data_root().map(|root| root.join("history.jsonl")) else {
+        return Ok(());
+    };
+    if !history_path.exists() {
+        return Ok(());
+    }
+
+    let file = std::fs::File::open(&history_path).map_err(|e| e.to_string())?;
+    let reader = BufReader::new(file);
+    let mut retained = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let should_drop = serde_json::from_str::<Value>(trimmed)
+            .ok()
+            .map(|payload| {
+                payload
+                    .get("session_id")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    == Some(resume_id)
+            })
+            .unwrap_or(false);
+        if !should_drop {
+            retained.push(line);
+        }
+    }
+
+    let rewritten = if retained.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", retained.join("\n"))
+    };
+    std::fs::write(history_path, rewritten).map_err(|e| e.to_string())
+}
+
+fn delete_codex_shell_snapshots(resume_id: &str) -> Result<(), String> {
+    let Some(snapshot_dir) = codex_data_root().map(|root| root.join("shell_snapshots")) else {
+        return Ok(());
+    };
+    if !snapshot_dir.exists() {
+        return Ok(());
+    }
+
+    let prefix = format!("{resume_id}.");
+    for entry in std::fs::read_dir(snapshot_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if file_name != resume_id && !file_name.starts_with(&prefix) {
+            continue;
+        }
+        let path = entry.path();
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            std::fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+        } else {
+            std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn delete_codex_workspace_session(workspace_path: &str, resume_id: &str) -> Result<(), String> {
+    use rusqlite::OptionalExtension;
+
+    let Some(workspace_path) = codex_workspace_path(workspace_path) else {
+        return Ok(());
+    };
+    let trimmed_resume_id = resume_id.trim();
+    if trimmed_resume_id.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(db_path) = codex_state_db_path() {
+        if db_path.exists() {
+            let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+            let rollout_path = conn
+                .query_row(
+                    "SELECT rollout_path FROM threads WHERE id = ?1 AND cwd = ?2 LIMIT 1",
+                    params![trimmed_resume_id, workspace_path],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?;
+            if let Some(rollout_path) = rollout_path {
+                match std::fs::remove_file(&rollout_path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.to_string()),
+                }
+            }
+            conn.execute(
+                "DELETE FROM logs WHERE thread_id = ?1",
+                params![trimmed_resume_id],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "DELETE FROM thread_spawn_edges WHERE parent_thread_id = ?1 OR child_thread_id = ?1",
+                params![trimmed_resume_id],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "DELETE FROM threads WHERE id = ?1 AND cwd = ?2",
+                params![trimmed_resume_id, workspace_path],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    rewrite_codex_history_without_session(trimmed_resume_id)?;
+    delete_codex_shell_snapshots(trimmed_resume_id)
+}
+
 fn upsert_codex_global_feature(root: &mut toml::Table, feature_name: &str) {
     let features_entry = root
         .entry("features".to_string())
@@ -425,6 +690,7 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -439,6 +705,76 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("temp dir should be created");
         path
+    }
+
+    fn with_codex_home<T>(home_root: &Path, run: impl FnOnce() -> T) -> T {
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .unwrap();
+        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
+        std::env::set_var("CODER_STUDIO_CODEX_HOME", home_root);
+        let result = run();
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
+        }
+        result
+    }
+
+    fn init_codex_state_db(path: &Path) {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                rollout_path TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                model_provider TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                title TEXT NOT NULL,
+                sandbox_policy TEXT NOT NULL,
+                approval_mode TEXT NOT NULL,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                has_user_event INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                archived_at INTEGER,
+                git_sha TEXT,
+                git_branch TEXT,
+                git_origin_url TEXT,
+                cli_version TEXT NOT NULL DEFAULT '',
+                first_user_message TEXT NOT NULL DEFAULT '',
+                agent_nickname TEXT,
+                agent_role TEXT,
+                memory_mode TEXT NOT NULL DEFAULT 'enabled',
+                model TEXT,
+                reasoning_effort TEXT,
+                agent_path TEXT
+            );
+            CREATE TABLE logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts INTEGER NOT NULL,
+                ts_nanos INTEGER NOT NULL,
+                level TEXT NOT NULL,
+                target TEXT NOT NULL,
+                message TEXT,
+                module_path TEXT,
+                file TEXT,
+                line INTEGER,
+                thread_id TEXT,
+                process_uuid TEXT,
+                estimated_bytes INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE thread_spawn_edges (
+                parent_thread_id TEXT NOT NULL,
+                child_thread_id TEXT NOT NULL PRIMARY KEY,
+                status TEXT NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -500,19 +836,10 @@ mod tests {
         )
         .unwrap();
 
-        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
-        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
-
-        let result =
-            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
-        }
-
-        result.unwrap();
+        with_codex_home(&codex_home, || {
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native)
+        })
+        .unwrap();
 
         let raw = fs::read_to_string(config_dir.join("config.toml")).unwrap();
         let parsed = raw.parse::<toml::Table>().unwrap();
@@ -574,19 +901,10 @@ mod tests {
         )
         .unwrap();
 
-        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
-        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
-
-        let result =
-            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
-        }
-
-        result.unwrap();
+        with_codex_home(&codex_home, || {
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native)
+        })
+        .unwrap();
 
         assert!(!workspace_root.join(".codex").join("hooks.json").exists());
 
@@ -635,19 +953,10 @@ mod tests {
         )
         .unwrap();
 
-        let previous = std::env::var_os("CODER_STUDIO_CODEX_HOME");
-        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
-
-        let result =
-            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native);
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
-        }
-
-        result.unwrap();
+        with_codex_home(&codex_home, || {
+            ensure_codex_hook_settings(workspace_root.to_str().unwrap(), &ExecTarget::Native)
+        })
+        .unwrap();
 
         assert!(!workspace_codex_dir.join("hooks.json").exists());
 
@@ -700,5 +1009,206 @@ mod tests {
                 ],
             )
         );
+    }
+
+    #[test]
+    fn codex_adapter_lists_workspace_sessions_from_threads_table() {
+        let workspace_root = unique_temp_dir("codex-provider-workspace");
+        let codex_home = unique_temp_dir("codex-provider-home");
+        let codex_dir = codex_home.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        init_codex_state_db(&codex_dir.join("state_5.sqlite"));
+        let rollout_path = codex_home.join("rollout-a.jsonl");
+        fs::write(&rollout_path, "{\"kind\":\"user\"}\n").unwrap();
+        let conn = Connection::open(codex_dir.join("state_5.sqlite")).unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode)
+             VALUES (?1, ?2, ?3, ?4, 'codex', 'openai', ?5, ?6, 'workspace-write', 'never')",
+            rusqlite::params![
+                "thread-a",
+                rollout_path.to_string_lossy().to_string(),
+                1775383200_i64,
+                1775388600_i64,
+                workspace_root.to_string_lossy().to_string(),
+                "Codex native title"
+            ],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode)
+             VALUES (?1, ?2, ?3, ?4, 'codex', 'openai', '/tmp/other', ?5, 'workspace-write', 'never')",
+            rusqlite::params![
+                "thread-b",
+                rollout_path.to_string_lossy().to_string(),
+                1_i64,
+                2_i64,
+                "Wrong workspace"
+            ],
+        ).unwrap();
+
+        let sessions = with_codex_home(&codex_home, || {
+            adapter().list_workspace_sessions(workspace_root.to_str().unwrap())
+        })
+        .expect("codex workspace sessions");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].provider, AgentProvider::codex());
+        assert_eq!(sessions[0].resume_id, "thread-a");
+        assert_eq!(sessions[0].title, "Codex native title");
+        assert_eq!(sessions[0].created_at, 1775383200000);
+        assert_eq!(sessions[0].last_active_at, 1775388600000);
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn codex_adapter_ignores_subagent_threads_in_workspace_sessions() {
+        let workspace_root = unique_temp_dir("codex-provider-workspace");
+        let codex_home = unique_temp_dir("codex-provider-home");
+        let codex_dir = codex_home.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        init_codex_state_db(&codex_dir.join("state_5.sqlite"));
+        let top_rollout_path = codex_home.join("rollout-top.jsonl");
+        let subagent_rollout_path = codex_home.join("rollout-subagent.jsonl");
+        fs::write(&top_rollout_path, "{\"kind\":\"user\"}\n").unwrap();
+        fs::write(&subagent_rollout_path, "{\"kind\":\"user\"}\n").unwrap();
+        let conn = Connection::open(codex_dir.join("state_5.sqlite")).unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode)
+             VALUES (?1, ?2, ?3, ?4, 'cli', 'openai', ?5, ?6, 'workspace-write', 'never')",
+            rusqlite::params![
+                "thread-top",
+                top_rollout_path.to_string_lossy().to_string(),
+                1775383200_i64,
+                1775388600_i64,
+                workspace_root.to_string_lossy().to_string(),
+                "Top Level Session"
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode, agent_nickname, agent_role)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'openai', ?6, ?7, 'workspace-write', 'never', ?8, ?9)",
+            rusqlite::params![
+                "thread-subagent",
+                subagent_rollout_path.to_string_lossy().to_string(),
+                1775383300_i64,
+                1775388700_i64,
+                "{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"thread-top\",\"depth\":1,\"agent_nickname\":\"Hilbert\",\"agent_role\":\"worker\"}}}",
+                workspace_root.to_string_lossy().to_string(),
+                "Subagent Session",
+                "Hilbert",
+                "worker"
+            ],
+        )
+        .unwrap();
+
+        let sessions = with_codex_home(&codex_home, || {
+            adapter().list_workspace_sessions(workspace_root.to_str().unwrap())
+        })
+        .expect("codex workspace sessions");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].resume_id, "thread-top");
+        assert_eq!(sessions[0].title, "Top Level Session");
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn codex_adapter_checks_rollout_existence_and_deletes_real_storage() {
+        let workspace_root = unique_temp_dir("codex-provider-workspace");
+        let codex_home = unique_temp_dir("codex-provider-home");
+        let codex_dir = codex_home.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        fs::create_dir_all(codex_dir.join("shell_snapshots")).unwrap();
+        init_codex_state_db(&codex_dir.join("state_5.sqlite"));
+        let rollout_path = codex_home.join("rollout-a.jsonl");
+        fs::write(&rollout_path, "{\"kind\":\"user\"}\n").unwrap();
+        fs::write(
+            codex_dir.join("history.jsonl"),
+            concat!(
+                "{\"session_id\":\"thread-a\",\"ts\":1,\"text\":\"delete me\"}\n",
+                "{\"session_id\":\"thread-b\",\"ts\":2,\"text\":\"keep me\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            codex_dir.join("shell_snapshots").join("thread-a.123.sh"),
+            "#!/bin/sh\necho snapshot\n",
+        )
+        .unwrap();
+        let conn = Connection::open(codex_dir.join("state_5.sqlite")).unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode)
+             VALUES (?1, ?2, ?3, ?4, 'codex', 'openai', ?5, ?6, 'workspace-write', 'never')",
+            rusqlite::params![
+                "thread-a",
+                rollout_path.to_string_lossy().to_string(),
+                1775383200_i64,
+                1775388600_i64,
+                workspace_root.to_string_lossy().to_string(),
+                "Codex native title"
+            ],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO logs (ts, ts_nanos, level, target, message, thread_id) VALUES (1, 0, 'INFO', 'test', 'log', 'thread-a')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status) VALUES ('thread-a', 'thread-child', 'running')",
+            [],
+        ).unwrap();
+
+        with_codex_home(&codex_home, || {
+            assert!(adapter()
+                .session_exists(workspace_root.to_str().unwrap(), "thread-a")
+                .unwrap());
+            fs::remove_file(&rollout_path).unwrap();
+            assert!(!adapter()
+                .session_exists(workspace_root.to_str().unwrap(), "thread-a")
+                .unwrap());
+            fs::write(&rollout_path, "{\"kind\":\"user\"}\n").unwrap();
+            adapter()
+                .delete_workspace_session(workspace_root.to_str().unwrap(), "thread-a")
+                .unwrap();
+        });
+
+        let remaining_threads: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM threads WHERE id = 'thread-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let remaining_logs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM logs WHERE thread_id = 'thread-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let remaining_edges: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM thread_spawn_edges WHERE parent_thread_id = 'thread-a' OR child_thread_id = 'thread-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining_threads, 0);
+        assert_eq!(remaining_logs, 0);
+        assert_eq!(remaining_edges, 0);
+        assert!(!rollout_path.exists());
+        assert!(!codex_dir
+            .join("shell_snapshots")
+            .join("thread-a.123.sh")
+            .exists());
+        let history = fs::read_to_string(codex_dir.join("history.jsonl")).unwrap();
+        assert!(!history.contains("delete me"));
+        assert!(history.contains("keep me"));
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(codex_home);
     }
 }

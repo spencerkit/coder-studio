@@ -236,12 +236,12 @@ pub(crate) fn session_runtime_start(
         let _ = unbind_session_runtime_by_terminal(existing_terminal_id, state);
     }
 
-    let session_id_num = params
-        .session_id
-        .parse::<u64>()
-        .map_err(|_| "invalid_session_id".to_string())?;
     let (workspace_cwd, workspace_target) = workspace_access_context(state, &params.workspace_id)?;
-    let session = load_session(state, &params.workspace_id, session_id_num)?;
+    let session = crate::services::workspace::resolve_session_for_slot(
+        state,
+        &params.workspace_id,
+        &params.session_id,
+    )?;
     let settings = load_or_default_app_settings(state)?;
     let adapter =
         crate::services::provider_registry::resolve_provider_adapter(session.provider.as_str())
@@ -308,7 +308,7 @@ pub(crate) fn session_runtime_start(
     let updated = sync_session_runtime_state(
         state,
         &params.workspace_id,
-        session_id_num,
+        &params.session_id,
         session_status_on_runtime_start(),
         true,
     )?;

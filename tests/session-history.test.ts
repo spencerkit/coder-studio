@@ -37,7 +37,9 @@ test("mapSessionHistoryRecord normalizes backend payload fields", () => {
     provider: "claude",
     archived: true,
     mounted: false,
+    availability: "available",
     recoverable: true,
+    created_at: 1729999999000,
     last_active_at: 1730000000000,
     archived_at: 1730000001000,
     resume_id: "claude-42",
@@ -53,7 +55,9 @@ test("mapSessionHistoryRecord normalizes backend payload fields", () => {
     provider: "claude",
     archived: true,
     mounted: false,
+    availability: "available",
     recoverable: true,
+    createdAt: 1729999999000,
     lastActiveAt: 1730000000000,
     archivedAt: 1730000001000,
     resumeId: "claude-42",
@@ -73,9 +77,18 @@ test("groupSessionHistory keeps the current workspace first and sorts records by
   assert.equal(groups[1]?.workspaceId, "ws-2");
 });
 
-test("selectHistoryPrimaryAction distinguishes focus restore and noop", () => {
+test("selectHistoryPrimaryAction distinguishes focus restore open and noop", () => {
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: true, archived: false, recoverable: true })), "focus");
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: true, recoverable: true })), "restore");
+  assert.equal(
+    selectHistoryPrimaryAction(createRecord({
+      mounted: true,
+      archived: false,
+      availability: "missing",
+      recoverable: false,
+    })),
+    "open",
+  );
   assert.equal(selectHistoryPrimaryAction(createRecord({ mounted: false, archived: false, recoverable: false })), "noop");
 });
 

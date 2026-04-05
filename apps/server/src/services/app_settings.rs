@@ -616,7 +616,9 @@ fn write_codex_provider_settings(
 
     if base_url_changed {
         match codex_active_provider_id(&config).as_deref() {
-            Some("openai") | None => update_toml_string_field(&mut config, "openai_base_url", next_base_url),
+            Some("openai") | None => {
+                update_toml_string_field(&mut config, "openai_base_url", next_base_url)
+            }
             Some(provider_id) => {
                 let provider = codex_provider_table_mut(&mut config, provider_id);
                 update_toml_string_field(provider, "base_url", next_base_url);
@@ -639,7 +641,10 @@ fn write_codex_provider_settings(
         }
     }
 
-    if codex_active_provider_uses_openai_auth(&config) && api_key_changed && (!next_api_key.is_empty() || had_existing_auth) {
+    if codex_active_provider_uses_openai_auth(&config)
+        && api_key_changed
+        && (!next_api_key.is_empty() || had_existing_auth)
+    {
         let needs_file_store = config
             .get("cli_auth_credentials_store")
             .and_then(toml::Value::as_str)
@@ -842,8 +847,7 @@ fn app_settings_update_in_conn(
 ) -> Result<AppSettingsPayload, String> {
     let normalized_patch = normalize_settings_patch_value(patch, &Vec::<String>::new());
     let current_settings = load_or_default_app_settings_from_conn_hydrated(conn)?;
-    let mut current = serde_json::to_value(current_settings.clone())
-        .map_err(|e| e.to_string())?;
+    let mut current = serde_json::to_value(current_settings.clone()).map_err(|e| e.to_string())?;
     merge_settings_value(&mut current, normalized_patch, &[]);
     before_save()?;
     let merged = normalize_app_settings_payload(current)?;
@@ -1508,7 +1512,10 @@ mod tests {
         write_claude_provider_settings(&current, &next, Some(root.as_path())).unwrap();
 
         let saved = read_json_object_file(&root.join(".claude/settings.json")).unwrap();
-        assert_eq!(saved.get("model").and_then(Value::as_str), Some("new-model"));
+        assert_eq!(
+            saved.get("model").and_then(Value::as_str),
+            Some("new-model")
+        );
         assert_eq!(
             saved.get("permissionMode").and_then(Value::as_str),
             Some("plan")
@@ -1518,14 +1525,16 @@ mod tests {
             Some(30)
         );
         assert_eq!(
-            saved.get("env")
+            saved
+                .get("env")
                 .and_then(Value::as_object)
                 .and_then(|env| env.get("UNCHANGED_ENV"))
                 .and_then(Value::as_str),
             Some("keep")
         );
         assert_eq!(
-            saved.get("env")
+            saved
+                .get("env")
                 .and_then(Value::as_object)
                 .and_then(|env| env.get("LATEST_ONLY_ENV"))
                 .and_then(Value::as_str),
@@ -1601,7 +1610,9 @@ disable_response_storage = true
             Some("https://old.example/v1")
         );
         assert_eq!(
-            saved_config.get("service_tier").and_then(toml::Value::as_str),
+            saved_config
+                .get("service_tier")
+                .and_then(toml::Value::as_str),
             Some("fast")
         );
         assert_eq!(

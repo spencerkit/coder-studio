@@ -91,6 +91,81 @@ test('restartRuntime proxies to service restart when service is installed', asyn
   assert.equal(result.status, 'running');
 });
 
+test('startRuntime installs and starts managed service when auto install is enabled', async () => {
+  const calls = [];
+  let installed = false;
+  let active = false;
+
+  const result = await startRuntime({
+    autoInstallManagedService: true,
+    __testOverrides: {
+      getServiceStatus: async () => createManagedServiceState({ installed, active }),
+      isServiceInstalled: async () => installed,
+      installService: async () => {
+        calls.push('service-install');
+        installed = true;
+        return { changed: true };
+      },
+      startService: async () => {
+        calls.push('service-start');
+        active = true;
+        return { changed: true };
+      },
+      fetchHealth: async () => {
+        if (!active) {
+          throw new Error('runtime_not_ready');
+        }
+        return { version: '0.2.6' };
+      },
+    },
+  });
+
+  assert.deepEqual(calls, ['service-install', 'service-start']);
+  assert.equal(result.managed, true);
+  assert.equal(result.status, 'running');
+  assert.equal(result.service.installed, true);
+});
+
+test('restartRuntime installs and starts managed service when auto install is enabled', async () => {
+  const calls = [];
+  let installed = false;
+  let active = false;
+
+  const result = await restartRuntime({
+    autoInstallManagedService: true,
+    __testOverrides: {
+      getServiceStatus: async () => createManagedServiceState({ installed, active }),
+      isServiceInstalled: async () => installed,
+      installService: async () => {
+        calls.push('service-install');
+        installed = true;
+        return { changed: true };
+      },
+      startService: async () => {
+        calls.push('service-start');
+        active = true;
+        return { changed: true };
+      },
+      restartService: async () => {
+        calls.push('service-restart');
+        active = true;
+        return { changed: true };
+      },
+      fetchHealth: async () => {
+        if (!active) {
+          throw new Error('runtime_not_ready');
+        }
+        return { version: '0.2.6' };
+      },
+    },
+  });
+
+  assert.deepEqual(calls, ['service-install', 'service-start']);
+  assert.equal(result.managed, true);
+  assert.equal(result.status, 'running');
+  assert.equal(result.service.installed, true);
+});
+
 test('getStatus surfaces stale managed service metadata without probing runtime health', async () => {
   let probed = false;
 

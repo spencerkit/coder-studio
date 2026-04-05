@@ -9,16 +9,17 @@ export const parseNumericId = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const extractGeneratedSessionTitleIndex = (value: string) => {
-  const match = value.trim().match(/^(?:Session|会话) (\d+)$/);
-  return match?.[1] ? Number(match[1]) : null;
-};
-
 export const isGeneratedSessionTitleForId = (value: string | undefined, id: string | number) => {
   if (!value) return false;
-  const index = extractGeneratedSessionTitleIndex(value);
-  const numericId = typeof id === "number" ? id : parseNumericId(id);
-  return index !== null && numericId !== null && index === numericId;
+  const sessionId = String(id).trim();
+  const normalized = value.trim();
+  if (normalized === `Session ${sessionId}` || normalized === `会话 ${sessionId}`) {
+    return true;
+  }
+  const numericId = typeof id === "number" ? id : parseNumericId(sessionId);
+  if (numericId === null) return false;
+  return normalized === `Session ${String(numericId).padStart(2, "0")}`
+    || normalized === `会话 ${String(numericId).padStart(2, "0")}`;
 };
 
 export const createSessionFromBackend = (source: BackendSession, locale: Locale, existing?: Session): Session => ({
@@ -55,6 +56,7 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
   resumeId: source.resume_id ?? existing?.resumeId,
+  unavailableReason: source.unavailable_reason ?? existing?.unavailableReason,
 });
 
 type CreateDraftSessionArgs = {
@@ -106,6 +108,7 @@ export const createDraftSessionPlaceholder = ({
     unread: existing?.unread ?? 0,
     lastActiveAt: existing?.lastActiveAt ?? Date.now(),
     resumeId: existing?.resumeId,
+    unavailableReason: existing?.unavailableReason,
   };
 };
 

@@ -22,7 +22,6 @@ test("createTabFromWorkspaceSnapshot remaps empty backend sessions to a draft pa
       },
     },
     sessions: [],
-    archive: [],
     view_state: {
       active_session_id: "1",
       active_pane_id: "pane-1",

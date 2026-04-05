@@ -78,15 +78,8 @@ fn sync_bound_terminal_runtime_state(
         if binding_workspace_id != workspace_id {
             return;
         }
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = sync_session_runtime_state(
-                state,
-                workspace_id,
-                session_id_num,
-                status,
-                runtime_active,
-            );
-        }
+        let _ =
+            sync_session_runtime_state(state, workspace_id, &session_id, status, runtime_active);
     }
 }
 pub(crate) fn create_terminal_runtime(

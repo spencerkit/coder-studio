@@ -74,13 +74,7 @@ export type BackendSession = {
   unread: number;
   last_active_at: number;
   resume_id?: string | null;
-};
-
-export type BackendArchiveEntry = {
-  id: number;
-  session_id: string;
-  mode: SessionMode;
-  time: string;
+  unavailable_reason?: string | null;
 };
 
 export type BackendSessionHistoryRecord = {
@@ -93,7 +87,9 @@ export type BackendSessionHistoryRecord = {
   provider: AgentProvider;
   archived: boolean;
   mounted: boolean;
+  availability: "available" | "missing";
   recoverable: boolean;
+  created_at: number;
   last_active_at: number;
   archived_at?: number | null;
   resume_id?: string | null;
@@ -109,7 +105,9 @@ export type SessionHistoryRecord = {
   provider: AgentProvider;
   archived: boolean;
   mounted: boolean;
+  availability: "available" | "missing";
   recoverable: boolean;
+  createdAt: number;
   lastActiveAt: number;
   archivedAt?: number | null;
   resumeId?: string | null;
@@ -167,7 +165,6 @@ export type WorkspaceControllerLease = {
 export type WorkspaceSnapshot = {
   workspace: WorkspaceSummary;
   sessions: BackendSession[];
-  archive: Array<BackendArchiveEntry & { snapshot: BackendSession }>;
   view_state: BackendWorkspaceViewState;
   terminals: { id: number; output: string; recoverable: boolean }[];
 };

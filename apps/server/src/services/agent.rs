@@ -76,10 +76,8 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
 
 fn dispatch_agent_output(
     app: &AppHandle,
-    state_handle: &AppHandle,
     workspace_id: &str,
     session_id: &str,
-    session_id_num: u64,
     lifecycle_state_out: &Mutex<AgentLifecycleFallbackState>,
     raw_text: &str,
     transcript_text: &str,
@@ -169,11 +167,9 @@ pub(crate) fn agent_start(
         }
     }
 
-    let session_id_num = session_id
-        .parse::<u64>()
-        .map_err(|_| "invalid_session_id".to_string())?;
     let (workspace_cwd, workspace_target) = workspace_access_context(state, &workspace_id)?;
-    let stored_session = load_session(state, &workspace_id, session_id_num)?;
+    let stored_session =
+        crate::services::workspace::resolve_session_for_slot(state, &workspace_id, &session_id)?;
     let effective_resume_id = stored_session.resume_id.clone();
     let settings = load_or_default_app_settings(state)?;
     let agent_target = ExecTarget::Native;
@@ -264,13 +260,8 @@ pub(crate) fn agent_start(
         let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
         agents.insert(key.clone(), runtime.clone());
     }
-    let _ = sync_session_runtime_state(
-        state,
-        &workspace_id,
-        session_id_num,
-        SessionStatus::Idle,
-        true,
-    );
+    let _ =
+        sync_session_runtime_state(state, &workspace_id, &session_id, SessionStatus::Idle, true);
 
     emit_agent(
         &app,
@@ -283,13 +274,11 @@ pub(crate) fn agent_start(
 
     let workspace_id_out = workspace_id.clone();
     let session_out = session_id.clone();
-    let session_out_num = session_id_num;
     let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState {
         resume_id: effective_resume_id.clone(),
         ..Default::default()
     }));
     let app_handle = app.clone();
-    let state_handle = app.clone();
     let lifecycle_fallback_state_out = lifecycle_fallback_state.clone();
     std::thread::spawn(move || {
         let mut reader = reader;
@@ -303,10 +292,8 @@ pub(crate) fn agent_start(
                     transcript.push_str(&sanitizer.finish());
                     dispatch_agent_output(
                         &app_handle,
-                        &state_handle,
                         &workspace_id_out,
                         &session_out,
-                        session_out_num,
                         &lifecycle_fallback_state_out,
                         "",
                         &transcript,
@@ -321,10 +308,8 @@ pub(crate) fn agent_start(
                     let transcript = sanitizer.push(&raw);
                     dispatch_agent_output(
                         &app_handle,
-                        &state_handle,
                         &workspace_id_out,
                         &session_out,
-                        session_out_num,
                         &lifecycle_fallback_state_out,
                         &raw,
                         &transcript,
@@ -374,7 +359,7 @@ pub(crate) fn agent_start(
             let _ = sync_session_runtime_state(
                 state,
                 &workspace_id,
-                session_id_num,
+                &session_id,
                 SessionStatus::Interrupted,
                 false,
             );
@@ -398,15 +383,13 @@ pub(crate) fn agent_send(
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
         write_agent_input(&mut **handle, &input, append_newline.unwrap_or(true))?;
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = sync_session_runtime_state(
-                state,
-                &workspace_id,
-                session_id_num,
-                SessionStatus::Running,
-                true,
-            );
-        }
+        let _ = sync_session_runtime_state(
+            state,
+            &workspace_id,
+            &session_id,
+            SessionStatus::Running,
+            true,
+        );
         Ok(())
     } else {
         Err("agent_stdin_closed".to_string())
@@ -419,15 +402,13 @@ pub(crate) fn agent_stop(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     stop_agent_runtime_without_status_update(&workspace_id, &session_id, state)?;
-    if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = sync_session_runtime_state(
-            state,
-            &workspace_id,
-            session_id_num,
-            SessionStatus::Interrupted,
-            false,
-        );
-    }
+    let _ = sync_session_runtime_state(
+        state,
+        &workspace_id,
+        &session_id,
+        SessionStatus::Interrupted,
+        false,
+    );
     Ok(())
 }
 
@@ -453,15 +434,13 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
 
     for (session_id, runtime) in runtimes {
         terminate_agent_runtime(runtime);
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = sync_session_runtime_state(
-                state,
-                workspace_id,
-                session_id_num,
-                SessionStatus::Interrupted,
-                false,
-            );
-        }
+        let _ = sync_session_runtime_state(
+            state,
+            workspace_id,
+            &session_id,
+            SessionStatus::Interrupted,
+            false,
+        );
     }
 }
 

@@ -76,12 +76,24 @@ async function isManagedServiceInstalled(options) {
   return Boolean(status?.installed && !status?.stale);
 }
 
+function managedServiceCanAutoInstall(status) {
+  return Boolean(status) && status.supported !== false;
+}
+
 async function startManagedService(options) {
   if (typeof options.__testOverrides?.startService === 'function') {
     return options.__testOverrides.startService(options);
   }
   const controller = resolveServiceController(options);
   return controller.start(resolveManagedServiceInput(options));
+}
+
+async function installManagedService(options) {
+  if (typeof options.__testOverrides?.installService === 'function') {
+    return options.__testOverrides.installService(options);
+  }
+  const controller = resolveServiceController(options);
+  return controller.install(resolveManagedServiceInput(options));
 }
 
 async function stopManagedService(options) {
@@ -298,15 +310,25 @@ async function cleanupIfManagedPid(options, pid) {
 
 export async function startRuntime(input = {}) {
   const options = resolveOptions(input);
-  if (await isManagedServiceInstalled(options)) {
-    const current = await getStatus(options);
-    if (isRuntimeActive(current)) {
-      return {
-        changed: false,
-        ...current
-      };
-    }
+  const current = await getStatus(options);
+  if (isRuntimeActive(current)) {
+    return {
+      changed: false,
+      ...current
+    };
+  }
 
+  let managedService = await getManagedServiceStatus(options);
+  if (
+    options.autoInstallManagedService
+    && managedServiceCanAutoInstall(managedService)
+    && (!managedService.installed || managedService.stale)
+  ) {
+    await installManagedService(options);
+    managedService = await getManagedServiceStatus(options);
+  }
+
+  if (managedService?.installed && !managedService.stale) {
     const startResult = await startManagedService(options);
     await waitForReady(options.endpoint, null, options.timeoutMs, options);
     return {
@@ -316,14 +338,6 @@ export async function startRuntime(input = {}) {
   }
 
   await ensureStateDirs(options.stateDir, options.dataDir);
-
-  const current = await getStatus(options);
-  if (current.status === 'running' || current.status === 'degraded') {
-    return {
-      changed: false,
-      ...current
-    };
-  }
 
   const bundle = resolvePlatformPackage({ env: options.env });
   assertRuntimeBundle(bundle);
@@ -487,7 +501,27 @@ export async function stopRuntime(input = {}) {
 
 export async function restartRuntime(input = {}) {
   const options = resolveOptions(input);
-  if (await isManagedServiceInstalled(options)) {
+  let managedService = await getManagedServiceStatus(options);
+  if (
+    options.autoInstallManagedService
+    && managedServiceCanAutoInstall(managedService)
+    && (!managedService.installed || managedService.stale)
+  ) {
+    const current = await getStatus(options);
+    if (isRuntimeActive(current) && !current.managed) {
+      await stopRuntime(options);
+    }
+    const installResult = await installManagedService(options);
+    managedService = await getManagedServiceStatus(options);
+    const startResult = await startManagedService(options);
+    await waitForReady(options.endpoint, null, options.timeoutMs, options);
+    return {
+      changed: Boolean((installResult?.changed ?? true) || (startResult?.changed ?? true)),
+      ...(await getStatus(options))
+    };
+  }
+
+  if (managedService?.installed && !managedService.stale) {
     const restartResult = await restartManagedService(options);
     await waitForReady(options.endpoint, null, options.timeoutMs, options);
     return {

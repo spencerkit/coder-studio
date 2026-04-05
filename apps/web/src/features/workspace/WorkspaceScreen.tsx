@@ -376,7 +376,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const terminalRecoveryAttemptsRef = useRef(new Set<string>());
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
-  const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
   const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
@@ -600,7 +599,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const fitVisibleWorkspaceTerminals = useCallback(() => {
     shellTerminalRef.current?.fit();
-    archiveTerminalRef.current?.fit();
     flushWorkspaceAgentFit();
   }, [flushWorkspaceAgentFit]);
 
@@ -1060,6 +1058,23 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }),
     [activeTab.id, activeTabSessionIdsKey, historyRecords, mountedSessionIds]
   );
+  const findSessionForHistoryRecord = useCallback((
+    tab: Tab | undefined,
+    record: SessionHistoryRecord,
+  ) => {
+    if (!tab) return undefined;
+    if (record.resumeId) {
+      const mounted = tab.sessions.find((session) => (
+        !isDraftSession(session)
+        && session.provider === record.provider
+        && session.resumeId === record.resumeId
+      ));
+      if (mounted) {
+        return mounted;
+      }
+    }
+    return tab.sessions.find((session) => session.id === record.sessionId);
+  }, []);
   const fileSearchQuery = fileSearchState.query;
   const fileSearchActiveIndex = fileSearchState.activeIndex;
   const fileSearchDropdownStyle = fileSearchState.dropdownStyle;
@@ -1193,13 +1208,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const displaySessionTitle = (value: string) => localizeSessionTitle(value, locale);
   const displayTerminalTitle = (value: string) => localizeTerminalTitle(value, locale);
   const hasPreviewFile = Boolean(activeTab.filePreview.path);
-
-  const archivedEntry = activeTab.viewingArchiveId
-    ? activeTab.archive.find((entry) => entry.id === activeTab.viewingArchiveId)
-    : undefined;
-  const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
-  const isArchiveView = Boolean(archivedEntry);
-  const viewedSession = isArchiveView ? sessionForView : activeSession;
 
   useEffect(() => {
     updateTab(activeTab.id, (tab) => {
@@ -1537,6 +1545,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   }, [activeTab.id, historyGroups, historyOpen]);
 
+  const formatHistoryRecordTimestamp = useCallback((value: number) => (
+    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
+  ), [locale]);
+
   const handleHistoryRecordSelect = async (record: SessionHistoryRecord) => {
     const targetTab = await ensureWorkspaceReady(record.workspaceId);
     if (!targetTab) return;
@@ -1544,19 +1556,36 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
     const restorePaneId = currentTab.activePaneId;
     const action = selectHistoryPrimaryAction(record);
-    if (action === "focus" && currentTab.sessions.some((session) => session.id === record.sessionId)) {
-      switchSessionInActiveTab(currentTab, record.sessionId);
+    const mountedSession = findSessionForHistoryRecord(currentTab, record);
+    if ((action === "focus" || action === "open") && mountedSession) {
+      switchSessionInActiveTab(currentTab, mountedSession.id);
+      setHistoryOpen(false);
+      return;
+    }
+    if (action === "open") {
       setHistoryOpen(false);
       return;
     }
 
-    const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId, restorePaneId);
+    const restored = await restoreSessionIntoPane(
+      record.workspaceId,
+      record.sessionId,
+      restorePaneId,
+      record,
+      {
+        strategy: "split-new",
+      },
+    );
     if (!restored) return;
     if (action === "restore") {
       const latestTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId);
-      const restoredSession = latestTab?.sessions.find((session) => session.id === record.sessionId);
-      if (latestTab && restoredSession) {
-        await startAgentSessionInPane(restorePaneId, latestTab, restoredSession);
+      const restoredSession = latestTab?.sessions.find((session) => session.id === String(restored.id))
+        ?? findSessionForHistoryRecord(latestTab, record);
+      const restoredPaneId = latestTab
+        ? findPaneIdBySessionId(latestTab.paneLayout, String(restored.id))
+        : null;
+      if (latestTab && restoredSession && restoredPaneId && !restoredSession.unavailableReason) {
+        await startAgentSessionInPane(restoredPaneId, latestTab, restoredSession);
       }
     }
     void refreshHistoryRecordsIfNeeded();
@@ -1564,14 +1593,23 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
+    const removingMissing = record.availability === "missing";
     setConfirmDialog({
       visible: true,
-      title: t("historyDeleteTitle"),
-      message: t("historyDeleteConfirm", { title: record.title }),
-      confirmLabel: t("delete"),
+      title: removingMissing ? t("historyRemoveTitle") : t("historyDeleteTitle"),
+      message: removingMissing
+        ? t("historyRemoveConfirm", { title: record.title })
+        : t("historyDeleteConfirm", { title: record.title }),
+      details: {
+        contentLabel: t("historyDialogContentLabel"),
+        content: record.title,
+        timeLabel: t("historyDialogTimeLabel"),
+        timestamp: formatHistoryRecordTimestamp(record.lastActiveAt),
+      },
+      confirmLabel: removingMissing ? t("historyRemove") : t("delete"),
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, visible: false }));
-        const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
+        const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId, record);
         if (!deleted) return;
         await refreshHistoryRecordsIfNeeded();
       },
@@ -1682,6 +1720,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const startSessionRuntimeInPane = async (paneId: string | null | undefined, tab: Tab, session: Session) => {
+    if (session.unavailableReason) {
+      addToast({
+        id: createId("toast"),
+        text: session.unavailableReason,
+        sessionId: session.id,
+      });
+      return null;
+    }
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
     const syncVersion = advanceWorkspaceSyncVersion(tab.id);
     const initialSize = resolveAgentInitialSize(paneId);
@@ -1889,7 +1935,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const onStartDraftSession = async (paneId: string, provider: Session["provider"]) => {
     if (!guardWorkspaceMutation("agent_input")) return;
-    if (isArchiveView) return;
 
     onDraftProviderChange(paneId, provider);
     const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
@@ -1903,27 +1948,30 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await startAgentSessionInPane(paneId, materialized.tab, materialized.session);
   };
 
-  const onRestoreDraftSession = (paneId: string, sessionId: string) => {
-    void restoreSessionIntoPane(activeTab.id, sessionId, paneId).then((restored) => {
+  const onRestoreDraftSession = (paneId: string, record: SessionHistoryRecord) => {
+    void restoreSessionIntoPane(activeTab.id, record.sessionId, paneId, record).then((restored) => {
       if (!restored) return;
       const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
-      const restoredSession = currentTab?.sessions.find((session) => session.id === sessionId);
-      if (currentTab && restoredSession) {
+      const restoredSession = currentTab?.sessions.find((session) => session.id === String(restored.id))
+        ?? findSessionForHistoryRecord(currentTab, record);
+      if (currentTab && restoredSession && !restoredSession.unavailableReason) {
         void startAgentSessionInPane(paneId, currentTab, restoredSession);
       }
       void refreshHistoryRecordsIfNeeded();
     });
   };
 
-  const onSelectArchive = (entryId: string) => {
-    updateTab(activeTab.id, (tab) => ({
-      ...tab,
-      viewingArchiveId: entryId
-    }));
-  };
-
-  const onExitArchive = () => {
-    updateTab(activeTab.id, (tab) => ({ ...tab, viewingArchiveId: undefined }));
+  const onRemoveUnavailableSession = async (sessionId: string) => {
+    const session = activeTab.sessions.find((item) => item.id === sessionId);
+    if (!session?.unavailableReason) return;
+    if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
+    const removed = await deleteSessionFromHistory(activeTab.id, sessionId, {
+      availability: "missing",
+      provider: session.provider,
+      resumeId: session.resumeId ?? null,
+    });
+    if (!removed) return;
+    await refreshHistoryRecordsIfNeeded();
   };
 
   const onFileSelect = async (node: TreeNode, workspaceId?: string) => {
@@ -2247,7 +2295,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       stateRef,
       updateState,
       shellTerminalRef,
-      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
@@ -2267,7 +2314,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const showAgentPanel = !isCodeExpanded;
 
   useEffect(() => {
-    if (isArchiveView || !activeTerminal || activeTerminal.recoverable) {
+    if (!activeTerminal || activeTerminal.recoverable) {
       return;
     }
     if (!canMutateWorkspace(activeTab.controller, "create_terminal")) {
@@ -2297,7 +2344,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     activeTab,
     activeTerminal,
     addToast,
-    isArchiveView,
     measureWorkspaceTerminalSize,
     t,
   ]);
@@ -2341,7 +2387,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       splitId,
       axis,
       updateTab,
-      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
@@ -2353,12 +2398,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const ensureAgentPaneSessionReady = async (paneId: string) => {
-    if (isArchiveView) return null;
     const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     if (!activeTabSnapshot) return null;
     const paneSessionId = findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId;
     const activeSessionSnapshot = activeTabSnapshot.sessions.find((session) => session.id === paneSessionId);
     if (!activeSessionSnapshot) return null;
+    if (activeSessionSnapshot.unavailableReason) return null;
 
     const materialized = isDraftSession(activeSessionSnapshot)
       ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
@@ -2379,7 +2424,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const onAgentTerminalData = async (paneId: string, data: string) => {
-    if (isArchiveView || !data) return;
+    if (!data) return;
     if (isAgentFocusTransitionSequence(data)) return;
     // Filter out terminal response sequences (cursor position reports, color queries, etc.)
     // These come from xterm initialization and should not be sent to the backend
@@ -2461,7 +2506,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         return;
       }
 
-      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget && !isArchiveView) {
+      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget) {
         event.preventDefault();
         setIsFocusMode((value) => !value);
         return;
@@ -2473,7 +2518,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         return;
       }
 
-      if (isArchiveView) return;
       const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
       const isSplitShortcut = isMacPlatform
         ? event.metaKey && !event.ctrlKey && !event.altKey && key === "d"
@@ -2493,15 +2537,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     activeTab.filePreview.content,
     activeSession.id,
     commandPaletteOpen,
-    isArchiveView,
     isFocusMode
   ]);
 
   useEffect(() => {
-    if (!isArchiveView) {
-      focusWorkspaceAgentPane();
-    }
-  }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
+    focusWorkspaceAgentPane();
+  }, [activeTab.activePaneId, activePaneSession.id]);
 
   useEffect(() => {
     setCommitMessage("");
@@ -2661,8 +2702,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const terminalProgressTone = activeTerminal
     ? (hasTerminalOutput ? "live" : "steady")
     : "idle";
-  const agentRecoveryAction = resolveAgentRecoveryAction(activeTab.controller, isArchiveView ? null : activePaneSession);
-  const activeAgentRecoveryBusy = !isArchiveView && agentRecoveryBusy?.sessionId === activePaneSession.id
+  const agentRecoveryAction = resolveAgentRecoveryAction(activeTab.controller, activePaneSession);
+  const activeAgentRecoveryBusy = agentRecoveryBusy?.sessionId === activePaneSession.id
     ? agentRecoveryBusy
     : null;
   const visibleAgentRecoveryAction = agentRecoveryAction ?? activeAgentRecoveryBusy;
@@ -2764,8 +2805,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       locale={locale}
       activeTab={activeTab}
       activePaneSession={activePaneSession}
-      viewedSession={viewedSession}
-      isArchiveView={isArchiveView}
       showCodePanel={showCodePanel}
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
@@ -2774,7 +2813,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       historyLoading={historyLoading}
       restoreCandidates={restoreCandidates}
       displaySessionTitle={displaySessionTitle}
-      onExitArchive={onExitArchive}
+      onRemoveUnavailableSession={(sessionId) => {
+        void onRemoveUnavailableSession(sessionId);
+      }}
       onSetActivePane={setActivePane}
       onSplitPane={splitPane}
       onCloseAgentPane={onCloseAgentPane}
@@ -2784,7 +2825,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }}
       onRestoreDraftSession={onRestoreDraftSession}
       setAgentTerminalRef={registerAgentTerminalRef}
-      archiveTerminalRef={archiveTerminalRef}
       onAgentTerminalData={(paneId, data) => {
         void onAgentTerminalData(paneId, data);
       }}

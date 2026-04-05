@@ -128,7 +128,7 @@ const createDraftState = (): WorkbenchState => ({
   ],
 });
 
-test("materializeSession falls back to the backend session title when no first prompt is provided", async () => {
+test("materializeSession keeps workbench-local state and does not create a backend session row", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -140,32 +140,6 @@ test("materializeSession falls back to the backend session title when no first p
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     calls.push({ url, body });
-
-    if (url.endsWith("/api/rpc/create_session")) {
-      return new Response(JSON.stringify({
-        ok: true,
-        data: {
-          id: 7,
-          title: "Session 7",
-          status: "idle",
-          mode: "branch",
-          provider: "claude",
-          auto_feed: true,
-          queue: [],
-          messages: [],
-          unread: 0,
-          last_active_at: 10,
-          resume_id: null,
-        },
-      }), { status: 200, headers: { "Content-Type": "application/json" } });
-    }
-
-    if (url.endsWith("/api/rpc/session_update")) {
-      return new Response(JSON.stringify({ ok: true, result: null }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
 
     throw new Error(`unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -210,7 +184,7 @@ test("materializeSession falls back to the backend session title when no first p
           },
         });
 
-        await actions.materializeSession("ws-1", "draft-1", "");
+        await actions.materializeSession("ws-1", "draft-1", "Investigate auth flow");
       },
     );
   } finally {
@@ -218,9 +192,6 @@ test("materializeSession falls back to the backend session title when no first p
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(
-    calls.map((entry) => entry.url.replace("http://127.0.0.1:41033", "")),
-    ["/api/rpc/create_session"],
-  );
-  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Session 7");
+  assert.deepEqual(calls, []);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Investigate auth flow");
 });

@@ -18,7 +18,6 @@ import {
 import type {
   AgentLifecycleHistoryEntry,
   AppSettings,
-  BackendArchiveEntry,
   BackendSession,
   WorkbenchBootstrap,
   WorkbenchLayout,
@@ -188,17 +187,6 @@ const normalizeFilePreview = (
     section: candidate.section ?? existing?.section,
   };
 };
-
-const mapArchiveEntry = (
-  entry: BackendArchiveEntry & { snapshot: BackendSession },
-  locale: Locale,
-) => ({
-  id: String(entry.id),
-  sessionId: String(entry.session_id),
-  time: entry.time,
-  mode: entry.mode,
-  snapshot: createSessionFromBackend(entry.snapshot, locale),
-});
 
 const mapTerminals = (
   terminals: WorkspaceSnapshot["terminals"],
@@ -382,7 +370,6 @@ export const createTabFromWorkspaceSnapshot = (
     worktrees: existing?.worktrees ?? [],
     sessions,
     activeSessionId: nextActiveSessionId,
-    archive: snapshot.archive.map((entry) => mapArchiveEntry(entry, locale)),
     terminals: terminalState.terminals,
     activeTerminalId: terminalState.activeTerminalId,
     fileTree: existing?.fileTree ?? [],
@@ -396,7 +383,6 @@ export const createTabFromWorkspaceSnapshot = (
       maxActive: snapshot.workspace.idle_policy.max_active,
       pressure: snapshot.workspace.idle_policy.pressure,
     },
-    viewingArchiveId: undefined,
   };
 
   return normalizeWorkbenchState({
@@ -672,7 +658,6 @@ export const applyWorkspaceRuntimeStateEvent = (
     && nextActiveTerminalId === nextTab.activeTerminalId
     && samePaneLayout(nextTab.paneLayout, nextPaneLayout)
     && sameFilePreview(nextTab.filePreview, nextFilePreview)
-    && nextTab.viewingArchiveId === undefined
   ) {
     const tabs = [...current.tabs];
     tabs[tabIndex] = nextTab;
@@ -689,7 +674,6 @@ export const applyWorkspaceRuntimeStateEvent = (
     && nextActiveTerminalId === currentTab.activeTerminalId
     && samePaneLayout(currentTab.paneLayout, nextPaneLayout)
     && sameFilePreview(currentTab.filePreview, nextFilePreview)
-    && currentTab.viewingArchiveId === undefined
   ) {
     return current;
   }
@@ -701,7 +685,6 @@ export const applyWorkspaceRuntimeStateEvent = (
     activeTerminalId: nextActiveTerminalId,
     paneLayout: nextPaneLayout,
     filePreview: nextFilePreview,
-    viewingArchiveId: undefined,
   };
   const tabs = [...current.tabs];
   tabs[tabIndex] = nextTab;

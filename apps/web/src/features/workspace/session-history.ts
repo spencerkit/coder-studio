@@ -17,7 +17,9 @@ export const mapSessionHistoryRecord = (
   provider: record.provider,
   archived: record.archived,
   mounted: record.mounted,
+  availability: record.availability,
   recoverable: record.recoverable,
+  createdAt: record.created_at,
   lastActiveAt: record.last_active_at,
   archivedAt: record.archived_at ?? null,
   resumeId: record.resume_id ?? null,
@@ -63,8 +65,11 @@ export const createInitialHistoryExpansion = (
 );
 
 export const selectHistoryPrimaryAction = (
-  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable">,
+  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable" | "availability">,
 ) => {
+  if (record.availability === "missing") {
+    return record.mounted ? "open" as const : "noop" as const;
+  }
   if (record.mounted && !record.archived) {
     return "focus" as const;
   }
@@ -75,7 +80,7 @@ export const selectHistoryPrimaryAction = (
 };
 
 export const selectHistoryPrimaryActionBadge = (
-  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable">,
+  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable" | "availability">,
 ) => {
   const action = selectHistoryPrimaryAction(record);
   if (action === "focus") return null;

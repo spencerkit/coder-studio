@@ -354,7 +354,7 @@ test("createSessionFromBackend preserves an existing custom title over a generic
 
   assert.equal(session.title, "test session duplication");
 });
-test("materializeSession persists the derived first-input title to the backend session", async () => {
+test("materializeSession applies the derived first-input title without persisting a backend session row", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -366,50 +366,6 @@ test("materializeSession persists the derived first-input title to the backend s
     const url = String(input);
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     calls.push({ url, body });
-
-    if (url.endsWith("/api/rpc/create_session")) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          data: {
-            id: 4,
-            title: "Session 4",
-            status: "idle",
-            mode: "branch",
-            auto_feed: true,
-            queue: [],
-            messages: [],
-            unread: 0,
-            last_active_at: 1,
-            claude_session_id: null,
-          },
-        }),
-      } as Response;
-    }
-
-    if (url.endsWith("/api/rpc/session_update")) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          data: {
-            id: 4,
-            title: "test session duplication",
-            status: "idle",
-            mode: "branch",
-            auto_feed: true,
-            queue: [],
-            messages: [],
-            unread: 0,
-            last_active_at: 1,
-            claude_session_id: null,
-          },
-        }),
-      } as Response;
-    }
 
     throw new Error(`unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -457,11 +413,6 @@ test("materializeSession persists the derived first-input title to the backend s
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(
-    calls.map((entry) => entry.url.replace("http://127.0.0.1:41033", "")),
-    ["/api/rpc/create_session", "/api/rpc/session_update"],
-  );
-  assert.deepEqual(calls[1]?.body.patch, {
-    title: "test session duplication",
-  });
+  assert.deepEqual(calls, []);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "test session duplication");
 });

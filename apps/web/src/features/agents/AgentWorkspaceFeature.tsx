@@ -1,4 +1,4 @@
-import { memo, useCallback, type PointerEventHandler, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, type PointerEventHandler, type ReactNode } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type {
   AppTheme,
@@ -21,8 +21,6 @@ type AgentWorkspaceFeatureProps = {
   locale: Locale;
   activeTab: Tab;
   activePaneSession: Session;
-  viewedSession: Session;
-  isArchiveView: boolean;
   showCodePanel: boolean;
   theme: AppTheme;
   terminalFontSize: number;
@@ -31,15 +29,14 @@ type AgentWorkspaceFeatureProps = {
   historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
-  onExitArchive: () => void;
+  onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
-  onRestoreDraftSession: (paneId: string, sessionId: string) => void;
+  onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
-  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
   onPaneSplitResizeStart: (splitId: string, axis: "horizontal" | "vertical") => PointerEventHandler<HTMLDivElement>;
@@ -63,12 +60,13 @@ type AgentPaneLeafProps = {
   historyLoading: boolean;
   restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
+  onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
-  onRestoreDraftSession: (paneId: string, sessionId: string) => void;
+  onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -91,6 +89,7 @@ const AgentPaneLeaf = memo(({
   historyLoading,
   restoreCandidates,
   displaySessionTitle,
+  onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
@@ -144,8 +143,8 @@ const AgentPaneLeaf = memo(({
     onStartDraftSession(paneId, provider);
   }, [onStartDraftSession, paneId]);
 
-  const handleRestoreDraftSession = useCallback((sessionId: string) => {
-    onRestoreDraftSession(paneId, sessionId);
+  const handleRestoreDraftSession = useCallback((record: SessionHistoryRecord) => {
+    onRestoreDraftSession(paneId, record);
   }, [onRestoreDraftSession, paneId]);
 
   const handleTerminalRef = useCallback((handle: XtermBaseHandle | null) => {
@@ -159,6 +158,10 @@ const AgentPaneLeaf = memo(({
   const handleTerminalSize = useCallback((size: { cols: number; rows: number }) => {
     onAgentTerminalSize(paneId, tabId, session.id, size);
   }, [onAgentTerminalSize, paneId, session.id, tabId]);
+
+  const handleRemoveUnavailableSession = useCallback(() => {
+    onRemoveUnavailableSession(session.id);
+  }, [onRemoveUnavailableSession, session.id]);
 
   return (
     <section
@@ -265,7 +268,7 @@ const AgentPaneLeaf = memo(({
                         key={`${record.workspaceId}:${record.sessionId}`}
                         type="button"
                         className="agent-draft-restore-item"
-                        onClick={() => handleRestoreDraftSession(record.sessionId)}
+                        onClick={() => handleRestoreDraftSession(record)}
                         data-testid={`restore-candidate-${record.sessionId}`}
                       >
                         <strong>{record.title}</strong>
@@ -276,6 +279,14 @@ const AgentPaneLeaf = memo(({
                 </div>
               )}
             </div>
+          </div>
+        ) : session.unavailableReason ? (
+          <div className="terminal-empty">
+            <strong>{t("sessionUnavailableTitle")}</strong>
+            <div>{session.unavailableReason}</div>
+            <button type="button" className="btn tiny" onClick={handleRemoveUnavailableSession}>
+              {t("historyRemove")}
+            </button>
           </div>
         ) : (!terminalBinding.stream.trim() && terminalMode === "readonly") ? (
           <div className="terminal-empty">{t("noAgentOutputYet")}</div>
@@ -342,8 +353,6 @@ export const AgentWorkspaceFeature = ({
   locale,
   activeTab,
   activePaneSession,
-  viewedSession,
-  isArchiveView,
   showCodePanel,
   theme,
   terminalFontSize,
@@ -352,7 +361,7 @@ export const AgentWorkspaceFeature = ({
   historyLoading,
   restoreCandidates,
   displaySessionTitle,
-  onExitArchive,
+  onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
@@ -360,7 +369,6 @@ export const AgentWorkspaceFeature = ({
   onStartDraftSession,
   onRestoreDraftSession,
   setAgentTerminalRef,
-  archiveTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
   onPaneSplitResizeStart,
@@ -368,10 +376,6 @@ export const AgentWorkspaceFeature = ({
   t,
 }: AgentWorkspaceFeatureProps) => {
   if (!visible) return null;
-
-  const viewedDisplayStatus = isArchiveView ? "archived" as const : viewedSession.status;
-  const viewedHeaderTag = sessionHeaderTag(viewedDisplayStatus, locale);
-  const archiveTerminalBinding = resolveAgentPaneTerminalBinding(viewedSession, "readonly", activeTab.terminals);
 
   const renderAgentPane = (node: SessionPaneNode): ReactNode => {
     if (node.type === "split") {
@@ -405,6 +409,7 @@ export const AgentWorkspaceFeature = ({
         historyLoading={historyLoading}
         restoreCandidates={restoreCandidates}
         displaySessionTitle={displaySessionTitle}
+        onRemoveUnavailableSession={onRemoveUnavailableSession}
         onSetActivePane={onSetActivePane}
         onSplitPane={onSplitPane}
         onCloseAgentPane={onCloseAgentPane}
@@ -425,58 +430,7 @@ export const AgentWorkspaceFeature = ({
         className="panel center-panel workspace-agent-shell studio-panel compact"
         style={{ flex: "1 1 0%" }}
       >
-        {isArchiveView && (
-          <div className="archive-banner">
-            <div>
-              {t("viewingArchivedSession")}
-              <div className="hint">{t("exitArchiveHint")}</div>
-            </div>
-            <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
-          </div>
-        )}
-        {isArchiveView ? (
-          <section
-            className="agent-pane-card archive-only"
-            data-session-id={viewedSession.id}
-            data-session-status={viewedSession.status}
-          >
-            <div className="agent-pane-header" data-density="compact" data-active="true">
-              <div className="agent-pane-header-copy">
-                <span className={`session-top-dot ${sessionTone(viewedDisplayStatus)} ${sessionTone(viewedDisplayStatus) === "active" ? "pulse" : ""}`} />
-                <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
-              </div>
-              <div className="agent-pane-meta">
-                <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
-                  {viewedHeaderTag.label}
-                </span>
-              </div>
-            </div>
-            <div className="agent-pane-body">
-              {archiveTerminalBinding.stream.trim() ? (
-                archiveTerminalBinding.renderMode === "transcript" ? (
-                  <pre className="agent-pane-transcript-output archive" aria-hidden="true">
-                    {sanitizeAnsiTranscript(archiveTerminalBinding.stream)}
-                  </pre>
-                ) : (
-                  <ShellTerminal
-                    ref={archiveTerminalRef}
-                    terminalId={viewedSession.id}
-                    outputIdentity={archiveTerminalBinding.streamId}
-                    outputSyncStrategy={archiveTerminalBinding.syncStrategy}
-                    output={archiveTerminalBinding.stream}
-                    theme={theme}
-                    fontSize={terminalFontSize}
-                    compatibilityMode={terminalCompatibilityMode}
-                  />
-                )
-              ) : (
-                <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-              )}
-            </div>
-          </section>
-        ) : (
-          renderAgentPane(activeTab.paneLayout)
-        )}
+        {renderAgentPane(activeTab.paneLayout)}
       </section>
 
       {showCodePanel && <div className="v-resizer" data-resize="left" onPointerDown={onCodeResizeStart} />}

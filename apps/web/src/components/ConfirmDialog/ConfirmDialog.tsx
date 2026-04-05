@@ -4,6 +4,12 @@ export type ConfirmDialogState = {
   visible: boolean;
   title: string;
   message: string;
+  details?: {
+    content?: string;
+    contentLabel?: string;
+    timestamp?: string;
+    timeLabel?: string;
+  };
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -27,6 +33,28 @@ export const ConfirmDialog = ({ state, locale, t }: ConfirmDialogProps) => {
         </div>
         <div className="modal-body confirm-dialog-body">
           <p>{state.message}</p>
+          {state.details ? (
+            <div className="confirm-dialog-details">
+              {state.details.content ? (
+                <div className="confirm-dialog-detail-row">
+                  <span className="confirm-dialog-detail-label">
+                    {state.details.contentLabel ?? t("historyDialogContentLabel")}
+                  </span>
+                  <p className="confirm-dialog-details-content" title={state.details.content}>
+                    {state.details.content}
+                  </p>
+                </div>
+              ) : null}
+              {state.details.timestamp ? (
+                <div className="confirm-dialog-detail-row">
+                  <span className="confirm-dialog-detail-label">
+                    {state.details.timeLabel ?? t("historyDialogTimeLabel")}
+                  </span>
+                  <span className="confirm-dialog-detail-value">{state.details.timestamp}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="modal-footer confirm-dialog-footer">
           <button

@@ -2,7 +2,6 @@ import type { WorkspaceControllerState } from "../../features/workspace/workspac
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
 import type { AgentProvider, SessionMode } from "../../state/workbench";
 import type {
-  BackendArchiveEntry,
   BackendSession,
   BackendSessionRestoreResult,
   SessionPatch,
@@ -18,17 +17,17 @@ type CancelTimeout = (handle: unknown) => void;
 type SessionActivityPersistScheduler<TController> = {
   schedule: (
     workspaceId: string,
-    sessionId: number,
+    sessionId: string,
     lastActiveAt: number,
     controller: TController,
   ) => void;
-  takeLastActiveAt: (workspaceId: string, sessionId: number) => number | undefined;
+  takeLastActiveAt: (workspaceId: string, sessionId: string) => number | undefined;
   dispose: () => void;
 };
 
 export const SESSION_ACTIVITY_PERSIST_DEBOUNCE_MS = 1500;
 
-const sessionActivityKey = (workspaceId: string, sessionId: number) => `${workspaceId}:${sessionId}`;
+const sessionActivityKey = (workspaceId: string, sessionId: string) => `${workspaceId}:${sessionId}`;
 
 const isLastActiveOnlySessionPatch = (patch: SessionPatch) => {
   const keys = Object.entries(patch)
@@ -40,7 +39,7 @@ const isLastActiveOnlySessionPatch = (patch: SessionPatch) => {
 export const createSessionActivityPersistScheduler = <TController>(
   persist: (
     workspaceId: string,
-    sessionId: number,
+    sessionId: string,
     patch: SessionPatch,
     controller: TController,
   ) => void | Promise<unknown>,
@@ -51,12 +50,12 @@ export const createSessionActivityPersistScheduler = <TController>(
   const pending = new Map<string, {
     handle: unknown;
     workspaceId: string;
-    sessionId: number;
+    sessionId: string;
     lastActiveAt: number;
     controller: TController;
   }>();
 
-  const clearPending = (workspaceId: string, sessionId: number) => {
+  const clearPending = (workspaceId: string, sessionId: string) => {
     const key = sessionActivityKey(workspaceId, sessionId);
     const entry = pending.get(key);
     if (!entry) return undefined;
@@ -95,7 +94,7 @@ export const createSessionActivityPersistScheduler = <TController>(
 
 const sendSessionUpdateMutation = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   patch: SessionPatch,
   controller: WorkspaceControllerState,
 ) => sendWsMutationWithNullableHttpFallback(
@@ -120,12 +119,33 @@ const sessionActivityPersistScheduler = createSessionActivityPersistScheduler(
 
 const createOptionalHistoryMutationPayload = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   controller?: WorkspaceControllerState | null,
 ) => (
   controller?.role === "controller"
     ? createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId })
     : { workspaceId, sessionId }
+);
+
+const createOptionalProviderHistoryMutationPayload = (
+  workspaceId: string,
+  provider: AgentProvider,
+  resumeId: string,
+  controller?: WorkspaceControllerState | null,
+  extra?: Record<string, unknown>,
+) => (
+  controller?.role === "controller"
+    ? createWorkspaceControllerRpcPayload(workspaceId, controller, {
+      provider,
+      resumeId,
+      ...extra,
+    })
+    : {
+      workspaceId,
+      provider,
+      resumeId,
+      ...extra,
+    }
 );
 
 export const createSession = (
@@ -140,7 +160,7 @@ export const createSession = (
 
 export const updateSession = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   patch: SessionPatch,
   controller: WorkspaceControllerState,
 ) => {
@@ -165,7 +185,7 @@ export const updateSession = (
 
 export const switchSession = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   controller: WorkspaceControllerState,
 ) => invokeRpc<BackendSession>(
   "switch_session",
@@ -174,16 +194,16 @@ export const switchSession = (
 
 export const archiveSession = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   controller: WorkspaceControllerState,
-) => invokeRpc<BackendArchiveEntry>(
+) => invokeRpc<void>(
   "archive_session",
   createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
 );
 
 export const restoreSession = async (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   controller?: WorkspaceControllerState | null,
 ): Promise<SessionRestoreResult> => {
   const result = await invokeRpc<BackendSessionRestoreResult>(
@@ -196,12 +216,50 @@ export const restoreSession = async (
   };
 };
 
+export const restoreProviderSession = async (
+  workspaceId: string,
+  sessionId: string,
+  provider: AgentProvider,
+  resumeId: string,
+  controller?: WorkspaceControllerState | null,
+): Promise<SessionRestoreResult> => {
+  const result = await invokeRpc<BackendSessionRestoreResult>(
+    "restore_provider_session",
+    createOptionalProviderHistoryMutationPayload(workspaceId, provider, resumeId, controller, {
+      sessionId,
+    }),
+  );
+  return {
+    session: result.session,
+    alreadyActive: result.already_active,
+  };
+};
+
 export const deleteSession = (
   workspaceId: string,
-  sessionId: number,
+  sessionId: string,
   controller?: WorkspaceControllerState | null,
 ) => invokeRpc<void>(
   "delete_session",
+  createOptionalHistoryMutationPayload(workspaceId, sessionId, controller),
+);
+
+export const deleteProviderSession = (
+  workspaceId: string,
+  provider: AgentProvider,
+  resumeId: string,
+  controller?: WorkspaceControllerState | null,
+) => invokeRpc<void>(
+  "delete_provider_session",
+  createOptionalProviderHistoryMutationPayload(workspaceId, provider, resumeId, controller),
+);
+
+export const removeMissingBinding = (
+  workspaceId: string,
+  sessionId: string,
+  controller?: WorkspaceControllerState | null,
+) => invokeRpc<void>(
+  "remove_missing_binding",
   createOptionalHistoryMutationPayload(workspaceId, sessionId, controller),
 );
 
