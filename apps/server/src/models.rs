@@ -17,6 +17,10 @@ pub enum SessionMode {
     GitTree,
 }
 
+fn default_session_mode() -> SessionMode {
+    SessionMode::Branch
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -433,18 +437,15 @@ pub struct SessionHistoryRecord {
     pub workspace_id: String,
     pub workspace_title: String,
     pub workspace_path: String,
-    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub title: String,
-    pub status: SessionStatus,
     pub provider: AgentProvider,
-    pub archived: bool,
     pub mounted: bool,
-    pub availability: String,
-    pub recoverable: bool,
+    pub state: String,
     pub created_at: i64,
     pub last_active_at: i64,
-    pub archived_at: Option<i64>,
-    pub resume_id: Option<String>,
+    pub resume_id: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -607,7 +608,10 @@ pub struct WorkspaceSummary {
 pub struct WorkspaceSessionBinding {
     pub session_id: String,
     pub provider: AgentProvider,
-    pub resume_id: String,
+    #[serde(default = "default_session_mode")]
+    pub mode: SessionMode,
+    #[serde(default)]
+    pub resume_id: Option<String>,
     pub title_snapshot: String,
     pub last_seen_at: i64,
 }

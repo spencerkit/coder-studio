@@ -7,29 +7,26 @@ const createRecord = (overrides: Partial<SessionHistoryRecord>): SessionHistoryR
   workspaceId: "ws-1",
   workspaceTitle: "Workspace One",
   workspacePath: "/tmp/ws-1",
-  sessionId: "1",
   title: "Session 1",
-  status: "idle",
-  archived: true,
+  provider: "claude",
   mounted: false,
-  recoverable: true,
+  createdAt: 0,
   lastActiveAt: 1,
-  archivedAt: 1,
-  claudeSessionId: null,
+  resumeId: "resume-1",
   ...overrides,
 });
 
-test("listRestoreCandidatesForWorkspace only returns current workspace recoverable unmounted sessions", () => {
+test("listRestoreCandidatesForWorkspace only returns current workspace detached provider sessions", () => {
   const candidates = listRestoreCandidatesForWorkspace({
     workspaceId: "ws-1",
-    mountedSessionIds: new Set(["2"]),
+    mountedProviders: new Set(["claude:resume-2", "claude:resume-3"]),
     records: [
-      createRecord({ sessionId: "1" }),
-      createRecord({ sessionId: "2" }),
-      createRecord({ sessionId: "3", recoverable: false }),
-      createRecord({ sessionId: "4", workspaceId: "ws-2", workspaceTitle: "Workspace Two", workspacePath: "/tmp/ws-2" }),
+      createRecord({ resumeId: "resume-1" }),
+      createRecord({ resumeId: "resume-2" }),
+      createRecord({ resumeId: "resume-3", mounted: true }),
+      createRecord({ resumeId: "resume-4", workspaceId: "ws-2", workspaceTitle: "Workspace Two", workspacePath: "/tmp/ws-2" }),
     ],
   });
 
-  assert.deepEqual(candidates.map((record) => record.sessionId), ["1"]);
+  assert.deepEqual(candidates.map((record) => record.resumeId), ["resume-1"]);
 });

@@ -11,18 +11,14 @@ export const mapSessionHistoryRecord = (
   workspaceId: record.workspace_id,
   workspaceTitle: record.workspace_title,
   workspacePath: record.workspace_path,
-  sessionId: String(record.session_id),
+  sessionId: record.session_id,
   title: record.title,
-  status: record.status,
   provider: record.provider,
-  archived: record.archived,
   mounted: record.mounted,
-  availability: record.availability,
-  recoverable: record.recoverable,
+  state: record.state,
   createdAt: record.created_at,
   lastActiveAt: record.last_active_at,
-  archivedAt: record.archived_at ?? null,
-  resumeId: record.resume_id ?? null,
+  resumeId: record.resume_id,
 });
 
 export const groupSessionHistory = (
@@ -65,25 +61,17 @@ export const createInitialHistoryExpansion = (
 );
 
 export const selectHistoryPrimaryAction = (
-  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable" | "availability">,
+  record: Pick<SessionHistoryRecord, "state">,
 ) => {
-  if (record.availability === "missing") {
-    return record.mounted ? "open" as const : "noop" as const;
-  }
-  if (record.mounted && !record.archived) {
-    return "focus" as const;
-  }
-  if (record.recoverable) {
-    return "restore" as const;
-  }
-  return "noop" as const;
+  if (record.state === "live") return "focus" as const;
+  if (record.state === "detached") return "restore" as const;
+  return null;
 };
 
 export const selectHistoryPrimaryActionBadge = (
-  record: Pick<SessionHistoryRecord, "archived" | "mounted" | "recoverable" | "availability">,
+  record: Pick<SessionHistoryRecord, "state">,
 ) => {
   const action = selectHistoryPrimaryAction(record);
-  if (action === "focus") return null;
   if (action === "restore") return "restore" as const;
-  return "open" as const;
+  return null;
 };

@@ -1063,17 +1063,15 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     record: SessionHistoryRecord,
   ) => {
     if (!tab) return undefined;
-    if (record.resumeId) {
-      const mounted = tab.sessions.find((session) => (
-        !isDraftSession(session)
-        && session.provider === record.provider
-        && session.resumeId === record.resumeId
-      ));
-      if (mounted) {
-        return mounted;
-      }
+    const mounted = tab.sessions.find((session) => (
+      !isDraftSession(session)
+      && session.provider === record.provider
+      && session.resumeId === record.resumeId
+    ));
+    if (mounted) {
+      return mounted;
     }
-    return tab.sessions.find((session) => session.id === record.sessionId);
+    return undefined;
   }, []);
   const fileSearchQuery = fileSearchState.query;
   const fileSearchActiveIndex = fileSearchState.activeIndex;
@@ -1289,7 +1287,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const {
-    archiveSessionForTab,
     createDraftSessionForTab,
     deleteSessionFromHistory,
     materializeSession,
@@ -1557,21 +1554,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     const restorePaneId = currentTab.activePaneId;
     const action = selectHistoryPrimaryAction(record);
     const mountedSession = findSessionForHistoryRecord(currentTab, record);
-    if ((action === "focus" || action === "open") && mountedSession) {
+    if (action === "focus" && mountedSession) {
       switchSessionInActiveTab(currentTab, mountedSession.id);
       setHistoryOpen(false);
       return;
     }
-    if (action === "open") {
+    if (action === null) {
       setHistoryOpen(false);
       return;
     }
 
     const restored = await restoreSessionIntoPane(
       record.workspaceId,
-      record.sessionId,
-      restorePaneId,
       record,
+      restorePaneId,
       {
         strategy: "split-new",
       },
@@ -1593,11 +1589,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
-    const removingMissing = record.availability === "missing";
     setConfirmDialog({
       visible: true,
-      title: removingMissing ? t("historyRemoveTitle") : t("historyDeleteTitle"),
-      message: removingMissing
+      title: record.state === "unavailable" ? t("historyRemoveTitle") : t("historyDeleteTitle"),
+      message: record.state === "unavailable"
         ? t("historyRemoveConfirm", { title: record.title })
         : t("historyDeleteConfirm", { title: record.title }),
       details: {
@@ -1606,10 +1601,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         timeLabel: t("historyDialogTimeLabel"),
         timestamp: formatHistoryRecordTimestamp(record.lastActiveAt),
       },
-      confirmLabel: removingMissing ? t("historyRemove") : t("delete"),
+      confirmLabel: record.state === "unavailable" ? t("historyRemove") : t("delete"),
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, visible: false }));
-        const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId, record);
+        const deleted = await deleteSessionFromHistory(record.workspaceId, record);
         if (!deleted) return;
         await refreshHistoryRecordsIfNeeded();
       },
@@ -1899,12 +1894,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }, 0);
   };
 
-  const onArchiveSession = async (sessionId: string) => {
-    if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
-    await archiveSessionForTab(activeTab.id, sessionId);
-    void refreshHistoryRecordsIfNeeded();
-  };
-
   const onDraftPaneModeChange = (paneId: string, mode: "new" | "restore") => {
     setDraftPaneModes((current) => ({
       ...current,
@@ -1949,7 +1938,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const onRestoreDraftSession = (paneId: string, record: SessionHistoryRecord) => {
-    void restoreSessionIntoPane(activeTab.id, record.sessionId, paneId, record).then((restored) => {
+    void restoreSessionIntoPane(activeTab.id, record, paneId).then((restored) => {
       if (!restored) return;
       const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
       const restoredSession = currentTab?.sessions.find((session) => session.id === String(restored.id))
@@ -1961,17 +1950,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   };
 
-  const onRemoveUnavailableSession = async (sessionId: string) => {
-    const session = activeTab.sessions.find((item) => item.id === sessionId);
-    if (!session?.unavailableReason) return;
+  const onRemoveUnavailableSession = (sessionId: string) => {
+    const pane = activeTab.panes.find((item) => item.sessionId === sessionId);
+    if (!pane) return;
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
-    const removed = await deleteSessionFromHistory(activeTab.id, sessionId, {
-      availability: "missing",
-      provider: session.provider,
-      resumeId: session.resumeId ?? null,
-    });
-    if (!removed) return;
-    await refreshHistoryRecordsIfNeeded();
+    closeAgentPaneSession(activeTab, pane.id, sessionId);
+    window.setTimeout(() => {
+      void refreshHistoryRecordsIfNeeded();
+    }, 0);
   };
 
   const onFileSelect = async (node: TreeNode, workspaceId?: string) => {

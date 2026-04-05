@@ -106,7 +106,8 @@ pub(crate) fn process_provider_hook_payload(
             WorkspaceSessionBinding {
                 session_id: envelope.session_id.clone(),
                 provider: session.provider.clone(),
-                resume_id,
+                mode: session.mode.clone(),
+                resume_id: Some(resume_id),
                 title_snapshot: session.title.clone(),
                 last_seen_at: session.last_active_at,
             },
@@ -319,11 +320,11 @@ mod tests {
         .unwrap();
         let state: State<AppState> = app.state();
         let workspace_id = workspace.snapshot.workspace.workspace_id;
-        let session = create_workspace_session(
-            state,
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             ProviderId::claude(),
+            state,
         )
         .unwrap();
 
@@ -357,11 +358,11 @@ mod tests {
         .unwrap();
         let state: State<AppState> = app.state();
         let workspace_id = workspace.snapshot.workspace.workspace_id;
-        let session = create_workspace_session(
-            state,
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             ProviderId::codex(),
+            state,
         )
         .unwrap();
         patch_workspace_view_state(
@@ -404,7 +405,10 @@ mod tests {
             view_state.session_bindings[0].provider,
             AgentProvider::codex()
         );
-        assert_eq!(view_state.session_bindings[0].resume_id, "codex-resume-1");
+        assert_eq!(
+            view_state.session_bindings[0].resume_id.as_deref(),
+            Some("codex-resume-1")
+        );
         assert_eq!(view_state.session_bindings[0].title_snapshot, running.title);
 
         let waiting_payload = json!({

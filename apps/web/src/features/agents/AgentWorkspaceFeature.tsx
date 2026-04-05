@@ -265,14 +265,14 @@ const AgentPaneLeaf = memo(({
                   ) : (
                     restoreCandidates.map((record) => (
                       <button
-                        key={`${record.workspaceId}:${record.sessionId}`}
+                        key={`${record.workspaceId}:${record.provider}:${record.resumeId}`}
                         type="button"
                         className="agent-draft-restore-item"
                         onClick={() => handleRestoreDraftSession(record)}
-                        data-testid={`restore-candidate-${record.sessionId}`}
+                        data-testid={`restore-candidate-${record.provider}-${record.resumeId}`}
                       >
                         <strong>{record.title}</strong>
-                        <span>{record.archived ? t("historyArchived") : t("historyDetached")}</span>
+                        <span>{t("historyDetached")}</span>
                       </button>
                     ))
                   )}

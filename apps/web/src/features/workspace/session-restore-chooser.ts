@@ -1,16 +1,19 @@
 import type { SessionHistoryRecord } from "../../types/app";
 
+const providerHistoryIdentity = (record: Pick<SessionHistoryRecord, "provider" | "resumeId">) => (
+  `${record.provider}:${record.resumeId}`
+);
+
 export const listRestoreCandidatesForWorkspace = ({
   workspaceId,
-  mountedSessionIds,
+  mountedProviders,
   records,
 }: {
   workspaceId: string;
-  mountedSessionIds: Set<string>;
+  mountedProviders: Set<string>;
   records: SessionHistoryRecord[];
 }) =>
   records.filter((record) => (
     record.workspaceId === workspaceId
-    && record.recoverable
-    && !mountedSessionIds.has(record.sessionId)
+    && !mountedProviders.has(providerHistoryIdentity(record))
   ));

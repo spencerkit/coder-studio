@@ -121,10 +121,11 @@ const createOptionalHistoryMutationPayload = (
   workspaceId: string,
   sessionId: string,
   controller?: WorkspaceControllerState | null,
+  extra?: Record<string, unknown>,
 ) => (
   controller?.role === "controller"
-    ? createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId })
-    : { workspaceId, sessionId }
+    ? createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId, ...extra })
+    : { workspaceId, sessionId, ...extra }
 );
 
 const createOptionalProviderHistoryMutationPayload = (
@@ -192,29 +193,14 @@ export const switchSession = (
   createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
 );
 
-export const archiveSession = (
-  workspaceId: string,
-  sessionId: string,
-  controller: WorkspaceControllerState,
-) => invokeRpc<void>(
-  "archive_session",
-  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
-);
-
-export const restoreSession = async (
+export const closeSession = (
   workspaceId: string,
   sessionId: string,
   controller?: WorkspaceControllerState | null,
-): Promise<SessionRestoreResult> => {
-  const result = await invokeRpc<BackendSessionRestoreResult>(
-    "restore_session",
-    createOptionalHistoryMutationPayload(workspaceId, sessionId, controller),
-  );
-  return {
-    session: result.session,
-    alreadyActive: result.already_active,
-  };
-};
+) => invokeRpc<void>(
+  "close_session",
+  createOptionalHistoryMutationPayload(workspaceId, sessionId, controller),
+);
 
 export const restoreProviderSession = async (
   workspaceId: string,
@@ -234,15 +220,6 @@ export const restoreProviderSession = async (
     alreadyActive: result.already_active,
   };
 };
-
-export const deleteSession = (
-  workspaceId: string,
-  sessionId: string,
-  controller?: WorkspaceControllerState | null,
-) => invokeRpc<void>(
-  "delete_session",
-  createOptionalHistoryMutationPayload(workspaceId, sessionId, controller),
-);
 
 export const deleteProviderSession = (
   workspaceId: string,

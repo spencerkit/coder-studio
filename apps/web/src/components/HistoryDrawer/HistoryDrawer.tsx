@@ -20,24 +20,25 @@ type HistoryDrawerProps = {
   t: Translator;
 };
 
+const recordTestId = (record: SessionHistoryRecord) => (
+  `${record.workspaceId}-${record.provider}-${record.resumeId}`
+);
+
 const recordMetaLabel = (record: SessionHistoryRecord, t: Translator) => {
-  if (record.availability === "missing") return t("historyUnavailable");
-  if (record.archived) return t("historyArchived");
-  if (record.mounted) return t("historyLive");
-  return t("historyDetached");
+  if (record.state === "live") return t("historyLive");
+  if (record.state === "detached") return t("historyDetached");
+  return t("historyUnavailable");
 };
 
 const recordStateClassName = (record: SessionHistoryRecord) => {
-  if (record.availability === "missing") return "missing";
-  if (record.archived) return "archived";
-  if (record.mounted) return "live";
-  return "detached";
+  if (record.state === "live") return "live";
+  if (record.state === "detached") return "detached";
+  return "archived";
 };
 
 const primaryActionLabel = (record: SessionHistoryRecord, t: Translator) => {
   const action = selectHistoryPrimaryActionBadge(record);
   if (action === "restore") return t("historyRestore");
-  if (action === "open") return t("historyOpen");
   return null;
 };
 
@@ -109,36 +110,50 @@ export const HistoryDrawer = ({
                     {group.records.map((record) => {
                       const actionLabel = primaryActionLabel(record, t);
 
+                      const mainContent = (
+                        <>
+                          <div className="history-record-title-row">
+                            <strong>{record.title}</strong>
+                            {actionLabel ? (
+                              <span className={`history-record-state ${recordStateClassName(record)}`}>
+                                {actionLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="history-record-meta">
+                            <span>{getProviderDisplayLabel(record.provider)}</span>
+                            <span>{recordMetaLabel(record, t)}</span>
+                            <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
+                          </div>
+                        </>
+                      );
+
                       return (
-                        <div key={`${record.workspaceId}:${record.sessionId}`} className="history-record-row">
-                          <button
-                            type="button"
-                            className="history-record-main"
-                            onClick={() => onSelectRecord(record)}
-                            data-testid={`history-record-${record.workspaceId}-${record.sessionId}`}
-                          >
-                            <div className="history-record-title-row">
-                              <strong>{record.title}</strong>
-                              {actionLabel ? (
-                                <span className={`history-record-state ${recordStateClassName(record)}`}>
-                                  {actionLabel}
-                                </span>
-                              ) : null}
+                        <div key={recordTestId(record)} className="history-record-row">
+                          {record.state === "unavailable" ? (
+                            <div
+                              className="history-record-main"
+                              data-testid={`history-record-${recordTestId(record)}`}
+                            >
+                              {mainContent}
                             </div>
-                            <div className="history-record-meta">
-                              <span>{getProviderDisplayLabel(record.provider)}</span>
-                              <span>{recordMetaLabel(record, t)}</span>
-                              <span>{record.status}</span>
-                              <span>{new Date(record.lastActiveAt).toLocaleString()}</span>
-                            </div>
-                          </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="history-record-main"
+                              onClick={() => onSelectRecord(record)}
+                              data-testid={`history-record-${recordTestId(record)}`}
+                            >
+                              {mainContent}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="history-record-delete"
                             onClick={() => onDeleteRecord(record)}
-                            data-testid={`history-delete-${record.workspaceId}-${record.sessionId}`}
+                            data-testid={`history-delete-${recordTestId(record)}`}
                           >
-                            {record.availability === "missing" ? t("historyRemove") : t("historyDelete")}
+                            {record.state === "unavailable" ? t("historyRemove") : t("historyDelete")}
                           </button>
                         </div>
                       );

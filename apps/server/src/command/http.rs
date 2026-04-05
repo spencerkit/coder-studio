@@ -73,7 +73,7 @@ struct SwitchSessionRequest {
 }
 
 #[derive(Deserialize)]
-struct ArchiveSessionRequest {
+struct CloseSessionRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
     session_id: String,
@@ -923,30 +923,10 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
-        "archive_session" => {
-            let req: ArchiveSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+        "close_session" => {
+            let req: CloseSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
-            serde_json::to_value(
-                archive_session(req.controller.workspace_id, req.session_id, app.state())
-                    .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "restore_session" => {
-            let req: SessionHistoryMutationRequest =
-                parse_payload(payload).map_err(rpc_bad_request)?;
-            require_optional_workspace_history_mutation(app, &req, authorized)?;
-            serde_json::to_value(
-                restore_session(req.workspace_id, req.session_id, app.state())
-                    .map_err(rpc_bad_request)?,
-            )
-            .map_err(|e| rpc_bad_request(e.to_string()))
-        }
-        "delete_session" => {
-            let req: SessionHistoryMutationRequest =
-                parse_payload(payload).map_err(rpc_bad_request)?;
-            require_optional_workspace_history_mutation(app, &req, authorized)?;
-            delete_session(req.workspace_id, req.session_id, app.state())
+            close_session(req.controller.workspace_id, req.session_id, app.state())
                 .map_err(rpc_bad_request)?;
             Ok(Value::Null)
         }
@@ -2105,7 +2085,7 @@ mod tests {
     }
 
     #[test]
-    fn switch_and_archive_requests_deserialize_string_session_ids() {
+    fn switch_and_close_requests_deserialize_string_session_ids() {
         let switch_request: SwitchSessionRequest = serde_json::from_value(json!({
             "workspace_id": "ws-http-switch",
             "device_id": "device-a",
@@ -2114,17 +2094,99 @@ mod tests {
             "session_id": "slot-switch",
         }))
         .expect("switch_session should accept string session ids");
-        let archive_request: ArchiveSessionRequest = serde_json::from_value(json!({
-            "workspace_id": "ws-http-archive",
+        let close_request: CloseSessionRequest = serde_json::from_value(json!({
+            "workspace_id": "ws-http-close",
             "device_id": "device-a",
             "client_id": "client-a",
             "fencing_token": 6,
-            "session_id": "slot-archive",
+            "session_id": "slot-close",
         }))
-        .expect("archive_session should accept string session ids");
+        .expect("close_session should accept string session ids");
 
         assert_eq!(switch_request.session_id, "slot-switch");
-        assert_eq!(archive_request.session_id, "slot-archive");
+        assert_eq!(close_request.session_id, "slot-close");
+    }
+
+    #[test]
+    fn close_session_unmounts_binding_without_local_restore_path() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_root = create_temp_workspace_root("ws-http-close-session");
+        let workspace_id = launch_test_workspace(&app, &workspace_root);
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let response = dispatch_rpc(
+            &app,
+            "close_session",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": "slot-primary",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect("close_session should succeed");
+
+        assert_eq!(response, Value::Null);
+
+        let snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
+        assert!(!snapshot
+            .sessions
+            .iter()
+            .any(|session| session.id == "slot-primary"));
+    }
+
+    #[test]
+    fn restore_session_rpc_is_removed() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let result = dispatch_rpc(
+            &app,
+            "restore_session",
+            json!({"workspace_id": "w", "session_id": "s"}),
+            &authorized,
+        );
+
+        let error = result.expect_err("restore_session rpc should be removed");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "unsupported_command:restore_session");
+    }
+
+    #[test]
+    fn archive_session_rpc_is_removed() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let result = dispatch_rpc(
+            &app,
+            "archive_session",
+            json!({"workspace_id": "w", "session_id": "s"}),
+            &authorized,
+        );
+
+        let error = result.expect_err("archive_session rpc should be removed");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "unsupported_command:archive_session");
+    }
+
+    #[test]
+    fn delete_session_rpc_is_removed() {
+        let app = test_app();
+        let authorized = authorized_request();
+
+        let result = dispatch_rpc(
+            &app,
+            "delete_session",
+            json!({"workspace_id": "w", "session_id": "s"}),
+            &authorized,
+        );
+
+        let error = result.expect_err("delete_session rpc should be removed");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "unsupported_command:delete_session");
     }
 
     #[test]
@@ -2535,9 +2597,8 @@ mod tests {
         assert!(history
             .iter()
             .any(|record| record.workspace_id == workspace_id
-                && record.resume_id.as_deref() == Some("session-a")
-                && record.archived
-                && record.availability == "available"));
+                && record.resume_id == "session-a"
+                && !record.mounted));
 
         let restored = with_claude_home(&claude_home, || {
             dispatch_rpc(
@@ -2579,7 +2640,7 @@ mod tests {
         let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
         assert!(!history
             .iter()
-            .any(|record| record.resume_id.as_deref() == Some("session-a")));
+            .any(|record| record.resume_id == "session-a"));
 
         let _ = std::fs::remove_dir_all(workspace_root);
         let _ = std::fs::remove_dir_all(claude_home);

@@ -25,34 +25,13 @@ pub(crate) fn resolve_session_for_slot(
     workspace_id: &str,
     session_id: &str,
 ) -> Result<SessionInfo, String> {
-    let live_session = state
+    if let Some(session) = state
         .live_sessions
         .lock()
         .map_err(|e| e.to_string())?
         .get(&live_session_key(workspace_id, session_id))
-        .cloned();
-    match load_session(state, workspace_id, session_id) {
-        Ok(mut session) => {
-            if let Some(live) = live_session {
-                session.status = live.status;
-                session.runtime_active = live.runtime_active;
-                session.last_active_at = session.last_active_at.max(live.last_active_at);
-                if live.resume_id.is_some() {
-                    session.resume_id = live.resume_id;
-                }
-                if !live.title.trim().is_empty() {
-                    session.title = live.title;
-                }
-                if live.unavailable_reason.is_some() {
-                    session.unavailable_reason = live.unavailable_reason;
-                }
-            }
-            return Ok(session);
-        }
-        Err(error) if error == "session_not_found" => {}
-        Err(error) => return Err(error),
-    }
-    if let Some(session) = live_session {
+        .cloned()
+    {
         return Ok(session);
     }
     crate::load_workspace_slot_session(state, workspace_id, session_id)
@@ -112,6 +91,41 @@ fn collect_visible_session_ids(
             collect_visible_session_ids(next, ordered, seen);
         }
     }
+}
+
+fn pane_id_for_session(value: &Value, session_id: &str) -> Option<String> {
+    let Value::Object(map) = value else {
+        return None;
+    };
+    let Some(Value::String(kind)) = map.get("type") else {
+        return None;
+    };
+
+    if kind == "leaf" {
+        let leaf_session_id = map
+            .get("session_id")
+            .or_else(|| map.get("sessionId"))
+            .and_then(Value::as_str)?;
+        if leaf_session_id == session_id {
+            return map.get("id").and_then(Value::as_str).map(str::to_string);
+        }
+        return None;
+    }
+
+    if kind == "split" {
+        if let Some(next) = map.get("first") {
+            if let Some(pane_id) = pane_id_for_session(next, session_id) {
+                return Some(pane_id);
+            }
+        }
+        if let Some(next) = map.get("second") {
+            if let Some(pane_id) = pane_id_for_session(next, session_id) {
+                return Some(pane_id);
+            }
+        }
+    }
+
+    None
 }
 
 fn visible_session_ids(view_state: &WorkspaceViewState) -> Vec<String> {
@@ -301,7 +315,7 @@ pub(crate) fn close_workspace_scoped(
     let visible_session_ids = load_workspace_snapshot(state, &workspace_id)
         .map(|snapshot| visible_session_ids(&snapshot.view_state))?;
     for session_id in visible_session_ids {
-        archive_session(workspace_id.clone(), session_id, state)?;
+        close_session(workspace_id.clone(), session_id, state)?;
     }
     let ui_state = close_workspace_ui(state, &workspace_id, device_id, client_id)?;
     release_workspace_controller(&workspace_id, state)?;
@@ -419,7 +433,21 @@ pub(crate) fn create_session(
     provider: AgentProvider,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    let session = create_workspace_session(state, &workspace_id, mode, provider)?;
+    let session_id = session_slot_id()?;
+    let last_active_at = now_ts_ms();
+    upsert_workspace_session_binding(
+        state,
+        &workspace_id,
+        WorkspaceSessionBinding {
+            session_id: session_id.clone(),
+            provider: provider.clone(),
+            mode: mode.clone(),
+            resume_id: None,
+            title_snapshot: session_title(&session_id),
+            last_seen_at: last_active_at,
+        },
+    )?;
+    let session = load_session(state, &workspace_id, &session_id)?;
     remember_live_session(state, &workspace_id, &session)?;
     Ok(session)
 }
@@ -430,7 +458,52 @@ pub(crate) fn session_update<S: ToString>(
     patch: SessionPatch,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    let session = update_workspace_session(state, &workspace_id, session_id, patch)?;
+    let session_id = session_id.to_string();
+    let mut session = resolve_session_for_slot(state, &workspace_id, &session_id)?;
+    if let Some(title) = patch.title {
+        session.title = title;
+    }
+    if let Some(status) = patch.status {
+        session.status = status;
+    }
+    if let Some(mode) = patch.mode {
+        session.mode = mode;
+    }
+    if let Some(auto_feed) = patch.auto_feed {
+        session.auto_feed = auto_feed;
+    }
+    if let Some(queue) = patch.queue {
+        session.queue = queue;
+    }
+    if let Some(messages) = patch.messages {
+        session.messages = messages;
+    }
+    if let Some(unread) = patch.unread {
+        session.unread = unread;
+    }
+    if let Some(last_active_at) = patch.last_active_at {
+        session.last_active_at = last_active_at;
+    }
+    if let Some(resume_id) = patch.resume_id {
+        session.resume_id = Some(resume_id.clone());
+        let current_title = if session.title.trim().is_empty() {
+            session_title(&session_id)
+        } else {
+            session.title.clone()
+        };
+        upsert_workspace_session_binding(
+            state,
+            &workspace_id,
+            WorkspaceSessionBinding {
+                session_id: session_id.clone(),
+                provider: session.provider.clone(),
+                mode: session.mode.clone(),
+                resume_id: Some(resume_id),
+                title_snapshot: current_title,
+                last_seen_at: session.last_active_at,
+            },
+        )?;
+    }
     remember_live_session(state, &workspace_id, &session)?;
     Ok(session)
 }
@@ -440,12 +513,27 @@ pub(crate) fn switch_session<S: ToString>(
     session_id: S,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    let session = switch_workspace_session(state, &workspace_id, session_id)?;
+    let session_id = session_id.to_string();
+    let session = resolve_session_for_slot(state, &workspace_id, &session_id)?;
+    let snapshot = load_workspace_snapshot(state, &workspace_id)?;
+    let active_pane_id = pane_id_for_session(&snapshot.view_state.pane_layout, &session_id)
+        .unwrap_or(snapshot.view_state.active_pane_id);
+    patch_workspace_view_state(
+        state,
+        &workspace_id,
+        WorkspaceViewPatch {
+            active_session_id: Some(session_id),
+            active_pane_id: Some(active_pane_id),
+            active_terminal_id: None,
+            pane_layout: None,
+            file_preview: None,
+        },
+    )?;
     remember_live_session(state, &workspace_id, &session)?;
     Ok(session)
 }
 
-pub(crate) fn archive_session<S: ToString>(
+pub(crate) fn close_session<S: ToString>(
     workspace_id: String,
     session_id: S,
     state: State<'_, AppState>,
@@ -453,11 +541,6 @@ pub(crate) fn archive_session<S: ToString>(
     let session_id = session_id.to_string();
     let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
     let _ = forget_live_session(state, &workspace_id, &session_id);
-    match delete_workspace_session(state, &workspace_id, session_id.clone()) {
-        Ok(()) => {}
-        Err(error) if error == "session_not_found" => {}
-        Err(error) => return Err(error),
-    }
     remove_workspace_session_binding(state, &workspace_id, &session_id).map(|_| ())
 }
 
@@ -465,6 +548,10 @@ pub(crate) fn list_session_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<SessionHistoryRecord>, String> {
     load_session_history_records(state)
+}
+
+fn session_title(session_id: &str) -> String {
+    format!("Session {session_id}")
 }
 
 fn load_provider_workspace_session(
@@ -483,16 +570,6 @@ fn load_provider_workspace_session(
         .ok_or_else(|| "provider_session_not_found".to_string())
 }
 
-pub(crate) fn restore_session<S: ToString>(
-    workspace_id: String,
-    session_id: S,
-    state: State<'_, AppState>,
-) -> Result<SessionRestoreResult, String> {
-    let restored = restore_workspace_session(state, &workspace_id, session_id)?;
-    remember_live_session(state, &workspace_id, &restored.session)?;
-    Ok(restored)
-}
-
 pub(crate) fn restore_provider_session(
     workspace_id: String,
     session_id: String,
@@ -502,13 +579,15 @@ pub(crate) fn restore_provider_session(
 ) -> Result<SessionRestoreResult, String> {
     let provider_session =
         load_provider_workspace_session(&workspace_id, &provider, &resume_id, state)?;
+    let existing = load_session(state, &workspace_id, &session_id)?;
     upsert_workspace_session_binding(
         state,
         &workspace_id,
         WorkspaceSessionBinding {
             session_id: session_id.clone(),
             provider: provider.clone(),
-            resume_id,
+            mode: existing.mode.clone(),
+            resume_id: Some(resume_id),
             title_snapshot: provider_session.title.clone(),
             last_seen_at: provider_session.last_active_at,
         },
@@ -519,18 +598,6 @@ pub(crate) fn restore_provider_session(
         session,
         already_active: false,
     })
-}
-
-pub(crate) fn delete_session<S: ToString>(
-    workspace_id: String,
-    session_id: S,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let session_id = session_id.to_string();
-    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
-    let result = delete_workspace_session(state, &workspace_id, session_id.clone());
-    let _ = forget_live_session(state, &workspace_id, &session_id);
-    result
 }
 
 pub(crate) fn delete_provider_session(
@@ -812,11 +879,11 @@ mod tests {
     }
 
     #[test]
-    fn archive_session_unmounts_provider_binding_and_marks_history_record_archived() {
+    fn close_session_unmounts_provider_binding_and_keeps_provider_history_record() {
         let app = test_app();
-        let workspace_root = unique_temp_dir("ws-history-archive-test");
+        let workspace_root = unique_temp_dir("ws-history-close-test");
         let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
-        let claude_home = unique_temp_dir("ws-history-archive-home");
+        let claude_home = unique_temp_dir("ws-history-close-home");
         let claude_dir = claude_home.join(".claude");
         let project_slug = workspace_root
             .to_string_lossy()
@@ -852,7 +919,7 @@ mod tests {
         })
         .expect("provider restore should succeed");
 
-        archive_session(workspace_id.clone(), "slot-primary", app.state()).unwrap();
+        close_session(workspace_id.clone(), "slot-primary", app.state()).unwrap();
 
         let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
         assert!(!snapshot
@@ -864,18 +931,16 @@ mod tests {
             .expect("history should load");
         let archived = history
             .iter()
-            .find(|record| record.resume_id.as_deref() == Some("session-a"))
+            .find(|record| record.resume_id == "session-a")
             .expect("provider record should remain visible");
-        assert!(archived.archived);
         assert!(!archived.mounted);
-        assert_eq!(archived.availability, "available");
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);
     }
 
     #[test]
-    fn close_workspace_clears_provider_bindings_and_marks_history_record_archived() {
+    fn close_workspace_clears_provider_bindings_and_keeps_provider_history_records_unmounted() {
         let app = test_app();
         let workspace_root = unique_temp_dir("ws-close-archive-workspace");
         let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
@@ -925,11 +990,9 @@ mod tests {
         .expect("history should load");
         let archived = history
             .iter()
-            .find(|record| record.resume_id.as_deref() == Some("session-a"))
+            .find(|record| record.resume_id == "session-a")
             .expect("provider record should remain visible");
-        assert!(archived.archived);
         assert!(!archived.mounted);
-        assert_eq!(archived.availability, "available");
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);
@@ -937,7 +1000,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_history_lists_archived_provider_records_and_missing_bindings() {
+    fn provider_history_lists_provider_records_and_missing_bindings() {
         let app = test_app();
         let workspace_root = unique_temp_dir("ws-provider-history-workspace");
         let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
@@ -971,7 +1034,8 @@ mod tests {
             WorkspaceSessionBinding {
                 session_id: "slot-primary".to_string(),
                 provider: AgentProvider::claude(),
-                resume_id: "missing-session".to_string(),
+                mode: SessionMode::Branch,
+                resume_id: Some("missing-session".to_string()),
                 title_snapshot: "Deleted Session".to_string(),
                 last_seen_at: 42,
             },
@@ -982,24 +1046,24 @@ mod tests {
             .expect("history should load");
         let archived = history
             .iter()
-            .find(|record| record.resume_id.as_deref() == Some("session-a"))
+            .find(|record| record.resume_id == "session-a")
             .expect("provider record should exist");
-        assert!(archived.archived);
         assert!(!archived.mounted);
-        assert_eq!(archived.availability, "available");
-        assert!(archived.recoverable);
+        assert_eq!(archived.state, "detached");
         assert_eq!(archived.title, "Archived Provider Session");
 
         let missing = history
             .iter()
-            .find(|record| record.session_id == "slot-primary")
-            .expect("missing binding should surface");
-        assert_eq!(missing.availability, "missing");
-        assert!(missing.mounted);
-        assert!(!missing.archived);
-        assert!(!missing.recoverable);
+            .find(|record| record.resume_id == "missing-session")
+            .expect("missing binding should exist");
+        assert!(!missing.mounted);
+        assert_eq!(missing.state, "unavailable");
+        assert_eq!(missing.session_id.as_deref(), Some("slot-primary"));
         assert_eq!(missing.title, "Deleted Session");
-        assert_eq!(missing.resume_id.as_deref(), Some("missing-session"));
+
+        assert!(history
+            .iter()
+            .all(|record| !record.resume_id.trim().is_empty()));
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);
@@ -1063,9 +1127,9 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(codex_records.len(), 1);
-        assert_eq!(codex_records[0].resume_id.as_deref(), Some("thread-top"));
+        assert_eq!(codex_records[0].resume_id, "thread-top");
         assert_eq!(codex_records[0].title, "Top Level Session");
-        assert!(codex_records[0].archived);
+        assert!(!codex_records[0].mounted);
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(codex_home);
@@ -1120,11 +1184,9 @@ mod tests {
             .expect("history should load");
         let mounted = history_before
             .iter()
-            .find(|record| record.resume_id.as_deref() == Some("session-a"))
+            .find(|record| record.resume_id == "session-a")
             .expect("provider record should exist");
         assert!(mounted.mounted);
-        assert!(!mounted.archived);
-        assert_eq!(mounted.session_id, "slot-primary");
 
         with_claude_home(&claude_home, || {
             delete_provider_session(
@@ -1141,7 +1203,7 @@ mod tests {
             .expect("history should reload");
         assert!(!history_after
             .iter()
-            .any(|record| record.resume_id.as_deref() == Some("session-a")));
+            .any(|record| record.resume_id == "session-a"));
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);
@@ -1174,6 +1236,30 @@ mod tests {
     }
 
     #[test]
+    fn create_session_preserves_requested_mode() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-session-mode-test");
+
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::GitTree,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert!(matches!(created.mode, SessionMode::GitTree));
+
+        let snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
+        let restored = snapshot
+            .sessions
+            .into_iter()
+            .find(|session| session.id == created.id)
+            .expect("session should exist in snapshot");
+        assert!(matches!(restored.mode, SessionMode::GitTree));
+    }
+
+    #[test]
     fn create_session_allocates_slot_ids() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-slot-id-test");
@@ -1187,6 +1273,108 @@ mod tests {
         .unwrap();
 
         assert!(created.id.starts_with("slot_"));
+    }
+
+    #[test]
+    fn switch_session_keeps_existing_pane_layout() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-switch-layout-test");
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        let pane_layout = json!({
+            "type": "split",
+            "id": "split-root",
+            "axis": "vertical",
+            "ratio": 0.5,
+            "first": {
+                "type": "leaf",
+                "id": "pane-left",
+                "sessionId": "slot-primary",
+            },
+            "second": {
+                "type": "leaf",
+                "id": "pane-right",
+                "sessionId": created.id.clone(),
+            },
+        });
+        workspace_view_update(
+            workspace_id.clone(),
+            WorkspaceViewPatch {
+                active_session_id: Some("slot-primary".to_string()),
+                active_pane_id: Some("pane-left".to_string()),
+                active_terminal_id: None,
+                pane_layout: Some(pane_layout.clone()),
+                file_preview: None,
+            },
+            app.state(),
+        )
+        .unwrap();
+
+        switch_session(workspace_id.clone(), &created.id, app.state()).unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
+        assert_eq!(snapshot.view_state.pane_layout, pane_layout);
+        assert_eq!(snapshot.view_state.active_session_id, created.id);
+        assert_eq!(snapshot.view_state.active_pane_id, "pane-right");
+    }
+
+    #[test]
+    fn restore_provider_session_preserves_existing_slot_mode() {
+        let app = test_app();
+        let workspace_root = unique_temp_dir("ws-restore-mode-test");
+        let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::GitTree,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        let claude_home = unique_temp_dir("ws-restore-mode-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-a.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Restorable Provider Session\",\"timestamp\":2,\"project\":\"{}\",\"sessionId\":\"session-a\"}}\n",
+                workspace_root.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        let restored = with_claude_home(&claude_home, || {
+            restore_provider_session(
+                workspace_id.clone(),
+                created.id.clone(),
+                AgentProvider::claude(),
+                "session-a".to_string(),
+                app.state(),
+            )
+        })
+        .unwrap();
+
+        assert!(matches!(restored.session.mode, SessionMode::GitTree));
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
     }
 
     #[test]
@@ -1268,6 +1456,104 @@ mod tests {
     }
 
     #[test]
+    fn resolve_session_for_slot_uses_live_session_before_db_lookup() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-live-session-resolver-test");
+        let live_session = SessionInfo {
+            id: "slot-live-only".to_string(),
+            title: "Live Only Session".to_string(),
+            status: SessionStatus::Running,
+            mode: SessionMode::Branch,
+            provider: AgentProvider::claude(),
+            auto_feed: true,
+            queue: Vec::new(),
+            messages: Vec::new(),
+            unread: 0,
+            last_active_at: now_ts_ms(),
+            resume_id: Some("resume-live-only".to_string()),
+            unavailable_reason: None,
+            runtime_active: true,
+        };
+        app.state().live_sessions.lock().unwrap().insert(
+            super::live_session_key(&workspace_id, &live_session.id),
+            live_session.clone(),
+        );
+
+        reset_with_db_call_count();
+        let resolved = resolve_session_for_slot(app.state(), &workspace_id, &live_session.id).unwrap();
+        let db_calls = read_with_db_call_count();
+
+        assert_eq!(resolved.id, live_session.id);
+        assert_eq!(resolved.title, live_session.title);
+        assert_eq!(resolved.status, live_session.status);
+        assert_eq!(resolved.resume_id, live_session.resume_id);
+        assert!(resolved.runtime_active);
+        assert_eq!(db_calls, 0);
+    }
+
+    #[test]
+    fn resolve_session_for_slot_falls_back_to_binding_snapshot_without_live_session() {
+        let app = test_app();
+        let workspace_root = unique_temp_dir("ws-binding-session-resolver-test");
+        let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
+        let claude_home = unique_temp_dir("ws-binding-session-resolver-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-a.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Restorable Provider Session\",\"timestamp\":2,\"project\":\"{}\",\"sessionId\":\"session-a\"}}\n",
+                workspace_root.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        with_claude_home(&claude_home, || {
+            restore_provider_session(
+                workspace_id.clone(),
+                "slot-primary".to_string(),
+                AgentProvider::claude(),
+                "session-a".to_string(),
+                app.state(),
+            )
+        })
+        .expect("provider restore should succeed");
+        app.state()
+            .live_sessions
+            .lock()
+            .unwrap()
+            .remove(&super::live_session_key(&workspace_id, "slot-primary"));
+
+        let resolved = with_claude_home(&claude_home, || {
+            resolve_session_for_slot(app.state(), &workspace_id, "slot-primary")
+        })
+        .unwrap();
+
+        assert_eq!(resolved.id, "slot-primary");
+        assert_eq!(resolved.title, "Restorable Provider Session");
+        assert_eq!(resolved.provider, AgentProvider::claude());
+        assert_eq!(resolved.resume_id.as_deref(), Some("session-a"));
+        assert_eq!(resolved.status, SessionStatus::Interrupted);
+        assert!(!resolved.runtime_active);
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
     fn bootstrap_and_runtime_attach_reuse_live_session_state() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-live-session-bootstrap-test");
@@ -1327,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    fn session_last_active_at_is_persisted_in_millis_for_create_switch_and_restore() {
+    fn session_last_active_at_is_persisted_in_millis_for_create_switch_and_provider_restore() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-last-active-ms-test");
 
@@ -1350,11 +1636,46 @@ mod tests {
             "switch_session should use millisecond timestamps"
         );
 
-        let restored = restore_session(workspace_id.clone(), &created_id, app.state()).unwrap();
+        let claude_home = unique_temp_dir("ws-last-active-ms-home");
+        let claude_dir = claude_home.join(".claude");
+        let workspace_root = PathBuf::from("/tmp/ws-last-active-ms-test");
+        let project_slug = workspace_root.to_string_lossy().replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-a.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Restorable Provider Session\",\"timestamp\":2,\"project\":\"{}\",\"sessionId\":\"session-a\"}}\n",
+                workspace_root.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        let restored = with_claude_home(&claude_home, || {
+            restore_provider_session(
+                workspace_id.clone(),
+                created_id.clone(),
+                AgentProvider::claude(),
+                "session-a".to_string(),
+                app.state(),
+            )
+        })
+        .unwrap();
         assert!(
             restored.session.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
-            "restore_session should use millisecond timestamps"
+            "restore_provider_session should use millisecond timestamps"
         );
+
+        let _ = fs::remove_dir_all(claude_home);
     }
 
     #[test]

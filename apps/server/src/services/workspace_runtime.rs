@@ -825,41 +825,6 @@ mod tests {
     }
 
     #[test]
-    fn workspace_runtime_attach_scans_workspace_sessions_once_for_snapshot_assembly() {
-        let _guard = lock_with_db_count_tests();
-        let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-scan-count");
-
-        let archived = create_workspace_session(
-            app.state(),
-            &workspace_id,
-            SessionMode::Branch,
-            AgentProvider::claude(),
-        )
-        .unwrap();
-        archive_workspace_session(app.state(), &workspace_id, archived.id).unwrap();
-        create_workspace_session(
-            app.state(),
-            &workspace_id,
-            SessionMode::Branch,
-            AgentProvider::claude(),
-        )
-        .unwrap();
-
-        reset_workspace_session_query_count();
-        workspace_runtime_attach(
-            workspace_id,
-            "device-a".to_string(),
-            "client-a".to_string(),
-            app.clone(),
-            app.state(),
-        )
-        .unwrap();
-
-        assert_eq!(read_workspace_session_query_count(), 1);
-    }
-
-    #[test]
     fn workspace_runtime_attach_assigns_controller_and_observer_roles() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-attach-test");
@@ -1189,11 +1154,11 @@ mod tests {
     fn workspace_runtime_attach_includes_agent_lifecycle_replay() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-lifecycle-replay-test");
-        let session = create_workspace_session(
-            app.state(),
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             AgentProvider::claude(),
+            app.state(),
         )
         .expect("session should be created");
 
@@ -1229,11 +1194,11 @@ mod tests {
     fn workspace_runtime_attach_keeps_created_session_view_and_claude_id() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-view-test");
-        let session = create_workspace_session(
-            app.state(),
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             AgentProvider::claude(),
+            app.state(),
         )
         .expect("session should be created");
 
@@ -1253,9 +1218,8 @@ mod tests {
             },
         )
         .expect("view state should be updated");
-        update_workspace_session(
-            app.state(),
-            &workspace_id,
+        session_update(
+            workspace_id.clone(),
             session.id.clone(),
             SessionPatch {
                 title: None,
@@ -1268,6 +1232,7 @@ mod tests {
                 last_active_at: None,
                 resume_id: Some("claude-runtime-attach".to_string()),
             },
+            app.state(),
         )
         .expect("session should be updated");
 
@@ -1306,11 +1271,11 @@ mod tests {
     fn workspace_runtime_attach_includes_runtime_bound_terminal_and_binding() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding");
-        let session = create_workspace_session(
-            app.state(),
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             AgentProvider::claude(),
+            app.state(),
         )
         .unwrap();
 
@@ -1373,7 +1338,8 @@ mod tests {
             view_state.session_bindings = vec![WorkspaceSessionBinding {
                 session_id: "slot-primary".to_string(),
                 provider: AgentProvider::claude(),
-                resume_id: "resume-session".to_string(),
+                mode: SessionMode::Branch,
+                resume_id: Some("resume-session".to_string()),
                 title_snapshot: "Old title".to_string(),
                 last_seen_at: 1,
             }];
@@ -1430,7 +1396,8 @@ mod tests {
             view_state.session_bindings = vec![WorkspaceSessionBinding {
                 session_id: "slot-primary".to_string(),
                 provider: AgentProvider::claude(),
-                resume_id: "missing-session".to_string(),
+                mode: SessionMode::Branch,
+                resume_id: Some("missing-session".to_string()),
                 title_snapshot: "Deleted Session".to_string(),
                 last_seen_at: 123,
             }];
@@ -1472,11 +1439,11 @@ mod tests {
     fn workspace_runtime_attach_keeps_bound_terminal_output_after_runtime_close() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-persist");
-        let session = create_workspace_session(
-            app.state(),
-            &workspace_id,
+        let session = create_session(
+            workspace_id.clone(),
             SessionMode::Branch,
             AgentProvider::claude(),
+            app.state(),
         )
         .unwrap();
 

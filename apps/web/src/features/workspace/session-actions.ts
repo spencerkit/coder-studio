@@ -12,12 +12,10 @@ import {
 } from "../../state/workbench-core";
 import { formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
-  archiveSession as archiveSessionRequest,
+  closeSession as closeSessionRequest,
   deleteProviderSession as deleteProviderSessionRequest,
-  deleteSession as deleteSessionRequest,
   removeMissingBinding as removeMissingBindingRequest,
   restoreProviderSession as restoreProviderSessionRequest,
-  restoreSession as restoreSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
 } from "../../services/http/session.service";
@@ -364,67 +362,16 @@ export const createWorkspaceSessionActions = ({
     }
 
     if (!isDraftSession(session)) {
-      void archiveSessionRequest(tab.id, session.id, tab.controller).catch(() => {
-        // Session has already been archived locally.
+      void closeSessionRequest(tab.id, session.id, tab.controller).catch(() => {
+        // Session has already been closed locally.
       });
     }
-  };
-
-  const archiveSessionForTab = async (tabId: string, sessionId: string) => {
-    const currentTab = stateRef.current.tabs.find((item) => item.id === tabId);
-    const session = currentTab?.sessions.find((item) => item.id === sessionId);
-    if (!currentTab || !session) return;
-
-    const nextActiveAt = Date.now();
-    const paneId = findPaneIdBySessionId(currentTab.paneLayout, sessionId) ?? currentTab.activePaneId;
-    if (!isDraftSession(session)) {
-      await withServiceFallback(
-        () => archiveSessionRequest(tabId, sessionId, currentTab.controller),
-        null,
-      );
-    }
-    updateTab(tabId, (tab) => {
-      const currentSession = tab.sessions.find((item) => item.id === sessionId);
-      if (!currentSession) return tab;
-      const replacement = {
-        ...createDraftSessionForTab(tab, currentSession.mode),
-        provider: currentSession.provider,
-        lastActiveAt: tab.activeSessionId === sessionId ? nextActiveAt : Date.now(),
-      };
-      const nextActiveId = tab.activeSessionId === sessionId
-        ? replacement.id
-        : tab.activeSessionId;
-      const nextSessions = tab.sessions.map((item) => {
-        if (item.id === sessionId) {
-          return {
-            ...replacement,
-            unread: 0,
-          };
-        }
-        if (item.id === nextActiveId) {
-          return {
-            ...item,
-            unread: 0,
-            lastActiveAt: nextActiveAt,
-          };
-        }
-        return item;
-      });
-      return {
-        ...tab,
-        sessions: nextSessions,
-        paneLayout: remapPaneSession(tab.paneLayout, sessionId, replacement.id),
-        activePaneId: paneId,
-        activeSessionId: nextActiveId,
-      };
-    });
   };
 
   const restoreSessionIntoPane = async (
     tabId: string,
-    sessionId: string,
+    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId">,
     preferredPaneId?: string,
-    historyRecord?: Pick<SessionHistoryRecord, "provider" | "resumeId" | "availability"> | null,
     options?: {
       strategy?: RestorePaneStrategy;
     },
@@ -432,22 +379,15 @@ export const createWorkspaceSessionActions = ({
     const strategy = options?.strategy ?? "reuse-draft";
     const target = ensureRestorePane(tabId, preferredPaneId, strategy);
     if (!target) return null;
-    if (historyRecord?.availability === "missing") {
-      return null;
-    }
 
     advanceWorkspaceSyncVersion(tabId);
     const restored = await withServiceFallback(
-      () => (
-        historyRecord?.resumeId
-          ? restoreProviderSessionRequest(
-            tabId,
-            target.replacedSessionId,
-            historyRecord.provider,
-            historyRecord.resumeId,
-            controllerForTab(tabId),
-          )
-          : restoreSessionRequest(tabId, sessionId, controllerForTab(tabId))
+      () => restoreProviderSessionRequest(
+        tabId,
+        target.replacedSessionId,
+        historyRecord.provider,
+        historyRecord.resumeId,
+        controllerForTab(tabId),
       ),
       null,
     );
@@ -500,24 +440,26 @@ export const createWorkspaceSessionActions = ({
 
   const deleteSessionFromHistory = async (
     workspaceId: string,
-    sessionId: string,
-    historyRecord?: Pick<SessionHistoryRecord, "provider" | "resumeId" | "availability"> | null,
+    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId" | "state" | "sessionId">,
   ) => {
     const controller = controllerForTab(workspaceId);
     const deleted = await withServiceFallback(
       async () => {
-        if (historyRecord?.availability === "missing") {
-          await removeMissingBindingRequest(workspaceId, sessionId, controller);
-        } else if (historyRecord?.resumeId) {
-          await deleteProviderSessionRequest(
+        if (historyRecord.state === "unavailable") {
+          if (!historyRecord.sessionId) return false;
+          await removeMissingBindingRequest(
             workspaceId,
-            historyRecord.provider,
-            historyRecord.resumeId,
+            historyRecord.sessionId,
             controller,
           );
-        } else {
-          await deleteSessionRequest(workspaceId, sessionId, controller);
+          return true;
         }
+        await deleteProviderSessionRequest(
+          workspaceId,
+          historyRecord.provider,
+          historyRecord.resumeId,
+          controller,
+        );
         return true;
       },
       false,
@@ -597,7 +539,6 @@ export const createWorkspaceSessionActions = ({
     onNewSession,
     onSwitchSession,
     onCloseAgentPane,
-    archiveSessionForTab,
     restoreSessionIntoPane,
     deleteSessionFromHistory,
     markSessionIdle,

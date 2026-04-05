@@ -349,6 +349,52 @@ const emitLifecycleEvent = async (page: Page, payload: Record<string, unknown>) 
   }, JSON.stringify(frame));
 };
 
+const installRpcTracker = async (page: Page) => {
+  await page.addInitScript(() => {
+    const calls: Array<{ command: string; payload: Record<string, unknown> | null }> = [];
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      const match = url.match(/\/api\/rpc\/([^/?#]+)/);
+      if (match) {
+        let payload: Record<string, unknown> | null = null;
+        if (typeof init?.body === 'string') {
+          try {
+            payload = JSON.parse(init.body) as Record<string, unknown>;
+          } catch {
+            payload = null;
+          }
+        }
+        calls.push({ command: match[1], payload });
+      }
+      return originalFetch(input, init);
+    };
+
+    window.__rpcTracker = {
+      read: () => calls.map((entry) => ({
+        command: entry.command,
+        payload: entry.payload ? { ...entry.payload } : null,
+      })),
+      clear: () => {
+        calls.length = 0;
+      },
+    };
+  });
+};
+
+const readRpcCalls = async (page: Page) => page.evaluate(() => window.__rpcTracker?.read() ?? []);
+
+const clearRpcCalls = async (page: Page) => {
+  await page.evaluate(() => {
+    window.__rpcTracker?.clear();
+  });
+};
+
 const createNotificationRecorder = async (page: Page) => {
   await page.addInitScript(() => {
     const notificationEvents: string[] = [];
@@ -595,17 +641,20 @@ const closeAllOpenWorkspaces = async (page: Page) => {
   }
 };
 
-const createArchivedSessionForWorkspace = async (
+const createDetachedProviderSessionForWorkspace = async (
   page: Page,
   workspaceId: string,
   title: string,
 ) => {
   const controller = await currentWorkspaceController(page, workspaceId);
-  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+  const session = await invokeRpc<{ id: string; resume_id?: string | null }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
     provider: 'claude',
   });
+  if (!session.resume_id) {
+    throw new Error('createDetachedProviderSessionForWorkspace: create_session returned no resume_id');
+  }
   await invokeRpc(page, 'session_update', {
     ...controller,
     sessionId: session.id,
@@ -614,11 +663,14 @@ const createArchivedSessionForWorkspace = async (
       status: 'idle',
     },
   });
-  await invokeRpc(page, 'archive_session', {
+  await invokeRpc(page, 'close_session', {
     ...controller,
-    sessionId: session.id,
+    sessionId: String(session.id),
   });
-  return String(session.id);
+  return {
+    sessionId: String(session.id),
+    resumeId: String(session.resume_id),
+  };
 };
 
 const createActiveSessionForWorkspace = async (
@@ -666,6 +718,7 @@ test.beforeEach(async ({ page }) => {
     }
   });
   await installTransportTracker(page);
+  await installRpcTracker(page);
   await installRuntimeCommandMock(page);
   await resetAppSettings(page);
   const { bootstrap } = await readScopedWorkbenchBootstrap(page);
@@ -1003,7 +1056,7 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('provider-settings-claude-base-url')).toHaveValue('https://example.test/claude');
 });
 
-test('history drawer restores archived sessions and deletes records permanently', async ({ page }) => {
+test('history drawer restores provider sessions and deletes records permanently', async ({ page }) => {
   const workspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-history-'));
 
   try {
@@ -1016,20 +1069,30 @@ test('history drawer restores archived sessions and deletes records permanently'
     expect(current.workspace).toBeTruthy();
     const workspaceId = current.workspace!.workspace.workspace_id;
 
-    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Restore Session');
-    const deleteSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Delete Session');
+    const restoreSession = await createDetachedProviderSessionForWorkspace(page, workspaceId, 'History Restore Session');
+    const deleteSession = await createDetachedProviderSessionForWorkspace(page, workspaceId, 'History Delete Session');
 
     await page.getByTestId('history-toggle').click();
     await expect(page.getByTestId('history-drawer')).toBeVisible();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`)).toBeVisible();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${restoreSession.resumeId}`)).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${deleteSession.resumeId}`)).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
-    await page.getByTestId(`history-delete-${workspaceId}-${deleteSessionId}`).click();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toHaveCount(0);
+    await page.getByTestId(`history-delete-${workspaceId}-claude-${deleteSession.resumeId}`).click();
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${deleteSession.resumeId}`)).toHaveCount(0);
 
-    await page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`).click();
-    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await clearRpcCalls(page);
+    await page.getByTestId(`history-record-${workspaceId}-claude-${restoreSession.resumeId}`).click();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSession.sessionId}"]`)).toBeVisible();
     await expect(page.locator('.agent-pane-title', { hasText: 'History Restore Session' })).toBeVisible();
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'restore_provider_session').length;
+    }).toBeGreaterThan(0);
+
+    const restoreCalls = await readRpcCalls(page);
+    expect(restoreCalls.some((call) => call.command === 'restore_session')).toBe(false);
+    expect(restoreCalls.some((call) => call.command === 'restore_provider_session' && call.payload?.resumeId === restoreSession.resumeId)).toBe(true);
   } finally {
     await closeAllOpenWorkspaces(page);
     await fs.rm(workspaceDir, { recursive: true, force: true });
@@ -1056,8 +1119,8 @@ test('draft pane restore only shows current workspace history and restores into 
     const workspaceBId = workspaceB.workspace!.workspace.workspace_id;
     const workspaceALabel = path.basename(workspaceADir);
 
-    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceAId, 'Draft Restore Alpha');
-    await createArchivedSessionForWorkspace(page, workspaceBId, 'Draft Restore Beta');
+    const restoreSession = await createDetachedProviderSessionForWorkspace(page, workspaceAId, 'Draft Restore Alpha');
+    await createDetachedProviderSessionForWorkspace(page, workspaceBId, 'Draft Restore Beta');
 
     await page.reload();
     await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -1075,16 +1138,63 @@ test('draft pane restore only shows current workspace history and restores into 
 
     await expect(draftLauncher.getByText('Draft Restore Alpha')).toBeVisible();
     await expect(draftLauncher.getByText('Draft Restore Beta')).toHaveCount(0);
-    await draftLauncher.getByTestId(`restore-candidate-${restoreSessionId}`).click();
+    await clearRpcCalls(page);
+    await draftLauncher.getByTestId(`restore-candidate-claude-${restoreSession.resumeId}`).click();
 
-    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSession.sessionId}"]`)).toBeVisible();
     await expect(page.locator('.agent-pane-title', { hasText: 'Draft Restore Alpha' })).toBeVisible();
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'restore_provider_session').length;
+    }).toBeGreaterThan(0);
+
+    const restoreCalls = await readRpcCalls(page);
+    expect(restoreCalls.some((call) => call.command === 'restore_session')).toBe(false);
+    expect(restoreCalls.some((call) => call.command === 'restore_provider_session' && call.payload?.resumeId === restoreSession.resumeId)).toBe(true);
   } finally {
     await closeAllOpenWorkspaces(page);
     await Promise.all([
       fs.rm(workspaceADir, { recursive: true, force: true }),
       fs.rm(workspaceBDir, { recursive: true, force: true }),
     ]);
+  }
+});
+
+test('closing a pane calls close_session instead of archive_session', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-close-session-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const current = await readWorkspaceByPath(page, workspaceDir);
+    expect(current.workspace).toBeTruthy();
+    const workspaceId = current.workspace!.workspace.workspace_id;
+    const sessionId = await createActiveSessionForWorkspace(page, workspaceId, 'Close Session RPC');
+
+    await page.reload();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await clearRpcCalls(page);
+
+    const paneCard = page.locator(`.agent-pane-card[data-session-id="${sessionId}"]`).first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Close').click();
+
+    await expect(page.locator(`.agent-pane-card[data-session-id="${sessionId}"]`)).toHaveCount(0);
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'close_session').length;
+    }).toBeGreaterThan(0);
+
+    const calls = await readRpcCalls(page);
+    expect(calls.some((call) => call.command === 'archive_session')).toBe(false);
+    expect(calls.some((call) => call.command === 'close_session' && call.payload?.sessionId === sessionId)).toBe(true);
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   }
 });
 

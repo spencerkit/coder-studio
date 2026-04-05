@@ -77,41 +77,36 @@ export type BackendSession = {
   unavailable_reason?: string | null;
 };
 
+export type SessionHistoryRecordState = "live" | "detached" | "unavailable";
+
 export type BackendSessionHistoryRecord = {
   workspace_id: string;
   workspace_title: string;
   workspace_path: string;
-  session_id: string;
+  session_id?: string | null;
   title: string;
-  status: SessionStatus;
   provider: AgentProvider;
-  archived: boolean;
   mounted: boolean;
-  availability: "available" | "missing";
-  recoverable: boolean;
+  state: SessionHistoryRecordState;
   created_at: number;
   last_active_at: number;
-  archived_at?: number | null;
-  resume_id?: string | null;
+  resume_id: string;
 };
 
 export type SessionHistoryRecord = {
   workspaceId: string;
   workspaceTitle: string;
   workspacePath: string;
-  sessionId: string;
+  sessionId?: string | null;
   title: string;
-  status: SessionStatus;
   provider: AgentProvider;
-  archived: boolean;
   mounted: boolean;
-  availability: "available" | "missing";
-  recoverable: boolean;
+  state: SessionHistoryRecordState;
   createdAt: number;
   lastActiveAt: number;
-  archivedAt?: number | null;
-  resumeId?: string | null;
+  resumeId: string;
 };
+
 
 export type SessionHistoryGroup = {
   workspaceId: string;
@@ -134,7 +129,7 @@ export type BackendWorkspaceViewState = {
 export type BackendWorkspaceSessionBinding = {
   session_id: string;
   provider: AgentProvider;
-  resume_id: string;
+  resume_id: string | null;
   title_snapshot: string;
   last_seen_at: number;
 };
