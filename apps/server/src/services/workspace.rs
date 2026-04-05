@@ -1,5 +1,35 @@
 use crate::*;
 
+fn live_session_key(workspace_id: &str, session_id: &str) -> String {
+    format!("{workspace_id}:{session_id}")
+}
+
+fn remember_live_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session: &SessionInfo,
+) -> Result<(), String> {
+    state
+        .live_sessions
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(live_session_key(workspace_id, &session.id), session.clone());
+    Ok(())
+}
+
+fn forget_live_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    state
+        .live_sessions
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&live_session_key(workspace_id, session_id));
+    Ok(())
+}
+
 pub(crate) fn launch_workspace_internal_scoped(
     source: WorkspaceSource,
     clone_root_override: Option<String>,
@@ -159,20 +189,22 @@ fn emit_workspace_runtime_state(
 
 fn session_state_payload(session: &SessionInfo) -> WorkspaceSessionState {
     WorkspaceSessionState {
-        session_id: session.id.to_string(),
+        session_id: session.id.clone(),
         status: session.status.clone(),
         last_active_at: session.last_active_at,
         resume_id: session.resume_id.clone(),
     }
 }
 
-pub(crate) fn sync_session_status(
+pub(crate) fn sync_session_status<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
+    session_id: S,
     status: SessionStatus,
 ) -> Result<bool, String> {
-    let updated = set_session_status_if_not_archived(state, workspace_id, session_id, status)?;
+    let session_id = session_id.to_string();
+    let updated =
+        set_session_status_if_not_archived(state, workspace_id, session_id.clone(), status)?;
     if !updated {
         return Ok(false);
     }
@@ -186,17 +218,18 @@ pub(crate) fn sync_session_status(
     Ok(true)
 }
 
-pub(crate) fn sync_session_runtime_state(
+pub(crate) fn sync_session_runtime_state<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
+    session_id: S,
     status: SessionStatus,
     runtime_active: bool,
 ) -> Result<bool, String> {
+    let session_id = session_id.to_string();
     let updated = set_session_runtime_state_if_not_archived(
         state,
         workspace_id,
-        session_id,
+        session_id.clone(),
         status,
         runtime_active,
     )?;
@@ -229,33 +262,41 @@ pub(crate) fn create_session(
     provider: AgentProvider,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    create_workspace_session(state, &workspace_id, mode, provider)
+    let session = create_workspace_session(state, &workspace_id, mode, provider)?;
+    remember_live_session(state, &workspace_id, &session)?;
+    Ok(session)
 }
 
-pub(crate) fn session_update(
+pub(crate) fn session_update<S: ToString>(
     workspace_id: String,
-    session_id: u64,
+    session_id: S,
     patch: SessionPatch,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    update_workspace_session(state, &workspace_id, session_id, patch)
+    let session = update_workspace_session(state, &workspace_id, session_id, patch)?;
+    remember_live_session(state, &workspace_id, &session)?;
+    Ok(session)
 }
 
-pub(crate) fn switch_session(
+pub(crate) fn switch_session<S: ToString>(
     workspace_id: String,
-    session_id: u64,
+    session_id: S,
     state: State<'_, AppState>,
 ) -> Result<SessionInfo, String> {
-    switch_workspace_session(state, &workspace_id, session_id)
+    let session = switch_workspace_session(state, &workspace_id, session_id)?;
+    remember_live_session(state, &workspace_id, &session)?;
+    Ok(session)
 }
 
-pub(crate) fn archive_session(
+pub(crate) fn archive_session<S: ToString>(
     workspace_id: String,
-    session_id: u64,
+    session_id: S,
     state: State<'_, AppState>,
 ) -> Result<ArchiveEntry, String> {
-    let entry = archive_workspace_session(state, &workspace_id, session_id)?;
-    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id.to_string(), state);
+    let session_id = session_id.to_string();
+    let entry = archive_workspace_session(state, &workspace_id, &session_id)?;
+    let _ = forget_live_session(state, &workspace_id, &entry.session_id);
+    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
     Ok(entry)
 }
 
@@ -265,21 +306,26 @@ pub(crate) fn list_session_history(
     load_session_history_records(state)
 }
 
-pub(crate) fn restore_session(
+pub(crate) fn restore_session<S: ToString>(
     workspace_id: String,
-    session_id: u64,
+    session_id: S,
     state: State<'_, AppState>,
 ) -> Result<SessionRestoreResult, String> {
-    restore_workspace_session(state, &workspace_id, session_id)
+    let restored = restore_workspace_session(state, &workspace_id, session_id)?;
+    remember_live_session(state, &workspace_id, &restored.session)?;
+    Ok(restored)
 }
 
-pub(crate) fn delete_session(
+pub(crate) fn delete_session<S: ToString>(
     workspace_id: String,
-    session_id: u64,
+    session_id: S,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id.to_string(), state);
-    delete_workspace_session(state, &workspace_id, session_id)
+    let session_id = session_id.to_string();
+    let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
+    let result = delete_workspace_session(state, &workspace_id, session_id.clone());
+    let _ = forget_live_session(state, &workspace_id, &session_id);
+    result
 }
 
 pub(crate) fn update_idle_policy(
@@ -415,21 +461,22 @@ mod tests {
             app.state(),
         )
         .unwrap();
+        let created_id = created.id.clone();
         set_session_runtime_state_if_not_archived(
             app.state(),
             &workspace_id,
-            created.id,
+            &created_id,
             SessionStatus::Running,
             true,
         )
         .unwrap();
 
-        let _entry = archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let _entry = archive_session(workspace_id.clone(), &created_id, app.state()).unwrap();
         let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
         let archived = snapshot
             .archive
             .iter()
-            .find(|entry| entry.session_id == created.id)
+            .find(|entry| entry.session_id == created_id)
             .unwrap();
         let status = archived.snapshot["status"].as_str().unwrap();
         assert_eq!(status, "idle");
@@ -447,22 +494,23 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let created_id = created.id.clone();
+        archive_session(workspace_id.clone(), &created_id, app.state()).unwrap();
 
         let history_before = list_session_history(app.state()).unwrap();
         assert!(history_before
             .iter()
-            .any(|record| record.session_id == created.id && record.archived));
+            .any(|record| record.session_id == created_id && record.archived));
 
-        let restored = restore_session(workspace_id.clone(), created.id, app.state()).unwrap();
-        assert_eq!(restored.session.id, created.id);
+        let restored = restore_session(workspace_id.clone(), &created_id, app.state()).unwrap();
+        assert_eq!(restored.session.id, created_id);
         assert!(!restored.already_active);
 
-        delete_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        delete_session(workspace_id.clone(), &created_id, app.state()).unwrap();
         let history_after = list_session_history(app.state()).unwrap();
         assert!(!history_after
             .iter()
-            .any(|record| record.session_id == created.id));
+            .any(|record| record.session_id == created_id));
     }
 
     #[test]
@@ -536,18 +584,19 @@ mod tests {
             app.state(),
         )
         .unwrap();
+        let created_id = created.id.clone();
         assert!(
             created.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
             "create_session should use millisecond timestamps"
         );
 
-        let switched = switch_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let switched = switch_session(workspace_id.clone(), &created_id, app.state()).unwrap();
         assert!(
             switched.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
             "switch_session should use millisecond timestamps"
         );
 
-        let archived = archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let archived = archive_session(workspace_id.clone(), &created_id, app.state()).unwrap();
         let archived_last_active_at = archived
             .snapshot
             .get("last_active_at")
@@ -558,7 +607,7 @@ mod tests {
             "archive_session should use millisecond timestamps"
         );
 
-        let restored = restore_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let restored = restore_session(workspace_id.clone(), &created_id, app.state()).unwrap();
         assert!(
             restored.session.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,
             "restore_session should use millisecond timestamps"
@@ -567,7 +616,7 @@ mod tests {
         let history = list_session_history(app.state()).unwrap();
         let restored_record = history
             .into_iter()
-            .find(|record| record.workspace_id == workspace_id && record.session_id == created.id)
+            .find(|record| record.workspace_id == workspace_id && record.session_id == created_id)
             .expect("history record should exist");
         assert!(
             restored_record.last_active_at >= TIMESTAMP_MILLIS_THRESHOLD,

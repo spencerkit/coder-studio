@@ -13,7 +13,10 @@ use tokio::sync::broadcast;
 
 use crate::{
     auth::{ip_guard::IpGuardMap, AuthRuntime},
-    models::{ExecTarget, GitChangeEntry, GitStatus, TransportEvent, WorkspaceTree, WorktreeInfo},
+    models::{
+        ExecTarget, GitChangeEntry, GitStatus, SessionInfo, TransportEvent, WorkspaceTree,
+        WorktreeInfo,
+    },
     services::artifact_cache::TimedCache,
     AppHandle,
 };
@@ -79,6 +82,7 @@ pub(crate) struct AppState {
     pub auth: Mutex<AuthRuntime>,
     pub agents: Mutex<HashMap<String, Arc<AgentRuntime>>>,
     pub terminals: Mutex<HashMap<String, Arc<TerminalRuntime>>>,
+    pub live_sessions: Mutex<HashMap<String, SessionInfo>>,
     pub session_runtime_bindings: Mutex<HashMap<String, u64>>,
     pub terminal_runtime_bindings: Mutex<HashMap<u64, String>>,
     pub workspace_client_connections: Mutex<HashMap<String, usize>>,
@@ -100,6 +104,7 @@ impl Default for AppState {
             auth: Mutex::new(AuthRuntime::default()),
             agents: Mutex::new(HashMap::new()),
             terminals: Mutex::new(HashMap::new()),
+            live_sessions: Mutex::new(HashMap::new()),
             session_runtime_bindings: Mutex::new(HashMap::new()),
             terminal_runtime_bindings: Mutex::new(HashMap::new()),
             workspace_client_connections: Mutex::new(HashMap::new()),

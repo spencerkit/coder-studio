@@ -93,9 +93,9 @@ pub(crate) use models::{
     SessionRuntimeStartResult, SessionStatus, TerminalEvent, TerminalInfo, TransportEvent,
     WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
     WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
-    WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
-    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
-    WorktreeInfo,
+    WorkspaceSessionBinding, WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource,
+    WorkspaceSourceKind, WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch,
+    WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{

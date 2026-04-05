@@ -61,7 +61,7 @@ struct SessionCreateRequest {
 struct SessionUpdateRequest {
     #[serde(flatten)]
     controller: WorkspaceControllerMutationRequest,
-    session_id: u64,
+    session_id: String,
     patch: SessionPatch,
 }
 
@@ -82,7 +82,7 @@ struct ArchiveSessionRequest {
 #[derive(Deserialize)]
 struct SessionHistoryMutationRequest {
     workspace_id: String,
-    session_id: u64,
+    session_id: String,
     device_id: Option<String>,
     client_id: Option<String>,
     fencing_token: Option<i64>,
@@ -1967,7 +1967,7 @@ mod tests {
             &app,
             &SessionHistoryMutationRequest {
                 workspace_id,
-                session_id: 1,
+                session_id: "1".to_string(),
                 device_id: Some("device-a".to_string()),
                 client_id: Some("client-a".to_string()),
                 fencing_token: Some(runtime.controller.fencing_token),
@@ -1977,6 +1977,37 @@ mod tests {
         .unwrap();
 
         assert_eq!(read_with_db_call_count(), 1);
+    }
+
+    #[test]
+    fn session_update_request_deserializes_string_session_ids() {
+        let request: SessionUpdateRequest = serde_json::from_value(json!({
+            "workspace_id": "ws-http-session-update",
+            "device_id": "device-a",
+            "client_id": "client-a",
+            "fencing_token": 7,
+            "session_id": "slot-alpha",
+            "patch": {
+                "title": "Updated title"
+            }
+        }))
+        .expect("session_update should accept string session ids");
+
+        assert_eq!(request.session_id.to_string(), "slot-alpha");
+    }
+
+    #[test]
+    fn session_history_mutation_request_deserializes_string_session_ids() {
+        let request: SessionHistoryMutationRequest = serde_json::from_value(json!({
+            "workspace_id": "ws-http-history",
+            "session_id": "slot-history",
+            "device_id": "device-a",
+            "client_id": "client-a",
+            "fencing_token": 11
+        }))
+        .expect("history mutation requests should accept string session ids");
+
+        assert_eq!(request.session_id.to_string(), "slot-history");
     }
 
     #[test]
@@ -2361,7 +2392,8 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        archive_session(workspace_id.clone(), created.id, app.state()).unwrap();
+        let created_id = created.id.clone();
+        archive_session(workspace_id.clone(), &created_id, app.state()).unwrap();
 
         let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
             .expect("history rpc should load");
@@ -2369,7 +2401,7 @@ mod tests {
         assert!(history
             .iter()
             .any(|record| record.workspace_id == workspace_id
-                && record.session_id == created.id
+                && record.session_id == created_id
                 && record.archived));
 
         let restored = dispatch_rpc(
@@ -2377,13 +2409,13 @@ mod tests {
             "restore_session",
             json!({
                 "workspace_id": workspace_id.clone(),
-                "session_id": created.id,
+                "session_id": created_id.clone(),
             }),
             &authorized,
         )
         .expect("restore rpc should succeed");
         let restored: SessionRestoreResult = serde_json::from_value(restored).unwrap();
-        assert_eq!(restored.session.id, created.id);
+        assert_eq!(restored.session.id, created_id);
         assert!(!restored.already_active);
 
         dispatch_rpc(
@@ -2391,7 +2423,7 @@ mod tests {
             "delete_session",
             json!({
                 "workspace_id": workspace_id.clone(),
-                "session_id": created.id,
+                "session_id": created_id.clone(),
             }),
             &authorized,
         )
@@ -2400,7 +2432,7 @@ mod tests {
         let history = dispatch_rpc(&app, "list_session_history", json!({}), &authorized)
             .expect("history rpc should reload");
         let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
-        assert!(!history.iter().any(|record| record.session_id == created.id));
+        assert!(!history.iter().any(|record| record.session_id == created_id));
     }
 
     #[test]
@@ -2926,10 +2958,11 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
         set_session_resume_id(
             app.state(),
             &workspace_id,
-            created.id,
+            &created_id,
             "resume-77".to_string(),
         )
         .unwrap();
@@ -2942,7 +2975,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
+                "session_id": created_id.clone(),
                 "cols": 100,
                 "rows": 24,
             }),
@@ -2969,7 +3002,7 @@ mod tests {
         .unwrap();
 
         std::thread::sleep(Duration::from_millis(150));
-        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
         assert!(refreshed.resume_id.is_some());
     }
 
@@ -3016,10 +3049,11 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
         set_session_resume_id(
             app.state(),
             &workspace_id,
-            created.id,
+            &created_id,
             "resume-77".to_string(),
         )
         .unwrap();
@@ -3032,7 +3066,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
+                "session_id": created_id.clone(),
                 "cols": 120,
                 "rows": 30,
             }),
@@ -3073,6 +3107,7 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
 
         let started = dispatch_rpc(
             &app,
@@ -3082,7 +3117,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
+                "session_id": created_id.clone(),
                 "cols": 80,
                 "rows": 24,
             }),
@@ -3108,7 +3143,7 @@ mod tests {
         .unwrap();
 
         std::thread::sleep(Duration::from_millis(150));
-        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
         assert_eq!(refreshed.status, SessionStatus::Interrupted);
         let events = drain_transport_events(&mut rx);
         let payload = events
@@ -3117,7 +3152,7 @@ mod tests {
             .map(|event| &event.payload)
             .expect("expected runtime state transport event");
         assert_eq!(payload["workspace_id"], workspace_id);
-        assert_eq!(payload["session_state"]["session_id"], created.id.to_string());
+        assert_eq!(payload["session_state"]["session_id"], created_id);
         assert_eq!(payload["session_state"]["status"], "interrupted");
     }
 
@@ -3145,6 +3180,7 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
 
         dispatch_rpc(
             &app,
@@ -3154,7 +3190,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
+                "session_id": created_id.clone(),
                 "cols": 120,
                 "rows": 30,
             }),
@@ -3162,7 +3198,7 @@ mod tests {
         )
         .unwrap();
 
-        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
         assert_eq!(refreshed.status, SessionStatus::Idle);
         assert!(refreshed.resume_id.is_none());
         assert!(refreshed.runtime_active);
@@ -3192,6 +3228,7 @@ mod tests {
         )
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
 
         let started = dispatch_rpc(
             &app,
@@ -3201,7 +3238,7 @@ mod tests {
                 "device_id": "device-a",
                 "client_id": "client-a",
                 "fencing_token": runtime.controller.fencing_token,
-                "session_id": created.id.to_string(),
+                "session_id": created_id.clone(),
                 "cols": 120,
                 "rows": 30,
             }),
@@ -3227,7 +3264,7 @@ mod tests {
         )
         .unwrap();
 
-        let refreshed = load_session(app.state(), &workspace_id, created.id).unwrap();
+        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
         assert_eq!(refreshed.status, SessionStatus::Running);
         assert!(refreshed.runtime_active);
 
@@ -3238,7 +3275,7 @@ mod tests {
             .map(|event| &event.payload)
             .expect("expected runtime state transport event");
         assert_eq!(payload["workspace_id"], workspace_id);
-        assert_eq!(payload["session_state"]["session_id"], created.id.to_string());
+        assert_eq!(payload["session_state"]["session_id"], created_id);
         assert_eq!(payload["session_state"]["status"], "running");
     }
 }

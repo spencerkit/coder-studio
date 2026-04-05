@@ -24,7 +24,7 @@ export type WsTerminalResizeEnvelope = {
 export type WsSessionUpdateEnvelope = {
   type: "session_update";
   workspace_id: string;
-  session_id: number;
+  session_id: string;
   patch: Record<string, unknown>;
   fencing_token: number;
 };

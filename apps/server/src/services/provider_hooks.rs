@@ -346,7 +346,8 @@ mod tests {
         let normalized = process_provider_hook_payload(&app, session_start_payload).unwrap();
         assert_eq!(normalized.kind, "session_started");
 
-        let running = load_session(app.state(), &workspace_id, session.id).unwrap();
+        let session_id = session.id.clone();
+        let running = load_session(app.state(), &workspace_id, &session_id).unwrap();
         assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
         assert_eq!(running.status, SessionStatus::Idle);
 
@@ -359,10 +360,16 @@ mod tests {
         });
 
         process_provider_hook_payload(&app, waiting_payload).unwrap();
-        let waiting = load_session(app.state(), &workspace_id, session.id).unwrap();
+        let waiting = load_session(app.state(), &workspace_id, &session_id).unwrap();
         assert_eq!(waiting.status, SessionStatus::Idle);
 
-        set_session_status(app.state(), &workspace_id, session.id, SessionStatus::Running).unwrap();
+        set_session_status(
+            app.state(),
+            &workspace_id,
+            &session_id,
+            SessionStatus::Running,
+        )
+        .unwrap();
         let mut rx = app.state().transport_events.subscribe();
         let _ = drain_transport_events(&mut rx);
 
@@ -375,7 +382,7 @@ mod tests {
         });
 
         process_provider_hook_payload(&app, stop_payload).unwrap();
-        let stopped = load_session(app.state(), &workspace_id, session.id).unwrap();
+        let stopped = load_session(app.state(), &workspace_id, &session_id).unwrap();
         assert_eq!(stopped.status, SessionStatus::Idle);
         let events = drain_transport_events(&mut rx);
         let payload = events
@@ -384,7 +391,7 @@ mod tests {
             .map(|event| &event.payload)
             .expect("expected runtime state transport event");
         assert_eq!(payload["workspace_id"], workspace_id);
-        assert_eq!(payload["session_state"]["session_id"], session.id.to_string());
+        assert_eq!(payload["session_state"]["session_id"], session_id);
         assert_eq!(payload["session_state"]["status"], "idle");
     }
 

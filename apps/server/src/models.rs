@@ -340,7 +340,7 @@ pub struct SessionMessage {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SessionInfo {
-    pub id: u64,
+    pub id: String,
     pub title: String,
     pub status: SessionStatus,
     pub mode: SessionMode,
@@ -410,7 +410,7 @@ pub struct WorktreeInfo {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ArchiveEntry {
     pub id: u64,
-    pub session_id: u64,
+    pub session_id: String,
     pub mode: SessionMode,
     pub time: String,
     pub snapshot: Value,
@@ -421,7 +421,7 @@ pub struct SessionHistoryRecord {
     pub workspace_id: String,
     pub workspace_title: String,
     pub workspace_path: String,
-    pub session_id: u64,
+    pub session_id: String,
     pub title: String,
     pub status: SessionStatus,
     pub provider: AgentProvider,
@@ -590,6 +590,15 @@ pub struct WorkspaceSummary {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WorkspaceSessionBinding {
+    pub session_id: String,
+    pub provider: AgentProvider,
+    pub resume_id: String,
+    pub title_snapshot: String,
+    pub last_seen_at: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WorkspaceViewState {
     pub active_session_id: String,
     pub active_pane_id: String,
@@ -597,6 +606,8 @@ pub struct WorkspaceViewState {
     pub active_terminal_id: String,
     pub pane_layout: Value,
     pub file_preview: Value,
+    #[serde(default)]
+    pub session_bindings: Vec<WorkspaceSessionBinding>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]

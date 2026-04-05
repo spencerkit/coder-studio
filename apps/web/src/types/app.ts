@@ -63,7 +63,7 @@ export type BackendQueueTask = {
 export type BackendSessionMessage = AgentMessage;
 
 export type BackendSession = {
-  id: number;
+  id: string;
   title: string;
   status: SessionStatus;
   mode: SessionMode;
@@ -78,7 +78,7 @@ export type BackendSession = {
 
 export type BackendArchiveEntry = {
   id: number;
-  session_id: number;
+  session_id: string;
   mode: SessionMode;
   time: string;
 };
@@ -87,7 +87,7 @@ export type BackendSessionHistoryRecord = {
   workspace_id: string;
   workspace_title: string;
   workspace_path: string;
-  session_id: number;
+  session_id: string;
   title: string;
   status: SessionStatus;
   provider: AgentProvider;
@@ -130,6 +130,15 @@ export type BackendWorkspaceViewState = {
   active_terminal_id: string;
   pane_layout: Tab["paneLayout"];
   file_preview: FilePreview;
+  session_bindings: BackendWorkspaceSessionBinding[];
+};
+
+export type BackendWorkspaceSessionBinding = {
+  session_id: string;
+  provider: AgentProvider;
+  resume_id: string;
+  title_snapshot: string;
+  last_seen_at: number;
 };
 
 export type SessionRuntimeBindingInfo = {

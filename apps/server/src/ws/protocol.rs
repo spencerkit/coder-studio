@@ -32,7 +32,7 @@ pub(crate) enum WsClientEnvelope {
     },
     SessionUpdate {
         workspace_id: String,
-        session_id: u64,
+        session_id: String,
         patch: SessionPatch,
         fencing_token: i64,
     },

@@ -553,12 +553,13 @@ mod tests {
         result.snapshot.workspace.workspace_id
     }
 
-    fn start_bound_session_for_test(
+    fn start_bound_session_for_test<S: ToString>(
         app: &AppHandle,
         workspace_id: &str,
-        session_id: u64,
+        session_id: S,
     ) -> SessionRuntimeStartResult {
         *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+        let session_id = session_id.to_string();
 
         let runtime = workspace_runtime_attach(
             workspace_id.to_string(),
@@ -1146,7 +1147,7 @@ mod tests {
         update_workspace_session(
             app.state(),
             &workspace_id,
-            session.id,
+            session.id.clone(),
             SessionPatch {
                 title: None,
                 status: Some(SessionStatus::Interrupted),
@@ -1204,7 +1205,7 @@ mod tests {
         )
         .unwrap();
 
-        let started = start_bound_session_for_test(&app, &workspace_id, session.id);
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
         let runtime = workspace_runtime_attach(
             workspace_id.clone(),
             "device-a".to_string(),
@@ -1242,7 +1243,7 @@ mod tests {
         )
         .unwrap();
 
-        let started = start_bound_session_for_test(&app, &workspace_id, session.id);
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
         #[cfg(target_os = "windows")]
         let input = "echo bound-terminal-persist\r";
         #[cfg(not(target_os = "windows"))]
