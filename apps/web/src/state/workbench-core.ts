@@ -37,6 +37,36 @@ export type AgentMessage = {
   time: string;
 };
 
+export type SupervisorStatus = "inactive" | "idle" | "evaluating" | "injecting" | "paused" | "error";
+
+export type WorkspaceSupervisorCycleStatus = "queued" | "evaluating" | "completed" | "injected" | "failed";
+
+export type WorkspaceSupervisorCycle = {
+  cycleId: string;
+  sessionId: string;
+  sourceTurnId: string;
+  objectiveVersion: number;
+  supervisorInput: string;
+  supervisorReply?: string;
+  injectionMessageId?: string;
+  status: WorkspaceSupervisorCycleStatus;
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+};
+
+export type SessionSupervisorState = {
+  provider: AgentProvider;
+  status: SupervisorStatus;
+  objectiveText: string;
+  objectivePrompt: string;
+  objectiveVersion: number;
+  autoInjectEnabled: boolean;
+  pendingObjectiveText?: string;
+  pendingObjectiveVersion?: number;
+  latestCycle?: WorkspaceSupervisorCycle;
+};
+
 export type Session = {
   id: string;
   title: string;
@@ -52,6 +82,7 @@ export type Session = {
   lastActiveAt: number;
   resumeId?: string;
   unavailableReason?: string;
+  supervisor?: SessionSupervisorState;
 };
 
 export type GitStatus = {

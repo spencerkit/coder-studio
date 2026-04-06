@@ -66,32 +66,19 @@ test('dev stack runtime reset stops recorded processes before clearing prior sta
   }
 });
 
-test('dev stack runtime rejects resetting into ports that are already occupied', async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-dev-stack-ports-'));
-  const stateDir = path.join(tempRoot, 'state');
-  const server = net.createServer();
+test('playwright port configs route through the isolated dev stack startup', async () => {
+  const configPaths = [
+    path.join(process.cwd(), 'playwright.config.ts'),
+    path.join(process.cwd(), 'playwright.port-4174.config.ts'),
+    path.join(process.cwd(), 'playwright.port-4175.config.ts'),
+    path.join(process.cwd(), 'playwright.port-4176.config.ts'),
+    path.join(process.cwd(), 'playwright.port-4177.config.ts'),
+    path.join(process.cwd(), 'playwright.port-4179.config.ts'),
+  ];
 
-  try {
-    const port = await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string') {
-          reject(new Error('port_bind_failed'));
-          return;
-        }
-        resolve(address.port);
-      });
-    });
-
-    await assert.rejects(
-      () => resetDevStackRuntimeState(stateDir, {
-        protectedPorts: [port],
-      }),
-      /port_in_use:127\.0\.0\.1:/,
-    );
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-    await fs.rm(tempRoot, { recursive: true, force: true });
+  for (const configPath of configPaths) {
+    const raw = await fs.readFile(configPath, 'utf8');
+    assert.match(raw, /node scripts\/test\/start-dev-stack\.mjs/);
+    assert.doesNotMatch(raw, /pnpm exec vite --host/);
   }
 });

@@ -4,6 +4,7 @@ use crate::infra::db::{
     load_workspace_controller_lease_from_conn, mark_workspace_client_detached_from_conn,
     save_workspace_controller_lease_to_conn, upsert_workspace_attachment_to_conn, with_db,
 };
+use crate::models::WorkspaceSupervisorViewState;
 use crate::*;
 
 const WORKSPACE_CONTROLLER_LEASE_SECS: i64 = 30;
@@ -643,6 +644,7 @@ mod tests {
                     "dirty": false
                 }),
                 session_bindings: Vec::new(),
+                supervisor: WorkspaceSupervisorViewState::default(),
             });
         mutate(&mut view_state);
         with_db(app.state(), |conn| {
@@ -1208,13 +1210,12 @@ mod tests {
             WorkspaceViewPatch {
                 active_session_id: Some(session.id.to_string()),
                 active_pane_id: Some(format!("pane-{}", session.id)),
-                active_terminal_id: None,
                 pane_layout: Some(json!({
                     "type": "leaf",
                     "id": format!("pane-{}", session.id),
                     "sessionId": session.id.to_string(),
                 })),
-                file_preview: None,
+                ..WorkspaceViewPatch::default()
             },
         )
         .expect("view state should be updated");
@@ -1436,6 +1437,53 @@ mod tests {
     }
 
     #[test]
+    fn workspace_runtime_attach_replays_lifecycle_for_bound_runtime_sessions() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-bound-lifecycle-replay");
+        let session = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+
+        emit_agent_lifecycle(
+            &app,
+            &workspace_id,
+            &session.id.to_string(),
+            "tool_started",
+            "PreToolUse",
+            r#"{"session_id":"claude-bound-replay"}"#,
+        );
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert!(runtime.lifecycle_events.iter().any(|event| {
+            event.session_id == session.id.to_string()
+                && event.kind == "tool_started"
+                && event.source_event == "PreToolUse"
+        }));
+        assert!(runtime.session_runtime_bindings.iter().any(|binding| {
+            binding.session_id == session.id.to_string()
+                && binding.terminal_id == started.terminal_id.to_string()
+        }));
+        assert!(runtime
+            .snapshot
+            .terminals
+            .iter()
+            .any(|terminal| terminal.id == started.terminal_id));
+    }
+
+    #[test]
     fn workspace_runtime_attach_keeps_bound_terminal_output_after_runtime_close() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-persist");
@@ -1457,6 +1505,7 @@ mod tests {
             workspace_id.clone(),
             started.terminal_id,
             input.to_string(),
+            TerminalWriteOrigin::User,
             app.state(),
         )
         .unwrap();
@@ -1503,5 +1552,99 @@ mod tests {
             binding.session_id == session.id.to_string()
                 && binding.terminal_id == started.terminal_id.to_string()
         }));
+    }
+
+    #[test]
+    fn workspace_runtime_attach_keeps_bound_terminal_after_runtime_exits_naturally() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-natural-exit");
+        let session = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
+        crate::services::terminal::terminal_write(
+            workspace_id.clone(),
+            started.terminal_id,
+            "exit\r".to_string(),
+            TerminalWriteOrigin::User,
+            app.state(),
+        )
+        .unwrap();
+
+        let terminal_key = format!("{workspace_id}:{}", started.terminal_id);
+        let mut exited = false;
+        for _ in 0..80 {
+            if !app.state().terminals.lock().unwrap().contains_key(&terminal_key) {
+                exited = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(exited, "expected bound terminal runtime to exit");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        assert!(runtime.snapshot.terminals.iter().any(|terminal| {
+            terminal.id == started.terminal_id && terminal.output.contains("terminal exited")
+        }));
+        assert!(runtime.session_runtime_bindings.iter().any(|binding| {
+            binding.session_id == session.id.to_string()
+                && binding.terminal_id == started.terminal_id.to_string()
+        }));
+    }
+
+    #[test]
+    fn workspace_runtime_turn_completed_triggers_supervisor() {
+        let _guard = crate::services::supervisor::supervisor_reply_test_lock()
+            .lock()
+            .unwrap();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-supervisor-hook");
+        crate::services::supervisor::seed_supervisor_binding_for_test(
+            app.state(),
+            &workspace_id,
+            "slot-primary",
+            "Keep using xterm",
+        );
+        crate::services::supervisor::bind_terminal_for_session_for_test(
+            app.state(),
+            &workspace_id,
+            "slot-primary",
+            88,
+        );
+        crate::services::supervisor::install_supervisor_adapter_reply_for_test("Use xterm only.");
+
+        let payload = json!({
+            "workspace_id": workspace_id.clone(),
+            "session_id": "slot-primary",
+            "payload": {
+                "hook_event_name": "Stop",
+                "transcript_path": "/tmp/transcript.jsonl"
+            }
+        });
+
+        let result = crate::services::provider_hooks::process_provider_hook_payload(&app, payload);
+        crate::services::supervisor::clear_supervisor_adapter_reply_for_test();
+        result.unwrap();
+
+        let writes = crate::services::supervisor::take_terminal_writes_for_test(
+            app.state(),
+            &workspace_id,
+            88,
+        );
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].1, TerminalWriteOrigin::Supervisor);
     }
 }

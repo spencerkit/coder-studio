@@ -1,6 +1,9 @@
 import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
+import type { AgentProvider } from "../../types/app";
 import type {
   BackendSessionHistoryRecord,
+  BackendWorkspaceSupervisorBinding,
+  BackendWorkspaceSupervisorCycle,
   GitStatus,
   SessionHistoryRecord,
   WorkbenchBootstrap,
@@ -103,6 +106,70 @@ export const updateWorkspaceView = (
   patch: WorkspaceViewPatch,
   controller: WorkspaceControllerState,
 ) => invokeRpc<void>("workspace_view_update", createWorkspaceControllerRpcPayload(workspaceId, controller, { patch }));
+
+export const enableSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+  provider: AgentProvider,
+  objectiveText: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "enable_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, {
+    sessionId,
+    provider,
+    objectiveText,
+  }),
+);
+
+export const updateSupervisorObjective = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+  objectiveText: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "update_supervisor_objective",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, {
+    sessionId,
+    objectiveText,
+  }),
+);
+
+export const pauseSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "pause_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const resumeSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "resume_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const disableSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<void>(
+  "disable_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const retrySupervisorCycle = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorCycle>(
+  "retry_supervisor_cycle",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
 
 export const releaseWorkspaceControllerKeepalive = (
   workspaceId: string,

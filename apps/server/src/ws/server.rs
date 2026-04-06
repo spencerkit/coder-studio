@@ -300,9 +300,14 @@ fn handle_ws_client_envelope(
                 app,
             )
             .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
-            terminal_write(workspace_id.clone(), terminal_id, input, app.state()).map_err(
-                |error| ws_input_error_envelope(&workspace_id, "terminal_write", &error),
-            )?;
+            terminal_write(
+                workspace_id.clone(),
+                terminal_id,
+                input,
+                TerminalWriteOrigin::User,
+                app.state(),
+            )
+            .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
             Ok(None)
         }
         WsClientEnvelope::TerminalResize {
@@ -412,7 +417,13 @@ pub(crate) fn emit_agent(
     );
 }
 
-pub(crate) fn emit_terminal(app: &AppHandle, workspace_id: &str, terminal_id: u64, data: &str) {
+pub(crate) fn emit_terminal(
+    app: &AppHandle,
+    workspace_id: &str,
+    terminal_id: u64,
+    data: &str,
+    origin: Option<TerminalWriteOrigin>,
+) {
     emit_transport_event(
         app,
         "terminal://event",
@@ -420,6 +431,7 @@ pub(crate) fn emit_terminal(app: &AppHandle, workspace_id: &str, terminal_id: u6
             "workspace_id": workspace_id,
             "terminal_id": terminal_id,
             "data": data,
+            "origin": origin,
         }),
     );
     let _ = app.emit(
@@ -428,6 +440,7 @@ pub(crate) fn emit_terminal(app: &AppHandle, workspace_id: &str, terminal_id: u6
             workspace_id: workspace_id.to_string(),
             terminal_id,
             data: data.to_string(),
+            origin,
         },
     );
 }

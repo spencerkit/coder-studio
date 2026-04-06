@@ -524,9 +524,7 @@ pub(crate) fn switch_session<S: ToString>(
         WorkspaceViewPatch {
             active_session_id: Some(session_id),
             active_pane_id: Some(active_pane_id),
-            active_terminal_id: None,
-            pane_layout: None,
-            file_preview: None,
+            ..WorkspaceViewPatch::default()
         },
     )?;
     remember_live_session(state, &workspace_id, &session)?;
@@ -541,6 +539,7 @@ pub(crate) fn close_session<S: ToString>(
     let session_id = session_id.to_string();
     let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
     let _ = forget_live_session(state, &workspace_id, &session_id);
+    let _ = crate::services::supervisor::disable_supervisor_mode(&workspace_id, &session_id, state);
     remove_workspace_session_binding(state, &workspace_id, &session_id).map(|_| ())
 }
 
@@ -592,7 +591,7 @@ pub(crate) fn restore_provider_session(
             last_seen_at: provider_session.last_active_at,
         },
     )?;
-    let session = resolve_session_for_slot(state, &workspace_id, &session_id)?;
+    let session = load_session(state, &workspace_id, &session_id)?;
     remember_live_session(state, &workspace_id, &session)?;
     Ok(SessionRestoreResult {
         session,
@@ -829,11 +828,8 @@ mod tests {
         let view_state = workspace_view_update(
             workspace_id.clone(),
             WorkspaceViewPatch {
-                active_session_id: None,
-                active_pane_id: None,
                 active_terminal_id: Some("7".to_string()),
-                pane_layout: None,
-                file_preview: None,
+                ..WorkspaceViewPatch::default()
             },
             app.state(),
         )
@@ -1307,9 +1303,8 @@ mod tests {
             WorkspaceViewPatch {
                 active_session_id: Some("slot-primary".to_string()),
                 active_pane_id: Some("pane-left".to_string()),
-                active_terminal_id: None,
                 pane_layout: Some(pane_layout.clone()),
-                file_preview: None,
+                ..WorkspaceViewPatch::default()
             },
             app.state(),
         )
@@ -1321,6 +1316,63 @@ mod tests {
         assert_eq!(snapshot.view_state.pane_layout, pane_layout);
         assert_eq!(snapshot.view_state.active_session_id, created.id);
         assert_eq!(snapshot.view_state.active_pane_id, "pane-right");
+    }
+
+    #[test]
+    fn restore_provider_session_updates_snapshot_title_for_bound_slot() {
+        let app = test_app();
+        let workspace_root = unique_temp_dir("ws-provider-restore-snapshot-title");
+        let workspace_id = launch_test_workspace(&app, workspace_root.to_str().unwrap());
+        let claude_home = unique_temp_dir("ws-provider-restore-snapshot-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("session-title.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:00:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Snapshot Restore Title\",\"timestamp\":2,\"project\":\"{}\",\"sessionId\":\"session-title\"}}\n",
+                workspace_root.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        let restored = with_claude_home(&claude_home, || {
+            restore_provider_session(
+                workspace_id.clone(),
+                "slot-primary".to_string(),
+                AgentProvider::claude(),
+                "session-title".to_string(),
+                app.state(),
+            )
+        })
+        .unwrap();
+
+        assert_eq!(restored.session.title, "Snapshot Restore Title");
+
+        let snapshot = with_claude_home(&claude_home, || workspace_snapshot(workspace_id.clone(), app.state()))
+            .unwrap();
+        let session = snapshot
+            .sessions
+            .into_iter()
+            .find(|session| session.id == "slot-primary")
+            .expect("restored slot should exist in snapshot");
+        assert_eq!(session.title, "Snapshot Restore Title");
+        assert_eq!(session.resume_id.as_deref(), Some("session-title"));
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
     }
 
     #[test]

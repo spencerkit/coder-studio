@@ -195,3 +195,71 @@ test("materializeSession keeps workbench-local state and does not create a backe
   assert.deepEqual(calls, []);
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Investigate auth flow");
 });
+
+test("materializeSession replaces the draft placeholder title even when startup input is empty", async () => {
+  const locale = "en";
+  const t = createTranslator(locale);
+  const stateRef = { current: createDraftState() };
+  const toasts: Toast[] = [];
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    calls.push({ url, body });
+
+    throw new Error(`unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    await withMockWindow(
+      {
+        fetch: globalThis.fetch,
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame: ((callback: FrameRequestCallback) => setTimeout(() => callback(0), 0)) as typeof requestAnimationFrame,
+        cancelAnimationFrame: ((handle: number) => clearTimeout(handle)) as typeof cancelAnimationFrame,
+        location: {
+          origin: "http://127.0.0.1:41033",
+          protocol: "http:",
+          hostname: "127.0.0.1",
+          port: "41033",
+          search: "",
+        },
+      } as Window & typeof globalThis,
+      async () => {
+        const actions = createWorkspaceSessionActions({
+          appSettings: defaultAppSettings(),
+          locale,
+          t,
+          stateRef,
+          updateTab: (tabId, updater) => {
+            stateRef.current = {
+              ...stateRef.current,
+              tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+            };
+          },
+          withServiceFallback: async (operation, fallback) => {
+            try {
+              return await operation();
+            } catch {
+              return fallback;
+            }
+          },
+          addToast: (toast) => {
+            toasts.push(toast);
+          },
+        });
+
+        await actions.materializeSession("ws-1", "draft-1", "");
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(toasts.length, 0);
+  assert.deepEqual(calls, []);
+  assert.notEqual(stateRef.current.tabs[0]?.sessions[0]?.title, "New Session");
+});

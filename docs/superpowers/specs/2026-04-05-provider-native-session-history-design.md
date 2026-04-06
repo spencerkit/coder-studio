@@ -2,110 +2,129 @@
 
 **Date:** 2026-04-05
 
-**Status:** Proposed
+**Status:** Approved target
 
 ## Goal
 
-Replace the app-managed session history and archive model with a provider-native model that reads real Claude and Codex sessions from provider storage, while keeping only the minimal pane-to-provider binding state required for recovery after page refresh or backend restart.
+Adopt a strict provider-only session model.
+
+The system must treat Claude and Codex as the only source of truth for session history and restore. Local app state must keep only the current mounted workspace state needed to render panes and re-attach mounted provider sessions after refresh or backend restart.
 
 The redesign must:
 
-- make Claude and Codex the source of truth for session existence, title, and delete behavior
-- keep archive as a visible state, but derive it instead of persisting it
-- preserve automatic restore for mounted panes by retaining a real provider session identifier
-- remove the redundant local history/session database layer
+- remove `workspace_sessions` entirely
+- make provider history the only history shown in the UI
+- make `provider + resume_id` the only restore key
+- make close mean unmount, not archive
+- keep only pane-to-provider mounted bindings as durable local session state
 
 ## Background
 
-Today the app keeps a second session history system in `workspace_sessions` and related archive helpers:
+The current code still mixes two models:
 
-- session startup creates a local history row
-- provider hooks later patch in `resume_id`
-- archive writes a local archived snapshot and removes runtime state
-- restore works through the local session row and uses the stored `resume_id`
-- delete removes the local record first and only partially reflects provider reality
+- provider-native history from Claude/Codex
+- app-managed session entities in `workspace_sessions`
 
-This duplicates what the providers already store:
+That mixed model leaks into all three flows:
 
-- Claude persists real sessions in `~/.claude/projects/...`
-- Claude prompt history is recorded in `~/.claude/history.jsonl`
-- Codex persists real sessions in `~/.codex/sessions/...`
-- Codex stores stable thread metadata in `~/.codex/state_5.sqlite`
+- history building mixes provider records with local binding-derived records
+- restore can go through either `restore_provider_session` or local `restore_session`
+- close still calls `archive_session`, which performs local session cleanup based on the old archive model
 
-The duplicate local history layer creates three product problems:
+This creates conceptual drift and implementation drift. The product behavior you want is simpler:
 
-- history can drift from the provider's real session list
-- titles and timestamps can disagree with provider resume views
-- deleted provider sessions can still look restorable locally
-
-The local app does still need one persistent concept:
-
-- which pane is bound to which real provider session
-
-That binding is required to recover a workspace after frontend refresh or backend restart.
+- history comes only from provider truth
+- restore always uses a provider resume id
+- closing a pane only unmounts the session from the workspace
 
 ## Decision
 
-Adopt a provider-first session model.
+Use provider-native history and provider-native restore as the only durable session model.
 
-The new ownership model is:
+### Source of truth
 
-- provider storage is the source of truth for session history
-- provider-native resume ids remain the source of truth for restore
-- local app state persists only workspace layout and pane bindings
-- archive is derived as "provider session exists for this workspace path but no pane currently mounts it"
-- missing is derived as "a pane binding still points at a provider session that no longer exists"
+- Claude/Codex own session existence
+- Claude/Codex own session title and activity timestamps
+- Claude/Codex own deletion semantics
+- the app owns only current workspace layout and mounted pane bindings
 
-This means the app no longer owns a durable history/session entity. It owns only:
+### Removed concepts
 
-- live runtime state for currently open panes
-- persistent pane bindings needed for recovery
+These concepts must be removed from the product and from the main implementation model:
+
+- `workspace_sessions`
+- local archived session records
+- local session restore by `workspace_id + session_id`
+- app-owned history rows
+- archive as a persisted local state
+
+### Remaining local state
+
+The app may still persist:
+
+- workspace pane layout
+- active pane and active session focus
+- pane bindings for currently mounted provider sessions
+- transient live runtime/session UI state
+- draft panes that have not yet attached to a real provider session
+
+That local state is mounted-state only. It is not history-state.
 
 ## Non-Goals
 
-- Do not preserve the existing `workspace_sessions` table as a second source of truth.
-- Do not persist a local archive list or archive snapshots in phase 1.
-- Do not generate or store app-specific session titles.
-- Do not change the provider-native resume launch behavior itself.
-- Do not build a provider-wide filesystem browser outside app-known workspaces in phase 1.
-- Do not attempt to scrub every provider diagnostic log file during delete.
+- Do not keep a compatibility layer where `workspace_sessions` still affects history or restore.
+- Do not keep `restore_session` as a second restore path.
+- Do not keep `archive_session` semantics in the session lifecycle.
+- Do not invent app-specific titles or timestamps for provider history records.
+- Do not expand scope beyond Claude and Codex support already present in the codebase.
 
-## Requirements
+## Required User-Facing Semantics
 
-### Functional
+### History
 
-- History records must come from real Claude and Codex session storage for a workspace path.
-- Restore must resume a provider session by its real provider-native resume id.
-- Page refresh and backend restart must auto-restore mounted panes when their provider session still exists.
-- If a bound provider session no longer exists, the pane must become unavailable and explain why it cannot be restored.
-- Delete must operate on provider real data, not on an app-managed history row.
+History must be built only from provider-native session discovery for a workspace path.
 
-### Semantics
+Every record shown in history must correspond to a real provider session and must include:
 
-- `archive` must remain a visible state.
-- `archive` must mean: a provider session exists, but the current workspace does not mount it in any pane.
-- `missing` must mean: the workspace still has a pane binding, but the provider session no longer exists.
-- Explicit archive persistence must be removed. Archive is a derived view state only.
+- `provider`
+- `resume_id`
+- provider-native title
+- provider-native timestamps
 
-### Title Consistency
+The UI must not synthesize extra history rows from local bindings, missing bindings, or old local session records.
 
-- Claude titles must mirror Claude's current `/resume` list semantics.
-- Codex titles must mirror Codex's native thread metadata.
-- The app must not maintain a parallel title system.
+### Restore
 
-### Reliability
+Restore must always mean:
 
-- A pane is recoverable only after a real provider session id has been observed and persisted as a binding.
-- If a session never emitted a provider resume id, it is not provider-recoverable after restart.
-- Mounted pane bindings must survive frontend refresh and backend restart.
+- select a provider-native history record
+- choose a target pane
+- mount that provider session into the pane using `provider + resume_id`
+
+There is no separate local-session restore concept.
+
+### Close
+
+Close must always mean:
+
+- stop the pane's runtime/shell if one is active
+- remove the pane's mounted binding to the provider session
+- update the workspace layout to remove or replace that pane
+- keep the provider session in provider history
+
+Close does not archive, snapshot, or persist a recoverable local session object.
+
+### Delete
+
+Delete must always mean deleting the real provider session by `provider + resume_id` and then removing any mounted binding that references it.
 
 ## State Model
 
 ### 1. Provider History Record
 
-History records are derived on demand and are not persisted as app-owned history entities.
+History records are derived on demand from provider storage only.
 
-Each derived record should contain:
+Each record should contain:
 
 - `workspaceId`
 - `workspaceTitle`
@@ -116,370 +135,177 @@ Each derived record should contain:
 - `createdAt`
 - `lastActiveAt`
 - `mounted`
-- `archived`
-- `availability`
-- `recoverable`
 
-Recommended semantics:
+A history record is valid only if the provider session still exists.
 
-- `availability = "available"` when provider data exists
-- `availability = "missing"` when only a dead pane binding remains
-- `recoverable = true` only when provider data exists
-
-History record identity should become a stable composite key:
+History record identity must be the stable composite key:
 
 - `${provider}:${resumeId}`
 
-### 2. Persisted Pane Binding
+The following legacy fields and semantics should be removed from the history layer if no longer needed by the UI:
 
-The only durable local session reference is a pane binding.
+- `archived`
+- `availability`
+- `recoverable`
+- local-session `sessionId` as a restore key
+
+If the UI still needs a per-record display id, it should derive it from the composite provider key rather than a local restorable session entity.
+
+### 2. Mounted Pane Binding
+
+The only durable local session reference is a mounted pane binding.
 
 Each binding should contain:
 
-- `paneId`
+- `session_id` or pane-local slot id used by the workspace UI
 - `provider`
-- `resumeId`
-- `titleSnapshot`
-- `lastSeenAt`
+- `resume_id`
+- optional `title_snapshot` for display continuity
+- optional `last_seen_at`
 
-`titleSnapshot` is not a local title system. It exists only so an unavailable placeholder can still show a human-readable label after the provider session has disappeared.
+This binding exists only to answer:
 
-For migration safety, the app may keep the field name `resumeId` even though its real meaning is "provider-native session id used for restore."
+- which provider session is currently mounted in this pane?
+
+It must not be treated as a history record, archived session, or restorable local session.
 
 ### 3. Runtime Session Instance
 
-Live runtime session state remains local and ephemeral.
+The in-memory/runtime session object shown by the UI remains valid, but it is ephemeral.
 
-It is still valid for the UI to have a local active session object per pane, but that object is no longer the durable history truth. It is reconstructed from:
+It may contain:
 
-- the pane binding
-- the current runtime
-- provider history data
+- pane-local id
+- rendered messages already loaded in memory
+- runtime status
+- terminal attachment info
+- unread counters and other UI concerns
 
-## Provider Adapters
+It must be reconstructible from current mounted bindings plus provider/runtime state and must not be the durable restore source.
 
-Provider access should be isolated behind adapters that expose:
+## Flow Changes
 
-- `listWorkspaceSessions(workspacePath)`
-- `sessionExists(workspacePath, resumeId)`
-- `deleteSession(workspacePath, resumeId)`
+### History list flow
 
-### Claude Adapter
+The backend history list must:
 
-#### Source of Truth
+1. enumerate app-known workspaces
+2. ask each provider adapter for real workspace sessions
+3. mark whether each provider record is currently mounted by checking mounted bindings
+4. return only those provider-native records
 
-- real transcripts: `~/.claude/projects/<project-slug>/*.jsonl`
-- title source: `~/.claude/history.jsonl`
+It must not:
 
-#### Workspace Scoping
+- read `workspace_sessions`
+- synthesize missing rows from dead bindings
+- emit local archive rows
 
-Claude sessions are workspace-scoped by absolute project path.
+### Restore flow
 
-The adapter should resolve the workspace path to Claude's project directory convention:
+The frontend restore action must always call the provider restore path.
 
-- resolve the absolute workspace path
-- map `/` to `-`
-- read sessions from `~/.claude/projects/<mapped-path>/`
+The backend restore path must:
 
-For `/home/spencer/workspace/coder-studio`, the observed Claude project directory is:
+1. validate the provider session still exists for the workspace path
+2. bind the target pane/session slot to `provider + resume_id`
+3. construct runtime-facing `SessionInfo` for that mounted pane
+4. keep the mounted binding for refresh/restart recovery
 
-- `~/.claude/projects/-home-spencer-workspace-coder-studio`
+The following must be removed:
 
-#### Existence
+- `restore_session`
+- `restore_workspace_session`
+- any fallback branch that restores from local `workspace_sessions`
 
-A Claude session exists when:
+### Close flow
 
-- `<projectDir>/<sessionId>.jsonl` exists
+The frontend close action must:
 
-#### Title
+1. update local pane layout
+2. stop runtime/shell for the mounted pane
+3. invoke a backend unmount/close mutation that removes the mounted binding
 
-Claude title must be read exactly from:
+The backend close/unmount mutation must:
 
-- the newest matching line in `~/.claude/history.jsonl`
-- where `sessionId == <sessionId>` and `project == <workspacePath>`
-- use that line's `display` as the title
+- stop runtime for the mounted pane if needed
+- forget any live in-memory runtime state for that pane
+- remove the mounted binding
+- not archive or delete provider history
 
-This intentionally mirrors current Claude `/resume` semantics and does not add a local title layer.
+The following must be removed or renamed away from the lifecycle model:
 
-#### Time
+- `archive_session`
+- local archive semantics
 
-Claude `createdAt` and `lastActiveAt` should come from transcript timestamps when available:
+### Delete flow
 
-- `createdAt`: earliest timestamp in the transcript
-- `lastActiveAt`: latest timestamp in the transcript
+Delete must:
 
-If transcript parsing fails, the adapter may fall back to file metadata so the session remains visible.
+1. call provider delete by `provider + resume_id`
+2. remove mounted bindings that reference that provider session
+3. refresh UI from provider-native history
 
-#### Delete
+The following must be removed:
 
-Claude has no currently exposed local CLI delete command in the installed CLI help, so delete should operate on Claude's local real storage:
+- deleting local session rows as the primary delete behavior
 
-- remove `<projectDir>/<sessionId>.jsonl`
-- remove `<projectDir>/<sessionId>/` if a sibling session directory exists
-- rewrite `~/.claude/history.jsonl` and remove entries matching both `sessionId` and `project`
+## Migration
 
-The app should not rewrite unrelated Claude backups, debug logs, or analytics files.
+### Schema and storage
 
-### Codex Adapter
+- remove `workspace_sessions`
+- remove code paths that insert into, update, restore from, or delete from `workspace_sessions`
+- keep view/layout persistence and mounted binding persistence
 
-#### Source of Truth
+### RPC/API
 
-- metadata index: `~/.codex/state_5.sqlite`
-- rollout transcript path: `threads.rollout_path`
-
-#### Workspace Scoping
-
-Codex history is workspace-scoped by `threads.cwd`.
-
-The adapter should list:
-
-- rows from `threads`
-- where `cwd == <workspacePath>`
-
-#### Existence
-
-A Codex session exists when:
-
-- a `threads` row exists for `id == resumeId`
-- and the referenced `rollout_path` file exists
-
-If the row exists but the rollout file is missing, treat the session as unavailable and do not surface it as a valid provider history record.
-
-#### Title
-
-Codex title should be read directly from:
-
-- `threads.title`
-
-Current observed local data shows `threads.title` and `first_user_message` are identical, but `threads.title` is the native title column and should be treated as canonical.
-
-#### Time
-
-Use:
-
-- `createdAt = threads.created_at`
-- `lastActiveAt = threads.updated_at`
-
-#### Delete
-
-Codex has no currently exposed CLI delete command in the installed CLI help, so delete should operate on Codex's local real storage:
-
-- remove the rollout file referenced by `threads.rollout_path`
-- delete the `threads` row
-- delete matching rows from `logs` where `thread_id == resumeId`
-- delete matching rows from `thread_spawn_edges` where `parent_thread_id == resumeId` or `child_thread_id == resumeId`
-- rewrite `~/.codex/history.jsonl` and remove entries where `session_id == resumeId`
-- remove `~/.codex/shell_snapshots/<resumeId>.*`
-
-Because `thread_dynamic_tools` and `stage1_outputs` have `ON DELETE CASCADE`, deleting the `threads` row is sufficient for those tables.
-
-The app should not rewrite generic append-only diagnostic logs such as `codex-tui.log`.
-
-## Derived History Assembly
-
-History should remain grouped by app-known workspaces, but the records inside each group are provider-derived.
-
-For each persisted workspace:
-
-1. Load the workspace's persisted pane bindings.
-2. Ask the Claude and Codex adapters for real provider sessions for that workspace path.
-3. Mark each provider session as `mounted` if any pane binding matches `(provider, resumeId)`.
-4. Mark each provider session as `archived` if it exists but no pane binding matches it.
-5. Create synthetic `missing` records for dead pane bindings whose provider session no longer exists.
-
-This produces three visible record classes:
-
-- available + mounted
-- available + archived
-- missing + mounted-reference-only
-
-No durable local history row is needed for any of them.
-
-## Runtime and Recovery Flow
-
-### 1. New Session Startup
-
-New session startup becomes:
-
-1. User starts a provider session in a pane.
-2. The app launches the provider normally.
-3. When the provider emits a real resume id, update that pane's binding only.
-4. Do not create or update a durable history row.
-
-This preserves recoverability without rebuilding a second history system.
-
-### 2. Manual Restore
-
-Manual restore becomes:
-
-1. User selects a provider-derived history record.
-2. The app mounts a pane binding for `(provider, resumeId)`.
-3. The app launches the provider in resume mode using that provider-native id.
-4. A new local live runtime session instance is created for the pane.
-
-The provider-native resume commands remain the same:
-
-- Claude: `claude --resume <resumeId>`
-- Codex: `codex resume <resumeId>`
-
-### 3. Page Refresh or Backend Restart
-
-Workspace recovery becomes:
-
-1. Load workspace layout and persisted pane bindings.
-2. For each binding, probe provider existence using `(workspacePath, provider, resumeId)`.
-3. If the provider session exists, auto-resume it into that pane.
-4. If it does not exist, do not auto-resume. Create an unavailable placeholder with a clear reason.
-
-Expected unavailable message:
-
-- `该会话已经被删除，无法恢复`
-
-### 4. Recoverability Boundaries
-
-A pane is provider-recoverable only after a real provider resume id has been captured and stored as a binding.
-
-If a live session is interrupted before the provider emits a real resume id:
-
-- the pane may still support local restart behavior
-- but it is not provider-recoverable after app or backend restart
-
-## Archive and Unmount Semantics
-
-Current archive behavior should be replaced.
-
-Archive is no longer a backend persistence operation. It is a derived state:
-
-- provider session exists
-- workspace does not currently mount it
-
-That means the old explicit archive flow goes away.
-
-New "archive" behavior is:
-
-1. stop the mounted runtime if needed
-2. remove the pane binding from the workspace
-3. remove the live local pane session instance
-4. leave provider data untouched
-
-After that, the same provider session simply appears in history as `archived` because it still exists and is no longer mounted.
-
-This keeps the user-visible concept of archive while removing the redundant archive database model.
-
-## Delete Semantics
-
-Delete should be split from archive clearly.
-
-### Delete Available Session
-
-Deleting an available session should:
-
-1. stop runtime if it is mounted
-2. call the provider adapter's real delete operation
-3. remove all matching pane bindings for `(provider, resumeId)` from the workspace
-4. remove the live local pane session instance
-
-After delete, the record disappears from derived history because the provider data is gone.
-
-### Delete Missing Session
-
-A missing placeholder is not a real provider session anymore.
-
-For missing placeholders, the UI should not pretend it is performing provider delete. Instead it should expose a workspace-local action such as:
-
-- `Remove from workspace`
-
-That action should only clear the dead pane binding and placeholder state.
-
-## API and Boundary Changes
-
-### Backend
-
-The backend should:
-
-- stop reading and writing `workspace_sessions` for history truth
-- remove archive snapshot generation
-- replace local-history-based restore/delete RPCs with provider-keyed operations
-- assemble history from providers plus pane bindings
-
-Recommended RPC direction:
-
-- `list_session_history()` returns provider-derived records
-- `restore_provider_session(workspace_id, provider, resume_id, pane_id?)`
-- `delete_provider_session(workspace_id, provider, resume_id)`
-- `remove_missing_binding(workspace_id, provider, resume_id, pane_id?)`
-
-The internal runtime launch path in `agent.rs` may still use `resumeId`; the important change is that the external restore target is no longer a local numeric history row id.
-
-### Provider Hooks
-
-Provider hooks should keep one responsibility:
-
-- when a real provider resume id is observed, patch the current pane binding
-
-They should stop doing this:
-
-- persisting `resume_id` into the old history/session database model
+- remove `restore_session`
+- remove `delete_session` if it only targets local app-managed sessions
+- replace `archive_session` with a close/unmount mutation whose semantics match the new model
+- keep `restore_provider_session` or rename it to the canonical restore mutation
+- keep provider delete mutation as the canonical delete path
 
 ### Frontend
 
-The frontend should:
+- remove restore branching on `historyRecord.resumeId ? provider restore : local restore`
+- always restore by provider record
+- remove UI assumptions that a closed session becomes a locally archived restorable session
+- keep draft-pane replacement behavior, but mount provider history into the pane directly
 
-- treat history records as provider-keyed records, not local session ids
-- derive archive badges from `mounted` and provider existence
-- replace archive RPC usage with local unmount behavior
-- drive restore/delete actions by `(provider, resumeId)`
-- create unavailable placeholders when recovery probes fail
+## Testing
 
-## Migration and Cleanup
+### Required coverage
 
-### Local Data Migration
+Add or update tests to prove:
 
-Phase 1 should migrate only the durable state that still matters:
+- history contains only real provider sessions
+- closing a pane does not create a local archived session record
+- restoring always uses `provider + resume_id`
+- page refresh restores mounted panes from mounted bindings only
+- backend restart restores mounted panes from mounted bindings only
+- deleting a provider session removes it from history and unmounts any pane bound to it
+- no code path depends on `workspace_sessions`
 
-- mounted session bindings
+### Regression targets
 
-Migration should:
+Add regression tests for the exact old behaviors being removed:
 
-1. read current persisted workspace state
-2. extract active pane sessions that already have `provider` and `resumeId`
-3. convert them into pane bindings
-4. ignore old archived history rows as durable truth
+- mixed history rows from local bindings
+- local restore via `restore_session`
+- close triggering archive semantics
+- provider delete leaving local restorable artifacts behind
 
-Historical archive rows should not be migrated. Once provider-derived history is live, the provider scan will repopulate available archived sessions automatically.
+## Open implementation note
 
-If a legacy mounted session has no `resumeId`, preserve the pane but mark it non-recoverable after restart.
+If any part of the current UI still depends on a pane-local `session_id`, keep that identifier as a pane/runtime handle only. It must not become a second durable restore identifier.
 
-### Code Cleanup
+## Acceptance criteria
 
-After the new binding model lands, remove or deprecate:
+This redesign is complete when all of the following are true:
 
-- `workspace_sessions` history writes
-- archive DB helpers
-- restore-by-local-session-id flows
-- provider-hook writes to local history rows
-
-The implementation may stage database removal separately, but the table must stop being authoritative immediately.
-
-## Risks
-
-- Claude and Codex local storage formats are not official stable APIs, so provider adapters may need updates when upstream CLI versions change.
-- Claude project path normalization must match Claude's current storage convention closely enough for real workspaces.
-- Direct local provider deletion is more invasive than calling a first-party CLI command, but current installed CLIs do not expose a suitable delete command.
-- Removing archive persistence changes UX semantics: archive becomes "unmounted" rather than a separate stored snapshot.
-- Sessions that never emitted a provider resume id cannot be restored after restart, which must be communicated clearly in the UI.
-
-## Validation Plan
-
-The redesign should be considered complete when the following flows work:
-
-1. Start a new Claude or Codex session and confirm no durable history row is created locally.
-2. Observe a real provider resume id and confirm only the pane binding is updated.
-3. List history for a workspace and confirm records come from provider storage, not `workspace_sessions`.
-4. Unmount a mounted session and confirm it reappears as `archived` because the provider session still exists.
-5. Restore an archived session and confirm the provider-native resume command is used.
-6. Refresh the page or restart the backend and confirm mounted sessions auto-resume if the provider session still exists.
-7. Delete a provider session from outside the app, reopen the workspace, and confirm the pane becomes unavailable with a clear reason.
-8. Delete an available session from inside the app and confirm the provider's real local data is removed and the record disappears from history.
-9. Remove a missing placeholder from the workspace and confirm only the dead binding is cleared.
-10. Verify the app no longer depends on `workspace_sessions` for history, archive, or restore behavior.
+- `workspace_sessions` no longer exists in schema or runtime code paths
+- history is sourced only from Claude/Codex provider data
+- restore always goes through `provider + resume_id`
+- close unmounts without creating archive-style local history
+- mounted bindings are the only durable local session reference
+- frontend and backend no longer expose a local-session restore model

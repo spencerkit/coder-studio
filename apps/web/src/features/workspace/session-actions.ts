@@ -10,9 +10,10 @@ import {
   createPaneLeaf,
   normalizeWorkbenchState,
 } from "../../state/workbench-core";
-import { formatTerminalTitle, type Locale, type Translator } from "../../i18n";
+import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator } from "../../i18n";
 import {
   closeSession as closeSessionRequest,
+  createSession as createSessionRequest,
   deleteProviderSession as deleteProviderSessionRequest,
   removeMissingBinding as removeMissingBindingRequest,
   restoreProviderSession as restoreProviderSessionRequest,
@@ -144,9 +145,10 @@ export const createWorkspaceSessionActions = ({
       const draftSession = tab.sessions.find((session) => session.id === sessionId);
       if (!draftSession) return tab;
       const draftTitle = draftSession.title.trim();
+      const generatedTitle = formatSessionTitle(draftSession.id, locale);
       const title = sessionTitleFromInput(firstInput)
-        || draftTitle
-        || t("draftSessionTitle");
+        || (draftTitle && draftTitle !== t("draftSessionTitle") ? draftTitle : "")
+        || generatedTitle;
       const preparedSession: Session = {
         ...draftSession,
         title,
@@ -370,21 +372,56 @@ export const createWorkspaceSessionActions = ({
 
   const restoreSessionIntoPane = async (
     tabId: string,
-    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId">,
+    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId" | "title">,
     preferredPaneId?: string,
     options?: {
       strategy?: RestorePaneStrategy;
     },
   ) => {
     const strategy = options?.strategy ?? "reuse-draft";
-    const target = ensureRestorePane(tabId, preferredPaneId, strategy);
+    const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === tabId) ?? null;
+    const matchingSession = tabSnapshot?.sessions.find((session) => (
+      !isDraftSession(session)
+      && session.provider === historyRecord.provider
+      && session.resumeId === historyRecord.resumeId
+    ));
+    const matchingPaneId = matchingSession && tabSnapshot
+      ? findPaneIdBySessionId(tabSnapshot.paneLayout, matchingSession.id)
+      : null;
+    const target = matchingSession && matchingPaneId
+      ? {
+          paneId: matchingPaneId,
+          replacedSessionId: matchingSession.id,
+        }
+      : ensureRestorePane(tabId, preferredPaneId, strategy);
     if (!target) return null;
+
+    const preparedTab = stateRef.current.tabs.find((tab) => tab.id === tabId) ?? null;
+    const replacedSession = preparedTab?.sessions.find((session) => session.id === target.replacedSessionId);
+    const needsBackendSlot = strategy === "split-new" || isDraftSession(replacedSession);
+    let restoreSessionId = target.replacedSessionId;
+    if (needsBackendSlot) {
+      const tab = preparedTab;
+      const controller = tab?.controller;
+      if (controller?.role !== "controller") return null;
+      const created = await withServiceFallback(
+        () => createSessionRequest(
+          tabId,
+          replacedSession?.mode ?? "branch",
+          historyRecord.provider,
+          controller,
+        ),
+        null,
+      );
+      if (!created) return null;
+      restoreSessionId = String(created.id);
+    }
 
     advanceWorkspaceSyncVersion(tabId);
     const restored = await withServiceFallback(
       () => restoreProviderSessionRequest(
         tabId,
-        target.replacedSessionId,
+        restoreSessionId,
         historyRecord.provider,
         historyRecord.resumeId,
         controllerForTab(tabId),
@@ -402,28 +439,44 @@ export const createWorkspaceSessionActions = ({
       return restored.session;
     }
 
+    await refreshTabFromBackend(tabId);
+    const refreshedTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
+    if (!refreshedTab) {
+      return restored.session;
+    }
+
     const nextActiveAt = Date.now();
     updateTab(tabId, (tab) => {
-      const existingSession = tab.sessions.find((session) => (
-        session.id === restored.session.id || session.id === target.replacedSessionId
+      const sourceTab = preparedTab ?? (refreshedTab.id === tab.id ? refreshedTab : tab);
+      const existingSession = sourceTab.sessions.find((session) => (
+        session.id === restored.session.id || session.id === restoreSessionId
       ));
+      const restoreTitleFallback = historyRecord.title.trim();
+      const baseSession = createSessionFromBackend(
+        restored.session,
+        locale,
+        restoreTitleFallback
+          ? { ...existingSession, title: restoreTitleFallback }
+          : existingSession,
+      );
       const nextSession = {
-        ...createSessionFromBackend(restored.session, locale, existingSession),
+        ...baseSession,
+        title: restoreTitleFallback || baseSession.title,
         unread: 0,
         lastActiveAt: nextActiveAt,
       };
-      const remainingSessions = tab.sessions
+      const remainingSessions = sourceTab.sessions
         .filter((session) => (
           session.id !== target.replacedSessionId
           && session.id !== nextSession.id
         ));
       const nextTab = {
-        ...tab,
+        ...sourceTab,
         sessions: [
           { ...nextSession, status: nextSession.status },
           ...remainingSessions,
         ],
-        paneLayout: replacePaneNode(tab.paneLayout, target.paneId, (leaf) => ({
+        paneLayout: replacePaneNode(sourceTab.paneLayout, target.paneId, (leaf) => ({
           ...leaf,
           sessionId: nextSession.id,
         })),

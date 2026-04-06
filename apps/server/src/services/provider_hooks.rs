@@ -41,6 +41,17 @@ fn lifecycle_status_for_hook(kind: &str) -> Option<SessionStatus> {
     }
 }
 
+fn latest_user_input_for_session(session: &SessionInfo) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, SessionMessageRole::User))
+        .map(|message| message.content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .unwrap_or_default()
+}
+
 fn respond_http(mut stream: TcpStream, status: &str, body: &str) {
     let response = format!(
         "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -130,6 +141,7 @@ pub(crate) fn process_provider_hook_payload(
         .ok_or_else(|| "unsupported_hook_payload".to_string())?;
     normalized.workspace_id = envelope.workspace_id.clone();
     normalized.session_id = envelope.session_id.clone();
+    let latest_user_input = latest_user_input_for_session(&session);
 
     if let Some(status) = lifecycle_status_for_hook(normalized.kind.as_str()) {
         let updated = sync_session_status(
@@ -161,6 +173,17 @@ pub(crate) fn process_provider_hook_payload(
         &normalized.source_event,
         &normalized.data,
     );
+
+    if normalized.kind == "turn_completed" {
+        let _ = crate::services::supervisor::handle_supervisor_turn_completed(
+            app,
+            &normalized.workspace_id,
+            &normalized.session_id,
+            &format!("{}:{}", normalized.source_event, normalized.kind),
+            &latest_user_input,
+            &normalized.data,
+        );
+    }
 
     Ok(normalized)
 }
@@ -371,13 +394,12 @@ mod tests {
             WorkspaceViewPatch {
                 active_session_id: Some(session.id.clone()),
                 active_pane_id: Some(format!("pane-{}", session.id)),
-                active_terminal_id: None,
                 pane_layout: Some(json!({
                     "type": "leaf",
                     "id": format!("pane-{}", session.id),
                     "sessionId": session.id.clone(),
                 })),
-                file_preview: None,
+                ..WorkspaceViewPatch::default()
             },
         )
         .expect("view state should track the session slot");
@@ -396,8 +418,8 @@ mod tests {
 
         let session_id = session.id.clone();
         let running = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(running.resume_id, None);
-        assert_eq!(running.status, SessionStatus::Idle);
+        assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
+        assert_eq!(running.status, SessionStatus::Interrupted);
         let view_state = load_view_state_for_test(&app, &workspace_id);
         assert_eq!(view_state.session_bindings.len(), 1);
         assert_eq!(view_state.session_bindings[0].session_id, session_id);
@@ -421,7 +443,7 @@ mod tests {
 
         process_provider_hook_payload(&app, waiting_payload).unwrap();
         let waiting = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(waiting.status, SessionStatus::Idle);
+        assert_eq!(waiting.status, SessionStatus::Interrupted);
 
         set_session_status(
             app.state(),
@@ -443,7 +465,7 @@ mod tests {
 
         process_provider_hook_payload(&app, stop_payload).unwrap();
         let stopped = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(stopped.status, SessionStatus::Idle);
+        assert_eq!(stopped.status, SessionStatus::Interrupted);
         let events = drain_transport_events(&mut rx);
         let payload = events
             .iter()
@@ -453,6 +475,87 @@ mod tests {
         assert_eq!(payload["workspace_id"], workspace_id);
         assert_eq!(payload["session_state"]["session_id"], session_id);
         assert_eq!(payload["session_state"]["status"], "idle");
+    }
+
+    #[test]
+    fn shared_hook_processor_uses_latest_user_message_for_supervisor_turns() {
+        let _guard = crate::services::supervisor::supervisor_reply_test_lock()
+            .lock()
+            .unwrap();
+        let app = test_app();
+        let workspace = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: "/tmp/ws-hook-supervisor-input".to_string(),
+                target: ExecTarget::Native,
+            },
+            "/tmp/ws-hook-supervisor-input".to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        let state: State<AppState> = app.state();
+        let workspace_id = workspace.snapshot.workspace.workspace_id;
+        let session = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            ProviderId::claude(),
+            state,
+        )
+        .unwrap();
+        session_update(
+            workspace_id.clone(),
+            session.id.clone(),
+            SessionPatch {
+                title: None,
+                status: None,
+                mode: None,
+                auto_feed: None,
+                queue: None,
+                messages: Some(vec![SessionMessage {
+                    id: "msg-user-1".to_string(),
+                    role: SessionMessageRole::User,
+                    content: "Please keep the business agent focused on xterm.".to_string(),
+                    time: "2026-04-06T00:00:00.000Z".to_string(),
+                }]),
+                unread: None,
+                last_active_at: None,
+                resume_id: None,
+            },
+            state,
+        )
+        .unwrap();
+        crate::services::supervisor::seed_supervisor_binding_for_test(
+            state,
+            &workspace_id,
+            &session.id,
+            "Keep using xterm",
+        );
+        crate::services::supervisor::bind_terminal_for_session_for_test(
+            state,
+            &workspace_id,
+            &session.id,
+            91,
+        );
+        crate::services::supervisor::install_supervisor_adapter_reply_for_test("Use xterm only.");
+
+        let payload = json!({
+            "workspace_id": workspace_id,
+            "session_id": session.id,
+            "payload": {
+                "hook_event_name": "Stop"
+            }
+        });
+
+        let result = process_provider_hook_payload(&app, payload);
+        crate::services::supervisor::clear_supervisor_adapter_reply_for_test();
+        result.unwrap();
+
+        let view_state = load_view_state_for_test(&app, &workspace_id);
+        assert_eq!(view_state.supervisor.cycles.len(), 1);
+        assert!(view_state.supervisor.cycles[0]
+            .supervisor_input
+            .contains("Please keep the business agent focused on xterm."));
     }
 
     #[test]

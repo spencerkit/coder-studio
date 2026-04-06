@@ -1,4 +1,8 @@
 use crate::infra::time::now_ts_ms;
+use crate::models::{
+    WorkspaceSupervisorBinding, WorkspaceSupervisorCycle, WorkspaceSupervisorCycleStatus,
+    WorkspaceSupervisorStatus, WorkspaceSupervisorViewState,
+};
 use crate::*;
 use serde::de::DeserializeOwned;
 #[cfg(test)]
@@ -661,14 +665,8 @@ fn default_view_state(active_session_id: String) -> WorkspaceViewState {
             "sessionId": active_session_id,
         }),
         file_preview: default_file_preview_value(),
-        session_bindings: vec![WorkspaceSessionBinding {
-            session_id: active_session_id.clone(),
-            provider: AgentProvider::claude(),
-            mode: SessionMode::Branch,
-            resume_id: None,
-            title_snapshot: session_title(&active_session_id),
-            last_seen_at: now_ts_ms(),
-        }],
+        session_bindings: Vec::new(),
+        supervisor: WorkspaceSupervisorViewState::default(),
     }
 }
 
@@ -679,7 +677,7 @@ fn derive_legacy_session_bindings_from_conn(
 ) -> Result<Vec<WorkspaceSessionBinding>, String> {
     let mut mounted_session_ids = HashSet::new();
     collect_pane_session_ids(&view_state.pane_layout, &mut mounted_session_ids);
-    let legacy_sessions = load_snapshot_sessions_from_conn(conn, workspace_id)?;
+    let legacy_sessions = load_snapshot_sessions_from_conn(conn, workspace_id).unwrap_or_default();
     let legacy_by_id = legacy_sessions
         .into_iter()
         .map(|session| (session.id.clone(), session))
@@ -1369,15 +1367,6 @@ pub(crate) fn build_snapshot_from_conn(
             .iter()
             .position(|binding| binding.session_id == *session_id)
         else {
-            sessions.push(session_placeholder(
-                session_id,
-                session_title(session_id),
-                AgentProvider::claude(),
-                SessionMode::Branch,
-                None,
-                now_ts_ms(),
-                None,
-            ));
             continue;
         };
         let binding = view_state.session_bindings[binding_index].clone();
@@ -1887,6 +1876,7 @@ pub(crate) fn patch_workspace_view_state(
             pane_layout: patch.pane_layout.unwrap_or(current.pane_layout),
             file_preview: patch.file_preview.unwrap_or(current.file_preview),
             session_bindings: current.session_bindings,
+            supervisor: patch.supervisor.unwrap_or(current.supervisor),
         };
         save_view_state_to_conn(conn, workspace_id, &next)?;
         Ok(next)
@@ -2189,6 +2179,38 @@ mod tests {
     }
 
     #[test]
+    fn load_view_state_from_conn_tolerates_missing_workspace_sessions_table_for_legacy_payloads() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_view_legacy_missing_table");
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_view_legacy_missing_table",
+                json!({
+                    "active_session_id": "slot-alpha",
+                    "active_pane_id": "pane-alpha",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-alpha",
+                        "sessionId": "slot-alpha",
+                    },
+                    "file_preview": default_file_preview_value(),
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let view_state = load_view_state_from_conn(&conn, "ws_view_legacy_missing_table").unwrap();
+
+        assert!(view_state.session_bindings.is_empty());
+    }
+
+    #[test]
     fn load_view_state_from_conn_defaults_session_bindings_for_legacy_payloads() {
         let conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
@@ -2311,6 +2333,64 @@ mod tests {
         let view_state = load_view_state_from_conn(&conn, "ws_view_legacy_no_resume").unwrap();
 
         assert!(view_state.session_bindings.is_empty());
+    }
+
+    #[test]
+    fn workspace_view_state_round_trips_supervisor_binding_and_cycles() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        let workspace_id = "ws-supervisor";
+        insert_workspace(&conn, workspace_id);
+
+        let patch = WorkspaceViewPatch {
+            supervisor: Some(WorkspaceSupervisorViewState {
+                bindings: vec![WorkspaceSupervisorBinding {
+                    session_id: "slot-primary".to_string(),
+                    provider: AgentProvider::claude(),
+                    objective_text: "Ship v1 supervisor mode using xterm only".to_string(),
+                    objective_prompt: "supervisor prompt body".to_string(),
+                    objective_version: 1,
+                    status: WorkspaceSupervisorStatus::Idle,
+                    auto_inject_enabled: true,
+                    pending_objective_text: None,
+                    pending_objective_prompt: None,
+                    pending_objective_version: None,
+                    updated_at: 1,
+                    created_at: 1,
+                }],
+                cycles: vec![WorkspaceSupervisorCycle {
+                    cycle_id: "cycle-1".to_string(),
+                    session_id: "slot-primary".to_string(),
+                    source_turn_id: "turn-1".to_string(),
+                    objective_version: 1,
+                    supervisor_input: "prompt".to_string(),
+                    supervisor_reply: Some("next message".to_string()),
+                    injection_message_id: Some("inject-1".to_string()),
+                    status: WorkspaceSupervisorCycleStatus::Injected,
+                    error: None,
+                    started_at: 1,
+                    finished_at: Some(2),
+                }],
+            }),
+            ..WorkspaceViewPatch::default()
+        };
+
+        let state = AppState {
+            db: Mutex::new(Some(conn)),
+            ..AppState::default()
+        };
+        patch_workspace_view_state(&state, workspace_id, patch).unwrap();
+        let conn = state.db.lock().unwrap();
+        let stored = load_view_state_from_conn(conn.as_ref().unwrap(), workspace_id).unwrap();
+
+        assert_eq!(stored.supervisor.bindings.len(), 1);
+        assert_eq!(stored.supervisor.cycles.len(), 1);
+        assert_eq!(stored.supervisor.bindings[0].objective_version, 1);
+        assert_eq!(
+            stored.supervisor.cycles[0].supervisor_reply.as_deref(),
+            Some("next message")
+        );
     }
     #[test]
     fn build_snapshot_from_conn_materializes_visible_unbound_sessions() {

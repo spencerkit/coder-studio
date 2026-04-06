@@ -9,10 +9,13 @@ import type {
   IdlePolicy,
   SessionMode,
   SessionStatus,
+  SupervisorStatus,
   Tab,
   Terminal,
   TreeNode,
-} from "../state/workbench";
+  WorkspaceSupervisorCycle,
+  WorkspaceSupervisorCycleStatus,
+} from "../state/workbench-core";
 
 export type Toast = { id: string; text: string; sessionId: string };
 
@@ -117,6 +120,40 @@ export type SessionHistoryGroup = {
 
 export type SessionHistoryExpansionState = Record<string, boolean>;
 
+export interface BackendWorkspaceSupervisorBinding {
+  session_id: string;
+  provider: AgentProvider;
+  objective_text: string;
+  objective_prompt: string;
+  objective_version: number;
+  status: SupervisorStatus;
+  auto_inject_enabled: boolean;
+  pending_objective_text?: string | null;
+  pending_objective_prompt?: string | null;
+  pending_objective_version?: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BackendWorkspaceSupervisorCycle {
+  cycle_id: string;
+  session_id: string;
+  source_turn_id: string;
+  objective_version: number;
+  supervisor_input: string;
+  supervisor_reply?: string | null;
+  injection_message_id?: string | null;
+  status: WorkspaceSupervisorCycleStatus;
+  error?: string | null;
+  started_at: number;
+  finished_at?: number | null;
+}
+
+export interface BackendWorkspaceSupervisorViewState {
+  bindings: BackendWorkspaceSupervisorBinding[];
+  cycles: BackendWorkspaceSupervisorCycle[];
+}
+
 export type BackendWorkspaceViewState = {
   active_session_id: string;
   active_pane_id: string;
@@ -124,6 +161,7 @@ export type BackendWorkspaceViewState = {
   pane_layout: Tab["paneLayout"];
   file_preview: FilePreview;
   session_bindings: BackendWorkspaceSessionBinding[];
+  supervisor: BackendWorkspaceSupervisorViewState;
 };
 
 export type BackendWorkspaceSessionBinding = {
@@ -244,6 +282,7 @@ export type WorkspaceViewPatch = {
   active_terminal_id?: string;
   pane_layout?: BackendWorkspaceViewState["pane_layout"];
   file_preview?: BackendWorkspaceViewState["file_preview"];
+  supervisor?: BackendWorkspaceSupervisorViewState;
 };
 
 export type AgentEvent = {

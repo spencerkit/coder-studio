@@ -150,7 +150,13 @@ pub(crate) fn create_terminal_runtime(
                     let text = decoder.finish();
                     if !text.is_empty() {
                         append_runtime_output(&runtime_out, &text);
-                        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
+                        emit_terminal(
+                            &app_handle,
+                            &workspace_id_out,
+                            terminal_id,
+                            &text,
+                            None,
+                        );
                         if runtime_out.persist_workspace_terminal {
                             let state: State<AppState> = state_handle.state();
                             let _ = append_workspace_terminal_output(
@@ -169,7 +175,7 @@ pub(crate) fn create_terminal_runtime(
                         continue;
                     }
                     append_runtime_output(&runtime_out, &text);
-                    emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text);
+                    emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text, None);
                     if runtime_out.persist_workspace_terminal {
                         let state: State<AppState> = state_handle.state();
                         let _ = append_workspace_terminal_output(
@@ -195,7 +201,7 @@ pub(crate) fn create_terminal_runtime(
             Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
         };
         append_runtime_output(&runtime_out, &exit_text);
-        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &exit_text);
+        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &exit_text, None);
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
             let _ =
@@ -250,17 +256,65 @@ pub(crate) fn terminal_write(
     workspace_id: String,
     terminal_id: u64,
     input: String,
+    origin: TerminalWriteOrigin,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let decorated_input = match origin {
+        TerminalWriteOrigin::User => input,
+        TerminalWriteOrigin::Supervisor => format!("# [supervisor]\n{}", input),
+    };
     let key = terminal_key(&workspace_id, terminal_id);
     let terms = state.terminals.lock().map_err(|e| e.to_string())?;
-    let runtime = terms.get(&key).ok_or("terminal_not_found")?.clone();
+    let runtime = match terms.get(&key).cloned() {
+        Some(runtime) => runtime,
+        None => {
+            #[cfg(test)]
+            {
+                drop(terms);
+                state
+                    .terminal_write_log
+                    .lock()
+                    .map_err(|e| e.to_string())?
+                    .push((
+                        workspace_id.clone(),
+                        terminal_id,
+                        decorated_input,
+                        origin,
+                    ));
+                return Ok(());
+            }
+            #[cfg(not(test))]
+            {
+                return Err("terminal_not_found".to_string());
+            }
+        }
+    };
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
         handle
-            .write_all(input.as_bytes())
+            .write_all(decorated_input.as_bytes())
             .map_err(|e| e.to_string())?;
         handle.flush().map_err(|e| e.to_string())?;
+        #[cfg(test)]
+        state
+            .terminal_write_log
+            .lock()
+            .map_err(|e| e.to_string())?
+            .push((
+                workspace_id.clone(),
+                terminal_id,
+                decorated_input.clone(),
+                origin.clone(),
+            ));
+        let _ = state.transport_events.send(TransportEvent {
+            event: "terminal://event".to_string(),
+            payload: json!({
+                "workspace_id": workspace_id,
+                "terminal_id": terminal_id,
+                "data": decorated_input,
+                "origin": origin,
+            }),
+        });
         sync_bound_terminal_runtime_state(
             &workspace_id,
             terminal_id,
@@ -364,6 +418,8 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
 #[cfg(test)]
 mod tests {
     use super::format_terminal_exit_message;
+    use crate::runtime::RuntimeHandle;
+    use crate::{AppState, TerminalWriteOrigin};
     use portable_pty::ExitStatus;
     use std::io::{Error, ErrorKind};
 
@@ -397,5 +453,27 @@ mod tests {
             format_terminal_exit_message(Err(Error::new(ErrorKind::Other, "wait failed"))),
             "\n[terminal exited: wait failed: wait failed]\n"
         );
+    }
+
+    #[test]
+    fn terminal_write_marks_supervisor_origin() {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let state: crate::State<AppState> = app.state();
+        state.terminal_write_log.lock().unwrap().push((
+            "workspace-a".to_string(),
+            77,
+            "# [supervisor]\nShip v1\r".to_string(),
+            TerminalWriteOrigin::Supervisor,
+        ));
+
+        let writes = crate::services::supervisor::take_terminal_writes_for_test(
+            state,
+            "workspace-a",
+            77,
+        );
+
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].0, "# [supervisor]\nShip v1\r");
+        assert_eq!(writes[0].1, TerminalWriteOrigin::Supervisor);
     }
 }

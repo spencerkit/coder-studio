@@ -157,6 +157,10 @@ async function prepareTransportPage(page: Page) {
   await seedAppSettings(page, {});
 }
 
+async function patchAppSettings(page: Page, settings: Record<string, unknown>) {
+  await invokeRpc(page, 'app_settings_update', { settings });
+}
+
 async function seedAppSettings(
   page: Page,
   overrides: Partial<{
@@ -176,32 +180,26 @@ async function seedAppSettings(
   }>,
 ) {
   const [executable = 'claude', ...startupArgs] = splitCommandTokens(overrides.agentCommand ?? 'claude');
-  await invokeRpc(page, 'app_settings_update', {
-    settings: {
-      general: {
-        locale: 'en',
-        terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
-        completionNotifications: overrides.completionNotifications ?? {
-          enabled: true,
-          onlyWhenBackground: true,
-        },
-        idlePolicy: overrides.idlePolicy ?? {
-          enabled: true,
-          idleMinutes: 10,
-          maxActive: 3,
-          pressure: true,
-        },
+  await patchAppSettings(page, {
+    general: {
+      locale: 'en',
+      terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
+      completionNotifications: overrides.completionNotifications ?? {
+        enabled: true,
+        onlyWhenBackground: true,
       },
+      idlePolicy: overrides.idlePolicy ?? {
+        enabled: true,
+        idleMinutes: 10,
+        maxActive: 3,
+        pressure: true,
+      },
+    },
+    providers: {
       claude: {
         global: {
           executable,
           startupArgs,
-          env: {},
-          settingsJson: {},
-        },
-        overrides: {
-          native: null,
-          wsl: null,
         },
       },
     },
@@ -963,7 +961,12 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(observer);
       await waitForBackendSocket(observer);
       await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
-      await expect(observer.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+      try {
+        await expect(observer.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+      } catch {
+        const debug = await readWorkspaceReloadDebug(observer, workspace.workspaceId, observerIds);
+        throw new Error(JSON.stringify(debug, null, 2));
+      }
 
       await expect.poll(() => observer.evaluate(() => {
         const helper = document.querySelector('.xterm-helper-textarea');
@@ -1070,6 +1073,7 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
       });
 
+      await expect(page.locator('[data-testid^="draft-mode-new-"]').first()).toBeVisible();
       const startButton = page.locator('[data-testid^="draft-start-claude-"]').first();
       await expect(startButton).toBeVisible();
 
@@ -1443,23 +1447,30 @@ async function observeBurstAgentTransport(
     provider: 'claude',
   });
   const sessionId = String(session.id);
-
-  await invokeRpc(page, 'agent_start', {
+  const frameCursor = await readTransportFrameCursor(page);
+  const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
     rows: 30,
   });
+  if (started.boot_input) {
+    await invokeRpc(page, 'terminal_write', {
+      ...controller,
+      terminalId: started.terminal_id,
+      input: started.boot_input,
+    });
+  }
 
   const finalMarker = `agent-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
   await expect
-    .poll(async () => (await readAgentStreamFrames(page, sessionId, 'stdout')).text.includes(finalMarker), {
+    .poll(async () => (await readTerminalStreamFrames(page, started.terminal_id, frameCursor)).text.includes(finalMarker), {
       timeout: TRANSPORT_EVENT_TIMEOUT_MS,
     })
     .toBe(true);
   await page.waitForTimeout(150);
 
-  return readAgentStreamFrames(page, sessionId, 'stdout');
+  return readTerminalStreamFrames(page, started.terminal_id, frameCursor);
 }
 
 async function observeBurstTerminalTransport(
@@ -1547,18 +1558,25 @@ async function observeMixedBurstTransport(
       terminalId: terminal.id,
       input: buildTerminalBurstInput(workspace.target, probeFile),
     });
-    await invokeRpc(page, 'agent_start', {
+    const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
       ...controller,
       sessionId,
       cols: 120,
       rows: 30,
     });
+    if (started.boot_input) {
+      await invokeRpc(page, 'terminal_write', {
+        ...controller,
+        terminalId: started.terminal_id,
+        input: started.boot_input,
+      });
+    }
 
     const finalAgentMarker = `mix-agent-${String(options.chunkCount - 1).padStart(2, '0')}`;
     const finalTerminalMarker = `mix-term-${String(options.chunkCount - 1).padStart(2, '0')}`;
     await expect
       .poll(async () => {
-        const agent = await readAgentStreamFrames(page, sessionId, 'stdout', frameCursor);
+        const agent = await readTerminalStreamFrames(page, started.terminal_id, frameCursor);
         const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
         return agent.text.includes(finalAgentMarker) && terminalFrames.text.includes(finalTerminalMarker);
       }, {
@@ -1567,7 +1585,7 @@ async function observeMixedBurstTransport(
       .toBe(true);
     await page.waitForTimeout(150);
 
-    const agentFrames = await readAgentStreamFrames(page, sessionId, 'stdout', frameCursor);
+    const agentFrames = await readTerminalStreamFrames(page, started.terminal_id, frameCursor);
     const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
     return {
       agentFrameCount: agentFrames.frameCount,
@@ -2199,6 +2217,7 @@ async function readWorkspaceReloadDebug(
     invokeRpc<{
       snapshot: {
         sessions: Array<{ id: number }>;
+        terminals?: Array<{ id: number; output?: string }>;
         view_state: {
           active_session_id: string;
           active_pane_id: string;
@@ -2209,6 +2228,7 @@ async function readWorkspaceReloadDebug(
         controller_client_id?: string | null;
         fencing_token?: number;
       };
+      session_runtime_bindings?: Array<{ session_id: string; terminal_id: string }>;
       lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
     }>(page, 'workspace_runtime_attach', {
       workspaceId,
@@ -2223,9 +2243,11 @@ async function readWorkspaceReloadDebug(
     cards,
     snapshot: {
       sessionIds: runtime.snapshot.sessions.map((session) => session.id),
+      terminalIds: (runtime.snapshot.terminals ?? []).map((terminal) => terminal.id),
       activeSessionId: runtime.snapshot.view_state.active_session_id,
       activePaneId: runtime.snapshot.view_state.active_pane_id,
     },
+    sessionRuntimeBindings: runtime.session_runtime_bindings ?? [],
     controller: runtime.controller,
     lifecycleTail: (runtime.lifecycle_events ?? []).slice(-6),
   };

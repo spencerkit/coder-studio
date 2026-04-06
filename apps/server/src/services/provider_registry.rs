@@ -27,6 +27,11 @@ pub(crate) trait ProviderAdapter: Sync {
         target: &ExecTarget,
         resume_id: &str,
     ) -> Result<ProviderLaunchConfig, String>;
+    fn build_supervisor_invoke(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+    ) -> Result<ProviderLaunchConfig, String>;
     fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String>;
     fn normalize_hook_payload(&self, payload: &Value) -> Option<AgentLifecycleEvent>;
     fn extract_resume_id(&self, payload: &Value) -> Option<String>;

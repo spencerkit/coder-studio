@@ -536,11 +536,20 @@ pub struct AgentLifecycleHistoryEntry {
     pub data: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalWriteOrigin {
+    User,
+    Supervisor,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TerminalEvent {
     pub workspace_id: String,
     pub terminal_id: u64,
     pub data: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<TerminalWriteOrigin>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -616,6 +625,66 @@ pub struct WorkspaceSessionBinding {
     pub last_seen_at: i64,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceSupervisorStatus {
+    Inactive,
+    Idle,
+    Evaluating,
+    Injecting,
+    Paused,
+    Error,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceSupervisorCycleStatus {
+    Queued,
+    Evaluating,
+    Completed,
+    Injected,
+    Failed,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct WorkspaceSupervisorBinding {
+    pub session_id: String,
+    pub provider: AgentProvider,
+    pub objective_text: String,
+    pub objective_prompt: String,
+    pub objective_version: i64,
+    pub status: WorkspaceSupervisorStatus,
+    pub auto_inject_enabled: bool,
+    pub pending_objective_text: Option<String>,
+    pub pending_objective_prompt: Option<String>,
+    pub pending_objective_version: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct WorkspaceSupervisorCycle {
+    pub cycle_id: String,
+    pub session_id: String,
+    pub source_turn_id: String,
+    pub objective_version: i64,
+    pub supervisor_input: String,
+    pub supervisor_reply: Option<String>,
+    pub injection_message_id: Option<String>,
+    pub status: WorkspaceSupervisorCycleStatus,
+    pub error: Option<String>,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
+pub struct WorkspaceSupervisorViewState {
+    #[serde(default)]
+    pub bindings: Vec<WorkspaceSupervisorBinding>,
+    #[serde(default)]
+    pub cycles: Vec<WorkspaceSupervisorCycle>,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WorkspaceViewState {
     pub active_session_id: String,
@@ -626,6 +695,8 @@ pub struct WorkspaceViewState {
     pub file_preview: Value,
     #[serde(default)]
     pub session_bindings: Vec<WorkspaceSessionBinding>,
+    #[serde(default)]
+    pub supervisor: WorkspaceSupervisorViewState,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -710,11 +781,12 @@ pub struct SessionPatch {
     pub resume_id: Option<String>,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Default)]
 pub struct WorkspaceViewPatch {
     pub active_session_id: Option<String>,
     pub active_pane_id: Option<String>,
     pub active_terminal_id: Option<String>,
     pub pane_layout: Option<Value>,
     pub file_preview: Option<Value>,
+    pub supervisor: Option<WorkspaceSupervisorViewState>,
 }

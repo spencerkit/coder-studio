@@ -88,12 +88,13 @@ pub(crate) use models::{
     GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId, ProviderWorkspaceSession,
     SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
     SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult,
-    SessionStatus, TerminalEvent, TerminalInfo, TransportEvent, WorkbenchBootstrap,
+    SessionStatus, TerminalEvent, TerminalInfo, TerminalWriteOrigin, TransportEvent, WorkbenchBootstrap,
     WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
     WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSessionBinding,
     WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
-    WorkspaceSummary, WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail,
-    WorktreeInfo,
+    WorkspaceSupervisorBinding, WorkspaceSupervisorCycle, WorkspaceSupervisorCycleStatus,
+    WorkspaceSupervisorStatus, WorkspaceSupervisorViewState, WorkspaceSummary, WorkspaceTree,
+    WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{

@@ -209,6 +209,14 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         })
     }
 
+    fn build_supervisor_invoke(
+        &self,
+        settings: &AppSettingsPayload,
+        target: &ExecTarget,
+    ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
+        self.build_start(settings, target)
+    }
+
     fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String> {
         ensure_claude_hook_settings(cwd, target)
     }

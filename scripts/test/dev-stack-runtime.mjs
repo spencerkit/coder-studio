@@ -123,12 +123,27 @@ export function buildDevStackRuntimeEnv(root, env = process.env) {
   const stateDir = env.CODER_STUDIO_HOME
     ? path.resolve(env.CODER_STUDIO_HOME)
     : path.join(root, '.tmp', 'dev-stack-runtime');
+  const dataDir = env.CODER_STUDIO_DATA_DIR
+    ? path.resolve(env.CODER_STUDIO_DATA_DIR)
+    : path.join(stateDir, 'data');
+  const claudeHomeRoot = env.CODER_STUDIO_CLAUDE_HOME
+    ? path.resolve(env.CODER_STUDIO_CLAUDE_HOME)
+    : path.join(stateDir, 'provider-homes', 'claude-home');
+  const codexHomeRoot = env.CODER_STUDIO_CODEX_HOME
+    ? path.resolve(env.CODER_STUDIO_CODEX_HOME)
+    : path.join(stateDir, 'provider-homes', 'codex-home');
 
   return {
     stateDir,
+    dataDir,
+    claudeHomeRoot,
+    codexHomeRoot,
     env: {
       ...env,
       CODER_STUDIO_HOME: stateDir,
+      CODER_STUDIO_DATA_DIR: dataDir,
+      CODER_STUDIO_CLAUDE_HOME: claudeHomeRoot,
+      CODER_STUDIO_CODEX_HOME: codexHomeRoot,
     },
   };
 }

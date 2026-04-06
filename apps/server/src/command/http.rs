@@ -124,6 +124,29 @@ struct WorkspaceViewRequest {
 }
 
 #[derive(Deserialize)]
+struct EnableSupervisorModeRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
+    session_id: String,
+    objective_text: String,
+}
+
+#[derive(Deserialize)]
+struct UpdateSupervisorObjectiveRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
+    session_id: String,
+    objective_text: String,
+}
+
+#[derive(Deserialize)]
+struct SupervisorSessionRequest {
+    #[serde(flatten)]
+    controller: WorkspaceControllerMutationRequest,
+    session_id: String,
+}
+
+#[derive(Deserialize)]
 struct WorkbenchLayoutRequest {
     layout: WorkbenchLayout,
     device_id: Option<String>,
@@ -886,6 +909,85 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "enable_supervisor_mode" => {
+            let req: EnableSupervisorModeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::enable_supervisor_mode(
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    &req.objective_text,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "update_supervisor_objective" => {
+            let req: UpdateSupervisorObjectiveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::update_supervisor_objective(
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    &req.objective_text,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "pause_supervisor_mode" => {
+            let req: SupervisorSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::pause_supervisor_mode(
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "resume_supervisor_mode" => {
+            let req: SupervisorSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::resume_supervisor_mode(
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
+        "disable_supervisor_mode" => {
+            let req: SupervisorSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            crate::services::supervisor::disable_supervisor_mode(
+                &req.controller.workspace_id,
+                &req.session_id,
+                app.state(),
+            )
+            .map_err(rpc_bad_request)?;
+            Ok(Value::Null)
+        }
+        "retry_supervisor_cycle" => {
+            let req: SupervisorSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::retry_supervisor_cycle(
+                    app,
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "create_session" => {
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
@@ -1358,6 +1460,7 @@ fn dispatch_rpc(
                 req.controller.workspace_id,
                 req.terminal_id,
                 req.input,
+                TerminalWriteOrigin::User,
                 app.state(),
             )
             .map_err(rpc_bad_request)?;
@@ -1765,6 +1868,7 @@ pub(crate) fn start_transport_server(app: &AppHandle) -> Result<TransportServer,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::WorkspaceSupervisorStatus;
     use crate::runtime::RuntimeHandle;
     use std::sync::OnceLock;
     use std::time::Duration;
@@ -1954,6 +2058,23 @@ mod tests {
     }
 
     #[test]
+    fn workspace_runtime_attach_keeps_new_workspace_sessions_empty() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-empty-sessions");
+
+        let runtime = workspace_runtime_attach(
+            workspace_id,
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .expect("runtime attach should succeed");
+
+        assert!(runtime.snapshot.sessions.is_empty());
+    }
+
+    #[test]
     fn require_workspace_controller_mutation_uses_single_with_db_critical_section() {
         let _guard = lock_with_db_count_tests();
         let app = test_app();
@@ -2136,6 +2257,58 @@ mod tests {
             .sessions
             .iter()
             .any(|session| session.id == "slot-primary"));
+    }
+
+    #[test]
+    fn launch_workspace_rpc_succeeds_without_workspace_sessions_table() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_root = create_temp_workspace_root("ws-http-launch-no-legacy-table");
+
+        let result = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": workspace_root,
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        );
+
+        let value = result.expect("launch_workspace should succeed without legacy workspace_sessions table");
+        let launch: WorkspaceLaunchResult = serde_json::from_value(value).unwrap();
+        assert!(!launch.snapshot.workspace.workspace_id.is_empty());
+    }
+
+    #[test]
+    fn launch_workspace_rpc_returns_empty_sessions_for_new_workspace() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_root = create_temp_workspace_root("ws-http-launch-empty-sessions");
+
+        let value = dispatch_rpc(
+            &app,
+            "launch_workspace",
+            json!({
+                "source": {
+                    "kind": "local",
+                    "path_or_url": workspace_root,
+                    "target": { "type": "native" },
+                },
+                "device_id": "device-a",
+                "client_id": "client-a",
+            }),
+            &authorized,
+        )
+        .expect("launch_workspace should succeed");
+
+        let launch: WorkspaceLaunchResult = serde_json::from_value(value).unwrap();
+        assert!(launch.snapshot.sessions.is_empty());
     }
 
     #[test]
@@ -3124,6 +3297,62 @@ mod tests {
     }
 
     #[test]
+    fn session_runtime_start_materializes_default_slot_and_observer_attach_sees_binding() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-slot-primary");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let started = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": "slot-primary",
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .expect("default slot should start without a pre-created backend session");
+        let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
+
+        let observer = dispatch_rpc(
+            &app,
+            "workspace_runtime_attach",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-b",
+                "client_id": "client-b",
+            }),
+            &authorized,
+        )
+        .expect("observer attach should succeed after starting the default slot");
+        let observer: WorkspaceRuntimeSnapshot = serde_json::from_value(observer).unwrap();
+
+        assert!(observer
+            .snapshot
+            .sessions
+            .iter()
+            .any(|session| session.id == "slot-primary" && session.runtime_active));
+        assert!(observer
+            .session_runtime_bindings
+            .iter()
+            .any(|binding| binding.session_id == "slot-primary" && binding.terminal_id == started.terminal_id.to_string()));
+        assert!(observer
+            .snapshot
+            .terminals
+            .iter()
+            .any(|terminal| terminal.id == started.terminal_id));
+    }
+
+    #[test]
     fn session_runtime_start_mirrors_bound_terminal_output_into_session_stream() {
         let app = test_app();
         let authorized = authorized_request();
@@ -3416,6 +3645,73 @@ mod tests {
     }
 
     #[test]
+    fn session_runtime_start_reuses_live_terminal_and_still_returns_boot_input() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let root = create_temp_workspace_root("session-runtime-reuse-boot-input");
+        let workspace_id = launch_test_workspace(&app, &root);
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
+
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let created = dispatch_rpc(
+            &app,
+            "create_session",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "mode": "branch",
+                "provider": "codex",
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let created: SessionInfo = serde_json::from_value(created).unwrap();
+        let created_id = created.id.clone();
+
+        let first = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created_id.clone(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let first: SessionRuntimeStartResult = serde_json::from_value(first).unwrap();
+        assert!(first.started);
+        assert!(first.boot_input.is_some());
+
+        let second = dispatch_rpc(
+            &app,
+            "session_runtime_start",
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+                "session_id": created_id.clone(),
+                "cols": 120,
+                "rows": 30,
+            }),
+            &authorized,
+        )
+        .unwrap();
+        let second: SessionRuntimeStartResult = serde_json::from_value(second).unwrap();
+
+        assert!(!second.started);
+        assert_eq!(second.terminal_id, first.terminal_id);
+        assert_eq!(second.boot_input, first.boot_input);
+    }
+
+    #[test]
     fn terminal_write_marks_bound_session_running_and_emits_runtime_state() {
         let app = test_app();
         let authorized = authorized_request();
@@ -3488,5 +3784,699 @@ mod tests {
         assert_eq!(payload["workspace_id"], workspace_id);
         assert_eq!(payload["session_state"]["session_id"], created_id);
         assert_eq!(payload["session_state"]["status"], "running");
+    }
+
+    #[test]
+    fn update_supervisor_objective_rpc_marks_pending_when_binding_is_evaluating() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-update-rpc");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .expect("binding should exist");
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                supervisor: Some(WorkspaceSupervisorViewState {
+                    bindings: vec![WorkspaceSupervisorBinding {
+                        status: WorkspaceSupervisorStatus::Evaluating,
+                        ..binding
+                    }],
+                    cycles: snapshot.view_state.supervisor.cycles,
+                }),
+                ..WorkspaceViewPatch::default()
+            },
+        )
+        .unwrap();
+
+        let result = dispatch_rpc(
+            &app,
+            "update_supervisor_objective",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "objective_text": "Use Claude only in v1.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect("update_supervisor_objective should succeed");
+
+        let updated: WorkspaceSupervisorBinding = serde_json::from_value(result).unwrap();
+        assert_eq!(updated.status, WorkspaceSupervisorStatus::Evaluating);
+        assert_eq!(updated.pending_objective_text.as_deref(), Some("Use Claude only in v1."));
+        assert_eq!(updated.pending_objective_version, Some(updated.objective_version + 1));
+        assert!(updated
+            .pending_objective_prompt
+            .as_deref()
+            .is_some_and(|prompt| prompt.contains("Active objective:\nUse Claude only in v1.")));
+    }
+
+    #[test]
+    fn pause_resume_disable_and_retry_supervisor_rpcs_require_live_controller() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-controller-guard");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let stale_payload = |session_id: &str| {
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "device_id": "device-b",
+                "client_id": "client-b",
+                "fencing_token": 1,
+            })
+        };
+
+        for command in [
+            "pause_supervisor_mode",
+            "resume_supervisor_mode",
+            "disable_supervisor_mode",
+            "retry_supervisor_cycle",
+        ] {
+            let error = dispatch_rpc(&app, command, stale_payload(session_id), &authorized)
+                .expect_err("stale controller should be rejected");
+            assert_eq!(error.status, StatusCode::FORBIDDEN, "{command}");
+            assert_eq!(error.error, "stale_fencing_token", "{command}");
+        }
+    }
+
+    #[test]
+    fn pause_resume_disable_and_retry_supervisor_rpcs_manage_state() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-flows");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .expect("binding should exist");
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                supervisor: Some(WorkspaceSupervisorViewState {
+                    bindings: vec![binding],
+                    cycles: vec![WorkspaceSupervisorCycle {
+                        cycle_id: "cycle-failed".to_string(),
+                        session_id: session_id.to_string(),
+                        source_turn_id: "turn-2".to_string(),
+                        objective_version: 1,
+                        supervisor_input: "prompt".to_string(),
+                        supervisor_reply: None,
+                        injection_message_id: None,
+                        status: WorkspaceSupervisorCycleStatus::Failed,
+                        error: Some("provider_error".to_string()),
+                        started_at: 2,
+                        finished_at: Some(3),
+                    }],
+                }),
+                ..WorkspaceViewPatch::default()
+            },
+        )
+        .unwrap();
+
+        let paused: WorkspaceSupervisorBinding = serde_json::from_value(
+            dispatch_rpc(
+                &app,
+                "pause_supervisor_mode",
+                json!({
+                    "workspace_id": workspace_id.clone(),
+                    "session_id": session_id,
+                    "device_id": "device-a",
+                    "client_id": "client-a",
+                    "fencing_token": runtime.controller.fencing_token,
+                }),
+                &authorized,
+            )
+            .expect("pause_supervisor_mode should succeed"),
+        )
+        .unwrap();
+        assert_eq!(paused.status, WorkspaceSupervisorStatus::Paused);
+
+        let resumed: WorkspaceSupervisorBinding = serde_json::from_value(
+            dispatch_rpc(
+                &app,
+                "resume_supervisor_mode",
+                json!({
+                    "workspace_id": workspace_id.clone(),
+                    "session_id": session_id,
+                    "device_id": "device-a",
+                    "client_id": "client-a",
+                    "fencing_token": runtime.controller.fencing_token,
+                }),
+                &authorized,
+            )
+            .expect("resume_supervisor_mode should succeed"),
+        )
+        .unwrap();
+        assert_eq!(resumed.status, WorkspaceSupervisorStatus::Idle);
+
+        let retried: WorkspaceSupervisorCycle = serde_json::from_value(
+            dispatch_rpc(
+                &app,
+                "retry_supervisor_cycle",
+                json!({
+                    "workspace_id": workspace_id.clone(),
+                    "session_id": session_id,
+                    "device_id": "device-a",
+                    "client_id": "client-a",
+                    "fencing_token": runtime.controller.fencing_token,
+                }),
+                &authorized,
+            )
+            .expect("retry_supervisor_cycle should succeed for latest failed cycle"),
+        )
+        .unwrap();
+        assert_eq!(retried.cycle_id, "cycle-failed");
+        assert_eq!(retried.status, WorkspaceSupervisorCycleStatus::Queued);
+        assert_eq!(retried.error, None);
+        assert_eq!(retried.finished_at, None);
+
+        let disabled = dispatch_rpc(
+            &app,
+            "disable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect("disable_supervisor_mode should succeed");
+        assert_eq!(disabled, Value::Null);
+
+        let final_snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
+        assert!(final_snapshot.view_state.supervisor.bindings.is_empty());
+    }
+
+    #[test]
+    fn disable_supervisor_mode_rpc_rejects_running_cycle() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-disable-running-rpc");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .expect("binding should exist");
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                supervisor: Some(WorkspaceSupervisorViewState {
+                    bindings: vec![WorkspaceSupervisorBinding {
+                        status: WorkspaceSupervisorStatus::Injecting,
+                        ..binding
+                    }],
+                    cycles: vec![],
+                }),
+                ..WorkspaceViewPatch::default()
+            },
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "disable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("running cycle should block disable");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_cycle_running");
+    }
+
+    #[test]
+    fn retry_supervisor_cycle_rpc_rejects_when_binding_is_paused() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-paused-rpc");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .expect("binding should exist");
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                supervisor: Some(WorkspaceSupervisorViewState {
+                    bindings: vec![WorkspaceSupervisorBinding {
+                        status: WorkspaceSupervisorStatus::Paused,
+                        ..binding
+                    }],
+                    cycles: vec![WorkspaceSupervisorCycle {
+                        cycle_id: "cycle-failed".to_string(),
+                        session_id: session_id.to_string(),
+                        source_turn_id: "turn-2".to_string(),
+                        objective_version: 1,
+                        supervisor_input: "prompt".to_string(),
+                        supervisor_reply: None,
+                        injection_message_id: None,
+                        status: WorkspaceSupervisorCycleStatus::Failed,
+                        error: Some("provider_error".to_string()),
+                        started_at: 2,
+                        finished_at: Some(3),
+                    }],
+                }),
+                ..WorkspaceViewPatch::default()
+            },
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "retry_supervisor_cycle",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("paused binding should block retry");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_paused");
+    }
+
+    #[test]
+    fn retry_supervisor_cycle_rpc_rejects_when_latest_cycle_is_not_failed() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-retry-reject");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .expect("binding should exist");
+        patch_workspace_view_state(
+            app.state(),
+            &workspace_id,
+            WorkspaceViewPatch {
+                supervisor: Some(WorkspaceSupervisorViewState {
+                    bindings: vec![binding],
+                    cycles: vec![
+                        WorkspaceSupervisorCycle {
+                            cycle_id: "cycle-older-failed".to_string(),
+                            session_id: session_id.to_string(),
+                            source_turn_id: "turn-2".to_string(),
+                            objective_version: 1,
+                            supervisor_input: "prompt".to_string(),
+                            supervisor_reply: None,
+                            injection_message_id: None,
+                            status: WorkspaceSupervisorCycleStatus::Failed,
+                            error: Some("provider_error".to_string()),
+                            started_at: 2,
+                            finished_at: Some(3),
+                        },
+                        WorkspaceSupervisorCycle {
+                            cycle_id: "cycle-latest-completed".to_string(),
+                            session_id: session_id.to_string(),
+                            source_turn_id: "turn-4".to_string(),
+                            objective_version: 1,
+                            supervisor_input: "prompt".to_string(),
+                            supervisor_reply: Some("done".to_string()),
+                            injection_message_id: Some("message-1".to_string()),
+                            status: WorkspaceSupervisorCycleStatus::Completed,
+                            error: None,
+                            started_at: 4,
+                            finished_at: Some(5),
+                        },
+                    ],
+                }),
+                ..WorkspaceViewPatch::default()
+            },
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "retry_supervisor_cycle",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("latest non-failed cycle should be rejected");
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_cycle_not_failed");
+    }
+
+    #[test]
+    fn enable_supervisor_mode_rpc_rejects_blank_objective() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-blank");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let error = dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": "slot-primary",
+                "provider": "claude",
+                "objective_text": "   ",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("blank objective should be rejected");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_objective_required");
+    }
+
+    #[test]
+    fn supervisor_rpcs_reject_missing_binding() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-missing-binding");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        for command in [
+            "update_supervisor_objective",
+            "pause_supervisor_mode",
+            "resume_supervisor_mode",
+            "disable_supervisor_mode",
+            "retry_supervisor_cycle",
+        ] {
+            let payload = match command {
+                "update_supervisor_objective" => json!({
+                    "workspace_id": workspace_id.clone(),
+                    "session_id": "slot-primary",
+                    "objective_text": "Updated objective.",
+                    "device_id": "device-a",
+                    "client_id": "client-a",
+                    "fencing_token": runtime.controller.fencing_token,
+                }),
+                _ => json!({
+                    "workspace_id": workspace_id.clone(),
+                    "session_id": "slot-primary",
+                    "device_id": "device-a",
+                    "client_id": "client-a",
+                    "fencing_token": runtime.controller.fencing_token,
+                }),
+            };
+            let error = dispatch_rpc(&app, command, payload, &authorized)
+                .expect_err("missing binding should be rejected");
+            assert_eq!(error.status, StatusCode::BAD_REQUEST, "{command}");
+            assert_eq!(error.error, "supervisor_binding_not_found", "{command}");
+        }
+    }
+
+    #[test]
+    fn enable_supervisor_mode_rpc_rejects_missing_session() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-missing-session");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        let error = dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": "slot-missing",
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("missing session should be rejected");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "session_not_found");
+    }
+
+    #[test]
+    fn enable_supervisor_mode_rpc_rejects_duplicate_binding() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-duplicate");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let payload = json!({
+            "workspace_id": workspace_id.clone(),
+            "session_id": "slot-primary",
+            "provider": "claude",
+            "objective_text": "Keep using xterm only.",
+            "device_id": "device-a",
+            "client_id": "client-a",
+            "fencing_token": runtime.controller.fencing_token,
+        });
+
+        dispatch_rpc(&app, "enable_supervisor_mode", payload.clone(), &authorized).unwrap();
+        let error = dispatch_rpc(&app, "enable_supervisor_mode", payload, &authorized)
+            .expect_err("duplicate binding should be rejected");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_binding_already_exists");
+    }
+
+    #[test]
+    fn resume_supervisor_mode_rpc_rejects_when_not_paused() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-resume-not-paused-rpc");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+
+        dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id.clone(),
+                "session_id": "slot-primary",
+                "provider": "claude",
+                "objective_text": "Keep using xterm only.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .unwrap();
+
+        let error = dispatch_rpc(
+            &app,
+            "resume_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": "slot-primary",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        )
+        .expect_err("resume should require paused status");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "supervisor_not_paused");
+    }
+
+    #[test]
+    fn enable_supervisor_mode_composes_prompt_and_sets_idle_status() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable");
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        let runtime = attach_controller(&app, &authorized, &workspace_id);
+        let session_id = "slot-primary";
+
+        let result = dispatch_rpc(
+            &app,
+            "enable_supervisor_mode",
+            json!({
+                "workspace_id": workspace_id,
+                "session_id": session_id,
+                "provider": "claude",
+                "objective_text": "Build supervisor mode v1. Use xterm only. Auto inject the reply.",
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": runtime.controller.fencing_token,
+            }),
+            &authorized,
+        );
+
+        assert!(result.is_ok());
+        let snapshot = workspace_snapshot(workspace_id.clone(), app.state()).unwrap();
+        let binding = snapshot
+            .view_state
+            .supervisor
+            .bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .expect("binding should exist");
+        assert_eq!(binding.status, WorkspaceSupervisorStatus::Idle);
+        assert!(binding.objective_prompt.contains("You are the supervisor"));
     }
 }

@@ -57,6 +57,7 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
   lastActiveAt: source.last_active_at,
   resumeId: source.resume_id ?? existing?.resumeId,
   unavailableReason: source.unavailable_reason ?? existing?.unavailableReason,
+  supervisor: existing?.supervisor,
 });
 
 type CreateDraftSessionArgs = {

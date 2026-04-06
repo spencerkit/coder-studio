@@ -16,22 +16,9 @@ import {
   applyWorkspaceRuntimeStateEvent,
 } from "../apps/web/src/shared/utils/workspace";
 import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
+import { defaultAppSettings } from "../apps/web/src/shared/app/settings-storage";
 
-const APP_SETTINGS = {
-  agentProvider: "claude" as const,
-  agentCommand: "claude",
-  idlePolicy: {
-    enabled: true,
-    idleMinutes: 10,
-    maxActive: 3,
-    pressure: true,
-  },
-  completionNotifications: {
-    enabled: true,
-    onlyWhenBackground: true,
-  },
-  terminalCompatibilityMode: "standard" as const,
-};
+const APP_SETTINGS = defaultAppSettings();
 
 const createRuntimeSnapshot = (controller: {
   workspace_id: string;
@@ -91,6 +78,10 @@ const createRuntimeSnapshot = (controller: {
         originalContent: "",
         modifiedContent: "",
         dirty: false,
+      },
+      supervisor: {
+        bindings: [],
+        cycles: [],
       },
     },
     terminals: [],
@@ -376,6 +367,70 @@ test("runtime snapshot hydrates session terminal bindings from runtime payload",
   );
 
   assert.equal(next.tabs[0]?.sessions[0]?.terminalId, "term-7");
+});
+
+test("runtime snapshot preserves runtime-bound draft session ids when backend snapshot is still empty", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-b",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-b",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        sessions: [],
+        view_state: {
+          active_session_id: "draft-remote",
+          active_pane_id: "pane-draft-remote",
+          active_terminal_id: "",
+          pane_layout: {
+            type: "leaf",
+            id: "pane-draft-remote",
+            session_id: "draft-remote",
+          },
+          file_preview: {
+            path: "",
+            content: "",
+            mode: "preview",
+            originalContent: "",
+            modifiedContent: "",
+            dirty: false,
+          },
+        },
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{ session_id: "draft-remote", terminal_id: "7" }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-b",
+    "client-b",
+  );
+
+  const draftSession = next.tabs[0]?.sessions[0];
+  assert.equal(draftSession?.id, "draft-remote");
+  assert.equal(draftSession?.isDraft, true);
+  assert.equal(next.tabs[0]?.activeSessionId, "draft-remote");
+  assert.equal(next.tabs[0]?.activePaneId, "pane-draft-remote");
+  assert.equal(draftSession?.terminalId, "term-7");
 });
 
 test("runtime state event applies session status patches without requiring a view patch", () => {

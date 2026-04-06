@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::infra::time::now_ts_ms;
 use crate::services::agent_client::AgentLaunchSpec;
 use crate::services::terminal::{create_terminal_runtime, TerminalCreateOptions};
 use crate::*;
@@ -215,33 +216,33 @@ pub(crate) fn session_runtime_start(
             .get(&binding_key)
             .copied()
     };
-    if let Some(existing_terminal_id) = existing_terminal_id {
-        let terminal_key = terminal_key(&params.workspace_id, existing_terminal_id);
-        let is_live = state
-            .terminals
-            .lock()
-            .map_err(|e| e.to_string())?
-            .contains_key(&terminal_key);
-        if is_live {
-            resume_debug_log(format!(
-                "session_runtime_start reused live terminal workspace_id={} session_id={} terminal_id={}",
-                params.workspace_id, params.session_id, existing_terminal_id
-            ));
-            return Ok(SessionRuntimeStartResult {
-                terminal_id: existing_terminal_id,
-                started: false,
-                boot_input: None,
-            });
-        }
-        let _ = unbind_session_runtime_by_terminal(existing_terminal_id, state);
-    }
 
     let (workspace_cwd, workspace_target) = workspace_access_context(state, &params.workspace_id)?;
     let session = crate::services::workspace::resolve_session_for_slot(
         state,
         &params.workspace_id,
         &params.session_id,
-    )?;
+    )
+    .or_else(|error| {
+        if params.session_id != "slot-primary" || error != "session_not_found" {
+            return Err(error);
+        }
+        let fallback_provider = load_or_default_app_settings(state)?.agent_defaults.provider;
+        let fallback_binding = WorkspaceSessionBinding {
+            session_id: params.session_id.clone(),
+            provider: fallback_provider,
+            mode: SessionMode::Branch,
+            resume_id: None,
+            title_snapshot: format!("Session {}", params.session_id),
+            last_seen_at: now_ts_ms(),
+        };
+        upsert_workspace_session_binding(state, &params.workspace_id, fallback_binding)?;
+        crate::services::workspace::resolve_session_for_slot(
+            state,
+            &params.workspace_id,
+            &params.session_id,
+        )
+    })?;
     let settings = load_or_default_app_settings(state)?;
     let adapter =
         crate::services::provider_registry::resolve_provider_adapter(session.provider.as_str())
@@ -260,6 +261,28 @@ pub(crate) fn session_runtime_start(
         launch_spec_display_command(&start_launch.launch_spec),
         launch_spec_display_command(&resume_launch.launch_spec),
     );
+
+    if let Some(existing_terminal_id) = existing_terminal_id {
+        let terminal_key = terminal_key(&params.workspace_id, existing_terminal_id);
+        let is_live = state
+            .terminals
+            .lock()
+            .map_err(|e| e.to_string())?
+            .contains_key(&terminal_key);
+        if is_live {
+            resume_debug_log(format!(
+                "session_runtime_start reused live terminal workspace_id={} session_id={} terminal_id={}",
+                params.workspace_id, params.session_id, existing_terminal_id
+            ));
+            return Ok(SessionRuntimeStartResult {
+                terminal_id: existing_terminal_id,
+                started: false,
+                boot_input: Some(format!("{boot_command}\r")),
+            });
+        }
+        let _ = unbind_session_runtime_by_terminal(existing_terminal_id, state);
+    }
+
     resume_debug_log(format!(
         "session_runtime_start prepared boot workspace_id={} session_id={} launch_mode={} resume_id={} boot_command={}",
         params.workspace_id,

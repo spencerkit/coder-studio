@@ -94,6 +94,8 @@ pub(crate) struct AppState {
     pub http_endpoint: Mutex<Option<String>>,
     pub artifact_caches: ArtifactCaches,
     pub transport_events: broadcast::Sender<TransportEvent>,
+    #[cfg(test)]
+    pub terminal_write_log: Mutex<Vec<(String, u64, String, crate::models::TerminalWriteOrigin)>>,
 }
 
 impl Default for AppState {
@@ -116,6 +118,8 @@ impl Default for AppState {
             http_endpoint: Mutex::new(None),
             artifact_caches: ArtifactCaches::default(),
             transport_events,
+            #[cfg(test)]
+            terminal_write_log: Mutex::new(Vec::new()),
         }
     }
 }

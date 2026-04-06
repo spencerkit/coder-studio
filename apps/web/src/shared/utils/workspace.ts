@@ -11,9 +11,12 @@ import {
   normalizeWorkbenchState,
   type FilePreview,
   type LayoutState,
+  type Session,
+  type SessionSupervisorState,
   type Tab,
   type Terminal,
   type WorkbenchState,
+  type WorkspaceSupervisorCycle,
 } from "../../state/workbench-core";
 import type {
   AgentLifecycleHistoryEntry,
@@ -33,12 +36,16 @@ import {
   isDraftSession,
 } from "./session";
 import { applySessionRuntimeBindings } from "../../features/workspace/session-runtime-bindings";
-import { mergeMonotonicTextSnapshot } from "./stream-snapshot";
 import {
   rememberWorkspaceViewBaseline,
   rememberWorkspaceViewBaselines,
   shouldIgnoreIncomingWorkspaceViewPatch,
 } from "../../features/workspace/workspace-view-persistence";
+import { mergeMonotonicTextSnapshot } from "./stream-snapshot";
+import {
+  findPaneSessionId,
+  remapPaneSession,
+} from "./panes";
 import {
   TERMINAL_STREAM_BUFFER_LIMIT,
 } from "../app/constants";
@@ -262,6 +269,48 @@ const normalizePaneLayout = (
   return createPaneLeaf(fallbackSessionId);
 };
 
+const mapBackendSupervisorCycle = (
+  cycle: WorkspaceSnapshot["view_state"]["supervisor"]["cycles"][number],
+): WorkspaceSupervisorCycle => ({
+  cycleId: cycle.cycle_id,
+  sessionId: cycle.session_id,
+  sourceTurnId: cycle.source_turn_id,
+  objectiveVersion: cycle.objective_version,
+  supervisorInput: cycle.supervisor_input,
+  supervisorReply: cycle.supervisor_reply ?? undefined,
+  injectionMessageId: cycle.injection_message_id ?? undefined,
+  status: cycle.status,
+  error: cycle.error ?? undefined,
+  startedAt: cycle.started_at,
+  finishedAt: cycle.finished_at ?? undefined,
+});
+
+const attachSupervisorState = (
+  session: Session,
+  viewState: WorkspaceSnapshot["view_state"] | WorkspaceRuntimeStateEvent["view_state"],
+): Session => {
+  const binding = viewState.supervisor.bindings.find((item) => item.session_id === session.id);
+  if (!binding) return session;
+  const latestCycle = [...viewState.supervisor.cycles]
+    .filter((cycle) => cycle.session_id === session.id)
+    .sort((a, b) => b.started_at - a.started_at)[0];
+  const supervisor: SessionSupervisorState = {
+    provider: binding.provider,
+    status: binding.status,
+    objectiveText: binding.objective_text,
+    objectivePrompt: binding.objective_prompt,
+    objectiveVersion: binding.objective_version,
+    autoInjectEnabled: binding.auto_inject_enabled,
+    pendingObjectiveText: binding.pending_objective_text ?? undefined,
+    pendingObjectiveVersion: binding.pending_objective_version ?? undefined,
+    latestCycle: latestCycle ? mapBackendSupervisorCycle(latestCycle) : undefined,
+  };
+  return {
+    ...session,
+    supervisor,
+  };
+};
+
 const samePaneLayout = (
   left: Tab["paneLayout"],
   right: Tab["paneLayout"],
@@ -322,11 +371,18 @@ export const createTabFromWorkspaceSnapshot = (
 ): Tab => {
   const backendSessions = snapshot.sessions.map((session) => {
     const current = existing?.sessions.find((item) => item.id === String(session.id));
-    return createSessionFromBackend(session, locale, current);
+    return attachSupervisorState(
+      createSessionFromBackend(session, locale, current),
+      snapshot.view_state,
+    );
   });
 
   const existingDraftSessions = existing?.sessions.filter((session) => isDraftSession(session)) ?? [];
   const existingSessions = existing?.sessions ?? [];
+  const emptySnapshotDraftSessionId = typeof snapshot.view_state.active_session_id === "string"
+    && snapshot.view_state.active_session_id.trim()
+    ? snapshot.view_state.active_session_id.trim()
+    : "1";
   const sessions = backendSessions.length > 0
     ? [...existingDraftSessions, ...backendSessions]
     : (
@@ -338,6 +394,9 @@ export const createTabFromWorkspaceSnapshot = (
               workspacePath: snapshot.workspace.project_path,
               branch: existing?.git.branch,
               provider: appSettings.agentDefaults.provider,
+              existing: {
+                id: emptySnapshotDraftSessionId,
+              } as Session,
             }),
           ]
     );
@@ -533,20 +592,63 @@ export const applyWorkspaceRuntimeSnapshot = (
   );
   return {
     ...next,
-    tabs: next.tabs.map((tab) => (
-      tab.id === runtimeSnapshot.snapshot.workspace.workspace_id
-        ? {
-            ...tab,
-            controller: mergeWorkspaceControllerState(tab.controller, incomingController),
-            sessions: applySessionRuntimeBindings(
-              tab.sessions,
-              runtimeSnapshot.session_runtime_bindings ?? [],
-            ),
-          }
-        : tab
-    )),
+    tabs: next.tabs.map((tab) => {
+      if (tab.id !== runtimeSnapshot.snapshot.workspace.workspace_id) {
+        return tab;
+      }
+      const boundSessions = applySessionRuntimeBindings(
+        tab.sessions,
+        runtimeSnapshot.session_runtime_bindings ?? [],
+      );
+      const bindingTerminalId = runtimeSnapshot.session_runtime_bindings?.find((binding) => (
+        binding.session_id === runtimeSnapshot.snapshot.view_state.active_session_id
+      ))?.terminal_id;
+      const activePaneSessionId = findPaneSessionId(tab.paneLayout, tab.activePaneId);
+      const nextActiveSessionId = runtimeSnapshot.snapshot.view_state.active_session_id;
+      const remapSourceSessionId = (
+        activePaneSessionId && tab.sessions.some((session) => session.id === activePaneSessionId)
+      )
+        ? activePaneSessionId
+        : tab.activeSessionId;
+      const shouldRemapDraftRuntimeBinding = (
+        runtimeSnapshot.snapshot.sessions.length === 0
+        && !!bindingTerminalId
+        && !!remapSourceSessionId
+        && remapSourceSessionId !== nextActiveSessionId
+        && !tab.sessions.some((session) => session.id === nextActiveSessionId)
+        && boundSessions.some((session) => session.id === remapSourceSessionId)
+      );
+
+      if (!shouldRemapDraftRuntimeBinding) {
+        return {
+          ...tab,
+          controller: mergeWorkspaceControllerState(tab.controller, incomingController),
+          sessions: boundSessions,
+        };
+      }
+
+      const remappedSessions = boundSessions.map((session) => (
+        session.id === remapSourceSessionId
+          ? {
+              ...session,
+              id: nextActiveSessionId,
+              isDraft: false,
+              terminalId: bindingTerminalId ? `term-${bindingTerminalId}` : session.terminalId,
+            }
+          : session
+      ));
+      return {
+        ...tab,
+        controller: mergeWorkspaceControllerState(tab.controller, incomingController),
+        sessions: remappedSessions,
+        activeSessionId: nextActiveSessionId,
+        activePaneId: runtimeSnapshot.snapshot.view_state.active_pane_id || tab.activePaneId,
+        paneLayout: remapPaneSession(tab.paneLayout, remapSourceSessionId, nextActiveSessionId),
+      };
+    }),
   };
 };
+
 
 export const applyWorkspaceControllerEvent = (
   current: WorkbenchState,
@@ -626,6 +728,15 @@ export const applyWorkspaceRuntimeStateEvent = (
     return {
       ...current,
       tabs,
+    };
+  }
+
+  const sessionsWithSupervisor = nextTab.sessions.map((session) => attachSupervisorState(session, viewState));
+  const sessionsChanged = sessionsWithSupervisor.some((session, index) => session !== nextTab.sessions[index]);
+  if (sessionsChanged) {
+    nextTab = {
+      ...nextTab,
+      sessions: sessionsWithSupervisor,
     };
   }
 
