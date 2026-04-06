@@ -8640,6 +8640,101 @@ pre.diff,
   justify-content: flex-end;
 }
 
+.supervisor-objective-dialog-card {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  border-radius: 10px !important;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-md) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.supervisor-objective-dialog-header {
+  padding: 16px 20px 12px;
+}
+
+.supervisor-objective-dialog-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.supervisor-objective-dialog-body {
+  padding: 0 20px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.supervisor-objective-dialog-body p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.supervisor-objective-dialog-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  resize: vertical;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-chip);
+  color: var(--text);
+  line-height: 1.6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.supervisor-objective-dialog-preview {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 86%, var(--bg) 14%);
+}
+
+.supervisor-objective-dialog-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.supervisor-objective-dialog-preview-code {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.supervisor-objective-dialog-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.supervisor-objective-dialog-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.supervisor-objective-dialog-footer {
+  padding: 12px 20px 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .worktree-modal-header {
   display: flex;
   align-items: flex-start;
@@ -9773,6 +9868,93 @@ pre.diff,
   opacity: 0.82;
 }
 
+.agent-pane-supervisor {
+  display: inline-flex;
+}
+
+.agent-pane-supervisor-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: min(300px, 44vw);
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, var(--accent) 12%), color-mix(in srgb, var(--surface-chip) 86%, var(--accent) 14%));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.agent-pane-supervisor-card[data-state="evaluating"] {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, var(--accent) 18%), color-mix(in srgb, var(--surface-chip) 78%, var(--accent) 22%));
+}
+
+.agent-pane-supervisor-card[data-state="injecting"] {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 82%, var(--accent) 18%), color-mix(in srgb, var(--surface-chip) 78%, var(--accent) 22%));
+}
+
+.agent-pane-supervisor-card[data-state="paused"] {
+  border-color: color-mix(in srgb, var(--text-tertiary) 30%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, var(--text-tertiary) 8%), color-mix(in srgb, var(--surface-chip) 88%, var(--text-tertiary) 12%));
+}
+
+.agent-pane-supervisor-card[data-state="error"] {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 86%, var(--danger) 14%), color-mix(in srgb, var(--surface-chip) 82%, var(--danger) 18%));
+}
+
+.agent-pane-supervisor-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.agent-pane-supervisor-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-pane-supervisor-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.agent-pane-supervisor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-pane-supervisor-status svg {
+  width: 13px;
+  height: 13px;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text) 30%);
+  flex-shrink: 0;
+}
+
+.agent-pane-supervisor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-subtle));
+}
+
 .pane-action {
   width: 20px;
   height: 20px;
@@ -9799,6 +9981,41 @@ pre.diff,
 .pane-action.close:hover {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.agent-supervisor-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-chip) 78%, var(--accent) 12%);
+}
+
+.agent-supervisor-banner-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agent-supervisor-banner-detail {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pane-action-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .session-top-history {

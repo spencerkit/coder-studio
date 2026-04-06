@@ -6,7 +6,7 @@ import type {
   TerminalCompatibilityMode,
 } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
-import { AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
+import { AgentSplitHorizontalIcon, AgentSplitVerticalIcon, BadgeCheckIcon, CirclePauseIcon, HeaderCloseIcon, MessageSquareIcon, PlayIcon, RefreshIcon, SquareIcon } from "../../components/icons";
 import { ShellTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
@@ -36,6 +36,12 @@ type AgentWorkspaceFeatureProps = {
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
+  onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
+  onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
+  onPauseSupervisor: (sessionId: string) => void;
+  onResumeSupervisor: (sessionId: string) => void;
+  onDisableSupervisor: (sessionId: string) => void;
+  onRetrySupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -67,6 +73,12 @@ type AgentPaneLeafProps = {
   onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
   onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
+  onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
+  onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
+  onPauseSupervisor: (sessionId: string) => void;
+  onResumeSupervisor: (sessionId: string) => void;
+  onDisableSupervisor: (sessionId: string) => void;
+  onRetrySupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -96,6 +108,12 @@ const AgentPaneLeaf = memo(({
   onDraftPaneModeChange,
   onStartDraftSession,
   onRestoreDraftSession,
+  onEnableSupervisor,
+  onEditSupervisorObjective,
+  onPauseSupervisor,
+  onResumeSupervisor,
+  onDisableSupervisor,
+  onRetrySupervisor,
   setAgentTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
@@ -163,6 +181,43 @@ const AgentPaneLeaf = memo(({
     onRemoveUnavailableSession(session.id);
   }, [onRemoveUnavailableSession, session.id]);
 
+  const supervisor = session.supervisor;
+  const supervisorStatusTone = (() => {
+    switch (supervisor?.status) {
+      case "evaluating":
+      case "injecting":
+        return "active";
+      case "paused":
+        return "muted";
+      case "error":
+        return "queue";
+      default:
+        return "info";
+    }
+  })();
+  const supervisorStatusLabel = supervisor ? `Supervisor ${supervisor.status}` : "Supervisor off";
+  const latestCycle = supervisor?.latestCycle;
+  const latestCycleSummary = latestCycle?.error
+    ?? latestCycle?.supervisorReply
+    ?? latestCycle?.supervisorInput
+    ?? "";
+  const handleEnableSupervisor = useCallback(() => {
+    onEnableSupervisor(session.id, session.provider);
+  }, [onEnableSupervisor, session.id, session.provider]);
+  const handleEditSupervisorObjective = useCallback(() => {
+    if (!supervisor) return;
+    onEditSupervisorObjective(session.id, supervisor.objectiveText);
+  }, [onEditSupervisorObjective, session.id, supervisor]);
+  const handlePauseSupervisor = useCallback(() => {
+    onPauseSupervisor(session.id);
+  }, [onPauseSupervisor, session.id]);
+  const handleResumeSupervisor = useCallback(() => {
+    onResumeSupervisor(session.id);
+  }, [onResumeSupervisor, session.id]);
+  const handleDisableSupervisor = useCallback(() => {
+    onDisableSupervisor(session.id);
+  }, [onDisableSupervisor, session.id]);
+
   return (
     <section
       className={`agent-pane-card ${isPaneActive ? "active" : ""}`}
@@ -185,6 +240,85 @@ const AgentPaneLeaf = memo(({
           <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
             {headerTag.label}
           </span>
+          <div className="agent-pane-supervisor">
+            <div className="agent-pane-supervisor-card" data-state={supervisor ? supervisor.status : "off"}>
+              <div className="agent-pane-supervisor-copy">
+                <div className="agent-pane-supervisor-label-row">
+                  <BadgeCheckIcon />
+                  <span className="agent-pane-supervisor-label">Supervisor</span>
+                  <span className={`agent-pane-state-tag ${supervisorStatusTone}`} data-tone={supervisorStatusTone}>
+                    {supervisorStatusLabel}
+                  </span>
+                </div>
+              </div>
+              <div className="agent-pane-supervisor-actions">
+                {supervisor ? (
+                  <>
+                    <button
+                      type="button"
+                      className="pane-action split"
+                      onClick={handleEditSupervisorObjective}
+                      title="Edit supervisor objective"
+                      aria-label="Edit supervisor objective"
+                    >
+                      <MessageSquareIcon />
+                    </button>
+                    {supervisor.status === "paused" ? (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handleResumeSupervisor}
+                        title="Resume supervisor"
+                        aria-label="Resume supervisor"
+                      >
+                        <PlayIcon />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handlePauseSupervisor}
+                        title="Pause supervisor"
+                        aria-label="Pause supervisor"
+                      >
+                        <CirclePauseIcon />
+                      </button>
+                    )}
+                    {latestCycle?.status === "failed" ? (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handleRetrySupervisor}
+                        title="Retry supervisor"
+                        aria-label="Retry supervisor"
+                      >
+                        <RefreshIcon />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="pane-action close"
+                      onClick={handleDisableSupervisor}
+                      title="Disable supervisor"
+                      aria-label="Disable supervisor"
+                    >
+                      <SquareIcon />
+                    </button>
+                  </>
+                ) : !session.isDraft ? (
+                  <button
+                    type="button"
+                    className="pane-action split"
+                    onClick={handleEnableSupervisor}
+                    title="Enable supervisor"
+                    aria-label="Enable supervisor"
+                  >
+                    <PlayIcon />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className="agent-pane-actions">
             <button
               type="button"
@@ -368,6 +502,12 @@ export const AgentWorkspaceFeature = ({
   onDraftPaneModeChange,
   onStartDraftSession,
   onRestoreDraftSession,
+  onEnableSupervisor,
+  onEditSupervisorObjective,
+  onPauseSupervisor,
+  onResumeSupervisor,
+  onDisableSupervisor,
+  onRetrySupervisor,
   setAgentTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
@@ -416,6 +556,12 @@ export const AgentWorkspaceFeature = ({
         onDraftPaneModeChange={onDraftPaneModeChange}
         onStartDraftSession={onStartDraftSession}
         onRestoreDraftSession={onRestoreDraftSession}
+        onEnableSupervisor={onEnableSupervisor}
+        onEditSupervisorObjective={onEditSupervisorObjective}
+        onPauseSupervisor={onPauseSupervisor}
+        onResumeSupervisor={onResumeSupervisor}
+        onDisableSupervisor={onDisableSupervisor}
+        onRetrySupervisor={onRetrySupervisor}
         setAgentTerminalRef={setAgentTerminalRef}
         onAgentTerminalData={onAgentTerminalData}
         onAgentTerminalSize={onAgentTerminalSize}

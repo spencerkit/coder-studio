@@ -152,6 +152,12 @@ import {
   getProviderRuntimePreview,
 } from "../../services/http/system.service";
 import {
+  enableSupervisorMode,
+  updateSupervisorObjective,
+  pauseSupervisorMode,
+  resumeSupervisorMode,
+  disableSupervisorMode,
+  retrySupervisorCycle,
   activateWorkspace as activateWorkspaceRequest,
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
@@ -200,6 +206,11 @@ import {
   parseNumericId,
   sessionCompletionRatio
 } from "../../shared/utils/session";
+import { normalizeSupervisorObjective } from "./supervisor-objective";
+import {
+  SupervisorObjectiveDialog,
+  type SupervisorObjectiveDialogMode,
+} from "./SupervisorObjectiveDialog";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
 import { ConfirmDialog, type ConfirmDialogState } from "../../components/ConfirmDialog";
 import type {
@@ -222,6 +233,15 @@ type WorkspaceScreenProps = {
   locale: Locale;
   appSettings: AppSettings;
   onOpenSettings: () => void;
+};
+
+type SupervisorObjectiveDialogState = {
+  visible: boolean;
+  mode: SupervisorObjectiveDialogMode;
+  sessionId: string | null;
+  provider: Session["provider"] | null;
+  currentObjective: string;
+  draftObjective: string;
 };
 
 const createInitialFolderBrowserState = (): FolderBrowserState => ({
@@ -349,6 +369,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     message: "",
     onConfirm: () => {},
     onCancel: () => {},
+  });
+  const [supervisorObjectiveDialog, setSupervisorObjectiveDialog] = useState<SupervisorObjectiveDialogState>({
+    visible: false,
+    mode: "enable",
+    sessionId: null,
+    provider: null,
+    currentObjective: "",
+    draftObjective: "",
   });
   const t = useMemo(() => createTranslator(locale), [locale]);
   const hasRestoreDraftModeSelected = useMemo(
@@ -891,8 +919,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     if (!bootstrapReady || !hasRestoreDraftModeSelected) return;
-    void loadHistoryRecords();
-  }, [bootstrapReady, hasRestoreDraftModeSelected, loadHistoryRecords]);
+    void refreshHistoryRecords();
+  }, [bootstrapReady, hasRestoreDraftModeSelected, refreshHistoryRecords]);
 
   useEffect(() => {
     if (!bootstrapReady) return;
@@ -1038,13 +1066,13 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
   );
-  const activeTabSessionIdsKey = useMemo(
-    () => activeTab.sessions.map((session) => session.id).join("|"),
+  const mountedProviderIdentities = useMemo(
+    () => new Set(
+      activeTab.sessions
+        .filter((session) => !isDraftSession(session) && !!session.resumeId)
+        .map((session) => `${session.provider}:${session.resumeId}`)
+    ),
     [activeTab.sessions]
-  );
-  const mountedSessionIds = useMemo(
-    () => new Set(collectPaneLeaves(activeTab.paneLayout).map((leaf) => leaf.sessionId)),
-    [activeTab.paneLayout]
   );
   const historyGroups = useMemo(
     () => groupSessionHistory(historyRecords, activeTab.id),
@@ -1053,10 +1081,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const restoreCandidates = useMemo(
     () => listRestoreCandidatesForWorkspace({
       workspaceId: activeTab.id,
-      mountedSessionIds,
+      mountedProviders: mountedProviderIdentities,
       records: historyRecords,
     }),
-    [activeTab.id, activeTabSessionIdsKey, historyRecords, mountedSessionIds]
+    [activeTab.id, historyRecords, mountedProviderIdentities]
   );
   const findSessionForHistoryRecord = useCallback((
     tab: Tab | undefined,
@@ -1237,7 +1265,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         activePaneId: nextActivePaneId
       };
     });
-  }, [activeTab.id, activeTabSessionIdsKey]);
+  }, [activeTab.id, activeTab.sessions]);
 
   const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
     try {
@@ -1293,6 +1321,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     onCloseAgentPane: closeAgentPaneSession,
     onNewSession: createNewSessionInActiveTab,
     onSwitchSession: switchSessionInActiveTab,
+    refreshTabFromBackend,
     restoreSessionIntoPane,
     syncSessionPatch,
     touchSession
@@ -1310,6 +1339,144 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!guardWorkspaceMutation("switch_session")) return;
     await createNewSessionInActiveTab();
   };
+
+  const runSupervisorMutation = useCallback(async (
+    sessionId: string,
+    operation: () => Promise<unknown>,
+    fallbackMessage: string,
+  ) => {
+    if (!guardWorkspaceMutation("session_update", activeTab.id, sessionId)) return false;
+    const result = await withServiceFallback(async () => {
+      await operation();
+      return true;
+    }, false);
+    if (!result) {
+      addToast({
+        id: createId("toast"),
+        text: fallbackMessage,
+        sessionId,
+      });
+      return false;
+    }
+    await refreshTabFromBackend(activeTab.id);
+    return true;
+  }, [activeTab.id, addToast, guardWorkspaceMutation, refreshTabFromBackend]);
+
+  const closeSupervisorObjectiveDialog = useCallback(() => {
+    setSupervisorObjectiveDialog((current) => ({
+      ...current,
+      visible: false,
+      sessionId: null,
+      provider: null,
+      currentObjective: "",
+      draftObjective: "",
+    }));
+  }, []);
+
+  const submitSupervisorObjectiveDialog = useCallback(async () => {
+    const sessionId = supervisorObjectiveDialog.sessionId;
+    if (!sessionId) return;
+
+    if (supervisorObjectiveDialog.mode === "disable") {
+      await runSupervisorMutation(
+        sessionId,
+        () => disableSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+        "Failed to disable supervisor mode.",
+      );
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    const objectiveText = normalizeSupervisorObjective(supervisorObjectiveDialog.draftObjective);
+    if (!objectiveText) return;
+
+    if (supervisorObjectiveDialog.mode === "edit" && objectiveText === supervisorObjectiveDialog.currentObjective.trim()) {
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    if (supervisorObjectiveDialog.mode === "enable") {
+      const provider = supervisorObjectiveDialog.provider;
+      if (!provider) return;
+      await runSupervisorMutation(
+        sessionId,
+        () => enableSupervisorMode(activeTab.id, activeTab.controller, sessionId, provider, objectiveText),
+        "Failed to enable supervisor mode.",
+      );
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    await runSupervisorMutation(
+      sessionId,
+      () => updateSupervisorObjective(activeTab.id, activeTab.controller, sessionId, objectiveText),
+      "Failed to update supervisor objective.",
+    );
+    closeSupervisorObjectiveDialog();
+  }, [
+    activeTab.controller,
+    activeTab.id,
+    closeSupervisorObjectiveDialog,
+    runSupervisorMutation,
+    supervisorObjectiveDialog,
+  ]);
+
+  const onEnableSupervisor = useCallback(async (sessionId: string, provider: Session["provider"]) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "enable",
+      sessionId,
+      provider,
+      currentObjective: "",
+      draftObjective: "Keep the business agent focused on the current task.",
+    });
+  }, []);
+
+  const onEditSupervisorObjective = useCallback(async (sessionId: string, currentObjective: string) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "edit",
+      sessionId,
+      provider: null,
+      currentObjective,
+      draftObjective: currentObjective,
+    });
+  }, []);
+
+  const onPauseSupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => pauseSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+      "Failed to pause supervisor mode.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onResumeSupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => resumeSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+      "Failed to resume supervisor mode.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onDisableSupervisor = useCallback(async (sessionId: string) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "disable",
+      sessionId,
+      provider: null,
+      currentObjective: "",
+      draftObjective: "",
+    });
+  }, []);
+
+  const onRetrySupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => retrySupervisorCycle(activeTab.id, activeTab.controller, sessionId),
+      "Failed to retry supervisor cycle.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
 
   const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
     activeTabId: activeTab.id,
@@ -1549,8 +1716,18 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const handleHistoryRecordSelect = async (record: SessionHistoryRecord) => {
     const targetTab = await ensureWorkspaceReady(record.workspaceId);
     if (!targetTab) return;
+    const readyTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
+    if (!canMutateWorkspace(readyTab.controller, "agent_input")) {
+      addToast({
+        id: createId("toast"),
+        text: t("workspaceReadOnlyToast"),
+        sessionId: activeSession.id,
+      });
+      setHistoryOpen(false);
+      return;
+    }
 
-    const currentTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
+    const currentTab = readyTab;
     const restorePaneId = currentTab.activePaneId;
     const action = selectHistoryPrimaryAction(record);
     const mountedSession = findSessionForHistoryRecord(currentTab, record);
@@ -1943,8 +2120,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
       const restoredSession = currentTab?.sessions.find((session) => session.id === String(restored.id))
         ?? findSessionForHistoryRecord(currentTab, record);
-      if (currentTab && restoredSession && !restoredSession.unavailableReason) {
-        void startAgentSessionInPane(paneId, currentTab, restoredSession);
+      const restoredPaneId = currentTab
+        ? findPaneIdBySessionId(currentTab.paneLayout, String(restored.id))
+        : null;
+      if (currentTab && restoredSession && restoredPaneId && !restoredSession.unavailableReason) {
+        void startAgentSessionInPane(restoredPaneId, currentTab, restoredSession);
       }
       void refreshHistoryRecordsIfNeeded();
     });
@@ -2810,6 +2990,24 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         void onStartDraftSession(paneId, provider);
       }}
       onRestoreDraftSession={onRestoreDraftSession}
+      onEnableSupervisor={(sessionId, provider) => {
+        void onEnableSupervisor(sessionId, provider);
+      }}
+      onEditSupervisorObjective={(sessionId, currentObjective) => {
+        void onEditSupervisorObjective(sessionId, currentObjective);
+      }}
+      onPauseSupervisor={(sessionId) => {
+        void onPauseSupervisor(sessionId);
+      }}
+      onResumeSupervisor={(sessionId) => {
+        void onResumeSupervisor(sessionId);
+      }}
+      onDisableSupervisor={(sessionId) => {
+        void onDisableSupervisor(sessionId);
+      }}
+      onRetrySupervisor={(sessionId) => {
+        void onRetrySupervisor(sessionId);
+      }}
       setAgentTerminalRef={registerAgentTerminalRef}
       onAgentTerminalData={(paneId, data) => {
         void onAgentTerminalData(paneId, data);
@@ -3053,6 +3251,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           />
 
           <ConfirmDialog state={confirmDialog} locale={locale} t={t} />
+          <SupervisorObjectiveDialog
+            visible={supervisorObjectiveDialog.visible}
+            mode={supervisorObjectiveDialog.mode}
+            objectiveText={supervisorObjectiveDialog.draftObjective}
+            onObjectiveTextChange={(value) => {
+              setSupervisorObjectiveDialog((current) => ({
+                ...current,
+                draftObjective: value,
+              }));
+            }}
+            onCancel={closeSupervisorObjectiveDialog}
+            onConfirm={() => {
+              void submitSupervisorObjectiveDialog();
+            }}
+          />
 
           {showWelcomeScreen ? (
             <WorkspaceWelcomeScreen

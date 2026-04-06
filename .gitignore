@@ -23,6 +23,8 @@ playwright-report/
 # Local provider config
 .claude/
 .codex/
+.codex
+.superpowers/
 
 # Logs
 *.log
