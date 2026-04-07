@@ -296,7 +296,7 @@ export type AgentEvent = {
 export type AgentLifecycleEvent = {
   workspace_id: string;
   session_id: string;
-  kind: "session_started" | "turn_waiting" | "tool_started" | "tool_finished" | "approval_required" | "turn_completed" | "session_ended";
+  kind: "session_started" | "turn_completed";
   source_event: string;
   data: string;
 };

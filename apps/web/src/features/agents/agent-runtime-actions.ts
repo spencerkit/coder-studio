@@ -377,12 +377,6 @@ export const noteAgentStartupLifecycle = (
   if (kind === "session_started") {
     current.sawReady = true;
     current.lastEventAt = Date.now();
-    return;
-  }
-
-  if (kind === "session_ended") {
-    current.exited = true;
-    current.lastEventAt = Date.now();
   }
 };
 

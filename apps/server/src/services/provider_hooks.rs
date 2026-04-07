@@ -366,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_hook_processor_persists_resume_id_and_runtime_status() {
+    fn shared_hook_processor_persists_resume_id_without_changing_status_and_stop_drives_idle() {
         let app = test_app();
         let workspace = launch_workspace_record(
             app.state(),
@@ -404,6 +404,9 @@ mod tests {
         )
         .expect("view state should track the session slot");
 
+        let session_id = session.id.clone();
+        let original = load_session(app.state(), &workspace_id, &session_id).unwrap();
+
         let session_start_payload = json!({
             "workspace_id": workspace_id,
             "session_id": session.id.to_string(),
@@ -416,10 +419,9 @@ mod tests {
         let normalized = process_provider_hook_payload(&app, session_start_payload).unwrap();
         assert_eq!(normalized.kind, "session_started");
 
-        let session_id = session.id.clone();
-        let running = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(running.resume_id.as_deref(), Some("codex-resume-1"));
-        assert_eq!(running.status, SessionStatus::Interrupted);
+        let after_start = load_session(app.state(), &workspace_id, &session_id).unwrap();
+        assert_eq!(after_start.resume_id.as_deref(), Some("codex-resume-1"));
+        assert_eq!(after_start.status, original.status);
         let view_state = load_view_state_for_test(&app, &workspace_id);
         assert_eq!(view_state.session_bindings.len(), 1);
         assert_eq!(view_state.session_bindings[0].session_id, session_id);
@@ -431,19 +433,7 @@ mod tests {
             view_state.session_bindings[0].resume_id.as_deref(),
             Some("codex-resume-1")
         );
-        assert_eq!(view_state.session_bindings[0].title_snapshot, running.title);
-
-        let waiting_payload = json!({
-            "workspace_id": workspace_id,
-            "session_id": session.id.to_string(),
-            "payload": {
-                "hook_event_name": "UserPromptSubmit"
-            }
-        });
-
-        process_provider_hook_payload(&app, waiting_payload).unwrap();
-        let waiting = load_session(app.state(), &workspace_id, &session_id).unwrap();
-        assert_eq!(waiting.status, SessionStatus::Interrupted);
+        assert_eq!(view_state.session_bindings[0].title_snapshot, after_start.title);
 
         set_session_status(
             app.state(),
@@ -475,6 +465,49 @@ mod tests {
         assert_eq!(payload["workspace_id"], workspace_id);
         assert_eq!(payload["session_state"]["session_id"], session_id);
         assert_eq!(payload["session_state"]["status"], "idle");
+    }
+
+    #[test]
+    fn shared_hook_processor_rejects_removed_provider_lifecycle_events() {
+        let app = test_app();
+        let workspace = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: "/tmp/ws-hook-unsupported".to_string(),
+                target: ExecTarget::Native,
+            },
+            "/tmp/ws-hook-unsupported".to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        let state: State<AppState> = app.state();
+        let workspace_id = workspace.snapshot.workspace.workspace_id;
+        let session = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            ProviderId::claude(),
+            state,
+        )
+        .unwrap();
+
+        for hook_event_name in [
+            "SessionEnd",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "Notification",
+        ] {
+            let payload = json!({
+                "workspace_id": workspace_id,
+                "session_id": session.id.to_string(),
+                "payload": {
+                    "hook_event_name": hook_event_name
+                }
+            });
+            let error = process_provider_hook_payload(&app, payload).unwrap_err();
+            assert_eq!(error, "unsupported_hook_payload");
+        }
     }
 
     #[test]

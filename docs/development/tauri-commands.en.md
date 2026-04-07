@@ -136,12 +136,7 @@ Related event channels:
 `agent://lifecycle` currently carries these normalized kinds:
 
 - `session_started`
-- `turn_waiting`
-- `tool_started`
-- `tool_finished`
-- `approval_required`
 - `turn_completed`
-- `session_ended`
 
 ## 10. How to Read Command Capability
 

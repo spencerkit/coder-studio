@@ -6,7 +6,7 @@
 - 当前本机版本：`codex-cli 0.118.0`
 - 已在真实 CLI 上验证通过的链路：
   - 在 `~/.codex/config.toml` 含 `[features] codex_hooks = true` 时，`codex ...` 可以触发全局 `~/.codex/hooks.json`
-  - `SessionStart` / `UserPromptSubmit` hook payload 会真实包含 `session_id`
+  - `SessionStart` hook payload 会真实包含 `session_id`
   - `codex resume <session_id> ...` 会继续写回同一个 `session_id`
   - 当前后端采用的参数顺序 `codex resume <id> ...` 对 Codex CLI 0.118.0 是可工作的
   - 新 workspace 现在不会再被后端预写一个默认 `claude` session，首个 draft session 的 provider 选择可以真实生效

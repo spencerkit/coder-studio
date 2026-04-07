@@ -136,12 +136,7 @@
 其中 `agent://lifecycle` 当前会承载这些 kind：
 
 - `session_started`
-- `turn_waiting`
-- `tool_started`
-- `tool_finished`
-- `approval_required`
 - `turn_completed`
-- `session_ended`
 
 ## 10. 文档使用原则
 

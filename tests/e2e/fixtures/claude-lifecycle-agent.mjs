@@ -68,13 +68,13 @@ const main = async () => {
   process.stdout.write(`argv:${argv.join(" ")}\n`);
   await postHook("SessionStart");
   await sleep(80);
-  await postHook("PreToolUse", { tool_name: "Edit" });
   process.stdout.write("fixture-running\n");
   await sleep(runningDelayMs);
   await postHook("Stop");
   process.stdout.write("fixture-stopped\n");
   await sleep(stoppedDelayMs);
 };
+
 
 main().catch((error) => {
   console.error(String(error));

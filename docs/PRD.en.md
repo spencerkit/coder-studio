@@ -117,16 +117,12 @@ The current product position is:
 ### 5.5 Claude-Specific Enhancements
 
 - The app automatically writes or updates Claude hook configuration in `~/.claude/settings.json` for the current runtime environment.
-- Claude lifecycle events are received and mapped into app-level session updates.
+- Provider lifecycle events are received and mapped into app-level session updates.
 - The normalized lifecycle categories currently include:
   - `session_started`
-  - `turn_waiting`
-  - `tool_started`
-  - `tool_finished`
-  - `approval_required`
   - `turn_completed`
-  - `session_ended`
-- Claude session IDs are stored so later launches can resume the same Claude conversation context.
+- `session_started` is only used to persist the provider session ID (`resume_id`) for future resume flows.
+- `turn_completed` is the authoritative signal that a turn finished, which returns the session to idle and triggers completion follow-up logic.
 
 ### 5.6 Code Panel
 

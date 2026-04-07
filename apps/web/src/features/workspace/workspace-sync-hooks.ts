@@ -206,10 +206,6 @@ export const useWorkspaceTransportSync = ({
     const unsubscribe = subscribeAgentLifecycleEvents(({ workspace_id, session_id, kind, data }: AgentLifecycleEvent) => {
       noteAgentStartupLifecycle(agentRuntimeRefs, workspace_id, session_id, kind);
 
-      if (kind === "session_ended") {
-        clearAgentRuntimeTracking(agentRuntimeRefs, workspace_id, session_id);
-      }
-
       const resumeId = readResumeId(data);
       if (resumeId) {
         let changed = false;

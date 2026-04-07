@@ -42,16 +42,15 @@ test("armAgentStartupGate stores startup state under the session runtime key", (
   });
 });
 
-test("noteAgentStartupLifecycle marks ready and exit transitions on the tracked runtime", () => {
+test("noteAgentStartupLifecycle marks ready transition on the tracked runtime", () => {
   const refs = createRuntimeRefs();
 
   armAgentStartupGate(refs, "ws-1", "session-1");
   noteAgentStartupLifecycle(refs, "ws-1", "session-1", "session_started");
-  noteAgentStartupLifecycle(refs, "ws-1", "session-1", "session_ended");
 
   const state = refs.agentStartupStateRef.current.get(agentRuntimeKey("ws-1", "session-1"));
   assert.equal(state?.sawReady, true);
-  assert.equal(state?.exited, true);
+  assert.equal(state?.exited, false);
 });
 
 test("clearAgentRuntimeTracking removes tracked startup state for the session", () => {

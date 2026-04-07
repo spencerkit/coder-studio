@@ -106,9 +106,6 @@ fn normalize_codex_lifecycle(payload: &Value) -> Option<(&'static str, String)> 
     let hook_event = payload.get("hook_event_name")?.as_str()?;
     let normalized = match hook_event {
         "SessionStart" => "session_started",
-        "UserPromptSubmit" => "turn_waiting",
-        "PreToolUse" => "tool_started",
-        "PostToolUse" | "PostToolUseFailure" => "tool_finished",
         "Stop" => "turn_completed",
         _ => return None,
     };
@@ -682,9 +679,6 @@ pub(crate) fn ensure_codex_hook_settings(cwd: &str, target: &ExecTarget) -> Resu
     let command = build_codex_hook_command();
 
     upsert_hook_groups(hooks_obj, "SessionStart", Some("startup|resume"), &command);
-    upsert_hook_groups(hooks_obj, "UserPromptSubmit", None, &command);
-    upsert_hook_groups(hooks_obj, "PreToolUse", Some("Bash"), &command);
-    upsert_hook_groups(hooks_obj, "PostToolUse", Some("Bash"), &command);
     upsert_hook_groups(hooks_obj, "Stop", None, &command);
 
     let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -884,6 +878,39 @@ mod tests {
     }
 
     #[test]
+    fn codex_adapter_only_normalizes_session_start_and_stop() {
+        let session_start = normalize_codex_lifecycle_event(&json!({
+            "hook_event_name": "SessionStart",
+            "session_id": "codex-session-1"
+        }))
+        .expect("session start should normalize");
+        assert_eq!(session_start.kind, "session_started");
+        assert_eq!(session_start.source_event, "SessionStart");
+
+        let stop = normalize_codex_lifecycle_event(&json!({
+            "hook_event_name": "Stop"
+        }))
+        .expect("stop should normalize");
+        assert_eq!(stop.kind, "turn_completed");
+        assert_eq!(stop.source_event, "Stop");
+
+        for removed_hook in [
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+        ] {
+            assert!(
+                normalize_codex_lifecycle_event(&json!({
+                    "hook_event_name": removed_hook
+                }))
+                .is_none(),
+                "{removed_hook} should no longer normalize"
+            );
+        }
+    }
+
+    #[test]
     fn ensure_codex_hook_settings_write_global_hooks_without_workspace_file() {
         let workspace_root = unique_temp_dir("codex-workspace");
         let codex_home = unique_temp_dir("codex-home");
@@ -930,6 +957,13 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("--coder-studio-agent-hook"));
+        assert_eq!(
+            parsed["hooks"]["Stop"][0]["hooks"][0]["type"],
+            Value::String("command".into())
+        );
+        assert!(parsed["hooks"].get("UserPromptSubmit").is_none());
+        assert!(parsed["hooks"].get("PreToolUse").is_none());
+        assert!(parsed["hooks"].get("PostToolUse").is_none());
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(codex_home);

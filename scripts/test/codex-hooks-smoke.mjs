@@ -165,16 +165,6 @@ async function main() {
           ],
         },
       ],
-      UserPromptSubmit: [
-        {
-          hooks: [
-            {
-              type: 'command',
-              command: `/bin/sh -lc 'cat >> ${hookLog}; printf "\\n" >> ${hookLog}'`,
-            },
-          ],
-        },
-      ],
     },
   };
 
@@ -198,19 +188,16 @@ async function main() {
     try {
       startState = await waitFor(async () => {
         const entries = await readJsonLines(hookLog);
-        const promptEntry = entries.find((entry) => entry.hook_event_name === 'UserPromptSubmit' && entry.prompt === startPrompt);
-        if (!promptEntry) {
-          return null;
-        }
         const sessionStartEntry = entries.find(
-          (entry) => entry.hook_event_name === 'SessionStart'
-            && entry.source === 'startup'
-            && entry.session_id === promptEntry.session_id,
+          (entry) => entry.hook_event_name === 'SessionStart' && entry.source === 'startup',
         );
-        if (!sessionStartEntry) {
+        if (!sessionStartEntry?.session_id) {
           return null;
         }
-        return { sessionId: promptEntry.session_id, transcriptPath: promptEntry.transcript_path };
+        return {
+          sessionId: sessionStartEntry.session_id,
+          transcriptPath: sessionStartEntry.transcript_path,
+        };
       }, options.timeoutMs, 'startup hook payload');
     } catch (error) {
       throw new Error(`${error.message}\n\nLast transcript:\n${startRun.getTranscript()}`.trimEnd());
@@ -232,10 +219,6 @@ async function main() {
     try {
       await waitFor(async () => {
         const entries = await readJsonLines(hookLog);
-        const promptEntry = entries.find((entry) => entry.hook_event_name === 'UserPromptSubmit' && entry.prompt === resumePrompt);
-        if (!promptEntry || promptEntry.session_id !== startState.sessionId) {
-          return null;
-        }
         const sessionStartEntry = entries.find(
           (entry) => entry.hook_event_name === 'SessionStart'
             && entry.source === 'resume'

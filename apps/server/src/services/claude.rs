@@ -90,12 +90,7 @@ fn normalize_claude_lifecycle(payload: &Value) -> Option<(&'static str, String)>
     let hook_event = payload.get("hook_event_name")?.as_str()?;
     let normalized = match hook_event {
         "SessionStart" => "session_started",
-        "UserPromptSubmit" => "turn_waiting",
-        "PreToolUse" => "tool_started",
-        "PostToolUse" | "PostToolUseFailure" => "tool_finished",
-        "Notification" => "approval_required",
         "Stop" => "turn_completed",
-        "SessionEnd" => "session_ended",
         _ => return None,
     };
     Some((normalized, hook_event.to_string()))
@@ -683,17 +678,7 @@ pub(crate) fn ensure_claude_hook_settings(cwd: &str, _target: &ExecTarget) -> Re
     let command = build_claude_hook_command();
 
     upsert_hook_groups(hooks_obj, "SessionStart", Some(".*"), &command);
-    upsert_hook_groups(hooks_obj, "UserPromptSubmit", None, &command);
-    upsert_hook_groups(hooks_obj, "PreToolUse", Some(".*"), &command);
-    upsert_hook_groups(hooks_obj, "PostToolUse", Some(".*"), &command);
-    upsert_hook_groups(
-        hooks_obj,
-        "Notification",
-        Some("permission_prompt"),
-        &command,
-    );
     upsert_hook_groups(hooks_obj, "Stop", None, &command);
-    upsert_hook_groups(hooks_obj, "SessionEnd", Some(".*"), &command);
 
     let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
     let settings_dir = home_root.join(".claude");
@@ -817,6 +802,41 @@ mod tests {
     }
 
     #[test]
+    fn claude_adapter_only_normalizes_session_start_and_stop() {
+        let session_start = normalize_claude_lifecycle_event(&json!({
+            "hook_event_name": "SessionStart",
+            "session_id": "claude-session-1"
+        }))
+        .expect("session start should normalize");
+        assert_eq!(session_start.kind, "session_started");
+        assert_eq!(session_start.source_event, "SessionStart");
+
+        let stop = normalize_claude_lifecycle_event(&json!({
+            "hook_event_name": "Stop"
+        }))
+        .expect("stop should normalize");
+        assert_eq!(stop.kind, "turn_completed");
+        assert_eq!(stop.source_event, "Stop");
+
+        for removed_hook in [
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "Notification",
+            "SessionEnd",
+        ] {
+            assert!(
+                normalize_claude_lifecycle_event(&json!({
+                    "hook_event_name": removed_hook
+                }))
+                .is_none(),
+                "{removed_hook} should no longer normalize"
+            );
+        }
+    }
+
+    #[test]
     fn ensure_claude_hook_settings_write_global_settings_without_workspace_file() {
         let workspace_root = unique_temp_dir("claude-workspace");
         let claude_home = unique_temp_dir("claude-home");
@@ -846,14 +866,17 @@ mod tests {
         let raw = fs::read_to_string(claude_dir.join("settings.json")).unwrap();
         let parsed: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed["permissions"]["allow"], json!(["Read"]));
-        assert_eq!(
-            parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"],
-            Value::String("command".into())
-        );
+        assert_eq!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"], Value::String("command".into()));
         assert!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap()
             .contains("--coder-studio-agent-hook"));
+        assert_eq!(parsed["hooks"]["Stop"][0]["hooks"][0]["type"], Value::String("command".into()));
+        assert!(parsed["hooks"].get("UserPromptSubmit").is_none());
+        assert!(parsed["hooks"].get("PreToolUse").is_none());
+        assert!(parsed["hooks"].get("PostToolUse").is_none());
+        assert!(parsed["hooks"].get("Notification").is_none());
+        assert!(parsed["hooks"].get("SessionEnd").is_none());
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(claude_home);

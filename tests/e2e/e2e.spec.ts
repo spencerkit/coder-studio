@@ -1014,15 +1014,6 @@ test('background turn_completed sends a completion reminder notification', async
     await emitLifecycleEvent(page, {
       workspace_id: pair.background.workspace.workspace_id,
       session_id: backgroundSessionId,
-      kind: 'tool_started',
-      source_event: 'PreToolUse',
-      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
-    });
-    await page.waitForTimeout(150);
-
-    await emitLifecycleEvent(page, {
-      workspace_id: pair.background.workspace.workspace_id,
-      session_id: backgroundSessionId,
       kind: 'turn_completed',
       source_event: 'Stop',
       data: JSON.stringify({ hook_event_name: 'Stop' }),
