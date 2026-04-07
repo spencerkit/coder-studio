@@ -5,11 +5,11 @@ use crate::models::{
 };
 use crate::*;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(test)]
 use std::thread::ThreadId;
-use std::collections::HashMap;
 
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
@@ -1303,7 +1303,9 @@ fn build_history_from_conn(conn: &Connection) -> Result<Vec<SessionHistoryRecord
             let Some(resume_id) = binding.resume_id.as_ref() else {
                 continue;
             };
-            if provider_sessions_by_identity.contains_key(&(binding.provider.clone(), resume_id.clone())) {
+            if provider_sessions_by_identity
+                .contains_key(&(binding.provider.clone(), resume_id.clone()))
+            {
                 continue;
             }
             records.push(SessionHistoryRecord {
@@ -1589,7 +1591,6 @@ pub(crate) fn read_with_db_call_count() -> usize {
     WITH_DB_CALL_COUNT.load(Ordering::SeqCst)
 }
 
-
 pub(crate) fn workbench_bootstrap(
     state: State<'_, AppState>,
     device_id: Option<&str>,
@@ -1615,7 +1616,9 @@ pub(crate) fn load_workspace_slot_session(
     with_db(state, |conn| {
         let workspace = load_workspace_row(conn, workspace_id)?;
         let mut view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
-            Ok::<WorkspaceViewState, String>(default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()))
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
         })?;
         let Some(binding_index) = view_state
             .session_bindings
@@ -1703,14 +1706,12 @@ pub(crate) fn remove_workspace_bindings_for_provider_session(
             .session_bindings
             .iter()
             .filter(|binding| {
-                binding.provider == *provider
-                    && binding.resume_id.as_deref() == Some(resume_id)
+                binding.provider == *provider && binding.resume_id.as_deref() == Some(resume_id)
             })
             .map(|binding| binding.session_id.clone())
             .collect::<Vec<_>>();
         view_state.session_bindings.retain(|binding| {
-            !(binding.provider == *provider
-                && binding.resume_id.as_deref() == Some(resume_id))
+            !(binding.provider == *provider && binding.resume_id.as_deref() == Some(resume_id))
         });
         save_view_state_to_conn(conn, workspace_id, &view_state)?;
         Ok(removed_session_ids)
@@ -1795,7 +1796,6 @@ pub(crate) fn launch_workspace_record_scoped(
         })
     })
 }
-
 
 pub(crate) fn load_session_history_records(
     state: State<'_, AppState>,
@@ -2047,7 +2047,9 @@ pub(crate) fn load_session<S: ToString>(
     with_db(state, |conn| {
         let session_id = session_id.to_string();
         let view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
-            Ok::<WorkspaceViewState, String>(default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()))
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
         })?;
         let binding = view_state
             .session_bindings
@@ -2144,7 +2146,6 @@ mod tests {
         })
         .to_string()
     }
-
 
     #[test]
     fn init_db_does_not_create_workspace_sessions_table() {
@@ -2271,14 +2272,26 @@ mod tests {
         let persisted_value: Value = serde_json::from_str(&persisted_payload).unwrap();
 
         assert_eq!(serialized["session_bindings"].as_array().unwrap().len(), 1);
-        assert_eq!(serialized["session_bindings"][0]["session_id"], "slot-alpha");
+        assert_eq!(
+            serialized["session_bindings"][0]["session_id"],
+            "slot-alpha"
+        );
         assert_eq!(serialized["session_bindings"][0]["provider"], "codex");
         assert_eq!(serialized["session_bindings"][0]["mode"], "branch");
-        assert_eq!(serialized["session_bindings"][0]["resume_id"], "resume-alpha");
-        assert_eq!(persisted_value["session_bindings"][0]["session_id"], "slot-alpha");
+        assert_eq!(
+            serialized["session_bindings"][0]["resume_id"],
+            "resume-alpha"
+        );
+        assert_eq!(
+            persisted_value["session_bindings"][0]["session_id"],
+            "slot-alpha"
+        );
         assert_eq!(persisted_value["session_bindings"][0]["provider"], "codex");
         assert_eq!(persisted_value["session_bindings"][0]["mode"], "branch");
-        assert_eq!(persisted_value["session_bindings"][0]["resume_id"], "resume-alpha");
+        assert_eq!(
+            persisted_value["session_bindings"][0]["resume_id"],
+            "resume-alpha"
+        );
     }
 
     #[test]
@@ -2680,9 +2693,7 @@ mod tests {
         )
         .unwrap();
 
-        let history = with_claude_home(&claude_home, || {
-            build_history_from_conn(&conn).unwrap()
-        });
+        let history = with_claude_home(&claude_home, || build_history_from_conn(&conn).unwrap());
 
         assert_eq!(history.len(), 2);
         let visible = history

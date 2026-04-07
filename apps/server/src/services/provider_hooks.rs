@@ -433,7 +433,10 @@ mod tests {
             view_state.session_bindings[0].resume_id.as_deref(),
             Some("codex-resume-1")
         );
-        assert_eq!(view_state.session_bindings[0].title_snapshot, after_start.title);
+        assert_eq!(
+            view_state.session_bindings[0].title_snapshot,
+            after_start.title
+        );
 
         set_session_status(
             app.state(),

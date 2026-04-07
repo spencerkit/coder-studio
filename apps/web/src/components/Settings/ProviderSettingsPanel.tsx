@@ -1,5 +1,5 @@
 import type { ChangeEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Translator } from "../../i18n";
 import { getProviderManifest } from "../../features/providers/registry";
@@ -14,6 +14,10 @@ type ProviderSettingsPanelProps = {
   providerId: string;
   settings: AppSettings;
   onChange: (updater: AppSettingsUpdater) => void;
+  onInjectHooks: (providerId: string) => Promise<void>;
+  canInjectHooks?: boolean;
+  injectHooksHint?: string;
+  injectionContextKey: string;
   t: Translator;
 };
 
@@ -116,17 +120,28 @@ export const ProviderSettingsPanel = ({
   providerId,
   settings,
   onChange,
+  onInjectHooks,
+  canInjectHooks = true,
+  injectHooksHint,
+  injectionContextKey,
   t,
 }: ProviderSettingsPanelProps) => {
   const manifest = getProviderManifest(providerId);
   const providerSettings = resolveProviderGlobalSettings(settings, providerId);
   const [fieldDrafts, setFieldDrafts] = useState<Record<string, string>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [injectState, setInjectState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [injectError, setInjectError] = useState("");
+  const latestInjectionContextKeyRef = useRef(injectionContextKey);
+
+  latestInjectionContextKeyRef.current = injectionContextKey;
 
   useEffect(() => {
     setFieldDrafts({});
     setFieldErrors({});
-  }, [providerId]);
+    setInjectState("idle");
+    setInjectError("");
+  }, [providerId, injectionContextKey]);
 
   const commitValue = (path: readonly string[], value: unknown) => {
     onChange((current) => applyProviderGlobalPatch(current, providerId, path, value));
@@ -170,6 +185,26 @@ export const ProviderSettingsPanel = ({
 
     clearFieldError(draftKey);
     commitValue(field.path, parsed.parsed);
+  };
+
+  const onInjectProviderHooks = async () => {
+    const requestContextKey = latestInjectionContextKeyRef.current;
+    setInjectState("loading");
+    setInjectError("");
+
+    try {
+      await onInjectHooks(providerId);
+      if (latestInjectionContextKeyRef.current !== requestContextKey) {
+        return;
+      }
+      setInjectState("success");
+    } catch (error) {
+      if (latestInjectionContextKeyRef.current !== requestContextKey) {
+        return;
+      }
+      setInjectState("error");
+      setInjectError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const renderFieldRow = (
@@ -306,6 +341,40 @@ export const ProviderSettingsPanel = ({
         <div className="provider-settings-summary-body">
           <span className="provider-settings-summary-badge">{manifest.badgeLabel}</span>
           <p className="provider-settings-summary-note">{t("settingsProviderSummaryHint")}</p>
+        </div>
+      </section>
+      <section className="settings-section-slab provider-settings-section" data-testid={`provider-settings-${providerId}-actions`}>
+        <header className="settings-section-header">
+          <div className="settings-section-copy">
+            <h2 className="settings-section-title">{t("injectHooks")}</h2>
+            <p className="settings-section-description">
+              {injectState === "error"
+                ? injectError
+                : (injectHooksHint ?? t("injectHooksHint"))}
+            </p>
+          </div>
+        </header>
+        <div className="settings-section-body">
+          <div className="settings-row" data-testid={`provider-settings-${providerId}-hook-actions`}>
+            <FieldCopy
+              label={t("injectHooks")}
+              hint={injectState === "error"
+                ? injectError
+                : (injectHooksHint ?? t("injectHooksHint"))}
+            />
+            <div className="settings-row-control">
+              <button
+                type="button"
+                className="settings-inline-button"
+                onClick={onInjectProviderHooks}
+                disabled={injectState === "loading" || !canInjectHooks}
+                data-testid={`provider-settings-${providerId}-inject-hooks`}
+              >
+                {injectState === "loading" ? t("injectingHooks") : t("injectHooks")}
+              </button>
+              {injectState === "success" ? <span>{t("injectHooksSuccess")}</span> : null}
+            </div>
+          </div>
         </div>
       </section>
       {manifest.settingsSections.map((section) => (

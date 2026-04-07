@@ -16,6 +16,7 @@ import {
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
 } from '../apps/web/src/services/http/settings.service';
+import { installProviderHooks } from '../apps/web/src/services/http/provider-hooks.service';
 
 test('persistConfirmedAppSettings returns the backend-confirmed settings on success', async () => {
   const confirmed = defaultAppSettings();
@@ -405,4 +406,84 @@ test('hydrateConfirmedAppSettings syncs an explicit locale preference when backe
   assert.equal(persistedLocale, 'zh');
   assert.equal(hydrated.settings.general.locale, 'zh');
   assert.equal(hydrated.localeExplicit, true);
+});
+
+test('installProviderHooks rejects missing workspace context before issuing a request', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls: Array<{ input: unknown; init: unknown }> = [];
+
+  globalThis.fetch = (async (input, init) => {
+    fetchCalls.push({ input, init });
+    return new Response(JSON.stringify({ ok: true, data: {} }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => installProviderHooks('claude', '', { type: 'native' }),
+      /active workspace/i,
+    );
+    assert.equal(fetchCalls.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('installProviderHooks calls the provider hook injection RPC with the selected provider', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+
+  Object.defineProperty(globalThis, 'window', {
+    value: {
+      location: {
+        origin: 'http://127.0.0.1:4173',
+        hostname: '127.0.0.1',
+        port: '4173',
+        search: '',
+      },
+    },
+    configurable: true,
+  });
+
+  globalThis.fetch = (async (input, init) => {
+    calls.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
+    });
+    return new Response(JSON.stringify({
+      ok: true,
+      data: {
+        provider: 'claude',
+        status: 'installed',
+      },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await installProviderHooks('claude', '/workspace/demo', { type: 'native' });
+
+    assert.deepEqual(result, {
+      provider: 'claude',
+      status: 'installed',
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!.url, /\/api\/rpc\/provider_hooks_install/);
+    assert.deepEqual(calls[0]!.body, {
+      provider: 'claude',
+      cwd: '/workspace/demo',
+      target: { type: 'native' },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(globalThis, 'window', {
+      value: originalWindow,
+      configurable: true,
+    });
+  }
 });

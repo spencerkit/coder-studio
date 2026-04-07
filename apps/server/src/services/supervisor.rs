@@ -4,7 +4,9 @@ fn load_supervisor_view_state(
     state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkspaceSupervisorViewState, String> {
-    Ok(load_workspace_snapshot(state, workspace_id)?.view_state.supervisor)
+    Ok(load_workspace_snapshot(state, workspace_id)?
+        .view_state
+        .supervisor)
 }
 
 fn save_supervisor_view_state(
@@ -27,7 +29,10 @@ fn replace_binding(
     binding: WorkspaceSupervisorBinding,
 ) -> WorkspaceSupervisorViewState {
     let mut bindings = supervisor.bindings.clone();
-    if let Some(index) = bindings.iter().position(|item| item.session_id == binding.session_id) {
+    if let Some(index) = bindings
+        .iter()
+        .position(|item| item.session_id == binding.session_id)
+    {
         bindings[index] = binding;
     } else {
         bindings.push(binding);
@@ -69,7 +74,10 @@ fn replace_cycle(
     cycle: WorkspaceSupervisorCycle,
 ) -> WorkspaceSupervisorViewState {
     let mut cycles = supervisor.cycles.clone();
-    if let Some(index) = cycles.iter().position(|item| item.cycle_id == cycle.cycle_id) {
+    if let Some(index) = cycles
+        .iter()
+        .position(|item| item.cycle_id == cycle.cycle_id)
+    {
         cycles[index] = cycle;
     } else {
         cycles.push(cycle);
@@ -98,11 +106,13 @@ fn apply_pending_or_active_objective(
     objective_prompt: String,
     now: i64,
 ) -> WorkspaceSupervisorBinding {
-    let is_cycle_running = matches!(binding.status, WorkspaceSupervisorStatus::Evaluating | WorkspaceSupervisorStatus::Injecting)
-        || matches!(
-            binding.pending_objective_version,
-            Some(version) if version > binding.objective_version
-        );
+    let is_cycle_running = matches!(
+        binding.status,
+        WorkspaceSupervisorStatus::Evaluating | WorkspaceSupervisorStatus::Injecting
+    ) || matches!(
+        binding.pending_objective_version,
+        Some(version) if version > binding.objective_version
+    );
 
     if is_cycle_running {
         WorkspaceSupervisorBinding {
@@ -147,7 +157,8 @@ pub(crate) fn enable_supervisor_mode(
     objective_text: &str,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceSupervisorBinding, String> {
-    let session = crate::services::workspace::resolve_session_for_slot(state, workspace_id, session_id)?;
+    let session =
+        crate::services::workspace::resolve_session_for_slot(state, workspace_id, session_id)?;
     let objective_prompt = compose_objective_prompt(objective_text)?;
     let supervisor = load_supervisor_view_state(state, workspace_id)?;
     if supervisor
@@ -186,7 +197,8 @@ pub(crate) fn update_supervisor_objective(
     let objective_prompt = compose_objective_prompt(objective_text)?;
     let supervisor = load_supervisor_view_state(state, workspace_id)?;
     let binding = binding_for_session(&supervisor, session_id)?;
-    let updated_binding = apply_pending_or_active_objective(&binding, objective_text, objective_prompt, now_ts());
+    let updated_binding =
+        apply_pending_or_active_objective(&binding, objective_text, objective_prompt, now_ts());
     let updated = replace_binding(&supervisor, updated_binding.clone());
     save_supervisor_view_state(state, workspace_id, updated)?;
     Ok(updated_binding)
@@ -383,21 +395,15 @@ fn persist_failed_cycle(
 ) -> Result<(), String> {
     let finished_at = now_ts();
     let supervisor = load_supervisor_view_state(state, workspace_id)?;
-    let failed_binding = finalize_binding_after_cycle(
-        binding,
-        WorkspaceSupervisorStatus::Error,
-        finished_at,
-    );
+    let failed_binding =
+        finalize_binding_after_cycle(binding, WorkspaceSupervisorStatus::Error, finished_at);
     let failed_cycle = WorkspaceSupervisorCycle {
         status: WorkspaceSupervisorCycleStatus::Failed,
         error: Some(error.to_string()),
         finished_at: Some(finished_at),
         ..cycle.clone()
     };
-    let updated = replace_cycle(
-        &replace_binding(&supervisor, failed_binding),
-        failed_cycle,
-    );
+    let updated = replace_cycle(&replace_binding(&supervisor, failed_binding), failed_cycle);
     save_supervisor_view_state(state, workspace_id, updated).map(|_| ())
 }
 
@@ -459,9 +465,9 @@ pub(crate) fn handle_supervisor_turn_completed(
     let reply = (|| -> Result<String, String> {
         let (workspace_cwd, workspace_target) = workspace_access_context(state, workspace_id)?;
         let settings = load_or_default_app_settings(state)?;
-        let adapter = crate::services::provider_registry::resolve_provider_adapter(binding.provider.as_str())
-            .ok_or_else(|| format!("unknown_provider:{}", binding.provider.as_str()))?;
-        adapter.ensure_workspace_integration(&workspace_cwd, &workspace_target)?;
+        let adapter =
+            crate::services::provider_registry::resolve_provider_adapter(binding.provider.as_str())
+                .ok_or_else(|| format!("unknown_provider:{}", binding.provider.as_str()))?;
         let launch = adapter.build_supervisor_invoke(&settings, &workspace_target)?;
         crate::services::agent_client::run_one_shot_prompt(
             &launch.launch_spec,
@@ -504,11 +510,8 @@ pub(crate) fn handle_supervisor_turn_completed(
 
     let finished_at = now_ts();
     let supervisor = load_supervisor_view_state(state, workspace_id)?;
-    let updated_binding = finalize_binding_after_cycle(
-        &binding,
-        WorkspaceSupervisorStatus::Idle,
-        finished_at,
-    );
+    let updated_binding =
+        finalize_binding_after_cycle(&binding, WorkspaceSupervisorStatus::Idle, finished_at);
     let completed_cycle = WorkspaceSupervisorCycle {
         supervisor_reply: Some(trimmed_reply.to_string()),
         injection_message_id: Some(format!("terminal:{terminal_id}")),
@@ -550,14 +553,10 @@ pub(crate) fn bind_terminal_for_session_for_test(
     session_id: &str,
     terminal_id: u64,
 ) {
-    state
-        .session_runtime_bindings
-        .lock()
-        .unwrap()
-        .insert(
-            crate::services::session_runtime::session_runtime_key(workspace_id, session_id),
-            terminal_id,
-        );
+    state.session_runtime_bindings.lock().unwrap().insert(
+        crate::services::session_runtime::session_runtime_key(workspace_id, session_id),
+        terminal_id,
+    );
     state
         .terminal_runtime_bindings
         .lock()
@@ -572,13 +571,7 @@ pub(crate) fn seed_supervisor_binding_for_test(
     session_id: &str,
     objective_text: &str,
 ) {
-    enable_supervisor_mode(
-        workspace_id,
-        session_id,
-        objective_text,
-        state,
-    )
-    .unwrap();
+    enable_supervisor_mode(workspace_id, session_id, objective_text, state).unwrap();
 }
 
 #[cfg(test)]
@@ -647,6 +640,22 @@ mod tests {
         result.snapshot.workspace.workspace_id
     }
 
+    fn seed_slot_primary_session(app: &AppHandle, workspace_id: &str) {
+        upsert_workspace_session_binding(
+            app.state(),
+            workspace_id,
+            WorkspaceSessionBinding {
+                session_id: "slot-primary".to_string(),
+                provider: AgentProvider::claude(),
+                mode: SessionMode::Branch,
+                resume_id: None,
+                title_snapshot: "Session slot-primary".to_string(),
+                last_seen_at: now_ts(),
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn enable_supervisor_mode_rejects_missing_session() {
         let app = test_app();
@@ -667,6 +676,7 @@ mod tests {
     fn enable_supervisor_mode_rejects_duplicate_binding() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-duplicate-binding");
+        seed_slot_primary_session(&app, &workspace_id);
         enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -728,6 +738,7 @@ mod tests {
     fn update_supervisor_objective_marks_pending_when_binding_is_evaluating() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-pending-evaluating");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -761,7 +772,10 @@ mod tests {
 
         assert_eq!(updated.objective_text, enabled.objective_text);
         assert_eq!(updated.objective_version, enabled.objective_version);
-        assert_eq!(updated.pending_objective_text.as_deref(), Some("Use Claude only in v1."));
+        assert_eq!(
+            updated.pending_objective_text.as_deref(),
+            Some("Use Claude only in v1.")
+        );
         assert!(updated
             .pending_objective_prompt
             .as_deref()
@@ -776,6 +790,7 @@ mod tests {
     fn pause_supervisor_mode_rejects_running_cycle() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-pause-running");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -808,6 +823,7 @@ mod tests {
     fn resume_supervisor_mode_rejects_when_not_paused() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-resume-not-paused");
+        seed_slot_primary_session(&app, &workspace_id);
         enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -825,6 +841,7 @@ mod tests {
     fn pause_and_resume_supervisor_mode_update_binding_status() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-pause-resume");
+        seed_slot_primary_session(&app, &workspace_id);
         enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -844,6 +861,7 @@ mod tests {
     fn disable_supervisor_mode_rejects_running_cycle() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-disable-running");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -876,6 +894,7 @@ mod tests {
     fn disable_supervisor_mode_removes_binding() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-disable");
+        seed_slot_primary_session(&app, &workspace_id);
         enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -893,6 +912,7 @@ mod tests {
     fn retry_supervisor_cycle_queues_latest_failed_cycle() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-latest-failed");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -917,7 +937,8 @@ mod tests {
             4,
         );
 
-        let retried = retry_supervisor_cycle(&app, &workspace_id, "slot-primary", app.state()).unwrap();
+        let retried =
+            retry_supervisor_cycle(&app, &workspace_id, "slot-primary", app.state()).unwrap();
         assert_eq!(retried.cycle_id, "cycle-latest-failed");
         assert_eq!(retried.status, WorkspaceSupervisorCycleStatus::Queued);
         assert_eq!(retried.error, None);
@@ -944,6 +965,7 @@ mod tests {
     fn retry_supervisor_cycle_rejects_when_binding_is_running() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-running");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -988,6 +1010,7 @@ mod tests {
     fn retry_supervisor_cycle_rejects_when_binding_is_paused() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-paused");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -1032,6 +1055,7 @@ mod tests {
     fn retry_supervisor_cycle_rejects_when_latest_cycle_did_not_fail() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-nonfailed-latest");
+        seed_slot_primary_session(&app, &workspace_id);
         let enabled = enable_supervisor_mode(
             &workspace_id,
             "slot-primary",
@@ -1141,9 +1165,15 @@ mod tests {
 
         assert_eq!(error, "terminal_not_found");
         let snapshot = load_workspace_snapshot(app.state(), &workspace_id).unwrap();
-        assert_eq!(snapshot.view_state.supervisor.bindings[0].status, WorkspaceSupervisorStatus::Error);
+        assert_eq!(
+            snapshot.view_state.supervisor.bindings[0].status,
+            WorkspaceSupervisorStatus::Error
+        );
         assert_eq!(snapshot.view_state.supervisor.cycles.len(), 1);
-        assert_eq!(snapshot.view_state.supervisor.cycles[0].status, WorkspaceSupervisorCycleStatus::Failed);
+        assert_eq!(
+            snapshot.view_state.supervisor.cycles[0].status,
+            WorkspaceSupervisorCycleStatus::Failed
+        );
         assert_eq!(
             snapshot.view_state.supervisor.cycles[0].error.as_deref(),
             Some("terminal_not_found")
@@ -1190,6 +1220,9 @@ mod tests {
             snapshot.view_state.supervisor.cycles[0].status,
             WorkspaceSupervisorCycleStatus::Injected
         );
-        assert_eq!(snapshot.view_state.supervisor.bindings[0].status, WorkspaceSupervisorStatus::Idle);
+        assert_eq!(
+            snapshot.view_state.supervisor.bindings[0].status,
+            WorkspaceSupervisorStatus::Idle
+        );
     }
 }

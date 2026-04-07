@@ -1557,7 +1557,8 @@ mod tests {
     #[test]
     fn workspace_runtime_attach_keeps_bound_terminal_after_runtime_exits_naturally() {
         let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-natural-exit");
+        let workspace_id =
+            launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-natural-exit");
         let session = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -1579,7 +1580,13 @@ mod tests {
         let terminal_key = format!("{workspace_id}:{}", started.terminal_id);
         let mut exited = false;
         for _ in 0..80 {
-            if !app.state().terminals.lock().unwrap().contains_key(&terminal_key) {
+            if !app
+                .state()
+                .terminals
+                .lock()
+                .unwrap()
+                .contains_key(&terminal_key)
+            {
                 exited = true;
                 break;
             }

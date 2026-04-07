@@ -212,6 +212,15 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         self.build_start(settings, target)
     }
 
+    fn hooks_installed(&self) -> bool {
+        current_claude_home_root()
+            .and_then(|home_root| {
+                std::fs::read_to_string(home_root.join(".claude").join("settings.json")).ok()
+            })
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .is_some_and(|root| claude_hooks_installed(&root))
+    }
+
     fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String> {
         ensure_claude_hook_settings(cwd, target)
     }
@@ -252,6 +261,20 @@ fn is_coder_studio_hook_group(group: &Value) -> bool {
             })
         })
         .unwrap_or(false)
+}
+
+fn claude_hooks_installed(root: &Value) -> bool {
+    let Some(hooks) = root.get("hooks").and_then(Value::as_object) else {
+        return false;
+    };
+
+    ["SessionStart", "Stop"].into_iter().all(|event| {
+        hooks
+            .get(event)
+            .and_then(Value::as_array)
+            .map(|groups| groups.iter().any(is_coder_studio_hook_group))
+            .unwrap_or(false)
+    })
 }
 
 fn build_hook_group(command: &str, matcher: Option<&str>) -> Value {
@@ -837,6 +860,70 @@ mod tests {
     }
 
     #[test]
+    fn claude_hook_detection_requires_session_start_and_stop() {
+        let config = json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }],
+                "Notification": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        });
+
+        assert!(claude_hooks_installed(&config));
+        assert!(!claude_hooks_installed(&json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+        assert!(!claude_hooks_installed(&json!({
+            "hooks": {
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+        assert!(!claude_hooks_installed(&json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "echo not-coder-studio"
+                    }]
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+    }
+
+    #[test]
     fn ensure_claude_hook_settings_write_global_settings_without_workspace_file() {
         let workspace_root = unique_temp_dir("claude-workspace");
         let claude_home = unique_temp_dir("claude-home");
@@ -866,12 +953,18 @@ mod tests {
         let raw = fs::read_to_string(claude_dir.join("settings.json")).unwrap();
         let parsed: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed["permissions"]["allow"], json!(["Read"]));
-        assert_eq!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"], Value::String("command".into()));
+        assert_eq!(
+            parsed["hooks"]["SessionStart"][0]["hooks"][0]["type"],
+            Value::String("command".into())
+        );
         assert!(parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap()
             .contains("--coder-studio-agent-hook"));
-        assert_eq!(parsed["hooks"]["Stop"][0]["hooks"][0]["type"], Value::String("command".into()));
+        assert_eq!(
+            parsed["hooks"]["Stop"][0]["hooks"][0]["type"],
+            Value::String("command".into())
+        );
         assert!(parsed["hooks"].get("UserPromptSubmit").is_none());
         assert!(parsed["hooks"].get("PreToolUse").is_none());
         assert!(parsed["hooks"].get("PostToolUse").is_none());

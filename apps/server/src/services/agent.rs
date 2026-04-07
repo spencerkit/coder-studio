@@ -183,7 +183,6 @@ pub(crate) fn agent_start(
         None => adapter.build_start(&settings, &agent_target)?,
     };
     let launch_spec = launch.launch_spec;
-    adapter.ensure_workspace_integration(&agent_cwd, &agent_target)?;
 
     let (command, program, args) = match launch_spec {
         crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
@@ -220,12 +219,6 @@ pub(crate) fn agent_start(
     for (key, value) in launch.runtime_env {
         cmd.env(key, value);
     }
-    let app_bin = current_app_bin_for_target(&agent_target)?;
-    let hook_endpoint = current_hook_endpoint(&app)?;
-    cmd.env("CODER_STUDIO_APP_BIN", app_bin);
-    cmd.env("CODER_STUDIO_HOOK_ENDPOINT", hook_endpoint);
-    cmd.env("CODER_STUDIO_WORKSPACE_ID", workspace_id.clone());
-    cmd.env("CODER_STUDIO_SESSION_ID", session_id.clone());
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
         let raw = e.to_string();

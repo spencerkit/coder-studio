@@ -20,6 +20,10 @@ type SettingsProps = {
   onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
   onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
   onProviderSettingsChange: (updater: AppSettingsUpdater) => void;
+  onInjectProviderHooks: (providerId: string) => Promise<void>;
+  canInjectProviderHooks?: boolean;
+  injectProviderHooksHint?: string;
+  injectionContextKey: string;
   onSelectLocale: (locale: Locale) => void;
   t: Translator;
 };
@@ -105,6 +109,10 @@ export const Settings = ({
   onAgentDefaultsChange,
   onSettingsIdlePolicyChange,
   onProviderSettingsChange,
+  onInjectProviderHooks,
+  canInjectProviderHooks = true,
+  injectProviderHooksHint,
+  injectionContextKey,
   onSelectLocale,
   t,
 }: SettingsProps) => {
@@ -337,6 +345,10 @@ export const Settings = ({
                   providerId={activeProviderId ?? ""}
                   settings={settingsDraft}
                   onChange={onProviderSettingsChange}
+                  onInjectHooks={onInjectProviderHooks}
+                  canInjectHooks={canInjectProviderHooks}
+                  injectHooksHint={injectProviderHooksHint}
+                  injectionContextKey={injectionContextKey}
                   t={t}
                 />
               ) : (

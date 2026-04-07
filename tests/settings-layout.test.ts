@@ -19,9 +19,13 @@ test('settings page declares the workspace panel header and section slab structu
   assert.match(source, /settingsProviderSummaryHint/);
 });
 
-test('settings page groups general and appearance content into named sections', async () => {
+test('settings page groups general and appearance content into named sections and wires provider hook injection callbacks', async () => {
   const source = await fs.readFile(
     new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),
+    'utf8',
+  );
+  const screenSource = await fs.readFile(
+    new URL('../apps/web/src/features/settings/SettingsScreen.tsx', import.meta.url),
     'utf8',
   );
 
@@ -32,6 +36,46 @@ test('settings page groups general and appearance content into named sections', 
   assert.match(source, /settings-section-suspend-strategy/);
   assert.match(source, /settings-section-notifications/);
   assert.match(source, /settings-section-appearance/);
+  assert.match(source, /onInjectProviderHooks/);
+  assert.match(source, /canInjectProviderHooks/);
+  assert.match(source, /injectProviderHooksHint/);
+  assert.match(source, /<ProviderSettingsPanel[\s\S]*onInjectHooks=\{onInjectProviderHooks\}/);
+  assert.match(screenSource, /installProviderHooks/);
+  assert.match(screenSource, /if \(!activeWorkspaceProject\) \{/);
+  assert.match(screenSource, /throw new Error\(t\("injectHooksWorkspaceRequired"\)\)/);
+  assert.doesNotMatch(screenSource, /activeTab\?\.project\?\.path \?\? "\."/);
+  assert.doesNotMatch(screenSource, /activeTab\?\.project\?\.target \?\? \{ type: "native" \}/);
+});
+
+test('provider settings panel exposes a single hook action section ahead of provider-specific sections', async () => {
+  const providerSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+
+  const actionsSectionMatches = providerSource.match(/provider-settings-\$\{providerId\}-actions/g) ?? [];
+  const hookRowMatches = providerSource.match(/provider-settings-\$\{providerId\}-hook-actions/g) ?? [];
+  const injectButtonMatches = providerSource.match(/provider-settings-\$\{providerId\}-inject-hooks/g) ?? [];
+  const sectionLoopIndex = providerSource.indexOf('{manifest.settingsSections.map((section) => (');
+  const actionsSectionIndex = providerSource.indexOf('provider-settings-${providerId}-actions');
+
+  assert.equal(actionsSectionMatches.length, 1);
+  assert.equal(hookRowMatches.length, 1);
+  assert.equal(injectButtonMatches.length, 1);
+  assert.ok(actionsSectionIndex >= 0);
+  assert.ok(sectionLoopIndex > actionsSectionIndex);
+});
+
+test('provider settings panel supports disabling hook injection with an explicit unavailable hint', async () => {
+  const providerSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(providerSource, /canInjectHooks\?: boolean/);
+  assert.match(providerSource, /injectHooksHint\?: string/);
+  assert.match(providerSource, /disabled=\{injectState === "loading" \|\| !canInjectHooks\}/);
+  assert.match(providerSource, /injectHooksHint \?\? t\("injectHooksHint"\)/);
 });
 
 test('provider settings panel uses shared section and row structure', async () => {
@@ -71,7 +115,7 @@ test('provider settings panel keeps multiline field draft state instead of refor
   assert.match(providerSource, /value=\{fieldDrafts\[field\.id\] \?\? envMapToText\(value\)\}/);
 });
 
-test('provider settings panel exposes runtime summary, section slabs, and multiline row variants', async () => {
+test('provider settings panel exposes runtime summary, section slabs, multiline rows, and hook injection action selectors', async () => {
   const providerSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
     'utf8',
@@ -82,16 +126,48 @@ test('provider settings panel exposes runtime summary, section slabs, and multil
   assert.match(providerSource, /settings-section-header/);
   assert.match(providerSource, /settings-row--multiline/);
   assert.match(providerSource, /provider-settings-textarea/);
+  assert.match(providerSource, /provider-settings-\$\{providerId\}-hook-actions/);
+  assert.match(providerSource, /provider-settings-\$\{providerId\}-inject-hooks/);
+  assert.match(providerSource, /injectHooks/);
+  assert.match(providerSource, /injectingHooks/);
+  assert.match(providerSource, /injectHooksSuccess/);
 });
 
-test('provider settings panel only resets draft state when the selected provider changes', async () => {
+test('provider settings panel resets injection feedback when the workspace-scoped injection context changes', async () => {
+  const providerSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  const settingsSource = await fs.readFile(
+    new URL('../apps/web/src/components/Settings/Settings.tsx', import.meta.url),
+    'utf8',
+  );
+  const screenSource = await fs.readFile(
+    new URL('../apps/web/src/features/settings/SettingsScreen.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(settingsSource, /injectionContextKey=/);
+  assert.match(screenSource, /const providerInjectionContextKey = \[/);
+  assert.match(screenSource, /activeWorkspaceProject\?\.path \?\? "no-workspace"/);
+  assert.match(screenSource, /activeWorkspaceProject\?\.target\.type \?\? "native"/);
+  assert.match(screenSource, /activeWorkspaceProject\?\.target\.type === "wsl" \? \(activeWorkspaceProject\?\.target\.distro \?\? ""\) : ""/);
+  assert.match(providerSource, /injectionContextKey: string;/);
+  assert.match(providerSource, /\}, \[providerId, injectionContextKey\]\);/);
+});
+
+test('provider settings panel ignores stale async injection completions after the context changes', async () => {
   const providerSource = await fs.readFile(
     new URL('../apps/web/src/components/Settings/ProviderSettingsPanel.tsx', import.meta.url),
     'utf8',
   );
 
-  assert.match(providerSource, /\}, \[providerId\]\);/);
-  assert.doesNotMatch(providerSource, /settings\.providers/);
+  assert.match(providerSource, /useRef/);
+  assert.match(providerSource, /const latestInjectionContextKeyRef = useRef\(injectionContextKey\);/);
+  assert.match(providerSource, /latestInjectionContextKeyRef\.current = injectionContextKey;/);
+  assert.match(providerSource, /const requestContextKey = latestInjectionContextKeyRef\.current;/);
+  assert.match(providerSource, /if \(latestInjectionContextKeyRef\.current !== requestContextKey\) \{/);
+  assert.match(providerSource, /return;/);
 });
 
 test('generic settings styles no longer keep Claude-named textarea residue', async () => {

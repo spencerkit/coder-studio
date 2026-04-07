@@ -66,7 +66,9 @@ pub(crate) use infra::db::{
     workspace_snapshot as load_workspace_snapshot,
 };
 #[cfg(test)]
-pub(crate) use infra::db::{launch_workspace_record, read_with_db_call_count, reset_with_db_call_count};
+pub(crate) use infra::db::{
+    launch_workspace_record, read_with_db_call_count, reset_with_db_call_count,
+};
 pub(crate) use infra::runtime::{
     build_agent_pty_command, build_terminal_pty_command, repo_name_from_url,
     resolve_agent_runtime_cwd, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
@@ -88,13 +90,13 @@ pub(crate) use models::{
     GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId, ProviderWorkspaceSession,
     SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
     SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult,
-    SessionStatus, TerminalEvent, TerminalInfo, TerminalWriteOrigin, TransportEvent, WorkbenchBootstrap,
-    WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease, WorkspaceLaunchResult,
-    WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent, WorkspaceSessionBinding,
-    WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource, WorkspaceSourceKind,
-    WorkspaceSupervisorBinding, WorkspaceSupervisorCycle, WorkspaceSupervisorCycleStatus,
-    WorkspaceSupervisorStatus, WorkspaceSupervisorViewState, WorkspaceSummary, WorkspaceTree,
-    WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
+    SessionStatus, TerminalEvent, TerminalInfo, TerminalWriteOrigin, TransportEvent,
+    WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
+    WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,
+    WorkspaceSessionBinding, WorkspaceSessionState, WorkspaceSnapshot, WorkspaceSource,
+    WorkspaceSourceKind, WorkspaceSummary, WorkspaceSupervisorBinding, WorkspaceSupervisorCycle,
+    WorkspaceSupervisorCycleStatus, WorkspaceSupervisorStatus, WorkspaceSupervisorViewState,
+    WorkspaceTree, WorkspaceViewPatch, WorkspaceViewState, WorktreeDetail, WorktreeInfo,
 };
 pub(crate) use runtime::{AppHandle, State};
 pub(crate) use services::agent::{
@@ -209,6 +211,110 @@ fn resolve_app_data_dir() -> Result<PathBuf, std::io::Error> {
     Ok(resolve_state_dir()?.join("data"))
 }
 
+fn install_provider_hooks_on_startup(app: &AppHandle) -> Vec<(String, String)> {
+    let state: State<AppState> = app.state();
+    let settings = match load_or_default_app_settings(state) {
+        Ok(settings) => settings,
+        Err(error) => return vec![("settings".to_string(), error)],
+    };
+    crate::services::provider_registry::install_missing_provider_hooks(
+        &settings,
+        "",
+        &ExecTarget::Native,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeHandle;
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    #[test]
+    fn install_provider_hooks_on_startup_returns_settings_error_without_panicking() {
+        let app = test_app();
+        *app.state().db.lock().unwrap() = None;
+
+        let errors = install_provider_hooks_on_startup(&app);
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, "settings");
+    }
+
+    #[test]
+    fn install_provider_hooks_on_startup_only_reports_missing_provider_install_failures() {
+        let app = test_app();
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .unwrap();
+        let claude_home = std::env::temp_dir().join(format!(
+            "coder-studio-main-startup-hooks-claude-{}",
+            now_ts()
+        ));
+        let codex_home = std::env::temp_dir().join(format!(
+            "coder-studio-main-startup-hooks-codex-{}",
+            now_ts()
+        ));
+        std::fs::create_dir_all(&claude_home).unwrap();
+        std::fs::create_dir_all(codex_home.join(".codex")).unwrap();
+        std::fs::write(
+            codex_home.join(".codex/hooks.json"),
+            serde_json::to_string_pretty(&json!({
+                "hooks": {
+                    "SessionStart": [{
+                        "matcher": "startup|resume",
+                        "hooks": [{
+                            "type": "command",
+                            "command": "/bin/sh -lc 'exec \"/tmp/app\" --coder-studio-agent-hook'"
+                        }]
+                    }],
+                    "Stop": [{
+                        "hooks": [{
+                            "type": "command",
+                            "command": "/bin/sh -lc 'exec \"/tmp/app\" --coder-studio-agent-hook'"
+                        }]
+                    }]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(claude_home.join(".claude"), "blocking file").unwrap();
+
+        let previous_claude = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        let previous_codex = std::env::var_os("CODER_STUDIO_CODEX_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", &claude_home);
+        std::env::set_var("CODER_STUDIO_CODEX_HOME", &codex_home);
+
+        let errors = install_provider_hooks_on_startup(&app);
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, "claude");
+        assert!(!claude_home.join(".claude/settings.json").exists());
+        assert!(codex_home.join(".codex/hooks.json").exists());
+
+        if let Some(value) = previous_claude {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+        if let Some(value) = previous_codex {
+            std::env::set_var("CODER_STUDIO_CODEX_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CODEX_HOME");
+        }
+        let _ = std::fs::remove_dir_all(claude_home);
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     if std::env::args().any(|arg| arg == "--coder-studio-agent-hook") {
@@ -243,6 +349,10 @@ async fn run() -> Result<(), String> {
     {
         let mut db_guard = state.db.lock().map_err(|e| e.to_string())?;
         *db_guard = Some(conn);
+    }
+
+    for (provider_id, error) in install_provider_hooks_on_startup(&app) {
+        eprintln!("warning: failed to install provider hooks for {provider_id}: {error}");
     }
 
     let transport_server = start_transport_server(&app)?;

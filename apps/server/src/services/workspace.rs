@@ -1361,8 +1361,10 @@ mod tests {
 
         assert_eq!(restored.session.title, "Snapshot Restore Title");
 
-        let snapshot = with_claude_home(&claude_home, || workspace_snapshot(workspace_id.clone(), app.state()))
-            .unwrap();
+        let snapshot = with_claude_home(&claude_home, || {
+            workspace_snapshot(workspace_id.clone(), app.state())
+        })
+        .unwrap();
         let session = snapshot
             .sessions
             .into_iter()
@@ -1532,7 +1534,8 @@ mod tests {
         );
 
         reset_with_db_call_count();
-        let resolved = resolve_session_for_slot(app.state(), &workspace_id, &live_session.id).unwrap();
+        let resolved =
+            resolve_session_for_slot(app.state(), &workspace_id, &live_session.id).unwrap();
         let db_calls = read_with_db_call_count();
 
         assert_eq!(resolved.id, live_session.id);
@@ -1691,7 +1694,9 @@ mod tests {
         let claude_home = unique_temp_dir("ws-last-active-ms-home");
         let claude_dir = claude_home.join(".claude");
         let workspace_root = PathBuf::from("/tmp/ws-last-active-ms-test");
-        let project_slug = workspace_root.to_string_lossy().replace(['/', '\\', ':'], "-");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
         let project_dir = claude_dir.join("projects").join(project_slug);
         fs::create_dir_all(&project_dir).unwrap();
         fs::create_dir_all(&claude_dir).unwrap();

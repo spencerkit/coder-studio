@@ -150,13 +150,7 @@ pub(crate) fn create_terminal_runtime(
                     let text = decoder.finish();
                     if !text.is_empty() {
                         append_runtime_output(&runtime_out, &text);
-                        emit_terminal(
-                            &app_handle,
-                            &workspace_id_out,
-                            terminal_id,
-                            &text,
-                            None,
-                        );
+                        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text, None);
                         if runtime_out.persist_workspace_terminal {
                             let state: State<AppState> = state_handle.state();
                             let _ = append_workspace_terminal_output(
@@ -201,7 +195,13 @@ pub(crate) fn create_terminal_runtime(
             Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
         };
         append_runtime_output(&runtime_out, &exit_text);
-        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &exit_text, None);
+        emit_terminal(
+            &app_handle,
+            &workspace_id_out,
+            terminal_id,
+            &exit_text,
+            None,
+        );
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
             let _ =
@@ -275,12 +275,7 @@ pub(crate) fn terminal_write(
                     .terminal_write_log
                     .lock()
                     .map_err(|e| e.to_string())?
-                    .push((
-                        workspace_id.clone(),
-                        terminal_id,
-                        decorated_input,
-                        origin,
-                    ));
+                    .push((workspace_id.clone(), terminal_id, decorated_input, origin));
                 return Ok(());
             }
             #[cfg(not(test))]
@@ -466,11 +461,8 @@ mod tests {
             TerminalWriteOrigin::Supervisor,
         ));
 
-        let writes = crate::services::supervisor::take_terminal_writes_for_test(
-            state,
-            "workspace-a",
-            77,
-        );
+        let writes =
+            crate::services::supervisor::take_terminal_writes_for_test(state, "workspace-a", 77);
 
         assert_eq!(writes.len(), 1);
         assert_eq!(writes[0].0, "# [supervisor]\nShip v1\r");

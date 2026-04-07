@@ -165,6 +165,13 @@ struct ProviderRuntimePreviewRequest {
 }
 
 #[derive(Deserialize)]
+struct ProviderHooksInstallRequest {
+    provider: ProviderId,
+    cwd: String,
+    target: ExecTarget,
+}
+
+#[derive(Deserialize)]
 struct PathTargetRequest {
     path: String,
     target: ExecTarget,
@@ -713,6 +720,21 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "provider_hooks_install" => {
+            let req: ProviderHooksInstallRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
+            require_path_access(&req.cwd, &req.target, authorized)?;
+            crate::services::provider_registry::install_provider_hooks(
+                req.provider.as_str(),
+                &req.cwd,
+                &req.target,
+            )
+            .map_err(rpc_bad_request)?;
+            Ok(json!({
+                "provider": req.provider,
+                "status": "installed"
+            }))
+        }
         "launch_workspace" => {
             let req: LaunchWorkspaceRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             if authorized.request.public_mode {
@@ -910,7 +932,8 @@ fn dispatch_rpc(
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "enable_supervisor_mode" => {
-            let req: EnableSupervisorModeRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let req: EnableSupervisorModeRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
                 crate::services::supervisor::enable_supervisor_mode(
@@ -924,7 +947,8 @@ fn dispatch_rpc(
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
         "update_supervisor_objective" => {
-            let req: UpdateSupervisorObjectiveRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            let req: UpdateSupervisorObjectiveRequest =
+                parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;
             serde_json::to_value(
                 crate::services::supervisor::update_supervisor_objective(
@@ -1981,6 +2005,22 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
+    fn seed_slot_primary_session(app: &AppHandle, workspace_id: &str) {
+        upsert_workspace_session_binding(
+            app.state(),
+            workspace_id,
+            WorkspaceSessionBinding {
+                session_id: "slot-primary".to_string(),
+                provider: AgentProvider::claude(),
+                mode: SessionMode::Branch,
+                resume_id: None,
+                title_snapshot: "Session slot-primary".to_string(),
+                last_seen_at: now_ts(),
+            },
+        )
+        .unwrap();
+    }
+
     fn test_agent_launch_profile() -> (String, Vec<String>) {
         #[cfg(target_os = "windows")]
         {
@@ -2023,6 +2063,26 @@ mod tests {
                 vec![
                     "-lc".to_string(),
                     format!("printf %s \"$TEST_MARKER\" > {marker_file}"),
+                ],
+            )
+        }
+    }
+
+    fn test_persistent_agent_launch_profile() -> (String, Vec<String>) {
+        #[cfg(target_os = "windows")]
+        {
+            (
+                "cmd".to_string(),
+                vec!["/K".to_string(), "set /P TEST_INPUT=".to_string()],
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (
+                "sh".to_string(),
+                vec![
+                    "-lc".to_string(),
+                    "while IFS= read -r _line; do :; done".to_string(),
                 ],
             )
         }
@@ -2280,7 +2340,8 @@ mod tests {
             &authorized,
         );
 
-        let value = result.expect("launch_workspace should succeed without legacy workspace_sessions table");
+        let value = result
+            .expect("launch_workspace should succeed without legacy workspace_sessions table");
         let launch: WorkspaceLaunchResult = serde_json::from_value(value).unwrap();
         assert!(!launch.snapshot.workspace.workspace_id.is_empty());
     }
@@ -2773,6 +2834,8 @@ mod tests {
                 && record.resume_id == "session-a"
                 && !record.mounted));
 
+        seed_slot_primary_session(&app, &workspace_id);
+
         let restored = with_claude_home(&claude_home, || {
             dispatch_rpc(
                 &app,
@@ -2811,12 +2874,93 @@ mod tests {
         })
         .expect("history rpc should reload");
         let history: Vec<SessionHistoryRecord> = serde_json::from_value(history).unwrap();
-        assert!(!history
-            .iter()
-            .any(|record| record.resume_id == "session-a"));
+        assert!(!history.iter().any(|record| record.resume_id == "session-a"));
 
         let _ = std::fs::remove_dir_all(workspace_root);
         let _ = std::fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn provider_hooks_install_rpc_runs_manual_install_for_provider() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_root =
+            std::path::PathBuf::from(create_temp_workspace_root("provider-hooks-install-rpc"));
+        let claude_home = workspace_root.join("claude-home");
+        std::fs::create_dir_all(claude_home.join(".claude")).unwrap();
+
+        let response = with_claude_home(&claude_home, || {
+            dispatch_rpc(
+                &app,
+                "provider_hooks_install",
+                json!({
+                    "provider": "claude",
+                    "cwd": workspace_root,
+                    "target": { "type": "native" }
+                }),
+                &authorized,
+            )
+        })
+        .expect("provider hook install RPC should succeed");
+
+        assert_eq!(response["provider"], "claude");
+        assert_eq!(response["status"], "installed");
+
+        let raw =
+            std::fs::read_to_string(claude_home.join(".claude").join("settings.json")).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        assert!(parsed["hooks"]["SessionStart"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|group| {
+                group["hooks"].as_array().unwrap().iter().any(|hook| {
+                    hook["type"] == "command"
+                        && hook["command"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .contains("--coder-studio-agent-hook")
+                })
+            }));
+        assert!(parsed["hooks"]["Stop"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|group| {
+                group["hooks"].as_array().unwrap().iter().any(|hook| {
+                    hook["type"] == "command"
+                        && hook["command"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .contains("--coder-studio-agent-hook")
+                })
+            }));
+
+        let _ = std::fs::remove_dir_all(&workspace_root);
+    }
+
+    #[test]
+    fn provider_hooks_install_rpc_rejects_unknown_provider() {
+        let app = test_app();
+        let authorized = authorized_request();
+        let workspace_root = create_temp_workspace_root("provider-hooks-install-invalid-provider");
+
+        let error = dispatch_rpc(
+            &app,
+            "provider_hooks_install",
+            json!({
+                "provider": "missing",
+                "cwd": workspace_root,
+                "target": { "type": "native" }
+            }),
+            &authorized,
+        )
+        .expect_err("provider hook install RPC should reject unknown providers");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.error, "unknown_provider:missing");
+
+        let _ = std::fs::remove_dir_all(workspace_root);
     }
 
     #[test]
@@ -3344,7 +3488,8 @@ mod tests {
         assert!(observer
             .session_runtime_bindings
             .iter()
-            .any(|binding| binding.session_id == "slot-primary" && binding.terminal_id == started.terminal_id.to_string()));
+            .any(|binding| binding.session_id == "slot-primary"
+                && binding.terminal_id == started.terminal_id.to_string()));
         assert!(observer
             .snapshot
             .terminals
@@ -3399,11 +3544,21 @@ mod tests {
         .unwrap();
         let created: SessionInfo = serde_json::from_value(created).unwrap();
         let created_id = created.id.clone();
-        set_session_resume_id(
+        crate::services::workspace::session_update(
+            workspace_id.clone(),
+            created_id.clone(),
+            SessionPatch {
+                title: None,
+                status: None,
+                mode: None,
+                auto_feed: None,
+                queue: None,
+                messages: None,
+                unread: None,
+                last_active_at: None,
+                resume_id: Some("resume-77".to_string()),
+            },
             app.state(),
-            &workspace_id,
-            &created_id,
-            "resume-77".to_string(),
         )
         .unwrap();
 
@@ -3442,8 +3597,13 @@ mod tests {
         .unwrap();
 
         std::thread::sleep(Duration::from_millis(150));
-        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
-        assert!(refreshed.resume_id.is_some());
+        let refreshed = crate::services::workspace::resolve_session_for_slot(
+            app.state(),
+            &workspace_id,
+            &created_id,
+        )
+        .unwrap();
+        assert_eq!(refreshed.resume_id.as_deref(), Some("resume-77"));
     }
 
     #[test]
@@ -3604,6 +3764,25 @@ mod tests {
         let workspace_id = launch_test_workspace(&app, &root);
         *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/codex-hook".into());
 
+        dispatch_rpc(
+            &app,
+            "app_settings_update",
+            json!({
+                "settings": {
+                    "providers": {
+                        "codex": {
+                            "global": {
+                                "executable": test_persistent_agent_launch_profile().0,
+                                "extra_args": test_persistent_agent_launch_profile().1
+                            }
+                        }
+                    }
+                }
+            }),
+            &authorized,
+        )
+        .unwrap();
+
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let created = dispatch_rpc(
             &app,
@@ -3638,7 +3817,12 @@ mod tests {
         )
         .unwrap();
 
-        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
+        let refreshed = crate::services::workspace::resolve_session_for_slot(
+            app.state(),
+            &workspace_id,
+            &created_id,
+        )
+        .unwrap();
         assert_eq!(refreshed.status, SessionStatus::Idle);
         assert!(refreshed.resume_id.is_none());
         assert!(refreshed.runtime_active);
@@ -3771,7 +3955,12 @@ mod tests {
         )
         .unwrap();
 
-        let refreshed = load_session(app.state(), &workspace_id, &created_id).unwrap();
+        let refreshed = crate::services::workspace::resolve_session_for_slot(
+            app.state(),
+            &workspace_id,
+            &created_id,
+        )
+        .unwrap();
         assert_eq!(refreshed.status, SessionStatus::Running);
         assert!(refreshed.runtime_active);
 
@@ -3791,7 +3980,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-update-rpc");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -3853,8 +4044,14 @@ mod tests {
 
         let updated: WorkspaceSupervisorBinding = serde_json::from_value(result).unwrap();
         assert_eq!(updated.status, WorkspaceSupervisorStatus::Evaluating);
-        assert_eq!(updated.pending_objective_text.as_deref(), Some("Use Claude only in v1."));
-        assert_eq!(updated.pending_objective_version, Some(updated.objective_version + 1));
+        assert_eq!(
+            updated.pending_objective_text.as_deref(),
+            Some("Use Claude only in v1.")
+        );
+        assert_eq!(
+            updated.pending_objective_version,
+            Some(updated.objective_version + 1)
+        );
         assert!(updated
             .pending_objective_prompt
             .as_deref()
@@ -3866,7 +4063,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-controller-guard");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -3914,7 +4113,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-flows");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -4049,7 +4250,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-disable-running-rpc");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -4116,7 +4319,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-retry-paused-rpc");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -4195,7 +4400,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-rpc-retry-reject");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 
@@ -4286,7 +4493,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-blank");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
 
         let error = dispatch_rpc(
@@ -4314,7 +4523,8 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-missing-binding");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
 
         for command in [
@@ -4353,7 +4563,8 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-missing-session");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
 
         let error = dispatch_rpc(
@@ -4381,7 +4592,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable-duplicate");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let payload = json!({
             "workspace_id": workspace_id.clone(),
@@ -4406,7 +4619,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-resume-not-paused-rpc");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
 
         dispatch_rpc(
@@ -4448,7 +4663,9 @@ mod tests {
         let app = test_app();
         let authorized = authorized_request();
         let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-enable");
-        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/supervisor-hook".into());
+        seed_slot_primary_session(&app, &workspace_id);
+        *app.state().hook_endpoint.lock().unwrap() =
+            Some("http://127.0.0.1:1/supervisor-hook".into());
         let runtime = attach_controller(&app, &authorized, &workspace_id);
         let session_id = "slot-primary";
 

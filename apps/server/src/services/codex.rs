@@ -224,6 +224,25 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         self.build_start(settings, target)
     }
 
+    fn hooks_installed(&self) -> bool {
+        let Some(home_root) = native_codex_home_root() else {
+            return false;
+        };
+
+        let hooks_installed = std::fs::read_to_string(home_root.join(".codex").join("hooks.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .is_some_and(|root| codex_hooks_installed(&root));
+        if !hooks_installed {
+            return false;
+        }
+
+        std::fs::read_to_string(home_root.join(".codex").join("config.toml"))
+            .ok()
+            .and_then(|raw| raw.parse::<toml::Table>().ok())
+            .is_some_and(|root| codex_hook_feature_enabled(&root))
+    }
+
     fn ensure_workspace_integration(&self, cwd: &str, target: &ExecTarget) -> Result<(), String> {
         ensure_codex_hook_settings(cwd, target)
     }
@@ -264,6 +283,20 @@ fn is_coder_studio_codex_group(group: &Value) -> bool {
             })
         })
         .unwrap_or(false)
+}
+
+fn codex_hooks_installed(root: &Value) -> bool {
+    let Some(hooks) = root.get("hooks").and_then(Value::as_object) else {
+        return false;
+    };
+
+    ["SessionStart", "Stop"].into_iter().all(|event| {
+        hooks
+            .get(event)
+            .and_then(Value::as_array)
+            .map(|groups| groups.iter().any(is_coder_studio_codex_group))
+            .unwrap_or(false)
+    })
 }
 
 fn build_hook_group(command: &str, matcher: Option<&str>) -> Value {
@@ -619,6 +652,14 @@ fn delete_codex_workspace_session(workspace_path: &str, resume_id: &str) -> Resu
     delete_codex_shell_snapshots(trimmed_resume_id)
 }
 
+fn codex_hook_feature_enabled(root: &toml::Table) -> bool {
+    root.get("features")
+        .and_then(toml::Value::as_table)
+        .and_then(|features| features.get("codex_hooks"))
+        .and_then(toml::Value::as_bool)
+        == Some(true)
+}
+
 fn upsert_codex_global_feature(root: &mut toml::Table, feature_name: &str) {
     let features_entry = root
         .entry("features".to_string())
@@ -821,6 +862,110 @@ mod tests {
             crate::services::session_runtime::launch_spec_display_command(&launch.launch_spec);
 
         assert_eq!(display_command, "codex");
+    }
+
+    #[test]
+    fn codex_hook_detection_requires_session_start_and_stop() {
+        let config = json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }],
+                "Notification": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        });
+
+        assert!(codex_hooks_installed(&config));
+        assert!(!codex_hooks_installed(&json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+        assert!(!codex_hooks_installed(&json!({
+            "hooks": {
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+        assert!(!codex_hooks_installed(&json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "echo not-coder-studio"
+                    }]
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "coder-studio --coder-studio-agent-hook"
+                    }]
+                }]
+            }
+        })));
+    }
+
+    #[test]
+    fn codex_adapter_requires_global_feature_flag_and_hooks_file_for_installed_state() {
+        let codex_home = unique_temp_dir("codex-home");
+        let config_dir = codex_home.join(".codex");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(
+            config_dir.join("hooks.json"),
+            serde_json::to_string_pretty(&json!({
+                "hooks": {
+                    "SessionStart": [{
+                        "hooks": [{
+                            "type": "command",
+                            "command": "coder-studio --coder-studio-agent-hook"
+                        }]
+                    }],
+                    "Stop": [{
+                        "hooks": [{
+                            "type": "command",
+                            "command": "coder-studio --coder-studio-agent-hook"
+                        }]
+                    }]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        with_codex_home(&codex_home, || {
+            assert!(!adapter().hooks_installed());
+
+            fs::write(config_dir.join("config.toml"), "[features]\ncodex_hooks = true\n").unwrap();
+            assert!(adapter().hooks_installed());
+
+            fs::write(config_dir.join("config.toml"), "[features]\ncodex_hooks = false\n").unwrap();
+            assert!(!adapter().hooks_installed());
+        });
+
+        let _ = fs::remove_dir_all(codex_home);
     }
 
     #[test]
