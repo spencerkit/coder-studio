@@ -19,6 +19,16 @@ test('dev stack runtime defaults to an isolated repo-local state dir', () => {
 
   assert.equal(result.stateDir, path.join(root, '.tmp', 'dev-stack-runtime'));
   assert.equal(result.env.CODER_STUDIO_HOME, path.join(root, '.tmp', 'dev-stack-runtime'));
+  assert.equal(result.env.CODER_STUDIO_DISABLE_VITE_WATCH, '1');
+});
+
+test('dev stack runtime preserves an explicit Vite watch override', () => {
+  const root = '/tmp/coder-studio-root';
+  const result = buildDevStackRuntimeEnv(root, {
+    CODER_STUDIO_DISABLE_VITE_WATCH: '0',
+  });
+
+  assert.equal(result.env.CODER_STUDIO_DISABLE_VITE_WATCH, '0');
 });
 
 test('dev stack runtime can persist and read recorded process ids', async () => {
@@ -81,4 +91,11 @@ test('playwright port configs route through the isolated dev stack startup', asy
     assert.match(raw, /node scripts\/test\/start-dev-stack\.mjs/);
     assert.doesNotMatch(raw, /pnpm exec vite --host/);
   }
+});
+
+test('vite config disables file watching only for isolated dev stack runs', async () => {
+  const raw = await fs.readFile(path.join(process.cwd(), 'vite.config.ts'), 'utf8');
+
+  assert.match(raw, /const disableViteWatch = process\.env\.CODER_STUDIO_DISABLE_VITE_WATCH === '1';/);
+  assert.match(raw, /watch: disableViteWatch \? null : undefined,/);
 });

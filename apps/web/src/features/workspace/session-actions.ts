@@ -98,12 +98,15 @@ export const createWorkspaceSessionActions = ({
     };
   };
 
-  const normalizeMutatedTab = (tab: Tab): Tab => normalizeWorkbenchState({
-    tabs: [tab],
-    activeTabId: tab.id,
-    layout: createDefaultWorkbenchState().layout,
-    overlay: createDefaultWorkbenchState().overlay,
-  }).tabs[0];
+  const normalizeMutatedTab = (tab: Tab): Tab => {
+    const defaultWorkbenchState = createDefaultWorkbenchState();
+    return normalizeWorkbenchState({
+      tabs: [tab],
+      activeTabId: tab.id,
+      layout: defaultWorkbenchState.layout,
+      overlay: defaultWorkbenchState.overlay,
+    }).tabs[0];
+  };
 
   const controllerForTab = (tabId: string) =>
     stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
@@ -564,7 +567,7 @@ export const createWorkspaceSessionActions = ({
     const updatedSession = updatedTab?.sessions.find((item) => item.id === sessionId);
     if (!updatedTab || !updatedSession) return;
 
-    if (!note && session.status !== "idle") {
+    if (!note) {
       void onCompletionReminder?.({
         workspaceId: updatedTab.id,
         workspaceTitle: updatedTab.title,

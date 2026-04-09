@@ -6,6 +6,7 @@ use crate::infra::db::{
 };
 use crate::models::WorkspaceSupervisorViewState;
 use crate::*;
+use std::collections::HashMap;
 
 const WORKSPACE_CONTROLLER_LEASE_SECS: i64 = 30;
 const WORKSPACE_TAKEOVER_TIMEOUT_SECS: i64 = 10;
@@ -329,6 +330,70 @@ pub(crate) fn handle_workspace_client_disconnect(
     Ok(())
 }
 
+pub(crate) fn session_runtime_liveness_for_binding(
+    workspace_id: &str,
+    binding: &SessionRuntimeBindingInfo,
+    state: State<'_, AppState>,
+) -> Option<SessionRuntimeLiveness> {
+    if binding.terminal_runtime_id.is_none() {
+        return Some(SessionRuntimeLiveness::ProviderExited);
+    }
+
+    let runtime_id = binding.terminal_runtime_id.as_deref()?;
+    let runtime = state
+        .terminal_runtimes
+        .lock()
+        .ok()?
+        .by_runtime_id(runtime_id)
+        .cloned()?;
+
+    if runtime.workspace_id != workspace_id || runtime.session_id != binding.session_id {
+        return Some(SessionRuntimeLiveness::ProviderExited);
+    }
+
+    if crate::services::tmux::tmux_session_exists(&runtime.tmux_session_name) {
+        Some(SessionRuntimeLiveness::Attached)
+    } else {
+        Some(SessionRuntimeLiveness::TmuxMissing)
+    }
+}
+
+pub(crate) fn session_runtime_liveness_for_session(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Option<SessionRuntimeLiveness> {
+    let bindings = crate::services::session_runtime::collect_workspace_session_runtime_bindings(
+        workspace_id,
+        state,
+    )
+    .ok()?;
+    bindings.iter().find_map(|binding| {
+        (binding.session_id == session_id)
+            .then(|| session_runtime_liveness_for_binding(workspace_id, binding, state))
+            .flatten()
+    })
+}
+
+pub(crate) fn apply_runtime_liveness_to_snapshot(
+    workspace_id: &str,
+    snapshot: &mut WorkspaceSnapshot,
+    bindings: &[SessionRuntimeBindingInfo],
+    state: State<'_, AppState>,
+) {
+    let liveness_by_session = bindings
+        .iter()
+        .filter_map(|binding| {
+            session_runtime_liveness_for_binding(workspace_id, binding, state)
+                .map(|liveness| (binding.session_id.as_str(), liveness))
+        })
+        .collect::<HashMap<_, _>>();
+
+    for session in &mut snapshot.sessions {
+        session.runtime_liveness = liveness_by_session.get(session.id.as_str()).cloned();
+    }
+}
+
 pub(crate) fn workspace_runtime_attach(
     workspace_id: String,
     device_id: String,
@@ -425,6 +490,7 @@ pub(crate) fn workspace_runtime_attach(
             &workspace_id,
             state,
         )?;
+    apply_runtime_liveness_to_snapshot(&workspace_id, &mut snapshot, &session_runtime_bindings, state);
 
     Ok(WorkspaceRuntimeSnapshot {
         snapshot,
@@ -553,6 +619,7 @@ pub(crate) fn workspace_controller_reject_takeover(
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
+    use crate::services::session_runtime::session_runtime_key;
     use std::fs;
     use std::sync::OnceLock;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1155,6 +1222,7 @@ mod tests {
     #[test]
     fn workspace_runtime_attach_includes_agent_lifecycle_replay() {
         let app = test_app();
+        *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
         let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-lifecycle-replay-test");
         let session = create_session(
             workspace_id.clone(),
@@ -1168,8 +1236,8 @@ mod tests {
             &app,
             &workspace_id,
             &session.id.to_string(),
-            "tool_started",
-            "PreToolUse",
+            "session_started",
+            "SessionStart",
             r#"{"session_id":"claude-lifecycle"}"#,
         );
 
@@ -1187,8 +1255,8 @@ mod tests {
             runtime.lifecycle_events[0].session_id,
             session.id.to_string()
         );
-        assert_eq!(runtime.lifecycle_events[0].kind, "tool_started");
-        assert_eq!(runtime.lifecycle_events[0].source_event, "PreToolUse");
+        assert_eq!(runtime.lifecycle_events[0].kind, "session_started");
+        assert_eq!(runtime.lifecycle_events[0].source_event, "SessionStart");
         assert_eq!(runtime.lifecycle_events[0].seq, 1);
     }
 
@@ -1297,13 +1365,142 @@ mod tests {
         );
         assert_eq!(
             runtime.session_runtime_bindings[0].terminal_id,
-            started.terminal_id.to_string()
+            started.terminal_runtime_id.clone().unwrap()
+        );
+        assert_eq!(
+            runtime.session_runtime_bindings[0].workspace_terminal_id,
+            Some(started.terminal_id.to_string())
+        );
+        assert_eq!(
+            runtime.session_runtime_bindings[0].terminal_runtime_id,
+            started.terminal_runtime_id
         );
         assert!(runtime
             .snapshot
             .terminals
             .iter()
             .any(|terminal| terminal.id == started.terminal_id));
+        assert!(runtime
+            .snapshot
+            .sessions
+            .iter()
+            .any(|candidate| {
+                candidate.id == session.id
+                    && candidate.runtime_active
+                    && candidate.runtime_liveness == Some(SessionRuntimeLiveness::Attached)
+            }));
+    }
+
+    #[test]
+    fn session_runtime_liveness_for_session_ignores_other_bound_sessions() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-liveness-targeted");
+        let target = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        let other = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+
+        app.state()
+            .session_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(session_runtime_key(&workspace_id, &other.id), 99);
+        app.state()
+            .terminal_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(99, session_runtime_key(&workspace_id, &other.id));
+        app.state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+                "runtime-missing-other".to_string(),
+                workspace_id.clone(),
+                other.id.to_string(),
+                "claude".to_string(),
+                "missing-tmux-session".to_string(),
+                "%1".to_string(),
+            ));
+
+        assert_eq!(
+            session_runtime_liveness_for_session(&workspace_id, &target.id, app.state()),
+            None
+        );
+        assert_eq!(
+            session_runtime_liveness_for_session(&workspace_id, &other.id, app.state()),
+            Some(SessionRuntimeLiveness::TmuxMissing)
+        );
+    }
+
+    #[test]
+    fn workspace_runtime_attach_reports_tmux_missing_for_bound_session_when_tmux_session_is_gone() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-tmux-missing");
+        let session = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+
+        app.state()
+            .session_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(session_runtime_key(&workspace_id, &session.id), 99);
+        app.state()
+            .terminal_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(99, session_runtime_key(&workspace_id, &session.id));
+        app.state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+                "runtime-missing".to_string(),
+                workspace_id.clone(),
+                session.id.to_string(),
+                "claude".to_string(),
+                "missing-tmux-session".to_string(),
+                "%1".to_string(),
+            ));
+
+        let runtime = workspace_runtime_attach(
+            workspace_id.clone(),
+            "device-a".to_string(),
+            "client-a".to_string(),
+            app.clone(),
+            app.state(),
+        )
+        .unwrap();
+
+        let bound = runtime
+            .snapshot
+            .sessions
+            .iter()
+            .find(|candidate| candidate.id == session.id)
+            .expect("bound session should be present");
+        assert_eq!(
+            bound.runtime_liveness,
+            Some(SessionRuntimeLiveness::TmuxMissing)
+        );
+        assert!(runtime.session_runtime_bindings.iter().any(|binding| {
+            binding.session_id == session.id.to_string()
+                && binding.terminal_runtime_id.as_deref() == Some("runtime-missing")
+        }));
     }
 
     #[test]
@@ -1368,6 +1565,10 @@ mod tests {
         assert_eq!(restored.resume_id.as_deref(), Some("resume-session"));
         assert_eq!(restored.title, "Claude native title");
         assert!(restored.runtime_active);
+        assert_eq!(
+            restored.runtime_liveness,
+            Some(SessionRuntimeLiveness::Attached)
+        );
         assert_eq!(runtime.session_runtime_bindings.len(), 1);
         assert_eq!(
             runtime.session_runtime_bindings[0].session_id,
@@ -1452,8 +1653,8 @@ mod tests {
             &app,
             &workspace_id,
             &session.id.to_string(),
-            "tool_started",
-            "PreToolUse",
+            "session_started",
+            "SessionStart",
             r#"{"session_id":"claude-bound-replay"}"#,
         );
         let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
@@ -1469,12 +1670,13 @@ mod tests {
 
         assert!(runtime.lifecycle_events.iter().any(|event| {
             event.session_id == session.id.to_string()
-                && event.kind == "tool_started"
-                && event.source_event == "PreToolUse"
+                && event.kind == "session_started"
+                && event.source_event == "SessionStart"
         }));
         assert!(runtime.session_runtime_bindings.iter().any(|binding| {
             binding.session_id == session.id.to_string()
-                && binding.terminal_id == started.terminal_id.to_string()
+                && binding.terminal_id == started.terminal_runtime_id.clone().unwrap()
+                && binding.workspace_terminal_id == Some(started.terminal_id.to_string())
         }));
         assert!(runtime
             .snapshot
@@ -1551,6 +1753,8 @@ mod tests {
         assert!(runtime.session_runtime_bindings.iter().any(|binding| {
             binding.session_id == session.id.to_string()
                 && binding.terminal_id == started.terminal_id.to_string()
+                && binding.terminal_runtime_id.is_none()
+                && binding.workspace_terminal_id == Some(started.terminal_id.to_string())
         }));
     }
 
@@ -1567,15 +1771,25 @@ mod tests {
         )
         .unwrap();
 
-        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
-        crate::services::terminal::terminal_write(
-            workspace_id.clone(),
-            started.terminal_id,
-            "exit\r".to_string(),
-            TerminalWriteOrigin::User,
+        app_settings_update(
+            serde_json::json!({
+                "providers": {
+                    "claude": {
+                        "global": {
+                            "executable": "/bin/sh",
+                            "startupArgs": [
+                                "-lc",
+                                "sleep 0.1"
+                            ]
+                        }
+                    }
+                }
+            }),
             app.state(),
         )
-        .unwrap();
+        .expect("settings update should succeed");
+
+        let started = start_bound_session_for_test(&app, &workspace_id, session.id.clone());
 
         let terminal_key = format!("{workspace_id}:{}", started.terminal_id);
         let mut exited = false;
@@ -1606,10 +1820,26 @@ mod tests {
         assert!(runtime.snapshot.terminals.iter().any(|terminal| {
             terminal.id == started.terminal_id && terminal.output.contains("terminal exited")
         }));
-        assert!(runtime.session_runtime_bindings.iter().any(|binding| {
-            binding.session_id == session.id.to_string()
-                && binding.terminal_id == started.terminal_id.to_string()
-        }));
+        let binding = runtime
+            .session_runtime_bindings
+            .iter()
+            .find(|binding| binding.session_id == session.id.to_string())
+            .expect("runtime binding should remain after natural exit");
+        assert_eq!(binding.terminal_id, started.terminal_id.to_string());
+        assert_eq!(binding.workspace_terminal_id, Some(started.terminal_id.to_string()));
+        assert_eq!(binding.terminal_runtime_id, None);
+        let restored_session = runtime
+            .snapshot
+            .sessions
+            .iter()
+            .find(|candidate| candidate.id == session.id)
+            .expect("bound session should remain visible after natural exit");
+        assert_eq!(restored_session.status, SessionStatus::Interrupted);
+        assert!(!restored_session.runtime_active);
+        assert_eq!(
+            restored_session.runtime_liveness,
+            Some(SessionRuntimeLiveness::ProviderExited)
+        );
     }
 
     #[test]

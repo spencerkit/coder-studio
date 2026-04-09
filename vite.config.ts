@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
   loadEnv(mode, process.cwd(), '');
   const frontendPort = readPort(process.env.CODER_STUDIO_DEV_FRONTEND_PORT, 5174);
   const backendPort = readPort(process.env.CODER_STUDIO_DEV_BACKEND_PORT, 41033);
+  const disableViteWatch = process.env.CODER_STUDIO_DISABLE_VITE_WATCH === '1';
   const backendOrigin = `http://127.0.0.1:${backendPort}`;
   const buildPublishedAt = new Date().toISOString();
 
@@ -46,6 +47,7 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: frontendPort,
       strictPort: true,
+      watch: disableViteWatch ? null : undefined,
       proxy: {
         '/api': {
           target: backendOrigin,

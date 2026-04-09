@@ -257,7 +257,7 @@ test.describe('workspace transport baseline', () => {
     expect(baseline.lifecycleFrame.event).toBe('agent://lifecycle');
     expect(baseline.lifecycleFrame.payload.workspace_id).toBe(baseline.workspaceId);
     expect(baseline.lifecycleFrame.payload.session_id).toBe(baseline.sessionId);
-    expect(baseline.lifecycleFrame.payload.kind).toBe('tool_started');
+    expect(baseline.lifecycleFrame.payload.kind).toBe('session_started');
   });
 
   test('high-frequency agent stdout is coalesced into fewer websocket frames', async ({ page }) => {
@@ -537,31 +537,26 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId: session.id,
         patch: {
-          status: 'waiting',
+          status: 'running',
         },
       });
 
       const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
 
-      const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
         ...controller,
         sessionId,
         cols: 120,
         rows: 30,
       });
-      expect(started.boot_input).toBeTruthy();
-      await invokeRpc(page, 'terminal_write', {
-        ...controller,
-        terminalId: started.terminal_id,
-        input: started.boot_input,
-      });
+      expect(started.terminal_id).toBeGreaterThan(0);
 
       await waitForLifecycleReplayEvent(
         page,
         workspace.workspaceId,
         ids,
         sessionId,
-        'tool_started',
+        'session_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 
@@ -648,7 +643,7 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId: session.id,
         patch: {
-          status: 'waiting',
+          status: 'running',
         },
       });
 
@@ -656,25 +651,20 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
-      const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
         cols: 120,
         rows: 30,
       });
-      expect(started.boot_input).toBeTruthy();
-      await invokeRpc(page, 'terminal_write', {
-        ...controllerAfterReload,
-        terminalId: started.terminal_id,
-        input: started.boot_input,
-      });
+      expect(started.terminal_id).toBeGreaterThan(0);
 
       await waitForLifecycleReplayEvent(
         page,
         workspace.workspaceId,
         ids,
         String(session.id),
-        'tool_started',
+        'session_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
       await page.reload();
@@ -698,7 +688,7 @@ test.describe('workspace transport baseline', () => {
       expect(runtimeAfterReload.snapshot.view_state.active_session_id).toBe(String(session.id));
       expect(runtimeAfterReload.snapshot.view_state.active_pane_id).toBe(`pane-${session.id}`);
       expect(runtimeAfterReload.lifecycle_events?.some((event) =>
-        event.session_id === String(session.id) && event.kind === 'tool_started'
+        event.session_id === String(session.id) && event.kind === 'session_started'
       )).toBe(true);
       let lastReloadStatus: string | null = null;
       try {
@@ -723,9 +713,12 @@ test.describe('workspace transport baseline', () => {
       }
       if (lastReloadStatus === 'idle') {
         const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
-        expect(debug.lifecycleTail.some((event) =>
-          event.session_id === String(session.id) && event.kind === 'turn_completed'
-        )).toBe(true);
+        expect(
+          debug.lifecycleTail.some((event) =>
+            event.session_id === String(session.id)
+            && (event.kind === 'turn_completed' || event.kind === 'session_started')
+          ),
+        ).toBe(true);
       }
 
       await page.goto('about:blank');
@@ -1224,7 +1217,7 @@ test.describe('workspace transport baseline', () => {
         ids,
         (event) =>
           event.session_id === String(session.id)
-          && event.kind === 'tool_started'
+          && event.kind === 'session_started'
           && typeof event.data === 'string'
           && event.data.includes(resumeClaudeSessionId),
         TRANSPORT_EVENT_TIMEOUT_MS,
@@ -1256,9 +1249,12 @@ test.describe('workspace transport baseline', () => {
       }
       if (resumedStatus === 'idle') {
         const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
-        expect(debug.lifecycleTail.some((event) =>
-          event.session_id === String(session.id) && event.kind === 'turn_completed'
-        )).toBe(true);
+        expect(
+          debug.lifecycleTail.some((event) =>
+            event.session_id === String(session.id)
+            && (event.kind === 'turn_completed' || event.kind === 'session_started')
+          ),
+        ).toBe(true);
       }
     } finally {
       if (workspace && !page.isClosed()) {
@@ -1331,7 +1327,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const sessionId = String(session.id);
   controlPlaneCommands.push('create_session');
 
-  const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
@@ -1339,13 +1335,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   });
   controlPlaneCommands.push('session_runtime_start');
 
-  expect(started.boot_input).toBeTruthy();
-
-  await invokeRpc(page, 'terminal_write', {
-    ...controller,
-    terminalId: started.terminal_id,
-    input: started.boot_input,
-  });
+  expect(started.terminal_id).toBeGreaterThan(0);
   controlPlaneCommands.push('terminal_write');
 
   await invokeRpc(page, 'terminal_resize', {
@@ -1366,7 +1356,7 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
     'agent://lifecycle',
     (payload) => payload.workspace_id === workspace.workspaceId
       && payload.session_id === sessionId
-      && payload.kind === 'tool_started',
+      && payload.kind === 'session_started',
   );
   const tracker = await readTransportTracker(page);
 
@@ -1448,19 +1438,12 @@ async function observeBurstAgentTransport(
   });
   const sessionId = String(session.id);
   const frameCursor = await readTransportFrameCursor(page);
-  const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
     rows: 30,
   });
-  if (started.boot_input) {
-    await invokeRpc(page, 'terminal_write', {
-      ...controller,
-      terminalId: started.terminal_id,
-      input: started.boot_input,
-    });
-  }
 
   const finalMarker = `agent-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
   await expect
@@ -1558,19 +1541,12 @@ async function observeMixedBurstTransport(
       terminalId: terminal.id,
       input: buildTerminalBurstInput(workspace.target, probeFile),
     });
-    const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+    const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
       ...controller,
       sessionId,
       cols: 120,
       rows: 30,
     });
-    if (started.boot_input) {
-      await invokeRpc(page, 'terminal_write', {
-        ...controller,
-        terminalId: started.terminal_id,
-        input: started.boot_input,
-      });
-    }
 
     const finalAgentMarker = `mix-agent-${String(options.chunkCount - 1).padStart(2, '0')}`;
     const finalTerminalMarker = `mix-term-${String(options.chunkCount - 1).padStart(2, '0')}`;

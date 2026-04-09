@@ -797,19 +797,12 @@ const createActiveSessionForWorkspace = async (
       },
     },
   });
-  const started = await invokeRpc<{ terminal_id: number; started: boolean; boot_input?: string | null }>(page, 'session_runtime_start', {
+  await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
     cols: 120,
     rows: 30,
   });
-  if (started.boot_input) {
-    await invokeRpc(page, 'terminal_write', {
-      ...controller,
-      terminalId: started.terminal_id,
-      input: started.boot_input,
-    });
-  }
   return sessionId;
 };
 
@@ -1043,15 +1036,6 @@ test('background turn_completed still sends a reminder while viewing settings', 
       (session) => session.id.toString() === backgroundSessionId,
     );
     expect(backgroundSession).toBeTruthy();
-
-    await emitLifecycleEvent(page, {
-      workspace_id: pair.background.workspace.workspace_id,
-      session_id: backgroundSessionId,
-      kind: 'tool_started',
-      source_event: 'PreToolUse',
-      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
-    });
-    await page.waitForTimeout(150);
 
     await page.getByTestId('settings-open').click();
     await expect(page.getByTestId('settings-page')).toBeVisible();

@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const DEV_STACK_PROCESS_FILE = 'dev-stack-processes.json';
+const CODER_STUDIO_DISABLE_VITE_WATCH = 'CODER_STUDIO_DISABLE_VITE_WATCH';
 
 const processStatePath = (stateDir) => path.join(stateDir, DEV_STACK_PROCESS_FILE);
 
@@ -144,6 +145,7 @@ export function buildDevStackRuntimeEnv(root, env = process.env) {
       CODER_STUDIO_DATA_DIR: dataDir,
       CODER_STUDIO_CLAUDE_HOME: claudeHomeRoot,
       CODER_STUDIO_CODEX_HOME: codexHomeRoot,
+      [CODER_STUDIO_DISABLE_VITE_WATCH]: env[CODER_STUDIO_DISABLE_VITE_WATCH] ?? '1',
     },
   };
 }

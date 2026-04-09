@@ -7,7 +7,7 @@ const DEFAULT_PTY_ROWS: u16 = 30;
 
 #[derive(Default)]
 struct AgentLifecycleFallbackState {
-    emitted_tool_started: bool,
+    emitted_session_started: bool,
     emitted_turn_completed: bool,
     resume_id: Option<String>,
 }
@@ -25,10 +25,10 @@ fn fallback_agent_lifecycle_from_output(
     state: &mut AgentLifecycleFallbackState,
     text: &str,
 ) -> Option<(&'static str, &'static str, String)> {
-    if state.emitted_tool_started || text.trim().is_empty() {
+    if state.emitted_session_started || text.trim().is_empty() {
         return None;
     }
-    state.emitted_tool_started = true;
+    state.emitted_session_started = true;
     let data = state
         .resume_id
         .as_deref()
@@ -44,13 +44,13 @@ fn fallback_agent_lifecycle_from_output(
             })
         })
         .to_string();
-    Some(("tool_started", "AgentProcessOutput", data))
+    Some(("session_started", "AgentProcessOutput", data))
 }
 
 fn fallback_agent_lifecycle_from_exit(
     state: &mut AgentLifecycleFallbackState,
 ) -> Option<(&'static str, &'static str, String)> {
-    if state.emitted_turn_completed || !state.emitted_tool_started {
+    if state.emitted_turn_completed || !state.emitted_session_started {
         return None;
     }
     state.emitted_turn_completed = true;
@@ -254,7 +254,7 @@ pub(crate) fn agent_start(
         agents.insert(key.clone(), runtime.clone());
     }
     let _ =
-        sync_session_runtime_state(state, &workspace_id, &session_id, SessionStatus::Idle, true);
+        sync_session_runtime_state(state, &workspace_id, &session_id, SessionStatus::Idle, true, None);
 
     emit_agent(
         &app,
@@ -355,6 +355,7 @@ pub(crate) fn agent_start(
                 &session_id,
                 SessionStatus::Interrupted,
                 false,
+                None,
             );
         }
     });
@@ -382,6 +383,7 @@ pub(crate) fn agent_send(
             &session_id,
             SessionStatus::Running,
             true,
+            None,
         );
         Ok(())
     } else {
@@ -401,6 +403,7 @@ pub(crate) fn agent_stop(
         &session_id,
         SessionStatus::Interrupted,
         false,
+        None,
     );
     Ok(())
 }
@@ -433,6 +436,7 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
             &session_id,
             SessionStatus::Interrupted,
             false,
+            None,
         );
     }
 }
@@ -518,13 +522,13 @@ mod tests {
     }
 
     #[test]
-    fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
+    fn fallback_agent_lifecycle_marks_first_output_as_session_started_once() {
         let mut state = AgentLifecycleFallbackState::default();
 
         assert_eq!(
             fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
             Some((
-                "tool_started",
+                "session_started",
                 "AgentProcessOutput",
                 r#"{"source":"agent_process_output"}"#.to_string(),
             )),
@@ -545,7 +549,7 @@ mod tests {
         assert_eq!(
             fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
             Some((
-                "tool_started",
+                "session_started",
                 "AgentProcessOutput",
                 r#"{"session_id":"claude-resume-known","source":"agent_process_output"}"#
                     .to_string(),
