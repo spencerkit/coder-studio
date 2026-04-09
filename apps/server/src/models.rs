@@ -351,6 +351,14 @@ pub struct SessionMessage {
     pub time: String,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRuntimeLiveness {
+    Attached,
+    ProviderExited,
+    TmuxMissing,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SessionInfo {
     pub id: String,
@@ -368,6 +376,8 @@ pub struct SessionInfo {
     pub unavailable_reason: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_liveness: Option<SessionRuntimeLiveness>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -379,13 +389,17 @@ pub struct AgentStartResult {
 pub struct SessionRuntimeBindingInfo {
     pub session_id: String,
     pub terminal_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_runtime_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_terminal_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct SessionRuntimeStartResult {
     pub terminal_id: u64,
     pub started: bool,
-    pub boot_input: Option<String>,
+    pub terminal_runtime_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -737,6 +751,8 @@ pub struct WorkspaceSessionState {
     pub status: SessionStatus,
     pub last_active_at: i64,
     pub resume_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_liveness: Option<SessionRuntimeLiveness>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

@@ -2,7 +2,9 @@ use std::{
     collections::HashMap,
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+    },
     time::Instant,
 };
 
@@ -35,13 +37,24 @@ pub(crate) struct AgentRuntime {
     pub process_group_leader: Option<i32>,
 }
 
+pub(crate) enum TerminalIo {
+    Pty {
+        writer: Mutex<Option<Box<dyn Write + Send>>>,
+        master: Mutex<Box<dyn MasterPty + Send>>,
+    },
+    TmuxAttached {
+        session_name: String,
+        writer: Mutex<Option<Box<dyn Write + Send>>>,
+        master: Mutex<Box<dyn MasterPty + Send>>,
+    },
+}
+
 pub(crate) struct TerminalRuntime {
-    pub child: Mutex<Box<dyn Child + Send>>,
-    pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
-    pub writer: Mutex<Option<Box<dyn Write + Send>>>,
-    pub master: Mutex<Box<dyn MasterPty + Send>>,
+    pub io: TerminalIo,
     pub output: Mutex<String>,
     pub persist_workspace_terminal: bool,
+    pub child: Option<Mutex<Box<dyn Child + Send>>>,
+    pub killer: Option<Mutex<Box<dyn ChildKiller + Send + Sync>>>,
     pub process_id: Option<u32>,
     pub process_group_leader: Option<i32>,
 }
@@ -85,6 +98,7 @@ pub(crate) struct AppState {
     pub live_sessions: Mutex<HashMap<String, SessionInfo>>,
     pub session_runtime_bindings: Mutex<HashMap<String, u64>>,
     pub terminal_runtime_bindings: Mutex<HashMap<u64, String>>,
+    pub terminal_runtimes: Mutex<crate::services::terminal_gateway::TerminalRuntimeRegistry>,
     pub workspace_client_connections: Mutex<HashMap<String, usize>>,
     pub workspace_watches: Mutex<HashMap<String, WorkspaceWatch>>,
     pub workspace_watch_suppressions: Arc<Mutex<HashMap<String, WorkspaceWatchSuppression>>>,
@@ -109,6 +123,7 @@ impl Default for AppState {
             live_sessions: Mutex::new(HashMap::new()),
             session_runtime_bindings: Mutex::new(HashMap::new()),
             terminal_runtime_bindings: Mutex::new(HashMap::new()),
+            terminal_runtimes: Mutex::new(Default::default()),
             workspace_client_connections: Mutex::new(HashMap::new()),
             workspace_watches: Mutex::new(HashMap::new()),
             workspace_watch_suppressions: Arc::new(Mutex::new(HashMap::new())),

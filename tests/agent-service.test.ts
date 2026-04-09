@@ -42,7 +42,7 @@ test("startSessionRuntime posts to session_runtime_start without any client-supp
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, data: { terminal_id: 9, started: true, boot_input: "claude\r" } }),
+      json: async () => ({ ok: true, data: { terminal_id: 9, started: true, terminal_runtime_id: "runtime-9" } }),
     } as Response;
   }) as typeof fetch;
 
@@ -73,7 +73,7 @@ test("startSessionRuntime posts to session_runtime_start without any client-supp
     assert.deepEqual(result, {
       terminal_id: 9,
       started: true,
-      boot_input: "claude\r",
+      terminal_runtime_id: "runtime-9",
     });
   } finally {
     globalThis.fetch = originalFetch;

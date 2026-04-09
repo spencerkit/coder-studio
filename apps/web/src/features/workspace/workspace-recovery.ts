@@ -15,7 +15,10 @@ export const resolveAgentRecoveryAction = (
   if (session.status !== "interrupted") {
     return null;
   }
-  if (session.terminalId) {
+  if (session.runtimeLiveness === "attached") {
+    return null;
+  }
+  if (session.terminalRuntimeId && !session.runtimeLiveness) {
     return null;
   }
   if (session.unavailableReason) {

@@ -58,7 +58,90 @@ test("controller gets restart action for interrupted session without resume id",
   assert.equal(action?.kind, "restart");
 });
 
-test("controller does not get recovery action once interrupted session is rebound to a live terminal", () => {
+test("controller does not get recovery action when interrupted session runtime is still attached", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "codex",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      lastActiveAt: 1,
+      resumeId: "resume-77",
+      terminalRuntimeId: "runtime-1",
+      runtimeLiveness: "attached",
+    },
+  );
+
+  assert.equal(action, null);
+});
+
+test("controller gets recovery action when interrupted session runtime exited even if runtime id remains bound", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "codex",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      lastActiveAt: 1,
+      resumeId: "resume-77",
+      terminalRuntimeId: "runtime-1",
+      runtimeLiveness: "provider_exited",
+    },
+  );
+
+  assert.deepEqual(action, { kind: "resume" });
+});
+
+test("controller gets recovery action when tmux session is missing even if runtime id remains bound", () => {
+  const action = resolveAgentRecoveryAction(
+    createWorkspaceControllerState({
+      role: "controller",
+      deviceId: "device-a",
+      clientId: "client-a",
+      fencingToken: 1,
+    }),
+    {
+      id: "1",
+      title: "Session 1",
+      status: "interrupted",
+      mode: "branch",
+      provider: "codex",
+      autoFeed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      lastActiveAt: 1,
+      terminalRuntimeId: "runtime-1",
+      runtimeLiveness: "tmux_missing",
+    },
+  );
+
+  assert.deepEqual(action, { kind: "restart" });
+});
+
+test("controller still gets recovery action when only a legacy terminal id remains without a live runtime binding", () => {
   const action = resolveAgentRecoveryAction(
     createWorkspaceControllerState({
       role: "controller",
@@ -82,7 +165,7 @@ test("controller does not get recovery action once interrupted session is reboun
     },
   );
 
-  assert.equal(action, null);
+  assert.deepEqual(action, { kind: "resume" });
 });
 
 test("controller does not get recovery action for unavailable missing sessions", () => {

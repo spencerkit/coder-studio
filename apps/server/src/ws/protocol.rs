@@ -36,6 +36,12 @@ pub(crate) enum WsClientEnvelope {
         patch: SessionPatch,
         fencing_token: i64,
     },
+    TerminalChannelInput {
+        workspace_id: String,
+        fencing_token: i64,
+        runtime_id: String,
+        input: String,
+    },
     WorkspaceControllerHeartbeat {
         workspace_id: String,
     },

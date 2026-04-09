@@ -105,6 +105,23 @@ pub(crate) fn provider_runtime_preview(
     })
 }
 
+pub(crate) fn provider_boot_command(
+    settings: &AppSettingsPayload,
+    provider: &ProviderId,
+    target: &ExecTarget,
+    resume_id: Option<&str>,
+) -> Result<String, String> {
+    let adapter = resolve_provider_adapter(provider.as_str())
+        .ok_or_else(|| format!("unknown_provider:{}", provider.as_str()))?;
+    let launch = match resume_id {
+        Some(id) => adapter.build_resume(settings, target, id)?,
+        None => adapter.build_start(settings, target)?,
+    };
+    Ok(crate::services::session_runtime::launch_spec_display_command(
+        &launch.launch_spec,
+    ))
+}
+
 #[cfg(test)]
 pub(crate) fn provider_env_test_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();

@@ -279,6 +279,43 @@ fn ws_input_error_envelope(workspace_id: &str, kind: &str, error: &str) -> WsEnv
     }
 }
 
+fn handle_terminal_channel_input(app: &AppHandle, payload: Value) -> Result<(), String> {
+    let workspace_id = payload
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "workspace_id_missing".to_string())?;
+    let device_id = payload
+        .get("device_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "device_id_missing".to_string())?;
+    let client_id = payload
+        .get("client_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "client_id_missing".to_string())?;
+    let fencing_token = payload
+        .get("fencing_token")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "fencing_token_missing".to_string())?;
+    let runtime_id = payload
+        .get("runtime_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "runtime_id_missing".to_string())?;
+    let input = payload
+        .get("input")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "input_missing".to_string())?;
+    let state = app.state();
+    crate::services::workspace_runtime::assert_workspace_controller_can_mutate(
+        workspace_id,
+        device_id,
+        client_id,
+        fencing_token,
+        app,
+        state,
+    )?;
+    crate::services::terminal_gateway::send_input(runtime_id, input, state)
+}
+
 fn handle_ws_client_envelope(
     envelope: WsClientEnvelope,
     app: &AppHandle,
@@ -345,6 +382,35 @@ fn handle_ws_client_envelope(
             session_update(workspace_id.clone(), session_id, patch, app.state()).map_err(
                 |error| ws_input_error_envelope(&workspace_id, "session_update", &error),
             )?;
+            Ok(None)
+        }
+        WsClientEnvelope::TerminalChannelInput {
+            workspace_id,
+            fencing_token,
+            runtime_id,
+            input,
+        } => {
+            let (device_id, client_id) = workspace_client.ok_or_else(|| {
+                ws_input_error_envelope(
+                    &workspace_id,
+                    "terminal_channel_input",
+                    "workspace_client_missing",
+                )
+            })?;
+            handle_terminal_channel_input(
+                app,
+                json!({
+                    "workspace_id": workspace_id,
+                    "device_id": device_id,
+                    "client_id": client_id,
+                    "fencing_token": fencing_token,
+                    "runtime_id": runtime_id,
+                    "input": input,
+                }),
+            )
+            .map_err(|error| {
+                ws_input_error_envelope("terminal-channel", "terminal_channel_input", &error)
+            })?;
             Ok(None)
         }
         WsClientEnvelope::WorkspaceControllerHeartbeat { workspace_id } => {
@@ -414,6 +480,17 @@ pub(crate) fn emit_agent(
             data: data.to_string(),
             raw_data: raw_data.map(str::to_string),
         },
+    );
+}
+
+pub(crate) fn emit_terminal_channel_output(app: &AppHandle, runtime_id: &str, data: &str) {
+    emit_transport_event(
+        app,
+        "terminal://channel_output",
+        json!({
+            "runtime_id": runtime_id,
+            "data": data,
+        }),
     );
 }
 
@@ -511,7 +588,114 @@ fn artifact_dirty_categories(reason: &str) -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::artifact_dirty_categories;
+    use super::{
+        artifact_dirty_categories,
+        emit_terminal_channel_output,
+        handle_terminal_channel_input,
+    };
+    use crate::runtime::RuntimeHandle;
+    use crate::services::terminal_gateway::TerminalRuntime;
+    use crate::{
+        default_idle_policy, init_db, launch_workspace_record, save_workspace_controller_lease,
+        AppHandle, ExecTarget, WorkspaceControllerLease, WorkspaceSource, WorkspaceSourceKind,
+    };
+    use serde_json::json;
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    fn launch_test_workspace(app: &AppHandle, root: &str) -> String {
+        let result = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: root.to_string(),
+                target: ExecTarget::Native,
+            },
+            root.to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        result.snapshot.workspace.workspace_id
+    }
+
+    #[test]
+    fn emit_terminal_channel_output_publishes_channel_event() {
+        let app = test_app();
+        let mut rx = app.state().transport_events.subscribe();
+        let _ = rx.try_recv();
+
+        emit_terminal_channel_output(&app, "runtime-1", "hello");
+
+        let event = rx.try_recv().expect("channel output should be emitted");
+        assert_eq!(event.event, "terminal://channel_output");
+        assert_eq!(event.payload["runtime_id"], "runtime-1");
+        assert_eq!(event.payload["data"], "hello");
+    }
+
+    #[test]
+    fn terminal_channel_input_requires_controller_fencing_context() {
+        let app = test_app();
+
+        let result = handle_terminal_channel_input(
+            &app,
+            json!({
+                "runtime_id": "runtime-1",
+                "input": "hello"
+            }),
+        );
+
+        assert_eq!(result, Err("workspace_id_missing".to_string()));
+    }
+
+    #[test]
+    fn terminal_channel_input_routes_to_runtime() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-terminal-channel-input");
+        save_workspace_controller_lease(
+            app.state(),
+            &WorkspaceControllerLease {
+                workspace_id: workspace_id.clone(),
+                controller_device_id: Some("device-a".to_string()),
+                controller_client_id: Some("client-a".to_string()),
+                lease_expires_at: crate::now_ts() + 60,
+                fencing_token: 1,
+                takeover_request_id: None,
+                takeover_requested_by_device_id: None,
+                takeover_requested_by_client_id: None,
+                takeover_deadline_at: None,
+            },
+        )
+        .unwrap();
+        let runtime = TerminalRuntime::new(
+            "runtime-1".into(),
+            workspace_id.clone(),
+            "session-1".into(),
+            "claude".into(),
+            "tmux-session-1".into(),
+            "%1".into(),
+        );
+        app.state().terminal_runtimes.lock().unwrap().insert(runtime);
+
+        let result = handle_terminal_channel_input(
+            &app,
+            json!({
+                "workspace_id": workspace_id,
+                "device_id": "device-a",
+                "client_id": "client-a",
+                "fencing_token": 1,
+                "runtime_id": "runtime-1",
+                "input": "hello"
+            }),
+        );
+
+        assert!(result.is_ok());
+    }
 
     #[test]
     fn artifact_dirty_categories_keep_tree_off_for_index_only_git_changes() {

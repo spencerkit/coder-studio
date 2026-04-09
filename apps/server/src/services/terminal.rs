@@ -1,3 +1,4 @@
+use crate::app::TerminalIo;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
 use std::collections::BTreeMap;
@@ -16,21 +17,50 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
 }
 
 fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
-    if let Ok(mut writer) = runtime.writer.lock() {
-        writer.take();
+    match &runtime.io {
+        TerminalIo::Pty { writer, .. } | TerminalIo::TmuxAttached { writer, .. } => {
+            if let Ok(mut writer) = writer.lock() {
+                writer.take();
+            }
+        }
     }
-    if let Ok(mut killer) = runtime.killer.lock() {
-        let _ = terminate_process_tree(
-            &mut **killer,
-            runtime.process_id,
-            runtime.process_group_leader,
-        );
+    if let Some(killer) = &runtime.killer {
+        if let Ok(mut killer) = killer.lock() {
+            let _ = terminate_process_tree(
+                &mut **killer,
+                runtime.process_id,
+                runtime.process_group_leader,
+            );
+        }
     }
+}
+
+pub(crate) enum TerminalLaunchCommand {
+    DefaultShell,
+    Custom { program: String, args: Vec<String> },
+}
+
+#[derive(Clone)]
+pub(crate) enum TerminalBridgeTarget {
+    Pty {
+        cwd: String,
+        target: ExecTarget,
+        cols: Option<u16>,
+        rows: Option<u16>,
+    },
+    Tmux {
+        session_name: String,
+        pane_id: String,
+        cols: Option<u16>,
+        rows: Option<u16>,
+    },
 }
 
 pub(crate) struct TerminalCreateOptions {
     pub persist_workspace_terminal: bool,
     pub env: BTreeMap<String, String>,
+    pub launch_command: TerminalLaunchCommand,
+    pub bridge_target: TerminalBridgeTarget,
 }
 
 fn next_terminal_id(state: State<'_, AppState>) -> Result<u64, String> {
@@ -58,6 +88,49 @@ fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
     }
 }
 
+fn persist_runtime_output_if_needed(
+    runtime: &Arc<TerminalRuntime>,
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    terminal_id: u64,
+    text: &str,
+) {
+    if runtime.persist_workspace_terminal {
+        let _ = append_workspace_terminal_output(state, workspace_id, terminal_id, text);
+    }
+}
+
+fn emit_runtime_output(
+    runtime: &Arc<TerminalRuntime>,
+    app: &AppHandle,
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    terminal_id: u64,
+    text: &str,
+) {
+    if text.is_empty() {
+        return;
+    }
+    append_runtime_output(runtime, text);
+    emit_terminal(app, workspace_id, terminal_id, text, None);
+    if let Ok(Some((binding_workspace_id, session_id))) =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+    {
+        if binding_workspace_id == workspace_id {
+            if let Ok(registry) = state.terminal_runtimes.lock() {
+                if let Some(runtime) = registry.by_session(workspace_id, &session_id) {
+                    crate::services::terminal_gateway::emit_terminal_channel_output(
+                        app,
+                        &runtime.runtime_id,
+                        text,
+                    );
+                }
+            }
+        }
+    }
+    persist_runtime_output_if_needed(runtime, state, workspace_id, terminal_id, text);
+}
+
 fn format_terminal_exit_message(wait_result: std::io::Result<portable_pty::ExitStatus>) -> String {
     match wait_result {
         Ok(status) => format!("\n[terminal exited: {status}]\n"),
@@ -70,6 +143,7 @@ fn sync_bound_terminal_runtime_state(
     terminal_id: u64,
     status: SessionStatus,
     runtime_active: bool,
+    runtime_liveness: Option<SessionRuntimeLiveness>,
     state: State<'_, AppState>,
 ) {
     if let Ok(Some((binding_workspace_id, session_id))) =
@@ -78,11 +152,41 @@ fn sync_bound_terminal_runtime_state(
         if binding_workspace_id != workspace_id {
             return;
         }
-        let _ =
-            sync_session_runtime_state(state, workspace_id, &session_id, status, runtime_active);
+        let _ = sync_session_runtime_state(
+            state,
+            workspace_id,
+            &session_id,
+            status,
+            runtime_active,
+            runtime_liveness,
+        );
     }
 }
-pub(crate) fn create_terminal_runtime(
+
+fn build_terminal_launch_command(
+    target: &ExecTarget,
+    cwd: &str,
+    options: &TerminalCreateOptions,
+) -> CommandBuilder {
+    match &options.launch_command {
+        TerminalLaunchCommand::DefaultShell => build_terminal_pty_command(target, cwd),
+        TerminalLaunchCommand::Custom { program, args } => {
+            let mut cmd = CommandBuilder::new(program);
+            cmd.args(args);
+            if !cwd.is_empty() {
+                cmd.cwd(cwd);
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                apply_unix_pty_env_defaults(&mut cmd, None);
+            }
+            cmd
+        }
+    }
+}
+
+fn create_pty_terminal_runtime(
+    terminal_id: u64,
     workspace_id: &str,
     cwd: &str,
     target: &ExecTarget,
@@ -90,14 +194,13 @@ pub(crate) fn create_terminal_runtime(
     rows: Option<u16>,
     options: TerminalCreateOptions,
     app: &AppHandle,
-    state: State<'_, AppState>,
-) -> Result<TerminalInfo, String> {
-    let terminal_id = next_terminal_id(state)?;
+    _state: State<'_, AppState>,
+) -> Result<Arc<TerminalRuntime>, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))
         .map_err(|e| e.to_string())?;
-    let mut cmd = build_terminal_pty_command(target, cwd);
+    let mut cmd = build_terminal_launch_command(target, cwd, &options);
     for (key, value) in &options.env {
         cmd.env(key, value);
     }
@@ -113,28 +216,17 @@ pub(crate) fn create_terminal_runtime(
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     let runtime = Arc::new(TerminalRuntime {
-        child: Mutex::new(child),
-        killer: Mutex::new(killer),
-        writer: Mutex::new(Some(writer)),
-        master: Mutex::new(pair.master),
+        io: TerminalIo::Pty {
+            writer: Mutex::new(Some(writer)),
+            master: Mutex::new(pair.master),
+        },
         output: Mutex::new(String::new()),
         persist_workspace_terminal: options.persist_workspace_terminal,
+        child: Some(Mutex::new(child)),
+        killer: Some(Mutex::new(killer)),
         process_id,
         process_group_leader,
     });
-
-    if runtime.persist_workspace_terminal {
-        if let Err(error) = persist_workspace_terminal(state, workspace_id, terminal_id, "", true) {
-            terminate_terminal_runtime(runtime);
-            return Err(error);
-        }
-    }
-
-    let key = terminal_key(workspace_id, terminal_id);
-    {
-        let mut terms = state.terminals.lock().map_err(|e| e.to_string())?;
-        terms.insert(key.clone(), runtime.clone());
-    }
 
     let app_handle = app.clone();
     let state_handle = app.clone();
@@ -148,19 +240,15 @@ pub(crate) fn create_terminal_runtime(
             match reader.read(&mut buf) {
                 Ok(0) => {
                     let text = decoder.finish();
-                    if !text.is_empty() {
-                        append_runtime_output(&runtime_out, &text);
-                        emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text, None);
-                        if runtime_out.persist_workspace_terminal {
-                            let state: State<AppState> = state_handle.state();
-                            let _ = append_workspace_terminal_output(
-                                state,
-                                &workspace_id_out,
-                                terminal_id,
-                                &text,
-                            );
-                        }
-                    }
+                    let state: State<AppState> = state_handle.state();
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
                     break;
                 }
                 Ok(n) => {
@@ -168,17 +256,15 @@ pub(crate) fn create_terminal_runtime(
                     if text.is_empty() {
                         continue;
                     }
-                    append_runtime_output(&runtime_out, &text);
-                    emit_terminal(&app_handle, &workspace_id_out, terminal_id, &text, None);
-                    if runtime_out.persist_workspace_terminal {
-                        let state: State<AppState> = state_handle.state();
-                        let _ = append_workspace_terminal_output(
-                            state,
-                            &workspace_id_out,
-                            terminal_id,
-                            &text,
-                        );
-                    }
+                    let state: State<AppState> = state_handle.state();
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
                 }
                 Err(_) => break,
             }
@@ -189,37 +275,237 @@ pub(crate) fn create_terminal_runtime(
     let state_handle = app.clone();
     let runtime_out = runtime.clone();
     let workspace_id_out = workspace_id.to_string();
+    let key = terminal_key(workspace_id, terminal_id);
     std::thread::spawn(move || {
-        let exit_text = match runtime_out.child.lock() {
-            Ok(mut child) => format_terminal_exit_message(child.wait()),
-            Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+        let exit_text = match &runtime_out.child {
+            Some(child) => match child.lock() {
+                Ok(mut child) => format_terminal_exit_message(child.wait()),
+                Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+            },
+            None => "\n[terminal exited]\n".to_string(),
         };
-        append_runtime_output(&runtime_out, &exit_text);
-        emit_terminal(
+        let state: State<AppState> = state_handle.state();
+        emit_runtime_output(
+            &runtime_out,
             &app_handle,
+            state,
             &workspace_id_out,
             terminal_id,
             &exit_text,
-            None,
         );
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
-            let _ =
-                append_workspace_terminal_output(state, &workspace_id_out, terminal_id, &exit_text);
-            let _ =
-                set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
         sync_bound_terminal_runtime_state(
             &workspace_id_out,
             terminal_id,
             SessionStatus::Interrupted,
             false,
+            Some(SessionRuntimeLiveness::ProviderExited),
             state,
         );
         if let Ok(mut terms) = state.terminals.lock() {
             terms.remove(&key);
         }
     });
+
+    Ok(runtime)
+}
+
+fn create_tmux_terminal_runtime(
+    terminal_id: u64,
+    workspace_id: &str,
+    session_name: &str,
+    _pane_id: &str,
+    cols: Option<u16>,
+    rows: Option<u16>,
+    options: TerminalCreateOptions,
+    app: &AppHandle,
+    _state: State<'_, AppState>,
+) -> Result<Arc<TerminalRuntime>, String> {
+    let attach_runtime = crate::services::tmux::attach_tmux_session(session_name, cols, rows)?;
+    let reader = attach_runtime
+        .pair
+        .master
+        .try_clone_reader()
+        .map_err(|e| e.to_string())?;
+    let writer = attach_runtime
+        .pair
+        .master
+        .take_writer()
+        .map_err(|e| e.to_string())?;
+
+    let runtime = Arc::new(TerminalRuntime {
+        io: TerminalIo::TmuxAttached {
+            session_name: session_name.to_string(),
+            writer: Mutex::new(Some(writer)),
+            master: Mutex::new(attach_runtime.pair.master),
+        },
+        output: Mutex::new(String::new()),
+        persist_workspace_terminal: options.persist_workspace_terminal,
+        child: Some(attach_runtime.child),
+        killer: Some(attach_runtime.killer),
+        process_id: None,
+        process_group_leader: None,
+    });
+
+    let app_handle = app.clone();
+    let state_handle = app.clone();
+    let runtime_out = runtime.clone();
+    let workspace_id_out = workspace_id.to_string();
+    std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut buf = [0u8; 4096];
+        let mut decoder = Utf8StreamDecoder::new();
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => {
+                    let text = decoder.finish();
+                    let state: State<AppState> = state_handle.state();
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
+                    break;
+                }
+                Ok(n) => {
+                    let text = decoder.push(&buf[..n]);
+                    if text.is_empty() {
+                        continue;
+                    }
+                    let state: State<AppState> = state_handle.state();
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &text,
+                    );
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let app_handle = app.clone();
+    let state_handle = app.clone();
+    let runtime_out = runtime.clone();
+    let workspace_id_out = workspace_id.to_string();
+    let key = terminal_key(workspace_id, terminal_id);
+    std::thread::spawn(move || {
+        let exit_text = match &runtime_out.child {
+            Some(child) => match child.lock() {
+                Ok(mut child) => format_terminal_exit_message(child.wait()),
+                Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+            },
+            None => "\n[terminal exited]\n".to_string(),
+        };
+        let state: State<AppState> = state_handle.state();
+        emit_runtime_output(
+            &runtime_out,
+            &app_handle,
+            state,
+            &workspace_id_out,
+            terminal_id,
+            &exit_text,
+        );
+        let state: State<AppState> = state_handle.state();
+        if let Ok(Some((binding_workspace_id, session_id))) =
+            crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+        {
+            if binding_workspace_id == workspace_id_out {
+                let _ = crate::services::session_runtime::remove_terminal_runtime_registration(
+                    &workspace_id_out,
+                    &session_id,
+                    state,
+                );
+            }
+        }
+        if runtime_out.persist_workspace_terminal {
+            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+        }
+        sync_bound_terminal_runtime_state(
+            &workspace_id_out,
+            terminal_id,
+            SessionStatus::Interrupted,
+            false,
+            Some(SessionRuntimeLiveness::ProviderExited),
+            state,
+        );
+        if let Ok(mut terms) = state.terminals.lock() {
+            terms.remove(&key);
+        }
+    });
+
+    Ok(runtime)
+}
+
+pub(crate) fn create_terminal_runtime(
+    workspace_id: &str,
+    _cwd: &str,
+    _target: &ExecTarget,
+    _cols: Option<u16>,
+    _rows: Option<u16>,
+    options: TerminalCreateOptions,
+    app: &AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TerminalInfo, String> {
+    let terminal_id = next_terminal_id(state)?;
+    let bridge_target = options.bridge_target.clone();
+    let runtime = match bridge_target {
+        TerminalBridgeTarget::Pty {
+            cwd,
+            target,
+            cols,
+            rows,
+        } => create_pty_terminal_runtime(
+            terminal_id,
+            workspace_id,
+            &cwd,
+            &target,
+            cols,
+            rows,
+            options,
+            app,
+            state,
+        )?,
+        TerminalBridgeTarget::Tmux {
+            session_name,
+            pane_id,
+            cols,
+            rows,
+        } => create_tmux_terminal_runtime(
+            terminal_id,
+            workspace_id,
+            &session_name,
+            &pane_id,
+            cols,
+            rows,
+            options,
+            app,
+            state,
+        )?,
+    };
+
+    if runtime.persist_workspace_terminal {
+        if let Err(error) = persist_workspace_terminal(state, workspace_id, terminal_id, "", true) {
+            terminate_terminal_runtime(runtime);
+            return Err(error);
+        }
+    }
+
+    let key = terminal_key(workspace_id, terminal_id);
+    state
+        .terminals
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(key, runtime);
 
     Ok(TerminalInfo {
         id: terminal_id,
@@ -246,6 +532,13 @@ pub(crate) fn terminal_create(
         TerminalCreateOptions {
             persist_workspace_terminal: true,
             env: BTreeMap::new(),
+            launch_command: TerminalLaunchCommand::DefaultShell,
+            bridge_target: TerminalBridgeTarget::Pty {
+                cwd: cwd.clone(),
+                target: target.clone(),
+                cols,
+                rows,
+            },
         },
         &app,
         state,
@@ -284,43 +577,51 @@ pub(crate) fn terminal_write(
             }
         }
     };
-    let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
-    if let Some(handle) = writer.as_mut() {
-        handle
-            .write_all(decorated_input.as_bytes())
-            .map_err(|e| e.to_string())?;
-        handle.flush().map_err(|e| e.to_string())?;
-        #[cfg(test)]
-        state
-            .terminal_write_log
-            .lock()
-            .map_err(|e| e.to_string())?
-            .push((
-                workspace_id.clone(),
-                terminal_id,
-                decorated_input.clone(),
-                origin.clone(),
-            ));
-        let _ = state.transport_events.send(TransportEvent {
-            event: "terminal://event".to_string(),
-            payload: json!({
-                "workspace_id": workspace_id,
-                "terminal_id": terminal_id,
-                "data": decorated_input,
-                "origin": origin,
-            }),
-        });
-        sync_bound_terminal_runtime_state(
-            &workspace_id,
-            terminal_id,
-            SessionStatus::Running,
-            true,
-            state,
-        );
-        Ok(())
-    } else {
-        Err("terminal_stdin_closed".to_string())
+    match &runtime.io {
+        TerminalIo::Pty { writer, .. } => {
+            let mut writer = writer.lock().map_err(|e| e.to_string())?;
+            if let Some(handle) = writer.as_mut() {
+                handle
+                    .write_all(decorated_input.as_bytes())
+                    .map_err(|e| e.to_string())?;
+                handle.flush().map_err(|e| e.to_string())?;
+            } else {
+                return Err("terminal_stdin_closed".to_string());
+            }
+        }
+        TerminalIo::TmuxAttached { session_name, .. } => {
+            crate::services::tmux::send_tmux_raw_input(session_name, &decorated_input)?;
+        }
     }
+    #[cfg(test)]
+    state
+        .terminal_write_log
+        .lock()
+        .map_err(|e| e.to_string())?
+        .push((
+            workspace_id.clone(),
+            terminal_id,
+            decorated_input.clone(),
+            origin.clone(),
+        ));
+    let _ = state.transport_events.send(TransportEvent {
+        event: "terminal://event".to_string(),
+        payload: json!({
+            "workspace_id": workspace_id,
+            "terminal_id": terminal_id,
+            "data": decorated_input,
+            "origin": origin,
+        }),
+    });
+    sync_bound_terminal_runtime_state(
+        &workspace_id,
+        terminal_id,
+        SessionStatus::Running,
+        true,
+        Some(SessionRuntimeLiveness::Attached),
+        state,
+    );
+    Ok(())
 }
 
 pub(crate) fn terminal_resize(
@@ -333,15 +634,19 @@ pub(crate) fn terminal_resize(
     let key = terminal_key(&workspace_id, terminal_id);
     let terms = state.terminals.lock().map_err(|e| e.to_string())?;
     let runtime = terms.get(&key).ok_or("terminal_not_found")?.clone();
-    let master = runtime.master.lock().map_err(|e| e.to_string())?;
-    master
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())
+    match &runtime.io {
+        TerminalIo::Pty { master, .. } | TerminalIo::TmuxAttached { master, .. } => {
+            let master = master.lock().map_err(|e| e.to_string())?;
+            master
+                .resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| e.to_string())
+        }
+    }
 }
 
 pub(crate) fn terminal_close(
@@ -356,7 +661,14 @@ pub(crate) fn terminal_close(
     };
 
     if let Some(runtime) = runtime {
+        let tmux_session = match &runtime.io {
+            TerminalIo::TmuxAttached { session_name, .. } => Some(session_name.clone()),
+            TerminalIo::Pty { .. } => None,
+        };
         terminate_terminal_runtime(runtime);
+        if let Some(session_name) = tmux_session {
+            let _ = crate::services::tmux::kill_tmux_session(&session_name);
+        }
     }
     let is_bound_session_terminal =
         crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)?
@@ -366,6 +678,7 @@ pub(crate) fn terminal_close(
         terminal_id,
         SessionStatus::Interrupted,
         false,
+        Some(SessionRuntimeLiveness::ProviderExited),
         state,
     );
     if is_bound_session_terminal {
@@ -398,12 +711,20 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
     };
 
     for (terminal_id, runtime) in runtimes {
+        let tmux_session = match &runtime.io {
+            TerminalIo::TmuxAttached { session_name, .. } => Some(session_name.clone()),
+            TerminalIo::Pty { .. } => None,
+        };
         terminate_terminal_runtime(runtime);
+        if let Some(session_name) = tmux_session {
+            let _ = crate::services::tmux::kill_tmux_session(&session_name);
+        }
         sync_bound_terminal_runtime_state(
             workspace_id,
             terminal_id,
             SessionStatus::Interrupted,
             false,
+            Some(SessionRuntimeLiveness::ProviderExited),
             state,
         );
         let _ = delete_workspace_terminal(state, workspace_id, terminal_id);

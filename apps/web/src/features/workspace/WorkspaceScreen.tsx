@@ -92,7 +92,7 @@ import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
   shouldAttachRouteRuntimeForExistingTab,
 } from "./workspace-route-runtime";
-import { filterWorkspacePanelTerminals } from "./session-runtime-bindings";
+import { filterWorkspacePanelTerminals, resolveSessionTerminalIdByRuntimeId } from "./session-runtime-bindings";
 import {
   createWorkspaceViewPatchFromTab,
   createWorkspaceViewPersistScheduler,
@@ -137,6 +137,7 @@ import {
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
 import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
+import { sendTerminalChannelInput } from "../../services/terminal-channel/client.ts";
 import { withFallback } from "../../services/http/client";
 import {
   commitGitChanges,
@@ -1913,13 +1914,19 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!result) {
       return null;
     }
-    const terminalId = `term-${result.terminal_id}`;
-    let nextSession = { ...session, terminalId };
+    const terminalRuntimeId = result.terminal_runtime_id ?? session.terminalRuntimeId;
+    const terminalId = result.terminal_runtime_id
+      ? undefined
+      : `term-${result.terminal_id}`;
+    let nextSession = {
+      ...session,
+      terminalId,
+      terminalRuntimeId,
+    };
     let nextTab = {
       ...tab,
-      terminals: tab.terminals.some((terminal) => terminal.id === terminalId)
-        ? tab.terminals
-        : [
+      terminals: terminalId && !tab.terminals.some((terminal) => terminal.id === terminalId)
+        ? [
             ...tab.terminals,
             {
               id: terminalId,
@@ -1927,7 +1934,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               output: "",
               recoverable: true,
             },
-          ],
+          ]
+        : tab.terminals,
       sessions: tab.sessions.map((item) => (
         item.id === session.id
           ? nextSession
@@ -1937,9 +1945,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateTab(tab.id, (current) => {
       nextTab = {
         ...current,
-        terminals: current.terminals.some((terminal) => terminal.id === terminalId)
-          ? current.terminals
-          : [
+        terminals: terminalId && !current.terminals.some((terminal) => terminal.id === terminalId)
+          ? [
               ...current.terminals,
               {
                 id: terminalId,
@@ -1947,10 +1954,15 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
                 output: "",
                 recoverable: true,
               },
-            ],
+            ]
+          : current.terminals,
         sessions: current.sessions.map((item) => (
           item.id === session.id
-            ? { ...item, terminalId }
+            ? {
+                ...item,
+                terminalId,
+                terminalRuntimeId: terminalRuntimeId ?? item.terminalRuntimeId,
+              }
             : item
         )),
       };
@@ -1962,8 +1974,17 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         window.requestAnimationFrame(() => resolve());
       });
     }
-    if (result.boot_input) {
-      writeWorkspaceTerminalData(tab.id, tab.controller, terminalId, result.boot_input);
+    if (terminalRuntimeId) {
+      updateState((current) => ({
+        ...current,
+        tabs: current.tabs.map((item) => item.id !== tab.id ? item : {
+          ...item,
+          sessions: item.sessions.map((entry) => entry.id !== session.id ? entry : {
+            ...entry,
+            terminalRuntimeId: terminalRuntimeId,
+          }),
+        }),
+      }));
     }
     const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
       tab.id,
@@ -1999,7 +2020,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    if (!session.terminalId) return false;
+    if (!session.terminalRuntimeId) return false;
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
       ...current,
@@ -2008,7 +2029,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    writeWorkspaceTerminalData(tab.id, tab.controller, session.terminalId, input);
+    sendTerminalChannelInput(tab.id, tab.controller.deviceId, tab.controller.clientId, tab.controller.fencingToken, session.terminalRuntimeId, input);
     return true;
   };
 
@@ -2578,7 +2599,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     let sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return null;
 
-    if (!sessionSnapshot.terminalId) {
+    if (!sessionSnapshot.terminalRuntimeId) {
       const started = await startSessionRuntimeInPane(paneId, tabSnapshot, sessionSnapshot);
       if (!started) return null;
       tabSnapshot = started.tab;
@@ -2747,13 +2768,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     agentPaneSizeRef.current.set(paneId, size);
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const session = tab?.sessions.find((item) => item.id === sessionId);
-    if (!tab || !session?.terminalId) return;
+    if (!tab || !session?.terminalRuntimeId) return;
     if (!canMutateWorkspace(tab.controller, "resize_terminal")) return;
+    const terminalId = resolveSessionTerminalIdByRuntimeId(tab.sessions, session.terminalRuntimeId, tab.terminals)
+      ?? session.terminalId;
+    if (!terminalId) return;
     syncWorkspaceTerminalSize(
       terminalSizeRef,
       tab.id,
       tab.controller,
-      session.terminalId,
+      terminalId,
       size.cols,
       size.rows,
     );

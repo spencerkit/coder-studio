@@ -1195,6 +1195,7 @@ fn session_placeholder(
         resume_id,
         unavailable_reason,
         runtime_active: false,
+        runtime_liveness: None,
     }
 }
 
@@ -2014,11 +2015,13 @@ pub(crate) fn set_session_runtime_state_if_not_archived<S: ToString>(
     session_id: S,
     status: SessionStatus,
     runtime_active: bool,
+    runtime_liveness: Option<SessionRuntimeLiveness>,
 ) -> Result<bool, String> {
     match load_session(state, workspace_id, session_id) {
         Ok(mut session) => {
             session.status = status;
             session.runtime_active = runtime_active;
+            session.runtime_liveness = runtime_liveness;
             session.last_active_at = now_ts_ms();
             crate::services::workspace::remember_live_session(state, workspace_id, &session)?;
             Ok(true)

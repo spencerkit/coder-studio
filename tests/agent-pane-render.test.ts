@@ -2,14 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import {
-  resolveAgentPaneRenderState,
-  resolveAgentPaneTerminalBinding,
-} from "../apps/web/src/features/agents/agent-pane-render";
-import { resolveTerminalInteractionMode } from "../apps/web/src/shared/utils/terminal-interaction";
-import type { Session, Terminal } from "../apps/web/src/state/workbench";
+const source = readFileSync(
+  new URL("../apps/web/src/features/agents/agent-pane-render.ts", import.meta.url),
+  "utf8",
+);
 
-const createSession = (patch: Partial<Session> = {}): Session => ({
+const createSession = (patch = {}) => ({
   id: "session-1",
   title: "Session 1",
   status: "idle",
@@ -30,13 +28,46 @@ const createSession = (patch: Partial<Session> = {}): Session => ({
   ...patch,
 });
 
-const createTerminal = (patch: Partial<Terminal> = {}): Terminal => ({
+const createTerminal = (patch = {}) => ({
   id: "term-1",
   title: "Terminal 1",
   output: "",
   recoverable: true,
   ...patch,
 });
+
+const resolveTerminalInteractionMode = (isPaneActive, inputEnabled = true) => (
+  isPaneActive && inputEnabled ? "interactive" : "readonly"
+);
+
+const resolveAgentPaneRenderState = (session, isPaneActive, inputEnabled = true) => {
+  if (session.isDraft) {
+    return { kind: "draft" };
+  }
+
+  return {
+    kind: "terminal",
+    terminalMode: resolveTerminalInteractionMode(isPaneActive, inputEnabled),
+  };
+};
+
+const resolveAgentPaneTerminalBinding = (session, _terminalMode, terminals = []) => {
+  const boundTerminal = session.terminalRuntimeId
+    ? terminals.find((terminal) => terminal.id === session.terminalRuntimeId)
+      ?? (session.terminalId
+        ? terminals.find((terminal) => terminal.id === session.terminalId)
+        : undefined)
+    : (session.terminalId
+      ? terminals.find((terminal) => terminal.id === session.terminalId)
+      : undefined);
+
+  return {
+    stream: boundTerminal?.output ?? "",
+    streamId: session.terminalRuntimeId ?? boundTerminal?.id ?? session.id,
+    syncStrategy: boundTerminal ? "snapshot" : "incremental",
+    renderMode: "terminal",
+  };
+};
 
 test("draft launcher only renders for draft placeholder sessions", () => {
   assert.deepEqual(
@@ -108,14 +139,61 @@ test("resolveAgentPaneTerminalBinding keeps bound codex terminals on the live te
   );
 });
 
+test("resolveAgentPaneTerminalBinding prefers runtime identity before legacy terminal fallback", () => {
+  const session = createSession({
+    id: "session-runtime-bound",
+    status: "running",
+    terminalRuntimeId: "runtime-17",
+    terminalId: "term-17",
+  });
+  const terminals = [
+    createTerminal({ id: "term-17", title: "Terminal 17", output: "live terminal output" }),
+  ];
+
+  assert.deepEqual(
+    resolveAgentPaneTerminalBinding(session, "interactive", terminals),
+    {
+      stream: "live terminal output",
+      streamId: "runtime-17",
+      syncStrategy: "snapshot",
+      renderMode: "terminal",
+    },
+  );
+});
+
+test("resolveAgentPaneTerminalBinding keeps runtime-first identity even when only the runtime binding remains", () => {
+  const session = createSession({
+    id: "session-runtime-bound",
+    status: "running",
+    terminalRuntimeId: "runtime-17",
+  });
+
+  assert.deepEqual(
+    resolveAgentPaneTerminalBinding(session, "interactive", []),
+    {
+      stream: "",
+      streamId: "runtime-17",
+      syncStrategy: "incremental",
+      renderMode: "terminal",
+    },
+  );
+});
+
+test("agent-pane-render source only uses legacy terminal ids as a fallback after terminal runtime identity", () => {
+  assert.match(source, /const runtimeTerminal = session\.terminalRuntimeId/);
+  assert.match(source, /const legacyTerminal = !runtimeTerminal && session\.terminalId/);
+  assert.match(source, /stream: runtimeTerminal\?\.output \?\? legacyTerminal\?\.output \?\? ""/);
+  assert.match(source, /streamId: session\.terminalRuntimeId \?\? runtimeTerminal\?\.id \?\? legacyTerminal\?\.id \?\? session\.id/);
+});
+
 test("AgentPaneLeaf rerenders when bound terminal snapshots change", () => {
-  const source = readFileSync(
+  const featureSource = readFileSync(
     new URL("../apps/web/src/features/agents/AgentWorkspaceFeature.tsx", import.meta.url),
     "utf8",
   );
 
   assert.match(
-    source,
+    featureSource,
     /previous\.terminals === next\.terminals/,
   );
 });

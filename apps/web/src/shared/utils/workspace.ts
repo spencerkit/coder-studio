@@ -600,9 +600,10 @@ export const applyWorkspaceRuntimeSnapshot = (
         tab.sessions,
         runtimeSnapshot.session_runtime_bindings ?? [],
       );
-      const bindingTerminalId = runtimeSnapshot.session_runtime_bindings?.find((binding) => (
+      const activeBinding = runtimeSnapshot.session_runtime_bindings?.find((binding) => (
         binding.session_id === runtimeSnapshot.snapshot.view_state.active_session_id
-      ))?.terminal_id;
+      ));
+      const bindingTerminalId = activeBinding?.workspace_terminal_id;
       const activePaneSessionId = findPaneSessionId(tab.paneLayout, tab.activePaneId);
       const nextActiveSessionId = runtimeSnapshot.snapshot.view_state.active_session_id;
       const remapSourceSessionId = (
@@ -633,7 +634,8 @@ export const applyWorkspaceRuntimeSnapshot = (
               ...session,
               id: nextActiveSessionId,
               isDraft: false,
-              terminalId: bindingTerminalId ? `term-${bindingTerminalId}` : session.terminalId,
+              terminalId: bindingTerminalId ? `term-${bindingTerminalId}` : undefined,
+              terminalRuntimeId: activeBinding?.terminal_runtime_id ?? session.terminalRuntimeId,
             }
           : session
       ));
@@ -699,6 +701,7 @@ export const applyWorkspaceRuntimeStateEvent = (
         session.status !== sessionState.status
         || session.lastActiveAt !== sessionState.last_active_at
         || session.resumeId !== (sessionState.resume_id ?? session.resumeId)
+        || session.runtimeLiveness !== (sessionState.runtime_liveness ?? session.runtimeLiveness)
       );
       if (!sessionChanged) {
         return session;
@@ -708,6 +711,7 @@ export const applyWorkspaceRuntimeStateEvent = (
         status: sessionState.status,
         lastActiveAt: sessionState.last_active_at,
         resumeId: sessionState.resume_id ?? session.resumeId,
+        runtimeLiveness: sessionState.runtime_liveness ?? session.runtimeLiveness,
       };
     });
     if (sessionChanged) {

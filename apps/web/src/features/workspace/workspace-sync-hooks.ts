@@ -6,6 +6,7 @@ import {
   subscribeWorkspaceController,
   subscribeWorkspaceRuntimeState,
 } from "../../command";
+import { subscribeTerminalChannelOutput } from "../../services/terminal-channel/client.ts";
 import { type ExecTarget, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
@@ -48,6 +49,7 @@ import {
   hasPendingStreamIndex,
   recordPendingTerminalStream,
 } from "./workspace-stream-index";
+import { resolveSessionTerminalIdByRuntimeId } from "./session-runtime-bindings";
 import {
   type WorkspaceRuntimeAttachRequestOptions,
   WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
@@ -146,6 +148,7 @@ export const useWorkspaceTransportSync = ({
   updateState,
 }: UseWorkspaceTransportSyncArgs) => {
   const updateStateRef = useLatestRef(updateState);
+  const stateRefLatest = useLatestRef(stateRef.current);
   const markSessionIdleRef = useLatestRef(markSessionIdle);
   const reattachWorkspaceRuntimeRef = useLatestRef(reattachWorkspaceRuntime);
   const syncSessionPatchRef = useLatestRef(syncSessionPatch);
@@ -254,6 +257,35 @@ export const useWorkspaceTransportSync = ({
     });
     return unsubscribe;
   }, [agentRuntimeRefs, schedulePendingStreamFlush, stateRef]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTerminalChannelOutput(({ runtime_id, data }) => {
+      const currentState = stateRefLatest.current;
+      const matchedTab = currentState.tabs.find((tab) => (
+        tab.sessions.some((session) => session.terminalRuntimeId === runtime_id)
+      ));
+      if (!matchedTab) {
+        return;
+      }
+      const terminalId = resolveSessionTerminalIdByRuntimeId(
+        matchedTab.sessions,
+        runtime_id,
+        matchedTab.terminals,
+      );
+      if (!terminalId) {
+        return;
+      }
+      const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
+        workspaceId: matchedTab.id,
+        terminalId,
+        chunk: data,
+      });
+      if (recorded) {
+        schedulePendingStreamFlush();
+      }
+    });
+    return unsubscribe;
+  }, [schedulePendingStreamFlush, stateRefLatest]);
 
   useEffect(() => {
     const unsubscribe = subscribeWorkspaceController((payload) => {

@@ -34,6 +34,16 @@ export type WsWorkspaceControllerHeartbeatEnvelope = {
   workspace_id: string;
 };
 
+export type WsTerminalChannelInputEnvelope = {
+  type: "terminal_channel_input";
+  workspace_id: string;
+  device_id: string;
+  client_id: string;
+  fencing_token: number;
+  runtime_id: string;
+  input: string;
+};
+
 export type WsPingEnvelope = {
   type: "ping";
   ts: number;
@@ -51,7 +61,8 @@ export type WsClientEnvelope =
   | WsSessionUpdateEnvelope
   | WsTerminalWriteEnvelope
   | WsTerminalResizeEnvelope
-  | WsWorkspaceControllerHeartbeatEnvelope;
+  | WsWorkspaceControllerHeartbeatEnvelope
+  | WsTerminalChannelInputEnvelope;
 
 export const parseWsEnvelope = (message: string): WsEnvelope | null => {
   try {

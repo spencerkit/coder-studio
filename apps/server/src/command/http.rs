@@ -3432,11 +3432,7 @@ mod tests {
 
         assert!(started.started);
         assert!(started.terminal_id > 0);
-        assert!(started
-            .boot_input
-            .as_deref()
-            .unwrap_or_default()
-            .contains(&marker_target));
+        assert!(started.terminal_runtime_id.is_some());
         assert!(!marker_path.exists());
     }
 
@@ -3489,7 +3485,8 @@ mod tests {
             .session_runtime_bindings
             .iter()
             .any(|binding| binding.session_id == "slot-primary"
-                && binding.terminal_id == started.terminal_id.to_string()));
+                && binding.terminal_id == started.terminal_runtime_id.clone().unwrap()
+                && binding.workspace_terminal_id == Some(started.terminal_id.to_string())));
         assert!(observer
             .snapshot
             .terminals
@@ -3579,22 +3576,7 @@ mod tests {
         .unwrap();
         let started: SessionRuntimeStartResult = serde_json::from_value(started).unwrap();
         assert!(started.terminal_id > 0);
-        assert!(started.boot_input.is_some());
-
-        dispatch_rpc(
-            &app,
-            "terminal_write",
-            json!({
-                "workspace_id": workspace_id,
-                "device_id": "device-a",
-                "client_id": "client-a",
-                "fencing_token": runtime.controller.fencing_token,
-                "terminal_id": started.terminal_id,
-                "input": started.boot_input,
-            }),
-            &authorized,
-        )
-        .unwrap();
+        assert!(started.terminal_runtime_id.is_some());
 
         std::thread::sleep(Duration::from_millis(150));
         let refreshed = crate::services::workspace::resolve_session_for_slot(
@@ -3604,10 +3586,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(refreshed.resume_id.as_deref(), Some("resume-77"));
+        let runtime_binding = app
+            .state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .by_session(&workspace_id, &created_id)
+            .cloned()
+            .expect("terminal runtime should be registered");
+        assert_eq!(started.terminal_runtime_id, Some(runtime_binding.runtime_id));
     }
 
     #[test]
-    fn session_runtime_start_returns_codex_resume_boot_input_when_resume_id_exists() {
+    fn session_runtime_start_returns_terminal_runtime_id_when_resume_id_exists() {
         let app = test_app();
         let authorized = authorized_request();
         let root = create_temp_workspace_root("session-runtime-codex-resume");
@@ -3677,10 +3668,7 @@ mod tests {
 
         assert!(started.started);
         assert!(started.terminal_id > 0);
-        assert_eq!(
-            started.boot_input.as_deref(),
-            Some("codex resume resume-77 --full-auto\r")
-        );
+        assert!(started.terminal_runtime_id.is_some());
     }
 
     #[test]
@@ -3829,7 +3817,7 @@ mod tests {
     }
 
     #[test]
-    fn session_runtime_start_reuses_live_terminal_and_still_returns_boot_input() {
+    fn session_runtime_start_reuses_live_terminal_and_preserves_terminal_runtime_id() {
         let app = test_app();
         let authorized = authorized_request();
         let root = create_temp_workspace_root("session-runtime-reuse-boot-input");
@@ -3871,7 +3859,7 @@ mod tests {
         .unwrap();
         let first: SessionRuntimeStartResult = serde_json::from_value(first).unwrap();
         assert!(first.started);
-        assert!(first.boot_input.is_some());
+        assert!(first.terminal_runtime_id.is_some());
 
         let second = dispatch_rpc(
             &app,
@@ -3892,7 +3880,7 @@ mod tests {
 
         assert!(!second.started);
         assert_eq!(second.terminal_id, first.terminal_id);
-        assert_eq!(second.boot_input, first.boot_input);
+        assert_eq!(second.terminal_runtime_id, first.terminal_runtime_id);
     }
 
     #[test]

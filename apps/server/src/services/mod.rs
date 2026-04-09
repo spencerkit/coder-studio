@@ -13,6 +13,8 @@ pub(crate) mod session_runtime;
 pub(crate) mod supervisor;
 pub(crate) mod system;
 pub(crate) mod terminal;
+pub(crate) mod terminal_gateway;
+pub(crate) mod tmux;
 pub(crate) mod utf8_stream;
 pub(crate) mod workspace;
 pub(crate) mod workspace_runtime;

@@ -70,9 +70,10 @@ pub(crate) use infra::db::{
     launch_workspace_record, read_with_db_call_count, reset_with_db_call_count,
 };
 pub(crate) use infra::runtime::{
-    build_agent_pty_command, build_terminal_pty_command, repo_name_from_url,
-    resolve_agent_runtime_cwd, resolve_git_repo_path, resolve_target_path, run_cmd, shell_escape,
-    summarize_status, temp_root, terminate_process_tree, trim_branch_name,
+    apply_unix_pty_env_defaults, build_agent_pty_command, build_terminal_pty_command,
+    repo_name_from_url, resolve_agent_runtime_cwd, resolve_git_repo_path, resolve_target_path,
+    resolve_unix_agent_shell, run_cmd, shell_escape, summarize_status, temp_root,
+    terminate_process_tree, trim_branch_name,
 };
 pub(crate) use infra::support::{
     build_changes_tree, build_tree, build_tree_from_paths, combine_git_diff_sections,
@@ -89,7 +90,8 @@ pub(crate) use models::{
     FileNode, FilePreview, FilesystemEntry, FilesystemListResponse, FilesystemRoot, GitChangeEntry,
     GitFileDiffPayload, GitStatus, IdlePolicy, ProviderId, ProviderWorkspaceSession,
     SessionHistoryRecord, SessionInfo, SessionMessage, SessionMessageRole, SessionMode,
-    SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeStartResult,
+    SessionPatch, SessionRestoreResult, SessionRuntimeBindingInfo, SessionRuntimeLiveness,
+    SessionRuntimeStartResult,
     SessionStatus, TerminalEvent, TerminalInfo, TerminalWriteOrigin, TransportEvent,
     WorkbenchBootstrap, WorkbenchLayout, WorkbenchUiState, WorkspaceControllerLease,
     WorkspaceLaunchResult, WorkspaceRuntimeSnapshot, WorkspaceRuntimeStateEvent,

@@ -37,14 +37,17 @@ export const resolveAgentPaneTerminalBinding = (
   _terminalMode: "interactive" | "readonly",
   terminals: readonly Terminal[] = [],
 ): AgentPaneTerminalBinding => {
-  const boundTerminal = session.terminalId
+  const runtimeTerminal = session.terminalRuntimeId
+    ? terminals.find((terminal) => terminal.id === session.terminalRuntimeId)
+    : undefined;
+  const legacyTerminal = !runtimeTerminal && session.terminalId
     ? terminals.find((terminal) => terminal.id === session.terminalId)
     : undefined;
 
   return {
-    stream: boundTerminal?.output ?? "",
-    streamId: boundTerminal?.id ?? session.id,
-    syncStrategy: boundTerminal ? "snapshot" : "incremental",
+    stream: runtimeTerminal?.output ?? legacyTerminal?.output ?? "",
+    streamId: session.terminalRuntimeId ?? runtimeTerminal?.id ?? legacyTerminal?.id ?? session.id,
+    syncStrategy: runtimeTerminal || legacyTerminal ? "snapshot" : "incremental",
     renderMode: "terminal",
   };
 };

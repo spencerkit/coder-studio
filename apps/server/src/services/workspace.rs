@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::infra::time::now_ts_ms;
 use crate::*;
 
-fn live_session_key(workspace_id: &str, session_id: &str) -> String {
+pub(crate) fn live_session_key(workspace_id: &str, session_id: &str) -> String {
     format!("{workspace_id}:{session_id}")
 }
 
@@ -157,30 +157,40 @@ pub(crate) fn hydrate_snapshot_with_live_sessions(
     state: State<'_, AppState>,
     mut snapshot: WorkspaceSnapshot,
 ) -> Result<WorkspaceSnapshot, String> {
-    let live_sessions = load_live_workspace_sessions(state, &snapshot.workspace.workspace_id)?;
-    if live_sessions.is_empty() {
-        return Ok(snapshot);
+    let workspace_id = snapshot.workspace.workspace_id.clone();
+    let live_sessions = load_live_workspace_sessions(state, &workspace_id)?;
+    if !live_sessions.is_empty() {
+        for session in &mut snapshot.sessions {
+            if let Some(live) = live_sessions.get(&session.id) {
+                *session = live.clone();
+            }
+        }
+
+        let visible_session_ids = visible_session_ids(&snapshot.view_state);
+        for session_id in visible_session_ids {
+            if snapshot
+                .sessions
+                .iter()
+                .any(|session| session.id == session_id)
+            {
+                continue;
+            }
+            if let Some(live) = live_sessions.get(&session_id) {
+                snapshot.sessions.push(live.clone());
+            }
+        }
     }
 
-    for session in &mut snapshot.sessions {
-        if let Some(live) = live_sessions.get(&session.id) {
-            *session = live.clone();
-        }
-    }
-
-    let visible_session_ids = visible_session_ids(&snapshot.view_state);
-    for session_id in visible_session_ids {
-        if snapshot
-            .sessions
-            .iter()
-            .any(|session| session.id == session_id)
-        {
-            continue;
-        }
-        if let Some(live) = live_sessions.get(&session_id) {
-            snapshot.sessions.push(live.clone());
-        }
-    }
+    let bindings = crate::services::session_runtime::collect_workspace_session_runtime_bindings(
+        &workspace_id,
+        state,
+    )?;
+    crate::services::workspace_runtime::apply_runtime_liveness_to_snapshot(
+        &workspace_id,
+        &mut snapshot,
+        &bindings,
+        state,
+    );
 
     Ok(snapshot)
 }
@@ -353,12 +363,22 @@ fn emit_workspace_runtime_state(
     Ok(())
 }
 
-fn session_state_payload(session: &SessionInfo) -> WorkspaceSessionState {
+fn session_state_payload(
+    workspace_id: &str,
+    session: &SessionInfo,
+    state: State<'_, AppState>,
+) -> WorkspaceSessionState {
     WorkspaceSessionState {
         session_id: session.id.clone(),
         status: session.status.clone(),
         last_active_at: session.last_active_at,
         resume_id: session.resume_id.clone(),
+        runtime_liveness: crate::services::workspace_runtime::session_runtime_liveness_for_session(
+            workspace_id,
+            &session.id,
+            state,
+        )
+        .or_else(|| session.runtime_liveness.clone()),
     }
 }
 
@@ -383,7 +403,7 @@ pub(crate) fn sync_session_status<S: ToString>(
         state,
         workspace_id,
         None,
-        Some(session_state_payload(&session)),
+        Some(session_state_payload(workspace_id, &session, state)),
     )?;
     Ok(updated)
 }
@@ -394,6 +414,7 @@ pub(crate) fn sync_session_runtime_state<S: ToString>(
     session_id: S,
     status: SessionStatus,
     runtime_active: bool,
+    runtime_liveness: Option<SessionRuntimeLiveness>,
 ) -> Result<bool, String> {
     let session_id = session_id.to_string();
     let updated = set_session_runtime_state_if_not_archived(
@@ -402,17 +423,19 @@ pub(crate) fn sync_session_runtime_state<S: ToString>(
         session_id.clone(),
         status.clone(),
         runtime_active,
+        runtime_liveness.clone(),
     )?;
     let mut session = resolve_session_for_slot(state, workspace_id, &session_id)?;
     session.status = status;
     session.runtime_active = runtime_active;
+    session.runtime_liveness = runtime_liveness;
     session.last_active_at = now_ts_ms();
     remember_live_session(state, workspace_id, &session)?;
     emit_workspace_runtime_state(
         state,
         workspace_id,
         None,
-        Some(session_state_payload(&session)),
+        Some(session_state_payload(workspace_id, &session, state)),
     )?;
     Ok(updated)
 }
@@ -849,6 +872,157 @@ mod tests {
             Some("7")
         );
         assert!(payload.session_state.is_none());
+    }
+
+    #[test]
+    fn sync_session_runtime_state_broadcasts_runtime_liveness() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-liveness-event-test");
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        let mut rx = app.state().transport_events.subscribe();
+
+        sync_session_runtime_state(
+            app.state(),
+            &workspace_id,
+            &created.id,
+            SessionStatus::Interrupted,
+            false,
+            Some(SessionRuntimeLiveness::ProviderExited),
+        )
+        .unwrap();
+
+        let event = rx.try_recv().expect("expected runtime state event");
+        assert_eq!(event.event, "workspace://runtime_state");
+        let payload: WorkspaceRuntimeStateEvent = serde_json::from_value(event.payload).unwrap();
+        assert_eq!(payload.workspace_id, workspace_id);
+        let session_state = payload.session_state.expect("session state should exist");
+        assert_eq!(session_state.session_id, created.id);
+        assert_eq!(session_state.status, SessionStatus::Interrupted);
+        assert_eq!(
+            session_state.runtime_liveness,
+            Some(SessionRuntimeLiveness::ProviderExited)
+        );
+    }
+
+    #[test]
+    fn sync_session_runtime_state_derives_tmux_missing_for_bound_session_payload() {
+        let app = test_app();
+        let workspace_id =
+            launch_test_workspace(&app, "/tmp/ws-runtime-liveness-event-tmux-missing-test");
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        app.state()
+            .session_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(
+                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+                99,
+            );
+        app.state()
+            .terminal_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(
+                99,
+                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+            );
+        app.state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+                "runtime-missing".to_string(),
+                workspace_id.clone(),
+                created.id.clone(),
+                "claude".to_string(),
+                "missing-tmux-session".to_string(),
+                "%1".to_string(),
+            ));
+        let mut rx = app.state().transport_events.subscribe();
+
+        sync_session_runtime_state(
+            app.state(),
+            &workspace_id,
+            &created.id,
+            SessionStatus::Running,
+            true,
+            Some(SessionRuntimeLiveness::Attached),
+        )
+        .unwrap();
+
+        let event = rx.try_recv().expect("expected runtime state event");
+        assert_eq!(event.event, "workspace://runtime_state");
+        let payload: WorkspaceRuntimeStateEvent = serde_json::from_value(event.payload).unwrap();
+        let session_state = payload.session_state.expect("session state should exist");
+        assert_eq!(session_state.session_id, created.id);
+        assert_eq!(
+            session_state.runtime_liveness,
+            Some(SessionRuntimeLiveness::TmuxMissing)
+        );
+    }
+
+    #[test]
+    fn workspace_snapshot_derives_tmux_missing_for_bound_session() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-snapshot-tmux-missing-test");
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        app.state()
+            .session_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(
+                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+                77,
+            );
+        app.state()
+            .terminal_runtime_bindings
+            .lock()
+            .unwrap()
+            .insert(
+                77,
+                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+            );
+        app.state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+                "runtime-missing-snapshot".to_string(),
+                workspace_id.clone(),
+                created.id.clone(),
+                "claude".to_string(),
+                "missing-tmux-session".to_string(),
+                "%1".to_string(),
+            ));
+
+        let snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
+        let session = snapshot
+            .sessions
+            .into_iter()
+            .find(|session| session.id == created.id)
+            .expect("session should exist in snapshot");
+        assert_eq!(
+            session.runtime_liveness,
+            Some(SessionRuntimeLiveness::TmuxMissing)
+        );
     }
 
     #[test]
@@ -1448,6 +1622,7 @@ mod tests {
             SessionInfo {
                 status: SessionStatus::Idle,
                 runtime_active: false,
+                runtime_liveness: None,
                 ..created.clone()
             },
         );
@@ -1458,6 +1633,7 @@ mod tests {
             &created.id,
             SessionStatus::Running,
             true,
+            None,
         )
         .unwrap();
 
@@ -1489,6 +1665,7 @@ mod tests {
             provider: AgentProvider::codex(),
             resume_id: Some("resume-live-snapshot".to_string()),
             runtime_active: true,
+            runtime_liveness: Some(SessionRuntimeLiveness::Attached),
             ..created.clone()
         };
         app.state().live_sessions.lock().unwrap().insert(
@@ -1527,6 +1704,7 @@ mod tests {
             resume_id: Some("resume-live-only".to_string()),
             unavailable_reason: None,
             runtime_active: true,
+            runtime_liveness: Some(SessionRuntimeLiveness::Attached),
         };
         app.state().live_sessions.lock().unwrap().insert(
             super::live_session_key(&workspace_id, &live_session.id),
@@ -1625,6 +1803,7 @@ mod tests {
             status: SessionStatus::Interrupted,
             resume_id: Some("resume-live-bootstrap".to_string()),
             runtime_active: true,
+            runtime_liveness: Some(SessionRuntimeLiveness::Attached),
             ..created.clone()
         };
         app.state().live_sessions.lock().unwrap().insert(

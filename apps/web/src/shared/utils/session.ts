@@ -53,10 +53,12 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
       }
   ]),
   terminalId: existing?.terminalId,
+  terminalRuntimeId: existing?.terminalRuntimeId,
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
   resumeId: source.resume_id ?? existing?.resumeId,
   unavailableReason: source.unavailable_reason ?? existing?.unavailableReason,
+  runtimeLiveness: source.runtime_liveness ?? existing?.runtimeLiveness,
   supervisor: existing?.supervisor,
 });
 
@@ -106,6 +108,7 @@ export const createDraftSessionPlaceholder = ({
           },
         ],
     terminalId: existing?.terminalId,
+    terminalRuntimeId: existing?.terminalRuntimeId,
     unread: existing?.unread ?? 0,
     lastActiveAt: existing?.lastActiveAt ?? Date.now(),
     resumeId: existing?.resumeId,

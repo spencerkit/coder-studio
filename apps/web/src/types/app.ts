@@ -8,6 +8,7 @@ import type {
   GitChange,
   IdlePolicy,
   SessionMode,
+  SessionRuntimeLiveness,
   SessionStatus,
   SupervisorStatus,
   Tab,
@@ -78,6 +79,8 @@ export type BackendSession = {
   last_active_at: number;
   resume_id?: string | null;
   unavailable_reason?: string | null;
+  runtime_active?: boolean;
+  runtime_liveness?: SessionRuntimeLiveness | null;
 };
 
 export type SessionHistoryRecordState = "live" | "detached" | "unavailable";
@@ -175,12 +178,19 @@ export type BackendWorkspaceSessionBinding = {
 export type SessionRuntimeBindingInfo = {
   session_id: string;
   terminal_id: string;
+  terminal_runtime_id?: string;
+  workspace_terminal_id?: string;
+};
+
+export type TerminalChannelOutputEvent = {
+  runtime_id: string;
+  data: string;
 };
 
 export type SessionRuntimeStartResult = {
   terminal_id: number;
   started: boolean;
-  boot_input?: string | null;
+  terminal_runtime_id?: string | null;
 };
 
 export type WorkspaceControllerLease = {
@@ -202,17 +212,6 @@ export type WorkspaceSnapshot = {
   terminals: { id: number; output: string; recoverable: boolean }[];
 };
 
-export type SessionRuntimeBindingInfo = {
-  session_id: string;
-  terminal_id: string;
-};
-
-export type SessionRuntimeStartResult = {
-  terminal_id: number;
-  started: boolean;
-  boot_input?: string | null;
-};
-
 export type WorkspaceRuntimeSnapshot = {
   snapshot: WorkspaceSnapshot;
   controller: WorkspaceControllerLease;
@@ -230,6 +229,7 @@ export type WorkspaceSessionState = {
   status: SessionStatus;
   last_active_at: number;
   resume_id?: string | null;
+  runtime_liveness?: SessionRuntimeLiveness | null;
 };
 
 export type WorkspaceRuntimeStateEvent = {
