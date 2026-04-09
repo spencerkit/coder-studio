@@ -139,27 +139,11 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         target: &ExecTarget,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
         let profile = resolve_claude_runtime_profile(settings, target);
-        let launch_spec = {
-            #[cfg(target_os = "windows")]
-            if matches!(target, ExecTarget::Native) {
-                let (program, args) = build_claude_start_invocation(&profile);
-                crate::services::agent_client::AgentLaunchSpec::Direct {
-                    program,
-                    args,
-                    display_command: build_claude_start_command(target, &profile),
-                }
-            } else {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_claude_start_command(target, &profile),
-                )
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_claude_start_command(target, &profile),
-                )
-            }
+        let (program, args) = build_claude_start_invocation(&profile);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_claude_start_command(target, &profile),
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
@@ -174,29 +158,11 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         resume_id: &str,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
         let profile = resolve_claude_runtime_profile(settings, target);
-        let launch_spec = {
-            #[cfg(target_os = "windows")]
-            if matches!(target, ExecTarget::Native) {
-                let (program, args) = build_claude_resume_invocation(&profile, resume_id);
-                crate::services::agent_client::AgentLaunchSpec::Direct {
-                    program,
-                    args,
-                    display_command: build_claude_resume_launch_command(
-                        target, &profile, resume_id,
-                    ),
-                }
-            } else {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_claude_resume_launch_command(target, &profile, resume_id),
-                )
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_claude_resume_launch_command(target, &profile, resume_id),
-                )
-            }
+        let (program, args) = build_claude_resume_invocation(&profile, resume_id);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_claude_resume_launch_command(target, &profile, resume_id),
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
@@ -690,6 +656,13 @@ pub(crate) fn ensure_claude_hook_settings(cwd: &str, _target: &ExecTarget) -> Re
     if !root.is_object() {
         root = Value::Object(Map::new());
     }
+
+    // If hooks are already correctly installed, skip writing to avoid
+    // unnecessary file modifications and preserve user-customized settings.
+    if claude_hooks_installed(&root) {
+        return Ok(());
+    }
+
     let root_obj = root.as_object_mut().expect("object");
     let hooks_value = root_obj
         .entry("hooks".to_string())

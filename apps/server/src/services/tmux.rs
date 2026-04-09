@@ -65,9 +65,12 @@ pub(crate) fn send_tmux_input(session_name: &str, input: &str) -> Result<(), Str
 }
 
 pub(crate) fn send_tmux_raw_input(session_name: &str, input: &str) -> Result<(), String> {
+    // Split on \r only. \n is a valid shell character (e.g., inside quoted
+    // format strings like 'hello\n') and must not be treated as a command separator.
+    // send_tmux_literal handles \n correctly via split_lines_outside_quotes.
     let mut literal = String::new();
     for ch in input.chars() {
-        if ch == '\r' || ch == '\n' {
+        if ch == '\r' {
             if !literal.is_empty() {
                 send_tmux_literal(session_name, &literal)?;
                 literal.clear();
@@ -84,21 +87,58 @@ pub(crate) fn send_tmux_raw_input(session_name: &str, input: &str) -> Result<(),
 }
 
 fn send_tmux_literal(session_name: &str, input: &str) -> Result<(), String> {
-    let output = Command::new("tmux")
-        .args(["set-buffer", "--", input])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-    let output = Command::new("tmux")
-        .args(["paste-buffer", "-d", "-t", session_name])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    // Split on newlines that appear outside quoted regions. This prevents \n inside
+    // quoted format strings (e.g. 'hello\n') from being mistaken for command separators.
+    // Then tokenize each line and send it as a single tmux send-keys argument,
+    // preserving the original spacing so the shell receives the correct command.
+    for line in split_lines_outside_quotes(input) {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            continue;
+        }
+        let output = Command::new("tmux")
+            .args(["send-keys", "-t", session_name, &line])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
     }
     Ok(())
+}
+
+/// Split input on '\n' (backslash-n) only when outside single/double quotes.
+fn split_lines_outside_quotes(input: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+    let mut last_start = 0;
+    let mut i = 0;
+
+    while i < input.len() {
+        let ch = input[i..].chars().next().unwrap();
+        if escaped {
+            escaped = false;
+            i += ch.len_utf8();
+            continue;
+        }
+        match ch {
+            '\\' => { escaped = true; i += 1; continue; }
+            '\'' if !in_double => { in_single = !in_single; }
+            '"' if !in_single => { in_double = !in_double; }
+            '\n' if !in_single && !in_double => {
+                lines.push(&input[last_start..i]);
+                last_start = i + 1;
+            }
+            _ => {}
+        }
+        i += ch.len_utf8();
+    }
+    if last_start < input.len() {
+        lines.push(&input[last_start..]);
+    }
+    lines
 }
 
 fn send_tmux_enter(session_name: &str) -> Result<(), String> {
@@ -252,4 +292,5 @@ mod tests {
 
         assert_eq!(result, Err("tmux failed to start".to_string()));
     }
+
 }

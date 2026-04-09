@@ -1,4 +1,4 @@
-import type { Locale } from "../../i18n";
+import type { Translator } from "../../i18n";
 import type { ExecTarget, Session } from "../../state/workbench-core";
 
 export type WorkspaceShellSummaryItem = {
@@ -8,12 +8,12 @@ export type WorkspaceShellSummaryItem = {
   tone?: "neutral" | "info" | "active" | "queue";
 };
 
-const formatRuntimeLabel = (target: ExecTarget | undefined, locale: Locale) => {
+const formatRuntimeLabel = (target: ExecTarget | undefined, t: Translator) => {
   if (target?.type === "wsl") {
     return target.distro?.trim() ? `WSL (${target.distro.trim()})` : "WSL";
   }
 
-  return locale === "zh" ? "本机" : "Native";
+  return t("nativeLabel");
 };
 
 const countQueuedWork = (sessions: Array<Pick<Session, "status" | "queue">>) =>
@@ -26,33 +26,33 @@ export const buildWorkspaceShellSummary = ({
   changeCount,
   target,
   sessions,
-  locale,
+  t,
 }: {
   branchName: string;
   changeCount: number;
   target: ExecTarget | undefined;
   sessions: Array<Pick<Session, "status" | "queue">>;
-  locale: Locale;
+  t: Translator;
 }): WorkspaceShellSummaryItem[] => {
   const queueCount = countQueuedWork(sessions);
 
   return [
-    { key: "branch", label: locale === "zh" ? "分支" : "Branch", value: branchName || "—" },
+    { key: "branch", label: t("branch"), value: branchName || "—" },
     {
       key: "runtime",
-      label: locale === "zh" ? "运行时" : "Runtime",
-      value: formatRuntimeLabel(target, locale),
+      label: t("runtimeLabel"),
+      value: formatRuntimeLabel(target, t),
       tone: "info",
     },
     {
       key: "changes",
-      label: locale === "zh" ? "改动" : "Changes",
+      label: t("changes"),
       value: String(changeCount),
       tone: changeCount > 0 ? "active" : "neutral",
     },
     {
       key: "queue",
-      label: locale === "zh" ? "队列" : "Queue",
+      label: t("queueLabel"),
       value: String(queueCount),
       tone: queueCount > 0 ? "queue" : "neutral",
     },

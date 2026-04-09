@@ -1,3 +1,4 @@
+import type { Translator } from "../../i18n";
 import { composeSupervisorObjectivePreview } from "./supervisor-objective";
 
 type SupervisorObjectiveDialogMode = "enable" | "edit" | "disable";
@@ -5,6 +6,7 @@ type SupervisorObjectiveDialogMode = "enable" | "edit" | "disable";
 type SupervisorObjectiveDialogProps = {
   visible: boolean;
   mode: SupervisorObjectiveDialogMode;
+  t: Translator;
   objectiveText: string;
   submitting?: boolean;
   onObjectiveTextChange: (value: string) => void;
@@ -12,11 +14,10 @@ type SupervisorObjectiveDialogProps = {
   onConfirm: () => void;
 };
 
-const SUPERVISOR_DISABLE_COPY = "Disable supervisor";
-
 export const SupervisorObjectiveDialog = ({
   visible,
   mode,
+  t,
   objectiveText,
   submitting = false,
   onObjectiveTextChange,
@@ -27,18 +28,18 @@ export const SupervisorObjectiveDialog = ({
 
   const isDisableMode = mode === "disable";
   const title = isDisableMode
-    ? SUPERVISOR_DISABLE_COPY
+    ? t("supervisorDisableTitle")
     : mode === "edit"
-      ? "Edit supervisor objective"
-      : "Enable supervisor";
+      ? t("supervisorEditTitle")
+      : t("supervisorEnableTitle");
   const message = isDisableMode
-    ? "Disable supervisor mode for this session?"
-    : "Describe how the supervisor should guide this session.";
+    ? t("supervisorDisableMessage")
+    : t("supervisorEnableMessage");
   const confirmLabel = isDisableMode
-    ? SUPERVISOR_DISABLE_COPY
+    ? t("supervisorDisableTitle")
     : mode === "edit"
-      ? "Save objective"
-      : "Enable supervisor";
+      ? t("supervisorEditConfirm")
+      : t("supervisorEnableConfirm");
   const contextPreview = isDisableMode ? "" : composeSupervisorObjectivePreview(objectiveText);
 
   return (
@@ -62,18 +63,18 @@ export const SupervisorObjectiveDialog = ({
                 onChange={(event) => onObjectiveTextChange(event.target.value)}
                 autoFocus
                 rows={5}
-                placeholder="Keep the business agent focused on the current task."
+                placeholder={t("supervisorObjectivePlaceholder")}
               />
               <div className="supervisor-objective-dialog-preview">
-                <div className="supervisor-objective-dialog-preview-label">Context preview</div>
-                <pre className="supervisor-objective-dialog-preview-code">{contextPreview || "No context will be sent until an objective is provided."}</pre>
+                <div className="supervisor-objective-dialog-preview-label">{t("supervisorContextPreview")}</div>
+                <pre className="supervisor-objective-dialog-preview-code">{contextPreview || t("supervisorContextPreviewEmpty")}</pre>
               </div>
             </>
           )}
         </div>
         <div className="modal-footer supervisor-objective-dialog-footer">
           <button type="button" className="btn" onClick={onCancel} disabled={submitting}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={submitting}>
             {confirmLabel}

@@ -102,9 +102,7 @@ export const browseWorkspaceOverlayDirectory = async ({
       currentPath: "",
       parentPath: undefined,
       entries: [],
-      error: locale === "zh"
-        ? `无法读取服务器目录${reason ? `：${reason}` : ""}`
-        : `Unable to read server directories${reason ? `: ${reason}` : ""}`,
+      error: t("errorBody"),
     }));
   }
 };

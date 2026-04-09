@@ -153,27 +153,11 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         target: &ExecTarget,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
         let profile = resolve_codex_runtime_profile(settings, target);
-        let launch_spec = {
-            #[cfg(target_os = "windows")]
-            if matches!(target, ExecTarget::Native) {
-                let (program, args) = build_codex_start_invocation(&profile);
-                crate::services::agent_client::AgentLaunchSpec::Direct {
-                    program,
-                    args,
-                    display_command: build_codex_start_command(target, &profile),
-                }
-            } else {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_codex_start_command(target, &profile),
-                )
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_codex_start_command(target, &profile),
-                )
-            }
+        let (program, args) = build_codex_start_invocation(&profile);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_codex_start_command(target, &profile),
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,
@@ -188,27 +172,11 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         resume_id: &str,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
         let profile = resolve_codex_runtime_profile(settings, target);
-        let launch_spec = {
-            #[cfg(target_os = "windows")]
-            if matches!(target, ExecTarget::Native) {
-                let (program, args) = build_codex_resume_invocation(&profile, resume_id);
-                crate::services::agent_client::AgentLaunchSpec::Direct {
-                    program,
-                    args,
-                    display_command: build_codex_resume_command(target, &profile, resume_id),
-                }
-            } else {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_codex_resume_command(target, &profile, resume_id),
-                )
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                crate::services::agent_client::AgentLaunchSpec::ShellCommand(
-                    build_codex_resume_command(target, &profile, resume_id),
-                )
-            }
+        let (program, args) = build_codex_resume_invocation(&profile, resume_id);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_codex_resume_command(target, &profile, resume_id),
         };
         Ok(crate::services::provider_registry::ProviderLaunchConfig {
             launch_spec,

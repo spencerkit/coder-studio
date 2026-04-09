@@ -142,6 +142,20 @@ export const createWorkspaceSessionActions = ({
       return { tab: currentTab, session: currentSession };
     }
 
+    const controller = currentTab.controller;
+    if (controller?.role !== "controller") return null;
+
+    const created = await withServiceFallback(
+      () => createSessionRequest(
+        tabId,
+        currentSession.mode,
+        currentSession.provider,
+        controller,
+      ),
+      null,
+    );
+    if (!created) return null;
+
     let tabSnapshot: Tab | null = null;
     let sessionSnapshot: Session | null = null;
     updateTab(tabId, (tab) => {
@@ -152,10 +166,10 @@ export const createWorkspaceSessionActions = ({
       const title = sessionTitleFromInput(firstInput)
         || (draftTitle && draftTitle !== t("draftSessionTitle") ? draftTitle : "")
         || generatedTitle;
+      const backendSession = createSessionFromBackend(created, locale, draftSession);
       const preparedSession: Session = {
-        ...draftSession,
+        ...backendSession,
         title,
-        status: "idle",
         isDraft: false,
         unread: 0,
         lastActiveAt: Date.now(),

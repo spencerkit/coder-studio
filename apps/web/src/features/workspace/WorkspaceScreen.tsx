@@ -137,7 +137,10 @@ import {
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
 import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
-import { sendTerminalChannelInput } from "../../services/terminal-channel/client.ts";
+import {
+  consumeTerminalChannelInputFragment,
+  sendTerminalChannelInput,
+} from "../../services/terminal-channel/client.ts";
 import { withFallback } from "../../services/http/client";
 import {
   commitGitChanges,
@@ -309,8 +312,6 @@ const isTextInputTarget = (target: EventTarget | null) => {
   return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 };
 
-const isAgentFocusTransitionSequence = (value: string) => value === "\u001b[I" || value === "\u001b[O";
-
 export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
   const [storeState, setStoreState] = useRelaxState(workbenchState);
   const [state, setRenderState] = useState(storeState);
@@ -408,6 +409,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
+  const agentTerminalInputBufferRef = useRef(new Map<string, string>());
+  const agentTerminalInputFlushTimerRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
   const agentTerminalFitSchedulerRef = useRef<ReturnType<typeof createAgentTerminalFitScheduler> | null>(null);
   const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
@@ -2610,12 +2613,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
 
-  const onAgentTerminalData = async (paneId: string, data: string) => {
+  const forwardAgentTerminalInput = async (paneId: string, data: string) => {
     if (!data) return;
-    if (isAgentFocusTransitionSequence(data)) return;
-    // Filter out terminal response sequences (cursor position reports, color queries, etc.)
-    // These come from xterm initialization and should not be sent to the backend
-    if (/^\x1B\[[0-9;]*[R?AHFGSTIcJJKMSXh]/.test(data) || /^\x1B\]10;[^\x07]*(?:\x07|\x1B\\)/.test(data) || /^\x1B\]11;[^\x07]*(?:\x07|\x1B\\)/.test(data)) return;
     if (!guardWorkspaceMutation("agent_input")) return;
     const ready = await ensureAgentPaneSessionReady(paneId);
     if (!ready) return;
@@ -2636,6 +2635,42 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await sendAgentRawChunk(ready.tab, ready.session, data);
   };
 
+  const clearAgentTerminalInputFlushTimer = (paneId: string) => {
+    const timer = agentTerminalInputFlushTimerRef.current.get(paneId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    agentTerminalInputFlushTimerRef.current.delete(paneId);
+  };
+
+  const scheduleAgentTerminalEscapeFlush = (paneId: string) => {
+    clearAgentTerminalInputFlushTimer(paneId);
+    const timer = setTimeout(() => {
+      agentTerminalInputFlushTimerRef.current.delete(paneId);
+      const pending = agentTerminalInputBufferRef.current.get(paneId);
+      if (pending !== "\u001b") return;
+      agentTerminalInputBufferRef.current.delete(paneId);
+      void forwardAgentTerminalInput(paneId, pending);
+    }, 24);
+    agentTerminalInputFlushTimerRef.current.set(paneId, timer);
+  };
+
+  const onAgentTerminalData = async (paneId: string, data: string) => {
+    if (!data) return;
+    clearAgentTerminalInputFlushTimer(paneId);
+    const bufferedInput = agentTerminalInputBufferRef.current.get(paneId) ?? "";
+    const { forwarded, pending } = consumeTerminalChannelInputFragment(bufferedInput, data);
+    if (pending) {
+      agentTerminalInputBufferRef.current.set(paneId, pending);
+      if (pending === "\u001b") {
+        scheduleAgentTerminalEscapeFlush(paneId);
+      }
+    } else {
+      agentTerminalInputBufferRef.current.delete(paneId);
+    }
+    if (!forwarded) return;
+    await forwardAgentTerminalInput(paneId, forwarded);
+  };
+
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
     if (!guardWorkspaceMutation("agent_input")) return;
     const ready = await ensureAgentPaneSessionReady(paneId);
@@ -2643,6 +2678,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await sendAgentRawChunk(ready.tab, ready.session, sequence);
     focusWorkspaceAgentPane(paneId);
   };
+
+  useEffect(() => {
+    return () => {
+      for (const timer of agentTerminalInputFlushTimerRef.current.values()) {
+        clearTimeout(timer);
+      }
+      agentTerminalInputFlushTimerRef.current.clear();
+      agentTerminalInputBufferRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2879,7 +2924,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     changeCount: currentFileChangeCount,
     target: activeTab.project?.target,
     sessions: activeTab.sessions,
-    locale,
+    t,
   });
   const hasStructuredDiffContent = Boolean(
     (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
@@ -3278,6 +3323,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           <SupervisorObjectiveDialog
             visible={supervisorObjectiveDialog.visible}
             mode={supervisorObjectiveDialog.mode}
+            t={t}
             objectiveText={supervisorObjectiveDialog.draftObjective}
             onObjectiveTextChange={(value) => {
               setSupervisorObjectiveDialog((current) => ({
@@ -3308,7 +3354,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               showTerminalPanel={showTerminalPanel}
               rightSplit={state.layout.rightSplit}
               statusItems={workspaceShellSummary}
-              runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
               statusBanner={workspaceStatusBanner}
               agentPanel={workspaceAgentPanel}
               codePanel={workspaceCodePanel}
@@ -3324,6 +3369,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           {commandPaletteOpen && (
             <CommandPalette
               locale={locale}
+              t={t}
               inputRef={commandPaletteInputRef}
               query={commandPaletteQuery}
               activeIndex={commandPaletteActiveIndex}

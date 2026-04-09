@@ -47,3 +47,4 @@ output
 .playwright-mcp
 .artifacts/
 .worktrees/
+.omc

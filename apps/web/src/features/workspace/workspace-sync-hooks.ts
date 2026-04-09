@@ -49,7 +49,10 @@ import {
   hasPendingStreamIndex,
   recordPendingTerminalStream,
 } from "./workspace-stream-index";
-import { resolveSessionTerminalIdByRuntimeId } from "./session-runtime-bindings";
+import {
+  isSessionBoundWorkspaceTerminalId,
+  resolveSessionTerminalIdByRuntimeId,
+} from "./session-runtime-bindings";
 import {
   type WorkspaceRuntimeAttachRequestOptions,
   WS_RESYNC_ATTACH_SUCCESS_REUSE_MS,
@@ -246,6 +249,12 @@ export const useWorkspaceTransportSync = ({
   useEffect(() => {
     const unsubscribe = subscribeTerminalEvents(({ workspace_id, terminal_id, data }) => {
       const mappedTerminalId = `term-${terminal_id}`;
+      // skip session-bound terminals to avoid duplicate streams; they use terminal://channel_output
+      const currentState = stateRefLatest.current;
+      const matchedTab = currentState.tabs.find((tab) => tab.id === workspace_id);
+      if (matchedTab && isSessionBoundWorkspaceTerminalId(matchedTab.sessions, mappedTerminalId)) {
+        return;
+      }
       const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
         workspaceId: workspace_id,
         terminalId: mappedTerminalId,

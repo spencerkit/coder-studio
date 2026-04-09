@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { createTranslator } from "../apps/web/src/i18n";
 import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
-import type { AppSettings, Toast } from "../apps/web/src/types/app";
+import type { AppSettings, BackendSession, Toast } from "../apps/web/src/types/app";
 import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
@@ -128,7 +128,20 @@ const createDraftState = (): WorkbenchState => ({
   ],
 });
 
-test("materializeSession keeps workbench-local state and does not create a backend session row", async () => {
+const mockBackendSession = (): BackendSession => ({
+  id: "slot_abc12345",
+  title: "Session 01",
+  status: "idle",
+  mode: "branch",
+  provider: "claude",
+  auto_feed: true,
+  queue: [],
+  messages: [],
+  unread: 0,
+  last_active_at: Date.now(),
+});
+
+test("materializeSession creates a backend session and uses the server-generated ID", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -140,6 +153,13 @@ test("materializeSession keeps workbench-local state and does not create a backe
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     calls.push({ url, body });
+
+    if (url.includes("/api/rpc/create_session")) {
+      return new Response(JSON.stringify({ ok: true, data: mockBackendSession() }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
     throw new Error(`unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -192,11 +212,19 @@ test("materializeSession keeps workbench-local state and does not create a backe
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(calls, []);
+  // Verify backend was called to create the session
+  assert.equal(calls.length, 1, `Expected 1 backend call, got: ${JSON.stringify(calls)}`);
+  assert.match(calls[0].url, /create_session/);
+  assert.equal(calls[0].body.workspaceId, "ws-1");
+  // Verify title was updated
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Investigate auth flow");
+  // Verify session ID was updated to server-generated ID
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.id, "slot_abc12345");
+  // Verify isDraft was set to false
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.isDraft, false);
 });
 
-test("materializeSession replaces the draft placeholder title even when startup input is empty", async () => {
+test("materializeSession preserves the placeholder title when startup input is empty but still creates a backend session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -208,6 +236,13 @@ test("materializeSession replaces the draft placeholder title even when startup 
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     calls.push({ url, body });
+
+    if (url.includes("/api/rpc/create_session")) {
+      return new Response(JSON.stringify({ ok: true, data: mockBackendSession() }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
     throw new Error(`unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -260,6 +295,70 @@ test("materializeSession replaces the draft placeholder title even when startup 
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(calls, []);
-  assert.notEqual(stateRef.current.tabs[0]?.sessions[0]?.title, "New Session");
+  assert.equal(calls.length, 1);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "New Session");
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.id, "slot_abc12345");
+});
+
+test("materializeSession returns null when backend session creation fails", async () => {
+  const locale = "en";
+  const t = createTranslator(locale);
+  const stateRef = { current: createDraftState() };
+  const toasts: Toast[] = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () => {
+    throw new Error("network error");
+  }) as typeof fetch;
+
+  try {
+    await withMockWindow(
+      {
+        fetch: globalThis.fetch,
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame: ((callback: FrameRequestCallback) => setTimeout(() => callback(0), 0)) as typeof requestAnimationFrame,
+        cancelAnimationFrame: ((handle: number) => clearTimeout(handle)) as typeof cancelAnimationFrame,
+        location: {
+          origin: "http://127.0.0.1:41033",
+          protocol: "http:",
+          hostname: "127.0.0.1",
+          port: "41033",
+          search: "",
+        },
+      } as Window & typeof globalThis,
+      async () => {
+        const actions = createWorkspaceSessionActions({
+          appSettings: defaultAppSettings(),
+          locale,
+          t,
+          stateRef,
+          updateTab: (tabId, updater) => {
+            stateRef.current = {
+              ...stateRef.current,
+              tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+            };
+          },
+          withServiceFallback: async (operation, fallback) => {
+            try {
+              return await operation();
+            } catch {
+              return fallback;
+            }
+          },
+          addToast: (toast) => {
+            toasts.push(toast);
+          },
+        });
+
+        const result = await actions.materializeSession("ws-1", "draft-1", "Investigate auth flow");
+        assert.equal(result, null);
+        // Session should still be a draft
+        assert.equal(stateRef.current.tabs[0]?.sessions[0]?.isDraft, true);
+        assert.equal(stateRef.current.tabs[0]?.sessions[0]?.id, "draft-1");
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

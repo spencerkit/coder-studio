@@ -17,13 +17,9 @@ fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
 }
 
 fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
-    match &runtime.io {
-        TerminalIo::Pty { writer, .. } | TerminalIo::TmuxAttached { writer, .. } => {
-            if let Ok(mut writer) = writer.lock() {
-                writer.take();
-            }
-        }
-    }
+    // Kill the child process first. This closes the PTY slave and causes
+    // the reader thread to receive EOF naturally, preventing it from
+    // blocking indefinitely on reader.read().
     if let Some(killer) = &runtime.killer {
         if let Ok(mut killer) = killer.lock() {
             let _ = terminate_process_tree(
@@ -31,6 +27,14 @@ fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
                 runtime.process_id,
                 runtime.process_group_leader,
             );
+        }
+    }
+    // Then close the writer end so no further input can be sent.
+    match &runtime.io {
+        TerminalIo::Pty { writer, .. } | TerminalIo::TmuxAttached { writer, .. } => {
+            if let Ok(mut writer) = writer.lock() {
+                writer.take();
+            }
         }
     }
 }
@@ -75,7 +79,10 @@ fn truncate_terminal_output(buffer: &mut String) {
         return;
     }
     let keep_from = buffer.len().saturating_sub(TERMINAL_RUNTIME_OUTPUT_LIMIT);
-    buffer.drain(..keep_from);
+    // Truncate at a valid UTF-8 character boundary to avoid corrupting
+    // multi-byte characters or leaving dangling ANSI escape sequences.
+    let safe_from = buffer.floor_char_boundary(keep_from);
+    buffer.drain(..safe_from);
 }
 
 fn append_runtime_output(runtime: &Arc<TerminalRuntime>, text: &str) {
@@ -112,7 +119,17 @@ fn emit_runtime_output(
         return;
     }
     append_runtime_output(runtime, text);
-    emit_terminal(app, workspace_id, terminal_id, text, None);
+    // check if this terminal is session-bound before emitting the legacy event
+    let is_session_bound = crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+        .ok()
+        .flatten()
+        .map(|(binding_workspace_id, _)| binding_workspace_id == workspace_id)
+        .unwrap_or(false);
+
+    if !is_session_bound {
+        emit_terminal(app, workspace_id, terminal_id, text, None);
+    }
+
     if let Ok(Some((binding_workspace_id, session_id))) =
         crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
     {
@@ -266,7 +283,31 @@ fn create_pty_terminal_runtime(
                         &text,
                     );
                 }
-                Err(_) => break,
+                Err(err) => {
+                    let text = decoder.finish();
+                    let state: State<AppState> = state_handle.state();
+                    if !text.is_empty() {
+                        emit_runtime_output(
+                            &runtime_out,
+                            &app_handle,
+                            state,
+                            &workspace_id_out,
+                            terminal_id,
+                            &text,
+                        );
+                    }
+                    let state: State<AppState> = state_handle.state();
+                    let error_msg = format!("\n[terminal error: read failed: {err}]\n");
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &error_msg,
+                    );
+                    break;
+                }
             }
         }
     });
@@ -388,7 +429,31 @@ fn create_tmux_terminal_runtime(
                         &text,
                     );
                 }
-                Err(_) => break,
+                Err(err) => {
+                    let text = decoder.finish();
+                    let state: State<AppState> = state_handle.state();
+                    if !text.is_empty() {
+                        emit_runtime_output(
+                            &runtime_out,
+                            &app_handle,
+                            state,
+                            &workspace_id_out,
+                            terminal_id,
+                            &text,
+                        );
+                    }
+                    let state: State<AppState> = state_handle.state();
+                    let error_msg = format!("\n[terminal error: read failed: {err}]\n");
+                    emit_runtime_output(
+                        &runtime_out,
+                        &app_handle,
+                        state,
+                        &workspace_id_out,
+                        terminal_id,
+                        &error_msg,
+                    );
+                    break;
+                }
             }
         }
     });

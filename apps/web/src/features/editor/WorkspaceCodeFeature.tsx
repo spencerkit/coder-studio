@@ -141,7 +141,7 @@ export const WorkspaceCodeFeature = ({
       {fileSearch.showDropdown && fileSearch.dropdownStyle && container && (
         <WorkspaceFileSearchDropdown
           container={container}
-          locale={locale}
+          t={t}
           dropdownStyle={fileSearch.dropdownStyle}
           results={fileSearch.results}
           activeIndex={fileSearch.activeIndex}

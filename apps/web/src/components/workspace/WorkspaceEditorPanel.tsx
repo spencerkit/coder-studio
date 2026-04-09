@@ -68,7 +68,7 @@ export const WorkspaceEditorPanel = ({
               onFocus={(event) => onFileSearchFocus(event.currentTarget.value)}
               onBlur={onFileSearchBlur}
               onKeyDown={onFileSearchKeyDown}
-              placeholder={locale === "zh" ? "搜索文件并跳转…" : "Search files and jump..."}
+              placeholder={t("fileSearchPlaceholder")}
               autoComplete="off"
               spellCheck={false}
               aria-expanded={showFileSearchDropdown}

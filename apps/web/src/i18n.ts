@@ -1,668 +1,39 @@
 export type Locale = "en" | "zh";
 
+export type Translator = (key: string, params?: Record<string, string | number>) => string;
+
 type TranslationParams = Record<string, string | number>;
-type TranslationValue = string | ((params: TranslationParams) => string);
 
 const STORAGE_KEY = "coder-studio.locale";
 
-const messages = {
-  en: {
-    languageLabel: "Language",
-    theme: "Theme",
-    themeDark: "Dark",
-    workspaceLabel: "Workspace",
-    noWorkspace: "No workspace",
-    workspaceWelcomeKicker: "Agent Workspace",
-    workspaceWelcomeTitle: "Start an agent workspace",
-    workspaceWelcomeBody: "Open a local repository, connect a remote repo, or restore a previous session.",
-    workspaceWelcomeOpenWorkspace: "Open workspace",
-    workspaceWelcomeRestoreHistory: "Restore from history",
-    workspaceWelcomeOpenSettings: "Open settings",
-    settings: "Settings",
-    status: "Status",
-    ready: "Ready",
-    idle: "Idle",
-    branch: "Branch",
-    changes: "Changes",
-    agent: "Agent",
-    localFolder: "Local Folder",
-    newSession: "New Session",
-    complete: "Complete",
-    stop: "Stop",
-    mode: "Mode",
-    autoSuspend: "Auto suspend",
-    idleAfter: "Idle after",
-    minutesShort: "min",
-    maxActive: "Max active",
-    sessionsWord: "sessions",
-    memoryPressure: "Memory pressure",
-    archive: "Archive",
-    autoFeed: "Auto-feed",
-    add: "Add",
-    runNext: "Run Next",
-    running: "Running",
-    interrupted: "Interrupted",
-    queued: "Queued",
-    done: "Done",
-    provider: "Provider",
-    launchCommand: "Launch command",
-    launchCommandResolvedPath: ({ path }) => `Resolved to ${path}`,
-    completionNotifications: "Completion Notifications",
-    completionNotificationsHint: "Send reminders when tasks finish in the background.",
-    notifyOnlyInBackground: "Only notify in background",
-    notifyOnlyInBackgroundHint: "Skip browser alerts when the completed session is already in view.",
-    notificationPermission: "Browser notification permission",
-    notificationPermissionAllowed: "Allowed",
-    notificationPermissionNotEnabled: "Not enabled",
-    notificationPermissionUnsupported: "Unsupported",
-    autoSuspendHint: "Automatically suspend idle sessions when capacity needs to be reclaimed.",
-    idleAfterHint: "How long a session can stay idle before it is suspended.",
-    maxActiveHint: "Maximum number of concurrently active sessions across workspaces.",
-    memoryPressureHint: "Allow the app to suspend sessions earlier when the system is under pressure.",
-    languageHint: "Choose the interface language used across the application.",
-    worktrees: "Worktrees",
-    repositoryNavigator: "Repository Navigator",
-    files: "Files",
-    refresh: "Refresh",
-    sourceControl: "Source Control",
-    stagedChanges: "Staged Changes",
-    untrackedFiles: "Untracked",
-    stageFile: "Stage file",
-    unstageFile: "Unstage file",
-    discardFile: "Discard changes",
-    commitMessage: "Commit Message",
-    commitPlaceholder: "Describe this change set",
-    stageAll: "Stage All",
-    unstageAll: "Unstage All",
-    discardAll: "Discard All",
-    commit: "Commit",
-    gitCommitSucceeded: "Commit created",
-    gitActionFailed: "Git action failed",
-    selectProjectToLoadFiles: "Select a project to load files.",
-    noChangesDetected: "No changes detected.",
-    modified: "Modified",
-    terminalMode: "Terminal",
-    viewingArchivedSession: "Viewing archived session (read-only)",
-    exitArchiveHint: "Exit archive view to resume live operations.",
-    exit: "Exit",
-    archiveViewReadonly: "Archive view (read-only)",
-    noAgentOutputYet: "No agent output yet.",
-    draftChooserHint: "Create a new session here, or restore a session from this workspace history into this pane.",
-    draftModeNew: "New session",
-    draftModeRestore: "Restore from history",
-    draftRestoreEmpty: "No recoverable sessions in this workspace history.",
-    sessionUnavailableTitle: "Session unavailable",
-    send: "Send",
-    history: "History",
-    historyTitle: "Session History",
-    historyDescription: "Closed sessions and workspaces are archived here until you permanently delete them.",
-    historyEmpty: "No session history yet.",
-    historyCount: ({ count }) => `${count} sessions`,
-    historyArchived: "Archived",
-    historyLive: "Live",
-    historyDetached: "Detached",
-    historyUnavailable: "Unavailable",
-    historyRestore: "Restore",
-    historyOpen: "Open",
-    historyDelete: "Delete",
-    historyRemove: "Remove",
-    historyDeleteTitle: "Delete Session",
-    historyDeleteConfirm: ({ title }) => `Delete "${title}" permanently? This cannot be undone.`,
-    historyRemoveTitle: "Remove Missing Session",
-    historyRemoveConfirm: ({ title }) => `Remove "${title}" from this workspace? The provider session is already gone.`,
-    historyDialogContentLabel: "Content",
-    historyDialogTimeLabel: "Last active",
-    delete: "Delete",
-    confirm: "Confirm",
-    cancel: "Cancel",
-    globalSettings: "Global Settings",
-    backToApp: "Back to app",
-    settingsGeneral: "General",
-    settingsAppearance: "Appearance",
-    settingsGeneralKicker: "Workspace Defaults",
-    settingsProviderKicker: "Runtime",
-    settingsAppearanceKicker: "Interface",
-    settingsAppearanceHint: "Tune terminal rendering and language defaults for this machine.",
-    settingsRuntimeSummaryTitle: "Runtime summary",
-    defaultProvider: "Default provider",
-    defaultProviderHint: "Used for new draft sessions until a persisted session starts carrying its own provider.",
-    providerUnknownHint: ({ provider }) => `Settings are not available for ${provider}. Check the provider manifest or install a supported runtime.`,
-    claudeSettingsTitle: "Claude",
-    claudeSettingsHint: "Keep Claude launch, auth, behavior, and local preferences organized in one place.",
-    codexSettingsTitle: "Codex",
-    codexSettingsHint: "Configure the Codex CLI command, structured config overrides, and environment for the current runtime.",
-    claudeStartupSection: "Startup",
-    claudeStartupSectionHint: "Claude always launches as `claude`. Configure common flags here and verify the exact command below.",
-    claudeExtraStartupArgs: "startup args",
-    claudeExtraStartupArgsHint: "One CLI token per line. Use this for flags or values that are not covered by the common toggles.",
-    claudeAuthSection: "Authentication",
-    claudeAuthSectionHint: "Credentials and endpoint overrides passed to the Claude CLI environment. When backend values are empty, existing local Claude config is used to prefill these fields.",
-    claudePermissionModeHelp: "Choose the launch-time permission mode. Use auto to let Claude decide when it can act without asking first.",
-    claudeSelectUnsetOption: "Not set",
-    claudeEditorModeVimOption: "vim",
-    claudeLaunchSection: "Launch & Auth",
-    claudeLaunchSectionHint: "Control executable resolution, startup flags, auth secrets, and extra environment variables.",
-    claudeVerbose: "--verbose",
-    claudeApiKey: "API key",
-    claudeApiKeyHelp: "Maps to ANTHROPIC_API_KEY. Use this for API-key auth when your Claude setup expects an explicit API key instead of bearer-token auth.",
-    claudeAuthToken: "auth token",
-    claudeAuthTokenHelp: "Maps to ANTHROPIC_AUTH_TOKEN. Common for bearer-token or gateway setups, especially when paired with a custom base URL.",
-    claudeAuthTokenMeta: "Secret string · Example: token-demo-...",
-    claudeAuthTokenPlaceholder: "token-demo-...",
-    claudeShowSecret: "Show secret",
-    claudeHideSecret: "Hide secret",
-    claudeBaseUrl: "base URL",
-    claudeBaseUrlHelp: "Maps to ANTHROPIC_BASE_URL. Point Claude CLI at a proxy, gateway, or compatible endpoint instead of the default Anthropic API.",
-    claudeBaseUrlPlaceholder: "https://api.anthropic.com",
-    claudeApiKeyHelper: "API key helper",
-    claudeApiKeyHelperHelp: "A settings.json field. Claude can run this helper to fetch credentials dynamically and send the result as both X-Api-Key and Authorization headers, but explicit ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN values still take precedence.",
-    claudeBehaviorSection: "Model & Behavior",
-    claudeBehaviorSectionHint: "Common settings.json fields for model selection, effort, cleanup, and language defaults.",
-    claudeModel: "model",
-    claudeModelPlaceholder: "claude-sonnet-4-5",
-    claudePermissionMode: "Permission mode",
-    claudeCleanupDays: "Cleanup period (days)",
-    claudeCleanupDaysMeta: "Integer >= 0 · Example: 30",
-    claudeEditorMode: "Editor mode",
-    claudeExtraStartupArgsPlaceholder: "--model\nclaude-sonnet-4-5",
-    codexCommandPreview: "Launch preview",
-    codexCommandPreviewHint: "This is the exact Codex CLI command that will run in the current runtime.",
-    codexExecutable: "executable",
-    codexExecutableHint: "Path or command name used to launch Codex in the current runtime.",
-    codexExtraArgs: "extra args",
-    codexExtraArgsHint: "One CLI token per line. Use this for launch flags that are not part of the real Codex config files.",
-    codexExtraArgsPlaceholder: "--full-auto\n--search",
-    codexConfigSection: "Account & Model",
-    codexConfigSectionHint: "These fields read from and write to your real Codex config files.",
-    codexModel: "model",
-    codexModelHint: "Maps to the real model value in ~/.codex/config.toml.",
-    codexModelPlaceholder: "gpt-5.4",
-    codexApiKey: "API key",
-    codexApiKeyHint: "For OpenAI auth providers, reads from and writes to ~/.codex/auth.json using OPENAI_API_KEY. Providers configured with env_key are not managed here.",
-    codexApiKeyPlaceholder: "sk-...",
-    codexBaseUrl: "base URL",
-    codexBaseUrlHint: "Uses the active provider base URL from ~/.codex/config.toml.",
-    codexBaseUrlPlaceholder: "https://api.openai.com/v1",
-    claudeJsonInvalid: "JSON must be an object.",
-    terminalRendering: "Terminal Rendering",
-    terminalRenderingHint: "Standard keeps richer symbols; compatibility narrows the font stack and refits more aggressively for Ubuntu and browser edge cases.",
-    terminalRenderingStandard: "Standard",
-    terminalRenderingCompatibility: "Compatibility",
-    settingsDescription: "Configure agent defaults and suspend policy for every workspace from one place.",
-    settingsAutoSave: "Changes save automatically.",
-    buildVersionLabel: "Version",
-    buildPublishedLabel: "Published",
-    settingsProviderSummaryHint: "Runtime changes apply the next time this provider launches.",
-    injectHooks: "Inject hooks",
-    injectHooksHint: "Install the global provider hooks required by Coder Studio.",
-    injectHooksWorkspaceRequired: "Open a workspace before injecting provider hooks.",
-    injectingHooks: "Injecting…",
-    injectHooksSuccess: "Hooks injected",
-    agentDefaults: "Agent Defaults",
-    agentDefaultsHint: "Choose the provider and launch command used when a workspace starts or an agent restarts.",
-    suspendStrategy: "Suspend Strategy",
-    suspendStrategyHint: "Keep active capacity predictable by automatically yielding idle sessions when the pool is busy.",
-    save: "Save",
-    saved: "Saved",
-    collapseCodePanel: "Collapse code panel",
-    expandCodePanel: "Expand code panel",
-    codePanel: "Code",
-    terminalPanel: "Terminal",
-    selectFileFromNavigator: "Select a file from the navigator",
-    preview: "Preview",
-    diff: "Diff",
-    noDiffAvailable: "No diff available.",
-    new: "New",
-    noTerminalYet: "No terminal yet.",
-    loading: "Loading",
-    close: "Close",
-    splitVertical: "Split Vertically",
-    splitHorizontal: "Split Horizontally",
-    splitVerticalDescription: "Split current agent pane into left and right",
-    splitHorizontalDescription: "Split current agent pane into top and bottom",
-    statusTab: "Status",
-    treeTab: "Tree",
-    loadingWorktreeDetails: "Loading worktree details...",
-    path: "Path",
-    clean: "Clean",
-    launchWorkspace: "Launch Workspace",
-    runtimeCheckTitle: "Validate Runtime",
-    runtimeCheckDescription: "Coder Studio depends on the selected agent CLI and Git. Validate the selected runtime before choosing a workspace.",
-    runtimeCheckRequiredTitle: "Selected runtime",
-    runtimeCheckChecking: "Checking...",
-    runtimeCheckCheckingDescription: ({ runtime }) => `Checking the selected agent CLI and Git in ${runtime}.`,
-    runtimeCheckMissingDescription: ({ runtime }) => `Install the missing tools in ${runtime}, make sure they are available in PATH, then retry the check.`,
-    runtimeCheckInstallHint: "Required tools are missing. Install them first before entering workspace selection.",
-    runtimeCheckRetry: "Retry Check",
-    runtimeCheckClaudeLabel: "Claude Code",
-    runtimeCheckClaudeHint: "Required for agent sessions. The configured Claude launch command must be available.",
-    runtimeCheckClaudeDeferredHint: "This command is resolved after you choose a workspace. Launch-time validation will run with the selected path.",
-    runtimeCheckCodexLabel: "Codex CLI",
-    runtimeCheckCodexHint: "Required for Codex sessions. The configured Codex launch command must be available.",
-    runtimeCheckCodexDeferredHint: "This command is resolved after you choose a workspace. Launch-time validation will run with the selected path.",
-    runtimeCheckGitLabel: "Git",
-    runtimeCheckGitHint: "Required for repository detection, status, and commit workflows. The `git` command must be available.",
-    localFolderHint: "Attach an existing project folder as your live workspace.",
-    nativeTarget: "Native",
-    nativeTargetHint: "Use the host shell runtime.",
-    wslHint: "Route Git and agent commands through WSL.",
-    optionalDistroPlaceholder: "Optional distro name (e.g. Ubuntu-22.04)",
-    folderBrowserRecovered: "The previous location is unavailable. Showing a valid server directory instead.",
-    homeDirectory: "Home",
-    goUp: "Up",
-    loadingDirectories: "Loading server directories...",
-    emptyDirectories: "No subdirectories in this location",
-    folderBrowserInteractionHint: "Click a folder to enter and select it.",
-    folderBrowserRowHint: "Click to enter",
-    enterFolder: "Enter",
-    selected: "Selected",
-    cancel: "Cancel",
-    startWorkspace: "Start Workspace",
-    selectProjectFirst: "Select a project first",
-    workspaceReadOnlyTitle: "Observer mode",
-    workspaceReadOnlyBody: "This workspace is following the current controller. Shared actions are read-only here.",
-    workspaceReadOnlyToast: "This workspace is read-only until you become the controller.",
-    workspaceTakeoverAction: "Request takeover",
-    workspaceTakeoverRequesting: "Requesting takeover...",
-    workspaceTakeoverPending: "Takeover requested. If the current controller does not respond within 10 seconds, control will transfer here.",
-    workspaceTakeoverRequestFailed: "Takeover request failed",
-    workspaceTakeoverIncomingTitle: "Takeover request pending",
-    workspaceTakeoverIncomingBody: "Another client asked to take control of this workspace. Reject to keep control.",
-    workspaceTakeoverReject: "Keep control",
-    workspaceAgentRecoveryTitle: "Session interrupted",
-    workspaceAgentResumeBody: "The previous agent runtime stopped, but the saved agent session can be resumed from here.",
-    workspaceAgentRestartBody: "The previous agent runtime stopped. Start a new agent runtime to continue working in this session.",
-    workspaceAgentResumeAction: "Resume agent",
-    workspaceAgentRestartAction: "Restart agent",
-    workspaceTerminalCreateFailed: "Start new shell failed",
-    agentStartFailed: "Agent start failed",
-    taskCompletedToast: ({ title }) => `${title} completed`,
-    completionNotificationBody: ({ workspaceTitle }) => `${workspaceTitle} · Task complete`,
-    draftSessionTitle: "New Session",
-    draftSessionPrompt: "Start here",
-    draftSessionWorkspace: ({ path }) => `Workspace: ${path}`,
-    previewUnavailable: "Preview unavailable.",
-    agentExited: "Agent exited",
-    escKey: "Esc",
-    tabKey: "Tab",
-    enterKey: "Enter",
-    arrowUp: "Up",
-    arrowDown: "Down",
-    arrowLeft: "Left",
-    arrowRight: "Right",
-    authPublicModeBadge: "Public Mode",
-    authLoadingTitle: "Checking access",
-    authLoadingDescription: "Verifying deployment mode and session state before the workspace loads.",
-    authTitle: "Unlock Coder Studio",
-    authDescription: "This deployment is protected by a single access passphrase. Enter it to continue.",
-    authAllowedRoots: "Allowed roots",
-    authAllowedRootsHint: "After sign-in, only the folders in this list can be opened from the browser.",
-    authAllowedRootsEmpty: "No allowed roots are configured yet.",
-    authIdleWindow: "Idle timeout",
-    authSessionWindow: "Session max",
-    authPasswordLabel: "Access passphrase",
-    authPasswordPlaceholder: "Enter passphrase",
-    authShowPassword: "Show",
-    authHidePassword: "Hide",
-    authLogin: "Enter workspace",
-    authLoggingIn: "Checking…",
-    authInvalidCredentials: "That passphrase is incorrect.",
-    authBlockedUntil: ({ time }) => `Too many failed attempts. Try again after ${time}.`,
-    authSessionExpired: "Your session expired. Sign in again to continue.",
-    authNotConfigured: "Set the passphrase in auth.json before public mode can be used.",
-    authNotConfiguredTitle: "Passphrase is not configured yet",
-    authNotConfiguredDescription: "Set the password field in auth.json, then retry the status check from this screen.",
-    authSetupHint: "If login is unavailable, check auth.json and make sure the password field is configured.",
-    authBlockedTitle: "This IP is temporarily blocked",
-    authBlockedDescription: ({ time }) => `Too many failed attempts were recorded from this IP. Access resumes after ${time}.`,
-    authUnavailable: "Authentication is temporarily unavailable. Check the transport service and try again.",
-    authUnavailableTitle: "Authentication service is unavailable",
-    authUnavailableDescription: "The service could not confirm the current session. Retry after the transport service is healthy.",
-    authRetry: "Retry check",
-    authRefreshing: "Refreshing…",
-    authUnlockingBadge: "Ready",
-    authUnlockingTitle: "Access granted",
-    authUnlockingDescription: "Loading the workbench and restoring your session."
-  },
-  zh: {
-    languageLabel: "语言",
-    theme: "主题",
-    themeDark: "深色",
-    workspaceLabel: "工作区",
-    noWorkspace: "未选择工作区",
-    workspaceWelcomeKicker: "智能体工作区",
-    workspaceWelcomeTitle: "开始一个智能体工作区",
-    workspaceWelcomeBody: "打开本地仓库、连接远程仓库，或恢复此前的会话。",
-    workspaceWelcomeOpenWorkspace: "打开工作区",
-    workspaceWelcomeRestoreHistory: "从历史记录恢复",
-    workspaceWelcomeOpenSettings: "打开设置",
-    settings: "设置",
-    status: "状态",
-    ready: "就绪",
-    idle: "空闲",
-    branch: "分支",
-    changes: "变更",
-    agent: "智能体",
-    localFolder: "本地目录",
-    newSession: "新建会话",
-    complete: "完成",
-    stop: "停止",
-    mode: "模式",
-    autoSuspend: "自动挂起",
-    idleAfter: "空闲后",
-    minutesShort: "分钟",
-    maxActive: "最大活跃数",
-    sessionsWord: "个会话",
-    memoryPressure: "内存压力",
-    archive: "归档",
-    autoFeed: "自动投喂",
-    add: "添加",
-    runNext: "运行下一项",
-    running: "执行中",
-    interrupted: "中断",
-    queued: "排队中",
-    done: "已完成",
-    provider: "提供方",
-    launchCommand: "启动命令",
-    launchCommandResolvedPath: ({ path }) => `解析路径：${path}`,
-    completionNotifications: "完成提醒",
-    completionNotificationsHint: "任务在后台完成时发送提醒。",
-    notifyOnlyInBackground: "仅在后台提醒",
-    notifyOnlyInBackgroundHint: "如果已在当前界面查看完成的会话，则跳过浏览器提醒。",
-    notificationPermission: "浏览器通知权限",
-    notificationPermissionAllowed: "已允许",
-    notificationPermissionNotEnabled: "未启用",
-    notificationPermissionUnsupported: "不支持",
-    autoSuspendHint: "当容量需要回收时，自动挂起空闲会话。",
-    idleAfterHint: "会话在被挂起前允许保持空闲的时长。",
-    maxActiveHint: "所有工作区内允许同时活跃的会话上限。",
-    memoryPressureHint: "当系统资源紧张时，允许更早挂起空闲会话。",
-    languageHint: "选择整个应用界面使用的语言。",
-    worktrees: "工作树",
-    repositoryNavigator: "仓库导航",
-    files: "文件",
-    refresh: "刷新",
-    sourceControl: "源码管理",
-    stagedChanges: "已暂存更改",
-    untrackedFiles: "未跟踪",
-    stageFile: "暂存文件",
-    unstageFile: "取消暂存",
-    discardFile: "放弃更改",
-    commitMessage: "提交说明",
-    commitPlaceholder: "输入本次变更说明",
-    stageAll: "全部暂存",
-    unstageAll: "取消暂存",
-    discardAll: "全部回退",
-    commit: "提交",
-    gitCommitSucceeded: "已创建提交",
-    gitActionFailed: "Git 操作失败",
-    selectProjectToLoadFiles: "先选择项目再加载文件。",
-    noChangesDetected: "未检测到变更。",
-    modified: "已修改",
-    terminalMode: "终端",
-    viewingArchivedSession: "正在查看归档会话（只读）",
-    exitArchiveHint: "退出归档视图后即可恢复实时操作。",
-    exit: "退出",
-    archiveViewReadonly: "归档视图（只读）",
-    noAgentOutputYet: "还没有智能体输出。",
-    draftChooserHint: "可以在这里新建会话，或把当前工作区历史里的会话恢复到这个 pane 位置。",
-    draftModeNew: "新建会话",
-    draftModeRestore: "从历史恢复",
-    draftRestoreEmpty: "当前工作区没有可恢复的历史会话。",
-    sessionUnavailableTitle: "会话不可用",
-    send: "发送",
-    history: "历史记录",
-    historyTitle: "会话历史",
-    historyDescription: "关闭的会话和工作区都会在这里归档，除非你手动永久删除。",
-    historyEmpty: "还没有会话历史。",
-    historyCount: ({ count }) => `${count} 条会话`,
-    historyArchived: "已归档",
-    historyLive: "活跃",
-    historyDetached: "未挂载",
-    historyUnavailable: "不可用",
-    historyRestore: "恢复",
-    historyOpen: "打开",
-    historyDelete: "删除",
-    historyRemove: "移出工作区",
-    historyDeleteTitle: "删除会话",
-    historyDeleteConfirm: ({ title }) => `确定永久删除“${title}”吗？删除后无法恢复。`,
-    historyRemoveTitle: "移除失效会话",
-    historyRemoveConfirm: ({ title }) => `“${title}”对应的 provider 会话已不存在。要把它从当前工作区移除吗？`,
-    historyDialogContentLabel: "内容",
-    historyDialogTimeLabel: "最近活跃时间",
-    delete: "删除",
-    confirm: "确认",
-    cancel: "取消",
-    globalSettings: "全局设置",
-    backToApp: "返回应用",
-    settingsGeneral: "常规",
-    settingsAppearance: "个性化",
-    settingsGeneralKicker: "工作区默认值",
-    settingsProviderKicker: "运行时",
-    settingsAppearanceKicker: "界面",
-    settingsAppearanceHint: "调整这台机器上的终端渲染和语言默认值。",
-    settingsRuntimeSummaryTitle: "运行时概览",
-    defaultProvider: "默认提供方",
-    defaultProviderHint: "用于新建草稿会话；一旦 session 已持久化，就以 session 自己记录的 provider 为准。",
-    providerUnknownHint: ({ provider }) => `${provider} 暂未提供可渲染的设置清单。请检查 provider manifest 或安装受支持的运行时。`,
-    claudeSettingsTitle: "Claude",
-    claudeSettingsHint: "把 Claude 的启动、鉴权、行为和本地偏好收拢到一个更清晰的面板里。",
-    codexSettingsTitle: "Codex",
-    codexSettingsHint: "配置当前运行环境下 Codex 的启动命令、结构化覆盖参数和环境变量。",
-    claudeStartupSection: "启动",
-    claudeStartupSectionHint: "Claude 固定以 `claude` 启动，在这里配置常用参数，并直接核对最终命令。",
-    claudeExtraStartupArgs: "startup args",
-    claudeExtraStartupArgsHint: "每行一个 CLI token。用于补充下面未覆盖的 flag 或参数值。",
-    claudeAuthSection: "鉴权",
-    claudeAuthSectionHint: "传给 Claude CLI 运行环境的凭据和服务端点覆盖项。后端未填写时，会自动把本机已有的 Claude 配置带出来作为预填值。",
-    claudePermissionModeHelp: "设置会话启动时的权限模式。选择 auto 时，会由 Claude 自行判断何时可以不先询问。",
-    claudeSelectUnsetOption: "未设置",
-    claudeEditorModeVimOption: "vim",
-    claudeLaunchSection: "启动与鉴权",
-    claudeLaunchSectionHint: "控制可执行文件、启动参数、鉴权信息，以及额外环境变量。",
-    claudeVerbose: "--verbose",
-    claudeApiKey: "API Key",
-    claudeApiKeyHelp: "对应 ANTHROPIC_API_KEY。只有在你的 Claude 环境明确使用 API Key 鉴权，而不是 bearer token 鉴权时才需要填写。",
-    claudeAuthToken: "auth token",
-    claudeAuthTokenHelp: "对应 ANTHROPIC_AUTH_TOKEN，常见于 bearer token 或网关代理场景，通常会和自定义 Base URL 一起使用。",
-    claudeAuthTokenMeta: "密文字符串 · 示例：token-demo-...",
-    claudeAuthTokenPlaceholder: "token-demo-...",
-    claudeShowSecret: "显示明文",
-    claudeHideSecret: "隐藏明文",
-    claudeBaseUrl: "base URL",
-    claudeBaseUrlHelp: "对应 ANTHROPIC_BASE_URL，用来把 Claude CLI 指向代理、网关或兼容 Anthropic API 的自定义端点。",
-    claudeBaseUrlPlaceholder: "https://api.anthropic.com",
-    claudeApiKeyHelper: "API Key Helper",
-    claudeApiKeyHelperHelp: "settings.json 里的字段。Claude 可以执行一个 helper 动态获取凭据，并把结果同时作为 X-Api-Key 和 Authorization 发送；但如果显式设置了 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN，仍然以它们为准。",
-    claudeBehaviorSection: "模型与行为",
-    claudeBehaviorSectionHint: "常用 settings.json 字段，覆盖模型、推理强度、清理周期和语言等默认行为。",
-    claudeModel: "model",
-    claudeModelPlaceholder: "claude-sonnet-4-5",
-    claudePermissionMode: "权限模式",
-    claudeCleanupDays: "清理周期（天）",
-    claudeCleanupDaysMeta: "整数，>= 0 · 示例：30",
-    claudeEditorMode: "编辑器模式",
-    claudeExtraStartupArgsPlaceholder: "--model\nclaude-sonnet-4-5",
-    codexCommandPreview: "启动预览",
-    codexCommandPreviewHint: "这里展示当前运行环境下最终会执行的 Codex CLI 命令。",
-    codexExecutable: "executable",
-    codexExecutableHint: "当前运行环境下用于启动 Codex 的命令或完整路径。",
-    codexExtraArgs: "extra args",
-    codexExtraArgsHint: "每行一个 CLI 参数，用于补充真实 Codex 配置文件之外的启动参数。",
-    codexExtraArgsPlaceholder: "--full-auto\n--search",
-    codexConfigSection: "账号与模型",
-    codexConfigSectionHint: "这些字段会直接读取并写回真实的 Codex 配置文件。",
-    codexModel: "model",
-    codexModelHint: "映射到 ~/.codex/config.toml 里的真实 model 字段。",
-    codexModelPlaceholder: "gpt-5.4",
-    codexApiKey: "API key",
-    codexApiKeyHint: "仅在当前 provider 使用 OpenAI auth 时，才会读取并写回 ~/.codex/auth.json 里的 OPENAI_API_KEY。配置为 env_key 的 provider 不在这里管理。",
-    codexApiKeyPlaceholder: "sk-...",
-    codexBaseUrl: "base URL",
-    codexBaseUrlHint: "使用 ~/.codex/config.toml 里当前生效 provider 的 base URL。",
-    codexBaseUrlPlaceholder: "https://api.openai.com/v1",
-    claudeJsonInvalid: "JSON 必须是对象。",
-    terminalRendering: "终端渲染",
-    terminalRenderingHint: "标准模式保留更丰富的符号；兼容模式会收窄字体链，并更积极地重新测量，适合 Ubuntu 和浏览器边界场景。",
-    terminalRenderingStandard: "标准",
-    terminalRenderingCompatibility: "兼容",
-    settingsDescription: "在一个面板里统一配置所有工作区的智能体默认值和挂起策略。",
-    settingsAutoSave: "修改后会自动保存。",
-    buildVersionLabel: "版本",
-    buildPublishedLabel: "发布时间",
-    settingsProviderSummaryHint: "运行时配置会在该提供方下次启动时生效。",
-    injectHooks: "注入 hooks",
-    injectHooksHint: "安装 Coder Studio 所需的全局 provider hooks。",
-    injectHooksWorkspaceRequired: "请先打开一个工作区，再注入 provider hooks。",
-    injectingHooks: "注入中…",
-    injectHooksSuccess: "Hooks 已注入",
-    agentDefaults: "智能体默认值",
-    agentDefaultsHint: "设置工作区启动或智能体重启时使用的提供方和启动命令。",
-    suspendStrategy: "挂起策略",
-    suspendStrategyHint: "在会话池繁忙时自动让空闲会话让出容量，保证活跃并发可控。",
-    save: "保存",
-    saved: "已保存",
-    collapseCodePanel: "收起代码区域",
-    expandCodePanel: "展开代码区域",
-    codePanel: "代码",
-    terminalPanel: "终端",
-    selectFileFromNavigator: "从导航中选择一个文件",
-    preview: "预览",
-    diff: "差异",
-    noDiffAvailable: "暂无差异。",
-    new: "新建",
-    noTerminalYet: "还没有终端。",
-    loading: "加载中",
-    close: "关闭",
-    splitVertical: "垂直拆分",
-    splitHorizontal: "水平拆分",
-    splitVerticalDescription: "将当前智能体面板拆分为左右两栏",
-    splitHorizontalDescription: "将当前智能体面板拆分为上下两栏",
-    statusTab: "状态",
-    treeTab: "目录",
-    loadingWorktreeDetails: "正在加载工作树详情...",
-    path: "路径",
-    clean: "干净",
-    launchWorkspace: "启动工作区",
-    runtimeCheckTitle: "运行环境校验",
-    runtimeCheckDescription: "Coder Studio 依赖当前选中的智能体 CLI 和 Git。开始选择工作区前，请先校验当前执行环境。",
-    runtimeCheckRequiredTitle: "当前执行环境",
-    runtimeCheckChecking: "校验中...",
-    runtimeCheckCheckingDescription: ({ runtime }) => `正在检查 ${runtime} 中的所选智能体 CLI 和 Git。`,
-    runtimeCheckMissingDescription: ({ runtime }) => `请先在 ${runtime} 中安装缺失的工具，并确保它们已经加入 PATH，然后重新校验。`,
-    runtimeCheckInstallHint: "检测到缺失依赖，请先完成安装后再进入工作区选择流程。",
-    runtimeCheckRetry: "重新校验",
-    runtimeCheckClaudeLabel: "Claude Code",
-    runtimeCheckClaudeHint: "智能体会话依赖 Claude Code，必须能够执行当前配置的 Claude 启动命令。",
-    runtimeCheckClaudeDeferredHint: "这个命令需要在选定工作区后才能准确解析。进入工作区后还会按实际路径再次校验。",
-    runtimeCheckCodexLabel: "Codex CLI",
-    runtimeCheckCodexHint: "Codex 会话依赖 Codex CLI，必须能够执行当前配置的 Codex 启动命令。",
-    runtimeCheckCodexDeferredHint: "这个命令需要在选定工作区后才能准确解析。进入工作区后还会按实际路径再次校验。",
-    runtimeCheckGitLabel: "Git",
-    runtimeCheckGitHint: "仓库识别、状态读取和提交流程依赖 Git，必须能够直接执行 `git` 命令。",
-    localFolderHint: "把现有项目目录接入为实时工作区。",
-    nativeTarget: "系统",
-    nativeTargetHint: "使用宿主机 Shell 运行时。",
-    wslHint: "通过 WSL 执行 Git 和智能体命令。",
-    optionalDistroPlaceholder: "可选发行版名称（如 Ubuntu-22.04）",
-    folderBrowserRecovered: "上次的位置已不可用，当前已切换到可读取的服务端目录。",
-    homeDirectory: "主目录",
-    goUp: "上一级",
-    loadingDirectories: "正在读取服务端目录…",
-    emptyDirectories: "当前目录下没有可进入的子目录",
-    folderBrowserInteractionHint: "点击目录即可进入并选中。",
-    folderBrowserRowHint: "点击进入",
-    enterFolder: "进入",
-    selected: "已选择",
-    cancel: "取消",
-    startWorkspace: "开始工作区",
-    selectProjectFirst: "请先选择项目",
-    workspaceReadOnlyTitle: "观察模式",
-    workspaceReadOnlyBody: "当前工作区正在跟随主控端，这里只能只读查看共享状态。",
-    workspaceReadOnlyToast: "当前工作区为只读，只有接管后才能修改。",
-    workspaceTakeoverAction: "请求接管",
-    workspaceTakeoverRequesting: "正在请求接管…",
-    workspaceTakeoverPending: "已发起接管请求。如果当前主控 10 秒内未响应，控制权会转移到这里。",
-    workspaceTakeoverRequestFailed: "接管请求失败",
-    workspaceTakeoverIncomingTitle: "有新的接管请求",
-    workspaceTakeoverIncomingBody: "另一个客户端正在请求接管这个工作区。拒绝后将继续保留当前控制权。",
-    workspaceTakeoverReject: "保留控制权",
-    workspaceAgentRecoveryTitle: "会话已中断",
-    workspaceAgentResumeBody: "上一次智能体 runtime 已停止，但这里还保留了可恢复的 agent 会话，可以从这里继续恢复。",
-    workspaceAgentRestartBody: "上一次智能体 runtime 已停止。重新启动一个新的智能体 runtime 以继续当前会话。",
-    workspaceAgentResumeAction: "恢复智能体",
-    workspaceAgentRestartAction: "重新启动智能体",
-    workspaceTerminalCreateFailed: "新建 shell 失败",
-    agentStartFailed: "智能体启动失败",
-    taskCompletedToast: ({ title }) => `${title} 已完成`,
-    completionNotificationBody: ({ workspaceTitle }) => `${workspaceTitle} · 任务完成`,
-    draftSessionTitle: "新会话",
-    draftSessionPrompt: "请开始",
-    draftSessionWorkspace: ({ path }) => `当前工作区：${path}`,
-    previewUnavailable: "无法预览。",
-    agentExited: "智能体已退出",
-    escKey: "退出",
-    tabKey: "制表",
-    enterKey: "回车",
-    arrowUp: "上",
-    arrowDown: "下",
-    arrowLeft: "左",
-    arrowRight: "右",
-    authPublicModeBadge: "公开访问模式",
-    authLoadingTitle: "正在校验访问状态",
-    authLoadingDescription: "在工作区加载前，先确认当前部署模式和会话状态。",
-    authTitle: "解锁 Coder Studio",
-    authDescription: "当前部署已启用单口令保护，请输入访问口令后继续。",
-    authAllowedRoots: "允许目录",
-    authAllowedRootsHint: "登录后，浏览器只能打开这份白名单中的目录。",
-    authAllowedRootsEmpty: "当前还没有配置任何可访问目录。",
-    authIdleWindow: "空闲超时",
-    authSessionWindow: "会话上限",
-    authPasswordLabel: "访问口令",
-    authPasswordPlaceholder: "请输入访问口令",
-    authShowPassword: "显示",
-    authHidePassword: "隐藏",
-    authLogin: "进入工作区",
-    authLoggingIn: "校验中…",
-    authInvalidCredentials: "访问口令不正确。",
-    authBlockedUntil: ({ time }) => `失败次数过多，请在 ${time} 后重试。`,
-    authSessionExpired: "当前会话已过期，请重新输入口令。",
-    authNotConfigured: "请先在 auth.json 中设置访问口令，再使用公开访问模式。",
-    authNotConfiguredTitle: "当前还没有配置访问口令",
-    authNotConfiguredDescription: "请先在 auth.json 中设置 password 字段，然后回到这里重新检查状态。",
-    authSetupHint: "如果当前无法登录，请先检查 auth.json，确认 password 字段已经设置。",
-    authBlockedTitle: "当前 IP 已被临时封禁",
-    authBlockedDescription: ({ time }) => `这个 IP 的失败次数过多，请在 ${time} 后再试。`,
-    authUnavailable: "鉴权服务暂时不可用，请检查传输服务后重试。",
-    authUnavailableTitle: "鉴权服务当前不可用",
-    authUnavailableDescription: "系统暂时无法确认当前会话，请在传输服务恢复后重新检查。",
-    authRetry: "重新检查",
-    authRefreshing: "检查中…",
-    authUnlockingBadge: "就绪",
-    authUnlockingTitle: "访问已通过",
-    authUnlockingDescription: "正在载入工作台并恢复当前会话。"
-  }
-} as const satisfies Record<Locale, Record<string, TranslationValue>>;
+// Template interpolation: replaces {key} placeholders with params values.
+const interpolate = (template: string, params: TranslationParams): string =>
+  template.replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? `{${key}}`));
 
-export type TranslationKey = keyof typeof messages.en;
-export type Translator = (key: TranslationKey, params?: TranslationParams) => string;
+// Lazy-loaded message maps, populated on first use.
+let _messagesCache: Record<Locale, Record<string, string>> | null = null;
 
-export const readStoredLocalePreference = (): Locale | null => {
-  if (typeof window === "undefined") return null;
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved === "en" || saved === "zh" ? saved : null;
-  } catch {
-    return null;
-  }
+const loadMessages = async (locale: Locale): Promise<Record<string, string>> => {
+  const mod = await import(`./locales/${locale}.json`);
+  return mod.default as Record<string, string>;
 };
 
-export const getSystemLocale = (): Locale => {
-  if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh")) {
-    return "zh";
-  }
-  return "en";
+const getMessages = async (): Promise<Record<Locale, Record<string, string>>> => {
+  if (_messagesCache) return _messagesCache;
+  const [en, zh] = await Promise.all([loadMessages("en"), loadMessages("zh")]);
+  _messagesCache = { en, zh };
+  return _messagesCache;
 };
+
+// Synchronous cache populated after first async load.
+let _syncMessages: Record<Locale, Record<string, string>> | null = null;
+
+export const initI18n = async (): Promise<void> => {
+  _syncMessages = await getMessages();
+};
+
+// Pre-load on module import.
+void initI18n().catch(() => {});
 
 export const getPreferredLocale = (): Locale => {
   const stored = readStoredLocalePreference();
@@ -680,9 +51,7 @@ export const persistLocale = (locale: Locale) => {
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, locale);
-    } catch {
-      // Ignore storage failures and keep the in-memory locale.
-    }
+    } catch {}
   }
   applyLocale(locale);
 };
@@ -691,16 +60,39 @@ export const clearLocalePreference = () => {
   if (typeof window !== "undefined") {
     try {
       window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore storage failures and keep the in-memory locale.
-    }
+    } catch {}
   }
 };
 
+export const readStoredLocalePreference = (): Locale | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (saved === "en" || saved === "zh") return saved;
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const getSystemLocale = (): Locale => {
+  if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh")) {
+    return "zh";
+  }
+  return "en";
+};
+
+// Synchronous translator — uses cached messages if available, otherwise falls back
+// to a minimal inline default until the async load completes.
 export const createTranslator = (locale: Locale): Translator => {
-  return (key, params = {}) => {
-    const value = messages[locale][key] ?? messages.en[key];
-    return typeof value === "function" ? value(params) : value;
+  return (key: string, params: Record<string, string | number> = {}): string => {
+    const msgs = _syncMessages ?? _messagesCache;
+    if (msgs) {
+      const template = msgs[locale]?.[key] ?? msgs.en?.[key] ?? key;
+      return interpolate(template, params);
+    }
+    // Minimal fallback before JSON loads
+    return key;
   };
 };
 
@@ -709,24 +101,31 @@ const padIndex = (value: number | string) => {
   return String(value).padStart(2, "0");
 };
 
-export const formatSessionTitle = (value: number | string, locale: Locale) =>
-  locale === "zh" ? `会话 ${padIndex(value)}` : `Session ${padIndex(value)}`;
+export const formatSessionTitle = (value: number | string, locale: Locale) => {
+  const t = createTranslator(locale);
+  return t("formatSessionTitle", { index: padIndex(value) });
+};
 
-export const formatWorkspaceTitle = (value: number | string, locale: Locale) =>
-  locale === "zh" ? `工作区 ${padIndex(value)}` : `Workspace ${padIndex(value)}`;
+export const formatWorkspaceTitle = (value: number | string, locale: Locale) => {
+  const t = createTranslator(locale);
+  return t("formatWorkspaceTitle", { index: padIndex(value) });
+};
 
-export const formatTerminalTitle = (value: number | string, locale: Locale) =>
-  locale === "zh" ? `终端 ${value}` : `Terminal ${value}`;
+export const formatTerminalTitle = (value: number | string, locale: Locale) => {
+  const t = createTranslator(locale);
+  return t("formatTerminalTitle", { value });
+};
 
-export const formatSessionReadyMessage = (value: number | string, locale: Locale) =>
-  locale === "zh" ? `${formatSessionTitle(value, locale)} 已就绪。` : `${formatSessionTitle(value, locale)} is ready.`;
+export const formatSessionReadyMessage = (value: number | string, locale: Locale) => {
+  const t = createTranslator(locale);
+  const sessionTitle = formatSessionTitle(value, locale);
+  return t("formatSessionReady", { sessionTitle });
+};
 
 const extractGeneratedValue = (value: string, patterns: RegExp[]) => {
   for (const pattern of patterns) {
     const match = value.match(pattern);
-    if (match?.[1]) {
-      return match[1];
-    }
+    if (match?.[1]) return match[1];
   }
   return null;
 };

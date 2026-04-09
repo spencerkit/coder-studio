@@ -58,6 +58,13 @@ export const collectSessionBoundTerminalIds = (
   sessions.flatMap((session) => (session.terminalId ? [session.terminalId] : [])),
 );
 
+export const isSessionBoundWorkspaceTerminalId = (
+  sessions: readonly Session[],
+  workspaceTerminalId: string,
+): boolean => sessions.some(
+  (session) => session.terminalId === workspaceTerminalId && session.terminalRuntimeId != null,
+);
+
 export const filterWorkspacePanelTerminals = (
   terminals: readonly Terminal[],
   sessions: readonly Session[],

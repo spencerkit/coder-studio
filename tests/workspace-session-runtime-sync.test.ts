@@ -27,7 +27,7 @@ test("history restore starts the recovered session immediately on first click", 
 
   assert.match(
     source,
-    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(\s*record\.workspaceId,\s*record,\s*restorePaneId,\s*\{\s*strategy:\s*"split-new",\s*\},\s*\);[\s\S]*?if \(action === "restore"\)[\s\S]*?const restoredPaneId = latestTab[\s\S]*?findPaneIdBySessionId\(latestTab\.paneLayout,\s*String\(restored\.id\)\)[\s\S]*?startAgentSessionInPane\(restoredPaneId,/,
+    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(\s*record\.workspaceId,\s*record,\s*restorePaneId,\s*\{\s*strategy:\s*"split-new",\s*\},\s*\);[\s\S]*?if \(action === "restore"\)[\s\S]*?const restoredPaneId = latestTab[\s\S]*?findPaneIdBySessionId\(latestTab\.paneLayout,\s*record\.id\)[\s\S]*?startAgentSessionInPane\(restoredPaneId,/,
   );
 });
 
@@ -41,4 +41,8 @@ test("agent pane terminal resize treats runtime bindings as the live gate and ke
   assert.match(source, /if \(!tab \|\| !session\?\.terminalRuntimeId\) return;/);
   assert.match(source, /const terminalId = resolveSessionTerminalIdByRuntimeId\(tab\.sessions, session\.terminalRuntimeId, tab\.terminals\)\s*\?\? session\.terminalId/);
   assert.match(source, /syncWorkspaceTerminalSize\([\s\S]*?terminalId,[\s\S]*?size\.cols,[\s\S]*?size\.rows,[\s\S]*?\);/);
+});
+
+test("legacy terminal events skip session-bound workspace terminals to avoid duplicate streams", () => {
+  assert.match(source, /const unsubscribe = subscribeTerminalEvents\(\(\{ workspace_id, terminal_id, data \}\) => \{[\s\S]*?const mappedTerminalId = `term-\$\{terminal_id\}`;[\s\S]*?const matchedTab = currentState\.tabs\.find\(\(tab\) => tab\.id === workspace_id\);[\s\S]*?if \(matchedTab && isSessionBoundWorkspaceTerminalId\(matchedTab\.sessions, mappedTerminalId\)\) \{[\s\S]*?return;[\s\S]*?\}/);
 });

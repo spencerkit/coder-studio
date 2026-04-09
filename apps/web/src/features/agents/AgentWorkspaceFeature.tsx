@@ -310,8 +310,8 @@ const AgentPaneLeaf = memo(({
                     type="button"
                     className="pane-action split"
                     onClick={handleEnableSupervisor}
-                    title="Enable supervisor"
-                    aria-label="Enable supervisor"
+                    title={t("supervisorEnableTitle")}
+                    aria-label={t("supervisorEnableTitle")}
                   >
                     <PlayIcon />
                   </button>

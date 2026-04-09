@@ -16,7 +16,6 @@ type WorkspaceShellProps = {
   showTerminalPanel: boolean;
   rightSplit: number;
   statusItems: WorkspaceShellSummaryItem[];
-  runtimeHint: string;
   statusBanner?: ReactNode;
   agentPanel: ReactNode;
   codePanel: ReactNode;
@@ -34,7 +33,6 @@ export const WorkspaceShell = ({
   showTerminalPanel,
   rightSplit,
   statusItems,
-  runtimeHint,
   statusBanner,
   agentPanel,
   codePanel,
@@ -66,6 +64,16 @@ export const WorkspaceShell = ({
         </button>
         <button
           type="button"
+          className={`workspace-panel-toggle icon-only ${isCodeExpanded ? "active" : ""}`}
+          onClick={onToggleCodeExpanded}
+          title={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+          aria-pressed={isCodeExpanded}
+          aria-label={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+        >
+          {isCodeExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+        </button>
+        <button
+          type="button"
           className={`workspace-panel-toggle icon-only ${showTerminalPanel ? "active" : ""}`}
           onClick={() => onToggleRightPane("terminal")}
           title={t("terminalPanel")}
@@ -74,19 +82,6 @@ export const WorkspaceShell = ({
         >
           <WorkspaceTerminalIcon />
         </button>
-        {showCodePanel ? (
-          <button
-            type="button"
-            className={`workspace-panel-toggle icon-only ${isCodeExpanded ? "active" : ""}`}
-            onClick={onToggleCodeExpanded}
-            title={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
-            aria-pressed={isCodeExpanded}
-            aria-label={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
-          >
-            {isCodeExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
-          </button>
-        ) : null}
-        <span className="workspace-shortcut-hint">{runtimeHint}</span>
       </div>
     </div>
 

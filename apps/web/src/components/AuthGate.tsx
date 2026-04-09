@@ -212,7 +212,7 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
         </div>
         <div className="topbar-actions">
           <span className="topbar-tool topbar-tool-wide auth-preview-tool">
-            <span>{locale === "zh" ? "操作" : "Actions"}</span>
+            <span>{t("actionsLabel")}</span>
           </span>
           <span className="topbar-tool auth-preview-tool-square" />
         </div>
@@ -221,7 +221,7 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
       <div className="workspace-layout auth-preview-layout">
         <aside className="panel left-panel auth-preview-panel">
           <div className="sidebar-header">
-            <span className="sidebar-title">{locale === "zh" ? "会话" : "Sessions"}</span>
+            <span className="sidebar-title">{t("sessionLabel")}</span>
           </div>
           <div className="sidebar-content auth-preview-panel-body">
             <span className="auth-preview-label" />
@@ -254,7 +254,7 @@ export default function AuthGate({ locale, onSelectLocale, children }: AuthGateP
 
         <aside className="panel right-panel auth-preview-panel auth-preview-panel-right">
           <div className="panel-header">
-            <span className="panel-title">{locale === "zh" ? "终端" : "Terminal"}</span>
+            <span className="panel-title">{t("terminalLabel")}</span>
           </div>
           <div className="panel-body auth-preview-panel-body">
             <span className="auth-preview-line" />

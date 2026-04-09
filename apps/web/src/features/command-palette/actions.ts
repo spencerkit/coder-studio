@@ -28,7 +28,6 @@ type BuildCommandPaletteActionsOptions = {
 };
 
 export const buildCommandPaletteActions = ({
-  locale,
   t,
   route,
   isFocusMode,
@@ -49,16 +48,16 @@ export const buildCommandPaletteActions = ({
 }: BuildCommandPaletteActionsOptions): CommandPaletteAction[] => [
   {
     id: "new-workspace",
-    label: locale === "zh" ? "新建工作区" : "New Workspace",
-    description: locale === "zh" ? "创建并切换到新的工作区" : "Create and switch to a new workspace",
+    label: t("commandPaletteNewWorkspace"),
+    description: t("commandPaletteNewWorkspaceDesc"),
     shortcut: "⌘/Ctrl N",
     keywords: "new workspace tab add create",
     run: onAddTab,
   },
   {
     id: "toggle-focus",
-    label: locale === "zh" ? (isFocusMode ? "退出专注模式" : "进入专注模式") : (isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode"),
-    description: locale === "zh" ? "隐藏左右面板，聚焦命令流" : "Hide side panels and focus the command stream",
+    label: isFocusMode ? t("commandPaletteExitFocusMode") : t("commandPaletteEnterFocusMode"),
+    description: t("commandPaletteToggleFocusModeDesc"),
     shortcut: "F",
     keywords: "focus mode zen panel hide",
     run: onToggleFocusMode,
@@ -66,25 +65,25 @@ export const buildCommandPaletteActions = ({
   {
     id: "toggle-code",
     label: showCodePanel
-      ? (locale === "zh" ? "隐藏代码面板" : "Hide Code Panel")
-      : (locale === "zh" ? "显示代码面板" : "Show Code Panel"),
-    description: locale === "zh" ? "切换右侧代码预览区域" : "Toggle the right-side code preview area",
+      ? t("commandPaletteHideCodePanel")
+      : t("commandPaletteShowCodePanel"),
+    description: t("commandPaletteToggleCodeDesc"),
     keywords: "code panel preview right inspector",
     run: onToggleCodePanel,
   },
   {
     id: "toggle-terminal",
     label: showTerminalPanel
-      ? (locale === "zh" ? "隐藏终端面板" : "Hide Terminal Panel")
-      : (locale === "zh" ? "显示终端面板" : "Show Terminal Panel"),
-    description: locale === "zh" ? "切换右侧终端区域" : "Toggle the right-side terminal area",
+      ? t("commandPaletteHideTerminalPanel")
+      : t("commandPaletteShowTerminalPanel"),
+    description: t("commandPaletteToggleTerminalDesc"),
     keywords: "terminal panel shell dock right",
     run: onToggleTerminalPanel,
   },
   {
     id: "focus-input",
-    label: locale === "zh" ? "聚焦当前 Agent" : "Focus Current Agent",
-    description: locale === "zh" ? "将光标移动到当前 agent 终端" : "Move cursor to the active agent terminal",
+    label: t("commandPaletteFocusAgent"),
+    description: t("commandPaletteFocusAgentDesc"),
     keywords: "agent terminal focus",
     run: onFocusAgent,
   },
@@ -106,16 +105,16 @@ export const buildCommandPaletteActions = ({
   },
   {
     id: "switch-prev-workspace",
-    label: locale === "zh" ? "切换到上一个工作区" : "Switch To Previous Workspace",
-    description: locale === "zh" ? "按当前标签顺序回到上一个工作区" : "Jump to the previous workspace tab",
+    label: t("commandPaletteSwitchPrevWorkspace"),
+    description: t("commandPaletteSwitchPrevWorkspaceDesc"),
     shortcut: "⌘/Ctrl ⇧ [",
     keywords: "workspace previous back",
     run: () => onCycleWorkspace(-1),
   },
   {
     id: "switch-next-workspace",
-    label: locale === "zh" ? "切换到下一个工作区" : "Switch To Next Workspace",
-    description: locale === "zh" ? "按当前标签顺序前往下一个工作区" : "Jump to the next workspace tab",
+    label: t("commandPaletteSwitchNextWorkspace"),
+    description: t("commandPaletteSwitchNextWorkspaceDesc"),
     shortcut: "⌘/Ctrl ⇧ ]",
     keywords: "workspace next forward",
     run: () => onCycleWorkspace(1),
@@ -123,11 +122,11 @@ export const buildCommandPaletteActions = ({
   {
     id: "open-settings",
     label: route === "settings"
-      ? (locale === "zh" ? "返回工作区" : "Back To Workspace")
-      : (locale === "zh" ? "打开设置" : "Open Settings"),
+      ? t("commandPaletteBackToWorkspace")
+      : t("commandPaletteOpenSettings"),
     description: route === "settings"
-      ? (locale === "zh" ? "关闭设置并返回工作台" : "Close settings and return to the workbench")
-      : (locale === "zh" ? "打开全局设置面板" : "Open global settings panel"),
+      ? t("commandPaletteBackToWorkspaceDesc")
+      : t("commandPaletteOpenSettingsDesc"),
     keywords: "settings preferences",
     run: () => {
       if (route === "settings") {
@@ -139,8 +138,8 @@ export const buildCommandPaletteActions = ({
   },
   ...workspaceTabs.map((tab) => ({
     id: `workspace:${tab.id}`,
-    label: `${locale === "zh" ? "切换到" : "Switch To"} ${tab.label}`,
-    description: locale === "zh" ? "直接跳转到该工作区" : "Jump directly to this workspace",
+    label: t("commandPaletteSwitchTo", { label: tab.label }),
+    description: t("commandPaletteSwitchToDesc"),
     keywords: `workspace ${tab.label.toLowerCase()}`,
     run: () => onSwitchWorkspace(tab.id),
   })),

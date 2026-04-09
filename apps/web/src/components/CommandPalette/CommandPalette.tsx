@@ -1,10 +1,11 @@
 import type { RefObject } from "react";
-import type { Locale } from "../../i18n";
+import type { Locale, Translator } from "../../i18n";
 import type { CommandPaletteAction } from "../../types/app";
 import { SearchIcon } from "../icons";
 
 type CommandPaletteProps = {
   locale: Locale;
+  t: Translator;
   inputRef: RefObject<HTMLInputElement | null>;
   query: string;
   activeIndex: number;
@@ -18,6 +19,7 @@ type CommandPaletteProps = {
 
 export const CommandPalette = ({
   locale,
+  t,
   inputRef,
   query,
   activeIndex,
@@ -42,13 +44,13 @@ export const CommandPalette = ({
       data-density="compact"
       role="dialog"
       aria-modal="true"
-      aria-label={locale === "zh" ? "快速操作面板" : "Quick actions palette"}
+      aria-label={t("commandPaletteAriaLabel")}
       onMouseDown={(event) => event.stopPropagation()}
     >
       <div className="command-palette-header">
-        <span className="section-kicker">{locale === "zh" ? "命令面板" : "Command Palette"}</span>
+        <span className="section-kicker">{t("commandPaletteTitle")}</span>
         <span className="command-palette-meta">
-          {locale === "zh" ? `${actions.length} 项` : `${actions.length} items`}
+          {t("commandPaletteMeta", { count: actions.length })}
         </span>
       </div>
       <div className="command-palette-search-row">
@@ -58,7 +60,7 @@ export const CommandPalette = ({
           className="command-palette-search-input"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder={locale === "zh" ? "搜索操作、面板或工作区…" : "Search actions, panels, or workspaces..."}
+          placeholder={t("commandPaletteSearchPlaceholder")}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();
@@ -84,11 +86,12 @@ export const CommandPalette = ({
             }
           }}
         />
+        <span className="command-palette-hint">{t("commandPaletteHint")}</span>
       </div>
       <div className="command-palette-results">
         {actions.length === 0 ? (
           <div className="command-palette-empty">
-            {locale === "zh" ? "未找到匹配操作" : "No matching actions"}
+            {t("commandPaletteEmpty")}
           </div>
         ) : (
           actions.map((action, index) => (

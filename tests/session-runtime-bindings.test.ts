@@ -4,6 +4,7 @@ import {
   applySessionRuntimeBindings,
   collectSessionBoundTerminalIds,
   filterWorkspacePanelTerminals,
+  isSessionBoundWorkspaceTerminalId,
   resolveSessionBoundTerminal,
   resolveSessionTerminalIdByRuntimeId,
 } from "../apps/web/src/features/workspace/session-runtime-bindings.ts";
@@ -184,4 +185,22 @@ test("resolveSessionBoundTerminal falls back to the legacy terminal id when runt
 
   assert.equal(boundTerminal?.id, "term-42");
   assert.equal(boundTerminal?.output, "legacy stream");
+});
+
+test("isSessionBoundWorkspaceTerminalId identifies session-bound workspace terminals by runtime presence", () => {
+  const boundSessions = applySessionRuntimeBindings(sessions as never, [
+    { session_id: "2", terminal_id: "17", terminal_runtime_id: "runtime-17", workspace_terminal_id: "17" },
+  ]);
+
+  assert.equal(isSessionBoundWorkspaceTerminalId(boundSessions, "term-17"), true);
+  assert.equal(isSessionBoundWorkspaceTerminalId(boundSessions, "term-7"), false);
+});
+
+test("isSessionBoundWorkspaceTerminalId returns false for workspace terminals with no runtime id", () => {
+  const boundSessions = applySessionRuntimeBindings(sessions as never, [
+    { session_id: "2", terminal_id: "17", workspace_terminal_id: "17" },
+  ]);
+
+  // session.terminalId is set, but terminalRuntimeId is undefined
+  assert.equal(isSessionBoundWorkspaceTerminalId(boundSessions, "term-17"), false);
 });

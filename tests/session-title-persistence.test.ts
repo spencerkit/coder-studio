@@ -354,7 +354,7 @@ test("createSessionFromBackend preserves an existing custom title over a generic
 
   assert.equal(session.title, "test session duplication");
 });
-test("materializeSession applies the derived first-input title without persisting a backend session row", async () => {
+test("materializeSession applies the derived first-input title and creates a backend session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -366,6 +366,27 @@ test("materializeSession applies the derived first-input title without persistin
     const url = String(input);
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     calls.push({ url, body });
+
+    if (url.includes("/api/rpc/create_session")) {
+      return new Response(JSON.stringify({
+        ok: true,
+        data: {
+          id: "slot_abc12345",
+          title: "Session 01",
+          status: "idle",
+          mode: "branch",
+          provider: "claude",
+          auto_feed: true,
+          queue: [],
+          messages: [],
+          unread: 0,
+          last_active_at: Date.now(),
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
     throw new Error(`unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -413,6 +434,10 @@ test("materializeSession applies the derived first-input title without persistin
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(calls, []);
+  // Verify backend was called
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /create_session/);
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "test session duplication");
+  // Verify session ID was updated to server-generated ID
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.id, "slot_abc12345");
 });

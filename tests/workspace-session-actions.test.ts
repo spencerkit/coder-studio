@@ -85,7 +85,7 @@ test("workspace snapshot maps supervisor binding onto the active session", () =>
   assert.match(tab.sessions[0]?.supervisor?.latestCycle?.supervisorReply ?? "", /next message/);
 });
 
-test("materializing a draft session stays local and avoids backend history creation", () => {
+test("materializing a draft session creates a backend session via createSessionRequest", () => {
   const source = readFileSync(
     new URL("../apps/web/src/features/workspace/session-actions.ts", import.meta.url),
     "utf8",
@@ -95,6 +95,6 @@ test("materializing a draft session stays local and avoids backend history creat
   )?.[0] ?? "";
 
   assert.match(materializeSessionSource, /const materializeSession = async[\s\S]*?isDraft: false/);
-  assert.doesNotMatch(materializeSessionSource, /createSessionRequest\(/);
+  assert.match(materializeSessionSource, /createSessionRequest\(/);
   assert.doesNotMatch(materializeSessionSource, /advanceWorkspaceSyncVersion\(tabId\)/);
 });

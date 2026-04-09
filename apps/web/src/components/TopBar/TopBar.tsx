@@ -110,8 +110,8 @@ export const TopBar = ({
               type="button"
               className="session-top-add"
               onClick={onAddTab}
-              title={locale === "zh" ? "新建工作区" : "Add workspace"}
-              aria-label={locale === "zh" ? "新建工作区" : "Add workspace"}
+              title={t("topBarAddWorkspace")}
+              aria-label={t("topBarAddWorkspace")}
             >
               <HeaderAddIcon />
             </button>
@@ -125,11 +125,11 @@ export const TopBar = ({
               type="button"
               className="topbar-tool topbar-tool-wide"
               onClick={onOpenCommandPalette}
-              title={locale === "zh" ? "快速操作（⌘/Ctrl+K）" : "Quick actions (⌘/Ctrl+K)"}
-              aria-label={locale === "zh" ? "快速操作" : "Quick actions"}
+              title={t("topBarQuickActionsTitle")}
+              aria-label={t("topBarQuickActionsAria")}
             >
               <SearchIcon />
-              <span>{locale === "zh" ? "操作" : "Actions"}</span>
+              <span>{t("topBarActions")}</span>
             </button>
             <button className="topbar-tool" type="button" onClick={onOpenSettings} data-testid="settings-open" title={t("settings")} aria-label={t("settings")}>
               <HeaderSettingsIcon />

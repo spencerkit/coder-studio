@@ -362,7 +362,7 @@ export const Settings = ({
                     <div className="settings-row">
                       <div className="settings-row-copy">
                         <strong>{t("theme")}</strong>
-                        <span>{locale === "zh" ? "当前版本仅保留深色主题。" : "This version uses a dark-only theme."}</span>
+                        <span>{t("settingsDarkOnlyHint")}</span>
                       </div>
                       <div className="settings-row-control">
                         <div className="settings-pill-select single">

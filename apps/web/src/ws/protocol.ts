@@ -10,6 +10,7 @@ export type WsTerminalWriteEnvelope = {
   terminal_id: number;
   input: string;
   fencing_token: number;
+  request_id?: string;
 };
 
 export type WsTerminalResizeEnvelope = {
@@ -19,6 +20,12 @@ export type WsTerminalResizeEnvelope = {
   cols: number;
   rows: number;
   fencing_token: number;
+  request_id?: string;
+};
+
+export type WsAckEnvelope = {
+  type: "ack";
+  request_id: string;
 };
 
 export type WsSessionUpdateEnvelope = {
@@ -54,7 +61,7 @@ export type WsPongEnvelope = {
   ts: number;
 };
 
-export type WsEnvelope = WsEventEnvelope | WsPingEnvelope | WsPongEnvelope;
+export type WsEnvelope = WsEventEnvelope | WsPingEnvelope | WsPongEnvelope | WsAckEnvelope;
 export type WsClientEnvelope =
   | WsPingEnvelope
   | WsPongEnvelope
@@ -76,6 +83,9 @@ export const parseWsEnvelope = (message: string): WsEnvelope | null => {
     }
     if ((parsed?.type === "ping" || parsed?.type === "pong") && typeof parsed.ts === "number") {
       return parsed as WsPingEnvelope | WsPongEnvelope;
+    }
+    if (parsed?.type === "ack" && typeof parsed.request_id === "string") {
+      return parsed as WsAckEnvelope;
     }
     return null;
   } catch {

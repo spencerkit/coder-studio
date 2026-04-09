@@ -329,6 +329,7 @@ fn handle_ws_client_envelope(
             terminal_id,
             input,
             fencing_token,
+            request_id,
         } => {
             require_ws_workspace_controller_mutation(
                 &workspace_id,
@@ -345,7 +346,8 @@ fn handle_ws_client_envelope(
                 app.state(),
             )
             .map_err(|error| ws_input_error_envelope(&workspace_id, "terminal_write", &error))?;
-            Ok(None)
+            // Send ACK if the client provided a request_id for delivery confirmation
+            Ok(request_id.map(|id| WsEnvelope::Ack { request_id: id }))
         }
         WsClientEnvelope::TerminalResize {
             workspace_id,
@@ -353,6 +355,7 @@ fn handle_ws_client_envelope(
             cols,
             rows,
             fencing_token,
+            request_id,
         } => {
             require_ws_workspace_controller_mutation(
                 &workspace_id,
@@ -364,7 +367,8 @@ fn handle_ws_client_envelope(
             terminal_resize(workspace_id.clone(), terminal_id, cols, rows, app.state()).map_err(
                 |error| ws_input_error_envelope(&workspace_id, "terminal_resize", &error),
             )?;
-            Ok(None)
+            // Send ACK if the client provided a request_id for delivery confirmation
+            Ok(request_id.map(|id| WsEnvelope::Ack { request_id: id }))
         }
         WsClientEnvelope::SessionUpdate {
             workspace_id,

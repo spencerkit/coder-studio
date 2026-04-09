@@ -4875,8 +4875,16 @@ pre.diff,
   color: var(--text-secondary);
 }
 
+.command-palette-hint {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
 .command-palette-search-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;

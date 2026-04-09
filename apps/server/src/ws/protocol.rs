@@ -5,6 +5,7 @@ use crate::*;
 pub(crate) enum WsEnvelope {
     Event { event: String, payload: Value },
     Pong { ts: i64 },
+    Ack { request_id: String },
 }
 
 #[allow(dead_code)]
@@ -22,6 +23,7 @@ pub(crate) enum WsClientEnvelope {
         terminal_id: u64,
         input: String,
         fencing_token: i64,
+        request_id: Option<String>,
     },
     TerminalResize {
         workspace_id: String,
@@ -29,6 +31,7 @@ pub(crate) enum WsClientEnvelope {
         cols: u16,
         rows: u16,
         fencing_token: i64,
+        request_id: Option<String>,
     },
     SessionUpdate {
         workspace_id: String,

@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import type { Locale } from "../../i18n";
+import type { Translator } from "../../i18n";
 
 type SearchResult = {
   absolutePath: string;
@@ -18,7 +18,7 @@ type DropdownStyle = {
 
 type WorkspaceFileSearchDropdownProps = {
   container: HTMLElement;
-  locale: Locale;
+  t: Translator;
   dropdownStyle: DropdownStyle;
   results: SearchResult[];
   activeIndex: number;
@@ -29,7 +29,7 @@ type WorkspaceFileSearchDropdownProps = {
 
 export const WorkspaceFileSearchDropdown = ({
   container,
-  locale,
+  t,
   dropdownStyle,
   results,
   activeIndex,
@@ -50,7 +50,7 @@ export const WorkspaceFileSearchDropdown = ({
     }}
   >
     {results.length === 0 ? (
-      <div className="workspace-search-empty">{locale === "zh" ? "未找到匹配文件" : "No matching files"}</div>
+      <div className="workspace-search-empty">{t("fileSearchNoResults")}</div>
     ) : (
       results.map((node, index) => (
         <button
