@@ -102,6 +102,50 @@ pub(crate) fn build_codex_resume_invocation(
     (program, args)
 }
 
+pub(crate) fn build_codex_supervisor_invocation(
+    profile: &CodexRuntimeProfile,
+) -> (String, Vec<String>) {
+    let executable = profile.executable.trim();
+    let program = if executable.is_empty() {
+        "codex".to_string()
+    } else {
+        executable.to_string()
+    };
+    let mut args = vec!["exec".to_string()];
+    let trimmed_model = profile.model.trim();
+    if !trimmed_model.is_empty() {
+        args.push("--model".to_string());
+        args.push(trimmed_model.to_string());
+    }
+    args.extend(
+        profile
+            .extra_args
+            .iter()
+            .map(|arg| arg.trim())
+            .filter(|arg| !arg.is_empty())
+            .map(ToString::to_string),
+    );
+    args.extend(build_codex_feature_args());
+    // Force prompt input from stdin so supervisor can stream one-shot context.
+    args.push("-".to_string());
+    (program, args)
+}
+
+pub(crate) fn build_codex_supervisor_command(
+    target: &ExecTarget,
+    profile: &CodexRuntimeProfile,
+) -> String {
+    let (program, args) = build_codex_supervisor_invocation(profile);
+    let mut parts = vec![crate::services::agent_client::escape_agent_command_part(
+        target, &program,
+    )];
+    parts.extend(
+        args.iter()
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
+}
+
 fn normalize_codex_lifecycle(payload: &Value) -> Option<(&'static str, String)> {
     let hook_event = payload.get("hook_event_name")?.as_str()?;
     let normalized = match hook_event {
@@ -189,7 +233,17 @@ impl crate::services::provider_registry::ProviderAdapter for CodexProviderAdapte
         settings: &AppSettingsPayload,
         target: &ExecTarget,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
-        self.build_start(settings, target)
+        let profile = resolve_codex_runtime_profile(settings, target);
+        let (program, args) = build_codex_supervisor_invocation(&profile);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_codex_supervisor_command(target, &profile),
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: Default::default(),
+        })
     }
 
     fn hooks_installed(&self) -> bool {
@@ -1163,6 +1217,54 @@ mod tests {
                     "--full-auto".to_string(),
                 ],
             )
+        );
+    }
+
+    #[test]
+    fn codex_supervisor_invoke_uses_exec_stdin_mode() {
+        let mut settings = AppSettingsPayload::default();
+        settings
+            .set_provider_profile(
+                "codex",
+                &CodexRuntimeProfile {
+                    executable: "codex".into(),
+                    extra_args: vec!["--full-auto".into()],
+                    model: "gpt-5.4".into(),
+                    api_key: "codex-key".into(),
+                    base_url: "https://codex.example/v1".into(),
+                },
+            )
+            .unwrap();
+
+        let launch = adapter()
+            .build_supervisor_invoke(&settings, &ExecTarget::Native)
+            .expect("supervisor launch");
+        let start = adapter()
+            .build_start(&settings, &ExecTarget::Native)
+            .expect("start launch");
+
+        match &launch.launch_spec {
+            crate::services::agent_client::AgentLaunchSpec::Direct { program, args, .. } => {
+                assert_eq!(program, "codex");
+                assert_eq!(
+                    args.as_slice(),
+                    [
+                        "exec".to_string(),
+                        "--model".to_string(),
+                        "gpt-5.4".to_string(),
+                        "--full-auto".to_string(),
+                        "-".to_string(),
+                    ]
+                );
+            }
+            crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
+                panic!("expected direct launch, got shell command: {command}");
+            }
+        }
+        assert!(launch.runtime_env.is_empty());
+        assert_ne!(
+            crate::services::session_runtime::launch_spec_display_command(&launch.launch_spec),
+            crate::services::session_runtime::launch_spec_display_command(&start.launch_spec),
         );
     }
 

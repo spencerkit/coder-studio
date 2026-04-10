@@ -27,6 +27,9 @@ pub(crate) trait ProviderAdapter: Sync {
         target: &ExecTarget,
         resume_id: &str,
     ) -> Result<ProviderLaunchConfig, String>;
+    /// Builds a provider-native one-shot/headless invocation for supervisor turns.
+    /// The returned launch spec must be non-interactive and consumable by
+    /// `agent_client::run_one_shot_prompt` (prompt provided via stdin or args).
     fn build_supervisor_invoke(
         &self,
         settings: &AppSettingsPayload,

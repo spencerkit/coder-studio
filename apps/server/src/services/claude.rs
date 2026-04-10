@@ -69,12 +69,41 @@ pub(crate) fn build_claude_resume_invocation(
     (program, args)
 }
 
+pub(crate) fn build_claude_supervisor_invocation(
+    profile: &ClaudeRuntimeProfile,
+) -> (String, Vec<String>) {
+    let (program, mut args) = build_claude_start_invocation(profile);
+    if !args
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "-p" | "--print"))
+    {
+        args.push("--print".to_string());
+    }
+    (program, args)
+}
+
 pub(crate) fn build_claude_resume_launch_command(
     target: &ExecTarget,
     profile: &ClaudeRuntimeProfile,
     resume_id: &str,
 ) -> String {
     let (program, args) = build_claude_resume_invocation(profile, resume_id);
+    let mut parts = Vec::with_capacity(1 + args.len());
+    parts.push(crate::services::agent_client::escape_agent_command_part(
+        target, &program,
+    ));
+    parts.extend(
+        args.iter()
+            .map(|arg| crate::services::agent_client::escape_agent_command_part(target, arg)),
+    );
+    parts.join(" ")
+}
+
+pub(crate) fn build_claude_supervisor_launch_command(
+    target: &ExecTarget,
+    profile: &ClaudeRuntimeProfile,
+) -> String {
+    let (program, args) = build_claude_supervisor_invocation(profile);
     let mut parts = Vec::with_capacity(1 + args.len());
     parts.push(crate::services::agent_client::escape_agent_command_part(
         target, &program,
@@ -175,7 +204,17 @@ impl crate::services::provider_registry::ProviderAdapter for ClaudeProviderAdapt
         settings: &AppSettingsPayload,
         target: &ExecTarget,
     ) -> Result<crate::services::provider_registry::ProviderLaunchConfig, String> {
-        self.build_start(settings, target)
+        let profile = resolve_claude_runtime_profile(settings, target);
+        let (program, args) = build_claude_supervisor_invocation(&profile);
+        let launch_spec = crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command: build_claude_supervisor_launch_command(target, &profile),
+        };
+        Ok(crate::services::provider_registry::ProviderLaunchConfig {
+            launch_spec,
+            runtime_env: profile.env,
+        })
     }
 
     fn hooks_installed(&self) -> bool {
@@ -794,6 +833,53 @@ mod tests {
                     "resume-123".to_string(),
                 ],
             )
+        );
+    }
+
+    #[test]
+    fn claude_supervisor_invoke_uses_print_mode() {
+        let mut settings = AppSettingsPayload::default();
+        let mut env = BTreeMap::new();
+        env.insert("ANTHROPIC_API_KEY".to_string(), "test-key".to_string());
+        settings
+            .set_provider_profile(
+                "claude",
+                &ClaudeRuntimeProfile {
+                    executable: "claude".into(),
+                    startup_args: vec!["--model".into(), "claude-sonnet-4-5".into()],
+                    env: env.clone(),
+                    settings_json: Value::Object(Map::new()),
+                },
+            )
+            .unwrap();
+
+        let launch = adapter()
+            .build_supervisor_invoke(&settings, &ExecTarget::Native)
+            .expect("supervisor launch");
+        let start = adapter()
+            .build_start(&settings, &ExecTarget::Native)
+            .expect("start launch");
+
+        match &launch.launch_spec {
+            crate::services::agent_client::AgentLaunchSpec::Direct { program, args, .. } => {
+                assert_eq!(program, "claude");
+                assert_eq!(
+                    args.as_slice(),
+                    [
+                        "--model".to_string(),
+                        "claude-sonnet-4-5".to_string(),
+                        "--print".to_string(),
+                    ]
+                );
+            }
+            crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
+                panic!("expected direct launch, got shell command: {command}");
+            }
+        }
+        assert_eq!(launch.runtime_env, env);
+        assert_ne!(
+            crate::services::session_runtime::launch_spec_display_command(&launch.launch_spec),
+            crate::services::session_runtime::launch_spec_display_command(&start.launch_spec),
         );
     }
 
