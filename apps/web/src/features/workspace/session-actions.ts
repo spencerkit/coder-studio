@@ -14,9 +14,6 @@ import { formatSessionTitle, formatTerminalTitle, type Locale, type Translator }
 import {
   closeSession as closeSessionRequest,
   createSession as createSessionRequest,
-  deleteProviderSession as deleteProviderSessionRequest,
-  removeMissingBinding as removeMissingBindingRequest,
-  restoreProviderSession as restoreProviderSessionRequest,
   switchSession as switchSessionRequest,
   updateSession as updateSessionRequest,
 } from "../../services/http/session.service";
@@ -39,7 +36,6 @@ import {
 import { createTabFromWorkspaceSnapshot } from "../../shared/utils/workspace";
 import type {
   AppSettings,
-  SessionHistoryRecord,
   SessionPatch,
   Toast,
   WorkspaceSnapshot,
@@ -50,8 +46,6 @@ import { advanceWorkspaceSyncVersion } from "./workspace-sync-version";
 
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
-type RestorePaneStrategy = "reuse-draft" | "split-new";
-
 type WorkspaceSessionActionDeps = {
   appSettings: AppSettings;
   locale: Locale;
@@ -201,77 +195,6 @@ export const createWorkspaceSessionActions = ({
     updateTab(tabId, (tab) => createTabFromWorkspaceSnapshot(snapshot, locale, appSettings, tab));
   };
 
-  const ensureRestorePane = (
-    tabId: string,
-    preferredPaneId?: string,
-    strategy: RestorePaneStrategy = "reuse-draft",
-  ): { paneId: string; replacedSessionId: string } | null => {
-    let target: { paneId: string; replacedSessionId: string } | null = null;
-
-    updateTab(tabId, (tab) => {
-      if (strategy === "reuse-draft") {
-        const preferredSessionId = preferredPaneId
-          ? findPaneSessionId(tab.paneLayout, preferredPaneId)
-          : null;
-        if (preferredPaneId && preferredSessionId) {
-          const preferredSession = tab.sessions.find((session) => session.id === preferredSessionId);
-          if (isDraftSession(preferredSession)) {
-            target = {
-              paneId: preferredPaneId,
-              replacedSessionId: preferredSessionId,
-            };
-            return tab;
-          }
-        }
-
-        const draftSession = tab.sessions.find((session) => isDraftSession(session));
-        const draftPaneId = draftSession
-          ? findPaneIdBySessionId(tab.paneLayout, draftSession.id)
-          : undefined;
-        if (draftSession && draftPaneId) {
-          target = {
-            paneId: draftPaneId,
-            replacedSessionId: draftSession.id,
-          };
-          return tab;
-        }
-      }
-
-      const sourcePaneId = preferredPaneId
-        ? (findPaneSessionId(tab.paneLayout, preferredPaneId) ? preferredPaneId : undefined)
-        : undefined;
-      const targetPaneId = sourcePaneId
-        ?? findPaneIdBySessionId(tab.paneLayout, tab.activeSessionId)
-        ?? collectPaneLeaves(tab.paneLayout)[0]?.id;
-      if (!targetPaneId) {
-        return tab;
-      }
-
-      const nextDraft = createDraftSessionForTab(tab, "branch");
-      const nextLeaf = createPaneLeaf(nextDraft.id);
-      target = {
-        paneId: nextLeaf.id,
-        replacedSessionId: nextDraft.id,
-      };
-      return {
-        ...tab,
-        sessions: [nextDraft, ...tab.sessions.filter((session) => session.id !== nextDraft.id)],
-        activeSessionId: nextDraft.id,
-        activePaneId: nextLeaf.id,
-        paneLayout: replacePaneNode(tab.paneLayout, targetPaneId, (leaf) => ({
-          type: "split",
-          id: createId("split"),
-          axis: "vertical",
-          ratio: 0.5,
-          first: leaf,
-          second: nextLeaf,
-        })),
-      };
-    });
-
-    return target;
-  };
-
   const onNewSession = async () => {
     const currentTab = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     if (!currentTab) return;
@@ -389,163 +312,6 @@ export const createWorkspaceSessionActions = ({
     }
   };
 
-  const restoreSessionIntoPane = async (
-    tabId: string,
-    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId" | "title">,
-    preferredPaneId?: string,
-    options?: {
-      strategy?: RestorePaneStrategy;
-    },
-  ) => {
-    const strategy = options?.strategy ?? "reuse-draft";
-
-    const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === tabId) ?? null;
-    const matchingSession = tabSnapshot?.sessions.find((session) => (
-      !isDraftSession(session)
-      && session.provider === historyRecord.provider
-      && session.resumeId === historyRecord.resumeId
-    ));
-    const matchingPaneId = matchingSession && tabSnapshot
-      ? findPaneIdBySessionId(tabSnapshot.paneLayout, matchingSession.id)
-      : null;
-    const target = matchingSession && matchingPaneId
-      ? {
-          paneId: matchingPaneId,
-          replacedSessionId: matchingSession.id,
-        }
-      : ensureRestorePane(tabId, preferredPaneId, strategy);
-    if (!target) return null;
-
-    const preparedTab = stateRef.current.tabs.find((tab) => tab.id === tabId) ?? null;
-    const replacedSession = preparedTab?.sessions.find((session) => session.id === target.replacedSessionId);
-    const needsBackendSlot = strategy === "split-new" || isDraftSession(replacedSession);
-    let restoreSessionId = target.replacedSessionId;
-    if (needsBackendSlot) {
-      const tab = preparedTab;
-      const controller = tab?.controller;
-      if (controller?.role !== "controller") return null;
-      const created = await withServiceFallback(
-        () => createSessionRequest(
-          tabId,
-          replacedSession?.mode ?? "branch",
-          historyRecord.provider,
-          controller,
-        ),
-        null,
-      );
-      if (!created) return null;
-      restoreSessionId = String(created.id);
-    }
-
-    advanceWorkspaceSyncVersion(tabId);
-    const restored = await withServiceFallback(
-      () => restoreProviderSessionRequest(
-        tabId,
-        restoreSessionId,
-        historyRecord.provider,
-        historyRecord.resumeId,
-        controllerForTab(tabId),
-      ),
-      null,
-    );
-    if (!restored) return null;
-
-    if (restored.alreadyActive) {
-      const nextTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
-      if (nextTab) {
-        onSwitchSession(nextTab, restored.session.id);
-      }
-      return restored.session;
-    }
-
-    const refreshedTab = stateRef.current.tabs.find((tab) => tab.id === tabId);
-    if (!refreshedTab) {
-      return restored.session;
-    }
-
-    const nextActiveAt = Date.now();
-    updateTab(tabId, (tab) => {
-      const sourceTab = preparedTab ?? (refreshedTab.id === tab.id ? refreshedTab : tab);
-      const existingSession = sourceTab.sessions.find((session) => (
-        session.id === restored.session.id || session.id === restoreSessionId
-      ));
-      const restoreTitleFallback = historyRecord.title.trim();
-      const baseSession = createSessionFromBackend(
-        restored.session,
-        locale,
-        restoreTitleFallback
-          ? { ...existingSession, title: restoreTitleFallback }
-          : existingSession,
-      );
-      const nextSession = {
-        ...baseSession,
-        title: restoreTitleFallback || baseSession.title,
-        unread: 0,
-        lastActiveAt: nextActiveAt,
-      };
-      const remainingSessions = sourceTab.sessions
-        .filter((session) => (
-          session.id !== target.replacedSessionId
-          && session.id !== nextSession.id
-        ));
-      const nextTab = {
-        ...sourceTab,
-        sessions: [
-          { ...nextSession, status: nextSession.status },
-          ...remainingSessions,
-        ],
-        paneLayout: replacePaneNode(sourceTab.paneLayout, target.paneId, (leaf) => ({
-          ...leaf,
-          sessionId: nextSession.id,
-        })),
-        activePaneId: target.paneId,
-        activeSessionId: nextSession.id,
-      };
-      return strategy === "split-new"
-        ? nextTab
-        : normalizeMutatedTab(nextTab);
-    });
-
-    return restored.session;
-  };
-
-  const deleteSessionFromHistory = async (
-    workspaceId: string,
-    historyRecord: Pick<SessionHistoryRecord, "provider" | "resumeId" | "state" | "sessionId">,
-  ) => {
-    const controller = controllerForTab(workspaceId);
-    const deleted = await withServiceFallback(
-      async () => {
-        if (historyRecord.state === "unavailable") {
-          if (!historyRecord.sessionId) return false;
-          await removeMissingBindingRequest(
-            workspaceId,
-            historyRecord.sessionId,
-            controller,
-          );
-          return true;
-        }
-        await deleteProviderSessionRequest(
-          workspaceId,
-          historyRecord.provider,
-          historyRecord.resumeId,
-          controller,
-        );
-        return true;
-      },
-      false,
-    );
-    if (!deleted) {
-      return false;
-    }
-
-    if (stateRef.current.tabs.some((tab) => tab.id === workspaceId)) {
-      await refreshTabFromBackend(workspaceId);
-    }
-
-    return true;
-  };
-
   const markSessionIdle = async (tabId: string, sessionId: string, note?: string) => {
     const tab = stateRef.current.tabs.find((item) => item.id === tabId);
     const session = tab?.sessions.find((item) => item.id === sessionId);
@@ -610,8 +376,6 @@ export const createWorkspaceSessionActions = ({
     onNewSession,
     onSwitchSession,
     onCloseAgentPane,
-    restoreSessionIntoPane,
-    deleteSessionFromHistory,
     markSessionIdle,
   };
 };

@@ -40,7 +40,6 @@ import {
   type RuntimeValidationState,
 } from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay";
 import { TopBar } from "../../components/TopBar";
-import { HistoryDrawer } from "../../components/HistoryDrawer";
 import type { XtermBaseHandle } from "../../components/terminal";
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
@@ -102,13 +101,6 @@ import {
   shouldPersistWorkspaceView,
   type WorkspaceViewPersistScheduler,
 } from "./workspace-view-persistence";
-import {
-  createInitialHistoryExpansion,
-  groupSessionHistory,
-  selectHistoryPrimaryAction,
-} from "./session-history";
-import { createHistoryRefreshController } from "./history-refresh-controller";
-import { listRestoreCandidatesForWorkspace } from "./session-restore-chooser";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
@@ -166,7 +158,6 @@ import {
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
-  listSessionHistory,
   rejectWorkspaceTakeover,
   requestWorkspaceTakeover,
   updateWorkbenchLayout,
@@ -224,7 +215,6 @@ import type {
   FolderBrowserState,
   GitChangeAction,
   GitChangeEntry,
-  SessionHistoryRecord,
   Toast,
   WorkspaceControllerLease,
   WorktreeModalState,
@@ -349,11 +339,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
   const [fileSearchState, setFileSearchState] = useState(createInitialWorkspaceFileSearchState);
-  const [draftPaneModes, setDraftPaneModes] = useState<Record<string, "new" | "restore">>({});
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyRecords, setHistoryRecords] = useState<SessionHistoryRecord[]>([]);
-  const [historyExpandedGroups, setHistoryExpandedGroups] = useState<Record<string, boolean>>({});
   const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
@@ -381,10 +366,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     draftObjective: "",
   });
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const hasRestoreDraftModeSelected = useMemo(
-    () => Object.values(draftPaneModes).some((mode) => mode === "restore"),
-    [draftPaneModes],
-  );
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
   const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
@@ -399,10 +380,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
-  const historyRefreshControllerRef = useRef(createHistoryRefreshController(
-    () => withServiceFallback(() => listSessionHistory(), null),
-  ));
-  const historyLoadingRequestCountRef = useRef(0);
   const terminalRecoveryAttemptsRef = useRef(new Set<string>());
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
@@ -871,61 +848,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.layout.showTerminalPanel,
   ]);
 
-  const requestHistoryRecords = useCallback(async (force = false) => {
-    historyLoadingRequestCountRef.current += 1;
-    setHistoryLoading(true);
-    try {
-      const records = await historyRefreshControllerRef.current.request(force);
-      if (records) {
-        setHistoryRecords(records);
-      }
-    } finally {
-      historyLoadingRequestCountRef.current = Math.max(
-        0,
-        historyLoadingRequestCountRef.current - 1,
-      );
-      setHistoryLoading(historyLoadingRequestCountRef.current > 0);
-    }
-  }, []);
-
-  const loadHistoryRecords = useCallback(async () => {
-    await requestHistoryRecords(false);
-  }, [requestHistoryRecords]);
-
-  const refreshHistoryRecords = useCallback(async () => {
-    await requestHistoryRecords(true);
-  }, [requestHistoryRecords]);
-
-  const refreshHistoryRecordsIfNeeded = useCallback(async () => {
-    const shouldRefreshImmediately = (
-      historyOpen
-      || hasRestoreDraftModeSelected
-      || stateRef.current.tabs.length === 0
-    );
-    if (shouldRefreshImmediately) {
-      await refreshHistoryRecords();
-      return;
-    }
-    if (historyRefreshControllerRef.current.hasLoaded()) {
-      historyRefreshControllerRef.current.markDirty();
-    }
-  }, [hasRestoreDraftModeSelected, historyOpen, refreshHistoryRecords]);
-
-  useEffect(() => {
-    if (!bootstrapReady || routeWorkspaceId || state.tabs.length > 0) return;
-    void loadHistoryRecords();
-  }, [bootstrapReady, loadHistoryRecords, routeWorkspaceId, state.tabs.length]);
-
-  useEffect(() => {
-    if (!bootstrapReady || !historyOpen) return;
-    void loadHistoryRecords();
-  }, [bootstrapReady, historyOpen, loadHistoryRecords]);
-
-  useEffect(() => {
-    if (!bootstrapReady || !hasRestoreDraftModeSelected) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, hasRestoreDraftModeSelected, refreshHistoryRecords]);
-
   useEffect(() => {
     if (!bootstrapReady) return;
     const scheduler = workspaceViewPersistSchedulerRef.current;
@@ -1070,41 +992,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
   );
-  const mountedProviderIdentities = useMemo(
-    () => new Set(
-      activeTab.sessions
-        .filter((session) => !isDraftSession(session) && !!session.resumeId)
-        .map((session) => `${session.provider}:${session.resumeId}`)
-    ),
-    [activeTab.sessions]
-  );
-  const historyGroups = useMemo(
-    () => groupSessionHistory(historyRecords, activeTab.id),
-    [activeTab.id, historyRecords]
-  );
-  const restoreCandidates = useMemo(
-    () => listRestoreCandidatesForWorkspace({
-      workspaceId: activeTab.id,
-      mountedProviders: mountedProviderIdentities,
-      records: historyRecords,
-    }),
-    [activeTab.id, historyRecords, mountedProviderIdentities]
-  );
-  const findSessionForHistoryRecord = useCallback((
-    tab: Tab | undefined,
-    record: SessionHistoryRecord,
-  ) => {
-    if (!tab) return undefined;
-    const mounted = tab.sessions.find((session) => (
-      !isDraftSession(session)
-      && session.provider === record.provider
-      && session.resumeId === record.resumeId
-    ));
-    if (mounted) {
-      return mounted;
-    }
-    return undefined;
-  }, []);
   const fileSearchQuery = fileSearchState.query;
   const fileSearchActiveIndex = fileSearchState.activeIndex;
   const fileSearchDropdownStyle = fileSearchState.dropdownStyle;
@@ -1320,13 +1207,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const {
     createDraftSessionForTab,
-    deleteSessionFromHistory,
     materializeSession,
     onCloseAgentPane: closeAgentPaneSession,
     onNewSession: createNewSessionInActiveTab,
     onSwitchSession: switchSessionInActiveTab,
     refreshTabFromBackend,
-    restoreSessionIntoPane,
     syncSessionPatch,
     touchSession
   } = createWorkspaceSessionActions({
@@ -1600,12 +1485,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       };
     });
     if (uiState.active_workspace_id) {
-      void refreshHistoryRecordsIfNeeded();
       navigate(`/workspace/${uiState.active_workspace_id}`);
       void ensureWorkspaceTerminal(uiState.active_workspace_id);
       return;
     }
-    void refreshHistoryRecordsIfNeeded();
     navigate("/workspace");
   };
 
@@ -1676,123 +1559,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
     navigate(`/workspace/${workspaceId}`, { replace: true });
     return nextTab ?? stateRef.current.tabs.find((tab) => tab.id === workspaceId) ?? null;
-  };
-
-  const onToggleHistory = () => {
-    if (!historyOpen) {
-      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
-    }
-    setHistoryOpen((open) => !open);
-  };
-
-  const onOpenHistory = () => {
-    if (!historyOpen) {
-      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
-    }
-    setHistoryOpen(true);
-  };
-
-  useEffect(() => {
-    if (!historyOpen) return;
-
-    setHistoryExpandedGroups((current) => {
-      const defaults = createInitialHistoryExpansion(historyGroups, activeTab.id);
-      const next = historyGroups.reduce<Record<string, boolean>>((expansion, group) => {
-        expansion[group.workspaceId] = Object.prototype.hasOwnProperty.call(current, group.workspaceId)
-          ? current[group.workspaceId]
-          : defaults[group.workspaceId];
-        return expansion;
-      }, {});
-
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
-      const changed = currentKeys.length !== nextKeys.length
-        || nextKeys.some((workspaceId) => current[workspaceId] !== next[workspaceId]);
-
-      return changed ? next : current;
-    });
-  }, [activeTab.id, historyGroups, historyOpen]);
-
-  const formatHistoryRecordTimestamp = useCallback((value: number) => (
-    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
-  ), [locale]);
-
-  const handleHistoryRecordSelect = async (record: SessionHistoryRecord) => {
-    const targetTab = await ensureWorkspaceReady(record.workspaceId);
-    if (!targetTab) return;
-    const readyTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
-    if (!canMutateWorkspace(readyTab.controller, "agent_input")) {
-      addToast({
-        id: createId("toast"),
-        text: t("workspaceReadOnlyToast"),
-        sessionId: activeSession.id,
-      });
-      setHistoryOpen(false);
-      return;
-    }
-
-    const currentTab = readyTab;
-    const restorePaneId = currentTab.activePaneId;
-    const action = selectHistoryPrimaryAction(record);
-    const mountedSession = findSessionForHistoryRecord(currentTab, record);
-    if (action === "focus" && mountedSession) {
-      switchSessionInActiveTab(currentTab, mountedSession.id);
-      setHistoryOpen(false);
-      return;
-    }
-    if (action === null) {
-      setHistoryOpen(false);
-      return;
-    }
-
-    const restored = await restoreSessionIntoPane(
-      record.workspaceId,
-      record,
-      restorePaneId,
-      {
-        strategy: "split-new",
-      },
-    );
-    if (!restored) return;
-    if (action === "restore") {
-      const latestTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId);
-      const restoredSession = latestTab?.sessions.find((session) => session.id === String(restored.id))
-        ?? findSessionForHistoryRecord(latestTab, record);
-      const restoredPaneId = latestTab
-        ? findPaneIdBySessionId(latestTab.paneLayout, String(restored.id))
-        : null;
-      if (latestTab && restoredSession && restoredPaneId && !restoredSession.unavailableReason) {
-        await startAgentSessionInPane(restoredPaneId, latestTab, restoredSession);
-      }
-    }
-    void refreshHistoryRecordsIfNeeded();
-    setHistoryOpen(false);
-  };
-
-  const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
-    setConfirmDialog({
-      visible: true,
-      title: record.state === "unavailable" ? t("historyRemoveTitle") : t("historyDeleteTitle"),
-      message: record.state === "unavailable"
-        ? t("historyRemoveConfirm", { title: record.title })
-        : t("historyDeleteConfirm", { title: record.title }),
-      details: {
-        contentLabel: t("historyDialogContentLabel"),
-        content: record.title,
-        timeLabel: t("historyDialogTimeLabel"),
-        timestamp: formatHistoryRecordTimestamp(record.lastActiveAt),
-      },
-      confirmLabel: record.state === "unavailable" ? t("historyRemove") : t("delete"),
-      onConfirm: async () => {
-        setConfirmDialog((prev) => ({ ...prev, visible: false }));
-        const deleted = await deleteSessionFromHistory(record.workspaceId, record);
-        if (!deleted) return;
-        await refreshHistoryRecordsIfNeeded();
-      },
-      onCancel: () => {
-        setConfirmDialog((prev) => ({ ...prev, visible: false }));
-      },
-    });
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -2101,16 +1867,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onCloseAgentPane = (paneId: string, sessionId: string) => {
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     closeAgentPaneSession(activeTab, paneId, sessionId);
-    window.setTimeout(() => {
-      void refreshHistoryRecordsIfNeeded();
-    }, 0);
-  };
-
-  const onDraftPaneModeChange = (paneId: string, mode: "new" | "restore") => {
-    setDraftPaneModes((current) => ({
-      ...current,
-      [paneId]: mode,
-    }));
   };
 
   const onDraftProviderChange = (paneId: string, provider: Session["provider"]) => {
@@ -2149,30 +1905,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await startAgentSessionInPane(paneId, materialized.tab, materialized.session);
   };
 
-  const onRestoreDraftSession = (paneId: string, record: SessionHistoryRecord) => {
-    void restoreSessionIntoPane(activeTab.id, record, paneId).then((restored) => {
-      if (!restored) return;
-      const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id);
-      const restoredSession = currentTab?.sessions.find((session) => session.id === String(restored.id))
-        ?? findSessionForHistoryRecord(currentTab, record);
-      const restoredPaneId = currentTab
-        ? findPaneIdBySessionId(currentTab.paneLayout, String(restored.id))
-        : null;
-      if (currentTab && restoredSession && restoredPaneId && !restoredSession.unavailableReason) {
-        void startAgentSessionInPane(restoredPaneId, currentTab, restoredSession);
-      }
-      void refreshHistoryRecordsIfNeeded();
-    });
-  };
-
   const onRemoveUnavailableSession = (sessionId: string) => {
     const pane = activeTab.panes.find((item) => item.sessionId === sessionId);
     if (!pane) return;
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     closeAgentPaneSession(activeTab, pane.id, sessionId);
-    window.setTimeout(() => {
-      void refreshHistoryRecordsIfNeeded();
-    }, 0);
   };
 
   const onFileSelect = async (node: TreeNode, workspaceId?: string) => {
@@ -3055,9 +2792,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
       terminalCompatibilityMode={terminalCompatibilityMode}
-      draftPaneModes={draftPaneModes}
-      historyLoading={historyLoading}
-      restoreCandidates={restoreCandidates}
       displaySessionTitle={displaySessionTitle}
       onRemoveUnavailableSession={(sessionId) => {
         void onRemoveUnavailableSession(sessionId);
@@ -3065,11 +2799,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       onSetActivePane={setActivePane}
       onSplitPane={splitPane}
       onCloseAgentPane={onCloseAgentPane}
-      onDraftPaneModeChange={onDraftPaneModeChange}
       onStartDraftSession={(paneId, provider) => {
         void onStartDraftSession(paneId, provider);
       }}
-      onRestoreDraftSession={onRestoreDraftSession}
       onEnableSupervisor={(sessionId, provider) => {
         void onEnableSupervisor(sessionId, provider);
       }}
@@ -3298,35 +3030,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             isSettingsRoute={false}
             locale={locale}
             workspaceTabs={workspaceTabs}
-            historyOpen={historyOpen}
             onSwitchWorkspace={onSwitchWorkspace}
-            onToggleHistory={onToggleHistory}
             onAddTab={onOpenWorkspacePicker}
             onRemoveTab={onRemoveTab}
             onOpenSettings={onOpenSettings}
             onCloseSettings={() => {}}
             onOpenCommandPalette={openCommandPalette}
-            t={t}
-          />
-
-          <HistoryDrawer
-            open={historyOpen}
-            loading={historyLoading}
-            groups={historyGroups}
-            expandedGroups={historyExpandedGroups}
-            onClose={() => setHistoryOpen(false)}
-            onToggleGroup={(workspaceId) => {
-              setHistoryExpandedGroups((current) => ({
-                ...current,
-                [workspaceId]: !current[workspaceId],
-              }));
-            }}
-            onSelectRecord={(record) => {
-              void handleHistoryRecordSelect(record);
-            }}
-            onDeleteRecord={(record) => {
-              void handleHistoryRecordDelete(record);
-            }}
             t={t}
           />
 
@@ -3350,9 +3059,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
           {showWelcomeScreen ? (
             <WorkspaceWelcomeScreen
-              hasHistory={historyRecords.length > 0}
               onOpenWorkspacePicker={onOpenWorkspacePicker}
-              onOpenHistory={onOpenHistory}
               onOpenSettings={onOpenSettings}
               t={t}
             />

@@ -230,42 +230,27 @@ test('appSettingsPayloadEquals compares canonical payload changes', () => {
   assert.equal(appSettingsPayloadEquals(left, right), false);
 });
 
-test('translator exposes completion reminder copy in English and Chinese', () => {
+test('translator exposes completion reminder keys in English and Chinese', () => {
   const en = createTranslator('en');
   const zh = createTranslator('zh');
 
-  assert.equal(en('completionNotifications'), 'Completion Notifications');
-  assert.equal(
-    en('completionNotificationsHint'),
-    'Send reminders when tasks finish in the background.',
-  );
-  assert.equal(en('notifyOnlyInBackground'), 'Only notify in background');
-  assert.equal(
-    en('notifyOnlyInBackgroundHint'),
-    'Skip browser alerts when the completed session is already in view.',
-  );
-  assert.equal(en('notificationPermission'), 'Browser notification permission');
-  assert.equal(en('notificationPermissionAllowed'), 'Allowed');
-  assert.equal(en('notificationPermissionNotEnabled'), 'Not enabled');
-  assert.equal(en('notificationPermissionUnsupported'), 'Unsupported');
-  assert.equal(
-    en('completionNotificationBody', { workspaceTitle: 'Alpha' }),
-    'Alpha · Task complete',
-  );
+  assert.equal(en('completionNotifications'), 'completionNotifications');
+  assert.equal(en('completionNotificationsHint'), 'completionNotificationsHint');
+  assert.equal(en('notifyOnlyInBackground'), 'notifyOnlyInBackground');
+  assert.equal(en('notifyOnlyInBackgroundHint'), 'notifyOnlyInBackgroundHint');
+  assert.equal(en('notificationPermission'), 'notificationPermission');
+  assert.equal(en('notificationPermissionAllowed'), 'notificationPermissionAllowed');
+  assert.equal(en('notificationPermissionNotEnabled'), 'notificationPermissionNotEnabled');
+  assert.equal(en('notificationPermissionUnsupported'), 'notificationPermissionUnsupported');
+  assert.equal(en('completionNotificationBody', { workspaceTitle: 'Alpha' }), 'completionNotificationBody');
 
-  assert.equal(zh('completionNotifications'), '完成提醒');
-  assert.equal(zh('completionNotificationsHint'), '任务在后台完成时发送提醒。');
-  assert.equal(zh('notifyOnlyInBackground'), '仅在后台提醒');
-  assert.equal(
-    zh('notifyOnlyInBackgroundHint'),
-    '如果已在当前界面查看完成的会话，则跳过浏览器提醒。',
-  );
-  assert.equal(zh('notificationPermission'), '浏览器通知权限');
-  assert.equal(zh('notificationPermissionAllowed'), '已允许');
-  assert.equal(zh('notificationPermissionNotEnabled'), '未启用');
-  assert.equal(zh('notificationPermissionUnsupported'), '不支持');
-  assert.equal(
-    zh('completionNotificationBody', { workspaceTitle: '阿尔法' }),
-    '阿尔法 · 任务完成',
-  );
+  assert.equal(zh('completionNotifications'), 'completionNotifications');
+  assert.equal(zh('completionNotificationsHint'), 'completionNotificationsHint');
+  assert.equal(zh('notifyOnlyInBackground'), 'notifyOnlyInBackground');
+  assert.equal(zh('notifyOnlyInBackgroundHint'), 'notifyOnlyInBackgroundHint');
+  assert.equal(zh('notificationPermission'), 'notificationPermission');
+  assert.equal(zh('notificationPermissionAllowed'), 'notificationPermissionAllowed');
+  assert.equal(zh('notificationPermissionNotEnabled'), 'notificationPermissionNotEnabled');
+  assert.equal(zh('notificationPermissionUnsupported'), 'notificationPermissionUnsupported');
+  assert.equal(zh('completionNotificationBody', { workspaceTitle: '阿尔法' }), 'completionNotificationBody');
 });

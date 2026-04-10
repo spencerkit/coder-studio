@@ -19,19 +19,6 @@ test("starting a session runtime reattaches the workspace runtime snapshot so te
   );
 });
 
-test("history restore starts the recovered session immediately on first click", () => {
-  const source = readFileSync(
-    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(
-    source,
-    /const handleHistoryRecordSelect = async[\s\S]*?const action = selectHistoryPrimaryAction\(record\);[\s\S]*?const restored = await restoreSessionIntoPane\(\s*record\.workspaceId,\s*record,\s*restorePaneId,\s*\{\s*strategy:\s*"split-new",\s*\},\s*\);[\s\S]*?if \(action === "restore"\)[\s\S]*?const restoredPaneId = latestTab[\s\S]*?findPaneIdBySessionId\(latestTab\.paneLayout,\s*record\.id\)[\s\S]*?startAgentSessionInPane\(restoredPaneId,/,
-  );
-});
-
-
 test("agent pane terminal resize treats runtime bindings as the live gate and keeps terminal ids as fallback compatibility", () => {
   const source = readFileSync(
     new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),

@@ -2,7 +2,6 @@ import { memo, useCallback, type PointerEventHandler, type ReactNode } from "rea
 import type { Locale, Translator } from "../../i18n";
 import type {
   AppTheme,
-  SessionHistoryRecord,
   TerminalCompatibilityMode,
 } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
@@ -25,17 +24,12 @@ type AgentWorkspaceFeatureProps = {
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPaneModes: Record<string, "new" | "restore">;
-  historyLoading: boolean;
-  restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
   onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
-  onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
-  onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
   onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
   onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
   onPauseSupervisor: (sessionId: string) => void;
@@ -62,17 +56,12 @@ type AgentPaneLeafProps = {
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPaneMode: "new" | "restore";
-  historyLoading: boolean;
-  restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
   onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
-  onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
   onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
-  onRestoreDraftSession: (paneId: string, record: SessionHistoryRecord) => void;
   onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
   onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
   onPauseSupervisor: (sessionId: string) => void;
@@ -97,17 +86,12 @@ const AgentPaneLeaf = memo(({
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPaneMode,
-  historyLoading,
-  restoreCandidates,
   displaySessionTitle,
   onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
-  onDraftPaneModeChange,
   onStartDraftSession,
-  onRestoreDraftSession,
   onEnableSupervisor,
   onEditSupervisorObjective,
   onPauseSupervisor,
@@ -149,21 +133,9 @@ const AgentPaneLeaf = memo(({
     onCloseAgentPane(paneId, session.id);
   }, [onCloseAgentPane, paneId, session.id]);
 
-  const handleSetDraftModeNew = useCallback(() => {
-    onDraftPaneModeChange(paneId, "new");
-  }, [onDraftPaneModeChange, paneId]);
-
-  const handleSetDraftModeRestore = useCallback(() => {
-    onDraftPaneModeChange(paneId, "restore");
-  }, [onDraftPaneModeChange, paneId]);
-
   const handleStartDraftSession = useCallback((provider: Session["provider"]) => {
     onStartDraftSession(paneId, provider);
   }, [onStartDraftSession, paneId]);
-
-  const handleRestoreDraftSession = useCallback((record: SessionHistoryRecord) => {
-    onRestoreDraftSession(paneId, record);
-  }, [onRestoreDraftSession, paneId]);
 
   const handleTerminalRef = useCallback((handle: XtermBaseHandle | null) => {
     setAgentTerminalRef(paneId, handle);
@@ -357,61 +329,20 @@ const AgentPaneLeaf = memo(({
                 <div className="agent-draft-launcher-title">{t("draftSessionPrompt")}</div>
                 <div className="agent-draft-launcher-hint">{t("draftChooserHint")}</div>
               </div>
-              <div className="agent-draft-launcher-tabs">
-                <button
-                  type="button"
-                  className={`agent-draft-launcher-tab ${draftPaneMode === "new" ? "active" : ""}`}
-                  onClick={handleSetDraftModeNew}
-                  data-testid={`draft-mode-new-${paneId}`}
-                >
-                  {t("draftModeNew")}
-                </button>
-                <button
-                  type="button"
-                  className={`agent-draft-launcher-tab ${draftPaneMode === "restore" ? "active" : ""}`}
-                  onClick={handleSetDraftModeRestore}
-                  data-testid={`draft-mode-restore-${paneId}`}
-                >
-                  {t("draftModeRestore")}
-                </button>
+              <div className="agent-draft-restore-list">
+                {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
+                  <button
+                    key={manifest.id}
+                    type="button"
+                    className="agent-draft-restore-item"
+                    onClick={() => handleStartDraftSession(manifest.id)}
+                    data-testid={`draft-start-${manifest.id}-${paneId}`}
+                  >
+                    <strong>{manifest.badgeLabel}</strong>
+                    <span>{getProviderDisplayLabel(manifest.id)}</span>
+                  </button>
+                ))}
               </div>
-              {draftPaneMode === "new" ? (
-                <div className="agent-draft-restore-list">
-                  {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
-                    <button
-                      key={manifest.id}
-                      type="button"
-                      className="agent-draft-restore-item"
-                      onClick={() => handleStartDraftSession(manifest.id)}
-                      data-testid={`draft-start-${manifest.id}-${paneId}`}
-                    >
-                      <strong>{manifest.badgeLabel}</strong>
-                      <span>{getProviderDisplayLabel(manifest.id)}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="agent-draft-restore-list">
-                  {historyLoading ? (
-                    <div className="agent-draft-launcher-empty">{t("loading")}</div>
-                  ) : restoreCandidates.length === 0 ? (
-                    <div className="agent-draft-launcher-empty">{t("draftRestoreEmpty")}</div>
-                  ) : (
-                    restoreCandidates.map((record) => (
-                      <button
-                        key={`${record.workspaceId}:${record.provider}:${record.resumeId}`}
-                        type="button"
-                        className="agent-draft-restore-item"
-                        onClick={() => handleRestoreDraftSession(record)}
-                        data-testid={`restore-candidate-${record.provider}-${record.resumeId}`}
-                      >
-                        <strong>{record.title}</strong>
-                        <span>{t("historyDetached")}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
             </div>
           </div>
         ) : session.unavailableReason ? (
@@ -474,9 +405,6 @@ const AgentPaneLeaf = memo(({
   && previous.theme === next.theme
   && previous.terminalFontSize === next.terminalFontSize
   && previous.terminalCompatibilityMode === next.terminalCompatibilityMode
-  && previous.draftPaneMode === next.draftPaneMode
-  && previous.historyLoading === next.historyLoading
-  && previous.restoreCandidates === next.restoreCandidates
 ));
 
 AgentPaneLeaf.displayName = "AgentPaneLeaf";
@@ -491,17 +419,12 @@ export const AgentWorkspaceFeature = ({
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPaneModes,
-  historyLoading,
-  restoreCandidates,
   displaySessionTitle,
   onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
-  onDraftPaneModeChange,
   onStartDraftSession,
-  onRestoreDraftSession,
   onEnableSupervisor,
   onEditSupervisorObjective,
   onPauseSupervisor,
@@ -545,17 +468,12 @@ export const AgentWorkspaceFeature = ({
         theme={theme}
         terminalFontSize={terminalFontSize}
         terminalCompatibilityMode={terminalCompatibilityMode}
-        draftPaneMode={draftPaneModes[node.id] ?? "new"}
-        historyLoading={historyLoading}
-        restoreCandidates={restoreCandidates}
         displaySessionTitle={displaySessionTitle}
         onRemoveUnavailableSession={onRemoveUnavailableSession}
         onSetActivePane={onSetActivePane}
         onSplitPane={onSplitPane}
         onCloseAgentPane={onCloseAgentPane}
-        onDraftPaneModeChange={onDraftPaneModeChange}
         onStartDraftSession={onStartDraftSession}
-        onRestoreDraftSession={onRestoreDraftSession}
         onEnableSupervisor={onEnableSupervisor}
         onEditSupervisorObjective={onEditSupervisorObjective}
         onPauseSupervisor={onPauseSupervisor}

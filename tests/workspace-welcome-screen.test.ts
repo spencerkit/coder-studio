@@ -124,7 +124,6 @@ test("workspace screen wires the no-workspace welcome screen", () => {
   assert.match(source, /\bWorkspaceWelcomeScreen\b/);
   assert.match(source, /const showWelcomeScreen = bootstrapReady && state\.tabs\.length === 0;/);
   assert.match(source, /\bonOpenWorkspacePicker\b/);
-  assert.match(source, /\bonOpenHistory\b/);
   assert.match(source, /const workspaceUiReady = bootstrapReady && \(state\.tabs\.length > 0 \|\| state\.overlay\.visible \|\| showWelcomeScreen\);/);
   assert.match(source, /\{showWelcomeScreen \? \(\s*<WorkspaceWelcomeScreen[\s\S]*?\) : hasOpenWorkspace \? \(\s*<WorkspaceShell/);
 });

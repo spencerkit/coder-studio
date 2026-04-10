@@ -87,9 +87,7 @@ export const SettingsScreen = ({
         isSettingsRoute
         locale={locale}
         workspaceTabs={workspaceTabs}
-        historyOpen={false}
         onSwitchWorkspace={() => {}}
-        onToggleHistory={() => {}}
         onAddTab={() => {}}
         onRemoveTab={() => {}}
         onOpenSettings={() => {}}

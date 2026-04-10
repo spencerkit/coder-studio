@@ -24,9 +24,9 @@ test("supervisor objective dialog supports textarea editing, generated context p
   assert.match(dialogSource, /aria-modal="true"/);
   assert.match(dialogSource, /textarea/);
   assert.match(dialogSource, /composeSupervisorObjectivePreview/);
-  assert.match(dialogSource, /Context preview/);
+  assert.match(dialogSource, /supervisorContextPreview/);
   assert.match(dialogSource, /supervisor-objective-dialog-preview/);
-  assert.match(dialogSource, /Disable supervisor/);
+  assert.match(dialogSource, /supervisorDisableTitle/);
 });
 
 test("supervisor controls live in a dedicated region with clearer action icons", () => {

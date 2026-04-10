@@ -1,11 +1,9 @@
 import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
 import type { AgentProvider } from "../../types/app";
 import type {
-  BackendSessionHistoryRecord,
   BackendWorkspaceSupervisorBinding,
   BackendWorkspaceSupervisorCycle,
   GitStatus,
-  SessionHistoryRecord,
   WorkbenchBootstrap,
   WorkbenchLayout,
   WorkbenchUiState,
@@ -19,7 +17,6 @@ import type {
 } from "../../types/app";
 import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
 import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
-import { mapSessionHistoryRecord } from "../../features/workspace/session-history";
 import { fireAndForgetRpc, invokeRpc } from "./client";
 import { sendWsMessage } from "../../ws/client";
 import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback";
@@ -36,10 +33,6 @@ export const launchWorkspace = (source: {
 
 export const getWorkbenchBootstrap = (deviceId?: string, clientId?: string) =>
   invokeRpc<WorkbenchBootstrap>("workbench_bootstrap", { deviceId, clientId });
-
-export const listSessionHistory = async () => (
-  (await invokeRpc<BackendSessionHistoryRecord[]>("list_session_history", {})).map(mapSessionHistoryRecord)
-) as SessionHistoryRecord[];
 
 export const getWorkspaceSnapshot = (workspaceId: string) =>
   invokeRpc<WorkspaceSnapshot>("workspace_snapshot", { workspaceId });

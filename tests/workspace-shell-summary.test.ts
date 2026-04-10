@@ -12,12 +12,12 @@ test("buildWorkspaceShellSummary returns branch runtime changes and queue items"
       { status: "idle", queue: [{ status: "queued" }, { status: "done" }] },
       { status: "idle", queue: [{ status: "queued" }] },
     ],
-    locale: "en",
+    t: (key) => key,
   });
 
   assert.deepEqual(
     summary.map((item) => item.label),
-    ["Branch", "Runtime", "Changes", "Queue"],
+    ["branch", "runtimeLabel", "changes", "queueLabel"],
   );
   assert.deepEqual(
     summary.map((item) => item.value),

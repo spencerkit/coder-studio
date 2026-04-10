@@ -87,6 +87,10 @@ const createWorkspaceSnapshot = (activeSessionId: string) => ({
       modifiedContent: "",
       dirty: false,
     },
+    supervisor: {
+      bindings: [],
+      cycles: [],
+    },
   },
   terminals: [],
 });
@@ -161,6 +165,10 @@ test("runtime state events refresh workspace view persistence baselines", () => 
         modifiedContent: "",
         dirty: false,
       },
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
     },
   });
 
@@ -217,6 +225,10 @@ test("runtime state ignores a stale local echo when a newer pane layout was alre
       originalContent: "",
       modifiedContent: "",
       dirty: false,
+    },
+    supervisor: {
+      bindings: [],
+      cycles: [],
     },
   };
 
@@ -296,6 +308,10 @@ test("runtime state still applies a remote pane layout that was not sent locally
       modifiedContent: "",
       dirty: false,
     },
+    supervisor: {
+      bindings: [],
+      cycles: [],
+    },
   };
 
   const next = applyWorkspaceRuntimeStateEvent(initial, {
@@ -344,6 +360,10 @@ test("runtime state reuses the current state when the incoming view is effective
       active_terminal_id: currentTab.activeTerminalId,
       pane_layout: paneLayout,
       file_preview: currentTab.filePreview,
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
     },
   });
 

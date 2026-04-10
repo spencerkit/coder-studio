@@ -98,22 +98,3 @@ test("materializing a draft session creates a backend session via createSessionR
   assert.match(materializeSessionSource, /createSessionRequest\(/);
   assert.doesNotMatch(materializeSessionSource, /advanceWorkspaceSyncVersion\(tabId\)/);
 });
-
-test("restoring a history session preserves unsynced split panes by avoiding a pre-restore backend refresh", () => {
-  const source = readFileSync(
-    new URL("../apps/web/src/features/workspace/session-actions.ts", import.meta.url),
-    "utf8",
-  );
-  const restoreSessionIntoPaneSource = source.match(
-    /const restoreSessionIntoPane = async[\s\S]*?const deleteSessionFromHistory = async/,
-  )?.[0] ?? "";
-
-  assert.doesNotMatch(
-    restoreSessionIntoPaneSource,
-    /await refreshTabFromBackend\(tabId\)/,
-  );
-  assert.match(
-    restoreSessionIntoPaneSource,
-    /const target =[\s\S]*ensureRestorePane\(tabId,\s*preferredPaneId,\s*strategy\)/,
-  );
-});

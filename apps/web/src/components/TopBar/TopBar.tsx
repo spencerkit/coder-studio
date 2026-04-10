@@ -4,7 +4,6 @@ import {
   HeaderAddIcon,
   HeaderBackIcon,
   HeaderCloseIcon,
-  HeaderHistoryIcon,
   HeaderSettingsIcon,
   SearchIcon,
 } from "../icons";
@@ -13,9 +12,7 @@ type TopBarProps = {
   isSettingsRoute: boolean;
   locale: Locale;
   workspaceTabs: WorkspaceTabItem[];
-  historyOpen?: boolean;
   onSwitchWorkspace: (id: string) => void;
-  onToggleHistory: () => void;
   onAddTab: () => void;
   onRemoveTab: (id: string) => void;
   onOpenSettings: () => void;
@@ -28,9 +25,7 @@ export const TopBar = ({
   isSettingsRoute,
   locale,
   workspaceTabs,
-  historyOpen = false,
   onSwitchWorkspace,
-  onToggleHistory,
   onAddTab,
   onRemoveTab,
   onOpenSettings,
@@ -53,16 +48,6 @@ export const TopBar = ({
           </div>
         ) : (
           <div className="topbar-session-strip topbar-workspace-strip" data-testid="workspace-topbar">
-            <button
-              type="button"
-              className={`session-top-history ${historyOpen ? "active" : ""}`}
-              onClick={onToggleHistory}
-              title={t("history")}
-              aria-label={t("history")}
-              data-testid="history-toggle"
-            >
-              <HeaderHistoryIcon />
-            </button>
             {hasWorkspaceTabs ? (
               workspaceTabs.map((item) => (
                 <div

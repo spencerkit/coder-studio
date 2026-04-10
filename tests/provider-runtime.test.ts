@@ -119,10 +119,6 @@ test("workspace runtime surfaces use provider registry helpers instead of hardco
     new URL("../apps/web/src/features/agents/AgentWorkspaceFeature.tsx", import.meta.url),
     "utf8",
   );
-  const historyDrawer = await fs.readFile(
-    new URL("../apps/web/src/components/HistoryDrawer/HistoryDrawer.tsx", import.meta.url),
-    "utf8",
-  );
   const agentRuntimeActions = await fs.readFile(
     new URL("../apps/web/src/features/agents/agent-runtime-actions.ts", import.meta.url),
     "utf8",
@@ -136,9 +132,6 @@ test("workspace runtime surfaces use provider registry helpers instead of hardco
   assert.doesNotMatch(agentWorkspaceFeature, /session\.provider === "codex" \? "Codex" : "Claude"/);
   assert.doesNotMatch(agentWorkspaceFeature, /handleSetDraftProvider\("claude"\)/);
   assert.doesNotMatch(agentWorkspaceFeature, /handleSetDraftProvider\("codex"\)/);
-
-  assert.match(historyDrawer, /getProviderDisplayLabel/);
-  assert.doesNotMatch(historyDrawer, /record\.provider === "codex" \? "Codex" : "Claude"/);
 
   assert.doesNotMatch(agentRuntimeActions, /getProviderStartupBehavior/);
   assert.doesNotMatch(agentRuntimeActions, /provider === "codex"/);

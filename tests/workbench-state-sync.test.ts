@@ -115,6 +115,10 @@ test("shared workbench snapshot keeps runtime view patches on the latest materia
         sessionId: "29",
       },
       file_preview: createEmptyPreview(),
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
     },
   }));
 

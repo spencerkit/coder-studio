@@ -2,20 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-test("history delete confirmation includes session content and time details", () => {
-  const screenSource = readFileSync(
-    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
-    "utf8",
-  );
+test("confirm dialog supports optional content and timestamp details", () => {
   const dialogSource = readFileSync(
     new URL("../apps/web/src/components/ConfirmDialog/ConfirmDialog.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(
-    screenSource,
-    /setConfirmDialog\(\{[\s\S]*details:\s*\{[\s\S]*content:\s*record\.title[\s\S]*timestamp:\s*formatHistoryRecordTimestamp\(record\.lastActiveAt\)[\s\S]*\}\s*,[\s\S]*\}\);/,
-  );
   assert.match(
     dialogSource,
     /state\.details[\s\S]*confirm-dialog-details[\s\S]*state\.details\.content[\s\S]*state\.details\.timestamp/,
