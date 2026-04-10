@@ -132,10 +132,7 @@ pub(crate) fn collect_workspace_session_runtime_bindings(
     state: State<'_, AppState>,
 ) -> Result<Vec<SessionRuntimeBindingInfo>, String> {
     let prefix = format!("{workspace_id}:");
-    let runtime_registry = state
-        .terminal_runtimes
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let runtime_registry = state.terminal_runtimes.lock().map_err(|e| e.to_string())?;
     let bindings = state
         .session_runtime_bindings
         .lock()
@@ -166,7 +163,9 @@ fn collect_workspace_runtime_terminal(
 ) -> Option<TerminalInfo> {
     let workspace_terminal_id = binding.workspace_terminal_id.as_ref()?;
     let terminal_id = workspace_terminal_id.parse::<u64>().ok()?;
-    let runtime = runtimes.get(&terminal_key(workspace_id, terminal_id))?.clone();
+    let runtime = runtimes
+        .get(&terminal_key(workspace_id, terminal_id))?
+        .clone();
     let output = runtime.output.lock().ok()?.clone();
     Some(TerminalInfo {
         id: terminal_id,
@@ -211,6 +210,10 @@ fn resolve_session_shell_env(
         "CODER_STUDIO_SESSION_ID".to_string(),
         session_id.to_string(),
     );
+    runtime_env.insert(
+        crate::services::tmux::CODER_STUDIO_RUNTIME_PID_ENV_KEY.to_string(),
+        std::process::id().to_string(),
+    );
     Ok(runtime_env)
 }
 
@@ -221,9 +224,7 @@ pub(crate) struct SessionRuntimeStartParams {
     pub(crate) rows: Option<u16>,
 }
 
-fn runtime_terminal_launch_command(
-    launch_spec: &AgentLaunchSpec,
-) -> TerminalLaunchCommand {
+fn runtime_terminal_launch_command(launch_spec: &AgentLaunchSpec) -> TerminalLaunchCommand {
     match launch_spec {
         AgentLaunchSpec::ShellCommand(command) => {
             #[cfg(target_os = "windows")]
@@ -436,14 +437,18 @@ pub(crate) fn session_runtime_start(
         &tmux_runtime.session_name,
         &build_tmux_boot_command(&boot_command),
     ) {
-        let _ = remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
+        let _ =
+            remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
         remove_failed_terminal_runtime(&params.workspace_id, terminal.id, state);
         let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
         return Err(error);
     }
 
-    if let Err(error) = bind_session_runtime(&params.workspace_id, &params.session_id, terminal.id, state) {
-        let _ = remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
+    if let Err(error) =
+        bind_session_runtime(&params.workspace_id, &params.session_id, terminal.id, state)
+    {
+        let _ =
+            remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
         remove_failed_terminal_runtime(&params.workspace_id, terminal.id, state);
         let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
         return Err(error);
@@ -513,10 +518,7 @@ mod tests {
 
     #[test]
     fn build_tmux_boot_command_passes_command_through() {
-        assert_eq!(
-            build_tmux_boot_command("claude --print"),
-            "claude --print"
-        );
+        assert_eq!(build_tmux_boot_command("claude --print"), "claude --print");
     }
 
     #[test]
@@ -548,9 +550,9 @@ mod tests {
 
     #[test]
     fn runtime_terminal_launch_command_uses_provider_launch_spec() {
-        let shell_launch = runtime_terminal_launch_command(
-            &AgentLaunchSpec::ShellCommand("claude --print".to_string()),
-        );
+        let shell_launch = runtime_terminal_launch_command(&AgentLaunchSpec::ShellCommand(
+            "claude --print".to_string(),
+        ));
         #[cfg(not(target_os = "windows"))]
         assert!(matches!(
             shell_launch,
@@ -687,13 +689,17 @@ mod tests {
             .by_session(&workspace_id, &session.id)
             .cloned()
             .expect("terminal runtime should be registered");
-        assert_eq!(result.terminal_runtime_id, Some(terminal_runtime.runtime_id));
+        assert_eq!(
+            result.terminal_runtime_id,
+            Some(terminal_runtime.runtime_id)
+        );
     }
 
     #[test]
     fn session_runtime_start_boots_provider_without_frontend_terminal_write() {
         let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/runtime-backend-boot-without-frontend-write");
+        let workspace_id =
+            launch_test_workspace(&app, "/tmp/runtime-backend-boot-without-frontend-write");
         let session = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -759,9 +765,11 @@ mod tests {
     }
 
     #[test]
-    fn collect_workspace_session_runtime_bindings_uses_runtime_terminal_id_as_canonical_terminal_id() {
+    fn collect_workspace_session_runtime_bindings_uses_runtime_terminal_id_as_canonical_terminal_id(
+    ) {
         let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/runtime-canonical-binding-terminal-id");
+        let workspace_id =
+            launch_test_workspace(&app, "/tmp/runtime-canonical-binding-terminal-id");
         let session = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -789,7 +797,10 @@ mod tests {
         assert_eq!(bindings.len(), 1);
         assert_eq!(bindings[0].session_id, session.id);
         assert_eq!(bindings[0].terminal_runtime_id, result.terminal_runtime_id);
-        assert_eq!(bindings[0].terminal_id, bindings[0].terminal_runtime_id.clone().unwrap());
+        assert_eq!(
+            bindings[0].terminal_id,
+            bindings[0].terminal_runtime_id.clone().unwrap()
+        );
     }
 
     #[test]
@@ -860,9 +871,15 @@ mod tests {
 
         assert_eq!(bindings.len(), 1);
         assert_eq!(bindings[0].session_id, session.id);
-        assert_eq!(bindings[0].terminal_id, result.terminal_runtime_id.clone().unwrap());
+        assert_eq!(
+            bindings[0].terminal_id,
+            result.terminal_runtime_id.clone().unwrap()
+        );
         assert_eq!(bindings[0].terminal_runtime_id, result.terminal_runtime_id);
-        assert_eq!(bindings[0].workspace_terminal_id, Some(result.terminal_id.to_string()));
+        assert_eq!(
+            bindings[0].workspace_terminal_id,
+            Some(result.terminal_id.to_string())
+        );
     }
 
     #[test]
