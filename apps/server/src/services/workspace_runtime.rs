@@ -9,7 +9,7 @@ use crate::*;
 use std::collections::HashMap;
 
 const WORKSPACE_CONTROLLER_LEASE_SECS: i64 = 30;
-const WORKSPACE_TAKEOVER_TIMEOUT_SECS: i64 = 10;
+const WORKSPACE_TAKEOVER_TIMEOUT_SECS: i64 = 0;
 const WORKSPACE_RUNTIME_LIFECYCLE_REPLAY_LIMIT: usize = 128;
 
 fn lease_alive(lease: &WorkspaceControllerLease, now: i64) -> bool {

@@ -70,6 +70,7 @@ function parseArgv(argv) {
     if (token === '--foreground') flags.foreground = true;
     else if (token === '--json') flags.json = true;
     else if (token === '--force') flags.force = true;
+    else if (token === '--no-service') flags.noService = true;
     else if (token === '--follow' || token === '-f') flags.follow = true;
     else if (token === '--help' || token === '-h') flags.help = true;
     else if (token === '--stdin') flags.stdin = true;
@@ -154,17 +155,19 @@ function printStartHelp() {
   console.log(`coder-studio start
 
 Usage:
-  coder-studio start [--host <host>] [--port <port>] [--foreground] [--json]
+  coder-studio start [--host <host>] [--port <port>] [--foreground] [--no-service] [--json]
 
 Options:
-  --host <host>   override configured host for this invocation
-  --port <port>   override configured port for this invocation
-  --foreground    keep the runtime in the foreground
-  --json          machine-readable output
+  --host <host>     override configured host for this invocation
+  --port <port>     override configured port for this invocation
+  --foreground      keep the runtime in the foreground
+  --no-service      skip managed service and start the runtime directly
+  --json            machine-readable output
 
 Examples:
   coder-studio start
   coder-studio start --foreground
+  coder-studio start --no-service
   coder-studio start --port 42033 --json
 `);
 }
@@ -566,6 +569,9 @@ async function getServiceStatus(context) {
 }
 
 async function assertManagedStartInputAllowed(context, flags) {
+  if (flags.noService) {
+    return { installed: false, stale: false };
+  }
   const status = await getServiceStatus(context);
   if (!status.installed || status.stale) {
     return status;
@@ -1344,7 +1350,8 @@ export async function runCli(argv = process.argv.slice(2)) {
       options = context.options;
       const result = await startRuntime({
         ...options,
-        autoInstallManagedService: true,
+        autoInstallManagedService: !flags.noService,
+        noService: Boolean(flags.noService),
         foreground: Boolean(flags.foreground),
         onReady: async ({ endpoint, pid }) => {
           if (!flags.json) {

@@ -1301,13 +1301,13 @@ fn build_history_from_conn(conn: &Connection) -> Result<Vec<SessionHistoryRecord
         }
 
         for binding in &view_state.session_bindings {
-            let Some(resume_id) = binding.resume_id.as_ref() else {
-                continue;
-            };
-            if provider_sessions_by_identity
-                .contains_key(&(binding.provider.clone(), resume_id.clone()))
-            {
-                continue;
+            let resume_id = binding.resume_id.clone();
+            if let Some(resume_id_val) = &resume_id {
+                if provider_sessions_by_identity
+                    .contains_key(&(binding.provider.clone(), resume_id_val.clone()))
+                {
+                    continue;
+                }
             }
             records.push(SessionHistoryRecord {
                 workspace_id: workspace.id.clone(),
@@ -1324,7 +1324,7 @@ fn build_history_from_conn(conn: &Connection) -> Result<Vec<SessionHistoryRecord
                 state: "unavailable".to_string(),
                 created_at: session_timestamp_to_millis(binding.last_seen_at),
                 last_active_at: session_timestamp_to_millis(binding.last_seen_at),
-                resume_id: resume_id.clone(),
+                resume_id: resume_id.unwrap_or_default(),
             });
         }
     }

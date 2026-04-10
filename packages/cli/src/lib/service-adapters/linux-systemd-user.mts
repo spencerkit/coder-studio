@@ -11,6 +11,46 @@ function quoteSystemdValue(value) {
   return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+const SYSTEMD_USER_GUIDE = [
+  'This machine does not have a systemd user session available.',
+  'To manage Coder Studio as a background service, you need systemd running in user mode.',
+  '',
+  'Fix options:',
+  '',
+  '1) Desktop Linux (GNOME, KDE, etc.):',
+  '   Ensure your login session uses systemd as the init system.',
+  '   Most modern distributions enable this by default.',
+  '',
+  '2) WSL 2 (Windows Subsystem for Linux):',
+  '   Create or edit /etc/wsl.conf and add:',
+  '     [boot]',
+  '     systemd=true',
+  '   Then restart WSL from PowerShell: wsl --shutdown',
+  '',
+  '3) Containers / Docker:',
+  '   User-mode systemd is typically not available inside containers.',
+  '   Run Coder Studio directly instead: coder-studio start --foreground',
+  '',
+  '4) Systems without systemd:',
+  '   Skip the managed service and launch directly:',
+  '     coder-studio start --no-service',
+  '   Or run the server binary in the foreground:',
+  '     coder-studio start --foreground',
+].join('\n');
+
+async function assertSystemdUserAvailable(execute) {
+  try {
+    await execute('systemctl', ['--user', 'is-system-running'], { allowFailure: true });
+  } catch {
+    // Even if is-system-running fails, systemctl --user might still work.
+    // Try a lightweight show command as a secondary check.
+  }
+  const result = await execute('systemctl', ['--user', 'status', '--no-pager'], { allowFailure: true });
+  if ((result.code ?? 999) !== 0 && (!result.stdout || result.stdout.trim().length === 0)) {
+    throw new Error(SYSTEMD_USER_GUIDE);
+  }
+}
+
 async function defaultExecute(command, args, { allowFailure = false } = {}) {
   try {
     const result = await execFileAsync(command, args, { windowsHide: true });
@@ -57,6 +97,7 @@ export function createLinuxSystemdUserServiceAdapter({ execute = defaultExecute,
     id: 'linux-systemd-user',
 
     async install({ serviceName, launcherPath, stateDir }) {
+      await assertSystemdUserAvailable(execute);
       const serviceTarget = resolveSystemdUserUnitName(serviceName);
       const definitionPath = resolveSystemdUserUnitPath(serviceName, homeDir);
       const unitContents = `[Unit]
@@ -100,6 +141,7 @@ WantedBy=default.target
     },
 
     async start({ serviceName }) {
+      await assertSystemdUserAvailable(execute);
       const serviceTarget = resolveSystemdUserUnitName(serviceName);
       await execute('systemctl', ['--user', 'start', serviceTarget]);
       return { serviceTarget };
@@ -112,6 +154,7 @@ WantedBy=default.target
     },
 
     async restart({ serviceName }) {
+      await assertSystemdUserAvailable(execute);
       const serviceTarget = resolveSystemdUserUnitName(serviceName);
       await execute('systemctl', ['--user', 'restart', serviceTarget]);
       return { serviceTarget };

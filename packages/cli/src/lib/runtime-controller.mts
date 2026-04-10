@@ -318,23 +318,25 @@ export async function startRuntime(input = {}) {
     };
   }
 
-  let managedService = await getManagedServiceStatus(options);
-  if (
-    options.autoInstallManagedService
-    && managedServiceCanAutoInstall(managedService)
-    && (!managedService.installed || managedService.stale)
-  ) {
-    await installManagedService(options);
-    managedService = await getManagedServiceStatus(options);
-  }
+  if (!options.noService) {
+    let managedService = await getManagedServiceStatus(options);
+    if (
+      options.autoInstallManagedService
+      && managedServiceCanAutoInstall(managedService)
+      && (!managedService.installed || managedService.stale)
+    ) {
+      await installManagedService(options);
+      managedService = await getManagedServiceStatus(options);
+    }
 
-  if (managedService?.installed && !managedService.stale) {
-    const startResult = await startManagedService(options);
-    await waitForReady(options.endpoint, null, options.timeoutMs, options);
-    return {
-      changed: startResult?.changed ?? true,
-      ...(await getStatus(options))
-    };
+    if (managedService?.installed && !managedService.stale) {
+      const startResult = await startManagedService(options);
+      await waitForReady(options.endpoint, null, options.timeoutMs, options);
+      return {
+        changed: startResult?.changed ?? true,
+        ...(await getStatus(options))
+      };
+    }
   }
 
   await ensureStateDirs(options.stateDir, options.dataDir);

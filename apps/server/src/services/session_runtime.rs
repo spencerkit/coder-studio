@@ -275,7 +275,7 @@ pub(crate) fn remove_terminal_runtime_registration(
 }
 
 fn build_tmux_boot_command(command: &str) -> String {
-    format!("exec {command}")
+    command.to_string()
 }
 
 pub(crate) fn session_runtime_start(
@@ -512,10 +512,10 @@ mod tests {
     }
 
     #[test]
-    fn build_tmux_boot_command_replaces_shell_with_boot_command() {
+    fn build_tmux_boot_command_passes_command_through() {
         assert_eq!(
             build_tmux_boot_command("claude --print"),
-            "exec claude --print"
+            "claude --print"
         );
     }
 
