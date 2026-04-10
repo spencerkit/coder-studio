@@ -397,9 +397,6 @@ export const createWorkspaceSessionActions = ({
   ) => {
     const strategy = options?.strategy ?? "reuse-draft";
 
-    // Refresh from backend FIRST so we have the latest backend state before making local changes
-    await refreshTabFromBackend(tabId);
-
     const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === tabId) ?? null;
     const matchingSession = tabSnapshot?.sessions.find((session) => (
       !isDraftSession(session)
