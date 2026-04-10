@@ -98,13 +98,29 @@ pub(crate) fn send_input(
     #[cfg(test)]
     {
         let _ = input;
-        let _ = runtime;
+        let _ = sync_session_runtime_state(
+            state,
+            &runtime.workspace_id,
+            &runtime.session_id,
+            SessionStatus::Running,
+            true,
+            Some(SessionRuntimeLiveness::Attached),
+        );
         return Ok(());
     }
 
     #[cfg(not(test))]
     {
-        crate::services::tmux::send_tmux_raw_input(&runtime.tmux_session_name, input)
+        crate::services::tmux::send_tmux_raw_input(&runtime.tmux_session_name, input)?;
+        let _ = sync_session_runtime_state(
+            state,
+            &runtime.workspace_id,
+            &runtime.session_id,
+            SessionStatus::Running,
+            true,
+            Some(SessionRuntimeLiveness::Attached),
+        );
+        Ok(())
     }
 }
 
@@ -115,6 +131,35 @@ pub(crate) fn emit_terminal_channel_output(app: &AppHandle, runtime_id: &str, da
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::RuntimeHandle;
+    use crate::services::workspace::resolve_session_for_slot;
+    use crate::{
+        create_session, default_idle_policy, init_db, launch_workspace_record, AgentProvider,
+        ExecTarget, SessionMode, WorkspaceSource, WorkspaceSourceKind,
+    };
+
+    fn test_app() -> AppHandle {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        app
+    }
+
+    fn launch_test_workspace(app: &AppHandle, root: &str) -> String {
+        let result = launch_workspace_record(
+            app.state(),
+            WorkspaceSource {
+                kind: WorkspaceSourceKind::Local,
+                path_or_url: root.to_string(),
+                target: ExecTarget::Native,
+            },
+            root.to_string(),
+            default_idle_policy(),
+        )
+        .unwrap();
+        result.snapshot.workspace.workspace_id
+    }
 
     fn runtime(runtime_id: &str, workspace_id: &str, session_id: &str) -> GatewayTerminalRuntime {
         GatewayTerminalRuntime::new(
@@ -175,5 +220,37 @@ mod tests {
 
         assert_eq!(removed, Some(original));
         assert_eq!(registry.by_session("ws-1", "session-1"), None);
+    }
+
+    #[test]
+    fn send_input_marks_bound_session_running() {
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-terminal-channel-running-state");
+        let created = create_session(
+            workspace_id.clone(),
+            SessionMode::Branch,
+            AgentProvider::claude(),
+            app.state(),
+        )
+        .unwrap();
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            TerminalRuntime::new(
+                "runtime-1".to_string(),
+                workspace_id.clone(),
+                created.id.clone(),
+                "claude".to_string(),
+                "tmux-session-1".to_string(),
+                "%1".to_string(),
+            ),
+        );
+
+        send_input("runtime-1", "hello", app.state()).unwrap();
+
+        let updated = resolve_session_for_slot(app.state(), &workspace_id, &created.id).unwrap();
+        assert_eq!(updated.status, SessionStatus::Running);
+        assert_eq!(
+            updated.runtime_liveness,
+            Some(SessionRuntimeLiveness::Attached)
+        );
     }
 }
