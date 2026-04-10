@@ -186,6 +186,9 @@ const AgentPaneLeaf = memo(({
   const handleResumeSupervisor = useCallback(() => {
     onResumeSupervisor(session.id);
   }, [onResumeSupervisor, session.id]);
+  const handleRetrySupervisor = useCallback(() => {
+    onRetrySupervisor(session.id);
+  }, [onRetrySupervisor, session.id]);
   const handleDisableSupervisor = useCallback(() => {
     onDisableSupervisor(session.id);
   }, [onDisableSupervisor, session.id]);
