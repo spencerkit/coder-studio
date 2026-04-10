@@ -235,7 +235,7 @@ pub(crate) fn current_hook_endpoint(app: &AppHandle) -> Result<String, String> {
 
 pub(crate) fn build_shared_hook_command(target: &ExecTarget) -> String {
     if matches!(target, ExecTarget::Wsl { .. }) {
-        "/bin/sh -lc '[ -n \"${CODER_STUDIO_APP_BIN:-}\" ] || exit 0; exec \"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook'".to_string()
+        "/bin/sh -lc 'app_bin=\"${CODER_STUDIO_APP_BIN:-}\"; if [ -n \"$app_bin\" ] && [ -x \"$app_bin\" ]; then exec \"$app_bin\" --coder-studio-agent-hook; fi; cli_bin=\"$(command -v coder-studio 2>/dev/null || true)\"; [ -n \"$cli_bin\" ] || exit 0; for candidate in \"$(dirname \"$cli_bin\")\"/../lib/node_modules/@spencer-kit/coder-studio/node_modules/@spencer-kit/coder-studio-*/bin/coder-studio; do if [ -x \"$candidate\" ]; then exec \"$candidate\" --coder-studio-agent-hook; fi; done; exit 0'".to_string()
     } else {
         #[cfg(target_os = "windows")]
         {
@@ -243,7 +243,7 @@ pub(crate) fn build_shared_hook_command(target: &ExecTarget) -> String {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            "/bin/sh -lc '[ -n \"${CODER_STUDIO_APP_BIN:-}\" ] || exit 0; exec \"$CODER_STUDIO_APP_BIN\" --coder-studio-agent-hook'".to_string()
+            "/bin/sh -lc 'app_bin=\"${CODER_STUDIO_APP_BIN:-}\"; if [ -n \"$app_bin\" ] && [ -x \"$app_bin\" ]; then exec \"$app_bin\" --coder-studio-agent-hook; fi; cli_bin=\"$(command -v coder-studio 2>/dev/null || true)\"; [ -n \"$cli_bin\" ] || exit 0; for candidate in \"$(dirname \"$cli_bin\")\"/../lib/node_modules/@spencer-kit/coder-studio/node_modules/@spencer-kit/coder-studio-*/bin/coder-studio; do if [ -x \"$candidate\" ]; then exec \"$candidate\" --coder-studio-agent-hook; fi; done; exit 0'".to_string()
         }
     }
 }
@@ -609,5 +609,73 @@ mod tests {
             status.success(),
             "hook command should no-op when app bin is missing"
         );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn shared_hook_command_falls_back_when_app_bin_is_stale() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let command = build_shared_hook_command(&ExecTarget::Native);
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should move forward")
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!(
+            "coder-studio-hook-fallback-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        let bin_dir = temp_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("bin dir should be created");
+        let marker = temp_dir.join("hook-ran");
+        let cli_entry = bin_dir.join("coder-studio");
+        fs::write(&cli_entry, "#!/bin/sh\nexit 0\n").expect("fake cli entry should be written");
+        let mut cli_perms = fs::metadata(&cli_entry)
+            .expect("fake cli metadata should load")
+            .permissions();
+        cli_perms.set_mode(0o755);
+        fs::set_permissions(&cli_entry, cli_perms).expect("fake cli should be executable");
+
+        let fake_bin = temp_dir
+            .join("lib/node_modules/@spencer-kit/coder-studio/node_modules/@spencer-kit/coder-studio-linux-x64/bin/coder-studio");
+        fs::create_dir_all(
+            fake_bin
+                .parent()
+                .expect("fake runtime parent should exist"),
+        )
+        .expect("fake runtime dir should be created");
+        let script = format!(
+            "#!/bin/sh\nprintf '%s' ok > '{}'\nexit 0\n",
+            marker.to_string_lossy()
+        );
+        fs::write(&fake_bin, script).expect("fake coder-studio should be written");
+        let mut perms = fs::metadata(&fake_bin)
+            .expect("fake coder-studio metadata should load")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&fake_bin, perms).expect("fake coder-studio should be executable");
+
+        let path = std::env::var("PATH").unwrap_or_default();
+        let status = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg(&command)
+            .env("CODER_STUDIO_APP_BIN", temp_dir.join("missing-bin").to_string_lossy().to_string())
+            .env("PATH", format!("{}:{path}", bin_dir.to_string_lossy()))
+            .status()
+            .expect("shell should run hook command");
+
+        assert!(status.success(), "hook command should succeed with PATH fallback");
+        assert!(
+            marker.exists(),
+            "fallback coder-studio binary should be executed when app bin is stale"
+        );
+
+        let _ = fs::remove_file(cli_entry);
+        let _ = fs::remove_file(fake_bin);
+        let _ = fs::remove_file(marker);
+        let _ = fs::remove_dir(temp_dir);
     }
 }
