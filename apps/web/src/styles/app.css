@@ -6697,11 +6697,6 @@ pre.diff,
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
-.workspace-code-sidebar .tree {
-  min-height: 0;
-  overflow: auto;
-}
-
 .workspace-code-sidebar .tree-line.selected {
   background: color-mix(in srgb, var(--surface-elevated) 74%, var(--accent) 26%) !important;
   color: var(--text) !important;
@@ -7623,10 +7618,16 @@ pre.diff,
   white-space: nowrap;
 }
 
-.workspace-review-dock .tree {
+.workspace-review-dock-section-files > .tree {
   min-height: 0;
   overflow: auto;
   margin: 0 -4px;
+}
+
+.workspace-review-dock-section-files .tree-children > .tree {
+  min-height: auto;
+  overflow: visible;
+  margin: 0;
 }
 
 .workspace-review-dock .tree-line {

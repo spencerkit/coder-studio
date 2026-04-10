@@ -18,7 +18,6 @@ type SettingsProps = {
   onSettingsPanelChange: (panel: SettingsPanel) => void;
   onGeneralSettingsChange: (patch: Partial<AppSettings["general"]>) => void;
   onAgentDefaultsChange: (patch: Partial<AppSettings["agentDefaults"]>) => void;
-  onSettingsIdlePolicyChange: (patch: Partial<AppSettings["general"]["idlePolicy"]>) => void;
   onProviderSettingsChange: (updater: AppSettingsUpdater) => void;
   onInjectProviderHooks: (providerId: string) => Promise<void>;
   canInjectProviderHooks?: boolean;
@@ -107,7 +106,6 @@ export const Settings = ({
   onSettingsPanelChange,
   onGeneralSettingsChange,
   onAgentDefaultsChange,
-  onSettingsIdlePolicyChange,
   onProviderSettingsChange,
   onInjectProviderHooks,
   canInjectProviderHooks = true,
@@ -194,85 +192,6 @@ export const Settings = ({
                               </button>
                             ))}
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </SettingsSection>
-
-                  <SettingsSection
-                    kicker={t("settingsGeneralKicker")}
-                    title={t("suspendStrategy")}
-                    description={t("suspendStrategyHint")}
-                    testId="settings-section-suspend-strategy"
-                  >
-                    <div className="settings-group-card settings-group-card--document">
-                      <div className="settings-row">
-                        <div className="settings-row-copy">
-                          <strong>{t("autoSuspend")}</strong>
-                          <span>{t("autoSuspendHint")}</span>
-                        </div>
-                        <div className="settings-row-control">
-                          <label className="toggle">
-                            <input
-                              type="checkbox"
-                              checked={settingsDraft.general.idlePolicy.enabled}
-                              onChange={() => onSettingsIdlePolicyChange({ enabled: !settingsDraft.general.idlePolicy.enabled })}
-                            />
-                            <span className="toggle-track"><span className="toggle-thumb" /></span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="settings-row">
-                        <div className="settings-row-copy">
-                          <strong>{t("idleAfter")}</strong>
-                          <span>{t("idleAfterHint")}</span>
-                        </div>
-                        <div className="settings-row-control settings-number-control">
-                          <input
-                            className="settings-inline-number"
-                            type="number"
-                            min={1}
-                            value={settingsDraft.general.idlePolicy.idleMinutes}
-                            onChange={(event) => onSettingsIdlePolicyChange({ idleMinutes: Number(event.target.value) })}
-                            data-testid="settings-idle-minutes"
-                          />
-                          <span>{t("minutesShort")}</span>
-                        </div>
-                      </div>
-
-                      <div className="settings-row">
-                        <div className="settings-row-copy">
-                          <strong>{t("maxActive")}</strong>
-                          <span>{t("maxActiveHint")}</span>
-                        </div>
-                        <div className="settings-row-control settings-number-control">
-                          <input
-                            className="settings-inline-number"
-                            type="number"
-                            min={1}
-                            value={settingsDraft.general.idlePolicy.maxActive}
-                            onChange={(event) => onSettingsIdlePolicyChange({ maxActive: Number(event.target.value) })}
-                            data-testid="settings-max-active"
-                          />
-                          <span>{t("sessionsWord")}</span>
-                        </div>
-                      </div>
-
-                      <div className="settings-row">
-                        <div className="settings-row-copy">
-                          <strong>{t("memoryPressure")}</strong>
-                          <span>{t("memoryPressureHint")}</span>
-                        </div>
-                        <div className="settings-row-control">
-                          <label className="toggle">
-                            <input
-                              type="checkbox"
-                              checked={settingsDraft.general.idlePolicy.pressure}
-                              onChange={() => onSettingsIdlePolicyChange({ pressure: !settingsDraft.general.idlePolicy.pressure })}
-                            />
-                            <span className="toggle-track"><span className="toggle-thumb" /></span>
-                          </label>
                         </div>
                       </div>
                     </div>

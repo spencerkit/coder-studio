@@ -30,10 +30,9 @@ test('settings page groups general and appearance content into named sections an
   );
 
   assert.match(source, /agentDefaults/);
-  assert.match(source, /suspendStrategy/);
   assert.match(source, /completionNotifications/);
   assert.match(source, /settings-section-agent-defaults/);
-  assert.match(source, /settings-section-suspend-strategy/);
+  assert.doesNotMatch(source, /settings-section-suspend-strategy/);
   assert.match(source, /settings-section-notifications/);
   assert.match(source, /settings-section-appearance/);
   assert.match(source, /onInjectProviderHooks/);

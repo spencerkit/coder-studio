@@ -59,10 +59,6 @@ export const SettingsScreen = ({
     commitSettings((current) => applyAgentDefaultsPatch(current, patch));
   };
 
-  const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
-    commitSettings((current) => applyGeneralSettingsPatch(current, { idlePolicy: patch }));
-  };
-
   const notificationPermissionText = notificationPermissionState === "allowed"
     ? t("notificationPermissionAllowed")
     : notificationPermissionState === "unsupported"
@@ -103,7 +99,6 @@ export const SettingsScreen = ({
         onSettingsPanelChange={setActiveSettingsPanel}
         onGeneralSettingsChange={onGeneralSettingsChange}
         onAgentDefaultsChange={onAgentDefaultsChange}
-        onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
         onProviderSettingsChange={commitSettings}
         onInjectProviderHooks={onInjectProviderHooks}
         canInjectProviderHooks={Boolean(activeWorkspaceProject)}
