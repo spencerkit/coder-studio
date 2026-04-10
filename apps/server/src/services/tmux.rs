@@ -81,6 +81,11 @@ fn tmux_command_builder() -> CommandBuilder {
     ensure_tmux_socket_parent(&socket);
     let socket = socket.to_string_lossy().into_owned();
     command.args(tmux_socket_args(&socket, &[]));
+    // Managed service processes may not inherit TERM from an interactive shell.
+    // tmux attach requires a terminal type with clear capability, so provide a
+    // stable fallback to prevent "open terminal failed: terminal does not support clear".
+    command.env("TERM", "xterm-256color");
+    command.env("COLORTERM", "truecolor");
     command
 }
 

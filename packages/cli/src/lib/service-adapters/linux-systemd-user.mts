@@ -7,8 +7,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-function quoteSystemdValue(value) {
-  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+function escapeSystemdPath(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/ /g, '\\ ');
 }
 
 const SYSTEMD_USER_GUIDE = [
@@ -106,8 +108,8 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart=${quoteSystemdValue(launcherPath)}
-WorkingDirectory=${quoteSystemdValue(stateDir)}
+ExecStart=${escapeSystemdPath(launcherPath)}
+WorkingDirectory=${escapeSystemdPath(stateDir)}
 Restart=on-failure
 RestartSec=2
 

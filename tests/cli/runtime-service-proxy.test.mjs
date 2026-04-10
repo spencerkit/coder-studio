@@ -239,6 +239,25 @@ test('startRuntime falls back to direct startup with warning when systemd start 
   assert.match(result.warnings[0], /systemd start failed/);
 });
 
+test('startRuntime falls back to direct startup with warning when managed status probe fails', async () => {
+  const result = await startRuntime({
+    autoInstallManagedService: true,
+    __testOverrides: {
+      getServiceStatus: async (options) => {
+        if (options.noService) {
+          return createManagedServiceState({ active: true });
+        }
+        throw new Error('Command failed: systemctl --user show com.spencer-kit.coder-studio.service');
+      },
+      fetchHealth: async () => ({ version: '0.2.6' }),
+    },
+  });
+
+  assert.equal(result.status, 'running');
+  assert.equal(Array.isArray(result.warnings), true);
+  assert.match(result.warnings[0], /systemd status failed/);
+});
+
 test('restartRuntime falls back to direct startup with warning when systemd restart fails', async () => {
   const calls = [];
 

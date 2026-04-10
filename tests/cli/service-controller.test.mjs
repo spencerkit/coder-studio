@@ -87,8 +87,11 @@ test('linux controller installs state and unit metadata through the adapter', as
     assert.equal(serviceState.platform, 'linux-systemd-user');
     assert.equal(serviceState.launcherPath, launcherPath);
     assert.match(unitContents, /Restart=on-failure/);
-    assert.match(unitContents, /ExecStart=".*launch\.sh"/);
+    assert.match(unitContents, /ExecStart=.*launch\.sh/);
+    assert.match(unitContents, /WorkingDirectory=.*state/);
     assert.deepEqual(calls, [
+      ['systemctl', '--user', 'is-system-running'],
+      ['systemctl', '--user', 'status', '--no-pager'],
       ['systemctl', '--user', 'daemon-reload'],
       ['systemctl', '--user', 'enable', 'com.example.coder-studio.service'],
       [

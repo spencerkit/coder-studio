@@ -340,7 +340,21 @@ async function cleanupIfManagedPid(options, pid) {
 
 export async function startRuntime(input = {}) {
   const options = resolveOptions(input);
-  const current = await getStatus(options);
+  let current = null;
+  try {
+    current = await getStatus(options);
+  } catch (error) {
+    if (!options.noService) {
+      const warning = buildSystemdFallbackWarning('status', error);
+      return startRuntime({
+        ...options,
+        noService: true,
+        autoInstallManagedService: false,
+        startupWarnings: [...options.startupWarnings, warning],
+      });
+    }
+    throw error;
+  }
   if (isRuntimeActive(current)) {
     return mergeRuntimeWarnings({
       changed: false,
@@ -349,7 +363,18 @@ export async function startRuntime(input = {}) {
   }
 
   if (!options.noService) {
-    let managedService = await getManagedServiceStatus(options);
+    let managedService = null;
+    try {
+      managedService = await getManagedServiceStatus(options);
+    } catch (error) {
+      const warning = buildSystemdFallbackWarning('status', error);
+      return startRuntime({
+        ...options,
+        noService: true,
+        autoInstallManagedService: false,
+        startupWarnings: [...options.startupWarnings, warning],
+      });
+    }
     if (
       options.autoInstallManagedService
       && managedServiceCanAutoInstall(managedService)
@@ -560,7 +585,18 @@ export async function stopRuntime(input = {}) {
 export async function restartRuntime(input = {}) {
   const options = resolveOptions(input);
   if (!options.noService) {
-    let managedService = await getManagedServiceStatus(options);
+    let managedService = null;
+    try {
+      managedService = await getManagedServiceStatus(options);
+    } catch (error) {
+      const warning = buildSystemdFallbackWarning('status', error);
+      return restartRuntime({
+        ...options,
+        noService: true,
+        autoInstallManagedService: false,
+        startupWarnings: [...options.startupWarnings, warning],
+      });
+    }
     if (
       options.autoInstallManagedService
       && managedServiceCanAutoInstall(managedService)
