@@ -2,9 +2,7 @@ use std::{
     collections::HashMap,
     io::Write,
     path::PathBuf,
-    sync::{
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::Instant,
 };
 

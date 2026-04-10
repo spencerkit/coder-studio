@@ -52,7 +52,8 @@ impl TerminalRuntimeRegistry {
             .by_session_key
             .insert(session_key, runtime_id)
             .and_then(|previous_runtime_id| self.by_runtime_id.remove(&previous_runtime_id));
-        self.by_runtime_id.insert(runtime.runtime_id.clone(), runtime);
+        self.by_runtime_id
+            .insert(runtime.runtime_id.clone(), runtime);
         replaced_runtime
     }
 
@@ -107,11 +108,7 @@ pub(crate) fn send_input(
     }
 }
 
-pub(crate) fn emit_terminal_channel_output(
-    app: &AppHandle,
-    runtime_id: &str,
-    data: &str,
-) {
+pub(crate) fn emit_terminal_channel_output(app: &AppHandle, runtime_id: &str, data: &str) {
     crate::ws::server::emit_terminal_channel_output(app, runtime_id, data);
 }
 
@@ -119,11 +116,7 @@ pub(crate) fn emit_terminal_channel_output(
 mod tests {
     use super::*;
 
-    fn runtime(
-        runtime_id: &str,
-        workspace_id: &str,
-        session_id: &str,
-    ) -> GatewayTerminalRuntime {
+    fn runtime(runtime_id: &str, workspace_id: &str, session_id: &str) -> GatewayTerminalRuntime {
         GatewayTerminalRuntime::new(
             runtime_id.to_string(),
             workspace_id.to_string(),

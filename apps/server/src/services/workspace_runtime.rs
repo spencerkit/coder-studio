@@ -490,7 +490,12 @@ pub(crate) fn workspace_runtime_attach(
             &workspace_id,
             state,
         )?;
-    apply_runtime_liveness_to_snapshot(&workspace_id, &mut snapshot, &session_runtime_bindings, state);
+    apply_runtime_liveness_to_snapshot(
+        &workspace_id,
+        &mut snapshot,
+        &session_runtime_bindings,
+        state,
+    );
 
     Ok(WorkspaceRuntimeSnapshot {
         snapshot,
@@ -1380,15 +1385,11 @@ mod tests {
             .terminals
             .iter()
             .any(|terminal| terminal.id == started.terminal_id));
-        assert!(runtime
-            .snapshot
-            .sessions
-            .iter()
-            .any(|candidate| {
-                candidate.id == session.id
-                    && candidate.runtime_active
-                    && candidate.runtime_liveness == Some(SessionRuntimeLiveness::Attached)
-            }));
+        assert!(runtime.snapshot.sessions.iter().any(|candidate| {
+            candidate.id == session.id
+                && candidate.runtime_active
+                && candidate.runtime_liveness == Some(SessionRuntimeLiveness::Attached)
+        }));
     }
 
     #[test]
@@ -1420,18 +1421,16 @@ mod tests {
             .lock()
             .unwrap()
             .insert(99, session_runtime_key(&workspace_id, &other.id));
-        app.state()
-            .terminal_runtimes
-            .lock()
-            .unwrap()
-            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            crate::services::terminal_gateway::TerminalRuntime::new(
                 "runtime-missing-other".to_string(),
                 workspace_id.clone(),
                 other.id.to_string(),
                 "claude".to_string(),
                 "missing-tmux-session".to_string(),
                 "%1".to_string(),
-            ));
+            ),
+        );
 
         assert_eq!(
             session_runtime_liveness_for_session(&workspace_id, &target.id, app.state()),
@@ -1446,7 +1445,8 @@ mod tests {
     #[test]
     fn workspace_runtime_attach_reports_tmux_missing_for_bound_session_when_tmux_session_is_gone() {
         let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-tmux-missing");
+        let workspace_id =
+            launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-tmux-missing");
         let session = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -1465,18 +1465,16 @@ mod tests {
             .lock()
             .unwrap()
             .insert(99, session_runtime_key(&workspace_id, &session.id));
-        app.state()
-            .terminal_runtimes
-            .lock()
-            .unwrap()
-            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            crate::services::terminal_gateway::TerminalRuntime::new(
                 "runtime-missing".to_string(),
                 workspace_id.clone(),
                 session.id.to_string(),
                 "claude".to_string(),
                 "missing-tmux-session".to_string(),
                 "%1".to_string(),
-            ));
+            ),
+        );
 
         let runtime = workspace_runtime_attach(
             workspace_id.clone(),
@@ -1826,7 +1824,10 @@ mod tests {
             .find(|binding| binding.session_id == session.id.to_string())
             .expect("runtime binding should remain after natural exit");
         assert_eq!(binding.terminal_id, started.terminal_id.to_string());
-        assert_eq!(binding.workspace_terminal_id, Some(started.terminal_id.to_string()));
+        assert_eq!(
+            binding.workspace_terminal_id,
+            Some(started.terminal_id.to_string())
+        );
         assert_eq!(binding.terminal_runtime_id, None);
         let restored_session = runtime
             .snapshot

@@ -593,9 +593,7 @@ fn artifact_dirty_categories(reason: &str) -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        artifact_dirty_categories,
-        emit_terminal_channel_output,
-        handle_terminal_channel_input,
+        artifact_dirty_categories, emit_terminal_channel_output, handle_terminal_channel_input,
     };
     use crate::runtime::RuntimeHandle;
     use crate::services::terminal_gateway::TerminalRuntime;
@@ -684,7 +682,11 @@ mod tests {
             "tmux-session-1".into(),
             "%1".into(),
         );
-        app.state().terminal_runtimes.lock().unwrap().insert(runtime);
+        app.state()
+            .terminal_runtimes
+            .lock()
+            .unwrap()
+            .insert(runtime);
 
         let result = handle_terminal_channel_input(
             &app,

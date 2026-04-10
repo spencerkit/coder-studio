@@ -120,11 +120,12 @@ fn emit_runtime_output(
     }
     append_runtime_output(runtime, text);
     // check if this terminal is session-bound before emitting the legacy event
-    let is_session_bound = crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
-        .ok()
-        .flatten()
-        .map(|(binding_workspace_id, _)| binding_workspace_id == workspace_id)
-        .unwrap_or(false);
+    let is_session_bound =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+            .ok()
+            .flatten()
+            .map(|(binding_workspace_id, _)| binding_workspace_id == workspace_id)
+            .unwrap_or(false);
 
     if !is_session_bound {
         emit_terminal(app, workspace_id, terminal_id, text, None);
@@ -321,7 +322,9 @@ fn create_pty_terminal_runtime(
         let exit_text = match &runtime_out.child {
             Some(child) => match child.lock() {
                 Ok(mut child) => format_terminal_exit_message(child.wait()),
-                Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+                Err(error) => {
+                    format!("\n[terminal exited: failed to lock child handle: {error}]\n")
+                }
             },
             None => "\n[terminal exited]\n".to_string(),
         };
@@ -336,7 +339,8 @@ fn create_pty_terminal_runtime(
         );
         let state: State<AppState> = state_handle.state();
         if runtime_out.persist_workspace_terminal {
-            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+            let _ =
+                set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
         sync_bound_terminal_runtime_state(
             &workspace_id_out,
@@ -467,7 +471,9 @@ fn create_tmux_terminal_runtime(
         let exit_text = match &runtime_out.child {
             Some(child) => match child.lock() {
                 Ok(mut child) => format_terminal_exit_message(child.wait()),
-                Err(error) => format!("\n[terminal exited: failed to lock child handle: {error}]\n"),
+                Err(error) => {
+                    format!("\n[terminal exited: failed to lock child handle: {error}]\n")
+                }
             },
             None => "\n[terminal exited]\n".to_string(),
         };
@@ -482,7 +488,10 @@ fn create_tmux_terminal_runtime(
         );
         let state: State<AppState> = state_handle.state();
         if let Ok(Some((binding_workspace_id, session_id))) =
-            crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+            crate::services::session_runtime::session_runtime_binding_for_terminal(
+                terminal_id,
+                state,
+            )
         {
             if binding_workspace_id == workspace_id_out {
                 let _ = crate::services::session_runtime::remove_terminal_runtime_registration(
@@ -493,7 +502,8 @@ fn create_tmux_terminal_runtime(
             }
         }
         if runtime_out.persist_workspace_terminal {
-            let _ = set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
+            let _ =
+                set_workspace_terminal_recoverable(state, &workspace_id_out, terminal_id, false);
         }
         sync_bound_terminal_runtime_state(
             &workspace_id_out,

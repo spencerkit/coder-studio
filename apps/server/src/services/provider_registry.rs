@@ -120,9 +120,7 @@ pub(crate) fn provider_boot_command(
         Some(id) => adapter.build_resume(settings, target, id)?,
         None => adapter.build_start(settings, target)?,
     };
-    Ok(crate::services::session_runtime::launch_spec_display_command(
-        &launch.launch_spec,
-    ))
+    Ok(crate::services::session_runtime::launch_spec_display_command(&launch.launch_spec))
 }
 
 #[cfg(test)]

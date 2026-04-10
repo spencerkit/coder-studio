@@ -922,14 +922,10 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        app.state()
-            .session_runtime_bindings
-            .lock()
-            .unwrap()
-            .insert(
-                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
-                99,
-            );
+        app.state().session_runtime_bindings.lock().unwrap().insert(
+            crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+            99,
+        );
         app.state()
             .terminal_runtime_bindings
             .lock()
@@ -938,18 +934,16 @@ mod tests {
                 99,
                 crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
             );
-        app.state()
-            .terminal_runtimes
-            .lock()
-            .unwrap()
-            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            crate::services::terminal_gateway::TerminalRuntime::new(
                 "runtime-missing".to_string(),
                 workspace_id.clone(),
                 created.id.clone(),
                 "claude".to_string(),
                 "missing-tmux-session".to_string(),
                 "%1".to_string(),
-            ));
+            ),
+        );
         let mut rx = app.state().transport_events.subscribe();
 
         sync_session_runtime_state(
@@ -984,14 +978,10 @@ mod tests {
             app.state(),
         )
         .unwrap();
-        app.state()
-            .session_runtime_bindings
-            .lock()
-            .unwrap()
-            .insert(
-                crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
-                77,
-            );
+        app.state().session_runtime_bindings.lock().unwrap().insert(
+            crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
+            77,
+        );
         app.state()
             .terminal_runtime_bindings
             .lock()
@@ -1000,18 +990,16 @@ mod tests {
                 77,
                 crate::services::session_runtime::session_runtime_key(&workspace_id, &created.id),
             );
-        app.state()
-            .terminal_runtimes
-            .lock()
-            .unwrap()
-            .insert(crate::services::terminal_gateway::TerminalRuntime::new(
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            crate::services::terminal_gateway::TerminalRuntime::new(
                 "runtime-missing-snapshot".to_string(),
                 workspace_id.clone(),
                 created.id.clone(),
                 "claude".to_string(),
                 "missing-tmux-session".to_string(),
                 "%1".to_string(),
-            ));
+            ),
+        );
 
         let snapshot = workspace_snapshot(workspace_id, app.state()).unwrap();
         let session = snapshot

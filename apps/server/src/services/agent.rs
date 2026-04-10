@@ -253,8 +253,14 @@ pub(crate) fn agent_start(
         let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
         agents.insert(key.clone(), runtime.clone());
     }
-    let _ =
-        sync_session_runtime_state(state, &workspace_id, &session_id, SessionStatus::Idle, true, None);
+    let _ = sync_session_runtime_state(
+        state,
+        &workspace_id,
+        &session_id,
+        SessionStatus::Idle,
+        true,
+        None,
+    );
 
     emit_agent(
         &app,

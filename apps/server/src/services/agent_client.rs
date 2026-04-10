@@ -138,7 +138,8 @@ fn execute_one_shot_process(
         drop(child.stdin.take());
     }
 
-    let output = wait_with_hard_timeout(child, prompt_config.timeout, stdout_reader, stderr_reader)?;
+    let output =
+        wait_with_hard_timeout(child, prompt_config.timeout, stdout_reader, stderr_reader)?;
     format_process_result(output)
 }
 

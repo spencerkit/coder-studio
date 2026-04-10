@@ -980,10 +980,18 @@ mod tests {
         with_codex_home(&codex_home, || {
             assert!(!adapter().hooks_installed());
 
-            fs::write(config_dir.join("config.toml"), "[features]\ncodex_hooks = true\n").unwrap();
+            fs::write(
+                config_dir.join("config.toml"),
+                "[features]\ncodex_hooks = true\n",
+            )
+            .unwrap();
             assert!(adapter().hooks_installed());
 
-            fs::write(config_dir.join("config.toml"), "[features]\ncodex_hooks = false\n").unwrap();
+            fs::write(
+                config_dir.join("config.toml"),
+                "[features]\ncodex_hooks = false\n",
+            )
+            .unwrap();
             assert!(!adapter().hooks_installed());
         });
 

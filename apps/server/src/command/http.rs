@@ -3594,7 +3594,10 @@ mod tests {
             .by_session(&workspace_id, &created_id)
             .cloned()
             .expect("terminal runtime should be registered");
-        assert_eq!(started.terminal_runtime_id, Some(runtime_binding.runtime_id));
+        assert_eq!(
+            started.terminal_runtime_id,
+            Some(runtime_binding.runtime_id)
+        );
     }
 
     #[test]
