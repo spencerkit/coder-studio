@@ -104,6 +104,14 @@ function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function printRuntimeWarnings(warnings) {
+  if (!Array.isArray(warnings) || warnings.length === 0) return;
+  for (const warning of warnings) {
+    if (!warning) continue;
+    console.warn(`warning: ${warning}`);
+  }
+}
+
 function printHelp() {
   console.log(`Coder Studio CLI
 
@@ -1365,10 +1373,13 @@ export async function runCli(argv = process.argv.slice(2)) {
       if (flags.json) {
         printJson(result);
       } else if (!flags.foreground) {
+        printRuntimeWarnings(result.warnings);
         console.log(result.changed ? 'runtime is ready' : 'runtime already running');
         console.log(`endpoint: ${result.endpoint}`);
         console.log(`pid: ${result.pid ?? 'n/a'}`);
         console.log(`logPath: ${result.logPath}`);
+      } else {
+        printRuntimeWarnings(result.warnings);
       }
       return result.status === 'failed' ? EXIT_FAILURE : EXIT_SUCCESS;
     }
@@ -1389,6 +1400,7 @@ export async function runCli(argv = process.argv.slice(2)) {
       });
       if (flags.json) printJson(result);
       else {
+        printRuntimeWarnings(result.warnings);
         console.log('coder-studio restarted');
         console.log(`endpoint: ${result.endpoint}`);
         console.log(`pid: ${result.pid ?? 'n/a'}`);

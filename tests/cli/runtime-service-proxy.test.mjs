@@ -212,3 +212,54 @@ test('openRuntime starts the managed service before opening the endpoint', async
   assert.equal(result.managed, true);
   assert.equal(result.status, 'running');
 });
+
+test('startRuntime falls back to direct startup with warning when systemd start fails', async () => {
+  const calls = [];
+
+  const result = await startRuntime({
+    autoInstallManagedService: true,
+    __testOverrides: {
+      getServiceStatus: async (options) => (
+        options.noService
+          ? createManagedServiceState({ active: true })
+          : createManagedServiceState({ active: false })
+      ),
+      startService: async () => {
+        calls.push('service-start');
+        throw new Error('systemctl_user_start_failed');
+      },
+      fetchHealth: async () => ({ version: '0.2.6' }),
+    },
+  });
+
+  assert.deepEqual(calls, ['service-start']);
+  assert.equal(result.status, 'running');
+  assert.equal(typeof result.managed, 'boolean');
+  assert.equal(Array.isArray(result.warnings), true);
+  assert.match(result.warnings[0], /systemd start failed/);
+});
+
+test('restartRuntime falls back to direct startup with warning when systemd restart fails', async () => {
+  const calls = [];
+
+  const result = await restartRuntime({
+    __testOverrides: {
+      getServiceStatus: async (options) => (
+        options.noService
+          ? createManagedServiceState({ active: true })
+          : createManagedServiceState({ active: true })
+      ),
+      restartService: async () => {
+        calls.push('service-restart');
+        throw new Error('systemctl_user_restart_failed');
+      },
+      fetchHealth: async () => ({ version: '0.2.6' }),
+    },
+  });
+
+  assert.deepEqual(calls, ['service-restart']);
+  assert.equal(result.status, 'running');
+  assert.equal(typeof result.managed, 'boolean');
+  assert.equal(Array.isArray(result.warnings), true);
+  assert.match(result.warnings[0], /systemd restart failed/);
+});

@@ -37,7 +37,8 @@ function resolveOptions(input = {}) {
     timeoutMs,
     tailLines: Number.isFinite(tailLines) && tailLines > 0 ? tailLines : DEFAULT_LOG_TAIL_LINES,
     openCommand: input.openCommand || null,
-    env
+    env,
+    startupWarnings: Array.isArray(input.startupWarnings) ? input.startupWarnings : [],
   };
 }
 
@@ -78,6 +79,35 @@ async function isManagedServiceInstalled(options) {
 
 function managedServiceCanAutoInstall(status) {
   return Boolean(status) && status.supported !== false;
+}
+
+function isLinuxSystemdManagedService(status) {
+  const platform = status?.serviceState?.platform || status?.platform;
+  return platform === 'linux-systemd-user';
+}
+
+function shouldFallbackAfterManagedServiceError(status, error) {
+  if (isLinuxSystemdManagedService(status)) {
+    return true;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  return /systemd|systemctl/i.test(detail);
+}
+
+function buildSystemdFallbackWarning(action, error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `systemd ${action} failed; falling back to direct runtime startup. detail: ${detail}`;
+}
+
+function mergeRuntimeWarnings(result, options) {
+  const pendingWarnings = Array.isArray(options?.startupWarnings) ? options.startupWarnings.filter(Boolean) : [];
+  if (pendingWarnings.length === 0) {
+    return result;
+  }
+  return {
+    ...result,
+    warnings: [...pendingWarnings, ...(Array.isArray(result?.warnings) ? result.warnings : [])],
+  };
 }
 
 async function startManagedService(options) {
@@ -312,10 +342,10 @@ export async function startRuntime(input = {}) {
   const options = resolveOptions(input);
   const current = await getStatus(options);
   if (isRuntimeActive(current)) {
-    return {
+    return mergeRuntimeWarnings({
       changed: false,
       ...current
-    };
+    }, options);
   }
 
   if (!options.noService) {
@@ -325,17 +355,43 @@ export async function startRuntime(input = {}) {
       && managedServiceCanAutoInstall(managedService)
       && (!managedService.installed || managedService.stale)
     ) {
-      await installManagedService(options);
-      managedService = await getManagedServiceStatus(options);
+      try {
+        await installManagedService(options);
+        managedService = await getManagedServiceStatus(options);
+      } catch (error) {
+        if (!shouldFallbackAfterManagedServiceError(managedService, error)) {
+          throw error;
+        }
+        const warning = buildSystemdFallbackWarning('install', error);
+        return startRuntime({
+          ...options,
+          noService: true,
+          autoInstallManagedService: false,
+          startupWarnings: [...options.startupWarnings, warning],
+        });
+      }
     }
 
     if (managedService?.installed && !managedService.stale) {
-      const startResult = await startManagedService(options);
-      await waitForReady(options.endpoint, null, options.timeoutMs, options);
-      return {
-        changed: startResult?.changed ?? true,
-        ...(await getStatus(options))
-      };
+      try {
+        const startResult = await startManagedService(options);
+        await waitForReady(options.endpoint, null, options.timeoutMs, options);
+        return mergeRuntimeWarnings({
+          changed: startResult?.changed ?? true,
+          ...(await getStatus(options))
+        }, options);
+      } catch (error) {
+        if (!shouldFallbackAfterManagedServiceError(managedService, error)) {
+          throw error;
+        }
+        const warning = buildSystemdFallbackWarning('start', error);
+        return startRuntime({
+          ...options,
+          noService: true,
+          autoInstallManagedService: false,
+          startupWarnings: [...options.startupWarnings, warning],
+        });
+      }
     }
   }
 
@@ -384,14 +440,14 @@ export async function startRuntime(input = {}) {
     try {
       const { code, signal } = await Promise.race([exitPromise, errorPromise]);
       await cleanupIfManagedPid(options, child.pid);
-      return {
+      return mergeRuntimeWarnings({
         changed: true,
         status: code === 0 ? 'stopped' : 'failed',
         endpoint: options.endpoint,
         pid: child.pid,
         exitCode: code,
         signal
-      };
+      }, options);
     } finally {
       process.off('SIGINT', forward);
       process.off('SIGTERM', forward);
@@ -424,7 +480,7 @@ export async function startRuntime(input = {}) {
       errorPromise
     ]);
     await writeStateForPid(options, bundle, child.pid);
-    return {
+    return mergeRuntimeWarnings({
       changed: true,
       status: 'running',
       endpoint: options.endpoint,
@@ -432,7 +488,7 @@ export async function startRuntime(input = {}) {
       logPath: options.logPath,
       stateDir: options.stateDir,
       dataDir: options.dataDir
-    };
+    }, options);
   } catch (error) {
     await Promise.allSettled([
       terminateProcess(child.pid, { force: false }),
@@ -444,7 +500,7 @@ export async function startRuntime(input = {}) {
 
 export async function stopRuntime(input = {}) {
   const options = resolveOptions(input);
-  if (await isManagedServiceInstalled(options)) {
+  if (!options.noService && await isManagedServiceInstalled(options)) {
     const current = await getStatus(options);
     if (!isRuntimeActive(current)) {
       return {
@@ -503,37 +559,66 @@ export async function stopRuntime(input = {}) {
 
 export async function restartRuntime(input = {}) {
   const options = resolveOptions(input);
-  let managedService = await getManagedServiceStatus(options);
-  if (
-    options.autoInstallManagedService
-    && managedServiceCanAutoInstall(managedService)
-    && (!managedService.installed || managedService.stale)
-  ) {
-    const current = await getStatus(options);
-    if (isRuntimeActive(current) && !current.managed) {
-      await stopRuntime(options);
+  if (!options.noService) {
+    let managedService = await getManagedServiceStatus(options);
+    if (
+      options.autoInstallManagedService
+      && managedServiceCanAutoInstall(managedService)
+      && (!managedService.installed || managedService.stale)
+    ) {
+      try {
+        const current = await getStatus(options);
+        if (isRuntimeActive(current) && !current.managed) {
+          await stopRuntime(options);
+        }
+        const installResult = await installManagedService(options);
+        managedService = await getManagedServiceStatus(options);
+        const startResult = await startManagedService(options);
+        await waitForReady(options.endpoint, null, options.timeoutMs, options);
+        return mergeRuntimeWarnings({
+          changed: Boolean((installResult?.changed ?? true) || (startResult?.changed ?? true)),
+          ...(await getStatus(options))
+        }, options);
+      } catch (error) {
+        if (!shouldFallbackAfterManagedServiceError(managedService, error)) {
+          throw error;
+        }
+        const warning = buildSystemdFallbackWarning('install/start', error);
+        return restartRuntime({
+          ...options,
+          noService: true,
+          autoInstallManagedService: false,
+          startupWarnings: [...options.startupWarnings, warning],
+        });
+      }
     }
-    const installResult = await installManagedService(options);
-    managedService = await getManagedServiceStatus(options);
-    const startResult = await startManagedService(options);
-    await waitForReady(options.endpoint, null, options.timeoutMs, options);
-    return {
-      changed: Boolean((installResult?.changed ?? true) || (startResult?.changed ?? true)),
-      ...(await getStatus(options))
-    };
+
+    if (managedService?.installed && !managedService.stale) {
+      try {
+        const restartResult = await restartManagedService(options);
+        await waitForReady(options.endpoint, null, options.timeoutMs, options);
+        return mergeRuntimeWarnings({
+          changed: restartResult?.changed ?? true,
+          ...(await getStatus(options))
+        }, options);
+      } catch (error) {
+        if (!shouldFallbackAfterManagedServiceError(managedService, error)) {
+          throw error;
+        }
+        const warning = buildSystemdFallbackWarning('restart', error);
+        return restartRuntime({
+          ...options,
+          noService: true,
+          autoInstallManagedService: false,
+          startupWarnings: [...options.startupWarnings, warning],
+        });
+      }
+    }
   }
 
-  if (managedService?.installed && !managedService.stale) {
-    const restartResult = await restartManagedService(options);
-    await waitForReady(options.endpoint, null, options.timeoutMs, options);
-    return {
-      changed: restartResult?.changed ?? true,
-      ...(await getStatus(options))
-    };
-  }
-
-  await stopRuntime(input);
-  return startRuntime(input);
+  await stopRuntime(options);
+  const started = await startRuntime(options);
+  return mergeRuntimeWarnings(started, options);
 }
 
 export async function openRuntime(input = {}) {
