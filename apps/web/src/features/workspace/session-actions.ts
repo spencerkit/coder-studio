@@ -175,11 +175,13 @@ export const createWorkspaceSessionActions = ({
         lastActiveAt: Date.now(),
       };
       const remainingSessions = tab.sessions.filter((session) => session.id !== sessionId);
+      const targetPaneId = findPaneIdBySessionId(tab.paneLayout, sessionId) ?? tab.activePaneId;
       tabSnapshot = {
         ...tab,
         sessions: [preparedSession, ...remainingSessions],
         activeSessionId: preparedSession.id,
-        paneLayout: replacePaneNode(tab.paneLayout, tab.activePaneId, (leaf) => ({
+        activePaneId: targetPaneId,
+        paneLayout: replacePaneNode(tab.paneLayout, targetPaneId, (leaf) => ({
           ...leaf,
           sessionId: preparedSession.id,
         })),

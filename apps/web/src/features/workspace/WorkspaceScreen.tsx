@@ -1989,6 +1989,17 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }),
       }));
     }
+    const latestTabBeforeAttach = stateRef.current.tabs.find((item) => item.id === tab.id);
+    if (latestTabBeforeAttach && canMutateWorkspace(latestTabBeforeAttach.controller, "switch_pane")) {
+      const viewPatch = createWorkspaceViewPatchFromTab(latestTabBeforeAttach);
+      workspaceViewPersistSchedulerRef.current?.cancel(latestTabBeforeAttach.id);
+      rememberWorkspaceViewPatchBaseline(latestTabBeforeAttach.id, viewPatch);
+      noteWorkspaceViewPersistRequest(latestTabBeforeAttach.id, viewPatch);
+      await withServiceFallback(
+        () => updateWorkspaceView(latestTabBeforeAttach.id, viewPatch, latestTabBeforeAttach.controller),
+        null,
+      );
+    }
     const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
       tab.id,
       deviceId,

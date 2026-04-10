@@ -1297,6 +1297,48 @@ test('draft pane restore only shows current workspace history and restores into 
   }
 });
 
+test('split pane keeps both panels visible after starting a new draft session', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-split-new-session-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const paneCard = page.locator('.agent-pane-card').first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Split Vertically').click();
+    await expect.poll(async () => page.locator('.agent-pane-card').count()).toBeGreaterThan(1);
+
+    const draftPaneCard = page.locator('.agent-pane-card').last();
+    await draftPaneCard.click();
+    const startButton = draftPaneCard.locator('[data-testid^="draft-start-claude-"]').first();
+    await expect(startButton).toBeVisible();
+
+    await clearRpcCalls(page);
+    await startButton.click();
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'session_runtime_start').length;
+    }).toBeGreaterThan(0);
+
+    await expect(page.locator('.agent-pane-xterm').first()).toBeVisible();
+    await expect(page.locator('.agent-pane-card')).toHaveCount(2);
+    await expect.poll(async () => page.locator('.agent-pane-card').evaluateAll((nodes) =>
+      new Set(
+        nodes
+          .map((node) => node.getAttribute('data-session-id') ?? '')
+          .filter(Boolean),
+      ).size
+    )).toBe(2);
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
 test('closing a pane calls close_session instead of archive_session', async ({ page }) => {
   const workspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-close-session-'));
 
