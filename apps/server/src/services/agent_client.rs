@@ -123,6 +123,20 @@ fn execute_one_shot_process(
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    eprintln!("[supervisor] run_one_shot: program={} args={:?} cwd={} PATH={}", 
+        command_label, cmd.get_args().collect::<Vec<_>>(), cwd, path_env);
+    eprintln!("[supervisor] run_one_shot: testing which codex...");
+    let test_out = std::process::Command::new("/bin/sh")
+        .args(["-lc", "which codex 2>&1"])
+        .env("PATH", &path_env)
+        .output();
+    if let Ok(out) = test_out {
+        eprintln!("[supervisor] which codex via sh: stdout={} stderr={}", 
+            String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    } else {
+        eprintln!("[supervisor] which codex via sh failed: {:?}", test_out.err());
+    }
     let mut child = cmd
         .spawn()
         .map_err(|error| classify_spawn_error(command_label, error))?;

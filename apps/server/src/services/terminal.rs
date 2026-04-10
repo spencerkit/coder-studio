@@ -629,7 +629,7 @@ pub(crate) fn terminal_write(
 ) -> Result<(), String> {
     let decorated_input = match origin {
         TerminalWriteOrigin::User => input,
-        TerminalWriteOrigin::Supervisor => format!("# [supervisor]\n{}", input),
+        TerminalWriteOrigin::Supervisor => format!("# [supervisor]\r{}", input),
     };
     let key = terminal_key(&workspace_id, terminal_id);
     let terms = state.terminals.lock().map_err(|e| e.to_string())?;
@@ -853,7 +853,7 @@ mod tests {
         state.terminal_write_log.lock().unwrap().push((
             "workspace-a".to_string(),
             77,
-            "# [supervisor]\nShip v1\r".to_string(),
+            "# [supervisor]\rShip v1\r".to_string(),
             TerminalWriteOrigin::Supervisor,
         ));
 
@@ -861,7 +861,7 @@ mod tests {
             crate::services::supervisor::take_terminal_writes_for_test(state, "workspace-a", 77);
 
         assert_eq!(writes.len(), 1);
-        assert_eq!(writes[0].0, "# [supervisor]\nShip v1\r");
+        assert_eq!(writes[0].0, "# [supervisor]\rShip v1\r");
         assert_eq!(writes[0].1, TerminalWriteOrigin::Supervisor);
     }
 }

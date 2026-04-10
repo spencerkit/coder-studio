@@ -419,17 +419,29 @@ pub(crate) fn handle_supervisor_turn_completed(
     let supervisor = load_supervisor_view_state(state, workspace_id)?;
     let binding = match binding_for_session(&supervisor, session_id) {
         Ok(binding) => binding,
-        Err(error) if error == "supervisor_binding_not_found" => return Ok(()),
-        Err(error) => return Err(error),
+        Err(error) if error == "supervisor_binding_not_found" => {
+            eprintln!("[supervisor] handle_supervisor_turn_completed: no binding for session {}, skipping", session_id);
+            return Ok(());
+        }
+        Err(error) => {
+            eprintln!("[supervisor] handle_supervisor_turn_completed: binding error: {}", error);
+            return Err(error);
+        }
     };
 
+    eprintln!("[supervisor] handle_supervisor_turn_completed: binding status={:?} auto_inject={} source_turn={}",
+        binding.status, binding.auto_inject_enabled, source_turn_id);
     if binding.status != WorkspaceSupervisorStatus::Idle || !binding.auto_inject_enabled {
+        eprintln!("[supervisor] handle_supervisor_turn_completed: skipped - not idle or auto_inject disabled");
         return Ok(());
     }
-    if latest_cycle_for_session(&supervisor, session_id)
-        .is_some_and(|cycle| cycle.source_turn_id == source_turn_id)
-    {
-        return Ok(());
+    if let Some(latest_cycle) = latest_cycle_for_session(&supervisor, session_id) {
+        if latest_cycle.source_turn_id == source_turn_id
+            && matches!(latest_cycle.status, WorkspaceSupervisorCycleStatus::Evaluating)
+        {
+            eprintln!("[supervisor] handle_supervisor_turn_completed: skipped - active cycle already exists for source_turn {}", source_turn_id);
+            return Ok(());
+        }
     }
 
     let started_at = now_ts();

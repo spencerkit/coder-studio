@@ -52,6 +52,8 @@ test('writeServiceLauncher creates a launcher and bundle manifest', async () => 
     const manifest = JSON.parse(await fs.readFile(result.bundleManifestPath, 'utf8'));
 
     assert.match(launcher, /^#!\/bin\/sh/m);
+    assert.match(launcher, /NODE_BIN_DIR=/);
+    assert.match(launcher, /export PATH="\$NODE_BIN_DIR:\$PATH"/);
     assert.match(launcher, /export CODER_STUDIO_HOST='127\.0\.0\.1'/);
     assert.match(launcher, /export CODER_STUDIO_PORT='41033'/);
     assert.match(launcher, /export CODER_STUDIO_DATA_DIR='/);

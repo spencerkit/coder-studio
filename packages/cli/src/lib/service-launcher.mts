@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import {
   resolveServiceBundleManifestPath,
   resolveServiceDir,
@@ -15,6 +16,7 @@ export async function writeServiceLauncher(input) {
   const bundleManifestPath = resolveServiceBundleManifestPath(input.stateDir);
   const manifestPathLiteral = shellQuote(bundleManifestPath);
   const nodeBinaryLiteral = shellQuote(process.execPath);
+  const nodeBinDirLiteral = shellQuote(path.dirname(process.execPath));
 
   await fs.mkdir(serviceDir, { recursive: true });
   await fs.writeFile(
@@ -34,6 +36,8 @@ export async function writeServiceLauncher(input) {
 set -eu
 BUNDLE_MANIFEST_PATH=${manifestPathLiteral}
 NODE_BIN=${nodeBinaryLiteral}
+NODE_BIN_DIR=${nodeBinDirLiteral}
+export PATH="$NODE_BIN_DIR:$PATH"
 export CODER_STUDIO_HOST=${shellQuote(input.host)}
 export CODER_STUDIO_PORT=${shellQuote(String(input.port))}
 export CODER_STUDIO_DATA_DIR=${shellQuote(input.dataDir)}

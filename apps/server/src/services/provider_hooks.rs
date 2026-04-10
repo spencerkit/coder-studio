@@ -174,8 +174,10 @@ pub(crate) fn process_provider_hook_payload(
         &normalized.data,
     );
 
+    eprintln!("[supervisor] process_provider_hook_payload: kind={} workspace={} session={}", 
+        normalized.kind, normalized.workspace_id, normalized.session_id);
     if normalized.kind == "turn_completed" {
-        let _ = crate::services::supervisor::handle_supervisor_turn_completed(
+        let result = crate::services::supervisor::handle_supervisor_turn_completed(
             app,
             &normalized.workspace_id,
             &normalized.session_id,
@@ -183,6 +185,7 @@ pub(crate) fn process_provider_hook_payload(
             &latest_user_input,
             &normalized.data,
         );
+        eprintln!("[supervisor] process_provider_hook_payload: handle_supervisor_turn_completed result={:?}", result);
     }
 
     Ok(normalized)
