@@ -5,7 +5,7 @@ import type {
   TerminalCompatibilityMode,
 } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
-import { AgentSplitHorizontalIcon, AgentSplitVerticalIcon, BadgeCheckIcon, CirclePauseIcon, HeaderCloseIcon, MessageSquareIcon, PlayIcon, RefreshIcon, SquareIcon } from "../../components/icons";
+import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, BadgeCheckIcon, CirclePauseIcon, HeaderCloseIcon, MessageSquareIcon, PlayIcon, RefreshIcon, SquareIcon } from "../../components/icons";
 import { ShellTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
@@ -36,6 +36,7 @@ type AgentWorkspaceFeatureProps = {
   onResumeSupervisor: (sessionId: string) => void;
   onDisableSupervisor: (sessionId: string) => void;
   onRetrySupervisor: (sessionId: string) => void;
+  onTriggerSupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -68,6 +69,7 @@ type AgentPaneLeafProps = {
   onResumeSupervisor: (sessionId: string) => void;
   onDisableSupervisor: (sessionId: string) => void;
   onRetrySupervisor: (sessionId: string) => void;
+  onTriggerSupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -98,6 +100,7 @@ const AgentPaneLeaf = memo(({
   onResumeSupervisor,
   onDisableSupervisor,
   onRetrySupervisor,
+  onTriggerSupervisor,
   setAgentTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
@@ -192,6 +195,9 @@ const AgentPaneLeaf = memo(({
   const handleDisableSupervisor = useCallback(() => {
     onDisableSupervisor(session.id);
   }, [onDisableSupervisor, session.id]);
+  const handleTriggerSupervisor = useCallback(() => {
+    onTriggerSupervisor(session.id);
+  }, [onTriggerSupervisor, session.id]);
 
   return (
     <section
@@ -270,6 +276,15 @@ const AgentPaneLeaf = memo(({
                         <RefreshIcon />
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      className="pane-action split"
+                      onClick={handleTriggerSupervisor}
+                      title="Trigger supervisor"
+                      aria-label="Trigger supervisor"
+                    >
+                      <AgentSendIcon />
+                    </button>
                     <button
                       type="button"
                       className="pane-action close"
@@ -434,6 +449,7 @@ export const AgentWorkspaceFeature = ({
   onResumeSupervisor,
   onDisableSupervisor,
   onRetrySupervisor,
+  onTriggerSupervisor,
   setAgentTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
@@ -483,6 +499,7 @@ export const AgentWorkspaceFeature = ({
         onResumeSupervisor={onResumeSupervisor}
         onDisableSupervisor={onDisableSupervisor}
         onRetrySupervisor={onRetrySupervisor}
+        onTriggerSupervisor={onTriggerSupervisor}
         setAgentTerminalRef={setAgentTerminalRef}
         onAgentTerminalData={onAgentTerminalData}
         onAgentTerminalSize={onAgentTerminalSize}

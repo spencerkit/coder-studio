@@ -85,6 +85,103 @@ test("workspace snapshot maps supervisor binding onto the active session", () =>
   assert.match(tab.sessions[0]?.supervisor?.latestCycle?.supervisorReply ?? "", /next message/);
 });
 
+test("workspace snapshot clears stale supervisor state when the binding is removed", () => {
+  const existingTab = createTabFromWorkspaceSnapshot({
+    workspace: {
+      workspace_id: "ws-1",
+      title: "Workspace 1",
+      project_path: "/tmp/ws-1",
+      source_kind: "local",
+      source_value: "/tmp/ws-1",
+      git_url: null,
+      target: { type: "native" },
+      idle_policy: { enabled: true, idle_minutes: 10, max_active: 3, pressure: true },
+    },
+    sessions: [{
+      id: "slot-primary",
+      title: "Session 1",
+      status: "idle",
+      mode: "branch",
+      provider: "claude",
+      auto_feed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      last_active_at: 1,
+      resume_id: null,
+      unavailable_reason: null,
+    }],
+    view_state: {
+      active_session_id: "slot-primary",
+      active_pane_id: "pane-slot-primary",
+      active_terminal_id: "",
+      pane_layout: { type: "leaf", id: "pane-slot-primary", sessionId: "slot-primary" },
+      file_preview: { path: "", content: "", mode: "preview", originalContent: "", modifiedContent: "", dirty: false },
+      session_bindings: [],
+      supervisor: {
+        bindings: [{
+          session_id: "slot-primary",
+          provider: "claude",
+          objective_text: "Keep using xterm",
+          objective_prompt: "You are the supervisor",
+          objective_version: 1,
+          status: "idle",
+          auto_inject_enabled: true,
+          pending_objective_text: null,
+          pending_objective_prompt: null,
+          pending_objective_version: null,
+          created_at: 1,
+          updated_at: 2,
+        }],
+        cycles: [],
+      },
+    },
+    terminals: [],
+  }, "en", appSettingsFixture(), undefined);
+
+  const refreshedTab = createTabFromWorkspaceSnapshot({
+    workspace: {
+      workspace_id: "ws-1",
+      title: "Workspace 1",
+      project_path: "/tmp/ws-1",
+      source_kind: "local",
+      source_value: "/tmp/ws-1",
+      git_url: null,
+      target: { type: "native" },
+      idle_policy: { enabled: true, idle_minutes: 10, max_active: 3, pressure: true },
+    },
+    sessions: [{
+      id: "slot-primary",
+      title: "Session 1",
+      status: "idle",
+      mode: "branch",
+      provider: "claude",
+      auto_feed: true,
+      queue: [],
+      messages: [],
+      unread: 0,
+      last_active_at: 2,
+      resume_id: null,
+      unavailable_reason: null,
+    }],
+    view_state: {
+      active_session_id: "slot-primary",
+      active_pane_id: "pane-slot-primary",
+      active_terminal_id: "",
+      pane_layout: { type: "leaf", id: "pane-slot-primary", sessionId: "slot-primary" },
+      file_preview: { path: "", content: "", mode: "preview", originalContent: "", modifiedContent: "", dirty: false },
+      session_bindings: [],
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
+    },
+    terminals: [],
+  }, "en", appSettingsFixture(), existingTab);
+
+  assert.equal(refreshedTab.sessions[0]?.supervisor, undefined);
+});
+
 test("materializing a draft session creates a backend session via createSessionRequest", () => {
   const source = readFileSync(
     new URL("../apps/web/src/features/workspace/session-actions.ts", import.meta.url),

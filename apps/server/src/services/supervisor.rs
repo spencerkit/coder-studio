@@ -1,4 +1,5 @@
 use crate::*;
+use crate::infra::time::now_ts_ms;
 
 fn load_supervisor_view_state(
     state: State<'_, AppState>,
@@ -98,6 +99,68 @@ fn binding_for_session(
         .find(|binding| binding.session_id == session_id)
         .cloned()
         .ok_or_else(|| "supervisor_binding_not_found".to_string())
+}
+
+fn latest_user_input_from_session(session: &SessionInfo) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, SessionMessageRole::User))
+        .map(|message| message.content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .unwrap_or_default()
+}
+
+fn latest_agent_output_from_session(session: &SessionInfo) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, SessionMessageRole::Agent))
+        .map(|message| message.content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .unwrap_or_default()
+}
+
+fn latest_terminal_output_for_session(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let terminal_id = match state
+        .session_runtime_bindings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&crate::services::session_runtime::session_runtime_key(
+            workspace_id,
+            session_id,
+        ))
+        .copied()
+    {
+        Some(terminal_id) => terminal_id,
+        None => return Ok(None),
+    };
+    let runtime = state
+        .terminals
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&terminal_key(workspace_id, terminal_id))
+        .cloned();
+    Ok(runtime.and_then(|runtime| {
+        runtime
+            .output
+            .lock()
+            .ok()
+            .map(|output| output.trim().to_string())
+            .filter(|output| !output.is_empty())
+    }))
+}
+
+fn tail_text(value: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    let start = chars.len().saturating_sub(max_chars);
+    chars[start..].iter().collect()
 }
 
 fn apply_pending_or_active_objective(
@@ -352,6 +415,125 @@ fn build_supervisor_turn_prompt(
     )
 }
 
+fn execute_supervisor_cycle(
+    app: &AppHandle,
+    workspace_id: &str,
+    session_id: &str,
+    source_turn_id: &str,
+    latest_user_input: &str,
+    latest_agent_output: &str,
+    binding: WorkspaceSupervisorBinding,
+    final_status: WorkspaceSupervisorStatus,
+    skip_if_active_same_source_turn: bool,
+) -> Result<WorkspaceSupervisorCycle, String> {
+    let state: State<AppState> = app.state();
+    let supervisor = load_supervisor_view_state(state, workspace_id)?;
+    if skip_if_active_same_source_turn {
+        if let Some(latest_cycle) = latest_cycle_for_session(&supervisor, session_id) {
+            if latest_cycle.source_turn_id == source_turn_id
+                && matches!(latest_cycle.status, WorkspaceSupervisorCycleStatus::Evaluating)
+            {
+                eprintln!("[supervisor] execute_supervisor_cycle: skipped - active cycle already exists for source_turn {}", source_turn_id);
+                return Ok(latest_cycle.clone());
+            }
+        }
+    }
+
+    let started_at = now_ts();
+    let cycle_id = format!("supervisor-cycle-{started_at}");
+    let cycle = WorkspaceSupervisorCycle {
+        cycle_id: cycle_id.clone(),
+        session_id: session_id.to_string(),
+        source_turn_id: source_turn_id.to_string(),
+        objective_version: binding.objective_version,
+        supervisor_input: build_supervisor_turn_prompt(
+            &binding,
+            latest_user_input,
+            latest_agent_output,
+        ),
+        supervisor_reply: None,
+        injection_message_id: None,
+        status: WorkspaceSupervisorCycleStatus::Evaluating,
+        error: None,
+        started_at,
+        finished_at: None,
+    };
+    let evaluating_binding = WorkspaceSupervisorBinding {
+        status: WorkspaceSupervisorStatus::Evaluating,
+        updated_at: started_at,
+        ..binding.clone()
+    };
+    let evaluating = replace_cycle(
+        &replace_binding(&supervisor, evaluating_binding),
+        cycle.clone(),
+    );
+    save_supervisor_view_state(state, workspace_id, evaluating)?;
+
+    let reply = (|| -> Result<String, String> {
+        let (workspace_cwd, workspace_target) = workspace_access_context(state, workspace_id)?;
+        let settings = load_or_default_app_settings(state)?;
+        let adapter =
+            crate::services::provider_registry::resolve_provider_adapter(binding.provider.as_str())
+                .ok_or_else(|| format!("unknown_provider:{}", binding.provider.as_str()))?;
+        let launch = adapter.build_supervisor_invoke(&settings, &workspace_target)?;
+        crate::services::agent_client::run_one_shot_prompt(
+            &launch.launch_spec,
+            &workspace_cwd,
+            &launch.runtime_env,
+            &cycle.supervisor_input,
+        )
+    })();
+
+    let reply = match reply {
+        Ok(reply) => reply,
+        Err(error) => {
+            let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
+            return Err(error);
+        }
+    };
+    let trimmed_reply = reply.trim();
+    if trimmed_reply.is_empty() {
+        let error = "supervisor_reply_empty".to_string();
+        let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
+        return Err(error);
+    }
+    let terminal_id = match session_terminal_id(workspace_id, session_id, state) {
+        Ok(terminal_id) => terminal_id,
+        Err(error) => {
+            let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
+            return Err(error);
+        }
+    };
+    if let Err(error) = crate::services::terminal::terminal_write(
+        workspace_id.to_string(),
+        terminal_id,
+        format!("{}\r", trimmed_reply),
+        TerminalWriteOrigin::Supervisor,
+        state,
+    ) {
+        let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
+        return Err(error);
+    }
+
+    let finished_at = now_ts();
+    let supervisor = load_supervisor_view_state(state, workspace_id)?;
+    let updated_binding =
+        finalize_binding_after_cycle(&binding, final_status, finished_at);
+    let completed_cycle = WorkspaceSupervisorCycle {
+        supervisor_reply: Some(trimmed_reply.to_string()),
+        injection_message_id: Some(format!("terminal:{terminal_id}")),
+        status: WorkspaceSupervisorCycleStatus::Injected,
+        finished_at: Some(finished_at),
+        ..cycle
+    };
+    let updated = replace_cycle(
+        &replace_binding(&supervisor, updated_binding),
+        completed_cycle.clone(),
+    );
+    save_supervisor_view_state(state, workspace_id, updated)?;
+    Ok(completed_cycle)
+}
+
 fn finalize_binding_after_cycle(
     binding: &WorkspaceSupervisorBinding,
     status: WorkspaceSupervisorStatus,
@@ -435,108 +617,63 @@ pub(crate) fn handle_supervisor_turn_completed(
         eprintln!("[supervisor] handle_supervisor_turn_completed: skipped - not idle or auto_inject disabled");
         return Ok(());
     }
-    if let Some(latest_cycle) = latest_cycle_for_session(&supervisor, session_id) {
-        if latest_cycle.source_turn_id == source_turn_id
-            && matches!(latest_cycle.status, WorkspaceSupervisorCycleStatus::Evaluating)
-        {
-            eprintln!("[supervisor] handle_supervisor_turn_completed: skipped - active cycle already exists for source_turn {}", source_turn_id);
-            return Ok(());
-        }
-    }
-
-    let started_at = now_ts();
-    let cycle_id = format!("supervisor-cycle-{started_at}");
-    let cycle = WorkspaceSupervisorCycle {
-        cycle_id: cycle_id.clone(),
-        session_id: session_id.to_string(),
-        source_turn_id: source_turn_id.to_string(),
-        objective_version: binding.objective_version,
-        supervisor_input: build_supervisor_turn_prompt(
-            &binding,
-            latest_user_input,
-            latest_agent_output,
-        ),
-        supervisor_reply: None,
-        injection_message_id: None,
-        status: WorkspaceSupervisorCycleStatus::Evaluating,
-        error: None,
-        started_at,
-        finished_at: None,
-    };
-    let evaluating_binding = WorkspaceSupervisorBinding {
-        status: WorkspaceSupervisorStatus::Evaluating,
-        updated_at: started_at,
-        ..binding.clone()
-    };
-    let evaluating = replace_cycle(
-        &replace_binding(&supervisor, evaluating_binding),
-        cycle.clone(),
-    );
-    save_supervisor_view_state(state, workspace_id, evaluating)?;
-
-    let reply = (|| -> Result<String, String> {
-        let (workspace_cwd, workspace_target) = workspace_access_context(state, workspace_id)?;
-        let settings = load_or_default_app_settings(state)?;
-        let adapter =
-            crate::services::provider_registry::resolve_provider_adapter(binding.provider.as_str())
-                .ok_or_else(|| format!("unknown_provider:{}", binding.provider.as_str()))?;
-        let launch = adapter.build_supervisor_invoke(&settings, &workspace_target)?;
-        crate::services::agent_client::run_one_shot_prompt(
-            &launch.launch_spec,
-            &workspace_cwd,
-            &launch.runtime_env,
-            &cycle.supervisor_input,
-        )
-    })();
-
-    let reply = match reply {
-        Ok(reply) => reply,
-        Err(error) => {
-            let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
-            return Err(error);
-        }
-    };
-    let trimmed_reply = reply.trim();
-    if trimmed_reply.is_empty() {
-        let error = "supervisor_reply_empty".to_string();
-        let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
-        return Err(error);
-    }
-    let terminal_id = match session_terminal_id(workspace_id, session_id, state) {
-        Ok(terminal_id) => terminal_id,
-        Err(error) => {
-            let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
-            return Err(error);
-        }
-    };
-    if let Err(error) = crate::services::terminal::terminal_write(
-        workspace_id.to_string(),
-        terminal_id,
-        format!("{}\r", trimmed_reply),
-        TerminalWriteOrigin::Supervisor,
-        state,
-    ) {
-        let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
-        return Err(error);
-    }
-
-    let finished_at = now_ts();
-    let supervisor = load_supervisor_view_state(state, workspace_id)?;
-    let updated_binding =
-        finalize_binding_after_cycle(&binding, WorkspaceSupervisorStatus::Idle, finished_at);
-    let completed_cycle = WorkspaceSupervisorCycle {
-        supervisor_reply: Some(trimmed_reply.to_string()),
-        injection_message_id: Some(format!("terminal:{terminal_id}")),
-        status: WorkspaceSupervisorCycleStatus::Injected,
-        finished_at: Some(finished_at),
-        ..cycle
-    };
-    let updated = replace_cycle(
-        &replace_binding(&supervisor, updated_binding),
-        completed_cycle,
-    );
-    save_supervisor_view_state(state, workspace_id, updated)?;
+    let _ = execute_supervisor_cycle(
+        app,
+        workspace_id,
+        session_id,
+        source_turn_id,
+        latest_user_input,
+        latest_agent_output,
+        binding,
+        WorkspaceSupervisorStatus::Idle,
+        true,
+    )?;
     Ok(())
+}
+
+pub(crate) fn trigger_supervisor_cycle(
+    app: &AppHandle,
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceSupervisorCycle, String> {
+    let session = crate::services::workspace::resolve_session_for_slot(state, workspace_id, session_id)?;
+    let supervisor = load_supervisor_view_state(state, workspace_id)?;
+    let binding = binding_for_session(&supervisor, session_id)?;
+    if matches!(
+        binding.status,
+        WorkspaceSupervisorStatus::Evaluating | WorkspaceSupervisorStatus::Injecting
+    ) {
+        return Err("supervisor_cycle_running".to_string());
+    }
+
+    let latest_user_input = latest_user_input_from_session(&session);
+    let latest_terminal_output = latest_terminal_output_for_session(workspace_id, session_id, state)?
+        .map(|output| tail_text(&output, 8000))
+        .unwrap_or_default();
+    let latest_agent_output = if latest_terminal_output.is_empty() {
+        latest_agent_output_from_session(&session)
+    } else {
+        latest_terminal_output
+    };
+    let restore_status = if binding.status == WorkspaceSupervisorStatus::Paused {
+        WorkspaceSupervisorStatus::Paused
+    } else {
+        WorkspaceSupervisorStatus::Idle
+    };
+    let source_turn_id = format!("manual:{}", now_ts_ms());
+
+    execute_supervisor_cycle(
+        app,
+        workspace_id,
+        session_id,
+        &source_turn_id,
+        &latest_user_input,
+        &latest_agent_output,
+        binding,
+        restore_status,
+        false,
+    )
 }
 
 #[cfg(test)]
@@ -1236,5 +1373,49 @@ mod tests {
             snapshot.view_state.supervisor.bindings[0].status,
             WorkspaceSupervisorStatus::Idle
         );
+    }
+
+    #[test]
+    fn manual_trigger_invokes_supervisor_and_injects_reply() {
+        let _guard = supervisor_reply_test_lock().lock().unwrap();
+        let app = test_app();
+        let workspace_id = launch_test_workspace(&app, "/tmp/supervisor-manual-trigger");
+        seed_slot_primary_session(&app, &workspace_id);
+        seed_supervisor_binding_for_test(
+            app.state(),
+            &workspace_id,
+            "slot-primary",
+            "Keep using xterm",
+        );
+        bind_terminal_for_session_for_test(app.state(), &workspace_id, "slot-primary", 77);
+        {
+            let mut live_sessions = app.state().live_sessions.lock().unwrap();
+            if let Some(session) = live_sessions.get_mut(&format!("{workspace_id}:slot-primary")) {
+                session.messages.push(SessionMessage {
+                    id: "user-1".to_string(),
+                    role: SessionMessageRole::User,
+                    content: "Please intervene now.".to_string(),
+                    time: "00:00".to_string(),
+                });
+                session.messages.push(SessionMessage {
+                    id: "agent-1".to_string(),
+                    role: SessionMessageRole::Agent,
+                    content: "I am waiting for guidance.".to_string(),
+                    time: "00:01".to_string(),
+                });
+            }
+        }
+        install_supervisor_adapter_reply_for_test("Send the next concrete shell command.");
+
+        let result = trigger_supervisor_cycle(&app, &workspace_id, "slot-primary", app.state());
+        clear_supervisor_adapter_reply_for_test();
+        let cycle = result.unwrap();
+
+        let writes = take_terminal_writes_for_test(app.state(), &workspace_id, 77);
+        assert_eq!(writes.len(), 1);
+        assert!(writes[0].0.contains("Send the next concrete shell command."));
+        assert_eq!(writes[0].1, TerminalWriteOrigin::Supervisor);
+        assert_eq!(cycle.status, WorkspaceSupervisorCycleStatus::Injected);
+        assert!(cycle.source_turn_id.starts_with("manual:"));
     }
 }

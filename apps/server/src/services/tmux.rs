@@ -249,7 +249,7 @@ fn send_tmux_literal(session_name: &str, input: &str) -> Result<(), String> {
             continue;
         }
         let output = tmux_command()
-            .args(["send-keys", "-t", session_name, "--", &line])
+            .args(["send-keys", "-l", "-t", session_name, "--", &line])
             .output()
             .map_err(|e| e.to_string())?;
         if !output.status.success() {

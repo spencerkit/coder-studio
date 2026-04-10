@@ -290,7 +290,13 @@ const attachSupervisorState = (
   viewState: WorkspaceSnapshot["view_state"] | WorkspaceRuntimeStateEvent["view_state"],
 ): Session => {
   const binding = viewState.supervisor.bindings.find((item) => item.session_id === session.id);
-  if (!binding) return session;
+  if (!binding) {
+    if (!session.supervisor) return session;
+    return {
+      ...session,
+      supervisor: undefined,
+    };
+  }
   const latestCycle = [...viewState.supervisor.cycles]
     .filter((cycle) => cycle.session_id === session.id)
     .sort((a, b) => b.started_at - a.started_at)[0];

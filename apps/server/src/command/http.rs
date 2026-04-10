@@ -1012,6 +1012,20 @@ fn dispatch_rpc(
             )
             .map_err(|e| rpc_bad_request(e.to_string()))
         }
+        "trigger_supervisor_cycle" => {
+            let req: SupervisorSessionRequest = parse_payload(payload).map_err(rpc_bad_request)?;
+            require_workspace_controller_mutation(app, &req.controller, authorized)?;
+            serde_json::to_value(
+                crate::services::supervisor::trigger_supervisor_cycle(
+                    app,
+                    &req.controller.workspace_id,
+                    &req.session_id,
+                    app.state(),
+                )
+                .map_err(rpc_bad_request)?,
+            )
+            .map_err(|e| rpc_bad_request(e.to_string()))
+        }
         "create_session" => {
             let req: SessionCreateRequest = parse_payload(payload).map_err(rpc_bad_request)?;
             require_workspace_controller_mutation(app, &req.controller, authorized)?;

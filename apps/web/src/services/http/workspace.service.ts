@@ -164,6 +164,15 @@ export const retrySupervisorCycle = (
   createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
 );
 
+export const triggerSupervisorCycle = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorCycle>(
+  "trigger_supervisor_cycle",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
 export const releaseWorkspaceControllerKeepalive = (
   workspaceId: string,
   controller: WorkspaceControllerState,

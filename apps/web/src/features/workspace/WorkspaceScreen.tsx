@@ -154,6 +154,7 @@ import {
   resumeSupervisorMode,
   disableSupervisorMode,
   retrySupervisorCycle,
+  triggerSupervisorCycle,
   activateWorkspace as activateWorkspaceRequest,
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
@@ -1364,6 +1365,14 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       sessionId,
       () => retrySupervisorCycle(activeTab.id, activeTab.controller, sessionId),
       "Failed to retry supervisor cycle.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onTriggerSupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => triggerSupervisorCycle(activeTab.id, activeTab.controller, sessionId),
+      "Failed to trigger supervisor cycle.",
     );
   }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
 
@@ -2817,6 +2826,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }}
       onRetrySupervisor={(sessionId) => {
         void onRetrySupervisor(sessionId);
+      }}
+      onTriggerSupervisor={(sessionId) => {
+        void onTriggerSupervisor(sessionId);
       }}
       setAgentTerminalRef={registerAgentTerminalRef}
       onAgentTerminalData={(paneId, data) => {
