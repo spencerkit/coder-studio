@@ -81,14 +81,14 @@ export const WorkspaceEditorPanel = ({
     </div>
 
     <div className={`workspace-code-body ${isExpanded ? "expanded" : "collapsed"}`}>
-      <div className="workspace-code-editor">{editorContent}</div>
+      <div className="workspace-code-editor">{sidebarContent}</div>
       {isExpanded && (
         <aside
           className="workspace-code-sidebar workspace-review-dock"
           data-testid="workspace-review-dock"
           data-view={codeSidebarView}
         >
-          {sidebarContent}
+          {editorContent}
         </aside>
       )}
     </div>
