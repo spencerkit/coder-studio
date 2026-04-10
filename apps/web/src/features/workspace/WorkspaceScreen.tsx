@@ -2659,11 +2659,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     staged: gitChangeGroups.find((group) => group.key === "staged")?.items.length ?? 0,
     untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
   };
-  const previewFileName = displayPathName(activeTab.filePreview.path);
   const previewPathLabel = resolveWorkspacePreviewPathLabel(
     activeTab.filePreview.path,
-    activeTab.project?.path,
-    previewFileName
+    activeTab.project?.path
   );
 
   const currentFileChangeCount = activeTab.git.changes;
@@ -2909,7 +2907,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       width={state.layout.rightWidth}
       codeSidebarView={codeSidebarView}
       previewPathLabel={previewPathLabel}
-      previewFileName={previewFileName}
       editorContent={workspaceEditorContent}
       fileParentLabel={fileParentLabel}
       sidebar={{

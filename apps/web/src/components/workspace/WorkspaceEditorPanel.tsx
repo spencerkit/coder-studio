@@ -1,14 +1,12 @@
 import type { KeyboardEventHandler, ReactNode, RefObject } from "react";
-import type { Locale, Translator } from "../../i18n";
+import type { Translator } from "../../i18n";
 import { SearchIcon } from "../icons";
 
 type WorkspaceEditorPanelProps = {
-  locale: Locale;
   isExpanded: boolean;
   width: number;
   codeSidebarView: "files" | "git";
   previewPathLabel: string;
-  previewFileName: string;
   fileSearchQuery: string;
   fileSearchActiveIndex: number;
   showFileSearchDropdown: boolean;
@@ -24,12 +22,10 @@ type WorkspaceEditorPanelProps = {
 };
 
 export const WorkspaceEditorPanel = ({
-  locale,
   isExpanded,
   width,
   codeSidebarView,
   previewPathLabel,
-  previewFileName,
   fileSearchQuery,
   fileSearchActiveIndex,
   showFileSearchDropdown,
@@ -49,13 +45,9 @@ export const WorkspaceEditorPanel = ({
   >
     <div className="workspace-code-header">
       <div className="workspace-panel-title-block workspace-code-title-block">
-        <span className="section-kicker">{t("codePanel")}</span>
-        <strong>{previewFileName || t("selectFileFromNavigator")}</strong>
-        {isExpanded && previewPathLabel ? (
-          <span className="workspace-code-current-path" title={previewPathLabel}>
-            {previewPathLabel}
-          </span>
-        ) : null}
+        <span className="workspace-code-current-path" title={previewPathLabel || t("selectFileFromNavigator")}>
+          {previewPathLabel || t("selectFileFromNavigator")}
+        </span>
       </div>
       <div className="workspace-code-actions">
         <div className="workspace-search-shell" ref={searchShellRef}>

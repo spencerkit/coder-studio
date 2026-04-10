@@ -64,7 +64,6 @@ type WorkspaceCodeFeatureProps = {
   width: number;
   codeSidebarView: "files" | "git";
   previewPathLabel: string;
-  previewFileName: string;
   editorContent: ReactNode;
   fileParentLabel: (path?: string) => string;
   sidebar: SidebarViewModel;
@@ -80,7 +79,6 @@ export const WorkspaceCodeFeature = ({
   width,
   codeSidebarView,
   previewPathLabel,
-  previewFileName,
   editorContent,
   fileParentLabel,
   sidebar,
@@ -118,12 +116,10 @@ export const WorkspaceCodeFeature = ({
   return (
     <>
       <WorkspaceEditorPanel
-        locale={locale}
         isExpanded={isExpanded}
         width={width}
         codeSidebarView={codeSidebarView}
         previewPathLabel={previewPathLabel}
-        previewFileName={previewFileName}
         fileSearchQuery={fileSearch.query}
         fileSearchActiveIndex={fileSearch.activeIndex}
         showFileSearchDropdown={fileSearch.showDropdown}

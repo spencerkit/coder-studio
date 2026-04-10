@@ -39,7 +39,6 @@ export const findPreviewGitChange = (
 export const resolveWorkspacePreviewPathLabel = (
   previewPath: string,
   workspaceRoot?: string,
-  previewFileName?: string,
 ) => {
   if (!previewPath) return "";
   if (!workspaceRoot) return previewPath;
@@ -51,5 +50,5 @@ export const resolveWorkspacePreviewPathLabel = (
   }
 
   const relative = previewPath.slice(workspaceRoot.length).replace(/^[/\\]+/, "");
-  return relative || previewFileName || previewPath;
+  return relative || previewPath;
 };
