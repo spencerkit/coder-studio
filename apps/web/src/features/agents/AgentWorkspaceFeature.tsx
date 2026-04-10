@@ -503,3 +503,6 @@ export const AgentWorkspaceFeature = ({
 };
 
 export default AgentWorkspaceFeature;
+  const handleRetrySupervisor = useCallback(() => {
+    onRetrySupervisor(session.id);
+  }, [onRetrySupervisor, session.id]);
