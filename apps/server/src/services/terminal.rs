@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
-const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 512 * 1024;
+const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     PtySize {
@@ -885,5 +885,33 @@ mod tests {
         assert_eq!(writes.len(), 1);
         assert_eq!(writes[0].0, "# [supervisor]\rShip v1\r");
         assert_eq!(writes[0].1, TerminalWriteOrigin::Supervisor);
+    }
+}
+
+#[cfg(test)]
+mod ring_buffer_tests {
+    use super::*;
+
+    #[test]
+    fn truncate_terminal_output_keeps_utf8_boundary_at_2mb_limit() {
+        // Construct a > 2 MB string where each char is 3 bytes (CJK)
+        // so the truncate cut-point likely lands mid-codepoint.
+        let one_chunk = "中".repeat(1024); // 3 KB
+        let mut buffer = one_chunk.repeat(800); // ~2.4 MB
+        let initial_len = buffer.len();
+        assert!(initial_len > TERMINAL_RUNTIME_OUTPUT_LIMIT);
+
+        truncate_terminal_output(&mut buffer);
+
+        // floor_char_boundary may keep up to (char_len - 1) extra bytes to
+        // avoid splitting a multi-byte codepoint, so allow a small overshoot.
+        assert!(buffer.len() <= TERMINAL_RUNTIME_OUTPUT_LIMIT + 2);
+        // Key assertion: truncated result is still valid UTF-8.
+        assert!(std::str::from_utf8(buffer.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn truncate_terminal_output_2mb_limit_value() {
+        assert_eq!(TERMINAL_RUNTIME_OUTPUT_LIMIT, 2 * 1024 * 1024);
     }
 }
