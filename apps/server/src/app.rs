@@ -38,7 +38,10 @@ pub(crate) struct AgentRuntime {
 #[non_exhaustive]
 pub(crate) enum TerminalIo {
     Pty {
-        writer: Mutex<Option<Box<dyn Write + Send>>>,
+        /// Channel to the writer thread. The writer thread owns the PTY writer
+        /// and handles writes asynchronously, preventing terminal_write from
+        /// blocking when the PTY buffer fills up.
+        writer_tx: std::sync::mpsc::Sender<crate::services::terminal::PtyWriteRequest>,
         master: Mutex<Box<dyn MasterPty + Send>>,
     },
     TmuxAttached {

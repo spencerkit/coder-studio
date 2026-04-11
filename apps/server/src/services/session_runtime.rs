@@ -290,10 +290,6 @@ pub(crate) fn remove_terminal_runtime_registration(
         .remove(workspace_id, session_id))
 }
 
-fn build_tmux_boot_command(command: &str) -> String {
-    command.to_string()
-}
-
 pub(crate) fn session_runtime_start(
     params: SessionRuntimeStartParams,
     app: AppHandle,
@@ -380,14 +376,6 @@ pub(crate) fn session_runtime_start(
         &workspace_target,
         launch.runtime_env.clone(),
     )?;
-    let tmux_runtime = crate::services::tmux::create_tmux_runtime(
-        &params.workspace_id,
-        &params.session_id,
-        &workspace_cwd,
-        &workspace_target,
-        &shell_env,
-    )?;
-
     let terminal = match create_terminal_runtime(
         &params.workspace_id,
         &workspace_cwd,
@@ -396,11 +384,11 @@ pub(crate) fn session_runtime_start(
         params.rows,
         TerminalCreateOptions {
             persist_workspace_terminal: true,
-            env: BTreeMap::new(),
+            env: shell_env.clone(),
             launch_command: TerminalLaunchCommand::DefaultShell,
-            bridge_target: TerminalBridgeTarget::Tmux {
-                session_name: tmux_runtime.session_name.clone(),
-                pane_id: tmux_runtime.pane_id.clone(),
+            bridge_target: TerminalBridgeTarget::Pty {
+                cwd: workspace_cwd.clone(),
+                target: workspace_target.clone(),
                 cols: params.cols,
                 rows: params.rows,
             },
@@ -409,10 +397,7 @@ pub(crate) fn session_runtime_start(
         state,
     ) {
         Ok(terminal) => terminal,
-        Err(error) => {
-            let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
-            return Err(error);
-        }
+        Err(error) => return Err(error),
     };
 
     let runtime_id = format!("runtime:{}:{}", params.workspace_id, params.session_id);
@@ -443,18 +428,20 @@ pub(crate) fn session_runtime_start(
                 state,
             );
             remove_failed_terminal_runtime(&params.workspace_id, terminal.id, state);
-            let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
             return Err(error);
         }
     };
-    if let Err(error) = crate::services::tmux::send_tmux_input(
-        &tmux_runtime.session_name,
-        &build_tmux_boot_command(&boot_command),
+
+    if let Err(error) = crate::services::terminal::terminal_write(
+        params.workspace_id.clone(),
+        terminal.id,
+        format!("{}\n", boot_command),
+        crate::TerminalWriteOrigin::User,
+        state,
     ) {
         let _ =
             remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
         remove_failed_terminal_runtime(&params.workspace_id, terminal.id, state);
-        let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
         return Err(error);
     }
 
@@ -464,7 +451,6 @@ pub(crate) fn session_runtime_start(
         let _ =
             remove_terminal_runtime_registration(&params.workspace_id, &params.session_id, state);
         remove_failed_terminal_runtime(&params.workspace_id, terminal.id, state);
-        let _ = crate::services::tmux::kill_tmux_session(&tmux_runtime.session_name);
         return Err(error);
     }
     let updated = sync_session_runtime_state(
@@ -531,11 +517,6 @@ mod tests {
     }
 
     #[test]
-    fn build_tmux_boot_command_passes_command_through() {
-        assert_eq!(build_tmux_boot_command("claude --print"), "claude --print");
-    }
-
-    #[test]
     fn remove_terminal_runtime_registration_clears_runtime_binding() {
         let app = test_app();
         let mut registry = app.state().terminal_runtimes.lock().unwrap();
@@ -592,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn session_runtime_start_routes_bound_terminal_output_from_tmux_runtime() {
+    fn session_runtime_start_routes_bound_terminal_output_from_pty_runtime() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/runtime-backend-terminal-launch");
         let session = create_session(
@@ -663,7 +644,7 @@ mod tests {
         }
         assert!(
             terminal_output.contains(&expected),
-            "bound terminal should show tmux runtime output, got: {terminal_output:?}"
+            "bound terminal should show PTY runtime output, got: {terminal_output:?}"
         );
     }
 
@@ -773,7 +754,7 @@ mod tests {
 
         assert!(
             terminal_output.contains(&expected),
-            "backend boot should reach tmux-backed terminal without frontend boot input write, got: {terminal_output:?}"
+            "backend boot should reach PTY-backed terminal without frontend boot input write, got: {terminal_output:?}"
         );
     }
 
@@ -896,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_write_routes_bound_terminal_input_to_tmux_runtime_env() {
+    fn terminal_write_routes_bound_terminal_input_to_pty_runtime_env() {
         let app = test_app();
         let workspace_id = launch_test_workspace(&app, "/tmp/runtime-terminal-write-bridge");
         let session = create_session(
@@ -908,6 +889,8 @@ mod tests {
         .unwrap();
         *app.state().hook_endpoint.lock().unwrap() = Some("http://127.0.0.1:1/claude-hook".into());
 
+        let env_file = format!("/tmp/runtime-terminal-write-{}.txt", session.id);
+
         app_settings_update(
             serde_json::json!({
                 "providers": {
@@ -916,7 +899,7 @@ mod tests {
                             "executable": "/bin/sh",
                             "startupArgs": [
                                 "-lc",
-                                "sleep 0.1"
+                                format!("echo $CODER_STUDIO_SESSION_ID > {}", env_file)
                             ]
                         }
                     }
@@ -926,7 +909,7 @@ mod tests {
         )
         .expect("settings update should succeed");
 
-        let started = session_runtime_start(
+        session_runtime_start(
             SessionRuntimeStartParams {
                 workspace_id: workspace_id.clone(),
                 session_id: session.id.clone(),
@@ -938,34 +921,25 @@ mod tests {
         )
         .expect("session runtime should start");
 
-        crate::services::terminal::terminal_write(
-            workspace_id.clone(),
-            started.terminal_id,
-            "printf 'BRIDGE:%s\n' \"$CODER_STUDIO_SESSION_ID\"\r".to_string(),
-            TerminalWriteOrigin::User,
-            app.state(),
-        )
-        .expect("terminal write should succeed");
-
-        let expected = format!("BRIDGE:{}", session.id);
-        let mut terminal_output = String::new();
+        // Wait for the boot command to execute and write the env var to the file.
+        let expected_content = session.id.clone();
+        let mut found = false;
         for _ in 0..40 {
-            terminal_output = load_workspace_snapshot(app.state(), &workspace_id)
-                .expect("workspace snapshot should load")
-                .terminals
-                .into_iter()
-                .find(|terminal| terminal.id == started.terminal_id)
-                .map(|terminal| terminal.output)
-                .unwrap_or_default();
-            if terminal_output.contains(&expected) {
-                break;
+            if let Ok(content) = std::fs::read_to_string(&env_file) {
+                if content.trim() == expected_content {
+                    found = true;
+                    break;
+                }
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         assert!(
-            terminal_output.contains(&expected),
-            "bound terminal input should execute inside tmux runtime env, got: {terminal_output:?}"
+            found,
+            "boot command should write Coder_Studio_SESSION_ID to file, file contents: {:?}",
+            std::fs::read_to_string(&env_file).ok()
         );
+
+        std::fs::remove_file(&env_file).ok();
     }
 }

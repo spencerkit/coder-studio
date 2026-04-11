@@ -2,10 +2,148 @@ use crate::app::TerminalIo;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
 use std::collections::BTreeMap;
+use std::io::Read;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
 const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
+
+/// Non-blocking wrapper around a PTY writer file descriptor.
+/// Uses direct libc::write calls with O_NONBLOCK to avoid blocking when the
+/// PTY buffer is full, preventing deadlocks between writer and reader threads.
+struct PtyWriter {
+    fd: i32,
+}
+
+impl PtyWriter {
+    fn new(writer: Box<dyn std::io::Write + Send>) -> std::io::Result<Self> {
+        // Extract the raw fd from Box<dyn Write> (which wraps Box<File> on Unix).
+        // Box<dyn Write> is a fat pointer: [data_ptr (8 bytes), vtable_ptr (8 bytes)].
+        //
+        // We use ManuallyDrop to prevent writer from closing the fd when dropped.
+        // Instead of reconstructing Box<File> (which requires unsafe pointer gymnastics),
+        // we duplicate the fd via F_DUPFD so both the original and duplicate reference
+        // the same open file description. The original Box<File> closes its fd when
+        // dropped; we close our duplicate in PtyWriter::drop.
+        use std::mem::ManuallyDrop;
+        let writer = ManuallyDrop::new(writer);
+
+        // Get a raw pointer to the fat pointer representation.
+        let writer_ptr: *const Box<dyn std::io::Write + Send> = &*writer;
+        let fat_ptr: *const (dyn std::io::Write + Send) = writer_ptr as *const _;
+        // fat_ptr points to two consecutive usize values: [data_ptr, vtable_ptr].
+        // Read the first word (data_ptr) which is the Box<File> thin pointer.
+        let data_ptr: usize = unsafe { *fat_ptr.cast::<usize>() };
+        let file_box_ptr = data_ptr as *const Box<std::fs::File>;
+        // Read the fd field from Box<File> (the only field, at offset 0).
+        let fd: i32 = unsafe { *file_box_ptr.cast::<i32>() };
+
+        // Duplicate the fd so both the original Box<File> and PtyWriter own a reference.
+        let dup_fd = unsafe { libc::fcntl(fd, libc::F_DUPFD, 0) };
+        if dup_fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        // Set non-blocking mode on the duplicated fd.
+        let flags = unsafe { libc::fcntl(dup_fd, libc::F_GETFL) };
+        if flags < 0 {
+            let err = std::io::Error::last_os_error();
+            unsafe { libc::close(dup_fd) };
+            return Err(err);
+        }
+        if unsafe { libc::fcntl(dup_fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            let err = std::io::Error::last_os_error();
+            unsafe { libc::close(dup_fd) };
+            return Err(err);
+        }
+        Ok(Self { fd: dup_fd })
+    }
+}
+
+impl std::io::Write for PtyWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Non-blocking write with timeout-based polling to avoid blocking indefinitely
+        // while still allowing the write to complete when the PTY buffer has space.
+        const POLL_TIMEOUT_MS: i32 = 100;
+        const MAX_RETRIES: usize = 20; // 2 seconds total wait time
+
+        let mut total_written = 0;
+        let mut remaining = buf;
+
+        for _ in 0..MAX_RETRIES {
+            let n = unsafe {
+                libc::write(
+                    self.fd,
+                    remaining.as_ptr() as *const libc::c_void,
+                    remaining.len(),
+                )
+            };
+            if n > 0 {
+                total_written += n as usize;
+                remaining = &remaining[n as usize..];
+                if remaining.is_empty() {
+                    return Ok(total_written);
+                }
+                // Continue to write remaining data
+                continue;
+            }
+            // n <= 0: write failed or would block
+            let err = std::io::Error::last_os_error();
+            if err.kind() == std::io::ErrorKind::WouldBlock {
+                // PTY buffer full: wait briefly then retry
+                let mut fds = [libc::pollfd {
+                    fd: self.fd,
+                    events: libc::POLLOUT,
+                    revents: 0,
+                }];
+                let ret = unsafe { libc::poll(&mut fds as *mut _, 1, POLL_TIMEOUT_MS) };
+                if ret < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if ret == 0 {
+                    // Timeout: PTY still not writable. Return WouldBlock so the caller
+                    // (write_all) can retry or fail gracefully.
+                    if total_written > 0 {
+                        return Ok(total_written);
+                    }
+                    return Err(err);
+                }
+                // POLLOUT set: fd is writable, retry write
+                continue;
+            }
+            // Non-WouldBlock error: propagate
+            return Err(err);
+        }
+        // Exceeded max retries
+        if total_written > 0 {
+            Ok(total_written)
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "pty write timeout",
+            ))
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        // No-op for non-blocking writes
+        Ok(())
+    }
+}
+
+impl Drop for PtyWriter {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.fd) };
+    }
+}
+
+/// Request sent to the PTY writer thread to write data.
+pub(crate) struct PtyWriteRequest {
+    pub data: Vec<u8>,
+    pub result_tx: std::sync::mpsc::Sender<std::io::Result<usize>>,
+}
+
+const PTY_WRITE_TIMEOUT_MS: u64 = 2000;
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     PtySize {
@@ -30,8 +168,14 @@ fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
         }
     }
     // Then close the writer end so no further input can be sent.
+    // For PTY, we drop the sender which signals the writer thread to exit.
+    // For TmuxAttached, we take the writer handle.
     match &runtime.io {
-        TerminalIo::Pty { writer, .. } | TerminalIo::TmuxAttached { writer, .. } => {
+        TerminalIo::Pty { .. } => {
+            // Writer thread will exit when the channel is closed (sender dropped).
+            // No explicit action needed; dropping the runtime closes the channel.
+        }
+        TerminalIo::TmuxAttached { writer, .. } => {
             if let Ok(mut writer) = writer.lock() {
                 writer.take();
             }
@@ -236,10 +380,28 @@ fn create_pty_terminal_runtime(
     drop(pair.slave);
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let pty_writer = PtyWriter::new(writer).map_err(|e| e.to_string())?;
+
+    // Create a channel for the writer thread. The thread owns the PTY writer
+    // and handles writes asynchronously, preventing terminal_write from blocking.
+    let (write_tx, write_rx): (
+        std::sync::mpsc::Sender<PtyWriteRequest>,
+        std::sync::mpsc::Receiver<PtyWriteRequest>,
+    ) = std::sync::mpsc::channel();
+
+    // Spawn the writer thread. It owns the non-blocking PTY writer and handles
+    // write requests. When the channel is dropped, the thread exits.
+    std::thread::spawn(move || {
+        let mut writer = pty_writer;
+        for req in write_rx {
+            let result = writer.write_all(&req.data).map(|_| req.data.len());
+            let _ = req.result_tx.send(result);
+        }
+    });
 
     let runtime = Arc::new(TerminalRuntime {
         io: TerminalIo::Pty {
-            writer: Mutex::new(Some(writer)),
+            writer_tx: write_tx,
             master: Mutex::new(pair.master),
         },
         output: Mutex::new(String::new()),
@@ -288,6 +450,11 @@ fn create_pty_terminal_runtime(
                         terminal_id,
                         &text,
                     );
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    // Non-blocking read with no data available: sleep and retry.
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
                 }
                 Err(err) => {
                     let text = decoder.finish();
@@ -439,6 +606,11 @@ fn create_tmux_terminal_runtime(
                         terminal_id,
                         &text,
                     );
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    // Non-blocking read with no data available: sleep and retry.
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
                 }
                 Err(err) => {
                     let text = decoder.finish();
@@ -636,7 +808,7 @@ pub(crate) fn terminal_write(
 ) -> Result<(), String> {
     let decorated_input = match origin {
         TerminalWriteOrigin::User => input,
-        TerminalWriteOrigin::Supervisor => format!("# [supervisor]\r{}", input),
+        TerminalWriteOrigin::Supervisor => format!("# [supervisor]\n{}", input),
     };
     let key = terminal_key(&workspace_id, terminal_id);
     let terms = state.terminals.lock().map_err(|e| e.to_string())?;
@@ -660,16 +832,27 @@ pub(crate) fn terminal_write(
         }
     };
     match &runtime.io {
-        TerminalIo::Pty { writer, .. } => {
-            let mut writer = writer.lock().map_err(|e| e.to_string())?;
-            if let Some(handle) = writer.as_mut() {
-                handle
-                    .write_all(decorated_input.as_bytes())
-                    .map_err(|e| e.to_string())?;
-                handle.flush().map_err(|e| e.to_string())?;
-            } else {
+        TerminalIo::Pty { writer_tx, .. } => {
+            // Send the write request to the writer thread with a timeout.
+            // The writer thread owns the PTY writer and handles writes synchronously.
+            let (result_tx, result_rx): (
+                std::sync::mpsc::Sender<std::io::Result<usize>>,
+                std::sync::mpsc::Receiver<std::io::Result<usize>>,
+            ) = std::sync::mpsc::channel();
+            let req = PtyWriteRequest {
+                data: decorated_input.as_bytes().to_vec(),
+                result_tx,
+            };
+            if writer_tx.send(req).is_err() {
+                // Writer thread has exited (channel closed)
                 return Err("terminal_stdin_closed".to_string());
             }
+            let result = result_rx
+                .recv_timeout(std::time::Duration::from_millis(PTY_WRITE_TIMEOUT_MS))
+                .map_err(|_| "terminal_write_timeout".to_string())?
+                .map_err(|e| e.to_string())?;
+            // result is the number of bytes written; we don't use it
+            let _ = result;
         }
         TerminalIo::TmuxAttached { writer, .. } => {
             let mut writer = writer.lock().map_err(|e| e.to_string())?;
