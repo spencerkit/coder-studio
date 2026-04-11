@@ -1,8 +1,15 @@
 use crate::app::TerminalIo;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
+use crossbeam_channel;
 use std::collections::BTreeMap;
 use std::io::Read;
+
+// Compile-time sanity: PtyWriter::new reads the fd by casting through Box<dyn Write>
+// (fat pointer, 16 bytes on 64-bit) -> data word (Box<File> thin pointer, 8 bytes) ->
+// *const Box<File> -> dereference to Box<File> -> cast to i32 (fd at offset 0 in File).
+// This assertion guards the Box<File> thin-pointer assumption.
+const _: [(); 8] = [(); std::mem::size_of::<Box<std::fs::File>>()];
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
@@ -37,6 +44,14 @@ impl PtyWriter {
         let file_box_ptr = data_ptr as *const Box<std::fs::File>;
         // Read the fd field from Box<File> (the only field, at offset 0).
         let fd: i32 = unsafe { *file_box_ptr.cast::<i32>() };
+
+        // Sanity: fd must be non-negative (valid)
+        if fd < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("PtyWriter: invalid fd {} from writer", fd),
+            ));
+        }
 
         // Duplicate the fd so both the original Box<File> and PtyWriter own a reference.
         let dup_fd = unsafe { libc::fcntl(fd, libc::F_DUPFD, 0) };
@@ -140,7 +155,7 @@ impl Drop for PtyWriter {
 /// Request sent to the PTY writer thread to write data.
 pub(crate) struct PtyWriteRequest {
     pub data: Vec<u8>,
-    pub result_tx: std::sync::mpsc::Sender<std::io::Result<usize>>,
+    pub result_tx: crossbeam_channel::Sender<std::io::Result<usize>>,
 }
 
 const PTY_WRITE_TIMEOUT_MS: u64 = 2000;
@@ -836,9 +851,9 @@ pub(crate) fn terminal_write(
             // Send the write request to the writer thread with a timeout.
             // The writer thread owns the PTY writer and handles writes synchronously.
             let (result_tx, result_rx): (
-                std::sync::mpsc::Sender<std::io::Result<usize>>,
-                std::sync::mpsc::Receiver<std::io::Result<usize>>,
-            ) = std::sync::mpsc::channel();
+                crossbeam_channel::Sender<std::io::Result<usize>>,
+                crossbeam_channel::Receiver<std::io::Result<usize>>,
+            ) = crossbeam_channel::bounded(0);
             let req = PtyWriteRequest {
                 data: decorated_input.as_bytes().to_vec(),
                 result_tx,
@@ -847,12 +862,16 @@ pub(crate) fn terminal_write(
                 // Writer thread has exited (channel closed)
                 return Err("terminal_stdin_closed".to_string());
             }
-            let result = result_rx
-                .recv_timeout(std::time::Duration::from_millis(PTY_WRITE_TIMEOUT_MS))
-                .map_err(|_| "terminal_write_timeout".to_string())?
-                .map_err(|e| e.to_string())?;
-            // result is the number of bytes written; we don't use it
-            let _ = result;
+            match result_rx.recv_timeout(std::time::Duration::from_millis(PTY_WRITE_TIMEOUT_MS)) {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => return Err(e.to_string()),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                    return Err("terminal_write_timeout".to_string())
+                }
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                    return Err("terminal_stdin_closed".to_string())
+                }
+            }
         }
         TerminalIo::TmuxAttached { writer, .. } => {
             let mut writer = writer.lock().map_err(|e| e.to_string())?;
