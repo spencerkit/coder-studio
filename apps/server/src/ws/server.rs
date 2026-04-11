@@ -437,6 +437,10 @@ fn handle_ws_client_envelope(
             })?;
             Ok(None)
         }
+        // Task 4: wire up TerminalChannelAttach dispatch
+        WsClientEnvelope::TerminalChannelAttach { .. } => {
+            Ok(None)
+        }
     }
 }
 
@@ -594,6 +598,7 @@ fn artifact_dirty_categories(reason: &str) -> Vec<&'static str> {
 mod tests {
     use super::{
         artifact_dirty_categories, emit_terminal_channel_output, handle_terminal_channel_input,
+        WsClientEnvelope,
     };
     use crate::runtime::RuntimeHandle;
     use crate::services::terminal_gateway::TerminalRuntime;
@@ -725,5 +730,28 @@ mod tests {
             artifact_dirty_categories("git_discard_file"),
             vec!["git", "worktrees", "tree"]
         );
+    }
+
+    #[test]
+    fn ws_client_envelope_parses_terminal_channel_attach() {
+        let raw = serde_json::json!({
+            "type": "terminal_channel_attach",
+            "workspace_id": "ws-1",
+            "fencing_token": 1,
+            "runtime_id": "runtime:ws-1:session-1",
+        });
+        let envelope: WsClientEnvelope = serde_json::from_value(raw).unwrap();
+        match envelope {
+            WsClientEnvelope::TerminalChannelAttach {
+                workspace_id,
+                fencing_token,
+                runtime_id,
+            } => {
+                assert_eq!(workspace_id, "ws-1");
+                assert_eq!(fencing_token, 1);
+                assert_eq!(runtime_id, "runtime:ws-1:session-1");
+            }
+            _ => panic!("unexpected variant"),
+        }
     }
 }

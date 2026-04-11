@@ -48,4 +48,9 @@ pub(crate) enum WsClientEnvelope {
     WorkspaceControllerHeartbeat {
         workspace_id: String,
     },
+    TerminalChannelAttach {
+        workspace_id: String,
+        fencing_token: i64,
+        runtime_id: String,
+    },
 }
