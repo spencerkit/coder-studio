@@ -911,10 +911,10 @@ mod tests {
     }
 
     #[test]
-    fn sync_session_runtime_state_derives_tmux_missing_for_bound_session_payload() {
+    fn sync_session_runtime_state_derives_runtime_missing_for_bound_session_payload() {
         let app = test_app();
         let workspace_id =
-            launch_test_workspace(&app, "/tmp/ws-runtime-liveness-event-tmux-missing-test");
+            launch_test_workspace(&app, "/tmp/ws-runtime-liveness-event-runtime-missing-test");
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -962,14 +962,14 @@ mod tests {
         assert_eq!(session_state.session_id, created.id);
         assert_eq!(
             session_state.runtime_liveness,
-            Some(SessionRuntimeLiveness::TmuxMissing)
+            Some(SessionRuntimeLiveness::RuntimeMissing)
         );
     }
 
     #[test]
-    fn workspace_snapshot_derives_tmux_missing_for_bound_session() {
+    fn workspace_snapshot_derives_runtime_missing_for_bound_session() {
         let app = test_app();
-        let workspace_id = launch_test_workspace(&app, "/tmp/ws-snapshot-tmux-missing-test");
+        let workspace_id = launch_test_workspace(&app, "/tmp/ws-snapshot-runtime-missing-test");
         let created = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -1007,7 +1007,7 @@ mod tests {
             .expect("session should exist in snapshot");
         assert_eq!(
             session.runtime_liveness,
-            Some(SessionRuntimeLiveness::TmuxMissing)
+            Some(SessionRuntimeLiveness::RuntimeMissing)
         );
     }
 

@@ -225,10 +225,6 @@ fn resolve_session_shell_env(
         "CODER_STUDIO_SESSION_ID".to_string(),
         session_id.to_string(),
     );
-    runtime_env.insert(
-        crate::services::tmux::CODER_STUDIO_RUNTIME_PID_ENV_KEY.to_string(),
-        std::process::id().to_string(),
-    );
     Ok(runtime_env)
 }
 

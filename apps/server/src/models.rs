@@ -356,7 +356,7 @@ pub struct SessionMessage {
 pub enum SessionRuntimeLiveness {
     Attached,
     ProviderExited,
-    TmuxMissing,
+    RuntimeMissing,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

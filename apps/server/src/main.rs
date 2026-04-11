@@ -149,11 +149,6 @@ pub(crate) use ws::server::{
 };
 
 use runtime::RuntimeHandle;
-use std::time::Duration;
-
-const DEFAULT_TMUX_JANITOR_INTERVAL_MS: u64 = 45_000;
-const MIN_TMUX_JANITOR_INTERVAL_MS: u64 = 5_000;
-const MAX_TMUX_JANITOR_INTERVAL_MS: u64 = 300_000;
 
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
@@ -235,12 +230,6 @@ fn install_provider_hooks_on_startup(app: &AppHandle) -> Vec<(String, String)> {
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHandle;
-    use std::sync::{Mutex, OnceLock};
-
-    fn janitor_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -326,39 +315,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(claude_home);
         let _ = std::fs::remove_dir_all(codex_home);
     }
-
-    #[test]
-    fn resolve_tmux_janitor_interval_defaults_when_env_missing() {
-        let _guard = janitor_env_lock().lock().unwrap();
-        let previous = std::env::var_os("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS");
-        std::env::remove_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS");
-
-        let interval = resolve_tmux_janitor_interval();
-        assert_eq!(interval, Duration::from_millis(DEFAULT_TMUX_JANITOR_INTERVAL_MS));
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS", value);
-        }
-    }
-
-    #[test]
-    fn resolve_tmux_janitor_interval_clamps_out_of_range_values() {
-        let _guard = janitor_env_lock().lock().unwrap();
-        let previous = std::env::var_os("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS");
-        std::env::set_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS", "1");
-        let min_interval = resolve_tmux_janitor_interval();
-        assert_eq!(min_interval, Duration::from_millis(MIN_TMUX_JANITOR_INTERVAL_MS));
-
-        std::env::set_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS", "9999999");
-        let max_interval = resolve_tmux_janitor_interval();
-        assert_eq!(max_interval, Duration::from_millis(MAX_TMUX_JANITOR_INTERVAL_MS));
-
-        if let Some(value) = previous {
-            std::env::set_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS", value);
-        } else {
-            std::env::remove_var("CODER_STUDIO_TMUX_JANITOR_INTERVAL_MS");
-        }
-    }
 }
 
 #[tokio::main]
@@ -377,18 +333,6 @@ async fn main() {
 async fn run() -> Result<(), String> {
     let state_dir = resolve_state_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&state_dir).map_err(|e| e.to_string())?;
-    crate::services::tmux::configure_tmux_socket_path(state_dir.join("tmux.sock"));
-
-    match crate::services::tmux::cleanup_managed_tmux_sessions_stale() {
-        Ok(report) => {
-            eprintln!("info: tmux startup cleanup {}", report.summary_line());
-        }
-        Err(error) => {
-            eprintln!(
-                "warning: failed to cleanup stale coder-studio tmux sessions on startup: {error}"
-            );
-        }
-    }
 
     let app_data = resolve_app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&app_data).map_err(|e| e.to_string())?;
@@ -417,7 +361,6 @@ async fn run() -> Result<(), String> {
     }
 
     let transport_server = start_transport_server(&app)?;
-    let janitor_interval = resolve_tmux_janitor_interval();
     if cfg!(debug_assertions) {
         println!("Coder Studio web dev server: {DEV_FRONTEND_URL}");
         println!("Coder Studio local server: {}", transport_server.endpoint);
@@ -427,9 +370,6 @@ async fn run() -> Result<(), String> {
             transport_server.endpoint
         );
     }
-
-    let janitor_shutdown_rx = shutdown_rx.clone();
-    let janitor_task = tokio::spawn(run_tmux_janitor(janitor_shutdown_rx, janitor_interval));
 
     let serve_result = axum::serve(
         transport_server.listener,
@@ -446,46 +386,5 @@ async fn run() -> Result<(), String> {
     .await
     .map_err(|e| e.to_string());
 
-    janitor_task.abort();
-
-    match crate::services::tmux::cleanup_managed_tmux_sessions_for_current_process() {
-        Ok(report) => {
-            eprintln!("info: tmux shutdown cleanup {}", report.summary_line());
-        }
-        Err(error) => {
-            eprintln!("warning: failed to cleanup coder-studio tmux sessions on shutdown: {error}");
-        }
-    }
-
     serve_result
-}
-
-fn resolve_tmux_janitor_interval() -> Duration {
-    let base = crate::services::tmux::tmux_janitor_interval();
-    base.clamp(
-        Duration::from_millis(MIN_TMUX_JANITOR_INTERVAL_MS),
-        Duration::from_millis(MAX_TMUX_JANITOR_INTERVAL_MS),
-    )
-}
-
-async fn run_tmux_janitor(mut shutdown_rx: tokio::sync::watch::Receiver<bool>, interval: Duration) {
-    loop {
-        tokio::select! {
-            _ = shutdown_rx.changed() => {
-                break;
-            }
-            _ = tokio::time::sleep(interval) => {
-                match crate::services::tmux::cleanup_managed_tmux_sessions_stale() {
-                    Ok(report) => {
-                        if report.cleaned_sessions > 0 {
-                            eprintln!("info: tmux janitor cleanup {}", report.summary_line());
-                        }
-                    }
-                    Err(error) => {
-                        eprintln!("warning: tmux janitor cleanup failed: {error}");
-                    }
-                }
-            }
-        }
-    }
 }

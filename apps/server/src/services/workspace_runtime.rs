@@ -361,7 +361,7 @@ pub(crate) fn session_runtime_liveness_for_binding(
     {
         Some(SessionRuntimeLiveness::Attached)
     } else {
-        Some(SessionRuntimeLiveness::TmuxMissing)
+        Some(SessionRuntimeLiveness::RuntimeMissing)
     }
 }
 
@@ -1444,15 +1444,15 @@ mod tests {
         );
         assert_eq!(
             session_runtime_liveness_for_session(&workspace_id, &other.id, app.state()),
-            Some(SessionRuntimeLiveness::TmuxMissing)
+            Some(SessionRuntimeLiveness::RuntimeMissing)
         );
     }
 
     #[test]
-    fn workspace_runtime_attach_reports_tmux_missing_for_bound_session_when_tmux_session_is_gone() {
+    fn workspace_runtime_attach_reports_runtime_missing_for_bound_session_when_terminal_is_gone() {
         let app = test_app();
         let workspace_id =
-            launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-tmux-missing");
+            launch_test_workspace(&app, "/tmp/ws-runtime-session-binding-runtime-missing");
         let session = create_session(
             workspace_id.clone(),
             SessionMode::Branch,
@@ -1498,7 +1498,7 @@ mod tests {
             .expect("bound session should be present");
         assert_eq!(
             bound.runtime_liveness,
-            Some(SessionRuntimeLiveness::TmuxMissing)
+            Some(SessionRuntimeLiveness::RuntimeMissing)
         );
         assert!(runtime.session_runtime_bindings.iter().any(|binding| {
             binding.session_id == session.id.to_string()
