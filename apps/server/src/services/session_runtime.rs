@@ -421,8 +421,7 @@ pub(crate) fn session_runtime_start(
         params.workspace_id.clone(),
         params.session_id.clone(),
         session.provider.as_str().to_string(),
-        tmux_runtime.session_name.clone(),
-        tmux_runtime.pane_id.clone(),
+        terminal.id,
     );
     state
         .terminal_runtimes
@@ -545,8 +544,7 @@ mod tests {
             "ws-1".to_string(),
             "session-1".to_string(),
             "claude".to_string(),
-            String::new(),
-            String::new(),
+            0,
         ));
         drop(registry);
 

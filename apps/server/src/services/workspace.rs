@@ -940,8 +940,7 @@ mod tests {
                 workspace_id.clone(),
                 created.id.clone(),
                 "claude".to_string(),
-                "missing-tmux-session".to_string(),
-                "%1".to_string(),
+                99,
             ),
         );
         let mut rx = app.state().transport_events.subscribe();
@@ -996,8 +995,7 @@ mod tests {
                 workspace_id.clone(),
                 created.id.clone(),
                 "claude".to_string(),
-                "missing-tmux-session".to_string(),
-                "%1".to_string(),
+                77,
             ),
         );
 

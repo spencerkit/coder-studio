@@ -351,7 +351,14 @@ pub(crate) fn session_runtime_liveness_for_binding(
         return Some(SessionRuntimeLiveness::ProviderExited);
     }
 
-    if crate::services::tmux::tmux_session_exists(&runtime.tmux_session_name) {
+    let key = crate::ws::server::terminal_key(&runtime.workspace_id, runtime.terminal_id);
+    if state
+        .terminals
+        .lock()
+        .ok()
+        .map(|terms| terms.contains_key(&key))
+        .unwrap_or(false)
+    {
         Some(SessionRuntimeLiveness::Attached)
     } else {
         Some(SessionRuntimeLiveness::TmuxMissing)
@@ -1427,8 +1434,7 @@ mod tests {
                 workspace_id.clone(),
                 other.id.to_string(),
                 "claude".to_string(),
-                "missing-tmux-session".to_string(),
-                "%1".to_string(),
+                99,
             ),
         );
 
@@ -1471,8 +1477,7 @@ mod tests {
                 workspace_id.clone(),
                 session.id.to_string(),
                 "claude".to_string(),
-                "missing-tmux-session".to_string(),
-                "%1".to_string(),
+                99,
             ),
         );
 

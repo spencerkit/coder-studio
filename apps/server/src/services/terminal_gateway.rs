@@ -9,8 +9,7 @@ pub(crate) struct GatewayTerminalRuntime {
     pub(crate) workspace_id: String,
     pub(crate) session_id: String,
     pub(crate) provider: String,
-    pub(crate) tmux_session_name: String,
-    pub(crate) tmux_pane_id: String,
+    pub(crate) terminal_id: u64,
 }
 
 pub(crate) type TerminalRuntime = GatewayTerminalRuntime;
@@ -21,16 +20,14 @@ impl GatewayTerminalRuntime {
         workspace_id: String,
         session_id: String,
         provider: String,
-        tmux_session_name: String,
-        tmux_pane_id: String,
+        terminal_id: u64,
     ) -> Self {
         Self {
             runtime_id,
             workspace_id,
             session_id,
             provider,
-            tmux_session_name,
-            tmux_pane_id,
+            terminal_id,
         }
     }
 }
@@ -95,33 +92,23 @@ pub(crate) fn send_input(
         .cloned()
         .ok_or_else(|| "terminal_runtime_not_found".to_string())?;
 
-    #[cfg(test)]
-    {
-        let _ = input;
-        let _ = sync_session_runtime_state(
-            state,
-            &runtime.workspace_id,
-            &runtime.session_id,
-            SessionStatus::Running,
-            true,
-            Some(SessionRuntimeLiveness::Attached),
-        );
-        return Ok(());
-    }
+    crate::services::terminal::terminal_write(
+        runtime.workspace_id.clone(),
+        runtime.terminal_id,
+        input.to_string(),
+        crate::TerminalWriteOrigin::User,
+        state,
+    )?;
 
-    #[cfg(not(test))]
-    {
-        crate::services::tmux::send_tmux_raw_input(&runtime.tmux_session_name, input)?;
-        let _ = sync_session_runtime_state(
-            state,
-            &runtime.workspace_id,
-            &runtime.session_id,
-            SessionStatus::Running,
-            true,
-            Some(SessionRuntimeLiveness::Attached),
-        );
-        Ok(())
-    }
+    let _ = sync_session_runtime_state(
+        state,
+        &runtime.workspace_id,
+        &runtime.session_id,
+        SessionStatus::Running,
+        true,
+        Some(SessionRuntimeLiveness::Attached),
+    );
+    Ok(())
 }
 
 pub(crate) fn emit_terminal_channel_output(app: &AppHandle, runtime_id: &str, data: &str) {
@@ -135,7 +122,7 @@ mod tests {
     use crate::services::workspace::resolve_session_for_slot;
     use crate::{
         create_session, default_idle_policy, init_db, launch_workspace_record, AgentProvider,
-        ExecTarget, SessionMode, WorkspaceSource, WorkspaceSourceKind,
+        ExecTarget, SessionMode, TerminalWriteOrigin, WorkspaceSource, WorkspaceSourceKind,
     };
 
     fn test_app() -> AppHandle {
@@ -167,8 +154,7 @@ mod tests {
             workspace_id.to_string(),
             session_id.to_string(),
             "claude".to_string(),
-            format!("coder-studio-{workspace_id}-{session_id}"),
-            "%1".to_string(),
+            0,
         )
     }
 
@@ -233,14 +219,14 @@ mod tests {
             app.state(),
         )
         .unwrap();
+        let terminal_id = 42u64;
         app.state().terminal_runtimes.lock().unwrap().insert(
             TerminalRuntime::new(
                 "runtime-1".to_string(),
                 workspace_id.clone(),
                 created.id.clone(),
                 "claude".to_string(),
-                "tmux-session-1".to_string(),
-                "%1".to_string(),
+                terminal_id,
             ),
         );
 
@@ -251,6 +237,15 @@ mod tests {
         assert_eq!(
             updated.runtime_liveness,
             Some(SessionRuntimeLiveness::Attached)
+        );
+
+        let log = app.state().terminal_write_log.lock().unwrap();
+        assert!(
+            log.iter().any(|(ws, tid, data, origin)| {
+                ws == &workspace_id && *tid == terminal_id && data == "hello" && *origin == TerminalWriteOrigin::User
+            }),
+            "terminal_write_log should contain the sent input: {:?}",
+            &*log
         );
     }
 }

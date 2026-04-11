@@ -792,8 +792,7 @@ mod tests {
             workspace_id.clone(),
             "session-1".into(),
             "claude".into(),
-            "tmux-session-1".into(),
-            "%1".into(),
+            1,
         );
         app.state()
             .terminal_runtimes
@@ -856,8 +855,7 @@ mod tests {
                     "ws-1".to_string(),
                     "session-1".to_string(),
                     "claude".to_string(),
-                    "tmux-fake".to_string(),
-                    "%1".to_string(),
+                    42,
                 ),
             );
 
@@ -919,8 +917,7 @@ mod tests {
                     "ws-1".to_string(),
                     "session-1".to_string(),
                     "claude".to_string(),
-                    "tmux-fake".to_string(),
-                    "%1".to_string(),
+                    42,
                 ),
             );
 
