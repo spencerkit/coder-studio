@@ -756,7 +756,10 @@ pub(crate) fn terminal_resize(
         #[cfg(test)]
         TerminalIo::Mock => Ok(()),
         #[cfg(not(test))]
-        _ => unreachable!(),
+        _ => {
+            tracing::warn!("terminal_resize: unknown TerminalIo variant, skipping");
+            return Ok(());
+        }
     }
 }
 

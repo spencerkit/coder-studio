@@ -842,60 +842,63 @@ mod tests {
 
     #[test]
     fn handle_terminal_channel_attach_emits_replay_event() {
-        let (app, _shutdown_rx) = RuntimeHandle::new();
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        crate::init_db(&conn).unwrap();
-        *app.state().db.lock().unwrap() = Some(conn);
+        #[cfg(test)]
+        {
+            let (app, _shutdown_rx) = RuntimeHandle::new();
+            let conn = rusqlite::Connection::open_in_memory().unwrap();
+            crate::init_db(&conn).unwrap();
+            *app.state().db.lock().unwrap() = Some(conn);
 
-        // Register a gateway runtime (uses existing signature from terminal_gateway.rs)
-        app.state().terminal_runtimes.lock().unwrap().insert(
-            GatewayTerminalRuntime::new(
-                "runtime-1".to_string(),
-                "ws-1".to_string(),
-                "session-1".to_string(),
-                "claude".to_string(),
-                "tmux-fake".to_string(),
-                "%1".to_string(),
-            ),
-        );
+            // Register a gateway runtime (uses existing signature from terminal_gateway.rs)
+            app.state().terminal_runtimes.lock().unwrap().insert(
+                GatewayTerminalRuntime::new(
+                    "runtime-1".to_string(),
+                    "ws-1".to_string(),
+                    "session-1".to_string(),
+                    "claude".to_string(),
+                    "tmux-fake".to_string(),
+                    "%1".to_string(),
+                ),
+            );
 
-        // Set up session -> terminal binding (needed for lookup)
-        let terminal_id = 42u64;
-        app.state().session_runtime_bindings.lock().unwrap().insert(
-            crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
-            terminal_id,
-        );
-        app.state().terminal_runtime_bindings.lock().unwrap().insert(
-            terminal_id,
-            crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
-        );
+            // Set up session -> terminal binding (needed for lookup)
+            let terminal_id = 42u64;
+            app.state().session_runtime_bindings.lock().unwrap().insert(
+                crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+                terminal_id,
+            );
+            app.state().terminal_runtime_bindings.lock().unwrap().insert(
+                terminal_id,
+                crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+            );
 
-        // Create and register a terminal runtime with output buffer + size
-        let terminal_runtime = Arc::new(TerminalRuntime {
-            io: TerminalIo::Mock,
-            output: Mutex::new("some output".to_string()),
-            size: Mutex::new((80u16, 24u16)),
-            persist_workspace_terminal: true,
-            child: None,
-            killer: None,
-            process_id: None,
-            process_group_leader: None,
-        });
-        app.state().terminals.lock().unwrap().insert(
-            crate::ws::server::terminal_key("ws-1", terminal_id),
-            terminal_runtime,
-        );
+            // Create and register a terminal runtime with output buffer + size
+            let terminal_runtime = Arc::new(TerminalRuntime {
+                io: TerminalIo::Mock,
+                output: Mutex::new("some output".to_string()),
+                size: Mutex::new((80u16, 24u16)),
+                persist_workspace_terminal: true,
+                child: None,
+                killer: None,
+                process_id: None,
+                process_group_leader: None,
+            });
+            app.state().terminals.lock().unwrap().insert(
+                crate::ws::server::terminal_key("ws-1", terminal_id),
+                terminal_runtime,
+            );
 
-        let payload = serde_json::json!({
-            "workspace_id": "ws-1",
-            "fencing_token": 1,
-            "runtime_id": "runtime-1",
-        });
+            let payload = serde_json::json!({
+                "workspace_id": "ws-1",
+                "fencing_token": 1,
+                "runtime_id": "runtime-1",
+            });
 
-        super::handle_terminal_channel_attach(&app, payload).expect("attach ok");
+            super::handle_terminal_channel_attach(&app, payload).expect("attach ok");
 
-        let captured = app.state().captured_transport_events.lock().unwrap().clone();
-        assert!(captured.iter().any(|(event, _)| event == "terminal://channel_replay"));
+            let captured = app.state().captured_transport_events.lock().unwrap().clone();
+            assert!(captured.iter().any(|(event, _)| event == "terminal://channel_replay"));
+        }
     }
 
     #[test]
