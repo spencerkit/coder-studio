@@ -1,4 +1,4 @@
-import type { TerminalChannelOutputEvent } from "../../types/app.ts";
+import type { TerminalChannelOutputEvent, TerminalChannelReplayEvent } from "../../types/app.ts";
 
 const TERMINAL_CHANNEL_RESPONSE_PATTERNS = [
   /^\u001b\[I$/,
@@ -145,6 +145,40 @@ export const subscribeTerminalChannelOutput = (
   let unsubscribe = () => {};
   void import("../../ws/client.ts").then(({ subscribeWsEvent }) => {
     unsubscribe = subscribeWsEvent<TerminalChannelOutputEvent>("terminal://channel_output", handler);
+  });
+  return () => unsubscribe();
+};
+
+export const buildTerminalChannelAttach = (
+  workspaceId: string,
+  fencingToken: number,
+  runtimeId: string,
+) => ({
+  type: "terminal_channel_attach" as const,
+  workspace_id: workspaceId,
+  fencing_token: fencingToken,
+  runtime_id: runtimeId,
+});
+
+export const sendTerminalChannelAttach = (
+  workspaceId: string,
+  fencingToken: number,
+  runtimeId: string,
+) => {
+  void import("../../ws/client.ts").then(({ sendWsMessage }) => {
+    sendWsMessage(buildTerminalChannelAttach(workspaceId, fencingToken, runtimeId));
+  });
+};
+
+export const subscribeTerminalChannelReplay = (
+  handler: (payload: TerminalChannelReplayEvent) => void,
+) => {
+  let unsubscribe = () => {};
+  void import("../../ws/client.ts").then(({ subscribeWsEvent }) => {
+    unsubscribe = subscribeWsEvent<TerminalChannelReplayEvent>(
+      "terminal://channel_replay",
+      handler,
+    );
   });
   return () => unsubscribe();
 };

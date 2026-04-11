@@ -187,6 +187,13 @@ export type TerminalChannelOutputEvent = {
   data: string;
 };
 
+export interface TerminalChannelReplayEvent {
+  runtime_id: string;
+  data: string;
+  cols: number;
+  rows: number;
+}
+
 export type SessionRuntimeStartResult = {
   terminal_id: number;
   started: boolean;
