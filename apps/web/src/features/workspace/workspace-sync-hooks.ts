@@ -352,6 +352,10 @@ export const useWorkspaceTransportSync = ({
     const unsubscribe = subscribeWsConnectionState(({ kind }) => {
       if ((kind !== "connected" && kind !== "reconnected") || !bootstrapReady) return;
       void resyncWorkspaceSnapshots(kind === "reconnected");
+      // Discard any stale chunks from the old connection before attaching on reconnect.
+      if (kind === "reconnected") {
+        drainPendingStreamIndex(pendingStreamIndexRef.current);
+      }
       // Attach terminal channel for each session so the server sends replay + live output.
       const currentState = stateRefLatest.current;
       for (const tab of currentState.tabs) {
