@@ -44,12 +44,7 @@ pub(crate) enum TerminalIo {
         writer_tx: std::sync::mpsc::Sender<crate::services::terminal::PtyWriteRequest>,
         master: Mutex<Box<dyn MasterPty + Send>>,
     },
-    TmuxAttached {
-        session_name: String,
-        pane_id: String,
-        writer: Mutex<Option<Box<dyn Write + Send>>>,
-        master: Mutex<Box<dyn MasterPty + Send>>,
-    },
+    /// Test-only variant for constructing mock terminal runtimes without a real PTY.
     #[cfg(test)]
     Mock,
 }
