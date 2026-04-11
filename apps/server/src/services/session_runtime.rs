@@ -155,15 +155,13 @@ pub(crate) fn collect_workspace_session_runtime_bindings(
         .iter()
         .filter_map(|(key, terminal_id)| {
             let session_id = key.strip_prefix(&prefix)?;
+            let runtime_info = runtime_registry.by_session(workspace_id, session_id);
             Some(SessionRuntimeBindingInfo {
                 session_id: session_id.to_string(),
-                terminal_id: runtime_registry
-                    .by_session(workspace_id, session_id)
-                    .map(|runtime| runtime.runtime_id.clone())
+                terminal_id: runtime_info
+                    .map(|runtime| runtime.terminal_id.to_string())
                     .unwrap_or_else(|| terminal_id.to_string()),
-                terminal_runtime_id: runtime_registry
-                    .by_session(workspace_id, session_id)
-                    .map(|runtime| runtime.runtime_id.clone()),
+                terminal_runtime_id: runtime_info.map(|runtime| runtime.runtime_id.clone()),
                 workspace_terminal_id: Some(terminal_id.to_string()),
             })
         })
@@ -789,7 +787,7 @@ mod tests {
         assert_eq!(bindings[0].terminal_runtime_id, result.terminal_runtime_id);
         assert_eq!(
             bindings[0].terminal_id,
-            bindings[0].terminal_runtime_id.clone().unwrap()
+            result.terminal_id.to_string()
         );
     }
 
@@ -863,7 +861,7 @@ mod tests {
         assert_eq!(bindings[0].session_id, session.id);
         assert_eq!(
             bindings[0].terminal_id,
-            result.terminal_runtime_id.clone().unwrap()
+            result.terminal_id.to_string()
         );
         assert_eq!(bindings[0].terminal_runtime_id, result.terminal_runtime_id);
         assert_eq!(

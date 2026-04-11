@@ -3499,7 +3499,8 @@ mod tests {
             .session_runtime_bindings
             .iter()
             .any(|binding| binding.session_id == "slot-primary"
-                && binding.terminal_id == started.terminal_runtime_id.clone().unwrap()
+                && binding.terminal_id == started.terminal_id.to_string()
+                && binding.terminal_runtime_id == started.terminal_runtime_id
                 && binding.workspace_terminal_id == Some(started.terminal_id.to_string())));
         assert!(observer
             .snapshot
