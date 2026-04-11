@@ -902,6 +902,113 @@ mod tests {
     }
 
     #[test]
+    fn handle_terminal_channel_attach_returns_correct_replay_data() {
+        #[cfg(test)]
+        {
+            use serde_json::Value;
+
+            let (app, _shutdown_rx) = RuntimeHandle::new();
+            let conn = rusqlite::Connection::open_in_memory().unwrap();
+            crate::init_db(&conn).unwrap();
+            *app.state().db.lock().unwrap() = Some(conn);
+
+            // Register a gateway runtime
+            app.state().terminal_runtimes.lock().unwrap().insert(
+                GatewayTerminalRuntime::new(
+                    "runtime-1".to_string(),
+                    "ws-1".to_string(),
+                    "session-1".to_string(),
+                    "claude".to_string(),
+                    "tmux-fake".to_string(),
+                    "%1".to_string(),
+                ),
+            );
+
+            // Set up session -> terminal binding
+            let terminal_id = 42u64;
+            app.state().session_runtime_bindings.lock().unwrap().insert(
+                crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+                terminal_id,
+            );
+            app.state().terminal_runtime_bindings.lock().unwrap().insert(
+                terminal_id,
+                crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+            );
+
+            // Seed the output buffer with known data
+            let expected_data = "hello from replay";
+            let terminal_runtime = Arc::new(TerminalRuntime {
+                io: TerminalIo::Mock,
+                output: Mutex::new(expected_data.to_string()),
+                size: Mutex::new((80u16, 24u16)),
+                persist_workspace_terminal: true,
+                child: None,
+                killer: None,
+                process_id: None,
+                process_group_leader: None,
+            });
+            app.state().terminals.lock().unwrap().insert(
+                crate::ws::server::terminal_key("ws-1", terminal_id),
+                terminal_runtime,
+            );
+
+            let payload = serde_json::json!({
+                "workspace_id": "ws-1",
+                "fencing_token": 1,
+                "runtime_id": "runtime-1",
+            });
+
+            let result = super::handle_terminal_channel_attach(&app, payload);
+            assert!(result.is_ok(), "attach should succeed: {:?}", result);
+
+            let captured = app.state().captured_transport_events.lock().unwrap().clone();
+            let replay_events: Vec<_> = captured
+                .iter()
+                .filter(|(event, payload)| {
+                    *event == "terminal://channel_replay"
+                        && payload.get("data").and_then(Value::as_str) == Some(expected_data)
+                })
+                .collect();
+            assert!(
+                !replay_events.is_empty(),
+                "expected terminal://channel_replay with data='{}', got: {:?}",
+                expected_data,
+                captured
+            );
+        }
+    }
+
+    #[test]
+    fn handle_terminal_channel_attach_returns_error_for_unknown_runtime() {
+        #[cfg(test)]
+        {
+            let (app, _shutdown_rx) = RuntimeHandle::new();
+            let conn = rusqlite::Connection::open_in_memory().unwrap();
+            crate::init_db(&conn).unwrap();
+            *app.state().db.lock().unwrap() = Some(conn);
+
+            // No gateway runtime registered — use a non-existent runtime_id
+            let payload = serde_json::json!({
+                "workspace_id": "ws-1",
+                "fencing_token": 1,
+                "runtime_id": "nonexistent-runtime",
+            });
+
+            let result = super::handle_terminal_channel_attach(&app, payload);
+            assert!(
+                result.is_err(),
+                "attach with unknown runtime_id should fail, got: {:?}",
+                result
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                "terminal_runtime_not_found",
+                "expected 'terminal_runtime_not_found' error"
+            );
+        }
+    }
+
+    #[test]
     fn ws_client_envelope_parses_terminal_channel_attach() {
         let raw = serde_json::json!({
             "type": "terminal_channel_attach",
