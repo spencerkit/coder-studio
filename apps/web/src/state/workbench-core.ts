@@ -12,7 +12,7 @@ export type SessionMode = "branch" | "git_tree";
 export type QueueTaskStatus = "queued" | "running" | "done";
 export type AgentMessageRole = "system" | "user" | "agent";
 export type AgentProvider = string;
-export type SessionRuntimeLiveness = "attached" | "provider_exited" | "tmux_missing";
+export type SessionRuntimeLiveness = "attached" | "provider_exited" | "runtime_missing";
 
 export type ExecTarget =
   | { type: "native" }

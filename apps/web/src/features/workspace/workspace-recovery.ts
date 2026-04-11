@@ -18,6 +18,9 @@ export const resolveAgentRecoveryAction = (
   if (session.runtimeLiveness === "attached") {
     return null;
   }
+  if (session.runtimeLiveness === "runtime_missing") {
+    return null;
+  }
   if (session.terminalRuntimeId && !session.runtimeLiveness) {
     return null;
   }
