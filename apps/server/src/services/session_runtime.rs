@@ -435,7 +435,7 @@ pub(crate) fn session_runtime_start(
     if let Err(error) = crate::services::terminal::terminal_write(
         params.workspace_id.clone(),
         terminal.id,
-        format!("{}\n", boot_command),
+        format!("{}\r", boot_command),
         crate::TerminalWriteOrigin::User,
         state,
     ) {
