@@ -6,7 +6,11 @@ import {
   subscribeWorkspaceController,
   subscribeWorkspaceRuntimeState,
 } from "../../command";
-import { subscribeTerminalChannelOutput } from "../../services/terminal-channel/client.ts";
+import {
+  subscribeTerminalChannelOutput,
+  subscribeTerminalChannelReplay,
+  sendTerminalChannelAttach,
+} from "../../services/terminal-channel/client.ts";
 import { type ExecTarget, type Tab, type WorkbenchState, type WorktreeInfo } from "../../state/workbench";
 import { getGitChanges } from "../../services/http/git.service";
 import { getGitStatus, getWorkspaceTree, getWorktreeList } from "../../services/http/workspace.service";
@@ -297,6 +301,38 @@ export const useWorkspaceTransportSync = ({
   }, [schedulePendingStreamFlush, stateRefLatest]);
 
   useEffect(() => {
+    const unsubscribe = subscribeTerminalChannelReplay(({ runtime_id, data }) => {
+      const currentState = stateRefLatest.current;
+      const matchedTab = currentState.tabs.find((tab) => (
+        tab.sessions.some((session) => session.terminalRuntimeId === runtime_id)
+      ));
+      if (!matchedTab) {
+        return;
+      }
+      const terminalId = resolveSessionTerminalIdByRuntimeId(
+        matchedTab.sessions,
+        runtime_id,
+        matchedTab.terminals,
+      );
+      if (!terminalId) {
+        return;
+      }
+      // Prepend ANSI clear screen + home before replay data so it replaces
+      // existing terminal content rather than appending to it.
+      const clearThenData = `\x1b[2J\x1b[H${data}`;
+      const recorded = recordPendingTerminalStream(pendingStreamIndexRef.current, {
+        workspaceId: matchedTab.id,
+        terminalId,
+        chunk: clearThenData,
+      });
+      if (recorded) {
+        schedulePendingStreamFlush();
+      }
+    });
+    return unsubscribe;
+  }, [pendingStreamIndexRef, schedulePendingStreamFlush, stateRefLatest]);
+
+  useEffect(() => {
     const unsubscribe = subscribeWorkspaceController((payload) => {
       updateStateRef.current((current) =>
         applyWorkspaceControllerEvent(current, payload, deviceId, clientId),
@@ -316,6 +352,15 @@ export const useWorkspaceTransportSync = ({
     const unsubscribe = subscribeWsConnectionState(({ kind }) => {
       if ((kind !== "connected" && kind !== "reconnected") || !bootstrapReady) return;
       void resyncWorkspaceSnapshots(kind === "reconnected");
+      // Attach terminal channel for each session so the server sends replay + live output.
+      const currentState = stateRefLatest.current;
+      for (const tab of currentState.tabs) {
+        for (const session of tab.sessions) {
+          if (session.terminalRuntimeId) {
+            sendTerminalChannelAttach(tab.id, tab.controller.fencingToken, session.terminalRuntimeId);
+          }
+        }
+      }
     });
     return unsubscribe;
   }, [bootstrapReady, resyncWorkspaceSnapshots]);
