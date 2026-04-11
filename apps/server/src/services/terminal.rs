@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 const DEFAULT_PTY_COLS: u16 = 120;
 const DEFAULT_PTY_ROWS: u16 = 30;
-const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 256 * 1024;
+const TERMINAL_RUNTIME_OUTPUT_LIMIT: usize = 512 * 1024;
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
     PtySize {
@@ -688,15 +688,28 @@ pub(crate) fn terminal_write(
             decorated_input.clone(),
             origin.clone(),
         ));
-    let _ = state.transport_events.send(TransportEvent {
-        event: "terminal://event".to_string(),
-        payload: json!({
-            "workspace_id": workspace_id,
-            "terminal_id": terminal_id,
-            "data": decorated_input,
-            "origin": origin,
-        }),
-    });
+
+    // Only emit transport_events for session-bound terminals.
+    // Non-session-bound terminals already have their echoed input sent via
+    // emit_terminal from the PTY reader thread. Emitting here would cause
+    // duplicate output (the echoed input written twice to xterm).
+    let is_session_bound =
+        crate::services::session_runtime::session_runtime_binding_for_terminal(terminal_id, state)
+            .ok()
+            .flatten()
+            .is_some_and(|(binding_workspace_id, _)| binding_workspace_id == workspace_id);
+
+    if is_session_bound {
+        let _ = state.transport_events.send(TransportEvent {
+            event: "terminal://event".to_string(),
+            payload: json!({
+                "workspace_id": workspace_id,
+                "terminal_id": terminal_id,
+                "data": decorated_input,
+                "origin": origin,
+            }),
+        });
+    }
     sync_bound_terminal_runtime_state(
         &workspace_id,
         terminal_id,

@@ -764,7 +764,7 @@ fn load_persisted_terminals_from_conn(
         .prepare(
             "SELECT terminal_id, output, recoverable
              FROM workspace_terminals
-             WHERE workspace_id = ?1
+             WHERE workspace_id = ?1 AND recoverable = 1
              ORDER BY terminal_id ASC",
         )
         .map_err(|e| e.to_string())?;
