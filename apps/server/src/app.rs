@@ -42,6 +42,7 @@ pub(crate) enum TerminalIo {
     },
     TmuxAttached {
         session_name: String,
+        pane_id: String,
         writer: Mutex<Option<Box<dyn Write + Send>>>,
         master: Mutex<Box<dyn MasterPty + Send>>,
     },

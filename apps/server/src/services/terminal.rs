@@ -362,7 +362,7 @@ fn create_tmux_terminal_runtime(
     terminal_id: u64,
     workspace_id: &str,
     session_name: &str,
-    _pane_id: &str,
+    pane_id: &str,
     cols: Option<u16>,
     rows: Option<u16>,
     options: TerminalCreateOptions,
@@ -384,6 +384,7 @@ fn create_tmux_terminal_runtime(
     let runtime = Arc::new(TerminalRuntime {
         io: TerminalIo::TmuxAttached {
             session_name: session_name.to_string(),
+            pane_id: pane_id.to_string(),
             writer: Mutex::new(Some(writer)),
             master: Mutex::new(attach_runtime.pair.master),
         },
@@ -664,8 +665,16 @@ pub(crate) fn terminal_write(
                 return Err("terminal_stdin_closed".to_string());
             }
         }
-        TerminalIo::TmuxAttached { session_name, .. } => {
-            crate::services::tmux::send_tmux_raw_input(session_name, &decorated_input)?;
+        TerminalIo::TmuxAttached { writer, .. } => {
+            let mut writer = writer.lock().map_err(|e| e.to_string())?;
+            if let Some(handle) = writer.as_mut() {
+                handle
+                    .write_all(decorated_input.as_bytes())
+                    .map_err(|e| e.to_string())?;
+                handle.flush().map_err(|e| e.to_string())?;
+            } else {
+                return Err("terminal_stdin_closed".to_string());
+            }
         }
     }
     #[cfg(test)]

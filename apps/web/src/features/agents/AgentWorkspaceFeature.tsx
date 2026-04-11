@@ -232,7 +232,12 @@ const AgentPaneLeaf = memo(({
                   </span>
                 </div>
               </div>
-              <div className="agent-pane-supervisor-actions">
+              <div
+                className="agent-pane-supervisor-actions"
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                }}
+              >
                 {supervisor ? (
                   <>
                     <button

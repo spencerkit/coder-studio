@@ -504,13 +504,31 @@ fn execute_supervisor_cycle(
             return Err(error);
         }
     };
-    if let Err(error) = crate::services::terminal::terminal_write(
-        workspace_id.to_string(),
-        terminal_id,
-        format!("{}\r", trimmed_reply),
-        TerminalWriteOrigin::Supervisor,
-        state,
-    ) {
+    let injected = (|| -> Result<(), String> {
+        let runtime_id = state
+            .terminal_runtimes
+            .lock()
+            .map_err(|error| error.to_string())?
+            .by_session(workspace_id, session_id)
+            .map(|runtime| runtime.runtime_id.clone());
+        if let Some(runtime_id) = runtime_id {
+            crate::services::terminal_gateway::send_input(
+                &runtime_id,
+                &format!("# [supervisor]\n{}", trimmed_reply),
+                state,
+            )?;
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            return crate::services::terminal_gateway::send_input(&runtime_id, "\r", state);
+        }
+        crate::services::terminal::terminal_write(
+            workspace_id.to_string(),
+            terminal_id,
+            format!("{}\r", trimmed_reply),
+            TerminalWriteOrigin::Supervisor,
+            state,
+        )
+    })();
+    if let Err(error) = injected {
         let _ = persist_failed_cycle(state, workspace_id, &binding, &cycle, &error);
         return Err(error);
     }

@@ -1,4 +1,5 @@
 use crate::*;
+use crate::infra::time::now_ts_ms;
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, PtyPair, PtySize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -238,6 +239,66 @@ pub(crate) fn send_tmux_raw_input(session_name: &str, input: &str) -> Result<(),
     Ok(())
 }
 
+pub(crate) fn paste_tmux_raw_input(target_id: &str, input: &str) -> Result<(), String> {
+    let before = capture_tmux_pane(target_id, target_id).ok();
+    eprintln!(
+        "[supervisor] tmux paste start: target={} input={:?} pane_before_tail={:?}",
+        target_id,
+        input,
+        before.as_ref().map(|value| tail_for_log(value))
+    );
+    let mut literal = String::new();
+    for ch in input.chars() {
+        if ch == '\r' {
+            if !literal.is_empty() {
+                paste_tmux_literal(target_id, &literal)?;
+                literal.clear();
+            }
+            send_tmux_enter(target_id)?;
+        } else {
+            literal.push(ch);
+        }
+    }
+    if !literal.is_empty() {
+        paste_tmux_literal(target_id, &literal)?;
+    }
+    let after = capture_tmux_pane(target_id, target_id).ok();
+    eprintln!(
+        "[supervisor] tmux paste end: target={} pane_after_tail={:?}",
+        target_id,
+        after.as_ref().map(|value| tail_for_log(value))
+    );
+    Ok(())
+}
+
+fn tail_for_log(value: &str) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    let start = chars.len().saturating_sub(400);
+    chars[start..].iter().collect()
+}
+
+fn paste_tmux_literal(target_id: &str, input: &str) -> Result<(), String> {
+    if input.is_empty() {
+        return Ok(());
+    }
+    let buffer_name = format!("coder-studio-{}", now_ts_ms());
+    let set_output = tmux_command()
+        .args(["set-buffer", "-b", &buffer_name, "--", input])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !set_output.status.success() {
+        return Err(String::from_utf8_lossy(&set_output.stderr).trim().to_string());
+    }
+    let paste_output = tmux_command()
+        .args(["paste-buffer", "-d", "-b", &buffer_name, "-t", target_id])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !paste_output.status.success() {
+        return Err(String::from_utf8_lossy(&paste_output.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
 fn send_tmux_literal(session_name: &str, input: &str) -> Result<(), String> {
     // Split on newlines that appear outside quoted regions. This prevents \n inside
     // quoted format strings (e.g. 'hello\n') from being mistaken for command separators.
@@ -301,9 +362,9 @@ fn split_lines_outside_quotes(input: &str) -> Vec<&str> {
     lines
 }
 
-fn send_tmux_enter(session_name: &str) -> Result<(), String> {
+fn send_tmux_enter(target_id: &str) -> Result<(), String> {
     let output = tmux_command()
-        .args(["send-keys", "-t", session_name, "Enter"])
+        .args(["send-keys", "-t", target_id, "C-m"])
         .output()
         .map_err(|error| error.to_string())?;
     if !output.status.success() {

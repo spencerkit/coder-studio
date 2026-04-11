@@ -1369,12 +1369,26 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
 
   const onTriggerSupervisor = useCallback(async (sessionId: string) => {
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      sessions: tab.sessions.map((session) => (
+        session.id === sessionId && session.supervisor
+          ? {
+              ...session,
+              supervisor: {
+                ...session.supervisor,
+                status: "evaluating",
+              },
+            }
+          : session
+      )),
+    }));
     await runSupervisorMutation(
       sessionId,
       () => triggerSupervisorCycle(activeTab.id, activeTab.controller, sessionId),
       "Failed to trigger supervisor cycle.",
     );
-  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation, updateTab]);
 
   const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
     activeTabId: activeTab.id,
