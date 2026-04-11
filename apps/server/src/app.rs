@@ -35,6 +35,7 @@ pub(crate) struct AgentRuntime {
     pub process_group_leader: Option<i32>,
 }
 
+#[non_exhaustive]
 pub(crate) enum TerminalIo {
     Pty {
         writer: Mutex<Option<Box<dyn Write + Send>>>,
@@ -46,11 +47,14 @@ pub(crate) enum TerminalIo {
         writer: Mutex<Option<Box<dyn Write + Send>>>,
         master: Mutex<Box<dyn MasterPty + Send>>,
     },
+    #[cfg(test)]
+    Mock,
 }
 
 pub(crate) struct TerminalRuntime {
     pub io: TerminalIo,
     pub output: Mutex<String>,
+    pub size: Mutex<(u16, u16)>,
     pub persist_workspace_terminal: bool,
     pub child: Option<Mutex<Box<dyn Child + Send>>>,
     pub killer: Option<Mutex<Box<dyn ChildKiller + Send + Sync>>>,
@@ -109,6 +113,8 @@ pub(crate) struct AppState {
     pub transport_events: broadcast::Sender<TransportEvent>,
     #[cfg(test)]
     pub terminal_write_log: Mutex<Vec<(String, u64, String, crate::models::TerminalWriteOrigin)>>,
+    #[cfg(test)]
+    pub captured_transport_events: Mutex<Vec<(String, serde_json::Value)>>,
 }
 
 impl Default for AppState {
@@ -134,6 +140,8 @@ impl Default for AppState {
             transport_events,
             #[cfg(test)]
             terminal_write_log: Mutex::new(Vec::new()),
+            #[cfg(test)]
+            captured_transport_events: Mutex::new(Vec::new()),
         }
     }
 }

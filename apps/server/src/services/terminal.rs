@@ -36,6 +36,10 @@ fn terminate_terminal_runtime(runtime: Arc<TerminalRuntime>) {
                 writer.take();
             }
         }
+        #[cfg(test)]
+        TerminalIo::Mock => {}
+        #[cfg(not(test))]
+        _ => {}
     }
 }
 
@@ -239,6 +243,7 @@ fn create_pty_terminal_runtime(
             master: Mutex::new(pair.master),
         },
         output: Mutex::new(String::new()),
+        size: Mutex::new((80, 24)),
         persist_workspace_terminal: options.persist_workspace_terminal,
         child: Some(Mutex::new(child)),
         killer: Some(Mutex::new(killer)),
@@ -389,6 +394,7 @@ fn create_tmux_terminal_runtime(
             master: Mutex::new(attach_runtime.pair.master),
         },
         output: Mutex::new(String::new()),
+        size: Mutex::new((80, 24)),
         persist_workspace_terminal: options.persist_workspace_terminal,
         child: Some(attach_runtime.child),
         killer: Some(attach_runtime.killer),
@@ -676,6 +682,10 @@ pub(crate) fn terminal_write(
                 return Err("terminal_stdin_closed".to_string());
             }
         }
+        #[cfg(test)]
+        TerminalIo::Mock => {}
+        #[cfg(not(test))]
+        _ => {}
     }
     #[cfg(test)]
     state
@@ -743,6 +753,10 @@ pub(crate) fn terminal_resize(
                 })
                 .map_err(|e| e.to_string())
         }
+        #[cfg(test)]
+        TerminalIo::Mock => Ok(()),
+        #[cfg(not(test))]
+        _ => unreachable!(),
     }
 }
 
@@ -760,7 +774,7 @@ pub(crate) fn terminal_close(
     if let Some(runtime) = runtime {
         let tmux_session = match &runtime.io {
             TerminalIo::TmuxAttached { session_name, .. } => Some(session_name.clone()),
-            TerminalIo::Pty { .. } => None,
+            _ => None,
         };
         terminate_terminal_runtime(runtime);
         if let Some(session_name) = tmux_session {
@@ -810,7 +824,7 @@ pub(crate) fn close_workspace_terminals(workspace_id: &str, state: State<'_, App
     for (terminal_id, runtime) in runtimes {
         let tmux_session = match &runtime.io {
             TerminalIo::TmuxAttached { session_name, .. } => Some(session_name.clone()),
-            TerminalIo::Pty { .. } => None,
+            _ => None,
         };
         terminate_terminal_runtime(runtime);
         if let Some(session_name) = tmux_session {
@@ -903,8 +917,10 @@ mod ring_buffer_tests {
 
         truncate_terminal_output(&mut buffer);
 
-        // floor_char_boundary may keep up to (char_len - 1) extra bytes to
-        // avoid splitting a multi-byte codepoint, so allow a small overshoot.
+        // floor_char_boundary rounds the drain boundary DOWN to the nearest valid
+        // char start, so less is drained than requested. The retained slice can
+        // therefore be up to (char_len - 1) bytes over the limit; for 3-byte CJK
+        // that is at most 2 extra bytes.
         assert!(buffer.len() <= TERMINAL_RUNTIME_OUTPUT_LIMIT + 2);
         // Key assertion: truncated result is still valid UTF-8.
         assert!(std::str::from_utf8(buffer.as_bytes()).is_ok());

@@ -127,6 +127,21 @@ pub(crate) fn session_runtime_binding_for_terminal(
     Ok(Some((workspace_id.to_string(), session_id.to_string())))
 }
 
+pub(crate) fn session_runtime_binding_by_session(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<Option<u64>, String> {
+    let key = session_runtime_key(workspace_id, session_id);
+    let binding = state
+        .session_runtime_bindings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&key)
+        .copied();
+    Ok(binding)
+}
+
 pub(crate) fn collect_workspace_session_runtime_bindings(
     workspace_id: &str,
     state: State<'_, AppState>,

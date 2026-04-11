@@ -316,6 +316,63 @@ fn handle_terminal_channel_input(app: &AppHandle, payload: Value) -> Result<(), 
     crate::services::terminal_gateway::send_input(runtime_id, input, state)
 }
 
+fn handle_terminal_channel_attach(app: &AppHandle, payload: Value) -> Result<(), String> {
+    let workspace_id = payload
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "workspace_id_missing".to_string())?;
+    let runtime_id = payload
+        .get("runtime_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "runtime_id_missing".to_string())?;
+
+    let state = app.state();
+
+    // 1) Look up the gateway runtime
+    let gateway_runtime = state
+        .terminal_runtimes
+        .lock()
+        .map_err(|e| e.to_string())?
+        .by_runtime_id(runtime_id)
+        .cloned()
+        .ok_or_else(|| "terminal_runtime_not_found".to_string())?;
+
+    if gateway_runtime.workspace_id != workspace_id {
+        return Err("workspace_runtime_mismatch".to_string());
+    }
+
+    // 2) Find the terminal_id via session runtime binding
+    let binding = crate::services::session_runtime::session_runtime_binding_by_session(
+        &gateway_runtime.workspace_id,
+        &gateway_runtime.session_id,
+        state,
+    )
+    .ok()
+    .flatten()
+    .ok_or_else(|| "session_runtime_unbound".to_string())?;
+    let terminal_id = binding;
+
+    // 3) Clone output buffer + size from the terminal runtime
+    let key = crate::ws::server::terminal_key(workspace_id, terminal_id);
+    let (data, cols, rows) = {
+        let terms = state.terminals.lock().map_err(|e| e.to_string())?;
+        let runtime = terms
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| "terminal_runtime_missing".to_string())?;
+        let data = runtime
+            .output
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone();
+        let (cols, rows) = *runtime.size.lock().map_err(|e| e.to_string())?;
+        (data, cols, rows)
+    };
+
+    emit_terminal_channel_replay(app, runtime_id, &data, cols, rows);
+    Ok(())
+}
+
 fn handle_ws_client_envelope(
     envelope: WsClientEnvelope,
     app: &AppHandle,
@@ -438,7 +495,31 @@ fn handle_ws_client_envelope(
             Ok(None)
         }
         // Task 4: wire up TerminalChannelAttach dispatch
-        WsClientEnvelope::TerminalChannelAttach { .. } => {
+        WsClientEnvelope::TerminalChannelAttach {
+            workspace_id,
+            fencing_token,
+            runtime_id,
+        } => {
+            require_ws_workspace_controller_mutation(
+                &workspace_id,
+                fencing_token,
+                workspace_client,
+                app,
+            )
+            .map_err(|error| {
+                ws_input_error_envelope(&workspace_id, "terminal_channel_attach", &error)
+            })?;
+            handle_terminal_channel_attach(
+                app,
+                json!({
+                    "workspace_id": workspace_id,
+                    "fencing_token": fencing_token,
+                    "runtime_id": runtime_id,
+                }),
+            )
+            .map_err(|error| {
+                ws_input_error_envelope(&workspace_id, "terminal_channel_attach", &error)
+            })?;
             Ok(None)
         }
     }
@@ -456,8 +537,14 @@ pub(crate) fn emit_transport_event(app: &AppHandle, event: &str, payload: Value)
     let state: State<AppState> = app.state();
     let _ = state.transport_events.send(TransportEvent {
         event: event.to_string(),
-        payload,
+        payload: payload.clone(),
     });
+    #[cfg(test)]
+    {
+        if let Ok(mut captured) = state.captured_transport_events.lock() {
+            captured.push((event.to_string(), payload));
+        }
+    }
 }
 
 pub(crate) fn emit_agent(
@@ -498,6 +585,25 @@ pub(crate) fn emit_terminal_channel_output(app: &AppHandle, runtime_id: &str, da
         json!({
             "runtime_id": runtime_id,
             "data": data,
+        }),
+    );
+}
+
+pub(crate) fn emit_terminal_channel_replay(
+    app: &AppHandle,
+    runtime_id: &str,
+    data: &str,
+    cols: u16,
+    rows: u16,
+) {
+    emit_transport_event(
+        app,
+        "terminal://channel_replay",
+        json!({
+            "runtime_id": runtime_id,
+            "data": data,
+            "cols": cols,
+            "rows": rows,
         }),
     );
 }
@@ -600,13 +706,15 @@ mod tests {
         artifact_dirty_categories, emit_terminal_channel_output, handle_terminal_channel_input,
         WsClientEnvelope,
     };
+    use crate::app::{TerminalIo, TerminalRuntime};
     use crate::runtime::RuntimeHandle;
-    use crate::services::terminal_gateway::TerminalRuntime;
+    use crate::services::terminal_gateway::TerminalRuntime as GatewayTerminalRuntime;
     use crate::{
         default_idle_policy, init_db, launch_workspace_record, save_workspace_controller_lease,
         AppHandle, ExecTarget, WorkspaceControllerLease, WorkspaceSource, WorkspaceSourceKind,
     };
     use serde_json::json;
+    use std::sync::{Arc, Mutex};
 
     fn test_app() -> AppHandle {
         let (app, _shutdown_rx) = RuntimeHandle::new();
@@ -679,7 +787,7 @@ mod tests {
             },
         )
         .unwrap();
-        let runtime = TerminalRuntime::new(
+        let runtime = GatewayTerminalRuntime::new(
             "runtime-1".into(),
             workspace_id.clone(),
             "session-1".into(),
@@ -730,6 +838,64 @@ mod tests {
             artifact_dirty_categories("git_discard_file"),
             vec!["git", "worktrees", "tree"]
         );
+    }
+
+    #[test]
+    fn handle_terminal_channel_attach_emits_replay_event() {
+        let (app, _shutdown_rx) = RuntimeHandle::new();
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+
+        // Register a gateway runtime (uses existing signature from terminal_gateway.rs)
+        app.state().terminal_runtimes.lock().unwrap().insert(
+            GatewayTerminalRuntime::new(
+                "runtime-1".to_string(),
+                "ws-1".to_string(),
+                "session-1".to_string(),
+                "claude".to_string(),
+                "tmux-fake".to_string(),
+                "%1".to_string(),
+            ),
+        );
+
+        // Set up session -> terminal binding (needed for lookup)
+        let terminal_id = 42u64;
+        app.state().session_runtime_bindings.lock().unwrap().insert(
+            crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+            terminal_id,
+        );
+        app.state().terminal_runtime_bindings.lock().unwrap().insert(
+            terminal_id,
+            crate::services::session_runtime::session_runtime_key("ws-1", "session-1"),
+        );
+
+        // Create and register a terminal runtime with output buffer + size
+        let terminal_runtime = Arc::new(TerminalRuntime {
+            io: TerminalIo::Mock,
+            output: Mutex::new("some output".to_string()),
+            size: Mutex::new((80u16, 24u16)),
+            persist_workspace_terminal: true,
+            child: None,
+            killer: None,
+            process_id: None,
+            process_group_leader: None,
+        });
+        app.state().terminals.lock().unwrap().insert(
+            crate::ws::server::terminal_key("ws-1", terminal_id),
+            terminal_runtime,
+        );
+
+        let payload = serde_json::json!({
+            "workspace_id": "ws-1",
+            "fencing_token": 1,
+            "runtime_id": "runtime-1",
+        });
+
+        super::handle_terminal_channel_attach(&app, payload).expect("attach ok");
+
+        let captured = app.state().captured_transport_events.lock().unwrap().clone();
+        assert!(captured.iter().any(|(event, _)| event == "terminal://channel_replay"));
     }
 
     #[test]
