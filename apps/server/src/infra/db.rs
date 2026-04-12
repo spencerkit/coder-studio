@@ -1350,6 +1350,136 @@ fn load_mounted_session_ids_from_conn(conn: &Connection, workspace_id: &str) -> 
         .unwrap_or_default()
 }
 
+struct SnapshotBase {
+    workspace: WorkspaceSummary,
+    view_state: WorkspaceViewState,
+    visible_session_ids: Vec<String>,
+    terminals: Vec<TerminalInfo>,
+}
+
+fn load_snapshot_base_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<SnapshotBase, String> {
+    let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
+    let view_state = match load_view_state_from_conn(conn, workspace_id) {
+        Ok(value) => value,
+        Err(_) => default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()),
+    };
+    let visible_session_ids = ordered_visible_session_ids(&view_state);
+    let terminals: Vec<TerminalInfo> = load_persisted_terminals_from_conn(conn, workspace_id)?
+        .into_iter()
+        .map(|row| TerminalInfo {
+            id: row.terminal_id,
+            output: row.output,
+            recoverable: row.recoverable,
+        })
+        .collect();
+    Ok(SnapshotBase {
+        workspace,
+        view_state,
+        visible_session_ids,
+        terminals,
+    })
+}
+
+fn apply_provider_sessions_to_snapshot_base(
+    mut base: SnapshotBase,
+    provider_sessions: &[ProviderWorkspaceSession],
+) -> (WorkspaceSnapshot, bool) {
+    let mut sessions = Vec::new();
+    let mut binding_snapshots_changed = false;
+
+    for session_id in &base.visible_session_ids {
+        let Some(binding_index) = base
+            .view_state
+            .session_bindings
+            .iter()
+            .position(|binding| binding.session_id == *session_id)
+        else {
+            continue;
+        };
+        let binding = base.view_state.session_bindings[binding_index].clone();
+        if let Some(provider_session) = provider_session_for_binding(provider_sessions, &binding) {
+            if base.view_state.session_bindings[binding_index].title_snapshot != provider_session.title
+                || base.view_state.session_bindings[binding_index].last_seen_at
+                    != provider_session.last_active_at
+            {
+                base.view_state.session_bindings[binding_index].title_snapshot =
+                    provider_session.title.clone();
+                base.view_state.session_bindings[binding_index].last_seen_at =
+                    provider_session.last_active_at;
+                binding_snapshots_changed = true;
+            }
+        }
+        sessions.push(resolve_bound_session_from_binding(
+            &base.view_state.session_bindings[binding_index],
+            provider_sessions,
+        ));
+    }
+
+    (
+        WorkspaceSnapshot {
+            workspace: base.workspace,
+            sessions,
+            view_state: base.view_state,
+            terminals: base.terminals,
+        },
+        binding_snapshots_changed,
+    )
+}
+
+fn refresh_binding_snapshots_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+    updated_view_state: &WorkspaceViewState,
+) -> Result<(), String> {
+    let mut latest_view_state = match load_view_state_from_conn(conn, workspace_id) {
+        Ok(value) => value,
+        Err(_) => default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()),
+    };
+    let mut changed = false;
+
+    for updated_binding in &updated_view_state.session_bindings {
+        let Some(latest_binding) = latest_view_state
+            .session_bindings
+            .iter_mut()
+            .find(|binding| binding.session_id == updated_binding.session_id)
+        else {
+            continue;
+        };
+        if latest_binding.title_snapshot != updated_binding.title_snapshot {
+            latest_binding.title_snapshot = updated_binding.title_snapshot.clone();
+            changed = true;
+        }
+        if latest_binding.last_seen_at != updated_binding.last_seen_at {
+            latest_binding.last_seen_at = updated_binding.last_seen_at;
+            changed = true;
+        }
+    }
+
+    if changed {
+        save_view_state_to_conn(conn, workspace_id, &latest_view_state)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn build_snapshot_outside_db_lock(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+) -> Result<WorkspaceSnapshot, String> {
+    let base = with_db(state, |conn| load_snapshot_base_from_conn(conn, workspace_id))?;
+    let provider_sessions = list_provider_workspace_sessions(&base.workspace.project_path)?;
+    let (snapshot, binding_snapshots_changed) =
+        apply_provider_sessions_to_snapshot_base(base, &provider_sessions);
+    if binding_snapshots_changed {
+        with_db(state, |conn| {
+            refresh_binding_snapshots_from_conn(conn, workspace_id, &snapshot.view_state)
+        })?;
+    }
+    Ok(snapshot)
+}
+
 pub(crate) fn build_snapshot_from_conn(
     conn: &Connection,
     workspace_id: &str,
@@ -1394,7 +1524,7 @@ pub(crate) fn build_snapshot_from_conn(
     if binding_snapshots_changed {
         save_view_state_to_conn(conn, workspace_id, &view_state)?;
     }
-    let terminals = load_persisted_terminals_from_conn(conn, workspace_id)?
+    let terminals: Vec<TerminalInfo> = load_persisted_terminals_from_conn(conn, workspace_id)?
         .into_iter()
         .map(|row| TerminalInfo {
             id: row.terminal_id,
@@ -1606,7 +1736,7 @@ pub(crate) fn workspace_snapshot(
     state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
-    with_db(state, |conn| build_snapshot_from_conn(conn, workspace_id))
+    build_snapshot_outside_db_lock(state, workspace_id)
 }
 
 pub(crate) fn load_workspace_slot_session(
@@ -1614,9 +1744,9 @@ pub(crate) fn load_workspace_slot_session(
     workspace_id: &str,
     session_id: &str,
 ) -> Result<SessionInfo, String> {
-    with_db(state, |conn| {
+    let (workspace, view_state, binding_index) = with_db(state, |conn| {
         let workspace = load_workspace_row(conn, workspace_id)?;
-        let mut view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+        let view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
             Ok::<WorkspaceViewState, String>(default_view_state(
                 DEFAULT_SESSION_SLOT_ID.to_string(),
             ))
@@ -1628,25 +1758,36 @@ pub(crate) fn load_workspace_slot_session(
         else {
             return Err("session_not_found".to_string());
         };
-        let provider_sessions = list_provider_workspace_sessions(&workspace.root_path)?;
-        let binding = view_state.session_bindings[binding_index].clone();
-        if let Some(provider_session) = provider_session_for_binding(&provider_sessions, &binding) {
-            if view_state.session_bindings[binding_index].title_snapshot != provider_session.title
-                || view_state.session_bindings[binding_index].last_seen_at
-                    != provider_session.last_active_at
-            {
-                view_state.session_bindings[binding_index].title_snapshot =
-                    provider_session.title.clone();
-                view_state.session_bindings[binding_index].last_seen_at =
-                    provider_session.last_active_at;
-                save_view_state_to_conn(conn, workspace_id, &view_state)?;
-            }
+        Ok((workspace, view_state, binding_index))
+    })?;
+
+    let provider_sessions = list_provider_workspace_sessions(&workspace.root_path)?;
+    let binding = view_state.session_bindings[binding_index].clone();
+    let mut updated_view_state = view_state.clone();
+    let mut binding_snapshot_changed = false;
+    if let Some(provider_session) = provider_session_for_binding(&provider_sessions, &binding) {
+        if updated_view_state.session_bindings[binding_index].title_snapshot != provider_session.title
+            || updated_view_state.session_bindings[binding_index].last_seen_at
+                != provider_session.last_active_at
+        {
+            updated_view_state.session_bindings[binding_index].title_snapshot =
+                provider_session.title.clone();
+            updated_view_state.session_bindings[binding_index].last_seen_at =
+                provider_session.last_active_at;
+            binding_snapshot_changed = true;
         }
-        Ok(resolve_bound_session_from_binding(
-            &binding,
-            &provider_sessions,
-        ))
-    })
+    }
+
+    if binding_snapshot_changed {
+        with_db(state, |conn| {
+            refresh_binding_snapshots_from_conn(conn, workspace_id, &updated_view_state)
+        })?;
+    }
+
+    Ok(resolve_bound_session_from_binding(
+        &updated_view_state.session_bindings[binding_index],
+        &provider_sessions,
+    ))
 }
 
 pub(crate) fn upsert_workspace_session_binding(

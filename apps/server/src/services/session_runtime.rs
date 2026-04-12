@@ -59,17 +59,39 @@ pub(crate) fn bind_session_runtime(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let key = session_runtime_key(workspace_id, session_id);
-    let mut terminal_bindings = state
-        .terminal_runtime_bindings
-        .lock()
-        .map_err(|e| e.to_string())?;
-    let mut session_bindings = state
-        .session_runtime_bindings
-        .lock()
-        .map_err(|e| e.to_string())?;
+    // Lock in order: terminal_runtimes -> terminal_runtime_bindings -> session_runtime_bindings.
+    // Do not acquire terminals/db while holding the binding locks, otherwise we can
+    // deadlock with terminal_close (terminals -> terminal_runtime_bindings).
+    drop(
+        state
+            .terminal_runtimes
+            .lock()
+            .map_err(|e| e.to_string())?,
+    );
+    let stale_terminal_id = {
+        let mut terminal_bindings = state
+            .terminal_runtime_bindings
+            .lock()
+            .map_err(|e| e.to_string())?;
+        let mut session_bindings = state
+            .session_runtime_bindings
+            .lock()
+            .map_err(|e| e.to_string())?;
 
-    if let Some(existing_terminal_id) = session_bindings.get(&key).copied() {
-        terminal_bindings.remove(&existing_terminal_id);
+        let stale_terminal_id = session_bindings.get(&key).copied();
+        if let Some(existing_terminal_id) = stale_terminal_id {
+            terminal_bindings.remove(&existing_terminal_id);
+        }
+        if let Some(existing_key) = terminal_bindings.get(&terminal_id).cloned() {
+            session_bindings.remove(&existing_key);
+        }
+
+        session_bindings.insert(key.clone(), terminal_id);
+        terminal_bindings.insert(terminal_id, key);
+        stale_terminal_id
+    };
+
+    if let Some(existing_terminal_id) = stale_terminal_id {
         let stale_terminal_key = terminal_key(workspace_id, existing_terminal_id);
         let stale_terminal_is_live = state
             .terminals
@@ -80,12 +102,7 @@ pub(crate) fn bind_session_runtime(
             let _ = crate::delete_workspace_terminal(state, workspace_id, existing_terminal_id);
         }
     }
-    if let Some(existing_key) = terminal_bindings.get(&terminal_id).cloned() {
-        session_bindings.remove(&existing_key);
-    }
 
-    session_bindings.insert(key.clone(), terminal_id);
-    terminal_bindings.insert(terminal_id, key);
     Ok(())
 }
 
@@ -93,6 +110,12 @@ pub(crate) fn unbind_session_runtime_by_terminal(
     terminal_id: u64,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    drop(
+        state
+            .terminal_runtimes
+            .lock()
+            .map_err(|e| e.to_string())?,
+    );
     let session_key = state
         .terminal_runtime_bindings
         .lock()
@@ -114,6 +137,12 @@ pub(crate) fn unbind_session_runtime_by_session(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let key = session_runtime_key(workspace_id, session_id);
+    drop(
+        state
+            .terminal_runtimes
+            .lock()
+            .map_err(|e| e.to_string())?,
+    );
     let terminal_id = state
         .session_runtime_bindings
         .lock()
@@ -169,7 +198,7 @@ pub(crate) fn collect_workspace_session_runtime_bindings(
 ) -> Result<Vec<SessionRuntimeBindingInfo>, String> {
     let prefix = format!("{workspace_id}:");
     let runtime_registry = state.terminal_runtimes.lock().map_err(|e| e.to_string())?;
-    let bindings = state
+    let bindings: Vec<SessionRuntimeBindingInfo> = state
         .session_runtime_bindings
         .lock()
         .map_err(|e| e.to_string())?
@@ -311,15 +340,6 @@ pub(crate) fn session_runtime_start(
     state: State<'_, AppState>,
 ) -> Result<SessionRuntimeStartResult, String> {
     let binding_key = session_runtime_key(&params.workspace_id, &params.session_id);
-    let existing_terminal_id = {
-        state
-            .session_runtime_bindings
-            .lock()
-            .map_err(|e| e.to_string())?
-            .get(&binding_key)
-            .copied()
-    };
-
     let (workspace_cwd, workspace_target) = workspace_access_context(state, &params.workspace_id)?;
     let session = crate::services::workspace::resolve_session_for_slot(
         state,
@@ -347,12 +367,30 @@ pub(crate) fn session_runtime_start(
         )
     })?;
     let settings = load_or_default_app_settings(state)?;
+
+    // Check if this session already has a running terminal (fast path).
+    // We lock terminal_runtimes FIRST, then session_runtime_bindings to avoid
+    // a 3-way lock cycle with:
+    //   - bootstrap: terminal_runtimes -> session_runtime_bindings
+    //   - PTY reader: terminal_runtime_bindings -> terminal_runtimes
+    //   - session_runtime_start: session_runtime_bindings -> (bind_session_runtime needs terminal_runtime_bindings)
+    // By following terminal_runtimes -> session_runtime_bindings, we avoid holding
+    // session_runtime_bindings when bind_session_runtime needs terminal_runtime_bindings.
     let existing_runtime = state
         .terminal_runtimes
         .lock()
         .map_err(|e| e.to_string())?
         .by_session(&params.workspace_id, &params.session_id)
         .cloned();
+
+    let existing_terminal_id = {
+        state
+            .session_runtime_bindings
+            .lock()
+            .map_err(|e| e.to_string())?
+            .get(&binding_key)
+            .copied()
+    };
 
     if let Some(existing_terminal_id) = existing_terminal_id {
         let terminal_key = terminal_key(&params.workspace_id, existing_terminal_id);

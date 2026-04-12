@@ -1,8 +1,8 @@
 use crate::infra::db::{
-    build_snapshot_from_conn, ensure_workspace_exists_from_conn,
-    list_workspace_ids_for_workspace_client_from_conn, load_agent_lifecycle_events_from_conn,
-    load_workspace_controller_lease_from_conn, mark_workspace_client_detached_from_conn,
-    save_workspace_controller_lease_to_conn, upsert_workspace_attachment_to_conn, with_db,
+    ensure_workspace_exists_from_conn, list_workspace_ids_for_workspace_client_from_conn,
+    load_agent_lifecycle_events_from_conn, load_workspace_controller_lease_from_conn,
+    mark_workspace_client_detached_from_conn, save_workspace_controller_lease_to_conn,
+    upsert_workspace_attachment_to_conn, with_db,
 };
 use crate::models::WorkspaceSupervisorViewState;
 use crate::*;
@@ -346,19 +346,18 @@ pub(crate) fn session_runtime_liveness_for_binding(
         .ok()?
         .by_runtime_id(runtime_id)
         .cloned()?;
-
     if runtime.workspace_id != workspace_id || runtime.session_id != binding.session_id {
         return Some(SessionRuntimeLiveness::ProviderExited);
     }
 
     let key = crate::ws::server::terminal_key(&runtime.workspace_id, runtime.terminal_id);
-    if state
+    let result = state
         .terminals
         .lock()
         .ok()
         .map(|terms| terms.contains_key(&key))
-        .unwrap_or(false)
-    {
+        .unwrap_or(false);
+    if result {
         Some(SessionRuntimeLiveness::Attached)
     } else {
         Some(SessionRuntimeLiveness::RuntimeMissing)
@@ -408,7 +407,7 @@ pub(crate) fn workspace_runtime_attach(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WorkspaceRuntimeSnapshot, String> {
-    let (lease, mut snapshot, lifecycle_events, controller_changed) = with_db(state, |conn| {
+    let (lease, lifecycle_events, controller_changed) = with_db(state, |conn| {
         ensure_workspace_exists_from_conn(conn, &workspace_id)?;
         let now = now_ts();
         let mut lease = load_workspace_controller_lease_from_conn(conn, &workspace_id)?;
@@ -424,19 +423,20 @@ pub(crate) fn workspace_runtime_attach(
         let role = controller_role(&lease, &device_id, &client_id);
         upsert_workspace_attachment_to_conn(conn, &workspace_id, &device_id, &client_id, role)?;
         save_workspace_controller_lease_to_conn(conn, &lease)?;
-        let snapshot = build_snapshot_from_conn(conn, &workspace_id)?;
         let lifecycle_events = load_agent_lifecycle_events_from_conn(
             conn,
             &workspace_id,
             WORKSPACE_RUNTIME_LIFECYCLE_REPLAY_LIMIT,
         )?;
         let controller_changed = lease != before;
-        Ok((lease, snapshot, lifecycle_events, controller_changed))
+        Ok((lease, lifecycle_events, controller_changed))
     })?;
 
     if controller_changed {
         emit_workspace_controller_change(&app, &lease);
     }
+
+    let mut snapshot = crate::load_workspace_snapshot(state, &workspace_id)?;
 
     let existing_runtime_bindings =
         crate::services::session_runtime::collect_workspace_session_runtime_bindings(
