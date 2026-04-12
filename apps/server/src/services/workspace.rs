@@ -563,7 +563,19 @@ pub(crate) fn close_session<S: ToString>(
     let _ = stop_agent_runtime_without_status_update(&workspace_id, &session_id, state);
     let _ = forget_live_session(state, &workspace_id, &session_id);
     let _ = crate::services::supervisor::disable_supervisor_mode(&workspace_id, &session_id, state);
-    remove_workspace_session_binding(state, &workspace_id, &session_id).map(|_| ())
+    remove_workspace_session_binding(state, &workspace_id, &session_id).map(|_| ())?;
+    let _ = crate::services::session_runtime::unbind_session_runtime_by_session(
+        &workspace_id,
+        &session_id,
+        state,
+    );
+    let _ =
+        crate::services::session_runtime::remove_terminal_runtime_registration(
+            &workspace_id,
+            &session_id,
+            state,
+        );
+    Ok(())
 }
 
 pub(crate) fn list_session_history(

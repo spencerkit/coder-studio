@@ -108,6 +108,27 @@ pub(crate) fn unbind_session_runtime_by_terminal(
     Ok(session_key)
 }
 
+pub(crate) fn unbind_session_runtime_by_session(
+    workspace_id: &str,
+    session_id: &str,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let key = session_runtime_key(workspace_id, session_id);
+    let terminal_id = state
+        .session_runtime_bindings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&key);
+    if let Some(tid) = terminal_id {
+        state
+            .terminal_runtime_bindings
+            .lock()
+            .map_err(|e| e.to_string())?
+            .remove(&tid);
+    }
+    Ok(())
+}
+
 pub(crate) fn session_runtime_binding_for_terminal(
     terminal_id: u64,
     state: State<'_, AppState>,
