@@ -1,1 +1,0 @@
-export { WorkspaceWelcomeScreen } from "./WorkspaceWelcomeScreen";
