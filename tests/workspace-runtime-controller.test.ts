@@ -467,16 +467,16 @@ test("agent session input routes through terminal channel runtime ids with contr
 
   assert.match(
     source,
-    /sendTerminalChannelInput\(tab\.id, tab\.controller\.deviceId, tab\.controller\.clientId, tab\.controller\.fencingToken, session\.terminalRuntimeId, input\)/,
+    /writeTerminalRequest\(tab\.id, tab\.controller, numericTerminalId, input\)/,
   );
-  assert.match(source, /if \(!session\.terminalRuntimeId\) return false;/);
+  assert.match(source, /if \(\!session\.terminalRuntimeId \|\| session\.runtimeLiveness !== "attached" \|\| \!session\.terminalId\) return false;/);
   assert.match(source, /const bufferedInput = agentTerminalInputBufferRef\.current\.get\(paneId\) \?\? "";/);
   assert.match(source, /clearAgentTerminalInputFlushTimer\(paneId\);/);
   assert.match(source, /consumeTerminalChannelInputFragment\(bufferedInput, data\)/);
   assert.match(source, /if \(pending === "\\u001b"\) \{[\s\S]*?scheduleAgentTerminalEscapeFlush\(paneId\);/);
   assert.match(source, /void forwardAgentTerminalInput\(paneId, pending\);/);
   assert.match(source, /await forwardAgentTerminalInput\(paneId, forwarded\);/);
-  assert.doesNotMatch(source, /if \(!session\.terminalId \|\| !session\.terminalRuntimeId\) return false;/);
+  assert.doesNotMatch(source, /if \(!session\.terminalId \|\| \!session\.terminalRuntimeId\) return false;/);
   assert.doesNotMatch(source, /if \(result\.boot_input\)[\s\S]*?writeWorkspaceTerminalData\(/);
   assert.doesNotMatch(source, /sanitizeTerminalChannelInput\(data\)/);
   assert.doesNotMatch(source, /\^\\x1B\\\[\[0-9;\]\*\[R\?AHFGSTIcJJKMSXh\]/);
@@ -488,7 +488,7 @@ test("agent pane session readiness starts runtimes from runtime identity instead
     "utf8",
   );
 
-  assert.match(source, /if \(!sessionSnapshot\.terminalRuntimeId\) \{/);
+  assert.match(source, /if \(!isSessionRuntimeWritable\(sessionSnapshot\)\) \{/);
   assert.doesNotMatch(source, /if \(!sessionSnapshot\.terminalId\) \{/);
 });
 
