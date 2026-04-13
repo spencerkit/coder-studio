@@ -576,19 +576,101 @@ workspace.<id>.supervisor.<sid>.cycle              // Supervisor 周期
 
 ### 3.7 断线重连协议
 
+**serverInstanceId：** server 每次启动生成一个 UUID（写入 `runtime.json`），client 在 `connection.ready` 事件中收到。它是 resync 的前置条件：
+
 ```
-1. WS 断开 → 前端进入 reconnecting 状态 (UI 顶栏显示)
+1. WS 断开 → 前端进入 reconnecting 状态 (UI 顶栏显示 "连接中...")
 2. 指数退避 (1s → 2s → 4s → ... → max 30s) 重连
-3. 连接成功 → 立即发送:
-   { kind: "resync", lastSeen: { "workspace.42.session.abc.state": 17, ... } }
-4. Server 检查每个 topic 的 ring buffer:
-   - 缺失的事件按顺序补发
-   - 如果 lastSeq < buffer 最老 seq → 返回错误 {code: "resync_too_old"}
-5. 前端收到 resync_too_old → dispatch("workspace.snapshot") 做全量刷新
+3. 连接建立 → server 立即下发 connection.ready event:
+   { kind: "event", topic: "connection.ready",
+     data: { serverInstanceId: "<uuid>", serverStartedAt: <ts> } }
+4. 前端比对 serverInstanceId：
+   a. 相同 → 发送 resync 尝试增量补发
+      { kind: "resync", lastSeen: { "workspace.42.session.abc.state": 17, ... } }
+   b. 不同（server 重启过）→ 跳过 resync，直接清空所有服务端投影 atom，
+      对当前活跃 workspace 执行 workspace.snapshot 全量重建
+5. Resync 分支：server 按 topic 检查 ring buffer
+   - lastSeq 在窗口内 → 按序补发缺失事件 → 最后一条带 { final: true }
+   - lastSeq < 窗口最老 seq → 返回 { kind: "result", error: { code: "resync_too_old", topic } }
+     → 前端对该 topic 走 snapshot 路径，其它 topic 继续
 6. 所有补发/快照完成 → connection.status → "connected" → 解锁 UI 写操作
 ```
 
-**写操作锁：** 断线期间前端所有 command 调用被排入队列，重连完成后按顺序重放；如果某个 command 在断线期已被用户取消（如切换到别的工作区），队列中移除。
+**写操作锁：** 断线期间前端所有 command 调用被排入队列，重连完成后按顺序重放。两条豁免：
+- 纯查询 command（`workspace.list` 等）如果结果只会被 snapshot 覆盖，直接丢弃
+- 如果某个 command 在断线期已被用户取消（如切换到别的工作区），从队列中移除
+
+**UI 状态显示：**
+
+| 内部状态 | 顶栏文案 | 可写 |
+|---|---|---|
+| `connecting` | "连接中..." | 否 |
+| `resyncing` | "同步中..." | 否 |
+| `connected` | 不显示 | 是 |
+| `reconnecting` | "连接中（第 N 次）" | 否 |
+| `failed` | "连接失败，点击重试" | 否 |
+
+### 3.8 WebSocket 保活与写回压
+
+**心跳参数：**
+
+| 参数 | 值 | 备注 |
+|---|---|---|
+| Ping 间隔（前台 tab） | 20s | `document.visibilityState === "visible"` |
+| Ping 间隔（后台 tab） | 45s | Chrome 后台 timer throttling 下仍能工作 |
+| Pong 超时 | 10s | 超时即认定连接死亡，主动 close → 进入重连 |
+| Server → Client ping | 30s | 服务端也主动 ping，双向检测半开连接 |
+| 空闲连接最大保留 | 10min | Server 侧对"既无心跳也无消息"的连接强制 close |
+
+**两边都要 ping：** 只靠 client ping 解决不了"client 发现不了 server 已死"的场景（TCP 连接看似健康）。Phase 1 用 WebSocket 协议自带的 ping/pong 帧（`ws` lib 支持）+ 应用层 `ping`/`pong` 消息双保险。
+
+**WS 写回压（backpressure）：**
+
+高频流（`terminal.*.output`）叠加慢客户端会让 `ws.bufferedAmount` 无限增长。策略：
+
+```typescript
+// packages/server/src/ws/client.ts
+class WsClient {
+  private readonly HIGH_WATER = 4 * 1024 * 1024;  // 4 MiB
+  private readonly CRITICAL  = 16 * 1024 * 1024;  // 16 MiB
+  private droppedOutputBytes = 0;
+
+  sendEvent(topic: string, payload: unknown) {
+    const buffered = this.conn.bufferedAmount;
+
+    if (buffered > this.CRITICAL) {
+      // 灾难位：强制断开，让 client 走重连+resync
+      this.conn.close(4003, "backpressure_critical");
+      return;
+    }
+
+    if (buffered > this.HIGH_WATER && isHighFreqTopic(topic)) {
+      // 丢弃策略：只丢"可丢"事件（terminal.output），语义事件永远送
+      this.droppedOutputBytes += estimateSize(payload);
+      return;
+    }
+
+    this.conn.send(encode({ topic, payload }));
+  }
+}
+```
+
+**哪些 topic 可丢：**
+
+| Topic | 可丢？ | 理由 |
+|---|---|---|
+| `terminal.*.output` | ✅ | 可从 ring buffer 重放；client resync 能恢复 |
+| `terminal.*.exit` | ❌ | 退出状态不可丢 |
+| `session.*.state` | ❌ | 状态机转换必须按序 |
+| `session.*.progress` | ⚠️ | 高频时可跳过中间进度，保留终值 |
+| `workspace.*.meta` | ❌ | 元数据变更必须送达 |
+| `fs.dirty` | ⚠️ | 可合并成一个 dirty 信号 |
+| `git.state` | ❌ | Git 状态必须准确 |
+| `notification.toast` | ❌ | 用户通知不可丢 |
+
+**丢弃时的恢复：** 当 `bufferedAmount` 回落到高水位线之下，下一次 `terminal.*.output` 事件 payload 里附带 `{ droppedBytes: N }` 字段，前端 xterm 插入一行灰色 `[... N bytes skipped, fetching from buffer ...]`，并向 server 发一次 `terminal.replay` 命令从 ring buffer 拉回完整数据。
+
+**Phase 1 简化：** `terminal.replay` 可以先不实现，丢弃时只显示提示行。Phase 2 再补。
 
 ---
 
@@ -873,6 +955,56 @@ Terminal 是**底层原语**：一个 PTY 进程 + ring buffer + 输入输出通
 
 **不负责：** Provider 解析、resume_id、hook 事件、Agent 状态机——全部在 Session 层。
 
+**关键生命周期规则（Phase 1 硬性约束）：**
+
+1. **PTY 不因 client 断开而终止**：Terminal 被 server 进程持有，WS 连接断开后 PTY 继续运行，输出照常写入 ring buffer。浏览器刷新/关闭/休眠期间的 Agent 工作完整保留，重连后通过 resync 或 replay 补回
+2. **PTY 只在三种情况下被终止**：
+   - 用户显式 `terminal.close` / `session.stop`
+   - 底层 PTY 自己 exit（命令结束、用户在 shell 里敲 `exit`）
+   - Server 优雅关闭（见 §4.13）
+3. **多 client 共享同一个 PTY**：Phase 1 单 writer，其它 observer 不存在；但架构上 TerminalManager 本就不关心有几个订阅者，Phase 3 上 writer/observer 时零改动
+4. **没有客户端订阅时 PTY 仍然输出**：ring buffer 会正常累计（循环覆盖），客户端订阅后从最新 seq 开始追
+
+**初始尺寸握手：**
+
+PTY spawn 时用默认 cols=120 / rows=30（常见终端尺寸）。Client 挂载 xterm 后**立即**发一个 `terminal.resize`，后续的 output 按真实尺寸排版。首屏可能有 <200ms 的错位，xterm 的重排能吸收。
+
+```typescript
+// 客户端 XtermHost useEffect 里
+term.current.open(container);
+fit.fit();
+dispatch({ op: "terminal.resize",
+           args: { terminalId, cols: term.cols, rows: term.rows } });
+```
+
+**Spawn 失败的两种路径：**
+
+```typescript
+create(spec: TerminalSpec): Terminal {
+  const id = generateId();
+  let pty: PtyProcess;
+  try {
+    // 路径 1：同步失败（命令不存在、路径无权限）
+    pty = this.deps.ptyHost.spawn(spec.argv, { cwd, env, cols, rows });
+  } catch (err) {
+    throw new TerminalSpawnError("spawn_failed_sync", err);
+  }
+
+  const active = new ActiveTerminal({ id, spec, pty, ringBuffer: new RingBuffer(2 << 20) });
+  this.terminals.set(id, active);
+  this.deps.db.terminals.insert(active.toRow());
+
+  // 路径 2：spawn 成功但 PTY 立即 exit（shebang 错误、启动脚本报错）
+  // onExit 在 <100ms 内触发 → Session 层捕捉 exitCode ≠ 0 → 进入 unavailable
+  // 此时 create(...) 已经返回了 DTO，异步 exit 事件走广播链路
+
+  this.wireEvents(active);
+  return active.toDTO();
+}
+```
+
+Session 层判断"spawn 是否成功"的规则：`create` 返回后设置一个 1s 宽限期定时器，期间若 `terminal.exit` 事件到达 → 认为启动失败 → session 进入 `unavailable`；1s 后仍未 exit 或已收到 `SessionStart` hook → 视为启动成功。
+
 ```typescript
 // packages/server/src/terminal/manager.ts
 interface TerminalSpec {
@@ -1105,6 +1237,84 @@ class SessionManager {
 - `SessionManager` 从未 import 过 `node-pty` 或 `PtyHost`；编译时 TypeScript 就保证它走不到 Terminal 之下
 - `SessionManager` 从未直接 `broadcaster.broadcast(...)`——它只向 `eventBus` emit 语义事件；WsHub 订阅 bus 后转成前端 topic
 - 单测 `SessionManager` 只需注入 `FakeTerminalManager`（方法数量极少：`create/write/kill/resize/replay`）+ `FakeEventBus`；完全不用 spawn 真进程
+
+**Hook 事件竞态（SessionStart 早到）：**
+
+Claude CLI 启动极快时，`SessionStart` hook 可能在 `SessionManager.create` 的 `this.sessions.set(...)` 之前就到达 `HooksEndpoint` → 落到 `onHookEvent` → `this.sessions.get(id)` 返回 undefined → 事件被丢。这个 race 必须修，否则 Phase 1 会随机丢 resume_id。
+
+**解决方案：pending events 暂存池**
+
+```typescript
+class SessionManager {
+  private sessions = new Map<SessionId, ActiveSession>();
+  // 未就绪 session 的暂存事件池；TTL 5s，超时丢弃
+  private pending = new Map<SessionId, { events: ProviderHookEvent[]; expiresAt: number }>();
+
+  async create(req: CreateSessionRequest): Promise<Session> {
+    const sessionId = generateId();
+    // 先注册一个占位，消费 pending 队列
+    this.sessions.set(sessionId, /* ... */);
+
+    // 如果 pending 里已有事件 → 立即消化
+    const waiting = this.pending.get(sessionId);
+    if (waiting) {
+      for (const ev of waiting.events) this.applyHookEvent(sessionId, ev);
+      this.pending.delete(sessionId);
+    }
+
+    // ...继续 Terminal 创建
+  }
+
+  onHookEvent(sessionId: SessionId, event: ProviderHookEvent): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.applyHookEvent(sessionId, event);
+      return;
+    }
+    // 暂存 ≤5s，等 create 完成
+    const pending = this.pending.get(sessionId) ?? { events: [], expiresAt: Date.now() + 5000 };
+    pending.events.push(event);
+    this.pending.set(sessionId, pending);
+    this.scheduleCleanup();
+  }
+}
+```
+
+`CODER_STUDIO_SESSION_ID` 通过环境变量传给 CLI，hook bridge 从 env 读到后回填到 HTTP POST payload——这保证 session-id 在 session 对象存在前就已经被分配，pending pool 才能工作。
+
+**resume_id 超时捕获：**
+
+如果 Full 模式 Provider 的 `SessionStart` hook 在 30s 内没有到达：
+- Session 状态保持 `starting`（不会降级，因为 PTY 还在跑）
+- 向 `eventBus` emit `session.lifecycle.warning: "resume_id_unavailable"` → UI 显示"此会话无法恢复"灰色标记
+- `session.resume` command 对该 session 返回 `error.code = "no_resume_id"`
+- 不影响 session 本身的运行；用户可继续交互，只是重启 server 后无法 resume
+
+**Tab 刷新宽限期（单 writer race）：**
+
+用户按 F5 时顺序是：旧 WS close → HTTP 请求 HTML → 新 JS 加载 → 新 WS open。间隔通常 200–800ms。如果 WsHub 在旧 WS close 的**瞬间**释放 writer 锁，新 WS 立即抢到；但如果另有一个"幽灵 tab"（某个老浏览器标签）刚好在这几百毫秒内检测到断开并重连，它会抢先拿到 writer 权限 → 用户看到"another_tab_active"弹窗，体验很差。
+
+**简单方案**：writer 释放后有 **3s 宽限期**，期间新连接如果来自**同一 IP + 同一 User-Agent**，直接获得 writer 权限不弹窗；其它情况按现有 takeover 流程。
+
+```typescript
+// packages/server/src/ws/hub.ts
+private lastWriter: { id: ClientId; closedAt: number; ip: string; ua: string } | null = null;
+private readonly GRACE_MS = 3000;
+
+handleConnection(conn: WebSocket, req: FastifyRequest) {
+  const info = { ip: req.ip, ua: req.headers["user-agent"] ?? "" };
+
+  if (this.writerId === null && this.lastWriter
+      && Date.now() - this.lastWriter.closedAt < this.GRACE_MS
+      && this.lastWriter.ip === info.ip
+      && this.lastWriter.ua === info.ua) {
+    // 同 origin 刷新，静默授予 writer
+    this.assignWriter(new WsClient(conn, generateId(), info));
+    return;
+  }
+  // 原有单 writer 逻辑
+}
+```
 
 **命令到层的映射：**
 
@@ -1376,6 +1586,96 @@ Plugin 内部：
 - IP 黑名单提前短路 (`ipBlocker` middleware)
 
 内部 hooks endpoint `/internal/hooks/:event` **不经过** auth，但必须带查询参数 token 且只接受 `127.0.0.1` 连接（server 明确 bind 时也是如此）。
+
+### 4.13 服务器生命周期与信号处理
+
+**启动流程**已在 §4.0 / §4.1 描述。本节聚焦关闭和异常退出。
+
+**优雅关闭（Graceful Shutdown）：**
+
+Server 收到 `SIGTERM` / `SIGINT` → 触发 `stop()` → 按**反向构造顺序**拆解，每一步都有超时上限：
+
+```typescript
+// packages/server/src/index.ts
+export async function createServer(config: ServerConfig): Promise<Server> {
+  // ... 构造 ...
+  const stop = async () => {
+    logger.info("shutdown_begin");
+
+    // 1. Transport：停止接受新连接 + 断开现有 WS（通知 client 去重连）
+    wsHub.shutdown({ reason: "server_shutdown", code: 4004 });
+    await app.close();                              // max 5s
+
+    // 2. Service 层反向关闭
+    await hooksMgr.shutdown();                      // 无副作用，纯内存
+    await workspaceMgr.shutdown();                  // 分离 fs/git watchers
+
+    //    Session 先于 Terminal（让 session 发出 ended 事件再杀 PTY）
+    await sessionMgr.stopAll({ timeoutMs: 2000 });  // emit ended, not kill
+    await terminalMgr.killAll({
+      signal: "SIGTERM",
+      graceMs: 2000,                                // 等 SIGTERM 自动退出
+      fallback: "SIGKILL",                          // 超时强杀
+    });
+
+    // 3. Infrastructure
+    ptyHost.dispose();
+    runtime.clear();                                // 删除 runtime.json
+    db.close();
+
+    logger.info("shutdown_complete");
+  };
+
+  // 注册信号
+  process.once("SIGTERM", () => void stop().then(() => process.exit(0)));
+  process.once("SIGINT",  () => void stop().then(() => process.exit(0)));
+
+  return { app, db, runtime, stop };
+}
+```
+
+**关键约束：**
+
+| 步骤 | 超时 | 失败后策略 |
+|---|---|---|
+| `app.close()` | 5s | 强制 `server.closeAllConnections()` |
+| `sessionMgr.stopAll()` | 2s | 跳过，进入 terminalMgr.killAll |
+| `terminalMgr.killAll(SIGTERM)` | 2s | 对仍存活的 PTY 发 SIGKILL |
+| `db.close()` | 1s | 硬退出（SQLite WAL 自恢复） |
+
+**总预算：** ≤10s，到期 `process.exit(1)`。systemd / docker `SIGKILL` 宽限期通常 10–30s，刚好覆盖。
+
+**异常退出（SIGKILL / OOM / 断电）：**
+
+无法优雅清理；node-pty 子进程在 **Linux/macOS 下会被内核的 orphan reparent 机制重新挂到 init**，变成孤儿 PTY。这种情况下：
+
+- 下次 server 启动时，`runtime.json` 仍存在但 `pid` 指向一个死进程 → 启动时检测：如果 `process.kill(pid, 0)` 不抛错且命令行匹配 → **另一个实例在跑**，当前启动 abort；否则视为残留，覆盖 `runtime.json`
+- 残留的孤儿 PTY 仍然存在并占用资源——Phase 1 **不主动回收**，由用户手动 `pkill claude` 或系统重启清理
+- 数据库使用 WAL 模式，SQLite 自带崩溃恢复；启动时跑 `PRAGMA integrity_check`，失败则广播 toast 要求用户处理备份
+
+**runtime.json 与 bridge 的 TOCTOU：**
+
+Bridge script 发 HTTP POST 时需要读 `runtime.json` 拿当前 port+token。如果 server 正在重启，bridge 可能读到旧数据。缓解：
+
+1. `runtime.json` 包含 `serverInstanceId`，bridge 在 HTTP header 里带上；server 收到后校验，不匹配返回 `410 Gone`
+2. Bridge 捕获 `ECONNREFUSED` / `410` → 重试 3 次，每次 500ms → 仍失败则把事件写到 `~/.coder-studio/hooks/retry-queue/<timestamp>.json`（Phase 4 考虑后台 flush；Phase 1 记录日志并放弃，毕竟几率极低）
+
+**Server 单实例保证：**
+
+启动时：
+```typescript
+if (existsSync(runtimePath)) {
+  const existing = readRuntime(runtimePath);
+  if (isAlive(existing.pid)) {
+    console.error(`coder-studio already running (pid=${existing.pid})`);
+    process.exit(1);
+  }
+  // else: 残留文件，覆盖
+}
+writeRuntime(runtimePath, { pid: process.pid, port, token, serverInstanceId });
+```
+
+不做 flock 之类的跨平台文件锁（pnp 环境和 WSL 表现不稳定），`pid + kill(0)` 已足够。
 
 ---
 
@@ -2365,7 +2665,16 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 | 场景 | 降级策略 |
 |---|---|
 | WS 断线 | 前端只读模式；命令排队；指数退避重连 |
+| WS 心跳超时（ping/pong）| 主动 `close(4005)` → 进入重连 |
 | WS 断线 + lastSeq 超过 ring buffer | 自动触发 `workspace.snapshot` 全量刷新 |
+| Server 重启（serverInstanceId 失配） | 跳过 resync，对当前 workspace 走 snapshot 全量重建 |
+| WS 回压超过高水位线 | 丢弃可丢 topic（terminal.output），在流里插入"N bytes skipped"提示 |
+| WS 回压超过 critical 水位线 | 强制 close(4003) → client 走重连+resync |
+| Tab 刷新同 origin 快速重连 | writer 释放后 3s 宽限期内静默授予权限，不弹 takeover |
+| Hook 事件到达早于 session.create | 进入 pending pool 暂存 5s，create 完成后补消费 |
+| resume_id 30s 未捕获 | session 保持运行；标记 `no_resume_id`；resume 命令拒绝 |
+| 残留 runtime.json 指向已死 pid | 覆盖并继续启动 |
+| runtime.json 指向存活 pid | abort 启动，提示已有实例 |
 | PTY 进程启动失败 | Session 面板 `unavailable` 状态，显示原因 + "Remove" 按钮 |
 | Provider CLI 不存在 | runtime check 拒绝启动工作区，提示安装 |
 | Provider 能力 Limited | 完成通知用近似文案；Supervisor 禁用；进度条静态 |
