@@ -1634,20 +1634,29 @@ pub(crate) async fn auth_status_handler(
     ConnectInfo(client_addr): ConnectInfo<std::net::SocketAddr>,
     AxumState(state): AxumState<HttpServerState>,
 ) -> Response {
-    match auth_status(
-        &state.app,
-        &headers,
-        client_addr,
-        request_forces_public_mode(&uri),
-    ) {
-        Ok(data) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
-        Err(error) => error.into_response(&RequestContext {
-            ip: client_addr.ip().to_string(),
+    let app = state.app.clone();
+    let headers = headers.clone();
+    let force_public = request_forces_public_mode(&uri);
+    let ip = client_addr.ip().to_string();
+
+    let blocking_result = tokio::task::spawn_blocking(move || {
+        auth_status(&app, &headers, client_addr, force_public)
+    })
+    .await;
+
+    match blocking_result {
+        Ok(Ok(data)) => json_success(serde_json::to_value(data).unwrap_or(Value::Null)),
+        Ok(Err(error)) => error.into_response(&RequestContext {
+            ip,
             user_agent: String::new(),
             is_local_host: client_addr.ip().is_loopback(),
             is_secure_transport: false,
             public_mode: true,
         }),
+        Err(error) => json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("auth_status_task_join_failed: {error}"),
+        ),
     }
 }
 
@@ -1740,6 +1749,13 @@ pub(crate) async fn rpc_handler(
     AxumState(state): AxumState<HttpServerState>,
     Json(payload): Json<Value>,
 ) -> Response {
+    let request_context = RequestContext {
+        ip: client_addr.ip().to_string(),
+        user_agent: String::new(),
+        is_local_host: client_addr.ip().is_loopback(),
+        is_secure_transport: false,
+        public_mode: true,
+    };
     let authorized = match require_session(
         &state.app,
         &headers,
@@ -1748,19 +1764,23 @@ pub(crate) async fn rpc_handler(
     ) {
         Ok(authorized) => authorized,
         Err(error) => {
-            return error.into_response(&RequestContext {
-                ip: client_addr.ip().to_string(),
-                user_agent: String::new(),
-                is_local_host: client_addr.ip().is_loopback(),
-                is_secure_transport: false,
-                public_mode: true,
-            })
+            return error.into_response(&request_context)
         }
     };
 
-    match dispatch_rpc(&state.app, &command, payload, &authorized) {
-        Ok(data) => json_success(data),
-        Err(error) => json_error(error.status, error.error),
+    let app = state.app.clone();
+    let blocking_result = tokio::task::spawn_blocking(move || {
+        dispatch_rpc(&app, &command, payload, &authorized)
+    })
+    .await;
+
+    match blocking_result {
+        Ok(Ok(data)) => json_success(data),
+        Ok(Err(error)) => json_error(error.status, error.error),
+        Err(error) => json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("rpc_task_join_failed: {error}"),
+        ),
     }
 }
 

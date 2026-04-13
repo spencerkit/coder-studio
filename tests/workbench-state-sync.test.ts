@@ -177,3 +177,92 @@ test("runtime snapshots without sessions preserve existing local sessions", () =
   assert.equal(nextTab.paneLayout.type, "leaf");
   assert.equal(nextTab.paneLayout.type === "leaf" ? nextTab.paneLayout.sessionId : "", "29");
 });
+
+test("background runtime snapshot keeps the current active workspace when ui state is absent", async () => {
+  const activeSession = createSession("11", "claude", false);
+  const backgroundSession = createSession("22", "codex", false);
+  const activeWorkspaceId = "workspace-active";
+  const backgroundWorkspaceId = "workspace-background";
+  const currentState: WorkbenchState = {
+    ...createDefaultWorkbenchState(),
+    tabs: [
+      createTab(activeWorkspaceId, activeSession),
+      createTab(backgroundWorkspaceId, backgroundSession),
+    ],
+    activeTabId: activeWorkspaceId,
+  };
+
+  const { applyWorkspaceRuntimeSnapshot } = await import("../apps/web/src/shared/utils/workspace");
+
+  const next = applyWorkspaceRuntimeSnapshot(
+    currentState,
+    {
+      snapshot: {
+        workspace: {
+          workspace_id: backgroundWorkspaceId,
+          title: backgroundWorkspaceId,
+          source_kind: "local",
+          project_path: "/tmp/coder-studio-background",
+          git_url: null,
+          target: { type: "native" },
+          idle_policy: {
+            enabled: true,
+            idle_minutes: 10,
+            max_active: 3,
+            pressure: true,
+          },
+        },
+        sessions: [
+          {
+            id: backgroundSession.id,
+            title: backgroundSession.title,
+            status: backgroundSession.status,
+            mode: backgroundSession.mode,
+            provider: backgroundSession.provider,
+            auto_feed: backgroundSession.autoFeed,
+            queue: [],
+            messages: [],
+            unread: 0,
+            last_active_at: backgroundSession.lastActiveAt,
+            resume_id: null,
+            unavailable_reason: null,
+            runtime_liveness: null,
+          },
+        ],
+        archive: [],
+        view_state: {
+          active_session_id: backgroundSession.id,
+          active_pane_id: `pane-${backgroundSession.id}`,
+          active_terminal_id: "",
+          pane_layout: createPaneLeaf(backgroundSession.id),
+          file_preview: createEmptyPreview(),
+          supervisor: {
+            bindings: [],
+            cycles: [],
+          },
+        },
+        terminals: [],
+      },
+      controller: {
+        role: "controller",
+        holder: {
+          device_id: "device-1",
+          client_id: "client-1",
+        },
+        fencing_token: 1,
+        lease_expires_at: null,
+        takeover_pending: false,
+        takeover_request_id: null,
+        takeover_deadline_at: null,
+      },
+      session_runtime_bindings: [],
+      lifecycle_events: [],
+    },
+    "en",
+    defaultAppSettings(),
+    "device-1",
+    "client-1",
+  );
+
+  assert.equal(next.activeTabId, activeWorkspaceId);
+});

@@ -103,6 +103,9 @@ import {
 } from "./workspace-view-persistence";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
+import {
+  subscribeWorkspaceInputError,
+} from "../../command";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
@@ -129,9 +132,9 @@ import {
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
 import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
+import { writeTerminal as writeTerminalRequest } from "../../services/http/terminal.service";
 import {
   consumeTerminalChannelInputFragment,
-  sendTerminalChannelInput,
 } from "../../services/terminal-channel/client.ts";
 import { withFallback } from "../../services/http/client";
 import {
@@ -223,6 +226,12 @@ import type {
 } from "../../types/app";
 
 const withServiceFallback = async <T,>(operation: () => Promise<T>, fallback: T): Promise<T> => withFallback(operation, fallback);
+
+const STALE_SESSION_INPUT_ERRORS = new Set([
+  "terminal_runtime_not_found",
+  "session_runtime_unbound",
+  "terminal_stdin_closed",
+]);
 
 type WorkspaceScreenProps = {
   locale: Locale;
@@ -700,30 +709,40 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }
 
         if (uiState && runtimeSnapshot) {
-          updateState((current) => applyWorkspaceBootstrapResult(
-            current,
-            bootstrap,
-            locale,
-            appSettings,
-            {
-              deviceId,
-              clientId,
-              uiState,
-              runtimeSnapshot,
-            },
-          ));
+          updateState((current) => {
+            const next = applyWorkspaceBootstrapResult(
+              current,
+              bootstrap,
+              locale,
+              appSettings,
+              {
+                deviceId,
+                clientId,
+                uiState,
+                runtimeSnapshot,
+              },
+            );
+            return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+              ? { ...next, activeTabId: routeWorkspaceId }
+              : next;
+          });
         } else {
-          updateState((current) => applyWorkspaceBootstrapResult(
-            current,
-            bootstrap,
-            locale,
-            appSettings,
-            {
-              deviceId,
-              clientId,
-              uiState,
-            },
-          ));
+          updateState((current) => {
+            const next = applyWorkspaceBootstrapResult(
+              current,
+              bootstrap,
+              locale,
+              appSettings,
+              {
+                deviceId,
+                clientId,
+                uiState,
+              },
+            );
+            return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+              ? { ...next, activeTabId: routeWorkspaceId }
+              : next;
+          });
         }
       } else {
         updateState((current) => applyWorkspaceBootstrapResult(
@@ -753,7 +772,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           switchWorkspaceLocally(routeWorkspaceId);
           void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null).then((uiState) => {
             if (!uiState || cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) return;
-            updateState((current) => applyWorkbenchUiState(current, uiState));
+            updateState((current) => {
+              const next = applyWorkbenchUiState(current, uiState);
+              return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+                ? { ...next, activeTabId: routeWorkspaceId }
+                : next;
+            });
           });
         }
         void ensureWorkspaceTerminal(routeWorkspaceId);
@@ -800,15 +824,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           navigate("/workspace", { replace: true });
           return;
         }
-        updateState((current) => applyWorkspaceRuntimeSnapshot(
-          current,
-          runtimeSnapshot,
-          locale,
-          appSettings,
-          deviceId,
-          clientId,
-          uiState,
-        ));
+        updateState((current) => {
+          const next = applyWorkspaceRuntimeSnapshot(
+            current,
+            runtimeSnapshot,
+            locale,
+            appSettings,
+            deviceId,
+            clientId,
+            uiState,
+          );
+          return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+            ? { ...next, activeTabId: routeWorkspaceId }
+            : next;
+        });
         void ensureWorkspaceTerminal(routeWorkspaceId);
       })();
       return () => {
@@ -1821,9 +1850,41 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     return { tab: nextTab, session: nextSession };
   };
 
+  const isSessionRuntimeWritable = (session: Session | null | undefined) => (
+    Boolean(session?.terminalRuntimeId) && session?.runtimeLiveness === "attached"
+  );
+
+  const refreshWorkspaceRuntimeSnapshot = useCallback(async (workspaceId: string) => {
+    const syncVersion = advanceWorkspaceSyncVersion(workspaceId);
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      workspaceId,
+      deviceId,
+      clientId,
+      withServiceFallback,
+      {
+        force: true,
+        successReuseMs: 0,
+      },
+    );
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) {
+      updateState((current) => applyWorkspaceRuntimeSnapshot(
+        current,
+        runtimeSnapshot,
+        locale,
+        appSettings,
+        deviceId,
+        clientId,
+      ));
+    }
+    if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
+    return stateRef.current.tabs.find((tab) => tab.id === workspaceId) ?? null;
+  }, [appSettings, clientId, deviceId, locale, updateState]);
+
   const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    if (!session.terminalRuntimeId) return false;
+    if (!session.terminalRuntimeId || session.runtimeLiveness !== "attached" || !session.terminalId) return false;
+    const numericTerminalId = Number(session.terminalId.replace("term-", ""));
+    if (!Number.isFinite(numericTerminalId)) return false;
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
       ...current,
@@ -1832,8 +1893,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    sendTerminalChannelInput(tab.id, tab.controller.deviceId, tab.controller.clientId, tab.controller.fencingToken, session.terminalRuntimeId, input);
-    return true;
+    try {
+      await writeTerminalRequest(tab.id, tab.controller, numericTerminalId, input);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const onRecoverActiveSession = async () => {
@@ -2373,13 +2438,28 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     let sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return null;
 
-    if (!sessionSnapshot.terminalRuntimeId) {
+    if (!isSessionRuntimeWritable(sessionSnapshot)) {
+      const needsRefresh = Boolean(sessionSnapshot.terminalRuntimeId)
+        || sessionSnapshot.runtimeLiveness === "runtime_missing"
+        || sessionSnapshot.runtimeLiveness === "provider_exited"
+        || !sessionSnapshot.runtimeLiveness;
+      if (needsRefresh) {
+        const refreshedTab = await refreshWorkspaceRuntimeSnapshot(tabSnapshot.id);
+        if (refreshedTab) {
+          tabSnapshot = refreshedTab;
+          sessionSnapshot = refreshedTab.sessions.find((session) => session.id === sessionSnapshot.id) ?? sessionSnapshot;
+        }
+      }
+    }
+
+    if (!isSessionRuntimeWritable(sessionSnapshot)) {
       const started = await startSessionRuntimeInPane(paneId, tabSnapshot, sessionSnapshot);
       if (!started) return null;
       tabSnapshot = started.tab;
       sessionSnapshot = started.session;
     }
 
+    if (!isSessionRuntimeWritable(sessionSnapshot)) return null;
     touchSession(tabSnapshot.id, sessionSnapshot.id);
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
@@ -2449,6 +2529,33 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await sendAgentRawChunk(ready.tab, ready.session, sequence);
     focusWorkspaceAgentPane(paneId);
   };
+
+  useEffect(() => {
+    const unsubscribe = subscribeWorkspaceInputError((payload) => {
+      if (!STALE_SESSION_INPUT_ERRORS.has(payload.error)) return;
+      const tab = stateRef.current.tabs.find((item) => item.id === payload.workspace_id);
+      if (!tab) return;
+      void (async () => {
+        let refreshedTab = await refreshWorkspaceRuntimeSnapshot(tab.id);
+        if (!refreshedTab) {
+          refreshedTab = stateRef.current.tabs.find((item) => item.id === tab.id) ?? null;
+        }
+        if (!refreshedTab || stateRef.current.activeTabId !== refreshedTab.id) return;
+        const paneSessionId = findPaneSessionId(refreshedTab.paneLayout, refreshedTab.activePaneId) ?? refreshedTab.activeSessionId;
+        const session = refreshedTab.sessions.find((item) => item.id === paneSessionId);
+        if (!session || session.unavailableReason || isSessionRuntimeWritable(session)) return;
+        const restarted = await startSessionRuntimeInPane(refreshedTab.activePaneId, refreshedTab, session);
+        if (!restarted) {
+          addToast({
+            id: createId("toast"),
+            text: `Session input recovery failed: ${payload.error}`,
+            sessionId: session.id,
+          });
+        }
+      })();
+    });
+    return () => unsubscribe();
+  }, [addToast, refreshWorkspaceRuntimeSnapshot]);
 
   useEffect(() => {
     return () => {

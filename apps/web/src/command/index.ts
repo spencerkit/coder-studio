@@ -3,5 +3,6 @@ export { subscribeTerminalEvents } from "./terminal.command";
 export {
   subscribeWorkspaceArtifactsDirty,
   subscribeWorkspaceController,
+  subscribeWorkspaceInputError,
   subscribeWorkspaceRuntimeState,
 } from "./workspace.command";

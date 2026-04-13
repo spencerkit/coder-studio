@@ -470,7 +470,7 @@ fn handle_ws_client_envelope(
                 }),
             )
             .map_err(|error| {
-                ws_input_error_envelope("terminal-channel", "terminal_channel_input", &error)
+                ws_input_error_envelope(&workspace_id, "terminal_channel_input", &error)
             })?;
             Ok(None)
         }

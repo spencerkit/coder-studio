@@ -245,6 +245,12 @@ export type WorkspaceRuntimeStateEvent = {
   session_state?: WorkspaceSessionState;
 };
 
+export type WorkspaceInputErrorEvent = {
+  workspace_id: string;
+  kind: string;
+  error: string;
+};
+
 export type WorkbenchLayout = {
   left_width: number;
   right_width: number;

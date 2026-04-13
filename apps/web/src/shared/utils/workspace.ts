@@ -563,10 +563,14 @@ export const upsertWorkspaceSnapshot = (
   }
   const tabs = orderTabsByUiState(Array.from(tabMap.values()), openWorkspaceIds);
 
+  const nextActiveWorkspaceId = uiState
+    ? uiState.active_workspace_id
+    : (current.activeTabId || nextTab.id);
+
   const nextState = {
     ...current,
     tabs,
-    activeTabId: resolveActiveWorkspaceId(tabs, uiState?.active_workspace_id ?? nextTab.id),
+    activeTabId: resolveActiveWorkspaceId(tabs, nextActiveWorkspaceId),
     layout: uiState ? workbenchLayoutFromBackend(uiState.layout) : current.layout,
     overlay: {
       ...current.overlay,
