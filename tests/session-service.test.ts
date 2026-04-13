@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
 import {
   createSessionActivityPersistScheduler,
   updateSession,
-} from "../apps/web/src/services/http/session.service.ts";
-import { WsConnectionManager } from "../apps/web/src/ws/connection-manager.ts";
+} from "../apps/web/src/services/http/session.service";
+import { WsConnectionManager } from "../apps/web/src/ws/connection-manager";
 
 const createFakeTimeouts = () => {
   const timers = new Map<number, { callback: () => void; delayMs: number }>();
@@ -40,7 +40,7 @@ test("createSessionActivityPersistScheduler waits for stability and only persist
   const timeouts = createFakeTimeouts();
   const persisted: Array<{
     workspaceId: string;
-    sessionId: number;
+    sessionId: string;
     lastActiveAt?: number;
     controller: string;
   }> = [];
@@ -58,8 +58,8 @@ test("createSessionActivityPersistScheduler waits for stability and only persist
     1200,
   );
 
-  scheduler.schedule("ws-1", 7, 101, "controller-a");
-  scheduler.schedule("ws-1", 7, 205, "controller-b");
+  scheduler.schedule("ws-1", "session-7", 101, "controller-a");
+  scheduler.schedule("ws-1", "session-7", 205, "controller-b");
 
   assert.deepEqual(persisted, []);
   assert.equal(timeouts.timers.size, 1);
@@ -70,7 +70,7 @@ test("createSessionActivityPersistScheduler waits for stability and only persist
   assert.deepEqual(persisted, [
     {
       workspaceId: "ws-1",
-      sessionId: 7,
+      sessionId: "session-7",
       lastActiveAt: 205,
       controller: "controller-b",
     },
@@ -88,9 +88,9 @@ test("createSessionActivityPersistScheduler can hand the latest pending activity
     1200,
   );
 
-  scheduler.schedule("ws-1", 7, 333, "controller-a");
+  scheduler.schedule("ws-1", "session-7", 333, "controller-a");
 
-  const pending = scheduler.takeLastActiveAt("ws-1", 7);
+  const pending = scheduler.takeLastActiveAt("ws-1", "session-7");
 
   assert.equal(pending, 333);
   assert.equal(timeouts.timers.size, 0);
@@ -111,11 +111,11 @@ test("updateSession prefers websocket transport when available", async () => {
   }) as typeof fetch;
 
   try {
-    const result = await updateSession(
-      "ws-1",
-      7,
-      { title: "Renamed Session" },
-      createWorkspaceControllerState({
+      const result = await updateSession(
+        "ws-1",
+        "session-7",
+        { title: "Renamed Session" },
+        createWorkspaceControllerState({
         role: "controller",
         deviceId: "device-a",
         clientId: "client-a",
@@ -128,7 +128,7 @@ test("updateSession prefers websocket transport when available", async () => {
       {
         type: "session_update",
         workspace_id: "ws-1",
-        session_id: 7,
+        session_id: "session-7",
         patch: { title: "Renamed Session" },
         fencing_token: 9,
       },

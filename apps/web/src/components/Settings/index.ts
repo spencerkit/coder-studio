@@ -1,2 +1,2 @@
 export { Settings } from "./Settings";
-export { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
+export { ProviderSettingsPanel } from "./ProviderSettingsPanel";

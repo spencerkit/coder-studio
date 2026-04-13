@@ -64,13 +64,11 @@ type WorkspaceCodeFeatureProps = {
   width: number;
   codeSidebarView: "files" | "git";
   previewPathLabel: string;
-  previewFileName: string;
   editorContent: ReactNode;
   fileParentLabel: (path?: string) => string;
   sidebar: SidebarViewModel;
   fileSearch: FileSearchViewModel;
   onSetSidebarView: (view: "files" | "git") => void;
-  onToggleExpanded: () => void;
   t: Translator;
 };
 
@@ -81,13 +79,11 @@ export const WorkspaceCodeFeature = ({
   width,
   codeSidebarView,
   previewPathLabel,
-  previewFileName,
   editorContent,
   fileParentLabel,
   sidebar,
   fileSearch,
   onSetSidebarView,
-  onToggleExpanded,
   t,
 }: WorkspaceCodeFeatureProps) => {
   const sidebarContent = (
@@ -120,12 +116,10 @@ export const WorkspaceCodeFeature = ({
   return (
     <>
       <WorkspaceEditorPanel
-        locale={locale}
         isExpanded={isExpanded}
         width={width}
         codeSidebarView={codeSidebarView}
         previewPathLabel={previewPathLabel}
-        previewFileName={previewFileName}
         fileSearchQuery={fileSearch.query}
         fileSearchActiveIndex={fileSearch.activeIndex}
         showFileSearchDropdown={fileSearch.showDropdown}
@@ -137,14 +131,13 @@ export const WorkspaceCodeFeature = ({
         onFileSearchFocus={fileSearch.onFocus}
         onFileSearchBlur={fileSearch.onBlur}
         onFileSearchKeyDown={fileSearch.onKeyDown}
-        onToggleExpanded={onToggleExpanded}
         t={t}
       />
 
       {fileSearch.showDropdown && fileSearch.dropdownStyle && container && (
         <WorkspaceFileSearchDropdown
           container={container}
-          locale={locale}
+          t={t}
           dropdownStyle={fileSearch.dropdownStyle}
           results={fileSearch.results}
           activeIndex={fileSearch.activeIndex}

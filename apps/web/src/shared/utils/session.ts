@@ -1,6 +1,6 @@
-import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n.ts";
-import { createId, type Session, type SessionMode, type SessionStatus, type Tab } from "../../state/workbench-core.ts";
-import type { BackendSession } from "../../types/app.ts";
+import { createTranslator, formatSessionReadyMessage, formatSessionTitle, type Locale } from "../../i18n";
+import { createId, type Session, type SessionMode, type SessionStatus } from "../../state/workbench-core";
+import type { BackendSession } from "../../types/app";
 
 export const nowLabel = () => new Date().toLocaleTimeString().slice(0, 5);
 
@@ -9,16 +9,17 @@ export const parseNumericId = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const extractGeneratedSessionTitleIndex = (value: string) => {
-  const match = value.trim().match(/^(?:Session|会话) (\d+)$/);
-  return match?.[1] ? Number(match[1]) : null;
-};
-
 export const isGeneratedSessionTitleForId = (value: string | undefined, id: string | number) => {
   if (!value) return false;
-  const index = extractGeneratedSessionTitleIndex(value);
-  const numericId = typeof id === "number" ? id : parseNumericId(id);
-  return index !== null && numericId !== null && index === numericId;
+  const sessionId = String(id).trim();
+  const normalized = value.trim();
+  if (normalized === `Session ${sessionId}` || normalized === `会话 ${sessionId}`) {
+    return true;
+  }
+  const numericId = typeof id === "number" ? id : parseNumericId(sessionId);
+  if (numericId === null) return false;
+  return normalized === `Session ${String(numericId).padStart(2, "0")}`
+    || normalized === `会话 ${String(numericId).padStart(2, "0")}`;
 };
 
 export const createSessionFromBackend = (source: BackendSession, locale: Locale, existing?: Session): Session => ({
@@ -33,6 +34,7 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
     : (source.title || existing?.title || formatSessionTitle(source.id, locale)),
   status: source.status,
   mode: source.mode,
+  provider: source.provider,
   autoFeed: source.auto_feed,
   isDraft: false,
   queue: source.queue.map((task) => ({
@@ -49,11 +51,15 @@ export const createSessionFromBackend = (source: BackendSession, locale: Locale,
         content: formatSessionReadyMessage(source.id, locale),
         time: nowLabel()
       }
-    ]),
-  stream: source.stream ?? existing?.stream ?? "",
+  ]),
+  terminalId: existing?.terminalId,
+  terminalRuntimeId: existing?.terminalRuntimeId,
   unread: source.unread ?? existing?.unread ?? 0,
   lastActiveAt: source.last_active_at,
-  claudeSessionId: source.claude_session_id ?? existing?.claudeSessionId
+  resumeId: source.resume_id ?? existing?.resumeId,
+  unavailableReason: source.unavailable_reason ?? existing?.unavailableReason,
+  runtimeLiveness: source.runtime_liveness ?? existing?.runtimeLiveness,
+  supervisor: existing?.supervisor,
 });
 
 type CreateDraftSessionArgs = {
@@ -61,6 +67,7 @@ type CreateDraftSessionArgs = {
   workspacePath: string;
   branch?: string;
   mode?: SessionMode;
+  provider?: Session["provider"];
   existing?: Session;
 };
 
@@ -69,6 +76,7 @@ export const createDraftSessionPlaceholder = ({
   workspacePath,
   branch,
   mode = "branch",
+  provider,
   existing,
 }: CreateDraftSessionArgs): Session => {
   const t = createTranslator(locale);
@@ -79,6 +87,7 @@ export const createDraftSessionPlaceholder = ({
     title: existing?.title ?? t("draftSessionTitle"),
     status: existing?.status ?? "idle",
     mode: existing?.mode ?? mode,
+    provider: existing?.provider ?? provider ?? "claude",
     autoFeed: existing?.autoFeed ?? true,
     isDraft: true,
     queue: existing?.queue ?? [],
@@ -98,10 +107,12 @@ export const createDraftSessionPlaceholder = ({
             time: nowLabel(),
           },
         ],
-    stream: existing?.stream ?? "",
+    terminalId: existing?.terminalId,
+    terminalRuntimeId: existing?.terminalRuntimeId,
     unread: existing?.unread ?? 0,
     lastActiveAt: existing?.lastActiveAt ?? Date.now(),
-    claudeSessionId: existing?.claudeSessionId,
+    resumeId: existing?.resumeId,
+    unavailableReason: existing?.unavailableReason,
   };
 };
 
@@ -109,7 +120,6 @@ export const isDraftSession = (session: Session | undefined | null) => Boolean(s
 
 export const isHiddenDraftPlaceholder = (session: Session | undefined | null) => Boolean(
   session
-  && !session.stream.trim()
   && session.queue.length === 0
   && session.messages.every((message) => message.role === "system")
 );
@@ -124,63 +134,38 @@ export const sessionTitleFromInput = (value: string) => {
   return `${firstLine.slice(0, 45)}...`;
 };
 
-const isForegroundActiveStatus = (status: SessionStatus) => status === "running" || status === "waiting";
+export type SessionDisplayStatus = SessionStatus | "archived";
+
+const isForegroundActiveStatus = (status: SessionStatus) => status === "running";
 export { isForegroundActiveStatus };
 
-// `background` is treated as a display-only compatibility status for older persisted data.
-// New state updates keep the underlying runtime status (`running` / `waiting`) intact.
-export const toBackgroundStatus = (status: SessionStatus): SessionStatus => status;
+export const displaySessionStatus = (session: Session): SessionStatus => session.status;
 
-export const restoreVisibleStatus = (session: Session): SessionStatus => {
-  if (session.status !== "background") return session.status;
-  return "waiting";
-};
-
-export const resolveVisibleStatus = (_tab: Tab, _session: Session, nextStatus: SessionStatus): SessionStatus => {
-  return nextStatus;
-};
-
-export const displaySessionStatus = (tab: Pick<Tab, "activeSessionId">, session: Session): SessionStatus => {
-  if (session.status === "background") return "background";
-  if (session.id !== tab.activeSessionId && isForegroundActiveStatus(session.status)) {
-    return "background";
-  }
-  return session.status;
-};
-
-export const sessionTone = (status: SessionStatus) => {
-  if (status === "running" || status === "waiting" || status === "background") return "active";
-  if (status === "idle") return "idle";
-  if (status === "queued") return "queued";
-  return "suspended";
+export const sessionTone = (status: SessionDisplayStatus) => {
+  if (status === "running") return "active";
+  return "idle";
 };
 
 export const sessionHeaderTag = (
-  status: SessionStatus,
+  status: SessionDisplayStatus,
   locale: Locale,
 ): {
   label: string;
-  tone: "active" | "info" | "queue" | "idle" | "muted";
+  tone: "active" | "idle" | "muted";
 } => {
   const t = createTranslator(locale);
 
   if (status === "running") {
     return { label: t("running"), tone: "active" };
   }
-  if (status === "background") {
-    return { label: t("background"), tone: "info" };
-  }
-  if (status === "waiting") {
-    return { label: t("waiting"), tone: "active" };
-  }
-  if (status === "queued") {
-    return { label: t("queued"), tone: "queue" };
-  }
   if (status === "idle") {
     return { label: t("ready"), tone: "idle" };
   }
+  if (status === "archived") {
+    return { label: t("historyArchived"), tone: "muted" };
+  }
 
-  return { label: t("suspended"), tone: "muted" };
+  return { label: t("interrupted"), tone: "muted" };
 };
 
 export const formatRelativeSessionTime = (value: number, locale: Locale) => {

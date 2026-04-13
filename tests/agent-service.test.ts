@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller.ts";
-import { startAgent } from "../apps/web/src/services/http/agent.service.ts";
+import { createWorkspaceControllerState } from "../apps/web/src/features/workspace/workspace-controller";
+import { startSessionRuntime } from "../apps/web/src/services/http/session-runtime.service";
 
 type MockFetchCall = {
   input: string | URL | Request;
@@ -34,7 +34,7 @@ const withMockWindow = (
   });
 };
 
-test("startAgent omits legacy command field from agent_start payload", async () => {
+test("startSessionRuntime posts to session_runtime_start without any client-supplied command", async () => {
   const calls: MockFetchCall[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -42,12 +42,12 @@ test("startAgent omits legacy command field from agent_start payload", async () 
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, data: { started: true } }),
+      json: async () => ({ ok: true, data: { terminal_id: 9, started: true, terminal_runtime_id: "runtime-9" } }),
     } as Response;
   }) as typeof fetch;
 
   try {
-    await withMockWindow(
+    const result = await withMockWindow(
       {
         location: {
           origin: "http://127.0.0.1:41033",
@@ -57,37 +57,39 @@ test("startAgent omits legacy command field from agent_start payload", async () 
           search: "",
         },
       } as Window & typeof globalThis,
-      async () => {
-        await startAgent({
-          workspaceId: "ws-1",
-          controller: createWorkspaceControllerState({
-            role: "controller",
-            deviceId: "device-a",
-            clientId: "client-a",
-            fencingToken: 7,
-          }),
-          sessionId: "1",
-          provider: "claude",
-          cols: 120,
-          rows: 30,
-        });
-      },
+      async () => startSessionRuntime({
+        workspaceId: "ws-1",
+        controller: createWorkspaceControllerState({
+          role: "controller",
+          deviceId: "device-a",
+          clientId: "client-a",
+          fencingToken: 7,
+        }),
+        sessionId: "42",
+        cols: 120,
+        rows: 30,
+      }),
     );
+    assert.deepEqual(result, {
+      terminal_id: 9,
+      started: true,
+      terminal_runtime_id: "runtime-9",
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
 
   assert.equal(calls.length, 1);
+  assert.match(String(calls[0].input), /\/api\/rpc\/session_runtime_start$/);
   const payload = JSON.parse(String(calls[0].init?.body));
-  assert.equal(payload.command, undefined);
   assert.deepEqual(payload, {
     workspaceId: "ws-1",
     deviceId: "device-a",
     clientId: "client-a",
     fencingToken: 7,
-    sessionId: "1",
-    provider: "claude",
+    sessionId: "42",
     cols: 120,
     rows: 30,
   });
+  assert.equal(payload.command, undefined);
 });

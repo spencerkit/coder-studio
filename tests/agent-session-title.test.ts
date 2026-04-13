@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTranslator } from "../apps/web/src/i18n.ts";
-import { previewAgentSessionTitle } from "../apps/web/src/features/agents/agent-runtime-actions.ts";
-import type { Tab } from "../apps/web/src/state/workbench.ts";
+import { createTranslator } from "../apps/web/src/i18n";
+import { previewAgentSessionTitle } from "../apps/web/src/features/agents/agent-runtime-actions";
+import type { Tab } from "../apps/web/src/state/workbench";
 
 const makeTab = (title: string, isDraft = true): Tab => ({
   id: "ws-1",
@@ -38,7 +38,6 @@ const makeTab = (title: string, isDraft = true): Tab => ({
     isDraft,
     queue: [],
     messages: [],
-    stream: "",
     unread: 0,
     lastActiveAt: 0,
   }],

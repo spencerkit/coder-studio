@@ -12,23 +12,26 @@ import {
 } from "../../i18n";
 import { SettingsScreen } from "../../features/settings";
 import WorkspaceScreen from "../../features/workspace/WorkspaceScreen";
-import type { AppRoute, AppSettings } from "../../types/app";
+import type { AppRoute, AppSettings, AppSettingsUpdater } from "../../types/app";
 import { WorkbenchRuntimeCoordinator } from "./WorkbenchRuntimeCoordinator";
 import {
   clearStoredAppSettings,
   cloneAppSettings,
   readStoredAppSettings,
-} from "../../shared/app/settings";
+} from "../../shared/app/settings-storage";
 import {
+  buildAppSettingsPatch,
   defaultAppSettings,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/app-settings";
 import {
+  applyAppSettingsUpdater,
   createAppSettingsDraftStore,
   createSequencedAppSettingsSaver,
   createPersistableAppSettings,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
-} from "../../services/http/settings.service.ts";
+  updateAppSettingsPatch,
+} from "../../services/http/settings.service";
 
 export default function AppController() {
   const [locale, setLocale] = useState<Locale>(() => getPreferredLocale());
@@ -121,16 +124,31 @@ export default function AppController() {
   const onSelectLocale = (nextLocale: Locale) => {
     persistLocale(nextLocale);
     localePreferenceExplicitRef.current = true;
+    const previousSettings = draftSettingsRef.current.get();
     const nextSettings = draftSettingsRef.current.update((draft) => {
       draft.general.locale = nextLocale;
     });
     setAppSettings(nextSettings);
     setSettingsDraft(nextSettings);
     setLocale(nextLocale);
+    const previousPersistable = createPersistableAppSettings(
+      previousSettings,
+      confirmedSettingsRef.current,
+      true,
+    );
+    const nextPersistable = createPersistableAppSettings(
+      nextSettings,
+      confirmedSettingsRef.current,
+      true,
+    );
+    const patch = buildAppSettingsPatch(previousPersistable, nextPersistable);
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
     void saveCoordinatorRef.current.save(
       confirmedSettingsRef.current,
-      createPersistableAppSettings(nextSettings, confirmedSettingsRef.current, true),
-      undefined,
+      nextPersistable,
+      async () => updateAppSettingsPatch(patch),
       backendSettingsConfirmedRef.current,
     )
       .then((result) => {
@@ -141,17 +159,27 @@ export default function AppController() {
       });
   };
 
-  const onCommitSettings = (nextSettings: AppSettings) => {
-    const normalized = draftSettingsRef.current.replace(cloneAppSettings(nextSettings));
+  const onCommitSettings = (updater: AppSettingsUpdater) => {
+    const previousSettings = draftSettingsRef.current.get();
+    const normalized = applyAppSettingsUpdater(draftSettingsRef.current, updater);
     setSettingsDraft(normalized);
-    void saveCoordinatorRef.current.save(
+    const previousPersistable = createPersistableAppSettings(
+      previousSettings,
       confirmedSettingsRef.current,
-      createPersistableAppSettings(
-        normalized,
-        confirmedSettingsRef.current,
-        localePreferenceExplicitRef.current,
-      ),
-      undefined,
+      localePreferenceExplicitRef.current,
+    );
+    const nextPersistable = createPersistableAppSettings(
+      normalized,
+      confirmedSettingsRef.current,
+      localePreferenceExplicitRef.current,
+    );
+    const patch = buildAppSettingsPatch(previousPersistable, nextPersistable);
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+    void saveCoordinatorRef.current.saveWithPersist(
+      confirmedSettingsRef.current,
+      async () => updateAppSettingsPatch(patch),
       backendSettingsConfirmedRef.current,
     )
       .then((result) => {

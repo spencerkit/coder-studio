@@ -1,5 +1,5 @@
-import type { Tab } from "../../state/workbench-core.ts";
-import type { WorkspaceViewPatch } from "../../types/app.ts";
+import type { Tab } from "../../state/workbench-core";
+import type { WorkspaceViewPatch } from "../../types/app";
 
 type WorkspaceViewTab = Pick<
   Tab,

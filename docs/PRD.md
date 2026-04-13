@@ -118,17 +118,13 @@ Coder Studio 是一个本地优先的开发工作台，当前以本地 server + 
 
 ### 5.5 Claude 相关增强 / Claude-Specific Enhancements
 
-- 当前版本会在 Claude 运行目录下自动写入/更新 `.claude/settings.local.json` 的 hook 配置。
-- 应用会接收 Claude 生命周期事件，并用于更新会话状态与会话上下文。
+- 当前版本会在当前运行环境的 `~/.claude/settings.json` 中自动写入/更新 Claude hooks 配置。
+- 应用会接收 provider 生命周期事件，并用于更新会话状态与会话上下文。
 - 当前已对接的生命周期类别包括：
   - `session_started`
-  - `turn_waiting`
-  - `tool_started`
-  - `tool_finished`
-  - `approval_required`
   - `turn_completed`
-  - `session_ended`
-- Claude 的会话 ID 会被记录下来，用于后续恢复同一会话上下文。
+- `session_started` 只用于同步 provider 返回的会话 ID（`resume_id`），供后续恢复同一会话上下文。
+- `turn_completed` 是当前 turn 完成的权威信号，用于把会话切回 idle 并触发后续完成逻辑。
 
 ### 5.6 代码面板 / Code Panel
 

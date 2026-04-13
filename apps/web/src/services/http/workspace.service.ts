@@ -1,9 +1,9 @@
-import type { ExecTarget, WorktreeInfo } from "../../state/workbench.ts";
+import type { ExecTarget, WorktreeInfo } from "../../state/workbench";
+import type { AgentProvider } from "../../types/app";
 import type {
-  BackendSessionHistoryRecord,
-  ClaudeSlashSkillEntry,
+  BackendWorkspaceSupervisorBinding,
+  BackendWorkspaceSupervisorCycle,
   GitStatus,
-  SessionHistoryRecord,
   WorkbenchBootstrap,
   WorkbenchLayout,
   WorkbenchUiState,
@@ -14,13 +14,12 @@ import type {
   WorkspaceTree,
   WorkspaceControllerLease,
   WorkspaceViewPatch,
-} from "../../types/app.ts";
-import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller.ts";
-import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller.ts";
-import { mapSessionHistoryRecord } from "../../features/workspace/session-history.ts";
-import { fireAndForgetRpc, invokeRpc } from "./client.ts";
-import { sendWsMessage } from "../../ws/client.ts";
-import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback.ts";
+} from "../../types/app";
+import type { WorkspaceControllerState } from "../../features/workspace/workspace-controller";
+import { createWorkspaceControllerRpcPayload } from "../../features/workspace/workspace-controller";
+import { fireAndForgetRpc, invokeRpc } from "./client";
+import { sendWsMessage } from "../../ws/client";
+import { sendWsMutationWithNullableHttpFallback } from "./ws-rpc-fallback";
 
 export const launchWorkspace = (source: {
   kind: "remote" | "local";
@@ -34,10 +33,6 @@ export const launchWorkspace = (source: {
 
 export const getWorkbenchBootstrap = (deviceId?: string, clientId?: string) =>
   invokeRpc<WorkbenchBootstrap>("workbench_bootstrap", { deviceId, clientId });
-
-export const listSessionHistory = async () => (
-  (await invokeRpc<BackendSessionHistoryRecord[]>("list_session_history", {})).map(mapSessionHistoryRecord)
-) as SessionHistoryRecord[];
 
 export const getWorkspaceSnapshot = (workspaceId: string) =>
   invokeRpc<WorkspaceSnapshot>("workspace_snapshot", { workspaceId });
@@ -105,6 +100,79 @@ export const updateWorkspaceView = (
   controller: WorkspaceControllerState,
 ) => invokeRpc<void>("workspace_view_update", createWorkspaceControllerRpcPayload(workspaceId, controller, { patch }));
 
+export const enableSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+  provider: AgentProvider,
+  objectiveText: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "enable_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, {
+    sessionId,
+    provider,
+    objectiveText,
+  }),
+);
+
+export const updateSupervisorObjective = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+  objectiveText: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "update_supervisor_objective",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, {
+    sessionId,
+    objectiveText,
+  }),
+);
+
+export const pauseSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "pause_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const resumeSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorBinding>(
+  "resume_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const disableSupervisorMode = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<void>(
+  "disable_supervisor_mode",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const retrySupervisorCycle = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorCycle>(
+  "retry_supervisor_cycle",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
+export const triggerSupervisorCycle = (
+  workspaceId: string,
+  controller: WorkspaceControllerState,
+  sessionId: string,
+) => invokeRpc<BackendWorkspaceSupervisorCycle>(
+  "trigger_supervisor_cycle",
+  createWorkspaceControllerRpcPayload(workspaceId, controller, { sessionId }),
+);
+
 export const releaseWorkspaceControllerKeepalive = (
   workspaceId: string,
   controller: WorkspaceControllerState,
@@ -121,6 +189,3 @@ export const inspectWorktree = (path: string, target: ExecTarget, depth = 4) =>
 
 export const getGitStatus = (path: string, target: ExecTarget) =>
   invokeRpc<GitStatus>("git_status", { path, target });
-
-export const listClaudeSlashSkills = (cwd: string) =>
-  invokeRpc<ClaudeSlashSkillEntry[]>("claude_slash_skills", { cwd });

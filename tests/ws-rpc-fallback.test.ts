@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   sendWsMutationWithHttpFallback,
   sendWsMutationWithNullableHttpFallback,
-} from "../apps/web/src/services/http/ws-rpc-fallback.ts";
+} from "../apps/web/src/services/http/ws-rpc-fallback";
 
 test("sendWsMutationWithHttpFallback prefers websocket when available", async () => {
   const calls: string[] = [];

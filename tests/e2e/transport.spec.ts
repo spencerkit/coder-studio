@@ -23,13 +23,12 @@ type WsEventFrame = {
 };
 
 type WsTransportBaseline = {
-  agentProbeMode: 'startup' | 'stdin';
   controlPlaneCommands: string[];
   websocketUrls: string[];
   workspaceId: string;
   sessionId: string;
   terminalFrame: WsEventFrame;
-  agentFrame: WsEventFrame;
+  lifecycleFrame: WsEventFrame;
 };
 
 type ReconnectBaseline = {
@@ -78,6 +77,8 @@ type WorkspaceControllerLeaseSnapshot = {
   takeover_deadline_at?: number | null;
 };
 
+type RpcCounts = Record<string, number>;
+
 type TransportTrackerSnapshot = {
   urls: string[];
   connectTimes: number[];
@@ -104,11 +105,18 @@ const WS_RECONNECT_DELAY_MS = 800;
 const WORKSPACE_PATH = process.cwd();
 const WORKSPACE_PROBE_FILE = path.join(WORKSPACE_PATH, 'package.json');
 const AGENT_STDIN_ECHO_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-stdin-echo.mjs');
+const AGENT_BURST_STREAM_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/agent-burst-stream.mjs');
 const AGENT_CLAUDE_LIFECYCLE_SCRIPT = path.join(WORKSPACE_PATH, 'tests/e2e/fixtures/claude-lifecycle-agent.mjs');
 const AGENT_CLAUDE_REPLAY_DELAY_MS = 5000;
 const AGENT_CLAUDE_RECOVERY_DELAY_MS = 12000;
 const AGENT_START_SYSTEM_MESSAGE = 'Agent started / 智能体已启动';
 const TRANSPORT_EVENT_TIMEOUT_MS = 20000;
+const BURST_CHUNK_COUNT = readIntEnv('CODER_STUDIO_TEST_BURST_CHUNKS', 24, 1);
+const BURST_INTERVAL_MS = readIntEnv('CODER_STUDIO_TEST_BURST_INTERVAL_MS', 2, 0);
+const BURST_MAX_FRAMES = readIntEnv('CODER_STUDIO_TEST_BURST_MAX_FRAMES', 12, 1);
+const TERMINAL_BURST_MAX_FRAMES = readIntEnv('CODER_STUDIO_TEST_TERMINAL_BURST_MAX_FRAMES', 14, 1);
+const MIXED_BURST_MAX_TOTAL_FRAMES = readIntEnv('CODER_STUDIO_TEST_MIXED_BURST_MAX_TOTAL_FRAMES', 24, 1);
+const BURST_EMIT_MEASURE = process.env.CODER_STUDIO_TEST_BURST_EMIT_MEASURE === '1';
 const execFileAsync = promisify(execFile);
 const DEFAULT_TRANSPORT_IDS = {
   deviceId: 'transport-default-device',
@@ -149,6 +157,10 @@ async function prepareTransportPage(page: Page) {
   await seedAppSettings(page, {});
 }
 
+async function patchAppSettings(page: Page, settings: Record<string, unknown>) {
+  await invokeRpc(page, 'app_settings_update', { settings });
+}
+
 async function seedAppSettings(
   page: Page,
   overrides: Partial<{
@@ -168,33 +180,26 @@ async function seedAppSettings(
   }>,
 ) {
   const [executable = 'claude', ...startupArgs] = splitCommandTokens(overrides.agentCommand ?? 'claude');
-  await invokeRpc(page, 'app_settings_update', {
-    settings: {
-      general: {
-        locale: 'en',
-        terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
-        completionNotifications: overrides.completionNotifications ?? {
-          enabled: true,
-          onlyWhenBackground: true,
-        },
-        idlePolicy: overrides.idlePolicy ?? {
-          enabled: true,
-          idleMinutes: 10,
-          maxActive: 3,
-          pressure: true,
-        },
+  await patchAppSettings(page, {
+    general: {
+      locale: 'en',
+      terminalCompatibilityMode: overrides.terminalCompatibilityMode ?? 'standard',
+      completionNotifications: overrides.completionNotifications ?? {
+        enabled: true,
+        onlyWhenBackground: true,
       },
+      idlePolicy: overrides.idlePolicy ?? {
+        enabled: true,
+        idleMinutes: 10,
+        maxActive: 3,
+        pressure: true,
+      },
+    },
+    providers: {
       claude: {
         global: {
           executable,
           startupArgs,
-          env: {},
-          settingsJson: {},
-          globalConfigJson: {},
-        },
-        overrides: {
-          native: null,
-          wsl: null,
         },
       },
     },
@@ -236,35 +241,77 @@ test.describe('workspace transport baseline', () => {
     expectPollCountsToAdvanceFrom(baseline.countsAfterNextPoll, baseline.initialCounts);
   });
 
-  test('terminal and agent streams still arrive over /ws', async ({ page }) => {
+  test('session startup and follow-up I/O use session_runtime_start plus terminal transport', async ({ page }) => {
     const baseline = await observeWsTransport(page);
 
-    expect(baseline.controlPlaneCommands).toEqual(
-      baseline.agentProbeMode === 'stdin'
-        ? [
-          'terminal_create',
-          'terminal_write',
-          'create_session',
-          'agent_start',
-          'agent_send',
-        ]
-        : [
-          'terminal_create',
-          'terminal_write',
-          'create_session',
-          'agent_start',
-        ],
-    );
+    expect(baseline.controlPlaneCommands).toContain('session_runtime_start');
+    expect(baseline.controlPlaneCommands).toContain('terminal_write');
+    expect(baseline.controlPlaneCommands).toContain('terminal_resize');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_start');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_send');
+    expect(baseline.controlPlaneCommands).not.toContain('agent_resize');
     expect(baseline.websocketUrls.some((url) => url.includes('/ws'))).toBe(true);
     expect(baseline.terminalFrame.event).toBe('terminal://event');
     expect(baseline.terminalFrame.payload.workspace_id).toBe(baseline.workspaceId);
     expect(String(baseline.terminalFrame.payload.data ?? '')).toContain('transport-terminal');
-    expect(baseline.agentFrame.event).toBe('agent://event');
-    expect(baseline.agentFrame.payload.workspace_id).toBe(baseline.workspaceId);
-    expect(baseline.agentFrame.payload.session_id).toBe(baseline.sessionId);
-    expect(String(baseline.agentFrame.payload.data ?? '')).toContain(
-      baseline.agentProbeMode === 'stdin' ? 'transport-agent' : AGENT_START_SYSTEM_MESSAGE,
-    );
+    expect(baseline.lifecycleFrame.event).toBe('agent://lifecycle');
+    expect(baseline.lifecycleFrame.payload.workspace_id).toBe(baseline.workspaceId);
+    expect(baseline.lifecycleFrame.payload.session_id).toBe(baseline.sessionId);
+    expect(baseline.lifecycleFrame.payload.kind).toBe('session_started');
+  });
+
+  test('high-frequency agent stdout is coalesced into fewer websocket frames', async ({ page }) => {
+    const baseline = await observeBurstAgentTransport(page, {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+    });
+
+    emitBurstMeasure('agent', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+      frameCount: baseline.frameCount,
+      textLength: baseline.text.length,
+    });
+    expect(baseline.text).toContain('agent-burst-00');
+    expect(baseline.text).toContain(`agent-burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.frameCount).toBeLessThanOrEqual(BURST_MAX_FRAMES);
+  });
+
+  test('high-frequency terminal output is coalesced into fewer websocket frames', async ({ page }) => {
+    const baseline = await observeBurstTerminalTransport(page, {
+      chunkCount: BURST_CHUNK_COUNT,
+    });
+
+    emitBurstMeasure('terminal', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: 0,
+      frameCount: baseline.frameCount,
+      textLength: baseline.text.length,
+    });
+    expect(baseline.text).toContain('term-burst-00');
+    expect(baseline.text).toContain(`term-burst-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.frameCount).toBeLessThanOrEqual(TERMINAL_BURST_MAX_FRAMES);
+  });
+
+  test('mixed agent and terminal burst workloads stay within bounded websocket frames', async ({ page }) => {
+    const baseline = await observeMixedBurstTransport(page, {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+    });
+
+    emitBurstMeasure('mixed', {
+      chunkCount: BURST_CHUNK_COUNT,
+      intervalMs: BURST_INTERVAL_MS,
+      frameCount: baseline.totalFrameCount,
+      textLength: baseline.agentText.length + baseline.terminalText.length,
+      agentFrameCount: baseline.agentFrameCount,
+      terminalFrameCount: baseline.terminalFrameCount,
+    });
+    expect(baseline.agentText).toContain('mix-agent-00');
+    expect(baseline.agentText).toContain(`mix-agent-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.terminalText).toContain('mix-term-00');
+    expect(baseline.terminalText).toContain(`mix-term-${String(BURST_CHUNK_COUNT - 1).padStart(2, '0')}`);
+    expect(baseline.totalFrameCount).toBeLessThanOrEqual(MIXED_BURST_MAX_TOTAL_FRAMES);
   });
 
   test('websocket reconnect preserves resource resync cadence after reconnect', async ({ page }) => {
@@ -287,8 +334,13 @@ test.describe('workspace transport baseline', () => {
     expect(
       baseline.countsAfterReconnectBeforePoll.workspace_tree - baseline.countsAtDisconnect.workspace_tree,
     ).toBeLessThanOrEqual(1);
-    expect(baseline.countsAfterNextPoll).toEqual(
-      incrementCounts(baseline.countsAfterReconnectBeforePoll),
+    expectPollCountsNotToRegressFrom(
+      baseline.countsAfterNextPoll,
+      baseline.countsAfterReconnectBeforePoll,
+    );
+    expectPollCountsToAdvanceFrom(
+      baseline.countsAfterNextPoll,
+      baseline.countsAtDisconnect,
     );
   });
 
@@ -315,6 +367,58 @@ test.describe('workspace transport baseline', () => {
 
     expect(baseline.countsAfterGitAdd).toBeGreaterThan(baseline.countsAfterFileWrite);
     expect(normalizePathForComparison(baseline.workspacePath)).toBe(normalizePathForComparison(WORKSPACE_PATH));
+  });
+
+  test('git discard all invalidations refresh the file tree over /ws before fallback polling', async ({ page }) => {
+    test.setTimeout(30000);
+    const probe = await installTransportProbe(page, { pollIntervalMs: 10000 });
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-git-discard-');
+    const untrackedFile = path.join(workspacePath, 'discard-me.txt');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await execFileAsync('git', ['init'], { cwd: workspacePath });
+      await fs.writeFile(untrackedFile, 'discard me\n', 'utf8');
+
+      workspace = await openWorkspace(page, DEFAULT_TRANSPORT_IDS, workspacePath);
+      await waitForBackendSocket(page);
+      const controller = await currentWorkspaceController(page, workspace.workspaceId);
+      const workspaceTreeCountBeforeDiscard = probe.rpcCounts.workspace_tree ?? 0;
+
+      await invokeRpc(page, 'git_discard_all', {
+        ...controller,
+        path: workspace.workspacePath,
+        target: workspace.target,
+      });
+
+      const dirtyFrame = await waitForWsEvent(
+        page,
+        'workspace://artifacts_dirty',
+        (payload) => payload.path === workspace?.workspacePath && payload.reason === 'git_discard_all',
+      );
+
+      expect(dirtyFrame.payload.categories).toEqual(['git', 'worktrees', 'tree']);
+      await expect
+        .poll(() => probe.rpcCounts.workspace_tree ?? 0, {
+          timeout: 5000,
+        })
+        .toBeGreaterThan(workspaceTreeCountBeforeDiscard);
+      await expect
+        .poll(async () => {
+          try {
+            await fs.access(untrackedFile);
+            return true;
+          } catch {
+            return false;
+          }
+        })
+        .toBe(false);
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
+      }
+      await removeExternalWorkspace(workspacePath);
+    }
   });
 
   test('refresh reattaches to the same shell replay and controller state', async ({ browser }) => {
@@ -413,6 +517,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
       const sessionId = String(session.id);
 
@@ -432,24 +537,26 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId: session.id,
         patch: {
-          status: 'waiting',
+          status: 'running',
         },
       });
 
       const sessionCard = page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first();
 
-      await invokeRpc(page, 'agent_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
         ...controller,
         sessionId,
-        provider: 'claude',
+        cols: 120,
+        rows: 30,
       });
+      expect(started.terminal_id).toBeGreaterThan(0);
 
       await waitForLifecycleReplayEvent(
         page,
         workspace.workspaceId,
         ids,
         sessionId,
-        'tool_started',
+        'session_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
 
@@ -517,6 +624,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
 
       await invokeRpc(page, 'workspace_view_update', {
@@ -535,7 +643,7 @@ test.describe('workspace transport baseline', () => {
         ...controller,
         sessionId: session.id,
         patch: {
-          status: 'waiting',
+          status: 'running',
         },
       });
 
@@ -543,18 +651,20 @@ test.describe('workspace transport baseline', () => {
       await waitForWorkspaceTopbar(page);
       await waitForBackendSocket(page);
       const controllerAfterReload = await currentWorkspaceController(page, workspace.workspaceId, ids);
-      await invokeRpc(page, 'agent_start', {
+      const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
         ...controllerAfterReload,
         sessionId: String(session.id),
-        provider: 'claude',
+        cols: 120,
+        rows: 30,
       });
+      expect(started.terminal_id).toBeGreaterThan(0);
 
       await waitForLifecycleReplayEvent(
         page,
         workspace.workspaceId,
         ids,
         String(session.id),
-        'tool_started',
+        'session_started',
         TRANSPORT_EVENT_TIMEOUT_MS,
       );
       await page.reload();
@@ -578,7 +688,7 @@ test.describe('workspace transport baseline', () => {
       expect(runtimeAfterReload.snapshot.view_state.active_session_id).toBe(String(session.id));
       expect(runtimeAfterReload.snapshot.view_state.active_pane_id).toBe(`pane-${session.id}`);
       expect(runtimeAfterReload.lifecycle_events?.some((event) =>
-        event.session_id === String(session.id) && event.kind === 'tool_started'
+        event.session_id === String(session.id) && event.kind === 'session_started'
       )).toBe(true);
       let lastReloadStatus: string | null = null;
       try {
@@ -603,9 +713,12 @@ test.describe('workspace transport baseline', () => {
       }
       if (lastReloadStatus === 'idle') {
         const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
-        expect(debug.lifecycleTail.some((event) =>
-          event.session_id === String(session.id) && event.kind === 'turn_completed'
-        )).toBe(true);
+        expect(
+          debug.lifecycleTail.some((event) =>
+            event.session_id === String(session.id)
+            && (event.kind === 'turn_completed' || event.kind === 'session_started')
+          ),
+        ).toBe(true);
       }
 
       await page.goto('about:blank');
@@ -616,6 +729,76 @@ test.describe('workspace transport baseline', () => {
       await expect.poll(async () =>
         page.locator(`.agent-pane-card[data-session-id="${session.id}"]`).first().getAttribute('data-session-status')
       ).toBe('idle');
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('reload keeps automatic workspace runtime attaches bounded', async ({ browser }) => {
+    test.setTimeout(30000);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const ids = { deviceId: 'device-reload-attach', clientId: 'client-reload-attach' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reload-attach-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(page);
+      const probe = await installTransportProbe(page);
+      await seedWorkspaceControllerIds(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
+      await waitForBackendSocket(page);
+
+      const attachCountBeforeReload = probe.rpcCounts.workspace_runtime_attach ?? 0;
+
+      await page.reload();
+      await waitForWorkspaceTopbar(page);
+      await waitForBackendSocket(page);
+      await page.waitForTimeout(3600);
+
+      const attachCountAfterReload = probe.rpcCounts.workspace_runtime_attach ?? 0;
+      expect(attachCountAfterReload - attachCountBeforeReload).toBeLessThanOrEqual(1);
+    } finally {
+      if (workspace && !page.isClosed()) {
+        await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
+      }
+      await Promise.allSettled([context.close()]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
+  test('reload defers session history loading until the drawer is opened', async ({ browser }) => {
+    test.setTimeout(30000);
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const ids = { deviceId: 'device-reload-history', clientId: 'client-reload-history' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-reload-history-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(page);
+      const probe = await installTransportProbe(page);
+      await seedWorkspaceControllerIds(page, ids);
+      workspace = await openWorkspace(page, ids, workspacePath);
+      await waitForBackendSocket(page);
+
+      const historyCountBeforeReload = probe.rpcCounts.list_session_history ?? 0;
+
+      await page.reload();
+      await waitForWorkspaceTopbar(page);
+      await waitForBackendSocket(page);
+      await page.waitForTimeout(1200);
+
+      const historyCountAfterReload = probe.rpcCounts.list_session_history ?? 0;
+      expect(historyCountAfterReload - historyCountBeforeReload).toBe(0);
+
+      await page.getByTestId('history-toggle').click();
+      await expect(page.getByTestId('history-drawer')).toBeVisible();
+      await expect.poll(() => probe.rpcCounts.list_session_history ?? 0).toBe(historyCountAfterReload + 1);
     } finally {
       if (workspace && !page.isClosed()) {
         await closeWorkspaceBestEffort(page, workspace.workspaceId, ids);
@@ -733,6 +916,81 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
+  test('observer terminal stays unfocused and read-only even after clicking the pane', async ({ browser }) => {
+    test.setTimeout(45000);
+    const controllerContext = await browser.newContext();
+    const observerContext = await browser.newContext();
+    const controller = await controllerContext.newPage();
+    const observer = await observerContext.newPage();
+    const controllerIds = { deviceId: 'device-readonly-a', clientId: 'client-readonly-a' };
+    const observerIds = { deviceId: 'device-readonly-b', clientId: 'client-readonly-b' };
+    const workspacePath = await createExternalTempWorkspace('coder-studio-transport-readonly-focus-');
+    let workspace: WorkspaceHandle | null = null;
+
+    try {
+      await prepareTransportPage(controller);
+      await prepareTransportPage(observer);
+      await installTransportProbe(controller);
+      await installTransportProbe(observer);
+      await seedWorkspaceControllerIds(controller, controllerIds);
+      await seedWorkspaceControllerIds(observer, observerIds);
+
+      workspace = await openWorkspace(controller, controllerIds, workspacePath);
+      await waitForBackendSocket(controller);
+      await seedAppSettings(controller, {
+        agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
+      });
+
+      const startButton = controller.locator('[data-testid^="draft-start-claude-"]').first();
+      await expect(startButton).toBeVisible();
+      await startButton.click();
+      await expect(controller.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+
+      await controller.locator('.agent-pane-xterm').click();
+      await controller.keyboard.type('observer focus guard');
+      await controller.keyboard.press('Enter');
+
+      await observer.goto(`/workspace/${workspace.workspaceId}`);
+      await waitForWorkspaceTopbar(observer);
+      await waitForBackendSocket(observer);
+      await expect(observer.getByTestId('workspace-read-only-banner')).toBeVisible();
+      try {
+        await expect(observer.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+      } catch {
+        const debug = await readWorkspaceReloadDebug(observer, workspace.workspaceId, observerIds);
+        throw new Error(JSON.stringify(debug, null, 2));
+      }
+
+      await expect.poll(() => observer.evaluate(() => {
+        const helper = document.querySelector('.xterm-helper-textarea');
+        return {
+          textboxActive: document.activeElement?.classList?.contains('xterm-helper-textarea') ?? false,
+          helperInteractive: helper instanceof HTMLTextAreaElement
+            ? (!helper.readOnly || helper.tabIndex !== -1)
+            : false,
+        };
+      })).toEqual({
+        textboxActive: false,
+        helperInteractive: false,
+      });
+
+      await observer.locator('.agent-pane-xterm').click();
+
+      await expect.poll(() => observer.evaluate(() => (
+        document.activeElement?.classList?.contains('xterm-helper-textarea') ?? false
+      ))).toBe(false);
+    } finally {
+      if (workspace && !observer.isClosed()) {
+        await closeWorkspaceBestEffort(observer, workspace.workspaceId, observerIds);
+      }
+      await Promise.allSettled([
+        observerContext.close(),
+        controllerContext.close(),
+      ]);
+      await removeExternalWorkspace(workspacePath);
+    }
+  });
+
   test('observer takeover button surfaces loading and error feedback when takeover request fails', async ({ browser }) => {
     test.setTimeout(45000);
     const controllerContext = await browser.newContext();
@@ -793,7 +1051,7 @@ test.describe('workspace transport baseline', () => {
     }
   });
 
-  test('first draft prompt becomes the session title', async ({ browser }) => {
+  test('draft provider button starts a session immediately with a generated title', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     const titleWorkspacePath = await createExternalTempWorkspace('coder-studio-transport-title-');
@@ -808,16 +1066,14 @@ test.describe('workspace transport baseline', () => {
         agentCommand: `node ${AGENT_STDIN_ECHO_SCRIPT}`,
       });
 
-      const firstPrompt = 'title derived from first prompt';
-      const draftInput = page.locator('[data-testid^="agent-draft-input-"]').first();
-      await expect(draftInput).toBeVisible();
+      await expect(page.locator('[data-testid^="draft-mode-new-"]').first()).toBeVisible();
+      const startButton = page.locator('[data-testid^="draft-start-claude-"]').first();
+      await expect(startButton).toBeVisible();
 
-      await draftInput.fill(firstPrompt);
-      await draftInput.press('Enter');
+      await startButton.click();
 
-      await expect(page.locator('.agent-pane-title').filter({ hasText: firstPrompt })).toHaveCount(1, {
-        timeout: 10000,
-      });
+      await expect(page.locator('.agent-pane-xterm')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('.agent-pane-title').first()).not.toHaveText('New Session');
     } finally {
       if (workspace && !page.isClosed()) {
         await closeWorkspaceBestEffort(page, workspace.workspaceId, DEFAULT_TRANSPORT_IDS);
@@ -917,6 +1173,7 @@ test.describe('workspace transport baseline', () => {
       const session = await invokeRpc<{ id: number }>(page, 'create_session', {
         ...controller,
         mode: 'branch',
+        provider: 'claude',
       });
 
       await invokeRpc(page, 'session_update', {
@@ -924,7 +1181,7 @@ test.describe('workspace transport baseline', () => {
         sessionId: session.id,
         patch: {
           status: 'interrupted',
-          claude_session_id: resumeClaudeSessionId,
+          resume_id: resumeClaudeSessionId,
         },
       });
       await page.reload();
@@ -960,7 +1217,7 @@ test.describe('workspace transport baseline', () => {
         ids,
         (event) =>
           event.session_id === String(session.id)
-          && event.kind === 'tool_started'
+          && event.kind === 'session_started'
           && typeof event.data === 'string'
           && event.data.includes(resumeClaudeSessionId),
         TRANSPORT_EVENT_TIMEOUT_MS,
@@ -992,9 +1249,12 @@ test.describe('workspace transport baseline', () => {
       }
       if (resumedStatus === 'idle') {
         const debug = await readWorkspaceReloadDebug(page, workspace.workspaceId, ids);
-        expect(debug.lifecycleTail.some((event) =>
-          event.session_id === String(session.id) && event.kind === 'turn_completed'
-        )).toBe(true);
+        expect(
+          debug.lifecycleTail.some((event) =>
+            event.session_id === String(session.id)
+            && (event.kind === 'turn_completed' || event.kind === 'session_started')
+          ),
+        ).toBe(true);
       }
     } finally {
       if (workspace && !page.isClosed()) {
@@ -1036,9 +1296,8 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   await installTransportProbe(page);
   const workspace = await openWorkspace(page);
   await waitForBackendSocket(page);
-  const agentProbe = buildAgentProbe(workspace.target);
   await seedAppSettings(page, {
-    agentCommand: agentProbe.command,
+    agentCommand: `node ${AGENT_CLAUDE_LIFECYCLE_SCRIPT} --running-delay-ms 5000 transport-lifecycle`,
   });
 
   const controlPlaneCommands: string[] = [];
@@ -1063,52 +1322,51 @@ async function observeWsTransport(page: Page): Promise<WsTransportBaseline> {
   const session = await invokeRpc<{ id: number }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
+    provider: 'claude',
   });
   const sessionId = String(session.id);
   controlPlaneCommands.push('create_session');
 
-  await invokeRpc(page, 'agent_start', {
+  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
     ...controller,
     sessionId,
-    provider: 'claude',
     cols: 120,
     rows: 30,
   });
-  controlPlaneCommands.push('agent_start');
+  controlPlaneCommands.push('session_runtime_start');
 
-  if (agentProbe.input) {
-    await invokeRpc(page, 'agent_send', {
-      ...controller,
-      sessionId,
-      input: agentProbe.input,
-      appendNewline: true,
-    });
-    controlPlaneCommands.push('agent_send');
-  }
+  expect(started.terminal_id).toBeGreaterThan(0);
+  controlPlaneCommands.push('terminal_write');
+
+  await invokeRpc(page, 'terminal_resize', {
+    ...controller,
+    terminalId: started.terminal_id,
+    cols: 100,
+    rows: 24,
+  });
+  controlPlaneCommands.push('terminal_resize');
 
   const terminalFrame = await waitForWsEvent(
     page,
     'terminal://event',
     (payload) => payload.workspace_id === workspace.workspaceId && String(payload.data ?? '').includes('transport-terminal'),
   );
-  const agentFrame = await waitForWsEvent(
+  const lifecycleFrame = await waitForWsEvent(
     page,
-    'agent://event',
+    'agent://lifecycle',
     (payload) => payload.workspace_id === workspace.workspaceId
       && payload.session_id === sessionId
-      && payload.kind === agentProbe.expectedKind
-      && String(payload.data ?? '').includes(agentProbe.expectedText),
+      && payload.kind === 'session_started',
   );
   const tracker = await readTransportTracker(page);
 
   return {
-    agentProbeMode: agentProbe.mode,
     controlPlaneCommands,
     websocketUrls: tracker.urls,
     workspaceId: workspace.workspaceId,
     sessionId,
     terminalFrame,
-    agentFrame,
+    lifecycleFrame,
   };
 }
 
@@ -1158,6 +1416,163 @@ async function observeReconnectBaseline(page: Page): Promise<ReconnectBaseline> 
     countsAfterReconnectBeforePoll,
     countsAfterNextPoll,
   };
+}
+
+async function observeBurstAgentTransport(
+  page: Page,
+  options: { chunkCount: number; intervalMs: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  await seedAppSettings(page, {
+    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs} --prefix agent-burst`,
+  });
+
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  const frameCursor = await readTransportFrameCursor(page);
+  const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
+    ...controller,
+    sessionId,
+    cols: 120,
+    rows: 30,
+  });
+
+  const finalMarker = `agent-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
+  await expect
+    .poll(async () => (await readTerminalStreamFrames(page, started.terminal_id, frameCursor)).text.includes(finalMarker), {
+      timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+    })
+    .toBe(true);
+  await page.waitForTimeout(150);
+
+  return readTerminalStreamFrames(page, started.terminal_id, frameCursor);
+}
+
+async function observeBurstTerminalTransport(
+  page: Page,
+  options: { chunkCount: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const terminal = await invokeRpc<{ id: number }>(page, 'terminal_create', {
+    ...controller,
+    cwd: workspace.workspacePath,
+    target: workspace.target,
+    cols: 120,
+    rows: 30,
+  });
+
+  const probeFile = await writeBurstProbeFile(
+    workspace.workspacePath,
+    'term-burst',
+    options.chunkCount,
+  );
+  try {
+    await page.waitForTimeout(150);
+    const frameCursor = await readTransportFrameCursor(page);
+    await invokeRpc(page, 'terminal_write', {
+      ...controller,
+      terminalId: terminal.id,
+      input: buildTerminalBurstInput(workspace.target, probeFile),
+    });
+
+    const finalMarker = `term-burst-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    await expect
+      .poll(async () => (await readTerminalStreamFrames(page, terminal.id, frameCursor)).text.includes(finalMarker), {
+        timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+      })
+      .toBe(true);
+    await page.waitForTimeout(150);
+
+    return readTerminalStreamFrames(page, terminal.id, frameCursor);
+  } finally {
+    await fs.rm(probeFile, { force: true });
+  }
+}
+
+async function observeMixedBurstTransport(
+  page: Page,
+  options: { chunkCount: number; intervalMs: number },
+) {
+  await prepareTransportPage(page);
+  await installTransportProbe(page);
+  const workspace = await openWorkspace(page);
+  await waitForBackendSocket(page);
+  await seedAppSettings(page, {
+    agentCommand: `node ${AGENT_BURST_STREAM_SCRIPT} --chunks ${options.chunkCount} --interval-ms ${options.intervalMs} --prefix mix-agent`,
+  });
+
+  const controller = await currentWorkspaceController(page, workspace.workspaceId);
+  const terminal = await invokeRpc<{ id: number }>(page, 'terminal_create', {
+    ...controller,
+    cwd: workspace.workspacePath,
+    target: workspace.target,
+    cols: 120,
+    rows: 30,
+  });
+  const session = await invokeRpc<{ id: number }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  const probeFile = await writeBurstProbeFile(
+    workspace.workspacePath,
+    'mix-term',
+    options.chunkCount,
+  );
+
+  try {
+    await page.waitForTimeout(150);
+    const frameCursor = await readTransportFrameCursor(page);
+    await invokeRpc(page, 'terminal_write', {
+      ...controller,
+      terminalId: terminal.id,
+      input: buildTerminalBurstInput(workspace.target, probeFile),
+    });
+    const started = await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
+      ...controller,
+      sessionId,
+      cols: 120,
+      rows: 30,
+    });
+
+    const finalAgentMarker = `mix-agent-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    const finalTerminalMarker = `mix-term-${String(options.chunkCount - 1).padStart(2, '0')}`;
+    await expect
+      .poll(async () => {
+        const agent = await readTerminalStreamFrames(page, started.terminal_id, frameCursor);
+        const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
+        return agent.text.includes(finalAgentMarker) && terminalFrames.text.includes(finalTerminalMarker);
+      }, {
+        timeout: TRANSPORT_EVENT_TIMEOUT_MS,
+      })
+      .toBe(true);
+    await page.waitForTimeout(150);
+
+    const agentFrames = await readTerminalStreamFrames(page, started.terminal_id, frameCursor);
+    const terminalFrames = await readTerminalStreamFrames(page, terminal.id, frameCursor);
+    return {
+      agentFrameCount: agentFrames.frameCount,
+      terminalFrameCount: terminalFrames.frameCount,
+      totalFrameCount: agentFrames.frameCount + terminalFrames.frameCount,
+      agentText: agentFrames.text,
+      terminalText: terminalFrames.text,
+    };
+  } finally {
+    await fs.rm(probeFile, { force: true });
+  }
 }
 
 async function observeArtifactsDirtyBaseline(page: Page): Promise<ArtifactsDirtyBaseline> {
@@ -1282,6 +1697,7 @@ async function installTransportProbe(
   options: { pollIntervalMs?: number } = {},
 ) {
   const counts = emptyPollCounts();
+  const rpcCounts: RpcCounts = {};
   const initialCommandOrder: PollCommand[] = [];
   const pollIntervalMs = options.pollIntervalMs ?? 4000;
 
@@ -1354,6 +1770,7 @@ async function installTransportProbe(
 
   await page.route('**/api/rpc/*', async (route) => {
     const command = rpcCommand(route.request().url());
+    rpcCounts[command] = (rpcCounts[command] ?? 0) + 1;
     if (isPollCommand(command)) {
       counts[command] += 1;
       if (!initialCommandOrder.includes(command)) {
@@ -1366,6 +1783,7 @@ async function installTransportProbe(
   return {
     counts,
     initialCommandOrder,
+    rpcCounts,
   };
 }
 
@@ -1775,6 +2193,7 @@ async function readWorkspaceReloadDebug(
     invokeRpc<{
       snapshot: {
         sessions: Array<{ id: number }>;
+        terminals?: Array<{ id: number; output?: string }>;
         view_state: {
           active_session_id: string;
           active_pane_id: string;
@@ -1785,6 +2204,7 @@ async function readWorkspaceReloadDebug(
         controller_client_id?: string | null;
         fencing_token?: number;
       };
+      session_runtime_bindings?: Array<{ session_id: string; terminal_id: string }>;
       lifecycle_events?: Array<{ session_id: string; kind: string; data?: string }>;
     }>(page, 'workspace_runtime_attach', {
       workspaceId,
@@ -1799,9 +2219,11 @@ async function readWorkspaceReloadDebug(
     cards,
     snapshot: {
       sessionIds: runtime.snapshot.sessions.map((session) => session.id),
+      terminalIds: (runtime.snapshot.terminals ?? []).map((terminal) => terminal.id),
       activeSessionId: runtime.snapshot.view_state.active_session_id,
       activePaneId: runtime.snapshot.view_state.active_pane_id,
     },
+    sessionRuntimeBindings: runtime.session_runtime_bindings ?? [],
     controller: runtime.controller,
     lifecycleTail: (runtime.lifecycle_events ?? []).slice(-6),
   };
@@ -1837,6 +2259,90 @@ async function waitForWsEventCount(
     .toBeGreaterThanOrEqual(expectedCount);
 }
 
+async function readTransportFrameCursor(page: Page) {
+  return (await readTransportTracker(page)).frames.length;
+}
+
+async function readAgentStreamFrames(
+  page: Page,
+  sessionId: string,
+  kind: 'stdout' | 'stderr',
+  fromFrameIndex = 0,
+) {
+  const tracker = await readTransportTracker(page);
+  const frames = tracker.frames
+    .slice(fromFrameIndex)
+    .map(parseBackendEnvelope)
+    .filter((frame): frame is WsEventFrame =>
+      Boolean(frame)
+      && frame.event === 'agent://event'
+      && frame.payload.session_id === sessionId
+      && frame.payload.kind === kind,
+    );
+
+  return {
+    frameCount: frames.length,
+    text: frames.map((frame) => String(frame.payload.data ?? '')).join(''),
+  };
+}
+
+async function readTerminalStreamFrames(
+  page: Page,
+  terminalId: number,
+  fromFrameIndex = 0,
+) {
+  const tracker = await readTransportTracker(page);
+  const frames = tracker.frames
+    .slice(fromFrameIndex)
+    .map(parseBackendEnvelope)
+    .filter((frame): frame is WsEventFrame =>
+      Boolean(frame)
+      && frame.event === 'terminal://event'
+      && frame.payload.terminal_id === terminalId,
+    );
+
+  return {
+    frameCount: frames.length,
+    text: frames.map((frame) => String(frame.payload.data ?? '')).join(''),
+  };
+}
+
+async function writeBurstProbeFile(workspacePath: string, prefix: string, chunkCount: number) {
+  const probeFile = path.join(
+    workspacePath,
+    `.${prefix}-${process.pid}-${Date.now()}.txt`,
+  );
+  const lines = Array.from({ length: chunkCount }, (_, index) =>
+    `${prefix}-${String(index).padStart(2, '0')}`,
+  ).join('\n');
+  await fs.writeFile(probeFile, `${lines}\n`, 'utf8');
+  return probeFile;
+}
+
+function buildTerminalBurstInput(target: WorkspaceHandle['target'], filePath: string) {
+  if (isWindowsNativeTarget(target)) {
+    return `type "${filePath.replaceAll('"', '""')}"\r`;
+  }
+  return `cat ${quotePosixShellArg(filePath)}\r`;
+}
+
+function quotePosixShellArg(value: string) {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function emitBurstMeasure(
+  scenario: 'agent' | 'terminal' | 'mixed',
+  measure: Record<string, number>,
+) {
+  if (!BURST_EMIT_MEASURE) {
+    return;
+  }
+  console.log(`__TRANSPORT_BURST_MEASURE__ ${JSON.stringify({
+    scenario,
+    ...measure,
+  })}`);
+}
+
 function parseBackendEnvelope(frame: string): WsEventFrame | null {
   try {
     const envelope = JSON.parse(frame) as BackendEnvelope;
@@ -1850,6 +2356,11 @@ function parseBackendEnvelope(frame: string): WsEventFrame | null {
   } catch {
     return null;
   }
+}
+
+function readIntEnv(name: string, fallback: number, minimum: number) {
+  const parsed = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
 }
 
 declare global {

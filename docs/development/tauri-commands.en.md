@@ -93,12 +93,10 @@ Notes:
 | Command | Purpose | Current UI Usage |
 | --- | --- | --- |
 | `command_exists` | validate whether the launch command can run | used |
-| `claude_slash_skills` | scan Claude skills and commands | used for data loading, though menu UI is not fully surfaced |
 
 Notes:
 
 - `command_exists` is important for Settings because it reports whether the configured runtime command is available.
-- `claude_slash_skills` scans both personal and project `.claude` directories.
 
 ## 7. Terminal Commands
 
@@ -138,12 +136,7 @@ Related event channels:
 `agent://lifecycle` currently carries these normalized kinds:
 
 - `session_started`
-- `turn_waiting`
-- `tool_started`
-- `tool_finished`
-- `approval_required`
 - `turn_completed`
-- `session_ended`
 
 ## 10. How to Read Command Capability
 

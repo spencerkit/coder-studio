@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   READY_TAB_RUNTIME_RECOVERY_DELAYS_MS,
   collectReadyTabRuntimeRecoveryWorkspaceIds,
-} from "../apps/web/src/features/workspace/workspace-ready-runtime.ts";
+} from "../apps/web/src/features/workspace/workspace-ready-runtime";
 
 test("ready-tab runtime recovery uses a single delayed follow-up attach", () => {
   assert.deepEqual(READY_TAB_RUNTIME_RECOVERY_DELAYS_MS, [0, 3_000]);

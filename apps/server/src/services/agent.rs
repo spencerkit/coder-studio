@@ -1,3 +1,4 @@
+use crate::services::ansi_stream::AnsiTranscriptSanitizer;
 use crate::services::utf8_stream::Utf8StreamDecoder;
 use crate::*;
 
@@ -6,9 +7,9 @@ const DEFAULT_PTY_ROWS: u16 = 30;
 
 #[derive(Default)]
 struct AgentLifecycleFallbackState {
-    emitted_tool_started: bool,
+    emitted_session_started: bool,
     emitted_turn_completed: bool,
-    claude_session_id: Option<String>,
+    resume_id: Option<String>,
 }
 
 fn initial_pty_size(cols: Option<u16>, rows: Option<u16>) -> PtySize {
@@ -24,12 +25,12 @@ fn fallback_agent_lifecycle_from_output(
     state: &mut AgentLifecycleFallbackState,
     text: &str,
 ) -> Option<(&'static str, &'static str, String)> {
-    if state.emitted_tool_started || text.trim().is_empty() {
+    if state.emitted_session_started || text.trim().is_empty() {
         return None;
     }
-    state.emitted_tool_started = true;
+    state.emitted_session_started = true;
     let data = state
-        .claude_session_id
+        .resume_id
         .as_deref()
         .map(|session_id| {
             json!({
@@ -43,13 +44,13 @@ fn fallback_agent_lifecycle_from_output(
             })
         })
         .to_string();
-    Some(("tool_started", "AgentProcessOutput", data))
+    Some(("session_started", "AgentProcessOutput", data))
 }
 
 fn fallback_agent_lifecycle_from_exit(
     state: &mut AgentLifecycleFallbackState,
 ) -> Option<(&'static str, &'static str, String)> {
-    if state.emitted_turn_completed || !state.emitted_tool_started {
+    if state.emitted_turn_completed || !state.emitted_session_started {
         return None;
     }
     state.emitted_turn_completed = true;
@@ -73,36 +74,50 @@ fn terminate_agent_runtime(runtime: Arc<AgentRuntime>) {
     }
 }
 
-fn escape_agent_command_part(target: &ExecTarget, value: &str) -> String {
-    if matches!(target, ExecTarget::Wsl { .. }) {
-        return shell_escape(value);
+fn dispatch_agent_output(
+    app: &AppHandle,
+    workspace_id: &str,
+    session_id: &str,
+    lifecycle_state_out: &Mutex<AgentLifecycleFallbackState>,
+    raw_text: &str,
+    transcript_text: &str,
+) {
+    if raw_text.is_empty() && transcript_text.is_empty() {
+        return;
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        crate::infra::runtime::shell_escape_windows(value)
+    if let Ok(mut lifecycle_state) = lifecycle_state_out.lock() {
+        if let Some((kind, source_event, data)) =
+            fallback_agent_lifecycle_from_output(&mut lifecycle_state, transcript_text)
+        {
+            emit_agent_lifecycle(app, workspace_id, session_id, kind, source_event, &data);
+        }
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        shell_escape(value)
-    }
+    emit_agent(
+        app,
+        workspace_id,
+        session_id,
+        "stdout",
+        transcript_text,
+        Some(raw_text),
+    );
 }
 
-fn build_claude_launch_command(
-    target: &ExecTarget,
-    profile: &ClaudeRuntimeProfile,
-    claude_session_id: Option<&str>,
-) -> String {
-    let mut parts = Vec::with_capacity(1 + profile.startup_args.len());
-    parts.push(escape_agent_command_part(target, &profile.executable));
-    parts.extend(
-        profile
-            .startup_args
-            .iter()
-            .map(|arg| escape_agent_command_part(target, arg)),
-    );
-    build_claude_resume_command(&parts.join(" "), claude_session_id)
+fn write_agent_input(
+    writer: &mut dyn Write,
+    input: &str,
+    append_newline: bool,
+) -> Result<(), String> {
+    writer
+        .write_all(input.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    if append_newline {
+        writer.write_all(b"\r").map_err(|e| e.to_string())?;
+    }
+
+    writer.flush().map_err(|e| e.to_string())
 }
 
 fn take_agent_runtime(
@@ -129,7 +144,6 @@ pub(crate) fn stop_agent_runtime_without_status_update(
 pub(crate) struct AgentStartParams {
     pub(crate) workspace_id: String,
     pub(crate) session_id: String,
-    pub(crate) provider: String,
     pub(crate) cols: Option<u16>,
     pub(crate) rows: Option<u16>,
 }
@@ -142,7 +156,6 @@ pub(crate) fn agent_start(
     let AgentStartParams {
         workspace_id,
         session_id,
-        provider,
         cols,
         rows,
     } = params;
@@ -154,25 +167,36 @@ pub(crate) fn agent_start(
         }
     }
 
-    let session_id_num = session_id
-        .parse::<u64>()
-        .map_err(|_| "invalid_session_id".to_string())?;
-    let (cwd, target) = workspace_access_context(state, &workspace_id)?;
-    let stored_session = load_session(state, &workspace_id, session_id_num)?;
-    let effective_claude_session_id = stored_session.claude_session_id.clone();
-    let (command, claude_profile) = if provider == "claude" {
-        let settings = load_or_default_app_settings(state)?;
-        let profile = resolve_claude_runtime_profile(&settings, &target);
-        let command =
-            build_claude_launch_command(&target, &profile, effective_claude_session_id.as_deref());
-        (command, Some(profile))
-    } else {
-        return Err("unsupported_agent_provider".to_string());
+    let (workspace_cwd, workspace_target) = workspace_access_context(state, &workspace_id)?;
+    let stored_session =
+        crate::services::workspace::resolve_session_for_slot(state, &workspace_id, &session_id)?;
+    let effective_resume_id = stored_session.resume_id.clone();
+    let settings = load_or_default_app_settings(state)?;
+    let agent_target = ExecTarget::Native;
+    let agent_cwd = resolve_agent_runtime_cwd(&workspace_cwd, &workspace_target, &agent_target)?;
+    let adapter = crate::services::provider_registry::resolve_provider_adapter(
+        stored_session.provider.as_str(),
+    )
+    .ok_or_else(|| format!("unknown_provider:{}", stored_session.provider.as_str()))?;
+    let launch = match effective_resume_id.as_deref() {
+        Some(resume_id) => adapter.build_resume(&settings, &agent_target, resume_id)?,
+        None => adapter.build_start(&settings, &agent_target)?,
     };
+    let launch_spec = launch.launch_spec;
 
-    let (program, args) = build_agent_pty_command(&target, &cwd, &command);
+    let (command, program, args) = match launch_spec {
+        crate::services::agent_client::AgentLaunchSpec::ShellCommand(command) => {
+            let (program, args) = build_agent_pty_command(&agent_target, &agent_cwd, &command);
+            (command, program, args)
+        }
+        crate::services::agent_client::AgentLaunchSpec::Direct {
+            program,
+            args,
+            display_command,
+        } => (display_command, program, args),
+    };
     #[cfg(not(target_os = "windows"))]
-    let shell_env = matches!(target, ExecTarget::Native).then(|| program.clone());
+    let shell_env = matches!(agent_target, ExecTarget::Native).then(|| program.clone());
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(initial_pty_size(cols, rows))
@@ -183,26 +207,17 @@ pub(crate) fn agent_start(
     }
 
     #[cfg(target_os = "windows")]
-    if matches!(target, ExecTarget::Native) && !cwd.is_empty() {
-        cmd.cwd(&cwd);
+    if matches!(agent_target, ExecTarget::Native) && !agent_cwd.is_empty() {
+        cmd.cwd(&agent_cwd);
     }
 
     #[cfg(not(target_os = "windows"))]
-    if matches!(target, ExecTarget::Native) {
+    if matches!(agent_target, ExecTarget::Native) {
         crate::infra::runtime::apply_unix_pty_env_defaults(&mut cmd, shell_env.as_deref());
     }
 
-    if let Some(profile) = claude_profile.as_ref() {
-        for (key, value) in &profile.env {
-            cmd.env(key, value);
-        }
-        ensure_claude_hook_settings(&cwd, &target)?;
-        let app_bin = current_app_bin_for_target(&target)?;
-        let hook_endpoint = current_hook_endpoint(&app)?;
-        cmd.env("CODER_STUDIO_APP_BIN", app_bin);
-        cmd.env("CODER_STUDIO_HOOK_ENDPOINT", hook_endpoint);
-        cmd.env("CODER_STUDIO_WORKSPACE_ID", workspace_id.clone());
-        cmd.env("CODER_STUDIO_SESSION_ID", session_id.clone());
+    for (key, value) in launch.runtime_env {
+        cmd.env(key, value);
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| {
@@ -238,6 +253,14 @@ pub(crate) fn agent_start(
         let mut agents = state.agents.lock().map_err(|e| e.to_string())?;
         agents.insert(key.clone(), runtime.clone());
     }
+    let _ = sync_session_runtime_state(
+        state,
+        &workspace_id,
+        &session_id,
+        SessionStatus::Idle,
+        true,
+        None,
+    );
 
     emit_agent(
         &app,
@@ -245,82 +268,51 @@ pub(crate) fn agent_start(
         &session_id,
         "system",
         "Agent started / 智能体已启动",
+        None,
     );
 
     let workspace_id_out = workspace_id.clone();
     let session_out = session_id.clone();
-    let session_out_num = session_id_num;
     let lifecycle_fallback_state = Arc::new(Mutex::new(AgentLifecycleFallbackState {
-        claude_session_id: effective_claude_session_id.clone(),
+        resume_id: effective_resume_id.clone(),
         ..Default::default()
     }));
     let app_handle = app.clone();
-    let state_handle = app.clone();
     let lifecycle_fallback_state_out = lifecycle_fallback_state.clone();
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 4096];
         let mut decoder = Utf8StreamDecoder::new();
+        let mut sanitizer = AnsiTranscriptSanitizer::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => {
-                    let text = decoder.finish();
-                    if !text.is_empty() {
-                        if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
-                            if let Some((kind, source_event, data)) =
-                                fallback_agent_lifecycle_from_output(&mut lifecycle_state, &text)
-                            {
-                                emit_agent_lifecycle(
-                                    &app_handle,
-                                    &workspace_id_out,
-                                    &session_out,
-                                    kind,
-                                    source_event,
-                                    &data,
-                                );
-                            }
-                        }
-                        emit_agent(
-                            &app_handle,
-                            &workspace_id_out,
-                            &session_out,
-                            "stdout",
-                            &text,
-                        );
-                        let state: State<AppState> = state_handle.state();
-                        let _ =
-                            append_session_stream(state, &workspace_id_out, session_out_num, &text);
-                    }
-                    break;
-                }
-                Ok(n) => {
-                    let text = decoder.push(&buf[..n]);
-                    if text.is_empty() {
-                        continue;
-                    }
-                    if let Ok(mut lifecycle_state) = lifecycle_fallback_state_out.lock() {
-                        if let Some((kind, source_event, data)) =
-                            fallback_agent_lifecycle_from_output(&mut lifecycle_state, &text)
-                        {
-                            emit_agent_lifecycle(
-                                &app_handle,
-                                &workspace_id_out,
-                                &session_out,
-                                kind,
-                                source_event,
-                                &data,
-                            );
-                        }
-                    }
-                    emit_agent(
+                    let mut transcript = sanitizer.push(&decoder.finish());
+                    transcript.push_str(&sanitizer.finish());
+                    dispatch_agent_output(
                         &app_handle,
                         &workspace_id_out,
                         &session_out,
-                        "stdout",
-                        &text,
+                        &lifecycle_fallback_state_out,
+                        "",
+                        &transcript,
                     );
-                    let state: State<AppState> = state_handle.state();
-                    let _ = append_session_stream(state, &workspace_id_out, session_out_num, &text);
+                    break;
+                }
+                Ok(n) => {
+                    let raw = decoder.push(&buf[..n]);
+                    if raw.is_empty() {
+                        continue;
+                    }
+                    let transcript = sanitizer.push(&raw);
+                    dispatch_agent_output(
+                        &app_handle,
+                        &workspace_id_out,
+                        &session_out,
+                        &lifecycle_fallback_state_out,
+                        &raw,
+                        &transcript,
+                    );
                 }
                 Err(_) => break,
             }
@@ -348,19 +340,28 @@ pub(crate) fn agent_start(
                 );
             }
         }
-        emit_agent(&app_handle, &workspace_id, &session_id, "exit", "exited");
+        emit_agent(
+            &app_handle,
+            &workspace_id,
+            &session_id,
+            "exit",
+            "exited",
+            None,
+        );
         let state: State<AppState> = state_handle.state();
-        let should_mark_idle = if let Ok(mut agents) = state.agents.lock() {
+        let should_mark_interrupted = if let Ok(mut agents) = state.agents.lock() {
             agents.remove(&key).is_some()
         } else {
             false
         };
-        if should_mark_idle {
-            let _ = set_session_status_if_not_archived(
+        if should_mark_interrupted {
+            let _ = sync_session_runtime_state(
                 state,
                 &workspace_id,
-                session_id_num,
-                SessionStatus::Idle,
+                &session_id,
+                SessionStatus::Interrupted,
+                false,
+                None,
             );
         }
     });
@@ -381,32 +382,15 @@ pub(crate) fn agent_send(
     drop(agents);
     let mut writer = runtime.writer.lock().map_err(|e| e.to_string())?;
     if let Some(handle) = writer.as_mut() {
-        handle
-            .write_all(input.as_bytes())
-            .map_err(|e| e.to_string())?;
-        if append_newline.unwrap_or(true) {
-            handle.write_all(b"\r").map_err(|e| e.to_string())?;
-        }
-        handle.flush().map_err(|e| e.to_string())?;
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = update_workspace_session(
-                state,
-                &workspace_id,
-                session_id_num,
-                SessionPatch {
-                    title: None,
-                    status: Some(SessionStatus::Waiting),
-                    mode: None,
-                    auto_feed: None,
-                    queue: None,
-                    messages: None,
-                    stream: None,
-                    unread: None,
-                    last_active_at: Some(now_ts()),
-                    claude_session_id: None,
-                },
-            );
-        }
+        write_agent_input(&mut **handle, &input, append_newline.unwrap_or(true))?;
+        let _ = sync_session_runtime_state(
+            state,
+            &workspace_id,
+            &session_id,
+            SessionStatus::Running,
+            true,
+            None,
+        );
         Ok(())
     } else {
         Err("agent_stdin_closed".to_string())
@@ -419,14 +403,14 @@ pub(crate) fn agent_stop(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     stop_agent_runtime_without_status_update(&workspace_id, &session_id, state)?;
-    if let Ok(session_id_num) = session_id.parse::<u64>() {
-        let _ = set_session_status_if_not_archived(
-            state,
-            &workspace_id,
-            session_id_num,
-            SessionStatus::Interrupted,
-        );
-    }
+    let _ = sync_session_runtime_state(
+        state,
+        &workspace_id,
+        &session_id,
+        SessionStatus::Interrupted,
+        false,
+        None,
+    );
     Ok(())
 }
 
@@ -452,14 +436,14 @@ pub(crate) fn stop_workspace_agents(workspace_id: &str, state: State<'_, AppStat
 
     for (session_id, runtime) in runtimes {
         terminate_agent_runtime(runtime);
-        if let Ok(session_id_num) = session_id.parse::<u64>() {
-            let _ = set_session_status_if_not_archived(
-                state,
-                workspace_id,
-                session_id_num,
-                SessionStatus::Interrupted,
-            );
-        }
+        let _ = sync_session_runtime_state(
+            state,
+            workspace_id,
+            &session_id,
+            SessionStatus::Interrupted,
+            false,
+            None,
+        );
     }
 }
 
@@ -487,15 +471,70 @@ pub(crate) fn agent_resize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct RecordingWriter {
+        ops: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl RecordingWriter {
+        fn operations(&self) -> Vec<String> {
+            self.ops.lock().unwrap().clone()
+        }
+    }
+
+    impl Write for RecordingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let op = match buf {
+                b"\r" => "write:<CR>".to_string(),
+                other => format!("write:{}", String::from_utf8_lossy(other)),
+            };
+            self.ops.lock().unwrap().push(op);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.ops.lock().unwrap().push("flush".to_string());
+            Ok(())
+        }
+    }
 
     #[test]
-    fn fallback_agent_lifecycle_marks_first_output_as_tool_started_once() {
+    fn first_submit_writes_enter_without_provider_specific_delay() {
+        let mut writer = RecordingWriter::default();
+        write_agent_input(&mut writer, "hello", true).unwrap();
+
+        assert_eq!(
+            writer.operations(),
+            vec![
+                "write:hello".to_string(),
+                "write:<CR>".to_string(),
+                "flush".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn follow_up_enter_submits_buffered_prompt_without_extra_delay() {
+        let mut writer = RecordingWriter::default();
+        write_agent_input(&mut writer, "", true).unwrap();
+
+        assert_eq!(
+            writer.operations(),
+            vec!["write:<CR>".to_string(), "flush".to_string()]
+        );
+    }
+
+    #[test]
+    fn fallback_agent_lifecycle_marks_first_output_as_session_started_once() {
         let mut state = AgentLifecycleFallbackState::default();
 
         assert_eq!(
             fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
             Some((
-                "tool_started",
+                "session_started",
                 "AgentProcessOutput",
                 r#"{"source":"agent_process_output"}"#.to_string(),
             )),
@@ -507,16 +546,16 @@ mod tests {
     }
 
     #[test]
-    fn fallback_agent_lifecycle_carries_known_claude_session_id() {
+    fn fallback_agent_lifecycle_carries_known_resume_id() {
         let mut state = AgentLifecycleFallbackState {
-            claude_session_id: Some("claude-resume-known".to_string()),
+            resume_id: Some("claude-resume-known".to_string()),
             ..Default::default()
         };
 
         assert_eq!(
             fallback_agent_lifecycle_from_output(&mut state, "fixture-running\n"),
             Some((
-                "tool_started",
+                "session_started",
                 "AgentProcessOutput",
                 r#"{"session_id":"claude-resume-known","source":"agent_process_output"}"#
                     .to_string(),

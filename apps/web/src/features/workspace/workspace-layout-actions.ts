@@ -6,16 +6,14 @@ import {
   type WorkbenchState,
   createId,
   createPaneLeaf,
-} from "../../state/workbench-core.ts";
+} from "../../state/workbench-core";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
   findPaneSessionId,
   replacePaneNode,
   updateSplitRatio,
-} from "../../shared/utils/panes.ts";
-import { restoreVisibleStatus, toBackgroundStatus } from "../../shared/utils/session.ts";
-
+} from "../../shared/utils/panes";
 type UpdateState = (updater: (current: WorkbenchState) => WorkbenchState) => void;
 type UpdateTab = (tabId: string, updater: (tab: Tab) => Tab) => void;
 
@@ -44,16 +42,13 @@ export const activateWorkspacePane = (
     activeSessionId: sessionId,
     sessions: tab.sessions.map((session) => {
       if (session.id === sessionId) {
-        return {
-          ...session,
-          unread: 0,
-          status: restoreVisibleStatus(session),
-          lastActiveAt: nextActiveAt,
-        };
-      }
-      if (session.id === tab.activeSessionId) {
-        return { ...session, status: toBackgroundStatus(session.status) };
-      }
+          return {
+            ...session,
+            unread: 0,
+            status: session.status,
+            lastActiveAt: nextActiveAt,
+          };
+        }
       return session;
     }),
   }));
@@ -114,7 +109,6 @@ type StartWorkspacePanelResizeArgs = {
   stateRef: MutableRefObject<WorkbenchState>;
   updateState: UpdateState;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
-  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   flushFitAgentTerminals: () => void;
 };
 
@@ -124,7 +118,6 @@ export const startWorkspacePanelResize = ({
   stateRef,
   updateState,
   shellTerminalRef,
-  archiveTerminalRef,
   flushFitAgentTerminals,
 }: StartWorkspacePanelResizeArgs) => {
   event.preventDefault();
@@ -178,7 +171,6 @@ export const startWorkspacePanelResize = ({
     }
     requestAnimationFrame(() => {
       shellTerminalRef.current?.fit();
-      archiveTerminalRef?.current?.fit();
       flushFitAgentTerminals();
     });
   };
@@ -194,7 +186,6 @@ type StartWorkspacePaneSplitResizeArgs = {
   splitId: string;
   axis: "horizontal" | "vertical";
   updateTab: UpdateTab;
-  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   flushFitAgentTerminals: () => void;
 };
 
@@ -205,7 +196,6 @@ export const startWorkspacePaneSplitResize = ({
   splitId,
   axis,
   updateTab,
-  archiveTerminalRef,
   flushFitAgentTerminals,
 }: StartWorkspacePaneSplitResizeArgs) => {
   event.preventDefault();
@@ -255,7 +245,6 @@ export const startWorkspacePaneSplitResize = ({
       flushRatio();
     }
     requestAnimationFrame(() => {
-      archiveTerminalRef?.current?.fit();
       flushFitAgentTerminals();
     });
   };

@@ -5,12 +5,13 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalCompatibilityMode } from "../../types/app";
 import { resetTerminalMeasurementCache, resolveTerminalFontFamily, XTERM_SCROLLBAR_WIDTH } from "../../shared/utils/terminal";
-import { planTerminalSnapshotUpdate } from "../../shared/utils/stream-snapshot";
 import { shouldRefreshTerminalAfterFit } from "./xterm-fit-refresh";
+import { syncXtermOutputState } from "./xterm-output-sync";
 
 type XtermBaseMode = "interactive" | "readonly";
 
 export type XtermBaseHandle = {
+  appendOutput: (value: string) => void;
   fit: () => void;
   focus: () => void;
   size: () => { cols: number; rows: number } | null;
@@ -19,6 +20,7 @@ export type XtermBaseHandle = {
 export type XtermBaseProps = {
   output: string;
   outputIdentity?: string;
+  outputSyncStrategy?: "snapshot" | "incremental" | "replace";
   themeIdentity?: string;
   theme: "dark";
   fontSize: number;
@@ -71,17 +73,6 @@ const readTerminalTheme = (source?: Element | null) => {
   };
 };
 
-const writeXtermSnapshot = (term: XTerminal, previous: string, next: string) => {
-  const plan = planTerminalSnapshotUpdate(previous, next);
-  if (plan.kind === "noop") return;
-  if (plan.kind === "append") {
-    term.write(plan.data);
-    return;
-  }
-  term.reset();
-  if (plan.data) term.write(plan.data);
-};
-
 const resolveTerminalThemeSource = (mount: HTMLElement | null) => {
   if (!mount) return null;
   return mount.closest(".agent-pane-card")
@@ -97,9 +88,16 @@ const readTerminalGeometry = (mount: HTMLElement | null) => {
   };
 };
 
+const blurTerminalInput = (mount: HTMLElement | null) => {
+  if (!mount) return;
+  const helper = mount.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+  helper?.blur();
+};
+
 export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   output,
   outputIdentity,
+  outputSyncStrategy = "snapshot",
   themeIdentity,
   theme,
   fontSize,
@@ -120,6 +118,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const geometryRef = useRef<{ width: number; height: number } | null>(null);
   const fitFrameRef = useRef<number | null>(null);
+  const hasImperativeWritesRef = useRef(false);
   const onDataRef = useRef(onData);
   const onSizeRef = useRef(onSize);
 
@@ -325,15 +324,20 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    if (identityRef.current !== outputIdentity) {
-      term.reset();
-      outputSnapshotRef.current = "";
-      identityRef.current = outputIdentity;
-    }
     const normalized = sanitizeOutput ? sanitizeOutput(output) : output;
-    writeXtermSnapshot(term, outputSnapshotRef.current, normalized);
-    outputSnapshotRef.current = normalized;
-  }, [output, outputIdentity, sanitizeOutput]);
+    const nextState = syncXtermOutputState({
+      term,
+      previousIdentity: identityRef.current,
+      nextIdentity: outputIdentity,
+      previousOutput: outputSnapshotRef.current,
+      nextOutput: normalized,
+      outputSyncStrategy,
+      hasImperativeWrites: hasImperativeWritesRef.current,
+    });
+    identityRef.current = outputIdentity;
+    outputSnapshotRef.current = nextState.snapshot;
+    hasImperativeWritesRef.current = nextState.hasImperativeWrites;
+  }, [output, outputIdentity, outputSyncStrategy, sanitizeOutput]);
 
   useEffect(() => {
     if (outputIdentity === undefined) return;
@@ -351,11 +355,50 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
   }, [mode]);
 
   useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount || typeof document === "undefined") return;
+    const helper = mount.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    if (!helper) return;
+    let blurFrame: number | null = null;
+    const blurReadonlyInput = () => {
+      termRef.current?.blur();
+      helper.blur();
+    };
+    if (mode === "readonly") {
+      helper.readOnly = true;
+      helper.tabIndex = -1;
+      blurReadonlyInput();
+      if (typeof window !== "undefined") {
+        blurFrame = window.requestAnimationFrame(() => {
+          blurFrame = null;
+          blurReadonlyInput();
+        });
+      }
+    } else {
+      helper.readOnly = false;
+      helper.tabIndex = 0;
+    }
+    return () => {
+      if (blurFrame !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(blurFrame);
+      }
+    };
+  }, [mode, outputIdentity]);
+
+  useEffect(() => {
     if (!autoFocus) return;
     termRef.current?.focus();
   }, [autoFocus, outputIdentity]);
 
   useImperativeHandle(ref, () => ({
+    appendOutput: (value: string) => {
+      const term = termRef.current;
+      const normalizedValue = sanitizeOutput ? sanitizeOutput(value) : value;
+      if (!term || !normalizedValue) return;
+      hasImperativeWritesRef.current = true;
+      outputSnapshotRef.current += normalizedValue;
+      term.write(normalizedValue);
+    },
     fit: flushFit,
     focus: () => {
       termRef.current?.focus();
@@ -365,7 +408,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       if (!term) return null;
       return { cols: term.cols, rows: term.rows };
     }
-  }), [flushFit]);
+  }), [flushFit, sanitizeOutput]);
 
   useEffect(() => {
     return () => {
@@ -376,6 +419,7 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
       unicodeRef.current = null;
       outputSnapshotRef.current = "";
       identityRef.current = undefined;
+      hasImperativeWritesRef.current = false;
       sizeRef.current = null;
       geometryRef.current = null;
     };
@@ -385,6 +429,20 @@ export const XtermBase = forwardRef<XtermBaseHandle, XtermBaseProps>(({
     <div
       ref={mountRef}
       className={className}
+      onMouseDownCapture={(event) => {
+        if (mode !== "readonly") return;
+        event.preventDefault();
+        termRef.current?.blur();
+        blurTerminalInput(mountRef.current);
+      }}
+      onFocusCapture={(event) => {
+        if (mode !== "readonly") return;
+        if (event.target instanceof HTMLElement) {
+          event.target.blur();
+        }
+        termRef.current?.blur();
+        blurTerminalInput(mountRef.current);
+      }}
       onClick={() => {
         if (mode === "interactive") {
           termRef.current?.focus();

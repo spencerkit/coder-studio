@@ -93,12 +93,10 @@
 | 命令 | 作用 | 当前 UI 使用情况 |
 | --- | --- | --- |
 | `command_exists` | 校验 Launch Command 是否可执行 | 已使用 |
-| `claude_slash_skills` | 扫描 Claude skills / commands | 已使用于数据加载，但菜单 UI 当前不完整可见 |
 
 说明：
 
 - `command_exists` 对设置页很重要，用来告诉用户当前 runtime 里命令是否可用。
-- `claude_slash_skills` 会扫描 personal/project 级 `.claude` 目录。
 
 ## 7. 终端命令
 
@@ -138,12 +136,7 @@
 其中 `agent://lifecycle` 当前会承载这些 kind：
 
 - `session_started`
-- `turn_waiting`
-- `tool_started`
-- `tool_finished`
-- `approval_required`
 - `turn_completed`
-- `session_ended`
 
 ## 10. 文档使用原则
 

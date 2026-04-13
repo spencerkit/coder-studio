@@ -1,15 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { defaultAppSettings } from '../apps/web/src/shared/app/settings.ts';
+import { defaultAppSettings } from '../apps/web/src/shared/app/settings-storage';
 import {
+  applyGeneralSettingsPatch,
+  applyProviderGlobalPatch,
+  buildAppSettingsPatch,
+} from '../apps/web/src/shared/app/app-settings';
+import {
+  applyAppSettingsUpdater,
   createAppSettingsDraftStore,
   createPersistableAppSettings,
   createSequencedAppSettingsSaver,
   deriveRuntimeAppSettings,
   hydrateConfirmedAppSettings,
   persistConfirmedAppSettings,
-} from '../apps/web/src/services/http/settings.service.ts';
+} from '../apps/web/src/services/http/settings.service';
+import { installProviderHooks } from '../apps/web/src/services/http/provider-hooks.service';
 
 test('persistConfirmedAppSettings returns the backend-confirmed settings on success', async () => {
   const confirmed = defaultAppSettings();
@@ -58,6 +65,94 @@ test('createAppSettingsDraftStore composes new saves from the latest in-memory d
   assert.equal(mixedDraft.general.idlePolicy.idleMinutes, 25);
 });
 
+test('applyAppSettingsUpdater preserves consecutive general changes created from stale UI snapshots', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  const disableCompletionNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        enabled: false,
+      },
+    })
+  );
+  const disableBackgroundOnlyNotifications = (current: ReturnType<typeof defaultAppSettings>) => (
+    applyGeneralSettingsPatch(current, {
+      completionNotifications: {
+        onlyWhenBackground: false,
+      },
+    })
+  );
+
+  applyAppSettingsUpdater(store, disableCompletionNotifications);
+  const updated = applyAppSettingsUpdater(store, disableBackgroundOnlyNotifications);
+
+  assert.equal(updated.general.completionNotifications.enabled, false);
+  assert.equal(updated.general.completionNotifications.onlyWhenBackground, false);
+});
+
+test('applyAppSettingsUpdater preserves general changes when a later claude update is committed', () => {
+  const store = createAppSettingsDraftStore(defaultAppSettings());
+
+  applyAppSettingsUpdater(store, (current) => applyGeneralSettingsPatch(current, {
+    idlePolicy: {
+      maxActive: 5,
+    },
+  }));
+  const updated = applyAppSettingsUpdater(store, (current) => (
+    applyProviderGlobalPatch(current, 'claude', {
+      executable: 'claude',
+      startupArgs: ['--verbose', '--debug'],
+    })
+  ));
+
+  assert.equal(updated.general.idlePolicy.maxActive, 5);
+  assert.deepEqual(updated.providers.claude.global.startupArgs, ['--verbose', '--debug']);
+});
+
+test('buildAppSettingsPatch only emits the changed provider field', () => {
+  const before = defaultAppSettings();
+  const after = applyProviderGlobalPatch(before, 'claude', ['settingsJson', 'model'], 'claude-sonnet-4-5');
+
+  assert.deepEqual(buildAppSettingsPatch(before, after), {
+    providers: {
+      claude: {
+        global: {
+          settingsJson: {
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    },
+  });
+});
+
+test('buildAppSettingsPatch emits the full claude env object when one env field changes', () => {
+  const before = applyProviderGlobalPatch(defaultAppSettings(), 'claude', {
+    env: {
+      ANTHROPIC_BASE_URL: 'https://old.example',
+      ANTHROPIC_AUTH_TOKEN: 'token-old',
+    },
+  });
+  const after = applyProviderGlobalPatch(before, 'claude', {
+    env: {
+      ANTHROPIC_BASE_URL: 'https://next.example',
+    },
+  });
+
+  assert.deepEqual(buildAppSettingsPatch(before, after), {
+    providers: {
+      claude: {
+        global: {
+          env: {
+            ANTHROPIC_BASE_URL: 'https://next.example',
+            ANTHROPIC_AUTH_TOKEN: 'token-old',
+          },
+        },
+      },
+    },
+  });
+});
+
 test('createPersistableAppSettings keeps the confirmed locale when the preference is implicit', () => {
   const confirmed = defaultAppSettings();
   const draft = defaultAppSettings();
@@ -93,7 +188,7 @@ test('deriveRuntimeAppSettings prefers the stored explicit locale over backend l
   assert.equal(runtime.general.locale, 'zh');
 });
 
-test('createSequencedAppSettingsSaver ignores stale save responses', async () => {
+test('createSequencedAppSettingsSaver defers applying an earlier save while a newer save is pending', async () => {
   const saver = createSequencedAppSettingsSaver();
   const confirmed = defaultAppSettings();
   const firstDraft = defaultAppSettings();
@@ -121,14 +216,14 @@ test('createSequencedAppSettingsSaver ignores stale save responses', async () =>
     async () => secondPersist,
   );
 
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
   resolveSecond?.(secondDraft);
   const secondResult = await secondSave;
   assert.equal(secondResult.shouldApply, true);
   assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
-
-  resolveFirst?.(firstDraft);
-  const firstResult = await firstSave;
-  assert.equal(firstResult.shouldApply, false);
 });
 
 test('createSequencedAppSettingsSaver applies the latest confirmed save after a newer request fails', async () => {
@@ -169,11 +264,67 @@ test('createSequencedAppSettingsSaver applies the latest confirmed save after a 
   assert.equal(secondResult.settings.general.locale, 'zh');
 });
 
+test('createSequencedAppSettingsSaver serializes backend saves to preserve request order', async () => {
+  const saver = createSequencedAppSettingsSaver();
+  const confirmed = defaultAppSettings();
+  const firstDraft = defaultAppSettings();
+  const secondDraft = defaultAppSettings();
+  firstDraft.general.locale = 'zh';
+  secondDraft.general.idlePolicy.idleMinutes = 25;
+
+  const started: number[] = [];
+  let resolveFirst: ((settings: typeof firstDraft) => void) | undefined;
+  let resolveSecond: ((settings: typeof secondDraft) => void) | undefined;
+  const firstPersist = new Promise<typeof firstDraft>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const secondPersist = new Promise<typeof secondDraft>((resolve) => {
+    resolveSecond = resolve;
+  });
+
+  const firstSave = saver.save(
+    confirmed,
+    firstDraft,
+    async () => {
+      started.push(1);
+      return firstPersist;
+    },
+  );
+  const secondSave = saver.save(
+    confirmed,
+    secondDraft,
+    async () => {
+      started.push(2);
+      return secondPersist;
+    },
+  );
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(started, [1]);
+
+  resolveFirst?.(firstDraft);
+  const firstResult = await firstSave;
+  assert.equal(firstResult.shouldApply, false);
+
+  await Promise.resolve();
+  assert.deepEqual(started, [1, 2]);
+
+  resolveSecond?.(secondDraft);
+  const secondResult = await secondSave;
+  assert.equal(secondResult.shouldApply, true);
+  assert.equal(secondResult.settings.general.idlePolicy.idleMinutes, 25);
+});
+
 test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy migration save fails', async () => {
   const confirmed = defaultAppSettings();
   confirmed.general.locale = 'en';
-  const legacy = defaultAppSettings();
-  legacy.general.locale = 'zh';
+  const legacy = {
+    agentCommand: 'claude-nightly --verbose',
+    general: {
+      locale: 'zh',
+    },
+  };
 
   const hydrated = await hydrateConfirmedAppSettings({
     fallbackSettings: defaultAppSettings(),
@@ -191,9 +342,14 @@ test('hydrateConfirmedAppSettings keeps confirmed backend settings when legacy m
 });
 
 test('hydrateConfirmedAppSettings ignores legacy local settings when backend hydrate fails', async () => {
-  const legacy = defaultAppSettings();
-  legacy.general.locale = 'zh';
-  legacy.general.idlePolicy.idleMinutes = 25;
+  const legacy = {
+    general: {
+      locale: 'zh',
+      idlePolicy: {
+        idleMinutes: 25,
+      },
+    },
+  };
 
   const hydrated = await hydrateConfirmedAppSettings({
     fallbackSettings: defaultAppSettings(),
@@ -250,4 +406,84 @@ test('hydrateConfirmedAppSettings syncs an explicit locale preference when backe
   assert.equal(persistedLocale, 'zh');
   assert.equal(hydrated.settings.general.locale, 'zh');
   assert.equal(hydrated.localeExplicit, true);
+});
+
+test('installProviderHooks rejects missing workspace context before issuing a request', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls: Array<{ input: unknown; init: unknown }> = [];
+
+  globalThis.fetch = (async (input, init) => {
+    fetchCalls.push({ input, init });
+    return new Response(JSON.stringify({ ok: true, data: {} }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => installProviderHooks('claude', '', { type: 'native' }),
+      /active workspace/i,
+    );
+    assert.equal(fetchCalls.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('installProviderHooks calls the provider hook injection RPC with the selected provider', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+
+  Object.defineProperty(globalThis, 'window', {
+    value: {
+      location: {
+        origin: 'http://127.0.0.1:4173',
+        hostname: '127.0.0.1',
+        port: '4173',
+        search: '',
+      },
+    },
+    configurable: true,
+  });
+
+  globalThis.fetch = (async (input, init) => {
+    calls.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
+    });
+    return new Response(JSON.stringify({
+      ok: true,
+      data: {
+        provider: 'claude',
+        status: 'installed',
+      },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await installProviderHooks('claude', '/workspace/demo', { type: 'native' });
+
+    assert.deepEqual(result, {
+      provider: 'claude',
+      status: 'installed',
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!.url, /\/api\/rpc\/provider_hooks_install/);
+    assert.deepEqual(calls[0]!.body, {
+      provider: 'claude',
+      cwd: '/workspace/demo',
+      target: { type: 'native' },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(globalThis, 'window', {
+      value: originalWindow,
+      configurable: true,
+    });
+  }
 });

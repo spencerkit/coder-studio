@@ -1,5 +1,6 @@
 import type {
   ArtifactsDirtyEvent,
+  WorkspaceInputErrorEvent,
   WorkspaceRuntimeControllerEvent,
   WorkspaceRuntimeStateEvent,
 } from "../types/app";
@@ -13,3 +14,6 @@ export const subscribeWorkspaceController = (handler: (payload: WorkspaceRuntime
 
 export const subscribeWorkspaceRuntimeState = (handler: (payload: WorkspaceRuntimeStateEvent) => void) =>
   subscribeWsEvent<WorkspaceRuntimeStateEvent>("workspace://runtime_state", handler);
+
+export const subscribeWorkspaceInputError = (handler: (payload: WorkspaceInputErrorEvent) => void) =>
+  subscribeWsEvent<WorkspaceInputErrorEvent>("workspace://input_error", handler);

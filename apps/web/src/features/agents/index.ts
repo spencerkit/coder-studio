@@ -4,6 +4,7 @@ export {
   type AgentTerminalFitScheduler,
 } from "./agent-terminal-fit-scheduler";
 export {
+  applyTrackedAgentSessionTitle,
   agentRuntimeKey,
   armAgentStartupGate,
   clearAgentRuntimeTracking,
@@ -11,17 +12,12 @@ export {
   commitAgentSessionTitle,
   focusAgentTerminal,
   fitAgentTerminals,
-  isAgentRuntimeRunning,
-  markAgentRuntimeStarted,
   noteAgentStartupEvent,
   noteAgentStartupLifecycle,
   previewAgentSessionTitle,
   setAgentTerminalRef,
   setDraftPromptInputRef,
-  syncAgentPaneSize,
-  syncAgentRuntimeSize,
   trackAgentInitialTitleInput,
   waitForAgentStartupDrain,
   type AgentRuntimeRefs,
 } from "./agent-runtime-actions";
-export { buildSlashMenuItems, buildSlashMenuSections } from "./slash-menu-actions";

@@ -1,4 +1,24 @@
+use std::time::{Duration, Instant};
+
+use crate::app::ArtifactCaches;
+use crate::services::artifact_cache::{
+    artifact_cache_key, cache_lookup, cache_store, invalidate_cache_entry,
+};
 use crate::*;
+
+const GIT_ARTIFACT_CACHE_TTL: Duration = Duration::from_millis(500);
+
+fn git_status_cache_key(path: &str, target: &ExecTarget) -> String {
+    artifact_cache_key("git_status", path, target, None)
+}
+
+fn git_changes_cache_key(path: &str, target: &ExecTarget) -> String {
+    artifact_cache_key("git_changes", path, target, None)
+}
+
+fn worktree_list_cache_key(path: &str, target: &ExecTarget) -> String {
+    artifact_cache_key("worktree_list", path, target, None)
+}
 
 pub(crate) fn git_status_label(code: char) -> &'static str {
     match code {
@@ -12,6 +32,28 @@ pub(crate) fn git_status_label(code: char) -> &'static str {
         '?' => "Untracked",
         _ => "Changed",
     }
+}
+
+pub(crate) fn git_status_cached(
+    path: String,
+    target: ExecTarget,
+    caches: &ArtifactCaches,
+) -> Result<GitStatus, String> {
+    let resolved = resolve_git_repo_path(&path, &target)?;
+    let key = git_status_cache_key(&resolved, &target);
+    let now = Instant::now();
+    if let Some(value) = cache_lookup(&caches.git_status, &key, now) {
+        return Ok(value);
+    }
+
+    let value = git_status(resolved.clone(), target.clone())?;
+    cache_store(
+        &caches.git_status,
+        key,
+        value.clone(),
+        now + GIT_ARTIFACT_CACHE_TTL,
+    );
+    Ok(value)
 }
 
 pub(crate) fn git_status(path: String, target: ExecTarget) -> Result<GitStatus, String> {
@@ -57,6 +99,28 @@ pub(crate) fn git_changes(path: String, target: ExecTarget) -> Result<Vec<GitCha
     let resolved = resolve_git_repo_path(&path, &target)?;
     let raw = run_cmd(&target, &resolved, &["git", "status", "--porcelain"]).unwrap_or_default();
     Ok(parse_git_changes(&raw))
+}
+
+pub(crate) fn git_changes_cached(
+    path: String,
+    target: ExecTarget,
+    caches: &ArtifactCaches,
+) -> Result<Vec<GitChangeEntry>, String> {
+    let resolved = resolve_git_repo_path(&path, &target)?;
+    let key = git_changes_cache_key(&resolved, &target);
+    let now = Instant::now();
+    if let Some(value) = cache_lookup(&caches.git_changes, &key, now) {
+        return Ok(value);
+    }
+
+    let value = git_changes(resolved.clone(), target.clone())?;
+    cache_store(
+        &caches.git_changes,
+        key,
+        value.clone(),
+        now + GIT_ARTIFACT_CACHE_TTL,
+    );
+    Ok(value)
 }
 
 pub(crate) fn git_diff_file(
@@ -302,4 +366,43 @@ pub(crate) fn worktree_list(path: String, target: ExecTarget) -> Result<Vec<Work
         list.push(current);
     }
     Ok(list)
+}
+
+pub(crate) fn worktree_list_cached(
+    path: String,
+    target: ExecTarget,
+    caches: &ArtifactCaches,
+) -> Result<Vec<WorktreeInfo>, String> {
+    let resolved = resolve_git_repo_path(&path, &target)?;
+    let key = worktree_list_cache_key(&resolved, &target);
+    let now = Instant::now();
+    if let Some(value) = cache_lookup(&caches.worktree_list, &key, now) {
+        return Ok(value);
+    }
+
+    let value = worktree_list(resolved.clone(), target.clone())?;
+    cache_store(
+        &caches.worktree_list,
+        key,
+        value.clone(),
+        now + GIT_ARTIFACT_CACHE_TTL,
+    );
+    Ok(value)
+}
+
+pub(crate) fn invalidate_git_artifact_caches(
+    caches: &ArtifactCaches,
+    path: &str,
+    target: &ExecTarget,
+) {
+    let resolved = resolve_git_repo_path(path, target).unwrap_or_else(|_| path.to_string());
+    invalidate_cache_entry(&caches.git_status, &git_status_cache_key(&resolved, target));
+    invalidate_cache_entry(
+        &caches.git_changes,
+        &git_changes_cache_key(&resolved, target),
+    );
+    invalidate_cache_entry(
+        &caches.worktree_list,
+        &worktree_list_cache_key(&resolved, target),
+    );
 }

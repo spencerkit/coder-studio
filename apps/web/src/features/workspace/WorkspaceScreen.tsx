@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRelaxState } from "@relax-state/react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -29,7 +29,6 @@ import {
   AgentSplitHorizontalIcon,
   AgentSplitVerticalIcon,
   AgentPlusIcon,
-  AgentSendIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   HeaderCloseIcon,
@@ -41,31 +40,18 @@ import {
   type RuntimeValidationState,
 } from "../../components/RuntimeValidationOverlay/RuntimeValidationOverlay";
 import { TopBar } from "../../components/TopBar";
-import { HistoryDrawer } from "../../components/HistoryDrawer";
-import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
+import type { XtermBaseHandle } from "../../components/terminal";
 import { WorktreeModal } from "../../components/WorktreeModal";
 import { WorkspaceLaunchOverlay } from "../../components/WorkspaceLaunchOverlay";
 import { WorkspaceWelcomeScreen } from "../../components/WorkspaceWelcomeScreen";
 import { WorkspaceShell } from "../../components/workspace";
 import {
   AgentWorkspaceFeature,
-  armAgentStartupGate,
-  buildSlashMenuItems,
-  buildSlashMenuSections,
-  clearAgentStartupGate,
-  commitAgentSessionTitle,
+  applyTrackedAgentSessionTitle,
   createAgentTerminalFitScheduler,
   focusAgentTerminal,
   fitAgentTerminals,
-  isAgentRuntimeRunning,
-  markAgentRuntimeStarted,
-  previewAgentSessionTitle,
   setAgentTerminalRef,
-  setDraftPromptInputRef,
-  syncAgentPaneSize,
-  syncAgentRuntimeSize,
-  trackAgentInitialTitleInput,
-  waitForAgentStartupDrain
 } from "../../features/agents";
 import { buildCommandPaletteActions, filterCommandPaletteActions } from "../../features/command-palette";
 import { WorkspaceCodeFeature } from "../../features/editor";
@@ -86,6 +72,7 @@ import {
   openWorkspacePreviewPath,
   openWorkspaceWorktree,
   performWorkspaceGitOperation,
+  replaceWorkspaceTerminal,
   resolveWorkspacePreviewPathLabel,
   saveWorkspacePreview,
   selectWorkspaceTerminal,
@@ -98,12 +85,13 @@ import {
 } from "./";
 import {
   resolveAgentRecoveryAction,
-  resolveTerminalRecoveryAction,
 } from "./workspace-recovery";
+import { buildRuntimeRequirementStatusesFromManifest } from "../providers/runtime-helpers";
 import { attachWorkspaceRuntimeWithRetry } from "./runtime-attach";
 import {
   shouldAttachRouteRuntimeForExistingTab,
 } from "./workspace-route-runtime";
+import { filterWorkspacePanelTerminals, resolveSessionTerminalIdByRuntimeId } from "./session-runtime-bindings";
 import {
   createWorkspaceViewPatchFromTab,
   createWorkspaceViewPersistScheduler,
@@ -113,14 +101,11 @@ import {
   shouldPersistWorkspaceView,
   type WorkspaceViewPersistScheduler,
 } from "./workspace-view-persistence";
-import {
-  createInitialHistoryExpansion,
-  groupSessionHistory,
-  selectHistoryPrimaryAction,
-} from "./session-history";
-import { listRestoreCandidatesForWorkspace } from "./session-restore-chooser";
 import { createWorkspaceSessionActions } from "./session-actions";
 import { useWorkspaceArtifactsSync } from "./workspace-sync-hooks";
+import {
+  subscribeWorkspaceInputError,
+} from "../../command";
 import { startWorkspaceLaunch } from "./workspace-launch-actions";
 import {
   browseWorkspaceOverlayDirectory,
@@ -130,7 +115,7 @@ import {
 import {
   advanceWorkspaceSyncVersion,
   isWorkspaceSyncVersionCurrent,
-} from "./workspace-sync-version.ts";
+} from "./workspace-sync-version";
 import {
   buildWorkspaceFileSearchResults,
   closeWorkspaceFileSearch,
@@ -146,7 +131,11 @@ import {
   updateWorkspaceFileSearchQuery,
   withWorkspaceFileSearchDropdownStyle
 } from "./file-search-actions";
-import { startAgent, sendAgentInput } from "../../services/http/agent.service";
+import { startSessionRuntime } from "../../services/http/session-runtime.service.ts";
+import { writeTerminal as writeTerminalRequest } from "../../services/http/terminal.service";
+import {
+  consumeTerminalChannelInputFragment,
+} from "../../services/terminal-channel/client.ts";
 import { withFallback } from "../../services/http/client";
 import {
   commitGitChanges,
@@ -158,15 +147,21 @@ import {
   unstageGitFile
 } from "../../services/http/git.service";
 import {
-} from "../../services/http/session.service";
-import { checkCommandAvailability } from "../../services/http/system.service";
+  checkCommandAvailability,
+  getProviderRuntimePreview,
+} from "../../services/http/system.service";
 import {
+  enableSupervisorMode,
+  updateSupervisorObjective,
+  pauseSupervisorMode,
+  resumeSupervisorMode,
+  disableSupervisorMode,
+  retrySupervisorCycle,
+  triggerSupervisorCycle,
   activateWorkspace as activateWorkspaceRequest,
   closeWorkspace as closeWorkspaceRequest,
   getWorkbenchBootstrap,
   getWorkspaceSnapshot,
-  listSessionHistory,
-  listClaudeSlashSkills,
   rejectWorkspaceTakeover,
   requestWorkspaceTakeover,
   updateWorkbenchLayout,
@@ -181,16 +176,14 @@ import {
   workbenchLayoutToBackend
 } from "../../shared/utils/workspace";
 import {
-  AGENT_SPECIAL_KEY_MAP,
-  replaceLeadingSlashToken
-} from "../../shared/app/constants";
-import {
-  formatClaudeRuntimeCommand,
-  resolveClaudeRuntimeProfile,
-} from "../../shared/app/claude-settings.ts";
-import { stripAnsi } from "../../shared/utils/ansi";
+  getWorkbenchStateSnapshot,
+  syncWorkbenchStateSnapshot,
+  updateWorkbenchStateSnapshot,
+} from "../../shared/utils/workbench-state-snapshot";
+import { AGENT_SPECIAL_KEY_MAP } from "../../shared/app/constants";
 import { inferEditorLanguage } from "../../shared/utils/editor";
 import { estimateTerminalGrid, type TerminalGridSize } from "../../shared/utils/terminal";
+import { resolveTerminalInteractionMode } from "../../shared/utils/terminal-interaction";
 import {
   collectPaneLeaves,
   findPaneIdBySessionId,
@@ -205,33 +198,27 @@ import {
   sanitizeGitRelativePath,
 } from "../../shared/utils/path";
 import {
-  createSessionFromBackend,
   formatRelativeSessionTime,
-  isForegroundActiveStatus,
   isDraftSession,
   isHiddenDraftPlaceholder,
   nowLabel,
   parseNumericId,
-  resolveVisibleStatus,
-  restoreVisibleStatus,
-  sessionCompletionRatio,
-  sessionTone,
-  toBackgroundStatus
+  sessionCompletionRatio
 } from "../../shared/utils/session";
-import { sortTreeNodes } from "../../shared/utils/tree";
+import { normalizeSupervisorObjective } from "./supervisor-objective";
+import {
+  SupervisorObjectiveDialog,
+  type SupervisorObjectiveDialogMode,
+} from "./SupervisorObjectiveDialog";
 import { buildWorkspaceShellSummary } from "./workspace-shell-summary";
+import { ConfirmDialog, type ConfirmDialogState } from "../../components/ConfirmDialog";
 import type {
-  AgentStartResult,
   AppSettings,
   AppTheme,
-  ClaudeSlashMenuItem,
-  ClaudeSlashSkillEntry,
-  CommandAvailability,
   CommandPaletteAction,
   FolderBrowserState,
   GitChangeAction,
   GitChangeEntry,
-  SessionHistoryRecord,
   Toast,
   WorkspaceControllerLease,
   WorktreeModalState,
@@ -240,10 +227,25 @@ import type {
 
 const withServiceFallback = async <T,>(operation: () => Promise<T>, fallback: T): Promise<T> => withFallback(operation, fallback);
 
+const STALE_SESSION_INPUT_ERRORS = new Set([
+  "terminal_runtime_not_found",
+  "session_runtime_unbound",
+  "terminal_stdin_closed",
+]);
+
 type WorkspaceScreenProps = {
   locale: Locale;
   appSettings: AppSettings;
   onOpenSettings: () => void;
+};
+
+type SupervisorObjectiveDialogState = {
+  visible: boolean;
+  mode: SupervisorObjectiveDialogMode;
+  sessionId: string | null;
+  provider: Session["provider"] | null;
+  currentObjective: string;
+  draftObjective: string;
 };
 
 const createInitialFolderBrowserState = (): FolderBrowserState => ({
@@ -261,113 +263,47 @@ const formatExecTargetLabel = (target: ExecTarget, t: ReturnType<typeof createTr
       : "WSL"
     : t("nativeTarget");
 
-const resolveTargetClaudeCommand = (
-  settings: AppSettings,
-  target: ExecTarget,
-) => formatClaudeRuntimeCommand(resolveClaudeRuntimeProfile(settings, target));
-
-const REQUIRED_RUNTIME_COMMANDS = [
-  { id: "git", command: "git" },
-] as const satisfies ReadonlyArray<{
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-}>;
-type RuntimeRequirementSpec = {
-  id: RuntimeRequirementStatus["id"];
-  command: string;
-  deferred?: boolean;
-  detailText?: string;
-};
-
-const parseRuntimeCommandBinary = (command: string) => {
-  const trimmed = command.trim();
-  if (!trimmed) return "";
-
-  let token = "";
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-
-  for (const ch of trimmed) {
-    if (escaped) {
-      token += ch;
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\" && !inSingle) {
-      escaped = true;
-      continue;
-    }
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-      continue;
-    }
-    if (ch === "\"" && !inSingle) {
-      inDouble = !inDouble;
-      continue;
-    }
-    if (/\s/.test(ch) && !inSingle && !inDouble) {
-      if (token) break;
-      continue;
-    }
-    token += ch;
-  }
-
-  return token.trim();
-};
-
-const commandUsesWorkspaceRelativePath = (binary: string) => {
-  return binary.startsWith("./")
-    || binary.startsWith("../")
-    || binary.startsWith(".\\")
-    || binary.startsWith("..\\");
-};
-
-const buildRuntimeRequirementSpecs = (
-  agentCommand: string,
-  t: ReturnType<typeof createTranslator>,
-): RuntimeRequirementSpec[] => {
-  const trimmedAgentCommand = agentCommand.trim();
-  const commandBinary = parseRuntimeCommandBinary(trimmedAgentCommand);
-  const claudeRequirement: RuntimeRequirementSpec = {
-    id: "claude",
-    command: trimmedAgentCommand,
-  };
-
-  if (commandBinary.includes("{path}") || commandUsesWorkspaceRelativePath(commandBinary)) {
-    claudeRequirement.deferred = true;
-    claudeRequirement.detailText = t("runtimeCheckClaudeDeferredHint");
-  }
-
-  return [claudeRequirement, ...REQUIRED_RUNTIME_COMMANDS];
-};
-
 const serializeRuntimeValidationKey = (target: ExecTarget, agentCommand: string) =>
   target.type === "wsl"
     ? `wsl:${target.distro?.trim() ?? ""}:${agentCommand.trim()}`
     : `native:${agentCommand.trim()}`;
 
+const serializeRuntimeValidationRequestKey = (
+  target: ExecTarget,
+  settings: Pick<AppSettings, "agentDefaults" | "providers">,
+) => JSON.stringify({
+  target,
+  provider: settings.agentDefaults.provider,
+  global: settings.providers[settings.agentDefaults.provider]?.global ?? null,
+});
+
+type RuntimeValidationModel = RuntimeValidationState & {
+  requestKey: string;
+};
+
 const createRuntimeRequirementStatus = (
   agentCommand: string,
+  provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
 ): RuntimeRequirementStatus[] =>
-  buildRuntimeRequirementSpecs(agentCommand, t).map(({ id, command, deferred, detailText }) => ({
-    id,
-    command,
-    available: deferred ? true : null,
-    detailText,
-  }));
+  buildRuntimeRequirementStatusesFromManifest(
+    provider,
+    agentCommand,
+    (key, params) => t(key as never, params),
+  );
 
 const createRuntimeValidationState = (
   agentCommand: string,
+  provider: Session["provider"],
   t: ReturnType<typeof createTranslator>,
+  requestKey = "",
   targetKey = "",
   status: RuntimeValidationState["status"] = "idle",
-): RuntimeValidationState => ({
+): RuntimeValidationModel => ({
+  requestKey,
   status,
   targetKey,
-  requirements: createRuntimeRequirementStatus(agentCommand, t),
+  requirements: createRuntimeRequirementStatus(agentCommand, provider, t),
 });
 
 const isTextInputTarget = (target: EventTarget | null) => {
@@ -376,10 +312,9 @@ const isTextInputTarget = (target: EventTarget | null) => {
   return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 };
 
-const isAgentFocusTransitionSequence = (value: string) => value === "\u001b[I" || value === "\u001b[O";
-
 export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }: WorkspaceScreenProps) {
-  const [state, setState] = useRelaxState(workbenchState);
+  const [storeState, setStoreState] = useRelaxState(workbenchState);
+  const [state, setRenderState] = useState(storeState);
   const navigate = useNavigate();
   const location = useLocation();
   const { workspaceId: routeWorkspaceParam } = useParams<{ workspaceId?: string }>();
@@ -414,20 +349,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteActiveIndex, setCommandPaletteActiveIndex] = useState(0);
   const [fileSearchState, setFileSearchState] = useState(createInitialWorkspaceFileSearchState);
-  const [draftPromptInputs, setDraftPromptInputs] = useState<Record<string, string>>({});
-  const [draftPaneModes, setDraftPaneModes] = useState<Record<string, "new" | "restore">>({});
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyRecords, setHistoryRecords] = useState<SessionHistoryRecord[]>([]);
-  const [historyExpandedGroups, setHistoryExpandedGroups] = useState<Record<string, boolean>>({});
   const [sessionSort, setSessionSort] = useState<"time" | "name">("time");
   const [repoCollapsedPaths, setRepoCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [worktreeCollapsedPaths, setWorktreeCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [selectedGitChangeKey, setSelectedGitChangeKey] = useState<string>("");
-  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
-  const [slashMenuPaneId, setSlashMenuPaneId] = useState<string | null>(null);
-  const [slashMenuLoading, setSlashMenuLoading] = useState(false);
-  const [slashSkillItems, setSlashSkillItems] = useState<ClaudeSlashSkillEntry[]>([]);
   const [bootstrapReady, setBootstrapReady] = useState(false);
   const [controllerActionBusy, setControllerActionBusy] = useState<"takeover" | "reject" | null>(null);
   const [agentRecoveryBusy, setAgentRecoveryBusy] = useState<{
@@ -435,26 +360,44 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     kind: "resume" | "restart";
   } | null>(null);
   const [optimisticTakeoverWorkspaceId, setOptimisticTakeoverWorkspaceId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    visible: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
+  const [supervisorObjectiveDialog, setSupervisorObjectiveDialog] = useState<SupervisorObjectiveDialogState>({
+    visible: false,
+    mode: "enable",
+    sessionId: null,
+    provider: null,
+    currentObjective: "",
+    draftObjective: "",
+  });
   const t = useMemo(() => createTranslator(locale), [locale]);
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const clientId = useMemo(() => getOrCreateClientId(), []);
   const terminalCompatibilityMode = appSettings.general.terminalCompatibilityMode;
-  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationState>(() => createRuntimeValidationState(
-    resolveTargetClaudeCommand(appSettings, { type: "native" }),
+  const [runtimeValidation, setRuntimeValidation] = useState<RuntimeValidationModel>(() => createRuntimeValidationState(
+    appSettings.agentDefaults.provider,
+    appSettings.agentDefaults.provider,
     t,
+    serializeRuntimeValidationRequestKey({ type: "native" }, appSettings),
   ));
   const stateRef = useRef(state);
   const appRef = useRef<HTMLDivElement | null>(null);
   const fileSearchShellRef = useRef<HTMLDivElement | null>(null);
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const slashMenuRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const terminalRecoveryAttemptsRef = useRef(new Set<string>());
   const draftPromptInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const shellTerminalRef = useRef<XtermBaseHandle | null>(null);
-  const archiveTerminalRef = useRef<XtermBaseHandle | null>(null);
   const shellTerminalViewportRef = useRef<HTMLDivElement | null>(null);
   const emptyTabRef = useRef<Tab | null>(null);
   const agentTerminalRefs = useRef(new Map<string, XtermBaseHandle | null>());
+  const agentTerminalInputBufferRef = useRef(new Map<string, string>());
+  const agentTerminalInputFlushTimerRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const agentTerminalQueueRef = useRef(new Map<string, Promise<void>>());
   const agentTerminalFitSchedulerRef = useRef<ReturnType<typeof createAgentTerminalFitScheduler> | null>(null);
   const agentPaneSizeRef = useRef(new Map<string, { cols: number; rows: number }>());
@@ -476,6 +419,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const runtimeValidationRequestIdRef = useRef(0);
   const overlayBrowseRequestIdRef = useRef(0);
   const persistedLayoutRef = useRef<string>("");
+  const workbenchStateVersionRef = useRef(0);
   const agentStartupStateRef = useRef(new Map<string, {
     token: number;
     startedAt: number;
@@ -485,44 +429,80 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     exited: boolean;
   }>());
   const agentStartupTokenRef = useRef(0);
-  const getTargetClaudeCommand = useCallback(
-    (target: ExecTarget) => resolveTargetClaudeCommand(appSettings, target),
+  const getRuntimeValidationRequestKey = useCallback(
+    (target: ExecTarget) => serializeRuntimeValidationRequestKey(target, appSettings),
     [appSettings],
   );
   const runRuntimeValidation = useCallback(async (target: ExecTarget) => {
-    const command = getTargetClaudeCommand(target);
-    const targetKey = serializeRuntimeValidationKey(target, command);
-    const requirementSpecs = buildRuntimeRequirementSpecs(command, t);
+    const provider = appSettings.agentDefaults.provider;
+    const requestKey = getRuntimeValidationRequestKey(target);
     const requestId = ++runtimeValidationRequestIdRef.current;
-    setRuntimeValidation(createRuntimeValidationState(command, t, targetKey, "checking"));
+    setRuntimeValidation(createRuntimeValidationState(
+      provider,
+      provider,
+      t,
+      requestKey,
+      "",
+      "checking",
+    ));
+
+    let command = provider;
+
+    try {
+      const preview = await getProviderRuntimePreview(provider, target);
+      command = preview.display_command.trim() || provider;
+    } catch (error) {
+      if (runtimeValidationRequestIdRef.current !== requestId) return;
+
+      const message = error instanceof Error ? error.message : String(error);
+      const requirements = createRuntimeRequirementStatus(provider, provider, t).map((requirement, index) => (
+        index === 0
+          ? {
+            ...requirement,
+            available: false,
+            error: message,
+          } satisfies RuntimeRequirementStatus
+          : requirement
+      ));
+
+      setRuntimeValidation({
+        requestKey,
+        status: "failed",
+        targetKey: serializeRuntimeValidationKey(target, provider),
+        requirements,
+      });
+      return;
+    }
+
+    if (runtimeValidationRequestIdRef.current !== requestId) return;
+
+    const targetKey = serializeRuntimeValidationKey(target, command);
+    const requirements = createRuntimeRequirementStatus(command, provider, t);
+    setRuntimeValidation({
+      requestKey,
+      status: "checking",
+      targetKey,
+      requirements,
+    });
 
     const results = await Promise.all(
-      requirementSpecs.map(async ({ id, command, deferred, detailText }) => {
-        if (deferred) {
-          return {
-            id,
-            command,
-            available: true,
-            detailText,
-          } satisfies RuntimeRequirementStatus;
+      requirements.map(async (requirement) => {
+        if (requirement.available === true) {
+          return requirement;
         }
         try {
-          const result = await checkCommandAvailability(command, target);
+          const result = await checkCommandAvailability(requirement.command, target);
           return {
-            id,
-            command,
+            ...requirement,
             available: result.available,
             resolvedPath: result.resolved_path ?? undefined,
             error: result.error ?? undefined,
-            detailText,
           } satisfies RuntimeRequirementStatus;
         } catch (error) {
           return {
-            id,
-            command,
+            ...requirement,
             available: false,
             error: error instanceof Error ? error.message : String(error),
-            detailText,
           } satisfies RuntimeRequirementStatus;
         }
       }),
@@ -539,11 +519,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
 
     setRuntimeValidation({
+      requestKey,
       status: nextStatus,
       targetKey,
       requirements: results,
     });
-  }, [getTargetClaudeCommand, t]);
+  }, [appSettings, getRuntimeValidationRequestKey, t]);
   const editorMetrics = useMemo(() => {
     if (typeof window === "undefined") {
       return { fontSize: 13, paddingY: 12, terminalFontSize: 12 };
@@ -587,9 +568,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   }, [editorMetrics.terminalFontSize, terminalCompatibilityMode]);
 
   const updateState = (updater: (current: WorkbenchState) => WorkbenchState) => {
-    const next = updater(stateRef.current);
+    const current = getWorkbenchStateSnapshot();
+    const next = updateWorkbenchStateSnapshot(updater);
+    if (
+      next !== current
+      && (
+        next.tabs !== current.tabs
+        || next.activeTabId !== current.activeTabId
+        || next.layout !== current.layout
+      )
+    ) {
+      workbenchStateVersionRef.current += 1;
+    }
     stateRef.current = next;
-    setState(next);
+    setRenderState(next);
+    setStoreState(next);
   };
 
   const agentRuntimeRefs = useMemo(() => ({
@@ -597,10 +590,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     agentTerminalRefs,
     agentTerminalQueueRef,
     agentPaneSizeRef,
-    agentRuntimeSizeRef,
-    agentResizeStateRef,
     agentTitleTrackerRef,
-    runningAgentKeysRef,
     agentStartupStateRef,
     agentStartupTokenRef
   }), []);
@@ -628,7 +618,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   const fitVisibleWorkspaceTerminals = useCallback(() => {
     shellTerminalRef.current?.fit();
-    archiveTerminalRef.current?.fit();
     flushWorkspaceAgentFit();
   }, [flushWorkspaceAgentFit]);
 
@@ -657,27 +646,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setAgentTerminalRef(agentRuntimeRefs, paneId, handle);
   };
 
-  const registerDraftPromptInputRef = (paneId: string, element: HTMLInputElement | null) => {
-    setDraftPromptInputRef(agentRuntimeRefs, paneId, element);
-  };
-
   const focusWorkspaceAgentPane = (paneId = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId)?.activePaneId) => {
     focusAgentTerminal(agentRuntimeRefs, paneId);
-  };
-
-  const commitTrackedAgentSessionTitle = (paneId: string, tabId: string, sessionId: string, rawInput: string) => {
-    const appliedTitle = commitAgentSessionTitle({
-      refs: agentRuntimeRefs,
-      paneId,
-      tabId,
-      sessionId,
-      rawInput,
-      locale,
-      t,
-      updateTab
-    });
-    if (!appliedTitle) return;
-    void syncSessionPatch(tabId, sessionId, { title: appliedTitle });
   };
 
   const openCommandPalette = () => {
@@ -692,9 +662,11 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     setCommandPaletteActiveIndex(0);
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useLayoutEffect(() => {
+    stateRef.current = storeState;
+    syncWorkbenchStateSnapshot(storeState);
+    setRenderState((current) => (current === storeState ? current : storeState));
+  }, [storeState]);
 
   useEffect(() => () => {
     workspaceViewPersistSchedulerRef.current?.flush();
@@ -704,6 +676,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
 
   useEffect(() => {
     let cancelled = false;
+    const bootstrapStateVersion = workbenchStateVersionRef.current;
     void (async () => {
       const bootstrap = await withServiceFallback(() => getWorkbenchBootstrap(deviceId, clientId), null);
       if (cancelled || !bootstrap) {
@@ -730,32 +703,46 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         if (cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) {
           return;
         }
+        if (workbenchStateVersionRef.current !== bootstrapStateVersion) {
+          setBootstrapReady(true);
+          return;
+        }
 
         if (uiState && runtimeSnapshot) {
-          updateState((current) => applyWorkspaceBootstrapResult(
-            current,
-            bootstrap,
-            locale,
-            appSettings,
-            {
-              deviceId,
-              clientId,
-              uiState,
-              runtimeSnapshot,
-            },
-          ));
+          updateState((current) => {
+            const next = applyWorkspaceBootstrapResult(
+              current,
+              bootstrap,
+              locale,
+              appSettings,
+              {
+                deviceId,
+                clientId,
+                uiState,
+                runtimeSnapshot,
+              },
+            );
+            return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+              ? { ...next, activeTabId: routeWorkspaceId }
+              : next;
+          });
         } else {
-          updateState((current) => applyWorkspaceBootstrapResult(
-            current,
-            bootstrap,
-            locale,
-            appSettings,
-            {
-              deviceId,
-              clientId,
-              uiState,
-            },
-          ));
+          updateState((current) => {
+            const next = applyWorkspaceBootstrapResult(
+              current,
+              bootstrap,
+              locale,
+              appSettings,
+              {
+                deviceId,
+                clientId,
+                uiState,
+              },
+            );
+            return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+              ? { ...next, activeTabId: routeWorkspaceId }
+              : next;
+          });
         }
       } else {
         updateState((current) => applyWorkspaceBootstrapResult(
@@ -785,7 +772,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           switchWorkspaceLocally(routeWorkspaceId);
           void withServiceFallback(() => activateWorkspaceRequest(routeWorkspaceId, deviceId, clientId), null).then((uiState) => {
             if (!uiState || cancelled || !isWorkspaceSyncVersionCurrent(routeWorkspaceId, syncVersion)) return;
-            updateState((current) => applyWorkbenchUiState(current, uiState));
+            updateState((current) => {
+              const next = applyWorkbenchUiState(current, uiState);
+              return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+                ? { ...next, activeTabId: routeWorkspaceId }
+                : next;
+            });
           });
         }
         void ensureWorkspaceTerminal(routeWorkspaceId);
@@ -832,15 +824,20 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           navigate("/workspace", { replace: true });
           return;
         }
-        updateState((current) => applyWorkspaceRuntimeSnapshot(
-          current,
-          runtimeSnapshot,
-          locale,
-          appSettings,
-          deviceId,
-          clientId,
-          uiState,
-        ));
+        updateState((current) => {
+          const next = applyWorkspaceRuntimeSnapshot(
+            current,
+            runtimeSnapshot,
+            locale,
+            appSettings,
+            deviceId,
+            clientId,
+            uiState,
+          );
+          return next.tabs.some((tab) => tab.id === routeWorkspaceId)
+            ? { ...next, activeTabId: routeWorkspaceId }
+            : next;
+        });
         void ensureWorkspaceTerminal(routeWorkspaceId);
       })();
       return () => {
@@ -881,25 +878,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     state.layout.showTerminalPanel,
   ]);
 
-  const refreshHistoryRecords = useCallback(async () => {
-    setHistoryLoading(true);
-    const records = await withServiceFallback(() => listSessionHistory(), null);
-    if (records) {
-      setHistoryRecords(records);
-    }
-    setHistoryLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!bootstrapReady) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, refreshHistoryRecords]);
-
-  useEffect(() => {
-    if (!bootstrapReady || !historyOpen) return;
-    void refreshHistoryRecords();
-  }, [bootstrapReady, historyOpen, refreshHistoryRecords]);
-
   useEffect(() => {
     if (!bootstrapReady) return;
     const scheduler = workspaceViewPersistSchedulerRef.current;
@@ -927,28 +905,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     scheduler?.prune(liveWorkspaceIds);
     pruneWorkspaceViewBaselines(liveWorkspaceIds);
   }, [bootstrapReady, persistWorkspaceView, state.tabs]);
-
-  useEffect(() => {
-    if (!slashMenuOpen) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!slashMenuRef.current?.contains(event.target as Node)) {
-        setSlashMenuOpen(false);
-        setSlashMenuPaneId(null);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSlashMenuOpen(false);
-        setSlashMenuPaneId(null);
-      }
-    };
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [slashMenuOpen]);
 
   useEffect(() => {
     if (!commandPaletteOpen) return;
@@ -991,18 +947,30 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }));
   }, [state.overlay.mode, state.overlay.visible]);
 
+  const currentRuntimeValidationRequestKey = getRuntimeValidationRequestKey(state.overlay.target);
+
   useEffect(() => {
     if (!bootstrapReady || !state.overlay.visible) return;
-    const command = getTargetClaudeCommand(state.overlay.target);
-    const targetKey = serializeRuntimeValidationKey(state.overlay.target, command);
-    if (validatedRuntimeTargetsRef.current.has(targetKey)) {
-      return;
+    if (runtimeValidation.requestKey === currentRuntimeValidationRequestKey) {
+      if (runtimeValidation.status === "checking" || runtimeValidation.status === "failed") {
+        return;
+      }
+      if (
+        runtimeValidation.status === "ready"
+        && runtimeValidation.targetKey
+        && validatedRuntimeTargetsRef.current.has(runtimeValidation.targetKey)
+      ) {
+        return;
+      }
     }
     void runRuntimeValidation(state.overlay.target);
   }, [
     bootstrapReady,
-    getTargetClaudeCommand,
+    currentRuntimeValidationRequestKey,
     runRuntimeValidation,
+    runtimeValidation.requestKey,
+    runtimeValidation.status,
+    runtimeValidation.targetKey,
     state.overlay.target.type,
     state.overlay.target.type === "wsl" ? state.overlay.target.distro : "",
     state.overlay.visible,
@@ -1015,24 +983,27 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       const fallback = createTab(1, locale);
       emptyTabRef.current = {
         ...fallback,
-        agent: {
-          ...fallback.agent,
-          provider: appSettings.agentProvider,
-          command: resolveTargetClaudeCommand(appSettings, { type: "native" }),
-        },
-        idlePolicy: { ...appSettings.idlePolicy },
+        idlePolicy: { ...appSettings.general.idlePolicy },
       };
     }
     return emptyTabRef.current;
   }, [appSettings, locale, state.activeTabId, state.tabs]);
   const overlayVisible = bootstrapReady && state.overlay.visible;
-  const showWelcomeScreen = bootstrapReady && state.tabs.length === 0 && !state.overlay.visible;
-  const overlayCommand = getTargetClaudeCommand(state.overlay.target);
-  const runtimeValidationTargetKey = serializeRuntimeValidationKey(state.overlay.target, overlayCommand);
-  const runtimeValidatedForTarget = validatedRuntimeTargetsRef.current.has(runtimeValidationTargetKey);
-  const runtimeValidationView = runtimeValidation.targetKey === runtimeValidationTargetKey
+  const showWelcomeScreen = bootstrapReady && state.tabs.length === 0;
+  const runtimeValidatedForTarget = runtimeValidation.requestKey === currentRuntimeValidationRequestKey
+    && runtimeValidation.status === "ready"
+    && runtimeValidation.targetKey.length > 0
+    && validatedRuntimeTargetsRef.current.has(runtimeValidation.targetKey);
+  const runtimeValidationView = runtimeValidation.requestKey === currentRuntimeValidationRequestKey
     ? runtimeValidation
-    : createRuntimeValidationState(overlayCommand, t, runtimeValidationTargetKey, "checking");
+    : createRuntimeValidationState(
+      appSettings.agentDefaults.provider,
+      appSettings.agentDefaults.provider,
+      t,
+      currentRuntimeValidationRequestKey,
+      "",
+      "checking",
+    );
   const showRuntimeValidationOverlay = overlayVisible && !runtimeValidatedForTarget;
   const showWorkspaceLaunchOverlay = overlayVisible && runtimeValidatedForTarget;
   const hasOpenWorkspace = state.tabs.length > 0;
@@ -1050,26 +1021,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const activePaneSession = useMemo(
     () => activeTab.sessions.find((session) => session.id === activePaneSessionId) ?? activeSession,
     [activePaneSessionId, activeSession, activeTab.sessions]
-  );
-  const activeTabSessionIdsKey = useMemo(
-    () => activeTab.sessions.map((session) => session.id).join("|"),
-    [activeTab.sessions]
-  );
-  const mountedSessionIds = useMemo(
-    () => new Set(collectPaneLeaves(activeTab.paneLayout).map((leaf) => leaf.sessionId)),
-    [activeTab.paneLayout]
-  );
-  const historyGroups = useMemo(
-    () => groupSessionHistory(historyRecords, activeTab.id),
-    [activeTab.id, historyRecords]
-  );
-  const restoreCandidates = useMemo(
-    () => listRestoreCandidatesForWorkspace({
-      workspaceId: activeTab.id,
-      mountedSessionIds,
-      records: historyRecords,
-    }),
-    [activeTab.id, activeTabSessionIdsKey, historyRecords, mountedSessionIds]
   );
   const fileSearchQuery = fileSearchState.query;
   const fileSearchActiveIndex = fileSearchState.activeIndex;
@@ -1205,14 +1156,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const displayTerminalTitle = (value: string) => localizeTerminalTitle(value, locale);
   const hasPreviewFile = Boolean(activeTab.filePreview.path);
 
-  const archivedEntry = activeTab.viewingArchiveId
-    ? activeTab.archive.find((entry) => entry.id === activeTab.viewingArchiveId)
-    : undefined;
-  const sessionForView = archivedEntry ? archivedEntry.snapshot : activeSession;
-  const isArchiveView = Boolean(archivedEntry);
-  const viewedSession = isArchiveView ? sessionForView : activeSession;
-  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
-
   useEffect(() => {
     updateTab(activeTab.id, (tab) => {
       const leaves = collectPaneLeaves(tab.paneLayout);
@@ -1243,7 +1186,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         activePaneId: nextActivePaneId
       };
     });
-  }, [activeTab.id, activeTabSessionIdsKey]);
+  }, [activeTab.id, activeTab.sessions]);
 
   const invokeAgent = async <T,>(operation: () => Promise<T>, sessionId: string, label: string) => {
     try {
@@ -1256,16 +1199,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       });
       return null;
     }
-  };
-
-  const loadSlashSkills = async (cwd?: string) => {
-    setSlashMenuLoading(true);
-    const items = await withServiceFallback(
-      () => listClaudeSlashSkills(cwd ?? activeTab.project?.path ?? ""),
-      []
-    );
-    setSlashSkillItems(items);
-    setSlashMenuLoading(false);
   };
 
   const updateTab = (tabId: string, updater: (tab: Tab) => Tab) => {
@@ -1303,14 +1236,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   };
 
   const {
-    archiveSessionForTab,
     createDraftSessionForTab,
-    deleteSessionFromHistory,
     materializeSession,
     onCloseAgentPane: closeAgentPaneSession,
     onNewSession: createNewSessionInActiveTab,
     onSwitchSession: switchSessionInActiveTab,
-    restoreSessionIntoPane,
+    refreshTabFromBackend,
     syncSessionPatch,
     touchSession
   } = createWorkspaceSessionActions({
@@ -1328,11 +1259,172 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await createNewSessionInActiveTab();
   };
 
+  const runSupervisorMutation = useCallback(async (
+    sessionId: string,
+    operation: () => Promise<unknown>,
+    fallbackMessage: string,
+  ) => {
+    if (!guardWorkspaceMutation("session_update", activeTab.id, sessionId)) return false;
+    const result = await withServiceFallback(async () => {
+      await operation();
+      return true;
+    }, false);
+    if (!result) {
+      addToast({
+        id: createId("toast"),
+        text: fallbackMessage,
+        sessionId,
+      });
+      return false;
+    }
+    await refreshTabFromBackend(activeTab.id);
+    return true;
+  }, [activeTab.id, addToast, guardWorkspaceMutation, refreshTabFromBackend]);
+
+  const closeSupervisorObjectiveDialog = useCallback(() => {
+    setSupervisorObjectiveDialog((current) => ({
+      ...current,
+      visible: false,
+      sessionId: null,
+      provider: null,
+      currentObjective: "",
+      draftObjective: "",
+    }));
+  }, []);
+
+  const submitSupervisorObjectiveDialog = useCallback(async () => {
+    const sessionId = supervisorObjectiveDialog.sessionId;
+    if (!sessionId) return;
+
+    if (supervisorObjectiveDialog.mode === "disable") {
+      await runSupervisorMutation(
+        sessionId,
+        () => disableSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+        "Failed to disable supervisor mode.",
+      );
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    const objectiveText = normalizeSupervisorObjective(supervisorObjectiveDialog.draftObjective);
+    if (!objectiveText) return;
+
+    if (supervisorObjectiveDialog.mode === "edit" && objectiveText === supervisorObjectiveDialog.currentObjective.trim()) {
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    if (supervisorObjectiveDialog.mode === "enable") {
+      const provider = supervisorObjectiveDialog.provider;
+      if (!provider) return;
+      await runSupervisorMutation(
+        sessionId,
+        () => enableSupervisorMode(activeTab.id, activeTab.controller, sessionId, provider, objectiveText),
+        "Failed to enable supervisor mode.",
+      );
+      closeSupervisorObjectiveDialog();
+      return;
+    }
+
+    await runSupervisorMutation(
+      sessionId,
+      () => updateSupervisorObjective(activeTab.id, activeTab.controller, sessionId, objectiveText),
+      "Failed to update supervisor objective.",
+    );
+    closeSupervisorObjectiveDialog();
+  }, [
+    activeTab.controller,
+    activeTab.id,
+    closeSupervisorObjectiveDialog,
+    runSupervisorMutation,
+    supervisorObjectiveDialog,
+  ]);
+
+  const onEnableSupervisor = useCallback(async (sessionId: string, provider: Session["provider"]) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "enable",
+      sessionId,
+      provider,
+      currentObjective: "",
+      draftObjective: "Keep the business agent focused on the current task.",
+    });
+  }, []);
+
+  const onEditSupervisorObjective = useCallback(async (sessionId: string, currentObjective: string) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "edit",
+      sessionId,
+      provider: null,
+      currentObjective,
+      draftObjective: currentObjective,
+    });
+  }, []);
+
+  const onPauseSupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => pauseSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+      "Failed to pause supervisor mode.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onResumeSupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => resumeSupervisorMode(activeTab.id, activeTab.controller, sessionId),
+      "Failed to resume supervisor mode.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onDisableSupervisor = useCallback(async (sessionId: string) => {
+    setSupervisorObjectiveDialog({
+      visible: true,
+      mode: "disable",
+      sessionId,
+      provider: null,
+      currentObjective: "",
+      draftObjective: "",
+    });
+  }, []);
+
+  const onRetrySupervisor = useCallback(async (sessionId: string) => {
+    await runSupervisorMutation(
+      sessionId,
+      () => retrySupervisorCycle(activeTab.id, activeTab.controller, sessionId),
+      "Failed to retry supervisor cycle.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation]);
+
+  const onTriggerSupervisor = useCallback(async (sessionId: string) => {
+    updateTab(activeTab.id, (tab) => ({
+      ...tab,
+      sessions: tab.sessions.map((session) => (
+        session.id === sessionId && session.supervisor
+          ? {
+              ...session,
+              supervisor: {
+                ...session.supervisor,
+                status: "evaluating",
+              },
+            }
+          : session
+      )),
+    }));
+    await runSupervisorMutation(
+      sessionId,
+      () => triggerSupervisorCycle(activeTab.id, activeTab.controller, sessionId),
+      "Failed to trigger supervisor cycle.",
+    );
+  }, [activeTab.controller, activeTab.id, runSupervisorMutation, updateTab]);
+
   const { refreshWorkspaceArtifacts } = useWorkspaceArtifactsSync({
     activeTabId: activeTab.id,
     activeProjectPath: activeTab.project?.path,
     bootstrapReady,
     codeSidebarView,
+    showCodePanel,
     stateRef,
     updateTab,
     withServiceFallback,
@@ -1370,7 +1462,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     updateState((current) => {
       const targetTab = current.tabs.find((tab) => tab.id === workspaceId);
       if (!targetTab) return current;
-      const previousActiveTabId = current.activeTabId;
       return {
         ...current,
         activeTabId: workspaceId,
@@ -1384,16 +1475,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               ...tab,
               sessions: tab.sessions.map((session) =>
                 session.id === tab.activeSessionId
-                  ? { ...session, unread: 0, status: restoreVisibleStatus(session), lastActiveAt: Date.now() }
+                  ? { ...session, unread: 0, status: session.status, lastActiveAt: Date.now() }
                   : session
-              )
-            };
-          }
-          if (tab.id === previousActiveTabId) {
-            return {
-              ...tab,
-              sessions: tab.sessions.map((session) =>
-                session.id === tab.activeSessionId ? { ...session, status: toBackgroundStatus(session.status) } : session
               )
             };
           }
@@ -1454,12 +1537,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       };
     });
     if (uiState.active_workspace_id) {
-      void refreshHistoryRecords();
       navigate(`/workspace/${uiState.active_workspace_id}`);
       void ensureWorkspaceTerminal(uiState.active_workspace_id);
       return;
     }
-    void refreshHistoryRecords();
     navigate("/workspace");
   };
 
@@ -1530,71 +1611,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
     navigate(`/workspace/${workspaceId}`, { replace: true });
     return nextTab ?? stateRef.current.tabs.find((tab) => tab.id === workspaceId) ?? null;
-  };
-
-  const onToggleHistory = () => {
-    if (!historyOpen) {
-      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
-    }
-    setHistoryOpen((open) => !open);
-  };
-
-  const onOpenHistory = () => {
-    if (!historyOpen) {
-      setHistoryExpandedGroups(createInitialHistoryExpansion(historyGroups, activeTab.id));
-    }
-    setHistoryOpen(true);
-  };
-
-  useEffect(() => {
-    if (!historyOpen) return;
-
-    setHistoryExpandedGroups((current) => {
-      const defaults = createInitialHistoryExpansion(historyGroups, activeTab.id);
-      const next = historyGroups.reduce<Record<string, boolean>>((expansion, group) => {
-        expansion[group.workspaceId] = Object.prototype.hasOwnProperty.call(current, group.workspaceId)
-          ? current[group.workspaceId]
-          : defaults[group.workspaceId];
-        return expansion;
-      }, {});
-
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
-      const changed = currentKeys.length !== nextKeys.length
-        || nextKeys.some((workspaceId) => current[workspaceId] !== next[workspaceId]);
-
-      return changed ? next : current;
-    });
-  }, [activeTab.id, historyGroups, historyOpen]);
-
-  const handleHistoryRecordSelect = async (record: SessionHistoryRecord) => {
-    const targetTab = await ensureWorkspaceReady(record.workspaceId);
-    if (!targetTab) return;
-
-    const currentTab = stateRef.current.tabs.find((tab) => tab.id === record.workspaceId) ?? targetTab;
-    const action = selectHistoryPrimaryAction(record);
-    if (action === "focus" && currentTab.sessions.some((session) => session.id === record.sessionId)) {
-      switchSessionInActiveTab(currentTab, record.sessionId);
-      setHistoryOpen(false);
-      return;
-    }
-
-    const restored = await restoreSessionIntoPane(record.workspaceId, record.sessionId);
-    if (!restored) return;
-    void refreshHistoryRecords();
-    setHistoryOpen(false);
-  };
-
-  const handleHistoryRecordDelete = async (record: SessionHistoryRecord) => {
-    const confirmed = typeof window === "undefined"
-      ? true
-      : window.confirm(t("historyDeleteConfirm", { title: record.title }));
-    if (!confirmed) return;
-
-    const deleted = await deleteSessionFromHistory(record.workspaceId, record.sessionId);
-    if (!deleted) return;
-
-    await refreshHistoryRecords();
   };
 
   const onCycleWorkspace = (direction: number) => {
@@ -1697,73 +1713,178 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     }
   };
 
-  const buildAgentCommand = (tab: Tab) => (
-    resolveTargetClaudeCommand(appSettings, tab.project?.target ?? { type: "native" })
-  );
-
-  const agentStartMaybe = async (tab: Tab, session: Session, paneId?: string | null) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const project = tab.project;
-    if (!project?.path) return false;
-    const command = buildAgentCommand(tab);
-    const target = project.target;
-    const initialSize = resolveAgentInitialSize(paneId);
-    const availability = await withServiceFallback<CommandAvailability | null>(
-      () => checkCommandAvailability(command, target, project.path),
-      null
-    );
-    if (availability && !availability.available) {
+  const startSessionRuntimeInPane = async (paneId: string | null | undefined, tab: Tab, session: Session) => {
+    if (session.unavailableReason) {
       addToast({
         id: createId("toast"),
-        text: `${t("agentStartFailed")}: ${availability.error ?? t("launchCommandMissing", { runtime: formatExecTargetLabel(target, t) })}`,
-        sessionId: session.id
+        text: session.unavailableReason,
+        sessionId: session.id,
       });
-      return false;
+      return null;
     }
-    const startupToken = armAgentStartupGate(agentRuntimeRefs, tab.id, session.id);
-    const result = await invokeAgent<AgentStartResult>(() => startAgent({
+    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
+    const syncVersion = advanceWorkspaceSyncVersion(tab.id);
+    const initialSize = resolveAgentInitialSize(paneId);
+    const result = await invokeAgent(() => startSessionRuntime({
       workspaceId: tab.id,
       controller: tab.controller,
       sessionId: session.id,
-      provider: tab.agent.provider,
       cols: initialSize?.cols,
       rows: initialSize?.rows,
     }), session.id, t("agentStartFailed"));
     if (!result) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-      return false;
+      return null;
     }
-    markAgentRuntimeStarted(agentRuntimeRefs, tab.id, session.id);
-    if (!result.started) {
-      clearAgentStartupGate(agentRuntimeRefs, tab.id, session.id, startupToken);
-    }
-    return {
-      ok: true,
-      started: result.started,
-      startupToken: result.started ? startupToken : null
+    const terminalRuntimeId = result.terminal_runtime_id ?? session.terminalRuntimeId;
+    const terminalId = result.terminal_runtime_id
+      ? undefined
+      : `term-${result.terminal_id}`;
+    let nextSession = {
+      ...session,
+      terminalId,
+      terminalRuntimeId,
     };
+    let nextTab = {
+      ...tab,
+      terminals: terminalId && !tab.terminals.some((terminal) => terminal.id === terminalId)
+        ? [
+            ...tab.terminals,
+            {
+              id: terminalId,
+              title: formatTerminalTitle(tab.terminals.length + 1, locale),
+              output: "",
+              recoverable: true,
+            },
+          ]
+        : tab.terminals,
+      sessions: tab.sessions.map((item) => (
+        item.id === session.id
+          ? nextSession
+          : item
+      )),
+    };
+    updateTab(tab.id, (current) => {
+      nextTab = {
+        ...current,
+        terminals: terminalId && !current.terminals.some((terminal) => terminal.id === terminalId)
+          ? [
+              ...current.terminals,
+              {
+                id: terminalId,
+                title: formatTerminalTitle(current.terminals.length + 1, locale),
+                output: "",
+                recoverable: true,
+              },
+            ]
+          : current.terminals,
+        sessions: current.sessions.map((item) => (
+          item.id === session.id
+            ? {
+                ...item,
+                terminalId,
+                terminalRuntimeId: terminalRuntimeId ?? item.terminalRuntimeId,
+              }
+            : item
+        )),
+      };
+      nextSession = nextTab.sessions.find((item) => item.id === session.id) ?? nextSession;
+      return nextTab;
+    });
+    if (typeof window !== "undefined") {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    }
+    if (terminalRuntimeId) {
+      updateState((current) => ({
+        ...current,
+        tabs: current.tabs.map((item) => item.id !== tab.id ? item : {
+          ...item,
+          sessions: item.sessions.map((entry) => entry.id !== session.id ? entry : {
+            ...entry,
+            terminalRuntimeId: terminalRuntimeId,
+          }),
+        }),
+      }));
+    }
+    const latestTabBeforeAttach = stateRef.current.tabs.find((item) => item.id === tab.id);
+    if (latestTabBeforeAttach && canMutateWorkspace(latestTabBeforeAttach.controller, "switch_pane")) {
+      const viewPatch = createWorkspaceViewPatchFromTab(latestTabBeforeAttach);
+      workspaceViewPersistSchedulerRef.current?.cancel(latestTabBeforeAttach.id);
+      rememberWorkspaceViewPatchBaseline(latestTabBeforeAttach.id, viewPatch);
+      noteWorkspaceViewPersistRequest(latestTabBeforeAttach.id, viewPatch);
+      await withServiceFallback(
+        () => updateWorkspaceView(latestTabBeforeAttach.id, viewPatch, latestTabBeforeAttach.controller),
+        null,
+      );
+    }
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      tab.id,
+      deviceId,
+      clientId,
+      withServiceFallback,
+      {
+        force: true,
+        successReuseMs: 0,
+      },
+    );
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(tab.id, syncVersion)) {
+      updateState((current) => {
+        const next = applyWorkspaceRuntimeSnapshot(
+          current,
+          runtimeSnapshot,
+          locale,
+          appSettings,
+          deviceId,
+          clientId,
+        );
+        nextTab = next.tabs.find((item) => item.id === tab.id) ?? nextTab;
+        nextSession = nextTab.sessions.find((item) => item.id === session.id) ?? nextSession;
+        return next;
+      });
+    }
+    if (!isWorkspaceSyncVersionCurrent(tab.id, syncVersion)) {
+      return null;
+    }
+    focusAgentTerminal(agentRuntimeRefs, paneId);
+    return { tab: nextTab, session: nextSession };
   };
 
-  const agentSend = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((s) =>
-        s.id === session.id ? { ...s, status: resolveVisibleStatus(current, s, "waiting"), lastActiveAt } : s
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { status: "waiting", last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, true),
-      session.id,
-      t("agentSendFailed")
+  const isSessionRuntimeWritable = (session: Session | null | undefined) => (
+    Boolean(session?.terminalRuntimeId) && session?.runtimeLiveness === "attached"
+  );
+
+  const refreshWorkspaceRuntimeSnapshot = useCallback(async (workspaceId: string) => {
+    const syncVersion = advanceWorkspaceSyncVersion(workspaceId);
+    const runtimeSnapshot = await attachWorkspaceRuntimeWithRetry(
+      workspaceId,
+      deviceId,
+      clientId,
+      withServiceFallback,
+      {
+        force: true,
+        successReuseMs: 0,
+      },
     );
-    return sent !== null;
-  };
+    if (runtimeSnapshot && isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) {
+      updateState((current) => applyWorkspaceRuntimeSnapshot(
+        current,
+        runtimeSnapshot,
+        locale,
+        appSettings,
+        deviceId,
+        clientId,
+      ));
+    }
+    if (!isWorkspaceSyncVersionCurrent(workspaceId, syncVersion)) return null;
+    return stateRef.current.tabs.find((tab) => tab.id === workspaceId) ?? null;
+  }, [appSettings, clientId, deviceId, locale, updateState]);
 
   const sendAgentRawChunk = async (tab: Tab, session: Session, input: string) => {
     if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return false;
+    if (!session.terminalRuntimeId || session.runtimeLiveness !== "attached" || !session.terminalId) return false;
+    const numericTerminalId = Number(session.terminalId.replace("term-", ""));
+    if (!Number.isFinite(numericTerminalId)) return false;
     const lastActiveAt = Date.now();
     updateTab(tab.id, (current) => ({
       ...current,
@@ -1772,30 +1893,12 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       )
     }));
     void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const sent = await invokeAgent(
-      () => sendAgentInput(tab.id, tab.controller, session.id, input, false),
-      session.id,
-      t("agentKeySendFailed")
-    );
-    return sent !== null;
-  };
-
-  const sendRawAgentInput = async (tab: Tab, session: Session, input: string) => {
-    if (!guardWorkspaceMutation("agent_input", tab.id, session.id)) return;
-    const lastActiveAt = Date.now();
-    updateTab(tab.id, (current) => ({
-      ...current,
-      sessions: current.sessions.map((item) =>
-        item.id === session.id ? { ...item, lastActiveAt } : item
-      )
-    }));
-    void syncSessionPatch(tab.id, session.id, { last_active_at: lastActiveAt });
-    const started = await agentStartMaybe(tab, session);
-    if (!started) return;
-    if (started.started && started.startupToken !== null) {
-      await waitForAgentStartupDrain(agentRuntimeRefs, tab.id, session.id, started.startupToken);
+    try {
+      await writeTerminalRequest(tab.id, tab.controller, numericTerminalId, input);
+      return true;
+    } catch {
+      return false;
     }
-    await sendAgentRawChunk(tab, session, input);
   };
 
   const onRecoverActiveSession = async () => {
@@ -1822,9 +1925,10 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         nextTab = next.tabs.find((tab) => tab.id === currentTab.id) ?? null;
         return next;
       });
-      if (nextTab) {
-        currentTab = nextTab;
-        session = nextTab.sessions.find((item) => item.id === session.id) ?? session;
+      const refreshedTab = nextTab;
+      if (refreshedTab) {
+        currentTab = refreshedTab;
+        session = refreshedTab.sessions.find((item) => item.id === session.id) ?? session;
       }
     }
     if (!isWorkspaceSyncVersionCurrent(currentTab.id, syncVersion)) return;
@@ -1835,11 +1939,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       kind: recoveryAction.kind,
     });
     try {
-      const started = await agentStartMaybe(currentTab, session, currentTab.activePaneId);
-      if (!started) return;
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(agentRuntimeRefs, currentTab.id, session.id, started.startupToken);
-      }
+      await startSessionRuntimeInPane(currentTab.activePaneId, currentTab, session);
     } finally {
       setAgentRecoveryBusy((current) => (
         current?.sessionId === session.id ? null : current
@@ -1855,40 +1955,49 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const onCloseAgentPane = (paneId: string, sessionId: string) => {
     if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
     closeAgentPaneSession(activeTab, paneId, sessionId);
-    window.setTimeout(() => {
-      void refreshHistoryRecords();
-    }, 0);
   };
 
-  const onArchiveSession = async (sessionId: string) => {
-    if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
-    await archiveSessionForTab(activeTab.id, sessionId);
-    void refreshHistoryRecords();
-  };
-
-  const onDraftPaneModeChange = (paneId: string, mode: "new" | "restore") => {
-    setDraftPaneModes((current) => ({
-      ...current,
-      [paneId]: mode,
-    }));
-  };
-
-  const onRestoreDraftSession = (paneId: string, sessionId: string) => {
-    void restoreSessionIntoPane(activeTab.id, sessionId, paneId).then((restored) => {
-      if (!restored) return;
-      void refreshHistoryRecords();
-    });
-  };
-
-  const onSelectArchive = (entryId: string) => {
+  const onDraftProviderChange = (paneId: string, provider: Session["provider"]) => {
+    const sessionId = findPaneSessionId(activeTab.paneLayout, paneId);
+    if (!sessionId) return;
     updateTab(activeTab.id, (tab) => ({
       ...tab,
-      viewingArchiveId: entryId
+      sessions: tab.sessions.map((session) => (
+        session.id === sessionId && session.isDraft
+          ? { ...session, provider }
+          : session
+      )),
     }));
   };
 
-  const onExitArchive = () => {
-    updateTab(activeTab.id, (tab) => ({ ...tab, viewingArchiveId: undefined }));
+  const startAgentSessionInPane = async (paneId: string, tab: Tab, session: Session) => {
+    const started = await startSessionRuntimeInPane(paneId, tab, session);
+    if (!started) return false;
+    touchSession(started.tab.id, started.session.id);
+    focusWorkspaceAgentPane(paneId);
+    return true;
+  };
+
+  const onStartDraftSession = async (paneId: string, provider: Session["provider"]) => {
+    if (!guardWorkspaceMutation("agent_input")) return;
+
+    onDraftProviderChange(paneId, provider);
+    const tabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
+    if (!tabSnapshot) return;
+    const paneSessionId = findPaneSessionId(tabSnapshot.paneLayout, paneId) ?? tabSnapshot.activeSessionId;
+    const sessionSnapshot = tabSnapshot.sessions.find((session) => session.id === paneSessionId);
+    if (!sessionSnapshot || !isDraftSession(sessionSnapshot)) return;
+
+    const materialized = await materializeSession(tabSnapshot.id, sessionSnapshot.id, "");
+    if (!materialized) return;
+    await startAgentSessionInPane(paneId, materialized.tab, materialized.session);
+  };
+
+  const onRemoveUnavailableSession = (sessionId: string) => {
+    const pane = activeTab.panes.find((item) => item.sessionId === sessionId);
+    if (!pane) return;
+    if (!guardWorkspaceMutation("close_session", activeTab.id, sessionId)) return;
+    closeAgentPaneSession(activeTab, pane.id, sessionId);
   };
 
   const onFileSelect = async (node: TreeNode, workspaceId?: string) => {
@@ -2212,7 +2321,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       stateRef,
       updateState,
       shellTerminalRef,
-      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
   };
@@ -2227,8 +2335,44 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     });
   };
 
-  const activeTerminal = activeTab.terminals.find((t) => t.id === activeTab.activeTerminalId) ?? activeTab.terminals[0];
+  const visiblePanelTerminals = filterWorkspacePanelTerminals(activeTab.terminals, activeTab.sessions);
+  const activeTerminal = visiblePanelTerminals.find((t) => t.id === activeTab.activeTerminalId) ?? visiblePanelTerminals[0];
   const showAgentPanel = !isCodeExpanded;
+
+  useEffect(() => {
+    if (!activeTerminal || activeTerminal.recoverable) {
+      return;
+    }
+    if (!canMutateWorkspace(activeTab.controller, "create_terminal")) {
+      return;
+    }
+
+    const attemptKey = `${activeTab.id}:${activeTerminal.id}`;
+    if (terminalRecoveryAttemptsRef.current.has(attemptKey)) {
+      return;
+    }
+    terminalRecoveryAttemptsRef.current.add(attemptKey);
+
+    const currentTab = stateRef.current.tabs.find((tab) => tab.id === activeTab.id) ?? activeTab;
+    const initialSize = measureWorkspaceTerminalSize();
+    void replaceWorkspaceTerminal({
+      tab: currentTab,
+      terminalId: activeTerminal.id,
+      updateTab,
+      addToast,
+      activeSessionId: activeSession.id,
+      createToastId: () => createId("toast"),
+      t,
+      initialSize,
+    });
+  }, [
+    activeSession.id,
+    activeTab,
+    activeTerminal,
+    addToast,
+    measureWorkspaceTerminalSize,
+    t,
+  ]);
 
   const toggleCodeExpanded = async () => {
     if (isCodeExpanded) {
@@ -2269,25 +2413,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       splitId,
       axis,
       updateTab,
-      archiveTerminalRef,
       flushFitAgentTerminals: flushWorkspaceAgentFit,
     });
-  };
-
-  const onToggleSlashMenu = async (paneId: string) => {
-    const nextOpen = !(slashMenuOpen && slashMenuPaneId === paneId);
-    setSlashMenuPaneId(nextOpen ? paneId : null);
-    setSlashMenuOpen(nextOpen);
-    if (nextOpen) {
-      await loadSlashSkills(activeTab.project?.path);
-    }
-  };
-
-  const onSelectSlashMenuItem = (item: ClaudeSlashMenuItem) => {
-    setSlashMenuOpen(false);
-    setSlashMenuPaneId(null);
-    void onAgentTerminalData(activeTab.activePaneId, `${item.command} `);
-    focusWorkspaceAgentPane(activeTab.activePaneId);
   };
 
   const onRunCommandPaletteAction = (action: CommandPaletteAction | undefined) => {
@@ -2296,109 +2423,103 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     action.run();
   };
 
-  const ensureAgentPaneSessionReady = async (paneId: string, firstInput = "") => {
-    if (isArchiveView) return null;
+  const ensureAgentPaneSessionReady = async (paneId: string) => {
     const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
     if (!activeTabSnapshot) return null;
     const paneSessionId = findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId;
     const activeSessionSnapshot = activeTabSnapshot.sessions.find((session) => session.id === paneSessionId);
     if (!activeSessionSnapshot) return null;
+    if (activeSessionSnapshot.unavailableReason) return null;
 
     const materialized = isDraftSession(activeSessionSnapshot)
-      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, firstInput)
+      ? await materializeSession(activeTabSnapshot.id, activeSessionSnapshot.id, "")
       : { tab: activeTabSnapshot, session: activeSessionSnapshot };
-    const tabSnapshot = materialized?.tab ?? activeTabSnapshot;
-    const sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
+    let tabSnapshot = materialized?.tab ?? activeTabSnapshot;
+    let sessionSnapshot = materialized?.session ?? activeSessionSnapshot;
     if (!tabSnapshot || !sessionSnapshot) return null;
 
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id)) {
-      const started = await agentStartMaybe(tabSnapshot, sessionSnapshot, paneId);
-      if (!started) return null;
-      if (started.started) {
-        syncAgentPaneSize(
-          agentRuntimeRefs,
-          paneId,
-          tabSnapshot.controller,
-          tabSnapshot.id,
-          sessionSnapshot.id,
-        );
-      }
-      if (started.started && started.startupToken !== null) {
-        await waitForAgentStartupDrain(agentRuntimeRefs, tabSnapshot.id, sessionSnapshot.id, started.startupToken);
+    if (!isSessionRuntimeWritable(sessionSnapshot)) {
+      const needsRefresh = Boolean(sessionSnapshot.terminalRuntimeId)
+        || sessionSnapshot.runtimeLiveness === "runtime_missing"
+        || sessionSnapshot.runtimeLiveness === "provider_exited"
+        || !sessionSnapshot.runtimeLiveness;
+      if (needsRefresh) {
+        const refreshedTab = await refreshWorkspaceRuntimeSnapshot(tabSnapshot.id);
+        if (refreshedTab) {
+          tabSnapshot = refreshedTab;
+          sessionSnapshot = refreshedTab.sessions.find((session) => session.id === sessionSnapshot.id) ?? sessionSnapshot;
+        }
       }
     }
 
-    syncAgentPaneSize(
-      agentRuntimeRefs,
-      paneId,
-      tabSnapshot.controller,
-      tabSnapshot.id,
-      sessionSnapshot.id,
-    );
+    if (!isSessionRuntimeWritable(sessionSnapshot)) {
+      const started = await startSessionRuntimeInPane(paneId, tabSnapshot, sessionSnapshot);
+      if (!started) return null;
+      tabSnapshot = started.tab;
+      sessionSnapshot = started.session;
+    }
+
+    if (!isSessionRuntimeWritable(sessionSnapshot)) return null;
     touchSession(tabSnapshot.id, sessionSnapshot.id);
     return { tab: tabSnapshot, session: sessionSnapshot };
   };
 
-  const onAgentTerminalData = async (paneId: string, data: string) => {
-    if (isArchiveView || !data) return;
-    if (isAgentFocusTransitionSequence(data)) return;
+  const forwardAgentTerminalInput = async (paneId: string, data: string) => {
+    if (!data) return;
     if (!guardWorkspaceMutation("agent_input")) return;
-    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const paneSessionId = activeTabSnapshot
-      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
-      : null;
-    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
-      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
-      : null;
-    const titleTracking = currentSessionSnapshot
-      ? trackAgentInitialTitleInput(agentRuntimeRefs, paneId, currentSessionSnapshot, data)
-      : { committedTitle: null, materializeTitle: "" };
-    const currentQueue = agentTerminalQueueRef.current.get(paneId) ?? Promise.resolve();
-    const nextQueue = currentQueue
-      .catch(() => undefined)
-      .then(async () => {
-        const ready = await ensureAgentPaneSessionReady(paneId, titleTracking.materializeTitle);
-        if (!ready) return;
-        if (titleTracking.committedTitle) {
-          commitTrackedAgentSessionTitle(paneId, ready.tab.id, ready.session.id, titleTracking.committedTitle);
-        }
-        await sendAgentRawChunk(ready.tab, ready.session, data);
-      });
-    agentTerminalQueueRef.current.set(paneId, nextQueue);
-    await nextQueue;
+    const ready = await ensureAgentPaneSessionReady(paneId);
+    if (!ready) return;
+    applyTrackedAgentSessionTitle({
+      refs: agentRuntimeRefs,
+      paneId,
+      tabId: ready.tab.id,
+      sessionId: ready.session.id,
+      session: ready.session,
+      data,
+      locale,
+      t,
+      updateTab,
+      persistTitle: (title) => {
+        void syncSessionPatch(ready.tab.id, ready.session.id, { title });
+      },
+    });
+    await sendAgentRawChunk(ready.tab, ready.session, data);
   };
 
-  const onSubmitDraftPrompt = async (paneId: string, submittedValue?: string) => {
-    if (!guardWorkspaceMutation("agent_input")) return;
-    const activeTabSnapshot = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeTabId);
-    const paneSessionId = activeTabSnapshot
-      ? (findPaneSessionId(activeTabSnapshot.paneLayout, paneId) ?? activeTabSnapshot.activeSessionId)
-      : null;
-    const currentSessionSnapshot = paneSessionId && activeTabSnapshot
-      ? activeTabSnapshot.sessions.find((session) => session.id === paneSessionId) ?? null
-      : null;
-    const content = (
-      submittedValue
-      ?? draftPromptInputRefs.current.get(paneId)?.value
-      ?? draftPromptInputs[paneId]
-      ?? ""
-    ).trim();
-    if (!content) return;
-    if (activeTabSnapshot && currentSessionSnapshot) {
-      previewAgentSessionTitle({
-        tabId: activeTabSnapshot.id,
-        sessionId: currentSessionSnapshot.id,
-        rawInput: content,
-        locale,
-        t,
-        updateTab,
-      });
+  const clearAgentTerminalInputFlushTimer = (paneId: string) => {
+    const timer = agentTerminalInputFlushTimerRef.current.get(paneId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    agentTerminalInputFlushTimerRef.current.delete(paneId);
+  };
+
+  const scheduleAgentTerminalEscapeFlush = (paneId: string) => {
+    clearAgentTerminalInputFlushTimer(paneId);
+    const timer = setTimeout(() => {
+      agentTerminalInputFlushTimerRef.current.delete(paneId);
+      const pending = agentTerminalInputBufferRef.current.get(paneId);
+      if (pending !== "\u001b") return;
+      agentTerminalInputBufferRef.current.delete(paneId);
+      void forwardAgentTerminalInput(paneId, pending);
+    }, 24);
+    agentTerminalInputFlushTimerRef.current.set(paneId, timer);
+  };
+
+  const onAgentTerminalData = async (paneId: string, data: string) => {
+    if (!data) return;
+    clearAgentTerminalInputFlushTimer(paneId);
+    const bufferedInput = agentTerminalInputBufferRef.current.get(paneId) ?? "";
+    const { forwarded, pending } = consumeTerminalChannelInputFragment(bufferedInput, data);
+    if (pending) {
+      agentTerminalInputBufferRef.current.set(paneId, pending);
+      if (pending === "\u001b") {
+        scheduleAgentTerminalEscapeFlush(paneId);
+      }
+    } else {
+      agentTerminalInputBufferRef.current.delete(paneId);
     }
-    setDraftPromptInputs((current) => ({
-      ...current,
-      [paneId]: ""
-    }));
-    await onAgentTerminalData(paneId, `${content}\r`);
+    if (!forwarded) return;
+    await forwardAgentTerminalInput(paneId, forwarded);
   };
 
   const onSendSpecialAgentKey = async (paneId: string, sequence: string) => {
@@ -2408,6 +2529,43 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     await sendAgentRawChunk(ready.tab, ready.session, sequence);
     focusWorkspaceAgentPane(paneId);
   };
+
+  useEffect(() => {
+    const unsubscribe = subscribeWorkspaceInputError((payload) => {
+      if (!STALE_SESSION_INPUT_ERRORS.has(payload.error)) return;
+      const tab = stateRef.current.tabs.find((item) => item.id === payload.workspace_id);
+      if (!tab) return;
+      void (async () => {
+        let refreshedTab = await refreshWorkspaceRuntimeSnapshot(tab.id);
+        if (!refreshedTab) {
+          refreshedTab = stateRef.current.tabs.find((item) => item.id === tab.id) ?? null;
+        }
+        if (!refreshedTab || stateRef.current.activeTabId !== refreshedTab.id) return;
+        const paneSessionId = findPaneSessionId(refreshedTab.paneLayout, refreshedTab.activePaneId) ?? refreshedTab.activeSessionId;
+        const session = refreshedTab.sessions.find((item) => item.id === paneSessionId);
+        if (!session || session.unavailableReason || isSessionRuntimeWritable(session)) return;
+        const restarted = await startSessionRuntimeInPane(refreshedTab.activePaneId, refreshedTab, session);
+        if (!restarted) {
+          addToast({
+            id: createId("toast"),
+            text: `Session input recovery failed: ${payload.error}`,
+            sessionId: session.id,
+          });
+        }
+      })();
+    });
+    return () => unsubscribe();
+  }, [addToast, refreshWorkspaceRuntimeSnapshot]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of agentTerminalInputFlushTimerRef.current.values()) {
+        clearTimeout(timer);
+      }
+      agentTerminalInputFlushTimerRef.current.clear();
+      agentTerminalInputBufferRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2421,8 +2579,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           closeCommandPalette();
         } else {
           openCommandPalette();
-          setSlashMenuOpen(false);
-          setSlashMenuPaneId(null);
         }
         return;
       }
@@ -2460,7 +2616,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         return;
       }
 
-      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget && !isArchiveView) {
+      if (!hasModifier && !event.altKey && !event.shiftKey && key === "f" && !isEditableTarget) {
         event.preventDefault();
         setIsFocusMode((value) => !value);
         return;
@@ -2472,7 +2628,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         return;
       }
 
-      if (isArchiveView) return;
       const isMacPlatform = typeof navigator !== "undefined" && (navigator.platform || "").toLowerCase().includes("mac");
       const isSplitShortcut = isMacPlatform
         ? event.metaKey && !event.ctrlKey && !event.altKey && key === "d"
@@ -2482,8 +2637,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       event.preventDefault();
       const splitAxis: "horizontal" | "vertical" = event.shiftKey ? "horizontal" : "vertical";
       splitPane(activeTab.activePaneId, splitAxis);
-      setSlashMenuOpen(false);
-      setSlashMenuPaneId(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -2494,21 +2647,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     activeTab.filePreview.content,
     activeSession.id,
     commandPaletteOpen,
-    isArchiveView,
     isFocusMode
   ]);
 
   useEffect(() => {
-    if (!isArchiveView) {
-      focusWorkspaceAgentPane();
-    }
-  }, [activeTab.activePaneId, activePaneSession.id, isArchiveView]);
+    focusWorkspaceAgentPane();
+  }, [activeTab.activePaneId, activePaneSession.id]);
 
   useEffect(() => {
     setCommitMessage("");
     setSelectedGitChangeKey("");
-    setSlashMenuOpen(false);
-    setSlashMenuPaneId(null);
   }, [activeTab.id]);
 
   useEffect(() => {
@@ -2541,10 +2689,21 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     size: { cols: number; rows: number }
   ) => {
     agentPaneSizeRef.current.set(paneId, size);
-    if (!isAgentRuntimeRunning(agentRuntimeRefs, tabId, sessionId)) return;
-    const controller = stateRef.current.tabs.find((tab) => tab.id === tabId)?.controller;
-    if (!controller || controller.role !== "controller") return;
-    syncAgentRuntimeSize(agentRuntimeRefs, controller, tabId, sessionId, size);
+    const tab = stateRef.current.tabs.find((item) => item.id === tabId);
+    const session = tab?.sessions.find((item) => item.id === sessionId);
+    if (!tab || !session?.terminalRuntimeId) return;
+    if (!canMutateWorkspace(tab.controller, "resize_terminal")) return;
+    const terminalId = resolveSessionTerminalIdByRuntimeId(tab.sessions, session.terminalRuntimeId, tab.terminals)
+      ?? session.terminalId;
+    if (!terminalId) return;
+    syncWorkspaceTerminalSize(
+      terminalSizeRef,
+      tab.id,
+      tab.controller,
+      terminalId,
+      size.cols,
+      size.rows,
+    );
   }, []);
 
   useEffect(() => {
@@ -2578,7 +2737,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       }
       return right.lastActiveAt - left.lastActiveAt;
     });
-    const hasRunning = sessions.some((session) => ["running", "waiting", "background"].includes(session.status));
+    const hasRunning = sessions.some((session) => session.status === "running");
     const unread = sessions.reduce((sum, session) => sum + session.unread, 0);
     return {
       id: tab.id,
@@ -2630,11 +2789,9 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     staged: gitChangeGroups.find((group) => group.key === "staged")?.items.length ?? 0,
     untracked: gitChangeGroups.find((group) => group.key === "untracked")?.items.length ?? 0
   };
-  const previewFileName = displayPathName(activeTab.filePreview.path);
   const previewPathLabel = resolveWorkspacePreviewPathLabel(
     activeTab.filePreview.path,
-    activeTab.project?.path,
-    previewFileName
+    activeTab.project?.path
   );
 
   const currentFileChangeCount = activeTab.git.changes;
@@ -2643,7 +2800,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
     changeCount: currentFileChangeCount,
     target: activeTab.project?.target,
     sessions: activeTab.sessions,
-    locale,
+    t,
   });
   const hasStructuredDiffContent = Boolean(
     (activeTab.filePreview.originalContent && activeTab.filePreview.originalContent.length > 0)
@@ -2656,12 +2813,16 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
   const terminalProgressTone = activeTerminal
     ? (hasTerminalOutput ? "live" : "steady")
     : "idle";
-  const agentRecoveryAction = resolveAgentRecoveryAction(activeTab.controller, isArchiveView ? null : activePaneSession);
-  const activeAgentRecoveryBusy = !isArchiveView && agentRecoveryBusy?.sessionId === activePaneSession.id
+  const agentRecoveryAction = resolveAgentRecoveryAction(activeTab.controller, activePaneSession);
+  const activeAgentRecoveryBusy = agentRecoveryBusy?.sessionId === activePaneSession.id
     ? agentRecoveryBusy
     : null;
   const visibleAgentRecoveryAction = agentRecoveryAction ?? activeAgentRecoveryBusy;
-  const terminalRecoveryAction = resolveTerminalRecoveryAction(activeTab.controller, activeTerminal);
+  const shellTerminalMode = resolveTerminalInteractionMode(
+    showTerminalPanel && !isCodeExpanded,
+    canMutateWorkspace(activeTab.controller, "shell_input"),
+  );
+  const agentInputEnabled = canMutateWorkspace(activeTab.controller, "agent_input");
   const workspaceStatusBanner = isObserverMode ? (
     <div
       className="workspace-status-banner read-only"
@@ -2714,7 +2875,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         </button>
       </div>
     </div>
-  ) : (visibleAgentRecoveryAction || terminalRecoveryAction) ? (
+  ) : visibleAgentRecoveryAction ? (
     <>
       {visibleAgentRecoveryAction && (
         <div
@@ -2746,66 +2907,51 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
           </div>
         </div>
       )}
-      {terminalRecoveryAction && (
-        <div
-          className="workspace-status-banner recovery"
-          data-testid="workspace-terminal-recovery-banner"
-        >
-          <div className="workspace-status-banner-copy">
-            <span className="workspace-status-banner-title">{t("workspaceTerminalRecoveryTitle")}</span>
-            <span className="workspace-status-banner-text">{t("workspaceTerminalRecoveryBody")}</span>
-          </div>
-          <div className="workspace-status-banner-actions">
-            <button
-              type="button"
-              className="workspace-status-banner-btn"
-              data-testid="workspace-terminal-recovery-action"
-              onClick={() => {
-                void onAddTerminal();
-              }}
-              disabled={controllerActionBusy !== null}
-            >
-              {t("workspaceTerminalRecoveryAction")}
-            </button>
-          </div>
-        </div>
-      )}
     </>
   ) : null;
   const workspaceAgentPanel = (
     <AgentWorkspaceFeature
       visible={showAgentPanel}
+      agentInputEnabled={agentInputEnabled}
       locale={locale}
       activeTab={activeTab}
       activePaneSession={activePaneSession}
-      viewedSession={viewedSession}
-      isArchiveView={isArchiveView}
       showCodePanel={showCodePanel}
       theme={theme}
       terminalFontSize={editorMetrics.terminalFontSize}
       terminalCompatibilityMode={terminalCompatibilityMode}
-      draftPromptInputs={draftPromptInputs}
-      draftPaneModes={draftPaneModes}
-      restoreCandidates={restoreCandidates}
       displaySessionTitle={displaySessionTitle}
-      onExitArchive={onExitArchive}
+      onRemoveUnavailableSession={(sessionId) => {
+        void onRemoveUnavailableSession(sessionId);
+      }}
       onSetActivePane={setActivePane}
       onSplitPane={splitPane}
       onCloseAgentPane={onCloseAgentPane}
-      onDraftPaneModeChange={onDraftPaneModeChange}
-      onRestoreDraftSession={onRestoreDraftSession}
-      onSubmitDraftPrompt={(paneId) => {
-        void onSubmitDraftPrompt(paneId);
+      onStartDraftSession={(paneId, provider) => {
+        void onStartDraftSession(paneId, provider);
       }}
-      onDraftPromptChange={(paneId, value) => {
-        setDraftPromptInputs((current) => ({
-          ...current,
-          [paneId]: value
-        }));
+      onEnableSupervisor={(sessionId, provider) => {
+        void onEnableSupervisor(sessionId, provider);
       }}
-      setDraftPromptInputRef={registerDraftPromptInputRef}
+      onEditSupervisorObjective={(sessionId, currentObjective) => {
+        void onEditSupervisorObjective(sessionId, currentObjective);
+      }}
+      onPauseSupervisor={(sessionId) => {
+        void onPauseSupervisor(sessionId);
+      }}
+      onResumeSupervisor={(sessionId) => {
+        void onResumeSupervisor(sessionId);
+      }}
+      onDisableSupervisor={(sessionId) => {
+        void onDisableSupervisor(sessionId);
+      }}
+      onRetrySupervisor={(sessionId) => {
+        void onRetrySupervisor(sessionId);
+      }}
+      onTriggerSupervisor={(sessionId) => {
+        void onTriggerSupervisor(sessionId);
+      }}
       setAgentTerminalRef={registerAgentTerminalRef}
-      archiveTerminalRef={archiveTerminalRef}
       onAgentTerminalData={(paneId, data) => {
         void onAgentTerminalData(paneId, data);
       }}
@@ -2894,7 +3040,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       width={state.layout.rightWidth}
       codeSidebarView={codeSidebarView}
       previewPathLabel={previewPathLabel}
-      previewFileName={previewFileName}
       editorContent={workspaceEditorContent}
       fileParentLabel={fileParentLabel}
       sidebar={{
@@ -2970,9 +3115,6 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
         }
       }}
       onSetSidebarView={setCodeSidebarView}
-      onToggleExpanded={() => {
-        void toggleCodeExpanded();
-      }}
       t={t}
     />
   ) : null;
@@ -2983,7 +3125,8 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       progressPercent={terminalProgressPercent}
       progressTone={terminalProgressTone}
       activeTerminal={activeTerminal ? { id: activeTerminal.id, output: activeTerminal.output ?? "" } : undefined}
-      terminals={activeTab.terminals.map((term) => ({
+      mode={shellTerminalMode}
+      terminals={visiblePanelTerminals.map((term) => ({
         id: term.id,
         title: displayTerminalTitle(term.title)
       }))}
@@ -2992,7 +3135,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
       theme={theme}
       fontSize={editorMetrics.terminalFontSize}
       compatibilityMode={terminalCompatibilityMode}
-      autoFocus={showTerminalPanel && !isCodeExpanded}
+      autoFocus={shellTerminalMode === "interactive"}
       onTerminalData={onShellTerminalData}
       onTerminalSize={onShellTerminalSize}
       onResizeStart={onResizeStart("right-split")}
@@ -3017,9 +3160,7 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             isSettingsRoute={false}
             locale={locale}
             workspaceTabs={workspaceTabs}
-            historyOpen={historyOpen}
             onSwitchWorkspace={onSwitchWorkspace}
-            onToggleHistory={onToggleHistory}
             onAddTab={onOpenWorkspacePicker}
             onRemoveTab={onRemoveTab}
             onOpenSettings={onOpenSettings}
@@ -3028,36 +3169,31 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
             t={t}
           />
 
-          <HistoryDrawer
-            open={historyOpen}
-            loading={historyLoading}
-            groups={historyGroups}
-            expandedGroups={historyExpandedGroups}
-            onClose={() => setHistoryOpen(false)}
-            onToggleGroup={(workspaceId) => {
-              setHistoryExpandedGroups((current) => ({
+          <ConfirmDialog state={confirmDialog} locale={locale} t={t} />
+          <SupervisorObjectiveDialog
+            visible={supervisorObjectiveDialog.visible}
+            mode={supervisorObjectiveDialog.mode}
+            t={t}
+            objectiveText={supervisorObjectiveDialog.draftObjective}
+            onObjectiveTextChange={(value) => {
+              setSupervisorObjectiveDialog((current) => ({
                 ...current,
-                [workspaceId]: !current[workspaceId],
+                draftObjective: value,
               }));
             }}
-            onSelectRecord={(record) => {
-              void handleHistoryRecordSelect(record);
+            onCancel={closeSupervisorObjectiveDialog}
+            onConfirm={() => {
+              void submitSupervisorObjectiveDialog();
             }}
-            onDeleteRecord={(record) => {
-              void handleHistoryRecordDelete(record);
-            }}
-            t={t}
           />
 
           {showWelcomeScreen ? (
             <WorkspaceWelcomeScreen
-              hasHistory={historyRecords.length > 0}
               onOpenWorkspacePicker={onOpenWorkspacePicker}
-              onOpenHistory={onOpenHistory}
               onOpenSettings={onOpenSettings}
               t={t}
             />
-          ) : (
+          ) : hasOpenWorkspace ? (
             <WorkspaceShell
               isFocusMode={isFocusMode}
               isCodeExpanded={isCodeExpanded}
@@ -3066,19 +3202,22 @@ export default function WorkspaceScreen({ locale, appSettings, onOpenSettings }:
               showTerminalPanel={showTerminalPanel}
               rightSplit={state.layout.rightSplit}
               statusItems={workspaceShellSummary}
-              runtimeHint={locale === "zh" ? "⌘/Ctrl+K 快速操作" : "⌘/Ctrl+K actions"}
               statusBanner={workspaceStatusBanner}
               agentPanel={workspaceAgentPanel}
               codePanel={workspaceCodePanel}
               terminalPanel={workspaceTerminalPanel}
               onToggleRightPane={toggleRightPane}
+              onToggleCodeExpanded={() => {
+                void toggleCodeExpanded();
+              }}
               t={t}
             />
-          )}
+          ) : null}
 
           {commandPaletteOpen && (
             <CommandPalette
               locale={locale}
+              t={t}
               inputRef={commandPaletteInputRef}
               query={commandPaletteQuery}
               activeIndex={commandPaletteActiveIndex}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as workspaceViewPersistence from "../apps/web/src/features/workspace/workspace-view-persistence.ts";
+import * as workspaceViewPersistence from "../apps/web/src/features/workspace/workspace-view-persistence";
 
 const createPatch = (ratio: number) => ({
   active_session_id: "session-1",

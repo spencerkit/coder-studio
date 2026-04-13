@@ -1,43 +1,43 @@
-import { memo, useCallback, type FormEvent, type PointerEventHandler, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, type PointerEventHandler, type ReactNode } from "react";
 import type { Locale, Translator } from "../../i18n";
 import type {
   AppTheme,
-  SessionHistoryRecord,
   TerminalCompatibilityMode,
 } from "../../types/app";
 import type { Session, SessionPaneNode, Tab } from "../../state/workbench";
-import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, HeaderCloseIcon } from "../../components/icons";
-import { AgentStreamTerminal, type XtermBaseHandle } from "../../components/terminal";
+import { AgentSendIcon, AgentSplitHorizontalIcon, AgentSplitVerticalIcon, BadgeCheckIcon, CirclePauseIcon, HeaderCloseIcon, MessageSquareIcon, PlayIcon, RefreshIcon, SquareIcon } from "../../components/icons";
+import { ShellTerminal, type XtermBaseHandle } from "../../components/terminal";
 import { displaySessionStatus, sessionCompletionRatio, sessionHeaderTag, sessionTone } from "../../shared/utils/session";
 import { stripAnsi } from "../../shared/utils/ansi";
-import { resolveAgentPaneRenderState } from "./agent-pane-render";
+import { sanitizeAnsiTranscript } from "../../shared/utils/ansi-transcript";
+import { BUILTIN_PROVIDER_MANIFESTS } from "../providers/registry";
+import { getProviderDisplayLabel } from "../providers/runtime-helpers";
+import { resolveAgentPaneRenderState, resolveAgentPaneTerminalBinding } from "./agent-pane-render";
 
 type AgentWorkspaceFeatureProps = {
   visible: boolean;
+  agentInputEnabled: boolean;
   locale: Locale;
   activeTab: Tab;
   activePaneSession: Session;
-  viewedSession: Session;
-  isArchiveView: boolean;
   showCodePanel: boolean;
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPromptInputs: Record<string, string>;
-  draftPaneModes: Record<string, "new" | "restore">;
-  restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
-  onExitArchive: () => void;
+  onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
-  onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
-  onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
-  onDraftPromptChange: (paneId: string, value: string) => void;
-  setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
+  onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
+  onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
+  onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
+  onPauseSupervisor: (sessionId: string) => void;
+  onResumeSupervisor: (sessionId: string) => void;
+  onDisableSupervisor: (sessionId: string) => void;
+  onRetrySupervisor: (sessionId: string) => void;
+  onTriggerSupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
-  archiveTerminalRef?: RefObject<XtermBaseHandle | null>;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
   onPaneSplitResizeStart: (splitId: string, axis: "horizontal" | "vertical") => PointerEventHandler<HTMLDivElement>;
@@ -50,23 +50,26 @@ type AgentPaneLeafProps = {
   session: Session;
   activeSessionId: string;
   tabId: string;
+  terminals: Tab["terminals"];
+  agentInputEnabled: boolean;
   locale: Locale;
   isPaneActive: boolean;
   theme: AppTheme;
   terminalFontSize: number;
   terminalCompatibilityMode: TerminalCompatibilityMode;
-  draftPromptValue: string;
-  draftPaneMode: "new" | "restore";
-  restoreCandidates: SessionHistoryRecord[];
   displaySessionTitle: (value: string) => string;
+  onRemoveUnavailableSession: (sessionId: string) => void;
   onSetActivePane: (paneId: string, sessionId: string) => void;
   onSplitPane: (paneId: string, axis: "horizontal" | "vertical") => void;
   onCloseAgentPane: (paneId: string, sessionId: string) => void;
-  onDraftPaneModeChange: (paneId: string, mode: "new" | "restore") => void;
-  onRestoreDraftSession: (paneId: string, sessionId: string) => void;
-  onSubmitDraftPrompt: (paneId: string, value?: string) => void;
-  onDraftPromptChange: (paneId: string, value: string) => void;
-  setDraftPromptInputRef: (paneId: string, element: HTMLInputElement | null) => void;
+  onStartDraftSession: (paneId: string, provider: Session["provider"]) => void;
+  onEnableSupervisor: (sessionId: string, provider: Session["provider"]) => void;
+  onEditSupervisorObjective: (sessionId: string, currentObjective: string) => void;
+  onPauseSupervisor: (sessionId: string) => void;
+  onResumeSupervisor: (sessionId: string) => void;
+  onDisableSupervisor: (sessionId: string) => void;
+  onRetrySupervisor: (sessionId: string) => void;
+  onTriggerSupervisor: (sessionId: string) => void;
   setAgentTerminalRef: (paneId: string, handle: XtermBaseHandle | null) => void;
   onAgentTerminalData: (paneId: string, data: string) => void;
   onAgentTerminalSize: (paneId: string, tabId: string, sessionId: string, size: { cols: number; rows: number }) => void;
@@ -78,45 +81,44 @@ const AgentPaneLeaf = memo(({
   session,
   activeSessionId,
   tabId,
+  terminals,
+  agentInputEnabled,
   locale,
   isPaneActive,
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPromptValue,
-  draftPaneMode,
-  restoreCandidates,
   displaySessionTitle,
+  onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
-  onDraftPaneModeChange,
-  onRestoreDraftSession,
-  onSubmitDraftPrompt,
-  onDraftPromptChange,
-  setDraftPromptInputRef,
+  onStartDraftSession,
+  onEnableSupervisor,
+  onEditSupervisorObjective,
+  onPauseSupervisor,
+  onResumeSupervisor,
+  onDisableSupervisor,
+  onRetrySupervisor,
+  onTriggerSupervisor,
   setAgentTerminalRef,
-  archiveTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
   t,
 }: AgentPaneLeafProps) => {
-  const visibleStatus = displaySessionStatus({ activeSessionId }, session);
+  const visibleStatus = displaySessionStatus(session);
   const progress = (() => {
     const ratio = sessionCompletionRatio(session);
     if (ratio > 0) return Math.max(14, ratio);
-    if (visibleStatus === "running" || visibleStatus === "background") return 34;
-    if (visibleStatus === "waiting") return 22;
+    if (visibleStatus === "running") return 34;
     return 6;
   })();
-  const tone = visibleStatus === "running" || visibleStatus === "background"
-    ? "live"
-    : visibleStatus === "waiting"
-      ? "queued"
-      : "idle";
+  const tone = visibleStatus === "running" ? "live" : "idle";
   const statusTone = sessionTone(visibleStatus);
   const headerTag = sessionHeaderTag(visibleStatus, locale);
-  const renderState = resolveAgentPaneRenderState(session, isPaneActive);
+  const renderState = resolveAgentPaneRenderState(session, isPaneActive, agentInputEnabled);
+  const terminalMode = renderState.kind === "draft" ? "interactive" : renderState.terminalMode;
+  const terminalBinding = resolveAgentPaneTerminalBinding(session, terminalMode, terminals);
 
   const handleSetActivePane = useCallback(() => {
     onSetActivePane(paneId, session.id);
@@ -134,28 +136,9 @@ const AgentPaneLeaf = memo(({
     onCloseAgentPane(paneId, session.id);
   }, [onCloseAgentPane, paneId, session.id]);
 
-  const handleSetDraftModeNew = useCallback(() => {
-    onDraftPaneModeChange(paneId, "new");
-  }, [onDraftPaneModeChange, paneId]);
-
-  const handleSetDraftModeRestore = useCallback(() => {
-    onDraftPaneModeChange(paneId, "restore");
-  }, [onDraftPaneModeChange, paneId]);
-
-  const handleRestoreDraftSession = useCallback((sessionId: string) => {
-    onRestoreDraftSession(paneId, sessionId);
-  }, [onRestoreDraftSession, paneId]);
-
-  const handleSubmitDraftPrompt = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const field = event.currentTarget.elements.namedItem("draftPrompt");
-    const value = field instanceof HTMLInputElement ? field.value : undefined;
-    onSubmitDraftPrompt(paneId, value);
-  }, [onSubmitDraftPrompt, paneId]);
-
-  const handleDraftPromptRef = useCallback((element: HTMLInputElement | null) => {
-    setDraftPromptInputRef(paneId, element);
-  }, [paneId, setDraftPromptInputRef]);
+  const handleStartDraftSession = useCallback((provider: Session["provider"]) => {
+    onStartDraftSession(paneId, provider);
+  }, [onStartDraftSession, paneId]);
 
   const handleTerminalRef = useCallback((handle: XtermBaseHandle | null) => {
     setAgentTerminalRef(paneId, handle);
@@ -168,6 +151,53 @@ const AgentPaneLeaf = memo(({
   const handleTerminalSize = useCallback((size: { cols: number; rows: number }) => {
     onAgentTerminalSize(paneId, tabId, session.id, size);
   }, [onAgentTerminalSize, paneId, session.id, tabId]);
+
+  const handleRemoveUnavailableSession = useCallback(() => {
+    onRemoveUnavailableSession(session.id);
+  }, [onRemoveUnavailableSession, session.id]);
+
+  const supervisor = session.supervisor;
+  const supervisorStatusTone = (() => {
+    switch (supervisor?.status) {
+      case "evaluating":
+      case "injecting":
+        return "active";
+      case "paused":
+        return "muted";
+      case "error":
+        return "queue";
+      default:
+        return "info";
+    }
+  })();
+  const supervisorStatusLabel = supervisor ? `Supervisor ${supervisor.status}` : "Supervisor off";
+  const latestCycle = supervisor?.latestCycle;
+  const latestCycleSummary = latestCycle?.error
+    ?? latestCycle?.supervisorReply
+    ?? latestCycle?.supervisorInput
+    ?? "";
+  const handleEnableSupervisor = useCallback(() => {
+    onEnableSupervisor(session.id, session.provider);
+  }, [onEnableSupervisor, session.id, session.provider]);
+  const handleEditSupervisorObjective = useCallback(() => {
+    if (!supervisor) return;
+    onEditSupervisorObjective(session.id, supervisor.objectiveText);
+  }, [onEditSupervisorObjective, session.id, supervisor]);
+  const handlePauseSupervisor = useCallback(() => {
+    onPauseSupervisor(session.id);
+  }, [onPauseSupervisor, session.id]);
+  const handleResumeSupervisor = useCallback(() => {
+    onResumeSupervisor(session.id);
+  }, [onResumeSupervisor, session.id]);
+  const handleRetrySupervisor = useCallback(() => {
+    onRetrySupervisor(session.id);
+  }, [onRetrySupervisor, session.id]);
+  const handleDisableSupervisor = useCallback(() => {
+    onDisableSupervisor(session.id);
+  }, [onDisableSupervisor, session.id]);
+  const handleTriggerSupervisor = useCallback(() => {
+    onTriggerSupervisor(session.id);
+  }, [onTriggerSupervisor, session.id]);
 
   return (
     <section
@@ -185,9 +215,105 @@ const AgentPaneLeaf = memo(({
           <span className="agent-pane-title">{displaySessionTitle(session.title)}</span>
         </div>
         <div className="agent-pane-meta">
+          <span className="agent-pane-state-tag muted" data-tone="muted">
+            {getProviderDisplayLabel(session.provider)}
+          </span>
           <span className={`agent-pane-state-tag ${headerTag.tone}`} data-tone={headerTag.tone}>
             {headerTag.label}
           </span>
+          <div className="agent-pane-supervisor">
+            <div className="agent-pane-supervisor-card" data-state={supervisor ? supervisor.status : "off"}>
+              <div className="agent-pane-supervisor-copy">
+                <div className="agent-pane-supervisor-label-row">
+                  <BadgeCheckIcon />
+                  <span className="agent-pane-supervisor-label">Supervisor</span>
+                  <span className={`agent-pane-state-tag ${supervisorStatusTone}`} data-tone={supervisorStatusTone}>
+                    {supervisorStatusLabel}
+                  </span>
+                </div>
+              </div>
+              <div
+                className="agent-pane-supervisor-actions"
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                {supervisor ? (
+                  <>
+                    <button
+                      type="button"
+                      className="pane-action split"
+                      onClick={handleEditSupervisorObjective}
+                      title="Edit supervisor objective"
+                      aria-label="Edit supervisor objective"
+                    >
+                      <MessageSquareIcon />
+                    </button>
+                    {supervisor.status === "paused" ? (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handleResumeSupervisor}
+                        title="Resume supervisor"
+                        aria-label="Resume supervisor"
+                      >
+                        <PlayIcon />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handlePauseSupervisor}
+                        title="Pause supervisor"
+                        aria-label="Pause supervisor"
+                      >
+                        <CirclePauseIcon />
+                      </button>
+                    )}
+                    {latestCycle?.status === "failed" ? (
+                      <button
+                        type="button"
+                        className="pane-action split"
+                        onClick={handleRetrySupervisor}
+                        title="Retry supervisor"
+                        aria-label="Retry supervisor"
+                      >
+                        <RefreshIcon />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="pane-action split"
+                      onClick={handleTriggerSupervisor}
+                      title="Trigger supervisor"
+                      aria-label="Trigger supervisor"
+                    >
+                      <AgentSendIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="pane-action close"
+                      onClick={handleDisableSupervisor}
+                      title="Disable supervisor"
+                      aria-label="Disable supervisor"
+                    >
+                      <SquareIcon />
+                    </button>
+                  </>
+                ) : !session.isDraft ? (
+                  <button
+                    type="button"
+                    className="pane-action split"
+                    onClick={handleEnableSupervisor}
+                    title={t("supervisorEnableTitle")}
+                    aria-label={t("supervisorEnableTitle")}
+                  >
+                    <PlayIcon />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className="agent-pane-actions">
             <button
               type="button"
@@ -226,93 +352,65 @@ const AgentPaneLeaf = memo(({
                 <div className="agent-draft-launcher-title">{t("draftSessionPrompt")}</div>
                 <div className="agent-draft-launcher-hint">{t("draftChooserHint")}</div>
               </div>
-              <div className="agent-draft-launcher-tabs">
-                <button
-                  type="button"
-                  className={`agent-draft-launcher-tab ${draftPaneMode === "new" ? "active" : ""}`}
-                  onClick={handleSetDraftModeNew}
-                  data-testid={`draft-mode-new-${paneId}`}
-                >
-                  {t("draftModeNew")}
-                </button>
-                <button
-                  type="button"
-                  className={`agent-draft-launcher-tab ${draftPaneMode === "restore" ? "active" : ""}`}
-                  onClick={handleSetDraftModeRestore}
-                  data-testid={`draft-mode-restore-${paneId}`}
-                >
-                  {t("draftModeRestore")}
-                </button>
+              <div className="agent-draft-restore-list">
+                {BUILTIN_PROVIDER_MANIFESTS.map((manifest) => (
+                  <button
+                    key={manifest.id}
+                    type="button"
+                    className="agent-draft-restore-item"
+                    onClick={() => handleStartDraftSession(manifest.id)}
+                    data-testid={`draft-start-${manifest.id}-${paneId}`}
+                  >
+                    <strong>{manifest.badgeLabel}</strong>
+                    <span>{getProviderDisplayLabel(manifest.id)}</span>
+                  </button>
+                ))}
               </div>
-              {draftPaneMode === "new" ? (
-                <form
-                  className="agent-pane-input agent-draft-launcher-form"
-                  onSubmit={handleSubmitDraftPrompt}
-                >
-                  <div className="agent-compose">
-                    <input
-                      ref={handleDraftPromptRef}
-                      name="draftPrompt"
-                      className="agent-compose-field agent-draft-launcher-field"
-                      value={draftPromptValue}
-                      onChange={(event) => onDraftPromptChange(paneId, event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && (event.nativeEvent as KeyboardEvent).isComposing) {
-                          event.preventDefault();
-                        }
-                      }}
-                      placeholder={t("draftTaskPlaceholder")}
-                      aria-label={t("draftTaskPlaceholder")}
-                      data-testid={`agent-draft-input-${paneId}`}
-                      autoFocus={isPaneActive}
-                    />
-                    <button
-                      type="submit"
-                      className="agent-send-button"
-                      disabled={!draftPromptValue.trim()}
-                      title={t("send")}
-                      aria-label={t("send")}
-                    >
-                      <AgentSendIcon />
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="agent-draft-restore-list">
-                  {restoreCandidates.length === 0 ? (
-                    <div className="agent-draft-launcher-empty">{t("draftRestoreEmpty")}</div>
-                  ) : (
-                    restoreCandidates.map((record) => (
-                      <button
-                        key={`${record.workspaceId}:${record.sessionId}`}
-                        type="button"
-                        className="agent-draft-restore-item"
-                        onClick={() => handleRestoreDraftSession(record.sessionId)}
-                        data-testid={`restore-candidate-${record.sessionId}`}
-                      >
-                        <strong>{record.title}</strong>
-                        <span>{record.archived ? t("historyArchived") : t("historyDetached")}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
             </div>
           </div>
-        ) : (!session.stream.trim() && renderState.terminalMode === "readonly") ? (
+        ) : session.unavailableReason ? (
+          <div className="terminal-empty">
+            <strong>{t("sessionUnavailableTitle")}</strong>
+            <div>{session.unavailableReason}</div>
+            <button type="button" className="btn tiny" onClick={handleRemoveUnavailableSession}>
+              {t("historyRemove")}
+            </button>
+          </div>
+        ) : (!terminalBinding.stream.trim() && terminalMode === "readonly") ? (
           <div className="terminal-empty">{t("noAgentOutputYet")}</div>
+        ) : terminalBinding.renderMode === "transcript" ? (
+          <div className={`agent-pane-transcript-shell ${terminalMode}`}>
+            <ShellTerminal
+              ref={handleTerminalRef}
+              terminalId={session.id}
+              outputIdentity={terminalBinding.streamId}
+              outputSyncStrategy={terminalBinding.syncStrategy}
+              output={terminalBinding.stream}
+              theme={theme}
+              fontSize={terminalFontSize}
+              compatibilityMode={terminalCompatibilityMode}
+              mode={terminalMode}
+              autoFocus={terminalMode === "interactive"}
+              onData={terminalMode === "interactive" ? handleTerminalData : undefined}
+              onSize={handleTerminalSize}
+            />
+            <pre className="agent-pane-transcript-output" aria-hidden="true">
+              {sanitizeAnsiTranscript(terminalBinding.stream)}
+            </pre>
+          </div>
         ) : (
-          <AgentStreamTerminal
+          <ShellTerminal
             ref={handleTerminalRef}
-            streamId={session.id}
-            stream={session.stream}
-            toneKey={isPaneActive ? "active" : "inactive"}
+            terminalId={session.id}
+            outputIdentity={terminalBinding.streamId}
+            outputSyncStrategy={terminalBinding.syncStrategy}
+            output={terminalBinding.stream}
             theme={theme}
             fontSize={terminalFontSize}
             compatibilityMode={terminalCompatibilityMode}
-            mode={renderState.terminalMode}
-            autoFocus={renderState.terminalMode === "interactive"}
-            onData={renderState.terminalMode === "interactive" ? handleTerminalData : undefined}
+            mode={terminalMode}
+            autoFocus={terminalMode === "interactive"}
+            onData={terminalMode === "interactive" ? handleTerminalData : undefined}
             onSize={handleTerminalSize}
           />
         )}
@@ -323,42 +421,40 @@ const AgentPaneLeaf = memo(({
   previous.paneId === next.paneId
   && previous.session === next.session
   && previous.tabId === next.tabId
+  && previous.terminals === next.terminals
+  && previous.agentInputEnabled === next.agentInputEnabled
   && previous.locale === next.locale
   && previous.isPaneActive === next.isPaneActive
   && previous.theme === next.theme
   && previous.terminalFontSize === next.terminalFontSize
   && previous.terminalCompatibilityMode === next.terminalCompatibilityMode
-  && previous.draftPromptValue === next.draftPromptValue
-  && previous.draftPaneMode === next.draftPaneMode
-  && previous.restoreCandidates === next.restoreCandidates
 ));
 
 AgentPaneLeaf.displayName = "AgentPaneLeaf";
 
 export const AgentWorkspaceFeature = ({
   visible,
+  agentInputEnabled,
   locale,
   activeTab,
   activePaneSession,
-  viewedSession,
-  isArchiveView,
   showCodePanel,
   theme,
   terminalFontSize,
   terminalCompatibilityMode,
-  draftPromptInputs,
-  draftPaneModes,
-  restoreCandidates,
   displaySessionTitle,
-  onExitArchive,
+  onRemoveUnavailableSession,
   onSetActivePane,
   onSplitPane,
   onCloseAgentPane,
-  onDraftPaneModeChange,
-  onRestoreDraftSession,
-  onSubmitDraftPrompt,
-  onDraftPromptChange,
-  setDraftPromptInputRef,
+  onStartDraftSession,
+  onEnableSupervisor,
+  onEditSupervisorObjective,
+  onPauseSupervisor,
+  onResumeSupervisor,
+  onDisableSupervisor,
+  onRetrySupervisor,
+  onTriggerSupervisor,
   setAgentTerminalRef,
   onAgentTerminalData,
   onAgentTerminalSize,
@@ -367,9 +463,6 @@ export const AgentWorkspaceFeature = ({
   t,
 }: AgentWorkspaceFeatureProps) => {
   if (!visible) return null;
-
-  const viewedSessionPlainStream = stripAnsi(viewedSession.stream);
-  const viewedHeaderTag = sessionHeaderTag(viewedSession.status, locale);
 
   const renderAgentPane = (node: SessionPaneNode): ReactNode => {
     if (node.type === "split") {
@@ -392,23 +485,26 @@ export const AgentWorkspaceFeature = ({
         session={session}
         activeSessionId={activeTab.activeSessionId}
         tabId={activeTab.id}
+        terminals={activeTab.terminals}
+        agentInputEnabled={agentInputEnabled}
         locale={locale}
         isPaneActive={isPaneActive}
         theme={theme}
         terminalFontSize={terminalFontSize}
         terminalCompatibilityMode={terminalCompatibilityMode}
-        draftPromptValue={draftPromptInputs[node.id] ?? ""}
-        draftPaneMode={draftPaneModes[node.id] ?? "new"}
-        restoreCandidates={restoreCandidates}
         displaySessionTitle={displaySessionTitle}
+        onRemoveUnavailableSession={onRemoveUnavailableSession}
         onSetActivePane={onSetActivePane}
         onSplitPane={onSplitPane}
         onCloseAgentPane={onCloseAgentPane}
-        onDraftPaneModeChange={onDraftPaneModeChange}
-        onRestoreDraftSession={onRestoreDraftSession}
-        onSubmitDraftPrompt={onSubmitDraftPrompt}
-        onDraftPromptChange={onDraftPromptChange}
-        setDraftPromptInputRef={setDraftPromptInputRef}
+        onStartDraftSession={onStartDraftSession}
+        onEnableSupervisor={onEnableSupervisor}
+        onEditSupervisorObjective={onEditSupervisorObjective}
+        onPauseSupervisor={onPauseSupervisor}
+        onResumeSupervisor={onResumeSupervisor}
+        onDisableSupervisor={onDisableSupervisor}
+        onRetrySupervisor={onRetrySupervisor}
+        onTriggerSupervisor={onTriggerSupervisor}
         setAgentTerminalRef={setAgentTerminalRef}
         onAgentTerminalData={onAgentTerminalData}
         onAgentTerminalSize={onAgentTerminalSize}
@@ -420,58 +516,10 @@ export const AgentWorkspaceFeature = ({
   return (
     <>
       <section
-        className="panel center-panel workspace-agent-shell"
+        className="panel center-panel workspace-agent-shell studio-panel compact"
         style={{ flex: "1 1 0%" }}
       >
-        <div className="panel-inner studio-panel compact">
-          {isArchiveView && (
-            <div className="archive-banner">
-              <div>
-                {t("viewingArchivedSession")}
-                <div className="hint">{t("exitArchiveHint")}</div>
-              </div>
-              <button className="btn tiny" onClick={onExitArchive}>{t("exit")}</button>
-            </div>
-          )}
-          <div className="agent-pane-workspace">
-            {isArchiveView ? (
-              <section
-                className="agent-pane-card archive-only"
-                data-session-id={viewedSession.id}
-                data-session-status={viewedSession.status}
-              >
-                <div className="agent-pane-header" data-density="compact" data-active="true">
-                  <div className="agent-pane-header-copy">
-                    <span className={`session-top-dot ${sessionTone(viewedSession.status)} ${sessionTone(viewedSession.status) === "active" ? "pulse" : ""}`} />
-                    <span className="agent-pane-title">{displaySessionTitle(viewedSession.title)}</span>
-                  </div>
-                  <div className="agent-pane-meta">
-                    <span className={`agent-pane-state-tag ${viewedHeaderTag.tone}`} data-tone={viewedHeaderTag.tone}>
-                      {viewedHeaderTag.label}
-                    </span>
-                  </div>
-                </div>
-                <div className="agent-pane-body">
-                  {viewedSessionPlainStream.trim() ? (
-                    <AgentStreamTerminal
-                      ref={archiveTerminalRef}
-                      streamId={viewedSession.id}
-                      stream={viewedSession.stream}
-                      toneKey="active"
-                      theme={theme}
-                      fontSize={terminalFontSize}
-                      compatibilityMode={terminalCompatibilityMode}
-                    />
-                  ) : (
-                    <div className="terminal-empty">{t("archiveViewReadonly")}</div>
-                  )}
-                </div>
-              </section>
-            ) : (
-              renderAgentPane(activeTab.paneLayout)
-            )}
-          </div>
-        </div>
+        {renderAgentPane(activeTab.paneLayout)}
       </section>
 
       {showCodePanel && <div className="v-resizer" data-resize="left" onPointerDown={onCodeResizeStart} />}

@@ -1,12 +1,19 @@
-import { attachWorkspaceRuntime } from "../../services/http/workspace.service.ts";
-import type { WorkspaceRuntimeSnapshot } from "../../types/app.ts";
+import { attachWorkspaceRuntime } from "../../services/http/workspace.service";
+import type { WorkspaceRuntimeSnapshot } from "../../types/app";
 
 type WithServiceFallback = <T>(operation: () => Promise<T>, fallback: T) => Promise<T>;
 
 export const ATTACH_RUNTIME_RETRY_DELAYS_MS = [0, 250, 750, 1500, 3000, 5000] as const;
 export const ATTACH_RUNTIME_SUCCESS_REUSE_MS = 1_200;
+export const READY_TAB_ATTACH_SUCCESS_REUSE_MS = 3_500;
+export const WS_RESYNC_ATTACH_SUCCESS_REUSE_MS = 2_000;
+export const CONTROLLER_RECOVERY_ATTACH_SUCCESS_REUSE_MS = 2_000;
 
 type RuntimeAttachTask<T> = () => Promise<T | null>;
+type RuntimeAttachRunOptions = {
+  successReuseMs?: number;
+  force?: boolean;
+};
 type RuntimeAttachDeduperOptions = {
   now?: () => number;
   successReuseMs?: number;
@@ -21,14 +28,19 @@ export const createWorkspaceRuntimeAttachDeduper = <T>(
   const recentSuccess = new Map<string, { at: number; result: T }>();
 
   return {
-    run(key: string, attach: RuntimeAttachTask<T>) {
+    run(
+      key: string,
+      attach: RuntimeAttachTask<T>,
+      options: RuntimeAttachRunOptions = {},
+    ) {
       const active = inflight.get(key);
       if (active) {
         return active;
       }
 
+      const successReuseWindowMs = options.successReuseMs ?? successReuseMs;
       const cached = recentSuccess.get(key);
-      if (cached && (now() - cached.at) <= successReuseMs) {
+      if (!options.force && cached && (now() - cached.at) <= successReuseWindowMs) {
         return Promise.resolve(cached.result);
       }
 
@@ -80,6 +92,10 @@ export const runAttachWithRetry = async <T>(
   return null;
 };
 
+export type WorkspaceRuntimeAttachRequestOptions = RuntimeAttachRunOptions & {
+  retryDelaysMs?: readonly number[];
+};
+
 const workspaceRuntimeAttachDeduper = createWorkspaceRuntimeAttachDeduper<WorkspaceRuntimeSnapshot>();
 
 export const attachWorkspaceRuntimeWithRetry = async (
@@ -87,12 +103,14 @@ export const attachWorkspaceRuntimeWithRetry = async (
   deviceId: string,
   clientId: string,
   withServiceFallback: WithServiceFallback,
+  options: WorkspaceRuntimeAttachRequestOptions = {},
 ): Promise<WorkspaceRuntimeSnapshot | null> => {
   return workspaceRuntimeAttachDeduper.run(
     `${workspaceId}:${deviceId}:${clientId}`,
     () => runAttachWithRetry(() => withServiceFallback(
       () => attachWorkspaceRuntime(workspaceId, deviceId, clientId),
       null,
-    )),
+    ), options.retryDelaysMs),
+    options,
   );
 };

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
 import {
   startWorkspacePaneSplitResize,
   startWorkspacePanelResize,
-} from "../apps/web/src/features/workspace/workspace-layout-actions.ts";
+} from "../apps/web/src/features/workspace/workspace-layout-actions";
 
 const installResizeEnvironment = () => {
   const root = globalThis as typeof globalThis & {
@@ -131,7 +131,6 @@ test("startWorkspacePanelResize updates layout during drag without fitting termi
     let scheduledFits = 0;
     let flushedFits = 0;
     let shellFits = 0;
-    let archiveFits = 0;
 
     startWorkspacePanelResize({
       event: {
@@ -150,13 +149,6 @@ test("startWorkspacePanelResize updates layout during drag without fitting termi
         current: {
           fit: () => {
             shellFits += 1;
-          },
-        },
-      } as never,
-      archiveTerminalRef: {
-        current: {
-          fit: () => {
-            archiveFits += 1;
           },
         },
       } as never,
@@ -184,7 +176,6 @@ test("startWorkspacePanelResize updates layout during drag without fitting termi
     assert.equal(scheduledFits, 0);
     assert.equal(flushedFits, 1);
     assert.equal(shellFits, 1);
-    assert.equal(archiveFits, 1);
     assert.equal(env.classNames.has("is-resizing-panels"), false);
     assert.equal(env.classNames.has("is-resizing-columns"), false);
   } finally {
@@ -218,7 +209,6 @@ test("startWorkspacePaneSplitResize keeps pane repaint live but defers terminal 
     const ratios: number[] = [];
     let scheduledFits = 0;
     let flushedFits = 0;
-    let archiveFits = 0;
 
     startWorkspacePaneSplitResize({
       event: {
@@ -242,13 +232,6 @@ test("startWorkspacePaneSplitResize keeps pane repaint live but defers terminal 
         tab = updater(tab as never) as typeof tab;
         ratios.push(tab.paneLayout.type === "split" ? tab.paneLayout.ratio : -1);
       },
-      archiveTerminalRef: {
-        current: {
-          fit: () => {
-            archiveFits += 1;
-          },
-        },
-      } as never,
       flushFitAgentTerminals: () => {
         flushedFits += 1;
       },
@@ -270,7 +253,6 @@ test("startWorkspacePaneSplitResize keeps pane repaint live but defers terminal 
 
     assert.equal(scheduledFits, 0);
     assert.equal(flushedFits, 1);
-    assert.equal(archiveFits, 1);
     assert.equal(env.classNames.has("is-resizing-panels"), false);
     assert.equal(env.classNames.has("is-resizing-columns"), false);
   } finally {

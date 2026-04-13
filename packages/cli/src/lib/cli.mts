@@ -38,6 +38,7 @@ import {
   startRuntime,
   stopRuntime,
 } from './runtime-controller.mjs';
+import { createPlatformServiceController } from './service-controller.mjs';
 import { readPackageVersion } from './state.mjs';
 
 const EXIT_SUCCESS = 0;
@@ -69,6 +70,7 @@ function parseArgv(argv) {
     if (token === '--foreground') flags.foreground = true;
     else if (token === '--json') flags.json = true;
     else if (token === '--force') flags.force = true;
+    else if (token === '--no-service') flags.noService = true;
     else if (token === '--follow' || token === '-f') flags.follow = true;
     else if (token === '--help' || token === '-h') flags.help = true;
     else if (token === '--stdin') flags.stdin = true;
@@ -102,6 +104,14 @@ function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function printRuntimeWarnings(warnings) {
+  if (!Array.isArray(warnings) || warnings.length === 0) return;
+  for (const warning of warnings) {
+    if (!warning) continue;
+    console.warn(`warning: ${warning}`);
+  }
+}
+
 function printHelp() {
   console.log(`Coder Studio CLI
 
@@ -114,6 +124,7 @@ Usage:
   coder-studio logs [-f] [-n 120]
   coder-studio open [--json]
   coder-studio doctor [--json]
+  coder-studio service <subcommand>
   coder-studio config <subcommand>
   coder-studio auth <subcommand>
   coder-studio completion <bash|zsh|fish>
@@ -136,6 +147,7 @@ Examples:
   coder-studio help start
   coder-studio help completion
   coder-studio start
+  coder-studio service status --json
   coder-studio config show --json
   coder-studio config root set /srv/coder-studio/workspaces
   coder-studio auth ip list
@@ -151,17 +163,19 @@ function printStartHelp() {
   console.log(`coder-studio start
 
 Usage:
-  coder-studio start [--host <host>] [--port <port>] [--foreground] [--json]
+  coder-studio start [--host <host>] [--port <port>] [--foreground] [--no-service] [--json]
 
 Options:
-  --host <host>   override configured host for this invocation
-  --port <port>   override configured port for this invocation
-  --foreground    keep the runtime in the foreground
-  --json          machine-readable output
+  --host <host>     override configured host for this invocation
+  --port <port>     override configured port for this invocation
+  --foreground      keep the runtime in the foreground
+  --no-service      skip managed service and start the runtime directly
+  --json            machine-readable output
 
 Examples:
   coder-studio start
   coder-studio start --foreground
+  coder-studio start --no-service
   coder-studio start --port 42033 --json
 `);
 }
@@ -261,6 +275,28 @@ Options:
 Examples:
   coder-studio doctor
   coder-studio doctor --json
+`);
+}
+
+function printServiceHelp() {
+  console.log(`coder-studio service
+
+Usage:
+  coder-studio service install [--json]
+  coder-studio service uninstall [--json]
+  coder-studio service start [--json]
+  coder-studio service stop [--json]
+  coder-studio service restart [--json]
+  coder-studio service status [--json]
+
+Description:
+  Manage the native user-level service that owns the Coder Studio runtime.
+
+Examples:
+  coder-studio service install
+  coder-studio service start
+  coder-studio service status --json
+  coder-studio service uninstall
 `);
 }
 
@@ -387,6 +423,9 @@ function printHelpTopic(topic) {
     case 'doctor':
       printDoctorHelp();
       return EXIT_SUCCESS;
+    case 'service':
+      printServiceHelp();
+      return EXIT_SUCCESS;
     case 'config':
       printConfigHelp();
       return EXIT_SUCCESS;
@@ -416,6 +455,33 @@ function printStatus(status) {
   }
   if (status.stale) {
     console.log('note: stale runtime state was cleaned up');
+  }
+}
+
+function printServiceStatus(result) {
+  console.log(`service.platform: ${result.platform}`);
+  console.log(`service.state: ${result.state}`);
+  console.log(`service.installed: ${result.installed ? 'yes' : 'no'}`);
+  console.log(`service.active: ${result.active ? 'yes' : 'no'}`);
+  console.log(`service.stale: ${result.stale ? 'yes' : 'no'}`);
+  console.log(`service.name: ${result.serviceName}`);
+  if (result.definitionPath) {
+    console.log(`service.definitionPath: ${result.definitionPath}`);
+  }
+  if (result.serviceTarget) {
+    console.log(`service.target: ${result.serviceTarget}`);
+  }
+  if (result.launcherPath) {
+    console.log(`service.launcherPath: ${result.launcherPath}`);
+  }
+  if (result.bundleManifestPath) {
+    console.log(`service.bundleManifestPath: ${result.bundleManifestPath}`);
+  }
+  if (result.serviceState?.installedAt) {
+    console.log(`service.installedAt: ${result.serviceState.installedAt}`);
+  }
+  if (result.serviceState?.lastInstallVersion) {
+    console.log(`service.lastInstallVersion: ${result.serviceState.lastInstallVersion}`);
   }
 }
 
@@ -496,6 +562,44 @@ async function followLogs(logPath, initialLines = 80) {
 
 function runtimeIsActive(status) {
   return status.status === 'running' || status.status === 'degraded';
+}
+
+function hasHostOrPortOverride(flags) {
+  return Boolean(flags.host) || Number.isFinite(flags.port);
+}
+
+function resolveServiceController(context) {
+  return createPlatformServiceController({ env: process.env });
+}
+
+async function getServiceStatus(context) {
+  return resolveServiceController(context).status(context.options);
+}
+
+async function assertManagedStartInputAllowed(context, flags) {
+  if (flags.noService) {
+    return { installed: false, stale: false };
+  }
+  const status = await getServiceStatus(context);
+  if (!status.installed || status.stale) {
+    return status;
+  }
+
+  if (flags.foreground) {
+    throw new CliError('service_managed_runtime_requires_service_stop_for_foreground_debug', {
+      exitCode: EXIT_FAILURE,
+      helpTopic: 'service',
+    });
+  }
+
+  if (hasHostOrPortOverride(flags)) {
+    throw new CliError('service_managed_runtime_requires_config_update_instead_of_ephemeral_override', {
+      exitCode: EXIT_FAILURE,
+      helpTopic: 'service',
+    });
+  }
+
+  return status;
 }
 
 async function loadLiveRuntimeView(context) {
@@ -647,7 +751,8 @@ async function promptHiddenInput(label) {
 
 async function ensureInitialPasswordConfigured(context, flags) {
   const status = await getStatus(context.options);
-  if (runtimeIsActive(status)) {
+  const runtimeBelongsToCurrentState = Boolean(status.runtime || status.serviceState);
+  if (runtimeIsActive(status) && runtimeBelongsToCurrentState) {
     return context;
   }
 
@@ -1016,6 +1121,70 @@ async function handleAuthCommand(positionals, flags, context) {
   throw usageError(`unsupported auth subcommand: ${subcommand}`, 'auth');
 }
 
+async function handleServiceCommand(positionals, flags, context) {
+  const [subcommand] = positionals;
+  if (!subcommand || flags.help) {
+    printServiceHelp();
+    return EXIT_SUCCESS;
+  }
+
+  if (hasHostOrPortOverride(flags)) {
+    throw new CliError('service_managed_runtime_requires_config_update_instead_of_ephemeral_override', {
+      exitCode: EXIT_FAILURE,
+      helpTopic: 'service',
+    });
+  }
+
+  let resolvedContext = context;
+  const controller = resolveServiceController(context);
+
+  if (subcommand === 'install') {
+    const result = await controller.install(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return EXIT_SUCCESS;
+  }
+
+  if (subcommand === 'uninstall') {
+    const result = await controller.uninstall(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return EXIT_SUCCESS;
+  }
+
+  if (subcommand === 'start') {
+    resolvedContext = await ensureInitialPasswordConfigured(resolvedContext, flags);
+    const result = await controller.start(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return EXIT_SUCCESS;
+  }
+
+  if (subcommand === 'stop') {
+    const result = await controller.stop(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return EXIT_SUCCESS;
+  }
+
+  if (subcommand === 'restart') {
+    resolvedContext = await ensureInitialPasswordConfigured(resolvedContext, flags);
+    const result = await controller.restart(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return EXIT_SUCCESS;
+  }
+
+  if (subcommand === 'status') {
+    const result = await controller.status(resolvedContext.options);
+    if (flags.json) printJson(result);
+    else printServiceStatus(result);
+    return result.installed && !result.stale ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+
+  throw usageError(`unsupported service subcommand: ${subcommand}`, 'service');
+}
+
 function normalizeCliError(error) {
   if (error instanceof CliError) {
     return error;
@@ -1077,6 +1246,8 @@ function printCliError(error, flags) {
     console.error('hint: run `coder-studio auth --help`');
   } else if (normalized.helpTopic === 'completion') {
     console.error('hint: run `coder-studio help completion`');
+  } else if (normalized.helpTopic === 'service') {
+    console.error('hint: run `coder-studio help service`');
   } else if (normalized.helpTopic === 'main') {
     console.error('hint: run `coder-studio help`');
   }
@@ -1173,14 +1344,22 @@ export async function runCli(argv = process.argv.slice(2)) {
       return await handleAuthCommand(positionals, flags, context);
     }
 
+    if (command === 'service') {
+      const context = await resolveCommandContext(flags);
+      return await handleServiceCommand(positionals, flags, context);
+    }
+
     let context = await resolveCommandContext(flags);
     let options = context.options;
 
     if (command === 'start') {
+      await assertManagedStartInputAllowed(context, flags);
       context = await ensureInitialPasswordConfigured(context, flags);
       options = context.options;
       const result = await startRuntime({
         ...options,
+        autoInstallManagedService: !flags.noService,
+        noService: Boolean(flags.noService),
         foreground: Boolean(flags.foreground),
         onReady: async ({ endpoint, pid }) => {
           if (!flags.json) {
@@ -1194,10 +1373,13 @@ export async function runCli(argv = process.argv.slice(2)) {
       if (flags.json) {
         printJson(result);
       } else if (!flags.foreground) {
+        printRuntimeWarnings(result.warnings);
         console.log(result.changed ? 'runtime is ready' : 'runtime already running');
         console.log(`endpoint: ${result.endpoint}`);
         console.log(`pid: ${result.pid ?? 'n/a'}`);
         console.log(`logPath: ${result.logPath}`);
+      } else {
+        printRuntimeWarnings(result.warnings);
       }
       return result.status === 'failed' ? EXIT_FAILURE : EXIT_SUCCESS;
     }
@@ -1212,9 +1394,13 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (command === 'restart') {
       context = await ensureInitialPasswordConfigured(context, flags);
       options = context.options;
-      const result = await restartRuntime(options);
+      const result = await restartRuntime({
+        ...options,
+        autoInstallManagedService: true,
+      });
       if (flags.json) printJson(result);
       else {
+        printRuntimeWarnings(result.warnings);
         console.log('coder-studio restarted');
         console.log(`endpoint: ${result.endpoint}`);
         console.log(`pid: ${result.pid ?? 'n/a'}`);

@@ -1,27 +1,21 @@
 import type { MutableRefObject } from "react";
-import type { WorkspaceControllerState } from "../workspace/workspace-controller.ts";
-import type { Locale, Translator } from "../../i18n.ts";
-import type { Session, Tab } from "../../state/workbench.ts";
-import { resizeAgent } from "../../services/http/agent.service.ts";
+import type { Locale, Translator } from "../../i18n";
+import type { Session, Tab } from "../../state/workbench";
 import {
   AGENT_START_SYSTEM_MESSAGE,
   AGENT_STARTUP_DISCOVERY_MS,
   AGENT_STARTUP_MAX_WAIT_MS,
   AGENT_STARTUP_QUIET_MS,
   AGENT_TITLE_TRACK_LIMIT,
-} from "../../shared/app/constants.ts";
-import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi.ts";
-import { isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session.ts";
-import type { AgentEvent, AgentLifecycleEvent } from "../../types/app.ts";
-import type { XtermBaseHandle } from "../../components/terminal/XtermBase.tsx";
-import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit.ts";
+} from "../../shared/app/constants";
+import { stripAnsi, stripTerminalInputEscapes } from "../../shared/utils/ansi";
+import { findPaneSessionId } from "../../shared/utils/panes";
+import { isDraftSession, isGeneratedSessionTitleForId, sessionTitleFromInput } from "../../shared/utils/session";
+import type { AgentEvent, AgentLifecycleEvent } from "../../types/app";
+import type { XtermBaseHandle } from "../../components/terminal/XtermBase";
+import { fitAgentTerminalHandles } from "./agent-terminal-ref-fit";
 
 type AgentSize = { cols: number; rows: number };
-
-type AgentResizeState = {
-  inflight: boolean;
-  pending?: AgentSize;
-};
 
 type AgentTitleTracker = {
   draftSessionId?: string;
@@ -45,94 +39,15 @@ export type AgentRuntimeRefs = {
   agentTerminalRefs: MutableRefObject<Map<string, XtermBaseHandle | null>>;
   agentTerminalQueueRef: MutableRefObject<Map<string, Promise<void>>>;
   agentPaneSizeRef: MutableRefObject<Map<string, AgentSize>>;
-  agentRuntimeSizeRef: MutableRefObject<Map<string, AgentSize>>;
-  agentResizeStateRef: MutableRefObject<Map<string, AgentResizeState>>;
   agentTitleTrackerRef: MutableRefObject<Map<string, AgentTitleTracker>>;
-  runningAgentKeysRef: MutableRefObject<Set<string>>;
   agentStartupStateRef: MutableRefObject<Map<string, AgentStartupState>>;
   agentStartupTokenRef: MutableRefObject<number>;
 };
 
 export const agentRuntimeKey = (tabId: string, sessionId: string) => `${tabId}:${sessionId}`;
 
-export const isAgentRuntimeRunning = (
-  refs: AgentRuntimeRefs,
-  tabId: string,
-  sessionId: string,
-) => refs.runningAgentKeysRef.current.has(agentRuntimeKey(tabId, sessionId));
-
 export const fitAgentTerminals = (refs: AgentRuntimeRefs) => {
   fitAgentTerminalHandles(refs.agentTerminalRefs.current);
-};
-
-const flushAgentRuntimeSize = (
-  refs: AgentRuntimeRefs,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  const current = refs.agentResizeStateRef.current.get(key);
-  if (!current || current.inflight || !current.pending) return;
-
-  const nextSize = current.pending;
-  current.pending = undefined;
-
-  const last = refs.agentRuntimeSizeRef.current.get(key);
-  if (last?.cols === nextSize.cols && last?.rows === nextSize.rows) {
-    if (!current.pending) return;
-  }
-
-  current.inflight = true;
-  void resizeAgent(tabId, controller, sessionId, nextSize.cols, nextSize.rows)
-    .then(() => {
-      refs.agentRuntimeSizeRef.current.set(key, nextSize);
-    })
-    .catch(() => {
-      refs.agentRuntimeSizeRef.current.delete(key);
-    })
-    .finally(() => {
-      const latest = refs.agentResizeStateRef.current.get(key);
-      if (!latest) return;
-      latest.inflight = false;
-      if (latest.pending) {
-        flushAgentRuntimeSize(refs, controller, tabId, sessionId);
-        return;
-      }
-      if (!refs.runningAgentKeysRef.current.has(key)) {
-        refs.agentResizeStateRef.current.delete(key);
-      }
-    });
-};
-
-export const syncAgentRuntimeSize = (
-  refs: AgentRuntimeRefs,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-  size: AgentSize,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  const last = refs.agentRuntimeSizeRef.current.get(key);
-  const current = refs.agentResizeStateRef.current.get(key) ?? { inflight: false };
-  if (last?.cols === size.cols && last?.rows === size.rows && !current.pending) return;
-  if (current.pending?.cols === size.cols && current.pending?.rows === size.rows) return;
-  current.pending = size;
-  refs.agentResizeStateRef.current.set(key, current);
-  flushAgentRuntimeSize(refs, controller, tabId, sessionId);
-};
-
-export const syncAgentPaneSize = (
-  refs: AgentRuntimeRefs,
-  paneId: string,
-  controller: WorkspaceControllerState,
-  tabId: string,
-  sessionId: string,
-) => {
-  const size = refs.agentPaneSizeRef.current.get(paneId)
-    ?? refs.agentTerminalRefs.current.get(paneId)?.size();
-  if (!size) return;
-  syncAgentRuntimeSize(refs, controller, tabId, sessionId, size);
 };
 
 export const armAgentStartupGate = (
@@ -171,22 +86,7 @@ export const clearAgentRuntimeTracking = (
   tabId: string,
   sessionId: string,
 ) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  refs.runningAgentKeysRef.current.delete(key);
-  refs.agentRuntimeSizeRef.current.delete(key);
-  refs.agentResizeStateRef.current.delete(key);
   clearAgentStartupGate(refs, tabId, sessionId);
-};
-
-export const markAgentRuntimeStarted = (
-  refs: AgentRuntimeRefs,
-  tabId: string,
-  sessionId: string,
-) => {
-  const key = agentRuntimeKey(tabId, sessionId);
-  refs.agentRuntimeSizeRef.current.delete(key);
-  refs.agentResizeStateRef.current.delete(key);
-  refs.runningAgentKeysRef.current.add(key);
 };
 
 export const setAgentTerminalRef = (
@@ -203,6 +103,21 @@ export const setAgentTerminalRef = (
   refs.agentTerminalQueueRef.current.delete(paneId);
   refs.agentPaneSizeRef.current.delete(paneId);
   refs.agentTitleTrackerRef.current.delete(paneId);
+};
+
+export const waitForAgentTerminalMount = async (
+  refs: AgentRuntimeRefs,
+  paneId: string,
+  timeoutMs = 1200,
+) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (refs.agentTerminalRefs.current.get(paneId)) {
+      return true;
+    }
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+  }
+  return false;
 };
 
 export const setDraftPromptInputRef = (
@@ -306,6 +221,12 @@ type CommitAgentSessionTitleArgs = {
   updateTab: UpdateTab;
 };
 
+type ApplyTrackedAgentSessionTitleArgs = CommitAgentSessionTitleArgs & {
+  session: Session;
+  data: string;
+  persistTitle?: (title: string) => void;
+};
+
 export const commitAgentSessionTitle = ({
   refs,
   paneId,
@@ -342,6 +263,42 @@ export const commitAgentSessionTitle = ({
   }
 
   return title;
+};
+
+export const applyTrackedAgentSessionTitle = ({
+  refs,
+  paneId,
+  tabId,
+  sessionId,
+  session,
+  data,
+  locale,
+  t,
+  updateTab,
+  persistTitle,
+}: ApplyTrackedAgentSessionTitleArgs): string | null => {
+  const tracked = trackAgentInitialTitleInput(refs, paneId, session, data);
+  if (!tracked.committedTitle) {
+    return null;
+  }
+
+  const appliedTitle = commitAgentSessionTitle({
+    refs,
+    paneId,
+    tabId,
+    sessionId,
+    rawInput: tracked.committedTitle,
+    locale,
+    t,
+    updateTab,
+  });
+
+  if (!appliedTitle) {
+    return null;
+  }
+
+  persistTitle?.(appliedTitle);
+  return appliedTitle;
 };
 
 type PreviewAgentSessionTitleArgs = {
@@ -420,13 +377,20 @@ export const noteAgentStartupLifecycle = (
   if (kind === "session_started") {
     current.sawReady = true;
     current.lastEventAt = Date.now();
-    return;
   }
+};
 
-  if (kind === "session_ended") {
-    current.exited = true;
-    current.lastEventAt = Date.now();
-  }
+export const shouldReleaseAgentStartupGate = (
+  state: Pick<AgentStartupState, "startedAt" | "lastEventAt" | "sawOutput" | "sawReady" | "exited">,
+  now: number,
+) => {
+  if (state.exited) return true;
+  if (state.sawReady && now - state.lastEventAt >= 120) return true;
+
+  if (state.sawOutput && now - state.lastEventAt >= AGENT_STARTUP_QUIET_MS) return true;
+  if (!state.sawOutput && now - state.startedAt >= AGENT_STARTUP_DISCOVERY_MS) return true;
+
+  return now - state.startedAt >= AGENT_STARTUP_MAX_WAIT_MS;
 };
 
 export const waitForAgentStartupDrain = async (
@@ -441,23 +405,7 @@ export const waitForAgentStartupDrain = async (
     if (!current || current.token !== token) return;
 
     const now = Date.now();
-    if (current.exited) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (current.sawReady && now - current.lastEventAt >= 120) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (current.sawOutput && now - current.lastEventAt >= AGENT_STARTUP_QUIET_MS) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (!current.sawOutput && now - current.startedAt >= AGENT_STARTUP_DISCOVERY_MS) {
-      clearAgentStartupGate(refs, tabId, sessionId, token);
-      return;
-    }
-    if (now - current.startedAt >= AGENT_STARTUP_MAX_WAIT_MS) {
+    if (shouldReleaseAgentStartupGate(current, now)) {
       clearAgentStartupGate(refs, tabId, sessionId, token);
       return;
     }

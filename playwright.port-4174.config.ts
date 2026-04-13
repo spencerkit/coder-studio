@@ -2,13 +2,14 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:4174'
   },
   webServer: {
-    command: 'pnpm exec vite --host 127.0.0.1 --port 4174',
+    command: 'CODER_STUDIO_DEV_FRONTEND_PORT=4174 node scripts/test/start-dev-stack.mjs',
     port: 4174,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120000
   }
 });

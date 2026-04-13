@@ -1,17 +1,22 @@
 import type { ReactNode } from "react";
-import type { Locale } from "../i18n.ts";
+import type { Locale } from "../i18n";
 import type {
   AgentMessage,
+  AgentProvider,
   ExecTarget,
   FilePreview,
   GitChange,
   IdlePolicy,
   SessionMode,
+  SessionRuntimeLiveness,
   SessionStatus,
+  SupervisorStatus,
   Tab,
   Terminal,
   TreeNode,
-} from "../state/workbench.ts";
+  WorkspaceSupervisorCycle,
+  WorkspaceSupervisorCycleStatus,
+} from "../state/workbench-core";
 
 export type Toast = { id: string; text: string; sessionId: string };
 
@@ -62,55 +67,52 @@ export type BackendQueueTask = {
 export type BackendSessionMessage = AgentMessage;
 
 export type BackendSession = {
-  id: number;
+  id: string;
   title: string;
   status: SessionStatus;
   mode: SessionMode;
+  provider: AgentProvider;
   auto_feed: boolean;
   queue: BackendQueueTask[];
   messages: BackendSessionMessage[];
-  stream: string;
   unread: number;
   last_active_at: number;
-  claude_session_id?: string | null;
+  resume_id?: string | null;
+  unavailable_reason?: string | null;
+  runtime_active?: boolean;
+  runtime_liveness?: SessionRuntimeLiveness | null;
 };
 
-export type BackendArchiveEntry = {
-  id: number;
-  session_id: number;
-  mode: SessionMode;
-  time: string;
-};
+export type SessionHistoryRecordState = "live" | "detached" | "unavailable";
 
 export type BackendSessionHistoryRecord = {
   workspace_id: string;
   workspace_title: string;
   workspace_path: string;
-  session_id: number;
+  session_id?: string | null;
   title: string;
-  status: SessionStatus;
-  archived: boolean;
+  provider: AgentProvider;
   mounted: boolean;
-  recoverable: boolean;
+  state: SessionHistoryRecordState;
+  created_at: number;
   last_active_at: number;
-  archived_at?: number | null;
-  claude_session_id?: string | null;
+  resume_id: string;
 };
 
 export type SessionHistoryRecord = {
   workspaceId: string;
   workspaceTitle: string;
   workspacePath: string;
-  sessionId: string;
+  sessionId?: string | null;
   title: string;
-  status: SessionStatus;
-  archived: boolean;
+  provider: AgentProvider;
   mounted: boolean;
-  recoverable: boolean;
+  state: SessionHistoryRecordState;
+  createdAt: number;
   lastActiveAt: number;
-  archivedAt?: number | null;
-  claudeSessionId?: string | null;
+  resumeId: string;
 };
+
 
 export type SessionHistoryGroup = {
   workspaceId: string;
@@ -121,12 +123,81 @@ export type SessionHistoryGroup = {
 
 export type SessionHistoryExpansionState = Record<string, boolean>;
 
+export interface BackendWorkspaceSupervisorBinding {
+  session_id: string;
+  provider: AgentProvider;
+  objective_text: string;
+  objective_prompt: string;
+  objective_version: number;
+  status: SupervisorStatus;
+  auto_inject_enabled: boolean;
+  pending_objective_text?: string | null;
+  pending_objective_prompt?: string | null;
+  pending_objective_version?: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BackendWorkspaceSupervisorCycle {
+  cycle_id: string;
+  session_id: string;
+  source_turn_id: string;
+  objective_version: number;
+  supervisor_input: string;
+  supervisor_reply?: string | null;
+  injection_message_id?: string | null;
+  status: WorkspaceSupervisorCycleStatus;
+  error?: string | null;
+  started_at: number;
+  finished_at?: number | null;
+}
+
+export interface BackendWorkspaceSupervisorViewState {
+  bindings: BackendWorkspaceSupervisorBinding[];
+  cycles: BackendWorkspaceSupervisorCycle[];
+}
+
 export type BackendWorkspaceViewState = {
   active_session_id: string;
   active_pane_id: string;
   active_terminal_id: string;
   pane_layout: Tab["paneLayout"];
   file_preview: FilePreview;
+  session_bindings: BackendWorkspaceSessionBinding[];
+  supervisor: BackendWorkspaceSupervisorViewState;
+};
+
+export type BackendWorkspaceSessionBinding = {
+  session_id: string;
+  provider: AgentProvider;
+  resume_id: string | null;
+  title_snapshot: string;
+  last_seen_at: number;
+};
+
+export type SessionRuntimeBindingInfo = {
+  session_id: string;
+  terminal_id: string;
+  terminal_runtime_id?: string;
+  workspace_terminal_id?: string;
+};
+
+export type TerminalChannelOutputEvent = {
+  runtime_id: string;
+  data: string;
+};
+
+export interface TerminalChannelReplayEvent {
+  runtime_id: string;
+  data: string;
+  cols: number;
+  rows: number;
+}
+
+export type SessionRuntimeStartResult = {
+  terminal_id: number;
+  started: boolean;
+  terminal_runtime_id?: string | null;
 };
 
 export type WorkspaceControllerLease = {
@@ -144,7 +215,6 @@ export type WorkspaceControllerLease = {
 export type WorkspaceSnapshot = {
   workspace: WorkspaceSummary;
   sessions: BackendSession[];
-  archive: Array<BackendArchiveEntry & { snapshot: BackendSession }>;
   view_state: BackendWorkspaceViewState;
   terminals: { id: number; output: string; recoverable: boolean }[];
 };
@@ -153,6 +223,7 @@ export type WorkspaceRuntimeSnapshot = {
   snapshot: WorkspaceSnapshot;
   controller: WorkspaceControllerLease;
   lifecycle_events?: AgentLifecycleHistoryEntry[];
+  session_runtime_bindings?: SessionRuntimeBindingInfo[];
 };
 
 export type WorkspaceRuntimeControllerEvent = {
@@ -160,9 +231,24 @@ export type WorkspaceRuntimeControllerEvent = {
   controller: WorkspaceControllerLease;
 };
 
+export type WorkspaceSessionState = {
+  session_id: string;
+  status: SessionStatus;
+  last_active_at: number;
+  resume_id?: string | null;
+  runtime_liveness?: SessionRuntimeLiveness | null;
+};
+
 export type WorkspaceRuntimeStateEvent = {
   workspace_id: string;
-  view_state: BackendWorkspaceViewState;
+  view_state?: BackendWorkspaceViewState;
+  session_state?: WorkspaceSessionState;
+};
+
+export type WorkspaceInputErrorEvent = {
+  workspace_id: string;
+  kind: string;
+  error: string;
 };
 
 export type WorkbenchLayout = {
@@ -198,10 +284,9 @@ export type SessionPatch = {
   auto_feed?: boolean;
   queue?: BackendQueueTask[];
   messages?: BackendSessionMessage[];
-  stream?: string;
   unread?: number;
   last_active_at?: number;
-  claude_session_id?: string;
+  resume_id?: string;
 };
 
 export type WorkspaceViewPatch = {
@@ -210,6 +295,7 @@ export type WorkspaceViewPatch = {
   active_terminal_id?: string;
   pane_layout?: BackendWorkspaceViewState["pane_layout"];
   file_preview?: BackendWorkspaceViewState["file_preview"];
+  supervisor?: BackendWorkspaceSupervisorViewState;
 };
 
 export type AgentEvent = {
@@ -217,12 +303,13 @@ export type AgentEvent = {
   session_id: string;
   kind: "stdout" | "stderr" | "exit" | "system";
   data: string;
+  raw_data?: string;
 };
 
 export type AgentLifecycleEvent = {
   workspace_id: string;
   session_id: string;
-  kind: "session_started" | "turn_waiting" | "tool_started" | "tool_finished" | "approval_required" | "turn_completed" | "session_ended";
+  kind: "session_started" | "turn_completed";
   source_event: string;
   data: string;
 };
@@ -241,6 +328,7 @@ export type ArtifactsDirtyEvent = {
   path: string;
   target: ExecTarget;
   reason: string;
+  categories?: Array<"git" | "worktrees" | "tree" | "full">;
 };
 
 export type WorktreeDetail = {
@@ -294,6 +382,11 @@ export type CommandAvailability = {
   error?: string | null;
 };
 
+export type ProviderRuntimePreview = {
+  provider: string;
+  display_command: string;
+};
+
 export type AgentStartResult = {
   started: boolean;
 };
@@ -333,30 +426,6 @@ export type WorktreeModalState = {
 
 export type WorktreeView = "status" | "diff" | "tree";
 
-export type ClaudeSlashSkillEntry = {
-  id: string;
-  command: string;
-  description: string;
-  scope: "project" | "personal";
-  source_kind: "skill" | "command";
-  source_path: string;
-};
-
-export type ClaudeSlashMenuItem = {
-  id: string;
-  command: string;
-  description: string;
-  section: "builtin" | "bundled" | "project" | "personal";
-  sourcePath?: string;
-  sourceKind?: "skill" | "command";
-};
-
-export type ClaudeSlashMenuSection = {
-  id: ClaudeSlashMenuItem["section"];
-  label: string;
-  items: ClaudeSlashMenuItem[];
-};
-
 export type CommandPaletteAction = {
   id: string;
   label: string;
@@ -386,12 +455,18 @@ export type ClaudeRuntimeProfile = {
   startupArgs: string[];
   env: Record<string, string>;
   settingsJson: Record<string, unknown>;
-  globalConfigJson: Record<string, unknown>;
 };
 
-export type ClaudeTargetOverride = {
-  enabled: boolean;
-  profile: ClaudeRuntimeProfile;
+export type CodexRuntimeProfile = {
+  executable: string;
+  extraArgs: string[];
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+};
+
+export type ProviderSettingsPayload = {
+  global: Record<string, unknown>;
 };
 
 export type AppSettingsPayload = {
@@ -401,16 +476,24 @@ export type AppSettingsPayload = {
     completionNotifications: CompletionNotificationSettings;
     idlePolicy: IdlePolicy;
   };
-  claude: {
-    global: ClaudeRuntimeProfile;
-    overrides: {
-      native: ClaudeTargetOverride | null;
-      wsl: ClaudeTargetOverride | null;
-    };
+  agentDefaults: {
+    provider: string;
   };
+  providers: Record<string, ProviderSettingsPayload>;
 };
 
 export type LegacyAppSettings = {
+  general?: Partial<AppSettingsPayload["general"]>;
+  agentDefaults?: Partial<AppSettingsPayload["agentDefaults"]>;
+  providers?: Record<string, Partial<ProviderSettingsPayload> | undefined>;
+  claude?: {
+    global?: Partial<ClaudeRuntimeProfile>;
+    overrides?: unknown;
+  };
+  codex?: {
+    global?: Partial<CodexRuntimeProfile>;
+    overrides?: unknown;
+  };
   locale?: Locale;
   agentCommand?: string;
   idlePolicy?: Partial<IdlePolicy>;
@@ -418,13 +501,9 @@ export type LegacyAppSettings = {
   terminalCompatibilityMode?: TerminalCompatibilityMode;
 };
 
-export type AppSettings = AppSettingsPayload & {
-  agentProvider: Tab["agent"]["provider"];
-  agentCommand: string;
-  idlePolicy: IdlePolicy;
-  completionNotifications: CompletionNotificationSettings;
-  terminalCompatibilityMode: TerminalCompatibilityMode;
-};
+export type AppSettings = AppSettingsPayload;
+
+export type AppSettingsUpdater = (settings: AppSettings) => AppSettings;
 
 export type AgentCommandStatus = {
   loading: boolean;
@@ -436,8 +515,7 @@ export type AgentCommandStatus = {
 
 export type AppTheme = "dark";
 export type AppRoute = "workspace" | "settings";
-export type SettingsPanel = "general" | "claude" | "appearance";
-export type ClaudeSettingsScope = "global" | "native" | "wsl";
+export type SettingsPanel = "general" | "appearance" | `provider:${string}`;
 
 export type SettingsNavItem = {
   id: SettingsPanel;

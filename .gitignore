@@ -20,6 +20,12 @@ playwright-report/
 !.env.example
 !.env.sample
 
+# Local provider config
+.claude/
+.codex/
+.codex
+.superpowers/
+
 # Logs
 *.log
 npm-debug.log*
@@ -38,5 +44,7 @@ Thumbs.db
 output
 .tmp
 .playwright-cli
+.playwright-mcp
 .artifacts/
 .worktrees/
+.omc

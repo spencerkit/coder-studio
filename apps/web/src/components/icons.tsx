@@ -1,7 +1,7 @@
 import type { LucideIcon, LucideProps } from "lucide-react";
 import React from "react";
 import {
-  Archive, ArrowDownUp, ArrowUp, Blocks, ChevronDown, ChevronLeft, ChevronRight, Code2, Code, Eye, EyeOff, File, FileDiff, FileJson, FileText, Folder, FolderOpen, FolderPlus, GitBranch, History, List, Minus, Monitor, MoonStar, Palette, Plus, RefreshCw, Rows3, Search, Settings2, SlidersHorizontal, SquarePlus, SunMedium, Terminal, Undo2, X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, SquareSplitVertical, SquareSplitHorizontal
+  Archive, ArrowDownUp, ArrowUp, BadgeCheck, Blocks, ChevronDown, ChevronLeft, ChevronRight, CirclePause, Code2, Code, Eye, EyeOff, File, FileDiff, FileJson, FileText, Folder, FolderOpen, FolderPlus, GitBranch, List, Minus, Monitor, MoonStar, Palette, Plus, RefreshCw, Rows3, Search, Settings2, SlidersHorizontal, SquarePlus, SunMedium, Terminal, Undo2, X, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, SquareSplitVertical, SquareSplitHorizontal, MessageSquare, Play, Square
 } from "lucide-react";
 
 const createIcon = (Icon: LucideIcon, defaults?: Partial<LucideProps>) => {
@@ -28,7 +28,6 @@ export const ThreadSortIcon = createIcon(ArrowDownUp);
 export const WorkspaceGroupIcon = createIcon(FolderPlus);
 export const HeaderAddIcon = createIcon(Plus);
 export const HeaderCloseIcon = createIcon(X);
-export const HeaderHistoryIcon = createIcon(History);
 export const HeaderSettingsIcon = createIcon(Settings2);
 export const HeaderBackIcon = createIcon(ChevronLeft);
 export const SettingsGeneralIcon = createIcon(SlidersHorizontal);
@@ -44,6 +43,11 @@ export const GitUnstageIcon = createIcon(Minus);
 export const GitDiscardIcon = createIcon(Undo2);
 export const RefreshIcon = createIcon(RefreshCw);
 export const WorkspaceAddIcon = createIcon(FolderPlus);
+export const BadgeCheckIcon = createIcon(BadgeCheck, { size: 13 });
+export const MessageSquareIcon = createIcon(MessageSquare, { size: 13 });
+export const PlayIcon = createIcon(Play, { size: 13 });
+export const CirclePauseIcon = createIcon(CirclePause, { size: 13 });
+export const SquareIcon = createIcon(Square, { size: 13 });
 
 export const SearchIcon = createIcon(Search, { size: 14 });
 export const ChevronRightIcon = createIcon(ChevronRight, { size: 12 });

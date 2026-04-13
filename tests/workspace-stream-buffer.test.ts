@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   appendBoundedMessage,
+  appendBufferedChunks,
   appendBufferedText,
-} from "../apps/web/src/features/workspace/workspace-stream-buffer.ts";
+} from "../apps/web/src/features/workspace/workspace-stream-buffer";
 
 test("appendBufferedText keeps the latest tail within the limit", () => {
   assert.equal(
@@ -15,6 +16,20 @@ test("appendBufferedText keeps the latest tail within the limit", () => {
 test("appendBufferedText keeps the current value when chunk is empty", () => {
   assert.equal(
     appendBufferedText("abcdef", "", 8),
+    "abcdef",
+  );
+});
+
+test("appendBufferedChunks appends multiple chunks and keeps the latest tail within the limit", () => {
+  assert.equal(
+    appendBufferedChunks("abcdef", ["gh", "ijkl"], 8),
+    "efghijkl",
+  );
+});
+
+test("appendBufferedChunks keeps the current value when there are no chunks", () => {
+  assert.equal(
+    appendBufferedChunks("abcdef", [], 8),
     "abcdef",
   );
 });

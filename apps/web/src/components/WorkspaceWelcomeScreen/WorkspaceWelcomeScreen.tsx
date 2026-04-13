@@ -1,22 +1,17 @@
 import type { Translator } from "../../i18n";
 import {
   HeaderAddIcon,
-  HeaderHistoryIcon,
   HeaderSettingsIcon,
 } from "../icons";
 
 type WorkspaceWelcomeScreenProps = {
-  hasHistory: boolean;
   onOpenWorkspacePicker: () => void;
-  onOpenHistory: () => void;
   onOpenSettings: () => void;
   t: Translator;
 };
 
 export const WorkspaceWelcomeScreen = ({
-  hasHistory,
   onOpenWorkspacePicker,
-  onOpenHistory,
   onOpenSettings,
   t,
 }: WorkspaceWelcomeScreenProps) => (
@@ -34,15 +29,6 @@ export const WorkspaceWelcomeScreen = ({
         >
           <HeaderAddIcon />
           <span>{t("workspaceWelcomeOpenWorkspace")}</span>
-        </button>
-        <button
-          type="button"
-          className="workspace-welcome-screen__button"
-          onClick={onOpenHistory}
-          disabled={!hasHistory}
-        >
-          <HeaderHistoryIcon />
-          <span>{t("workspaceWelcomeRestoreHistory")}</span>
         </button>
       </div>
 

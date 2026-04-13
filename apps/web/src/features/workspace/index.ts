@@ -55,6 +55,7 @@ export {
 export {
   addWorkspaceTerminal,
   closeWorkspaceTerminal,
+  replaceWorkspaceTerminal,
   selectWorkspaceTerminal,
   syncWorkspaceTerminalSize,
   writeWorkspaceTerminalData,

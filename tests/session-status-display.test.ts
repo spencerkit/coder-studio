@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createTranslator } from "../apps/web/src/i18n.ts";
-import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions.ts";
-import { displaySessionStatus } from "../apps/web/src/shared/utils/session.ts";
-import type { AppSettings } from "../apps/web/src/types/app.ts";
-import type { WorkbenchState } from "../apps/web/src/state/workbench.ts";
+import { createTranslator } from "../apps/web/src/i18n";
+import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
+import { displaySessionStatus } from "../apps/web/src/shared/utils/session";
+import type { AppSettings } from "../apps/web/src/types/app";
+import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
@@ -93,7 +93,6 @@ const createState = (): WorkbenchState => ({
           autoFeed: true,
           queue: [],
           messages: [],
-          stream: "",
           unread: 0,
           lastActiveAt: 1,
         },
@@ -105,7 +104,6 @@ const createState = (): WorkbenchState => ({
           autoFeed: true,
           queue: [],
           messages: [],
-          stream: "",
           unread: 0,
           lastActiveAt: 1,
         },
@@ -151,20 +149,20 @@ const createState = (): WorkbenchState => ({
   ],
 });
 
-test("displaySessionStatus derives background only for non-active running or waiting sessions", () => {
+test("displaySessionStatus returns the stored runtime status without deriving background", () => {
   const tab = createState().tabs[0];
   const active = tab.sessions[0];
   const inactive = {
     ...tab.sessions[0],
     id: "session-3",
-    status: "waiting" as const,
+    status: "running" as const,
   };
 
-  assert.equal(displaySessionStatus(tab, active), "running");
-  assert.equal(displaySessionStatus(tab, inactive), "background");
+  assert.equal(displaySessionStatus(active), "running");
+  assert.equal(displaySessionStatus(inactive), "running");
 });
 
-test("onSwitchSession does not persist a background status patch for the previous session", async () => {
+test("onSwitchSession does not persist a display-only status patch for the previous session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createState() };
@@ -190,7 +188,6 @@ test("onSwitchSession does not persist a background status patch for the previou
             auto_feed: true,
             queue: [],
             messages: [],
-            stream: "",
             unread: 0,
             last_active_at: 2,
             claude_session_id: null,
@@ -257,6 +254,6 @@ test("onSwitchSession does not persist a background status patch for the previou
     .filter((entry) => entry.url.endsWith("/api/rpc/session_update"))
     .map((entry) => entry.body.patch as { status?: string });
 
-  assert.equal(persistedStatuses.some((patch) => patch.status === "background"), false);
+  assert.equal(persistedStatuses.some((patch) => patch.status === "running"), false);
   assert.equal(stateRef.current.tabs[0].sessions.find((session) => session.id === "session-1")?.status, "running");
 });

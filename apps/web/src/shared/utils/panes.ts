@@ -1,4 +1,4 @@
-import type { SessionPaneNode } from "../../state/workbench.ts";
+import type { SessionPaneNode } from "../../state/workbench";
 
 export const collectPaneLeaves = (node: SessionPaneNode): Array<{ id: string; sessionId: string }> => {
   if (node.type === "leaf") {

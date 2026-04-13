@@ -5,7 +5,7 @@ import {
   ATTACH_RUNTIME_SUCCESS_REUSE_MS,
   createWorkspaceRuntimeAttachDeduper,
   runAttachWithRetry,
-} from "../apps/web/src/features/workspace/runtime-attach.ts";
+} from "../apps/web/src/features/workspace/runtime-attach";
 
 test("runAttachWithRetry keeps retrying until attach succeeds", async () => {
   const snapshot = { workspace: "ws-1" };
@@ -91,6 +91,54 @@ test("createWorkspaceRuntimeAttachDeduper reuses a recent successful attach resu
   });
 
   assert.deepEqual(third, { workspace: "ws-1-third" });
+  assert.equal(calls, 2);
+});
+
+test("createWorkspaceRuntimeAttachDeduper allows callers to extend the success reuse window per request", async () => {
+  let now = 5_000;
+  let calls = 0;
+  const dedupe = createWorkspaceRuntimeAttachDeduper<{ workspace: string }>({
+    now: () => now,
+    successReuseMs: 500,
+  });
+
+  const first = await dedupe.run("ws-1:device-a:client-a", async () => {
+    calls += 1;
+    return { workspace: "ws-1" };
+  });
+
+  now += 1_500;
+
+  const second = await dedupe.run("ws-1:device-a:client-a", async () => {
+    calls += 1;
+    return { workspace: "ws-1-second" };
+  }, {
+    successReuseMs: 2_000,
+  });
+
+  assert.deepEqual(first, { workspace: "ws-1" });
+  assert.deepEqual(second, { workspace: "ws-1" });
+  assert.equal(calls, 1);
+});
+
+test("createWorkspaceRuntimeAttachDeduper lets force requests bypass cached success reuse", async () => {
+  let calls = 0;
+  const dedupe = createWorkspaceRuntimeAttachDeduper<{ workspace: string }>();
+
+  const first = await dedupe.run("ws-1:device-a:client-a", async () => {
+    calls += 1;
+    return { workspace: "ws-1" };
+  });
+
+  const second = await dedupe.run("ws-1:device-a:client-a", async () => {
+    calls += 1;
+    return { workspace: "ws-1-forced" };
+  }, {
+    force: true,
+  });
+
+  assert.deepEqual(first, { workspace: "ws-1" });
+  assert.deepEqual(second, { workspace: "ws-1-forced" });
   assert.equal(calls, 2);
 });
 

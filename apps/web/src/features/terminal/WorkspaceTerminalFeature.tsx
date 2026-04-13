@@ -19,6 +19,7 @@ type WorkspaceTerminalFeatureProps = {
   progressPercent: number;
   progressTone: "live" | "steady" | "idle";
   activeTerminal?: ActiveTerminal;
+  mode: "interactive" | "readonly";
   terminals: TerminalOption[];
   terminalViewportRef: RefObject<HTMLDivElement | null>;
   shellTerminalRef: RefObject<XtermBaseHandle | null>;
@@ -40,6 +41,7 @@ export const WorkspaceTerminalFeature = ({
   progressPercent,
   progressTone,
   activeTerminal,
+  mode,
   terminals,
   terminalViewportRef,
   shellTerminalRef,
@@ -72,6 +74,7 @@ export const WorkspaceTerminalFeature = ({
           theme={theme}
           fontSize={fontSize}
           compatibilityMode={compatibilityMode}
+          mode={mode}
           onData={onTerminalData}
           onSize={onTerminalSize}
           autoFocus={autoFocus}

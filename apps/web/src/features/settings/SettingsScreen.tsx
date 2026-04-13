@@ -3,18 +3,25 @@ import { useRelaxState } from "@relax-state/react";
 import { createTranslator, type Locale } from "../../i18n";
 import { Settings } from "../../components/Settings";
 import { TopBar } from "../../components/TopBar";
+import { installProviderHooks } from "../../services/http/provider-hooks.service";
 import {
+  applyAgentDefaultsPatch,
   applyGeneralSettingsPatch,
-} from "../../shared/app/claude-settings.ts";
+} from "../../shared/app/app-settings";
 import { workbenchState } from "../../state/workbench";
-import type { AppSettings, BrowserNotificationSupport, SettingsPanel } from "../../types/app";
+import type {
+  AppSettings,
+  AppSettingsUpdater,
+  BrowserNotificationSupport,
+  SettingsPanel,
+} from "../../types/app";
 import { buildWorkspaceTabItems, getBrowserNotificationPermissionState } from "../workspace";
 
 type SettingsScreenProps = {
   locale: Locale;
   settingsDraft: AppSettings;
   onSelectLocale: (locale: Locale) => void;
-  onCommitSettings: (nextSettings: AppSettings) => void;
+  onCommitSettings: (updater: AppSettingsUpdater) => void;
   onCloseSettings: () => void;
 };
 
@@ -32,17 +39,24 @@ export const SettingsScreen = ({
   );
   const t = useMemo(() => createTranslator(locale), [locale]);
   const workspaceTabs = buildWorkspaceTabItems(state.tabs, state.activeTabId, locale);
+  const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
+  const activeWorkspaceProject = activeTab?.project ?? null;
+  const providerInjectionContextKey = [
+    activeWorkspaceProject?.path ?? "no-workspace",
+    activeWorkspaceProject?.target.type ?? "native",
+    activeWorkspaceProject?.target.type === "wsl" ? (activeWorkspaceProject?.target.distro ?? "") : "",
+  ].join("::");
 
-  const commitSettings = (nextSettings: AppSettings) => {
-    onCommitSettings(nextSettings);
+  const commitSettings = (updater: AppSettingsUpdater) => {
+    onCommitSettings(updater);
   };
 
   const onGeneralSettingsChange = (patch: Partial<AppSettings["general"]>) => {
-    commitSettings(applyGeneralSettingsPatch(settingsDraft, patch));
+    commitSettings((current) => applyGeneralSettingsPatch(current, patch));
   };
 
-  const onSettingsIdlePolicyChange = (patch: Partial<AppSettings["general"]["idlePolicy"]>) => {
-    commitSettings(applyGeneralSettingsPatch(settingsDraft, { idlePolicy: patch }));
+  const onAgentDefaultsChange = (patch: Partial<AppSettings["agentDefaults"]>) => {
+    commitSettings((current) => applyAgentDefaultsPatch(current, patch));
   };
 
   const notificationPermissionText = notificationPermissionState === "allowed"
@@ -51,15 +65,25 @@ export const SettingsScreen = ({
       ? t("notificationPermissionUnsupported")
       : t("notificationPermissionNotEnabled");
 
+  const onInjectProviderHooks = async (providerId: string) => {
+    if (!activeWorkspaceProject) {
+      throw new Error(t("injectHooksWorkspaceRequired"));
+    }
+
+    await installProviderHooks(
+      providerId,
+      activeWorkspaceProject.path,
+      activeWorkspaceProject.target,
+    );
+  };
+
   return (
     <div className="app" data-theme="dark">
       <TopBar
         isSettingsRoute
         locale={locale}
         workspaceTabs={workspaceTabs}
-        historyOpen={false}
         onSwitchWorkspace={() => {}}
-        onToggleHistory={() => {}}
         onAddTab={() => {}}
         onRemoveTab={() => {}}
         onOpenSettings={() => {}}
@@ -74,8 +98,12 @@ export const SettingsScreen = ({
         notificationPermissionText={notificationPermissionText}
         onSettingsPanelChange={setActiveSettingsPanel}
         onGeneralSettingsChange={onGeneralSettingsChange}
-        onSettingsIdlePolicyChange={onSettingsIdlePolicyChange}
-        onClaudeSettingsChange={commitSettings}
+        onAgentDefaultsChange={onAgentDefaultsChange}
+        onProviderSettingsChange={commitSettings}
+        onInjectProviderHooks={onInjectProviderHooks}
+        canInjectProviderHooks={Boolean(activeWorkspaceProject)}
+        injectProviderHooksHint={activeWorkspaceProject ? undefined : t("injectHooksWorkspaceRequired")}
+        injectionContextKey={providerInjectionContextKey}
         onSelectLocale={onSelectLocale}
         t={t}
       />

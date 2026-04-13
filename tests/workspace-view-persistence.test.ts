@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import {
   applyWorkspaceRuntimeStateEvent,
   buildWorkbenchStateFromBootstrap,
-} from "../apps/web/src/shared/utils/workspace.ts";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+} from "../apps/web/src/shared/utils/workspace";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
 import {
   noteWorkspaceViewPersistRequest,
   resetWorkspaceViewBaselines,
   shouldPersistWorkspaceView,
-} from "../apps/web/src/features/workspace/workspace-view-persistence.ts";
+} from "../apps/web/src/features/workspace/workspace-view-persistence";
 
 const APP_SETTINGS = {
   agentProvider: "claude" as const,
@@ -52,7 +52,6 @@ const createWorkspaceSnapshot = (activeSessionId: string) => ({
       auto_feed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       last_active_at: 1,
       claude_session_id: null,
@@ -60,12 +59,11 @@ const createWorkspaceSnapshot = (activeSessionId: string) => ({
     {
       id: 2,
       title: "Session 2",
-      status: "waiting" as const,
+      status: "running" as const,
       mode: "branch" as const,
       auto_feed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       last_active_at: 2,
       claude_session_id: null,
@@ -88,6 +86,10 @@ const createWorkspaceSnapshot = (activeSessionId: string) => ({
       originalContent: "",
       modifiedContent: "",
       dirty: false,
+    },
+    supervisor: {
+      bindings: [],
+      cycles: [],
     },
   },
   terminals: [],
@@ -163,6 +165,10 @@ test("runtime state events refresh workspace view persistence baselines", () => 
         modifiedContent: "",
         dirty: false,
       },
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
     },
   });
 
@@ -219,6 +225,10 @@ test("runtime state ignores a stale local echo when a newer pane layout was alre
       originalContent: "",
       modifiedContent: "",
       dirty: false,
+    },
+    supervisor: {
+      bindings: [],
+      cycles: [],
     },
   };
 
@@ -298,6 +308,10 @@ test("runtime state still applies a remote pane layout that was not sent locally
       modifiedContent: "",
       dirty: false,
     },
+    supervisor: {
+      bindings: [],
+      cycles: [],
+    },
   };
 
   const next = applyWorkspaceRuntimeStateEvent(initial, {
@@ -309,4 +323,49 @@ test("runtime state still applies a remote pane layout that was not sent locally
   if (next.tabs[0]?.paneLayout.type === "split") {
     assert.equal(next.tabs[0].paneLayout.ratio, 0.61);
   }
+});
+
+test("runtime state reuses the current state when the incoming view is effectively unchanged", () => {
+  const initial = buildWorkbenchStateFromBootstrap(
+    createDefaultWorkbenchState(),
+    {
+      ui_state: {
+        open_workspace_ids: ["ws-1"],
+        active_workspace_id: "ws-1",
+        layout: {
+          left_width: 320,
+          right_width: 320,
+          right_split: 64,
+          show_code_panel: false,
+          show_terminal_panel: false,
+        },
+      },
+      workspaces: [createWorkspaceSnapshot("2")],
+    },
+    "en",
+    APP_SETTINGS,
+  );
+
+  const currentTab = initial.tabs[0];
+  const paneLayout = currentTab?.paneLayout;
+  if (!currentTab || !paneLayout) {
+    throw new Error("expected hydrated tab");
+  }
+
+  const next = applyWorkspaceRuntimeStateEvent(initial, {
+    workspace_id: "ws-1",
+    view_state: {
+      active_session_id: currentTab.activeSessionId,
+      active_pane_id: currentTab.activePaneId,
+      active_terminal_id: currentTab.activeTerminalId,
+      pane_layout: paneLayout,
+      file_preview: currentTab.filePreview,
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
+    },
+  });
+
+  assert.equal(next, initial);
 });

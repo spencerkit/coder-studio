@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   canMutateWorkspace,
   collectControlledWorkspaceReleasePayloads,
@@ -8,29 +9,17 @@ import {
   createWorkspaceControllerState,
   createWorkspaceControllerStateFromLease,
   shouldRecoverWorkspaceController,
-} from "../apps/web/src/features/workspace/workspace-controller.ts";
+} from "../apps/web/src/features/workspace/workspace-controller";
 import {
   applyWorkspaceControllerEvent,
   applyWorkspaceBootstrapResult,
   applyWorkspaceRuntimeSnapshot,
-} from "../apps/web/src/shared/utils/workspace.ts";
-import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core.ts";
+  applyWorkspaceRuntimeStateEvent,
+} from "../apps/web/src/shared/utils/workspace";
+import { createDefaultWorkbenchState } from "../apps/web/src/state/workbench-core";
+import { defaultAppSettings } from "../apps/web/src/shared/app/settings-storage";
 
-const APP_SETTINGS = {
-  agentProvider: "claude" as const,
-  agentCommand: "claude",
-  idlePolicy: {
-    enabled: true,
-    idleMinutes: 10,
-    maxActive: 3,
-    pressure: true,
-  },
-  completionNotifications: {
-    enabled: true,
-    onlyWhenBackground: true,
-  },
-  terminalCompatibilityMode: "standard" as const,
-};
+const APP_SETTINGS = defaultAppSettings();
 
 const createRuntimeSnapshot = (controller: {
   workspace_id: string;
@@ -63,12 +52,11 @@ const createRuntimeSnapshot = (controller: {
       {
         id: 1,
         title: "Session 1",
-        status: "waiting" as const,
+        status: "idle" as const,
         mode: "branch" as const,
         auto_feed: true,
         queue: [],
         messages: [],
-        stream: "",
         unread: 0,
         last_active_at: 1,
         claude_session_id: null,
@@ -92,6 +80,10 @@ const createRuntimeSnapshot = (controller: {
         modifiedContent: "",
         dirty: false,
       },
+      supervisor: {
+        bindings: [],
+        cycles: [],
+      },
     },
     terminals: [],
   },
@@ -99,13 +91,7 @@ const createRuntimeSnapshot = (controller: {
   lifecycle_events: [],
 });
 
-const createOutputSnapshot = ({
-  sessionStream,
-  terminalOutput = "",
-}: {
-  sessionStream: string;
-  terminalOutput?: string;
-}) => {
+const createOutputSnapshot = (terminalOutput = "") => {
   const runtime = createRuntimeSnapshot({
     workspace_id: "ws-1",
     controller_device_id: "device-a",
@@ -117,7 +103,6 @@ const createOutputSnapshot = ({
     takeover_requested_by_client_id: null,
     takeover_deadline_at: null,
   });
-  runtime.snapshot.sessions[0].stream = sessionStream;
   runtime.snapshot.terminals = terminalOutput
     ? [{ id: 7, output: terminalOutput, recoverable: true }]
     : [];
@@ -252,21 +237,24 @@ test("release payloads only include ready controller workspaces", () => {
   ]);
 });
 
-test("runtime snapshot lifecycle replay restores running session state", () => {
+test("runtime snapshot lifecycle replay preserves running session state and restores resume id", () => {
+  const snapshot = createRuntimeSnapshot({
+    workspace_id: "ws-1",
+    controller_device_id: "device-a",
+    controller_client_id: "client-a",
+    lease_expires_at: Date.now() + 30_000,
+    fencing_token: 1,
+    takeover_request_id: null,
+    takeover_requested_by_device_id: null,
+    takeover_requested_by_client_id: null,
+    takeover_deadline_at: null,
+  });
+  snapshot.snapshot.sessions[0].status = "running";
+
   const next = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
     {
-      ...createRuntimeSnapshot({
-        workspace_id: "ws-1",
-        controller_device_id: "device-a",
-        controller_client_id: "client-a",
-        lease_expires_at: Date.now() + 30_000,
-        fencing_token: 1,
-        takeover_request_id: null,
-        takeover_requested_by_device_id: null,
-        takeover_requested_by_client_id: null,
-        takeover_deadline_at: null,
-      }),
+      ...snapshot,
       controller: {
         workspace_id: "ws-1",
         controller_device_id: "device-a",
@@ -283,8 +271,8 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
           workspace_id: "ws-1",
           session_id: "1",
           seq: 1,
-          kind: "tool_started",
-          source_event: "PreToolUse",
+          kind: "session_started",
+          source_event: "SessionStart",
           data: "{\"session_id\":\"claude-replay\"}",
         },
       ],
@@ -297,12 +285,433 @@ test("runtime snapshot lifecycle replay restores running session state", () => {
 
   const session = next.tabs[0]?.sessions[0];
   assert.equal(session?.status, "running");
-  assert.equal(session?.claudeSessionId, "claude-replay");
+  assert.equal(session?.resumeId, "claude-replay");
   assert.equal(next.tabs[0]?.paneLayout.type, "leaf");
   if (next.tabs[0]?.paneLayout.type === "leaf") {
     assert.equal(next.tabs[0].paneLayout.sessionId, "1");
   }
 });
+
+test("runtime snapshot lifecycle replay does not override interrupted session state", () => {
+  const snapshot = createRuntimeSnapshot({
+    workspace_id: "ws-1",
+    controller_device_id: "device-a",
+    controller_client_id: "client-a",
+    lease_expires_at: Date.now() + 30_000,
+    fencing_token: 1,
+    takeover_request_id: null,
+    takeover_requested_by_device_id: null,
+    takeover_requested_by_client_id: null,
+    takeover_deadline_at: null,
+  });
+  snapshot.snapshot.sessions[0].status = "interrupted";
+  snapshot.lifecycle_events = [
+    {
+      workspace_id: "ws-1",
+      session_id: "1",
+      seq: 1,
+      kind: "turn_completed",
+      source_event: "Stop",
+      data: "{\"session_id\":\"claude-replay\"}",
+    },
+  ];
+
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    snapshot,
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const session = next.tabs[0]?.sessions[0];
+  assert.equal(session?.status, "interrupted");
+  assert.equal(session?.resumeId, "claude-replay");
+});
+
+test("runtime snapshot hydrates session runtime bindings without promoting legacy terminal ids when only runtime identity is available", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-a",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{
+        session_id: "1",
+        terminal_id: "runtime-7",
+        terminal_runtime_id: "runtime-7",
+      }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(next.tabs[0]?.sessions[0]?.terminalId, undefined);
+  assert.equal(next.tabs[0]?.sessions[0]?.terminalRuntimeId, "runtime-7");
+});
+
+test("runtime snapshot still records compatibility terminal ids when workspace terminal ids are supplied", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-a",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{
+        session_id: "1",
+        terminal_id: "runtime-7",
+        terminal_runtime_id: "runtime-7",
+        workspace_terminal_id: "7",
+      }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(next.tabs[0]?.sessions[0]?.terminalId, "term-7");
+  assert.equal(next.tabs[0]?.sessions[0]?.terminalRuntimeId, "runtime-7");
+});
+
+test("runtime start stores terminal runtime id on the session when backend returns it", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const terminalRuntimeId = result\.terminal_runtime_id \?\? session\.terminalRuntimeId[\s\S]*?terminalRuntimeId: terminalRuntimeId/,
+  );
+});
+
+test("runtime start keeps legacy terminal ids as fallback only when no runtime id is returned", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const terminalId = result\.terminal_runtime_id[\s\S]*?\? undefined[\s\S]*?: `term-\$\{result\.terminal_id\}`/,
+  );
+});
+
+test("runtime start no longer performs client boot_input terminal writes", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  const runtimeStartSection = source.slice(
+    source.indexOf("const result = await invokeAgent(() => startSessionRuntime({"),
+    source.indexOf("const sendAgentRawChunk = async"),
+  );
+
+  assert.doesNotMatch(runtimeStartSection, /result\.boot_input/);
+  assert.doesNotMatch(runtimeStartSection, /writeWorkspaceTerminalData\(/);
+});
+
+test("agent session input routes through terminal channel runtime ids with controller identity fields", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /writeTerminalRequest\(tab\.id, tab\.controller, numericTerminalId, input\)/,
+  );
+  assert.match(source, /if \(\!session\.terminalRuntimeId \|\| session\.runtimeLiveness !== "attached" \|\| \!session\.terminalId\) return false;/);
+  assert.match(source, /const bufferedInput = agentTerminalInputBufferRef\.current\.get\(paneId\) \?\? "";/);
+  assert.match(source, /clearAgentTerminalInputFlushTimer\(paneId\);/);
+  assert.match(source, /consumeTerminalChannelInputFragment\(bufferedInput, data\)/);
+  assert.match(source, /if \(pending === "\\u001b"\) \{[\s\S]*?scheduleAgentTerminalEscapeFlush\(paneId\);/);
+  assert.match(source, /void forwardAgentTerminalInput\(paneId, pending\);/);
+  assert.match(source, /await forwardAgentTerminalInput\(paneId, forwarded\);/);
+  assert.doesNotMatch(source, /if \(!session\.terminalId \|\| \!session\.terminalRuntimeId\) return false;/);
+  assert.doesNotMatch(source, /if \(result\.boot_input\)[\s\S]*?writeWorkspaceTerminalData\(/);
+  assert.doesNotMatch(source, /sanitizeTerminalChannelInput\(data\)/);
+  assert.doesNotMatch(source, /\^\\x1B\\\[\[0-9;\]\*\[R\?AHFGSTIcJJKMSXh\]/);
+});
+
+test("agent pane session readiness starts runtimes from runtime identity instead of legacy terminal ids", () => {
+  const source = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /if \(!isSessionRuntimeWritable\(sessionSnapshot\)\) \{/);
+  assert.doesNotMatch(source, /if \(!sessionSnapshot\.terminalId\) \{/);
+});
+
+test("runtime snapshot remaps draft session ids without treating terminal runtime ids as workspace terminal ids", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-b",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-b",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        sessions: [],
+        view_state: {
+          active_session_id: "draft-remote",
+          active_pane_id: "pane-draft-remote",
+          active_terminal_id: "",
+          pane_layout: {
+            type: "leaf",
+            id: "pane-draft-remote",
+            session_id: "draft-remote",
+          },
+          file_preview: {
+            path: "",
+            content: "",
+            mode: "preview",
+            originalContent: "",
+            modifiedContent: "",
+            dirty: false,
+          },
+        },
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{
+        session_id: "draft-remote",
+        terminal_id: "runtime-7",
+        terminal_runtime_id: "runtime-7",
+        workspace_terminal_id: "7",
+      }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-b",
+    "client-b",
+  );
+
+  const draftSession = next.tabs[0]?.sessions[0];
+  assert.equal(draftSession?.id, "draft-remote");
+  assert.equal(draftSession?.isDraft, true);
+  assert.equal(next.tabs[0]?.activeSessionId, "draft-remote");
+  assert.equal(next.tabs[0]?.activePaneId, "pane-draft-remote");
+  assert.equal(draftSession?.terminalId, "term-7");
+  assert.equal(draftSession?.terminalRuntimeId, "runtime-7");
+});
+
+test("runtime snapshot remap keeps workspace terminal ids when active binding only exposes terminal runtime id", () => {
+  const next = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    {
+      ...createRuntimeSnapshot({
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-b",
+        lease_expires_at: Date.now() + 30_000,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      }),
+      snapshot: {
+        ...createRuntimeSnapshot({
+          workspace_id: "ws-1",
+          controller_device_id: "device-a",
+          controller_client_id: "client-b",
+          lease_expires_at: Date.now() + 30_000,
+          fencing_token: 1,
+          takeover_request_id: null,
+          takeover_requested_by_device_id: null,
+          takeover_requested_by_client_id: null,
+          takeover_deadline_at: null,
+        }).snapshot,
+        sessions: [],
+        view_state: {
+          active_session_id: "remote-session",
+          active_pane_id: "pane-1",
+          active_terminal_id: "",
+          pane_layout: {
+            type: "leaf",
+            id: "pane-1",
+            session_id: "remote-session",
+          },
+          file_preview: {
+            path: "",
+            content: "",
+            mode: "preview",
+            originalContent: "",
+            modifiedContent: "",
+            dirty: false,
+          },
+        },
+        terminals: [{ id: 7, output: "live terminal output", recoverable: true }],
+      },
+      session_runtime_bindings: [{
+        session_id: "remote-session",
+        terminal_id: "runtime-7",
+        terminal_runtime_id: "runtime-7",
+        workspace_terminal_id: "7",
+      }],
+    },
+    "en",
+    APP_SETTINGS,
+    "device-b",
+    "client-b",
+  );
+
+  const session = next.tabs[0]?.sessions[0];
+  assert.equal(session?.id, "remote-session");
+  assert.equal(session?.terminalId, "term-7");
+  assert.equal(session?.terminalRuntimeId, "runtime-7");
+  assert.notEqual(session?.terminalId, "term-runtime-7");
+});
+
+test("runtime state event applies session status patches without requiring a view patch", () => {
+  const attached = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createRuntimeSnapshot({
+      workspace_id: "ws-1",
+      controller_device_id: "device-a",
+      controller_client_id: "client-a",
+      lease_expires_at: Date.now() + 30_000,
+      fencing_token: 1,
+      takeover_request_id: null,
+      takeover_requested_by_device_id: null,
+      takeover_requested_by_client_id: null,
+      takeover_deadline_at: null,
+    }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const next = applyWorkspaceRuntimeStateEvent(attached, {
+    workspace_id: "ws-1",
+    session_state: {
+      session_id: "1",
+      status: "interrupted",
+      last_active_at: 42,
+      resume_id: "resume-99",
+    },
+  } as never);
+
+  const session = next.tabs[0]?.sessions[0];
+  assert.equal(session?.status, "interrupted");
+  assert.equal(session?.lastActiveAt, 42);
+  assert.equal(session?.resumeId, "resume-99");
+  assert.equal(next.tabs[0]?.activeSessionId, "1");
+});
+
+test("runtime snapshot and state events preserve session runtime liveness", () => {
+  const snapshot = createRuntimeSnapshot({
+    workspace_id: "ws-1",
+    controller_device_id: "device-a",
+    controller_client_id: "client-a",
+    lease_expires_at: Date.now() + 30_000,
+    fencing_token: 1,
+    takeover_request_id: null,
+    takeover_requested_by_device_id: null,
+    takeover_requested_by_client_id: null,
+    takeover_deadline_at: null,
+  });
+  snapshot.snapshot.sessions[0] = {
+    ...snapshot.snapshot.sessions[0],
+    runtime_active: true,
+    runtime_liveness: "attached",
+  };
+
+  const attached = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    snapshot as never,
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(attached.tabs[0]?.sessions[0]?.runtimeLiveness, "attached");
+
+  const next = applyWorkspaceRuntimeStateEvent(attached, {
+    workspace_id: "ws-1",
+    session_state: {
+      session_id: "1",
+      status: "interrupted",
+      last_active_at: 42,
+      resume_id: "resume-99",
+      runtime_liveness: "provider_exited",
+    },
+  } as never);
+
+  const session = next.tabs[0]?.sessions[0];
+  assert.equal(session?.runtimeLiveness, "provider_exited");
+  assert.equal(session?.status, "interrupted");
+});
+
 
 test("runtime snapshot keeps newer takeover state from controller events on the same lease", () => {
   const staleSnapshot = createRuntimeSnapshot({
@@ -508,10 +917,53 @@ test("controller events can clear takeover state after a preserved runtime merge
   assert.equal(cleared.tabs[0]?.controller.takeoverRequestId, undefined);
 });
 
-test("runtime snapshot does not overwrite a newer live session stream with a shorter replay", () => {
+test("controller events reuse the current state when the effective controller is unchanged", () => {
+  const current = applyWorkspaceRuntimeSnapshot(
+    createDefaultWorkbenchState(),
+    createRuntimeSnapshot({
+      workspace_id: "ws-1",
+      controller_device_id: "device-a",
+      controller_client_id: "client-a",
+      lease_expires_at: 100,
+      fencing_token: 1,
+      takeover_request_id: null,
+      takeover_requested_by_device_id: null,
+      takeover_requested_by_client_id: null,
+      takeover_deadline_at: null,
+    }),
+    "en",
+    APP_SETTINGS,
+    "device-a",
+    "client-a",
+  );
+
+  const next = applyWorkspaceControllerEvent(
+    current,
+    {
+      workspace_id: "ws-1",
+      controller: {
+        workspace_id: "ws-1",
+        controller_device_id: "device-a",
+        controller_client_id: "client-a",
+        lease_expires_at: 100,
+        fencing_token: 1,
+        takeover_request_id: null,
+        takeover_requested_by_device_id: null,
+        takeover_requested_by_client_id: null,
+        takeover_deadline_at: null,
+      },
+    },
+    "device-a",
+    "client-a",
+  );
+
+  assert.equal(next, current);
+});
+
+test("runtime snapshot does not overwrite a newer live terminal snapshot with a shorter replay", () => {
   const attached = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "terminal-output" }),
+    createOutputSnapshot("terminal-output"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -520,21 +972,20 @@ test("runtime snapshot does not overwrite a newer live session stream with a sho
 
   const merged = applyWorkspaceRuntimeSnapshot(
     attached,
-    createOutputSnapshot({ sessionStream: "abc", terminalOutput: "term" }),
+    createOutputSnapshot("term"),
     "en",
     APP_SETTINGS,
     "device-a",
     "client-a",
   );
 
-  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdef");
   assert.equal(merged.tabs[0]?.terminals[0]?.output, "terminal-output");
 });
 
-test("runtime snapshot bridges truncated-head replays with newer appended output", () => {
+test("runtime snapshot bridges truncated-head terminal replays with newer appended output", () => {
   const attached = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    createOutputSnapshot("123456"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -543,21 +994,20 @@ test("runtime snapshot bridges truncated-head replays with newer appended output
 
   const merged = applyWorkspaceRuntimeSnapshot(
     attached,
-    createOutputSnapshot({ sessionStream: "cdefgh", terminalOutput: "345678" }),
+    createOutputSnapshot("345678"),
     "en",
     APP_SETTINGS,
     "device-a",
     "client-a",
   );
 
-  assert.equal(merged.tabs[0]?.sessions[0]?.stream, "abcdefgh");
   assert.equal(merged.tabs[0]?.terminals[0]?.output, "12345678");
 });
 
-test("bootstrap replay merges against the latest store state instead of replacing newer streams", () => {
+test("bootstrap replay merges against the latest store state instead of replacing newer terminal output", () => {
   const current = applyWorkspaceRuntimeSnapshot(
     createDefaultWorkbenchState(),
-    createOutputSnapshot({ sessionStream: "abcdef", terminalOutput: "123456" }),
+    createOutputSnapshot("123456"),
     "en",
     APP_SETTINGS,
     "device-a",
@@ -580,7 +1030,7 @@ test("bootstrap replay merges against the latest store state instead of replacin
       },
       workspaces: [
         {
-          ...createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }).snapshot,
+          ...createOutputSnapshot("123").snapshot,
         },
       ],
     },
@@ -600,10 +1050,9 @@ test("bootstrap replay merges against the latest store state instead of replacin
           show_terminal_panel: false,
         },
       },
-      runtimeSnapshot: createOutputSnapshot({ sessionStream: "abc", terminalOutput: "123" }),
+      runtimeSnapshot: createOutputSnapshot("123"),
     },
   );
 
-  assert.equal(next.tabs[0]?.sessions[0]?.stream, "abcdef");
   assert.equal(next.tabs[0]?.terminals[0]?.output, "123456");
 });

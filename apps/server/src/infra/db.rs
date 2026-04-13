@@ -1,12 +1,29 @@
+use crate::infra::time::now_ts_ms;
+use crate::models::{
+    WorkspaceSupervisorBinding, WorkspaceSupervisorCycle, WorkspaceSupervisorCycleStatus,
+    WorkspaceSupervisorStatus, WorkspaceSupervisorViewState,
+};
 use crate::*;
-use chrono::TimeZone;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(test)]
+use std::thread::ThreadId;
 
-const SESSION_STREAM_LIMIT: usize = 200_000;
 const TERMINAL_STREAM_LIMIT: usize = 200_000;
 const AGENT_LIFECYCLE_HISTORY_LIMIT_PER_SESSION: i64 = 128;
 const APP_UI_STATE_ROW_ID: i64 = 1;
 const APP_SETTINGS_ROW_ID: i64 = 1;
+const DB_SCHEMA_VERSION: i64 = 5;
+const DEFAULT_SESSION_SLOT_ID: &str = "slot-primary";
+const SESSION_TIMESTAMP_MILLIS_THRESHOLD: i64 = 1_000_000_000_000;
+const MISSING_PROVIDER_SESSION_REASON: &str = "该会话已经被删除，无法恢复";
+
+#[cfg(test)]
+static WITH_DB_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static WITH_DB_COUNT_OWNER: Mutex<Option<ThreadId>> = Mutex::new(None);
 
 #[derive(Clone, Serialize, Deserialize)]
 struct DeviceWorkbenchUiState {
@@ -29,14 +46,6 @@ struct WorkspaceRow {
     git_url: Option<String>,
     target: ExecTarget,
     idle_policy: IdlePolicy,
-}
-
-#[derive(Clone)]
-struct SessionRow {
-    workspace_id: String,
-    archived_at: Option<i64>,
-    sort_order: i64,
-    payload: String,
 }
 
 #[derive(Clone)]
@@ -83,12 +92,24 @@ fn default_file_preview_value() -> Value {
     })
 }
 
-fn session_title(id: u64) -> String {
+fn session_title(id: &str) -> String {
     format!("Session {}", id)
 }
 
-fn archive_entry_id(session_id: u64, archived_at: i64) -> u64 {
-    ((archived_at as u64) << 32) ^ session_id
+#[cfg(test)]
+fn archive_entry_id(session_id: &str, archived_at: i64) -> u64 {
+    let session_hash = session_id.bytes().fold(0u64, |acc, byte| {
+        acc.wrapping_mul(131).wrapping_add(byte as u64)
+    });
+    ((archived_at as u64) << 32) ^ session_hash
+}
+
+pub(crate) fn session_timestamp_to_millis(value: i64) -> i64 {
+    if value > 0 && value < SESSION_TIMESTAMP_MILLIS_THRESHOLD {
+        value.saturating_mul(1000)
+    } else {
+        value
+    }
 }
 
 fn workspace_title_from_path(path: &str) -> String {
@@ -99,7 +120,7 @@ fn workspace_title_from_path(path: &str) -> String {
         .unwrap_or_else(|| "Workspace".to_string())
 }
 
-fn random_hex(bytes_len: usize) -> Result<String, String> {
+pub(crate) fn random_hex(bytes_len: usize) -> Result<String, String> {
     let mut bytes = vec![0u8; bytes_len];
     getrandom::getrandom(&mut bytes).map_err(|e| e.to_string())?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
@@ -107,6 +128,10 @@ fn random_hex(bytes_len: usize) -> Result<String, String> {
 
 fn workspace_id() -> Result<String, String> {
     Ok(format!("ws_{}", random_hex(8)?))
+}
+
+pub(crate) fn session_slot_id() -> Result<String, String> {
+    Ok(format!("slot_{}", random_hex(8)?))
 }
 
 fn parse_source_kind(value: &str) -> Result<WorkspaceSourceKind, String> {
@@ -186,6 +211,13 @@ fn load_workspace_row(conn: &Connection, workspace_id: &str) -> Result<Workspace
         })
 }
 
+pub(crate) fn ensure_workspace_exists_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(), String> {
+    load_workspace_row(conn, workspace_id).map(|_| ())
+}
+
 fn load_workspace_row_by_root(
     conn: &Connection,
     root_path: &str,
@@ -223,81 +255,170 @@ fn load_all_workspace_rows(conn: &Connection) -> Result<Vec<WorkspaceRow>, Strin
 }
 
 fn session_from_payload(payload: &str) -> Result<SessionInfo, String> {
-    parse_json(payload)
+    let mut value: Value = parse_json(payload)?;
+    if let Some(id) = value.get_mut("id") {
+        match id {
+            Value::String(_) => {}
+            Value::Number(number) => *id = Value::String(number.to_string()),
+            other => {
+                return Err(format!(
+                    "session_payload_id_must_be_string_or_number:{other:?}"
+                ))
+            }
+        }
+    }
+    serde_json::from_value(value).map_err(|e| e.to_string())
 }
 
-fn session_row_from_query(row: &rusqlite::Row<'_>) -> Result<SessionRow, rusqlite::Error> {
-    Ok(SessionRow {
-        workspace_id: row.get("workspace_id")?,
-        archived_at: row.get("archived_at")?,
-        sort_order: row.get("sort_order")?,
-        payload: row.get("payload")?,
-    })
-}
-
-fn load_session_row(
-    conn: &Connection,
-    workspace_id: &str,
-    session_id: u64,
-) -> Result<SessionRow, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT workspace_id, archived_at, sort_order, payload
-             FROM workspace_sessions
-             WHERE workspace_id = ?1 AND id = ?2",
-        )
-        .map_err(|e| e.to_string())?;
-    stmt.query_row(
-        params![workspace_id, session_id as i64],
-        session_row_from_query,
+fn session_binding_to_session_info(binding: &WorkspaceSessionBinding) -> SessionInfo {
+    session_placeholder(
+        &binding.session_id,
+        if binding.title_snapshot.trim().is_empty() {
+            session_title(&binding.session_id)
+        } else {
+            binding.title_snapshot.clone()
+        },
+        binding.provider.clone(),
+        binding.mode.clone(),
+        binding.resume_id.clone(),
+        binding.last_seen_at,
+        None,
     )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "session_not_found".to_string(),
-        other => other.to_string(),
-    })
 }
 
-fn persist_session_row(
-    conn: &Connection,
-    workspace_id: &str,
-    session: &SessionInfo,
-    archived_at: Option<i64>,
-    sort_order: i64,
-) -> Result<(), String> {
-    let payload = json_string(session)?;
-    conn.execute(
-        "UPDATE workspace_sessions
-         SET status = ?3,
-             last_active_at = ?4,
-             claude_session_id = ?5,
-             payload = ?6,
-             archived_at = ?7,
-             sort_order = ?8
-         WHERE workspace_id = ?1 AND id = ?2",
-        params![
-            workspace_id,
-            session.id as i64,
-            status_label(&session.status),
-            session.last_active_at,
-            session.claude_session_id,
-            payload,
-            archived_at,
-            sort_order,
-        ],
+fn recreate_all_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS app_client_ui_state;
+        DROP TABLE IF EXISTS app_device_ui_state;
+        DROP TABLE IF EXISTS app_settings;
+        DROP TABLE IF EXISTS app_ui_state;
+        DROP TABLE IF EXISTS agent_lifecycle_events;
+        DROP TABLE IF EXISTS workspace_terminals;
+        DROP TABLE IF EXISTS workspace_attachments;
+        DROP TABLE IF EXISTS workspace_controller_leases;
+        DROP TABLE IF EXISTS workspace_view_state;
+        DROP TABLE IF EXISTS workspace_sessions;
+        DROP TABLE IF EXISTS workspaces;",
     )
-    .map_err(|e| e.to_string())?;
+}
+
+fn ensure_schema_version(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let mut current_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    loop {
+        match current_version {
+            0 | DB_SCHEMA_VERSION => break,
+            2 | 3 | 4 => {
+                conn.execute_batch("DROP TABLE IF EXISTS workspace_sessions;")?;
+                current_version = DB_SCHEMA_VERSION;
+            }
+            _ => {
+                recreate_all_tables(conn)?;
+                break;
+            }
+        }
+    }
+    conn.pragma_update(None, "user_version", DB_SCHEMA_VERSION)?;
     Ok(())
 }
 
-fn min_active_sort_order(conn: &Connection, workspace_id: &str) -> Result<i64, String> {
-    let value: Option<i64> = conn
-        .query_row(
-            "SELECT MIN(sort_order) FROM workspace_sessions WHERE workspace_id = ?1 AND archived_at IS NULL",
-            params![workspace_id],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(value.unwrap_or(1))
+pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
+    ensure_schema_version(conn)?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            root_path TEXT NOT NULL UNIQUE,
+            source_kind TEXT NOT NULL,
+            source_value TEXT NOT NULL,
+            git_url TEXT,
+            target_json TEXT NOT NULL,
+            idle_policy_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            last_opened_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workspace_view_state (
+            workspace_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_controller_leases (
+            workspace_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_attachments (
+            attachment_id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            attached_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL,
+            detached_at INTEGER,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS workspace_terminals (
+            workspace_id TEXT NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            output TEXT NOT NULL,
+            recoverable INTEGER NOT NULL DEFAULT 1,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (workspace_id, terminal_id),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
+            workspace_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            seq INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            source_event TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (workspace_id, session_id, seq),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS app_ui_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_device_ui_state (
+            device_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_client_ui_state (
+            device_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (device_id, client_id)
+        );",
+    )?;
+    let payload = serde_json::to_string(&default_ui_state()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_UI_STATE_ROW_ID, payload, now_ts()],
+    )?;
+    let app_settings_payload =
+        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
+    conn.execute(
+        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
+    )?;
+    conn.execute(
+        "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",
+        params![now_ts()],
+    )?;
+    Ok(())
 }
 
 fn load_legacy_ui_state_from_conn(conn: &Connection) -> Result<WorkbenchUiState, String> {
@@ -533,18 +654,51 @@ fn save_ui_state_to_conn(
     )
 }
 
-fn default_view_state(active_session_id: u64) -> WorkspaceViewState {
+fn default_view_state(active_session_id: String) -> WorkspaceViewState {
     WorkspaceViewState {
-        active_session_id: active_session_id.to_string(),
+        active_session_id: active_session_id.clone(),
         active_pane_id: format!("pane-{active_session_id}"),
         active_terminal_id: String::new(),
         pane_layout: json!({
             "type": "leaf",
             "id": format!("pane-{active_session_id}"),
-            "sessionId": active_session_id.to_string(),
+            "sessionId": active_session_id,
         }),
         file_preview: default_file_preview_value(),
+        session_bindings: Vec::new(),
+        supervisor: WorkspaceSupervisorViewState::default(),
     }
+}
+
+fn derive_legacy_session_bindings_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+    view_state: &WorkspaceViewState,
+) -> Result<Vec<WorkspaceSessionBinding>, String> {
+    let mut mounted_session_ids = HashSet::new();
+    collect_pane_session_ids(&view_state.pane_layout, &mut mounted_session_ids);
+    let legacy_sessions = load_snapshot_sessions_from_conn(conn, workspace_id).unwrap_or_default();
+    let legacy_by_id = legacy_sessions
+        .into_iter()
+        .map(|session| (session.id.clone(), session))
+        .collect::<HashMap<_, _>>();
+
+    Ok(ordered_visible_session_ids(view_state)
+        .into_iter()
+        .filter(|session_id| mounted_session_ids.contains(session_id))
+        .filter_map(|session_id| {
+            let session = legacy_by_id.get(&session_id)?;
+            let resume_id = session.resume_id.clone()?;
+            Some(WorkspaceSessionBinding {
+                session_id: session.id.clone(),
+                provider: session.provider.clone(),
+                mode: session.mode.clone(),
+                resume_id: Some(resume_id),
+                title_snapshot: session.title.clone(),
+                last_seen_at: session.last_active_at,
+            })
+        })
+        .collect())
 }
 
 fn load_view_state_from_conn(
@@ -561,7 +715,19 @@ fn load_view_state_from_conn(
             rusqlite::Error::QueryReturnedNoRows => "workspace_view_not_found".to_string(),
             other => other.to_string(),
         })?;
-    parse_json(&payload)
+    let value: Value = parse_json(&payload)?;
+    let needs_binding_migration = value
+        .as_object()
+        .map(|object| !object.contains_key("session_bindings"))
+        .unwrap_or(false);
+    let mut view_state: WorkspaceViewState =
+        serde_json::from_value(value).map_err(|e| e.to_string())?;
+    if needs_binding_migration {
+        let bindings = derive_legacy_session_bindings_from_conn(conn, workspace_id, &view_state)?;
+        view_state.session_bindings = bindings;
+        save_view_state_to_conn(conn, workspace_id, &view_state)?;
+    }
+    Ok(view_state)
 }
 
 fn save_view_state_to_conn(
@@ -598,7 +764,7 @@ fn load_persisted_terminals_from_conn(
         .prepare(
             "SELECT terminal_id, output, recoverable
              FROM workspace_terminals
-             WHERE workspace_id = ?1
+             WHERE workspace_id = ?1 AND recoverable = 1
              ORDER BY terminal_id ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -751,7 +917,7 @@ fn append_agent_lifecycle_event_to_conn(
     })
 }
 
-fn load_agent_lifecycle_events_from_conn(
+pub(crate) fn load_agent_lifecycle_events_from_conn(
     conn: &Connection,
     workspace_id: &str,
     limit: usize,
@@ -796,7 +962,7 @@ fn default_workspace_controller_lease(workspace_id: &str) -> WorkspaceController
     }
 }
 
-fn load_workspace_controller_lease_from_conn(
+pub(crate) fn load_workspace_controller_lease_from_conn(
     conn: &Connection,
     workspace_id: &str,
 ) -> Result<WorkspaceControllerLease, String> {
@@ -815,7 +981,7 @@ fn load_workspace_controller_lease_from_conn(
     }
 }
 
-fn save_workspace_controller_lease_to_conn(
+pub(crate) fn save_workspace_controller_lease_to_conn(
     conn: &Connection,
     lease: &WorkspaceControllerLease,
 ) -> Result<(), String> {
@@ -829,7 +995,7 @@ fn save_workspace_controller_lease_to_conn(
     Ok(())
 }
 
-fn upsert_workspace_attachment_to_conn(
+pub(crate) fn upsert_workspace_attachment_to_conn(
     conn: &Connection,
     workspace_id: &str,
     device_id: &str,
@@ -847,7 +1013,7 @@ fn upsert_workspace_attachment_to_conn(
     Ok(())
 }
 
-fn list_workspace_ids_for_workspace_client_from_conn(
+pub(crate) fn list_workspace_ids_for_workspace_client_from_conn(
     conn: &Connection,
     device_id: &str,
     client_id: &str,
@@ -869,7 +1035,7 @@ fn list_workspace_ids_for_workspace_client_from_conn(
     Ok(workspace_ids)
 }
 
-fn mark_workspace_client_detached_from_conn(
+pub(crate) fn mark_workspace_client_detached_from_conn(
     conn: &Connection,
     device_id: &str,
     client_id: &str,
@@ -884,53 +1050,187 @@ fn mark_workspace_client_detached_from_conn(
     Ok(())
 }
 
-fn load_sessions_from_conn(
-    conn: &Connection,
-    workspace_id: &str,
-    archived: bool,
-) -> Result<Vec<SessionRow>, String> {
-    let sql = if archived {
-        "SELECT workspace_id, archived_at, sort_order, payload
-         FROM workspace_sessions
-         WHERE workspace_id = ?1 AND archived_at IS NOT NULL
-         ORDER BY archived_at DESC, id DESC"
-    } else {
-        "SELECT workspace_id, archived_at, sort_order, payload
-         FROM workspace_sessions
-         WHERE workspace_id = ?1 AND archived_at IS NULL
-         ORDER BY sort_order ASC, last_active_at DESC, id DESC"
-    };
-    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params![workspace_id], session_row_from_query)
-        .map_err(|e| e.to_string())?;
-    let mut items = Vec::new();
-    for row in rows {
-        items.push(row.map_err(|e| e.to_string())?);
-    }
-    Ok(items)
-}
-
 fn load_all_session_rows_from_conn(
     conn: &Connection,
     workspace_id: &str,
-) -> Result<Vec<SessionRow>, String> {
+) -> Result<Vec<SessionInfo>, String> {
+    let table_exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workspace_sessions'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if table_exists == 0 {
+        return Ok(Vec::new());
+    }
+
     let mut stmt = conn
         .prepare(
-            "SELECT workspace_id, archived_at, sort_order, payload
+            "SELECT payload
              FROM workspace_sessions
              WHERE workspace_id = ?1
-             ORDER BY last_active_at DESC, id DESC",
+             ORDER BY id ASC",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map(params![workspace_id], session_row_from_query)
+        .query_map(params![workspace_id], |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
-    let mut items = Vec::new();
+    let mut sessions = Vec::new();
     for row in rows {
-        items.push(row.map_err(|e| e.to_string())?);
+        sessions.push(session_from_payload(&row.map_err(|e| e.to_string())?)?);
     }
-    Ok(items)
+    Ok(sessions)
+}
+
+fn load_snapshot_sessions_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<Vec<SessionInfo>, String> {
+    let mut sessions = load_all_session_rows_from_conn(conn, workspace_id)?;
+    sessions.sort_by(|left, right| right.last_active_at.cmp(&left.last_active_at));
+    Ok(sessions)
+}
+
+fn collect_ordered_pane_session_ids(
+    value: &Value,
+    ordered: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+) {
+    let Value::Object(map) = value else {
+        return;
+    };
+    let Some(Value::String(kind)) = map.get("type") else {
+        return;
+    };
+
+    if kind == "leaf" {
+        if let Some(Value::String(session_id)) =
+            map.get("session_id").or_else(|| map.get("sessionId"))
+        {
+            if seen.insert(session_id.clone()) {
+                ordered.push(session_id.clone());
+            }
+        }
+        return;
+    }
+
+    if kind == "split" {
+        if let Some(next) = map.get("first") {
+            collect_ordered_pane_session_ids(next, ordered, seen);
+        }
+        if let Some(next) = map.get("second") {
+            collect_ordered_pane_session_ids(next, ordered, seen);
+        }
+    }
+}
+
+fn ordered_visible_session_ids(view_state: &WorkspaceViewState) -> Vec<String> {
+    let mut ordered = Vec::new();
+    let mut seen = HashSet::new();
+    if !view_state.active_session_id.trim().is_empty()
+        && seen.insert(view_state.active_session_id.clone())
+    {
+        ordered.push(view_state.active_session_id.clone());
+    }
+    collect_ordered_pane_session_ids(&view_state.pane_layout, &mut ordered, &mut seen);
+    ordered
+}
+
+fn list_provider_workspace_sessions(
+    workspace_path: &str,
+) -> Result<Vec<ProviderWorkspaceSession>, String> {
+    let mut sessions = Vec::new();
+    for provider_id in [AgentProvider::claude(), AgentProvider::codex()] {
+        let Some(adapter) =
+            crate::services::provider_registry::resolve_provider_adapter(provider_id.as_str())
+        else {
+            continue;
+        };
+        match adapter.list_workspace_sessions(workspace_path) {
+            Ok(provider_sessions) => sessions.extend(provider_sessions),
+            Err(error) => {
+                eprintln!(
+                    "failed to list provider sessions provider={} workspace_path={workspace_path}: {error}",
+                    provider_id.as_str()
+                );
+            }
+        }
+    }
+    Ok(sessions)
+}
+
+fn provider_session_for_binding<'a>(
+    provider_sessions: &'a [ProviderWorkspaceSession],
+    binding: &WorkspaceSessionBinding,
+) -> Option<&'a ProviderWorkspaceSession> {
+    let Some(resume_id) = binding.resume_id.as_deref() else {
+        return None;
+    };
+    provider_sessions
+        .iter()
+        .find(|session| session.provider == binding.provider && session.resume_id == resume_id)
+}
+
+fn session_placeholder(
+    session_id: &str,
+    title: String,
+    provider: AgentProvider,
+    mode: SessionMode,
+    resume_id: Option<String>,
+    last_active_at: i64,
+    unavailable_reason: Option<String>,
+) -> SessionInfo {
+    SessionInfo {
+        id: session_id.to_string(),
+        title,
+        status: SessionStatus::Interrupted,
+        mode,
+        provider,
+        auto_feed: true,
+        queue: Vec::new(),
+        messages: Vec::new(),
+        unread: 0,
+        last_active_at: session_timestamp_to_millis(last_active_at),
+        resume_id,
+        unavailable_reason,
+        runtime_active: false,
+        runtime_liveness: None,
+    }
+}
+
+fn resolve_bound_session_from_binding(
+    binding: &WorkspaceSessionBinding,
+    provider_sessions: &[ProviderWorkspaceSession],
+) -> SessionInfo {
+    if let Some(provider_session) = provider_session_for_binding(provider_sessions, binding) {
+        return session_placeholder(
+            &binding.session_id,
+            provider_session.title.clone(),
+            binding.provider.clone(),
+            binding.mode.clone(),
+            binding.resume_id.clone(),
+            provider_session.last_active_at,
+            None,
+        );
+    }
+
+    session_placeholder(
+        &binding.session_id,
+        if binding.title_snapshot.trim().is_empty() {
+            session_title(&binding.session_id)
+        } else {
+            binding.title_snapshot.clone()
+        },
+        binding.provider.clone(),
+        binding.mode.clone(),
+        binding.resume_id.clone(),
+        binding.last_seen_at,
+        binding
+            .resume_id
+            .as_ref()
+            .map(|_| MISSING_PROVIDER_SESSION_REASON.to_string()),
+    )
 }
 
 fn collect_pane_session_ids(value: &Value, ids: &mut HashSet<String>) {
@@ -960,64 +1260,82 @@ fn collect_pane_session_ids(value: &Value, ids: &mut HashSet<String>) {
     }
 }
 
-fn session_rows_to_archive(rows: Vec<SessionRow>) -> Result<Vec<ArchiveEntry>, String> {
-    rows.into_iter()
-        .map(|row| {
-            let session = session_from_payload(&row.payload)?;
-            let time = row
-                .archived_at
-                .and_then(|value| chrono::Local.timestamp_opt(value, 0).single())
-                .map(|dt| dt.format("%H:%M").to_string())
-                .unwrap_or_else(now_label);
-            Ok(ArchiveEntry {
-                id: archive_entry_id(session.id, row.archived_at.unwrap_or(now_ts())),
-                session_id: session.id,
-                mode: session.mode.clone(),
-                time,
-                snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
-            })
-        })
-        .collect()
-}
-
-fn session_row_to_history_record(
-    workspace: &WorkspaceRow,
-    mounted_session_ids: &HashSet<String>,
-    row: SessionRow,
-) -> Result<SessionHistoryRecord, String> {
-    let session = session_from_payload(&row.payload)?;
-    let archived = row.archived_at.is_some();
-    let mounted = !archived
-        && (mounted_session_ids.is_empty()
-            || mounted_session_ids.contains(&session.id.to_string()));
-    Ok(SessionHistoryRecord {
-        workspace_id: workspace.id.clone(),
-        workspace_title: workspace.title.clone(),
-        workspace_path: workspace.root_path.clone(),
-        session_id: session.id,
-        title: session.title,
-        status: session.status.clone(),
-        archived,
-        mounted,
-        recoverable: archived || !mounted,
-        last_active_at: session.last_active_at,
-        archived_at: row.archived_at,
-        claude_session_id: session.claude_session_id,
-    })
-}
-
 fn build_history_from_conn(conn: &Connection) -> Result<Vec<SessionHistoryRecord>, String> {
     let mut records = Vec::new();
     for workspace in load_all_workspace_rows(conn)? {
-        let mounted_session_ids = load_mounted_session_ids_from_conn(conn, &workspace.id);
-        for row in load_all_session_rows_from_conn(conn, &workspace.id)? {
-            records.push(session_row_to_history_record(
-                &workspace,
-                &mounted_session_ids,
-                row,
-            )?);
+        let view_state = load_view_state_from_conn(conn, &workspace.id)
+            .unwrap_or_else(|_| default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()));
+        let provider_sessions = list_provider_workspace_sessions(&workspace.root_path)?;
+        let provider_sessions_by_identity = provider_sessions
+            .iter()
+            .map(|session| {
+                (
+                    (session.provider.clone(), session.resume_id.clone()),
+                    session,
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        for provider_session in &provider_sessions {
+            let mounted_binding = view_state.session_bindings.iter().find(|binding| {
+                binding.provider == provider_session.provider
+                    && binding.resume_id.as_deref() == Some(provider_session.resume_id.as_str())
+            });
+            records.push(SessionHistoryRecord {
+                workspace_id: workspace.id.clone(),
+                workspace_title: workspace.title.clone(),
+                workspace_path: workspace.root_path.clone(),
+                session_id: mounted_binding.map(|binding| binding.session_id.clone()),
+                title: provider_session.title.clone(),
+                provider: provider_session.provider.clone(),
+                mounted: mounted_binding.is_some(),
+                state: if mounted_binding.is_some() {
+                    "live".to_string()
+                } else {
+                    "detached".to_string()
+                },
+                created_at: provider_session.created_at,
+                last_active_at: provider_session.last_active_at,
+                resume_id: provider_session.resume_id.clone(),
+            });
+        }
+
+        for binding in &view_state.session_bindings {
+            let resume_id = binding.resume_id.clone();
+            if let Some(resume_id_val) = &resume_id {
+                if provider_sessions_by_identity
+                    .contains_key(&(binding.provider.clone(), resume_id_val.clone()))
+                {
+                    continue;
+                }
+            }
+            records.push(SessionHistoryRecord {
+                workspace_id: workspace.id.clone(),
+                workspace_title: workspace.title.clone(),
+                workspace_path: workspace.root_path.clone(),
+                session_id: Some(binding.session_id.clone()),
+                title: if binding.title_snapshot.trim().is_empty() {
+                    session_title(&binding.session_id)
+                } else {
+                    binding.title_snapshot.clone()
+                },
+                provider: binding.provider.clone(),
+                mounted: false,
+                state: "unavailable".to_string(),
+                created_at: session_timestamp_to_millis(binding.last_seen_at),
+                last_active_at: session_timestamp_to_millis(binding.last_seen_at),
+                resume_id: resume_id.unwrap_or_default(),
+            });
         }
     }
+    records.sort_by(|left, right| {
+        right
+            .last_active_at
+            .cmp(&left.last_active_at)
+            .then_with(|| left.workspace_id.cmp(&right.workspace_id))
+            .then_with(|| left.provider.as_str().cmp(right.provider.as_str()))
+            .then_with(|| left.resume_id.cmp(&right.resume_id))
+    });
     Ok(records)
 }
 
@@ -1032,44 +1350,181 @@ fn load_mounted_session_ids_from_conn(conn: &Connection, workspace_id: &str) -> 
         .unwrap_or_default()
 }
 
-fn build_snapshot_from_conn(
+struct SnapshotBase {
+    workspace: WorkspaceSummary,
+    view_state: WorkspaceViewState,
+    visible_session_ids: Vec<String>,
+    terminals: Vec<TerminalInfo>,
+}
+
+fn load_snapshot_base_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<SnapshotBase, String> {
+    let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
+    let view_state = match load_view_state_from_conn(conn, workspace_id) {
+        Ok(value) => value,
+        Err(_) => default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()),
+    };
+    let visible_session_ids = ordered_visible_session_ids(&view_state);
+    let terminals: Vec<TerminalInfo> = load_persisted_terminals_from_conn(conn, workspace_id)?
+        .into_iter()
+        .map(|row| TerminalInfo {
+            id: row.terminal_id,
+            output: row.output,
+            recoverable: row.recoverable,
+        })
+        .collect();
+    Ok(SnapshotBase {
+        workspace,
+        view_state,
+        visible_session_ids,
+        terminals,
+    })
+}
+
+fn apply_provider_sessions_to_snapshot_base(
+    mut base: SnapshotBase,
+    provider_sessions: &[ProviderWorkspaceSession],
+) -> (WorkspaceSnapshot, bool) {
+    let mut sessions = Vec::new();
+    let mut binding_snapshots_changed = false;
+
+    for session_id in &base.visible_session_ids {
+        let Some(binding_index) = base
+            .view_state
+            .session_bindings
+            .iter()
+            .position(|binding| binding.session_id == *session_id)
+        else {
+            continue;
+        };
+        let binding = base.view_state.session_bindings[binding_index].clone();
+        if let Some(provider_session) = provider_session_for_binding(provider_sessions, &binding) {
+            if base.view_state.session_bindings[binding_index].title_snapshot != provider_session.title
+                || base.view_state.session_bindings[binding_index].last_seen_at
+                    != provider_session.last_active_at
+            {
+                base.view_state.session_bindings[binding_index].title_snapshot =
+                    provider_session.title.clone();
+                base.view_state.session_bindings[binding_index].last_seen_at =
+                    provider_session.last_active_at;
+                binding_snapshots_changed = true;
+            }
+        }
+        sessions.push(resolve_bound_session_from_binding(
+            &base.view_state.session_bindings[binding_index],
+            provider_sessions,
+        ));
+    }
+
+    (
+        WorkspaceSnapshot {
+            workspace: base.workspace,
+            sessions,
+            view_state: base.view_state,
+            terminals: base.terminals,
+        },
+        binding_snapshots_changed,
+    )
+}
+
+fn refresh_binding_snapshots_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+    updated_view_state: &WorkspaceViewState,
+) -> Result<(), String> {
+    let mut latest_view_state = match load_view_state_from_conn(conn, workspace_id) {
+        Ok(value) => value,
+        Err(_) => default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()),
+    };
+    let mut changed = false;
+
+    for updated_binding in &updated_view_state.session_bindings {
+        let Some(latest_binding) = latest_view_state
+            .session_bindings
+            .iter_mut()
+            .find(|binding| binding.session_id == updated_binding.session_id)
+        else {
+            continue;
+        };
+        if latest_binding.title_snapshot != updated_binding.title_snapshot {
+            latest_binding.title_snapshot = updated_binding.title_snapshot.clone();
+            changed = true;
+        }
+        if latest_binding.last_seen_at != updated_binding.last_seen_at {
+            latest_binding.last_seen_at = updated_binding.last_seen_at;
+            changed = true;
+        }
+    }
+
+    if changed {
+        save_view_state_to_conn(conn, workspace_id, &latest_view_state)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn build_snapshot_outside_db_lock(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+) -> Result<WorkspaceSnapshot, String> {
+    let base = with_db(state, |conn| load_snapshot_base_from_conn(conn, workspace_id))?;
+    let provider_sessions = list_provider_workspace_sessions(&base.workspace.project_path)?;
+    let (snapshot, binding_snapshots_changed) =
+        apply_provider_sessions_to_snapshot_base(base, &provider_sessions);
+    if binding_snapshots_changed {
+        with_db(state, |conn| {
+            refresh_binding_snapshots_from_conn(conn, workspace_id, &snapshot.view_state)
+        })?;
+    }
+    Ok(snapshot)
+}
+
+pub(crate) fn build_snapshot_from_conn(
     conn: &Connection,
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
     let workspace = row_to_workspace_summary(load_workspace_row(conn, workspace_id)?);
-    let mut sessions = load_sessions_from_conn(conn, workspace_id, false)?
-        .into_iter()
-        .map(|row| session_from_payload(&row.payload))
-        .collect::<Result<Vec<_>, _>>()?;
-    if sessions.is_empty() {
-        let template = SessionInfo {
-            id: 0,
-            title: String::new(),
-            status: SessionStatus::Idle,
-            mode: SessionMode::Branch,
-            auto_feed: true,
-            queue: Vec::new(),
-            messages: vec![SessionMessage {
-                id: format!("msg-{}", random_hex(6)?),
-                role: SessionMessageRole::System,
-                content: format!("{} ready", workspace.title),
-                time: now_label(),
-            }],
-            stream: String::new(),
-            unread: 0,
-            last_active_at: now_ts(),
-            claude_session_id: None,
-        };
-        let session = create_workspace_session_from_template(conn, workspace_id, template)?;
-        sessions.push(session.clone());
-        save_view_state_to_conn(conn, workspace_id, &default_view_state(session.id))?;
-    }
-    let archive = session_rows_to_archive(load_sessions_from_conn(conn, workspace_id, true)?)?;
-    let view_state = match load_view_state_from_conn(conn, workspace_id) {
+    let mut view_state = match load_view_state_from_conn(conn, workspace_id) {
         Ok(value) => value,
-        Err(_) => default_view_state(sessions.first().map(|session| session.id).unwrap_or(1)),
+        Err(_) => default_view_state(DEFAULT_SESSION_SLOT_ID.to_string()),
     };
-    let terminals = load_persisted_terminals_from_conn(conn, workspace_id)?
+    let visible_session_ids = ordered_visible_session_ids(&view_state);
+    let provider_sessions = list_provider_workspace_sessions(&workspace.project_path)?;
+    let mut sessions = Vec::new();
+    let mut binding_snapshots_changed = false;
+
+    for session_id in &visible_session_ids {
+        let Some(binding_index) = view_state
+            .session_bindings
+            .iter()
+            .position(|binding| binding.session_id == *session_id)
+        else {
+            continue;
+        };
+        let binding = view_state.session_bindings[binding_index].clone();
+        if let Some(provider_session) = provider_session_for_binding(&provider_sessions, &binding) {
+            if view_state.session_bindings[binding_index].title_snapshot != provider_session.title
+                || view_state.session_bindings[binding_index].last_seen_at
+                    != provider_session.last_active_at
+            {
+                view_state.session_bindings[binding_index].title_snapshot =
+                    provider_session.title.clone();
+                view_state.session_bindings[binding_index].last_seen_at =
+                    provider_session.last_active_at;
+                binding_snapshots_changed = true;
+            }
+        }
+        sessions.push(resolve_bound_session_from_binding(
+            &binding,
+            &provider_sessions,
+        ));
+    }
+
+    if binding_snapshots_changed {
+        save_view_state_to_conn(conn, workspace_id, &view_state)?;
+    }
+    let terminals: Vec<TerminalInfo> = load_persisted_terminals_from_conn(conn, workspace_id)?
         .into_iter()
         .map(|row| TerminalInfo {
             id: row.terminal_id,
@@ -1080,7 +1535,6 @@ fn build_snapshot_from_conn(
     Ok(WorkspaceSnapshot {
         workspace,
         sessions,
-        archive,
         view_state,
         terminals,
     })
@@ -1220,144 +1674,7 @@ fn remove_workspace_from_all_ui_state_scopes(
     load_ui_state_from_conn(conn, device_id, client_id)
 }
 
-pub(crate) fn init_db(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS workspaces (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            root_path TEXT NOT NULL UNIQUE,
-            source_kind TEXT NOT NULL,
-            source_value TEXT NOT NULL,
-            git_url TEXT,
-            target_json TEXT NOT NULL,
-            idle_policy_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            last_opened_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS workspace_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id TEXT NOT NULL,
-            archived_at INTEGER,
-            sort_order INTEGER NOT NULL,
-            last_active_at INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            claude_session_id TEXT,
-            payload TEXT NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_active
-            ON workspace_sessions(workspace_id, archived_at, sort_order, last_active_at DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_sessions_workspace_claude
-            ON workspace_sessions(workspace_id, claude_session_id)
-            WHERE claude_session_id IS NOT NULL;
-        CREATE TABLE IF NOT EXISTS workspace_view_state (
-            workspace_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_controller_leases (
-            workspace_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_attachments (
-            attachment_id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL,
-            device_id TEXT NOT NULL,
-            client_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            attached_at INTEGER NOT NULL,
-            last_seen_at INTEGER NOT NULL,
-            detached_at INTEGER,
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS workspace_terminals (
-            workspace_id TEXT NOT NULL,
-            terminal_id INTEGER NOT NULL,
-            output TEXT NOT NULL,
-            recoverable INTEGER NOT NULL DEFAULT 1,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (workspace_id, terminal_id),
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS agent_lifecycle_events (
-            workspace_id TEXT NOT NULL,
-            session_id TEXT NOT NULL,
-            seq INTEGER NOT NULL,
-            kind TEXT NOT NULL,
-            source_event TEXT NOT NULL,
-            data TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            PRIMARY KEY (workspace_id, session_id, seq),
-            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS app_ui_state (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_settings (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_device_ui_state (
-            device_id TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS app_client_ui_state (
-            device_id TEXT NOT NULL,
-            client_id TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (device_id, client_id)
-        );",
-    )?;
-    let payload = serde_json::to_string(&default_ui_state()).unwrap_or_else(|_| "{}".to_string());
-    conn.execute(
-        "INSERT OR IGNORE INTO app_ui_state (id, payload, updated_at) VALUES (?1, ?2, ?3)",
-        params![APP_UI_STATE_ROW_ID, payload, now_ts()],
-    )?;
-    let app_settings_payload =
-        serde_json::to_string(&AppSettingsPayload::default()).unwrap_or_else(|_| "{}".to_string());
-    conn.execute(
-        "INSERT OR IGNORE INTO app_settings (id, payload, updated_at) VALUES (?1, ?2, ?3)",
-        params![APP_SETTINGS_ROW_ID, app_settings_payload, now_ts()],
-    )?;
-    conn.execute(
-        "UPDATE workspace_terminals SET recoverable = 0, updated_at = ?1",
-        params![now_ts()],
-    )?;
-    Ok(())
-}
-
-pub(crate) fn mark_active_sessions_interrupted_on_boot(conn: &Connection) -> Result<(), String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, workspace_id, archived_at, sort_order, payload
-             FROM workspace_sessions
-             WHERE archived_at IS NULL AND status IN ('running', 'waiting', 'background')",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], session_row_from_query)
-        .map_err(|e| e.to_string())?;
-    for row in rows {
-        let row = row.map_err(|e| e.to_string())?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.status = SessionStatus::Interrupted;
-        persist_session_row(
-            conn,
-            &row.workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )?;
-    }
+pub(crate) fn mark_active_sessions_interrupted_on_boot(_conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
@@ -1365,9 +1682,44 @@ pub(crate) fn with_db<T>(
     state: State<'_, AppState>,
     f: impl FnOnce(&Connection) -> Result<T, String>,
 ) -> Result<T, String> {
-    let guard = state.db.lock().map_err(|e| e.to_string())?;
-    let conn = guard.as_ref().ok_or("db_not_ready")?;
+    with_db_mapped(state, |error| error, f)
+}
+
+pub(crate) fn with_db_mapped<T, E>(
+    state: State<'_, AppState>,
+    map_err: impl Fn(String) -> E,
+    f: impl FnOnce(&Connection) -> Result<T, E>,
+) -> Result<T, E> {
+    #[cfg(test)]
+    {
+        let current = std::thread::current().id();
+        if WITH_DB_COUNT_OWNER
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|owner| owner == &current))
+            .unwrap_or(false)
+        {
+            WITH_DB_CALL_COUNT.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    let guard = state.db.lock().map_err(|e| map_err(e.to_string()))?;
+    let conn = guard
+        .as_ref()
+        .ok_or_else(|| map_err("db_not_ready".to_string()))?;
     f(conn)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_with_db_call_count() {
+    if let Ok(mut owner) = WITH_DB_COUNT_OWNER.lock() {
+        *owner = Some(std::thread::current().id());
+    }
+    WITH_DB_CALL_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn read_with_db_call_count() -> usize {
+    WITH_DB_CALL_COUNT.load(Ordering::SeqCst)
 }
 
 pub(crate) fn workbench_bootstrap(
@@ -1384,7 +1736,128 @@ pub(crate) fn workspace_snapshot(
     state: State<'_, AppState>,
     workspace_id: &str,
 ) -> Result<WorkspaceSnapshot, String> {
-    with_db(state, |conn| build_snapshot_from_conn(conn, workspace_id))
+    build_snapshot_outside_db_lock(state, workspace_id)
+}
+
+pub(crate) fn load_workspace_slot_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: &str,
+) -> Result<SessionInfo, String> {
+    let (workspace, view_state, binding_index) = with_db(state, |conn| {
+        let workspace = load_workspace_row(conn, workspace_id)?;
+        let view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
+        })?;
+        let Some(binding_index) = view_state
+            .session_bindings
+            .iter()
+            .position(|binding| binding.session_id == session_id)
+        else {
+            return Err("session_not_found".to_string());
+        };
+        Ok((workspace, view_state, binding_index))
+    })?;
+
+    let provider_sessions = list_provider_workspace_sessions(&workspace.root_path)?;
+    let binding = view_state.session_bindings[binding_index].clone();
+    let mut updated_view_state = view_state.clone();
+    let mut binding_snapshot_changed = false;
+    if let Some(provider_session) = provider_session_for_binding(&provider_sessions, &binding) {
+        if updated_view_state.session_bindings[binding_index].title_snapshot != provider_session.title
+            || updated_view_state.session_bindings[binding_index].last_seen_at
+                != provider_session.last_active_at
+        {
+            updated_view_state.session_bindings[binding_index].title_snapshot =
+                provider_session.title.clone();
+            updated_view_state.session_bindings[binding_index].last_seen_at =
+                provider_session.last_active_at;
+            binding_snapshot_changed = true;
+        }
+    }
+
+    if binding_snapshot_changed {
+        with_db(state, |conn| {
+            refresh_binding_snapshots_from_conn(conn, workspace_id, &updated_view_state)
+        })?;
+    }
+
+    Ok(resolve_bound_session_from_binding(
+        &updated_view_state.session_bindings[binding_index],
+        &provider_sessions,
+    ))
+}
+
+pub(crate) fn upsert_workspace_session_binding(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    binding: WorkspaceSessionBinding,
+) -> Result<WorkspaceViewState, String> {
+    with_db(state, |conn| {
+        let mut view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(binding.session_id.clone()))
+        })?;
+        if let Some(existing) = view_state
+            .session_bindings
+            .iter_mut()
+            .find(|existing| existing.session_id == binding.session_id)
+        {
+            *existing = binding;
+        } else {
+            view_state.session_bindings.push(binding);
+        }
+        save_view_state_to_conn(conn, workspace_id, &view_state)?;
+        Ok(view_state)
+    })
+}
+
+pub(crate) fn remove_workspace_session_binding(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: &str,
+) -> Result<WorkspaceViewState, String> {
+    with_db(state, |conn| {
+        let mut view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
+        })?;
+        view_state
+            .session_bindings
+            .retain(|binding| binding.session_id != session_id);
+        save_view_state_to_conn(conn, workspace_id, &view_state)?;
+        Ok(view_state)
+    })
+}
+
+pub(crate) fn remove_workspace_bindings_for_provider_session(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    provider: &AgentProvider,
+    resume_id: &str,
+) -> Result<Vec<String>, String> {
+    with_db(state, |conn| {
+        let mut view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
+        })?;
+        let removed_session_ids = view_state
+            .session_bindings
+            .iter()
+            .filter(|binding| {
+                binding.provider == *provider && binding.resume_id.as_deref() == Some(resume_id)
+            })
+            .map(|binding| binding.session_id.clone())
+            .collect::<Vec<_>>();
+        view_state.session_bindings.retain(|binding| {
+            !(binding.provider == *provider && binding.resume_id.as_deref() == Some(resume_id))
+        });
+        save_view_state_to_conn(conn, workspace_id, &view_state)?;
+        Ok(removed_session_ids)
+    })
 }
 
 pub(crate) fn workspace_access_context(
@@ -1392,9 +1865,16 @@ pub(crate) fn workspace_access_context(
     workspace_id: &str,
 ) -> Result<(String, ExecTarget), String> {
     with_db(state, |conn| {
-        let row = load_workspace_row(conn, workspace_id)?;
-        Ok((row.root_path, row.target))
+        workspace_access_context_from_conn(conn, workspace_id)
     })
+}
+
+pub(crate) fn workspace_access_context_from_conn(
+    conn: &Connection,
+    workspace_id: &str,
+) -> Result<(String, ExecTarget), String> {
+    let row = load_workspace_row(conn, workspace_id)?;
+    Ok((row.root_path, row.target))
 }
 
 #[cfg(test)]
@@ -1459,278 +1939,10 @@ pub(crate) fn launch_workspace_record_scoped(
     })
 }
 
-fn create_workspace_session_from_template(
-    conn: &Connection,
-    workspace_id: &str,
-    mut template: SessionInfo,
-) -> Result<SessionInfo, String> {
-    let sort_order = min_active_sort_order(conn, workspace_id)? - 1;
-    conn.execute(
-        "INSERT INTO workspace_sessions (workspace_id, archived_at, sort_order, last_active_at, status, claude_session_id, payload)
-         VALUES (?1, NULL, ?2, ?3, ?4, ?5, '')",
-        params![
-            workspace_id,
-            sort_order,
-            template.last_active_at,
-            status_label(&template.status),
-            template.claude_session_id,
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-    template.id = conn.last_insert_rowid() as u64;
-    if template.title.trim().is_empty() {
-        template.title = session_title(template.id);
-    }
-    persist_session_row(conn, workspace_id, &template, None, sort_order)?;
-    Ok(template)
-}
-
-pub(crate) fn create_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    mode: SessionMode,
-) -> Result<SessionInfo, String> {
-    with_db(state, |conn| {
-        let workspace = load_workspace_row(conn, workspace_id)?;
-        let active_sessions = load_sessions_from_conn(conn, workspace_id, false)?
-            .into_iter()
-            .map(|row| session_from_payload(&row.payload))
-            .collect::<Result<Vec<_>, _>>()?;
-        let active_count = active_sessions
-            .iter()
-            .filter(|session| {
-                !matches!(
-                    session.status,
-                    SessionStatus::Suspended | SessionStatus::Queued
-                )
-            })
-            .count() as u32;
-        let status = if active_count >= workspace.idle_policy.max_active {
-            SessionStatus::Queued
-        } else {
-            SessionStatus::Idle
-        };
-        let template = SessionInfo {
-            id: 0,
-            title: String::new(),
-            status,
-            mode,
-            auto_feed: true,
-            queue: Vec::new(),
-            messages: vec![SessionMessage {
-                id: format!("msg-{}", random_hex(6)?),
-                role: SessionMessageRole::System,
-                content: format!("{} ready", workspace.title),
-                time: now_label(),
-            }],
-            stream: String::new(),
-            unread: 0,
-            last_active_at: now_ts(),
-            claude_session_id: None,
-        };
-        create_workspace_session_from_template(conn, workspace_id, template)
-    })
-}
-
-pub(crate) fn update_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-    patch: SessionPatch,
-) -> Result<SessionInfo, String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        if let Some(title) = patch.title {
-            session.title = title;
-        }
-        if let Some(status) = patch.status {
-            session.status = status;
-        }
-        if let Some(mode) = patch.mode {
-            session.mode = mode;
-        }
-        if let Some(auto_feed) = patch.auto_feed {
-            session.auto_feed = auto_feed;
-        }
-        if let Some(queue) = patch.queue {
-            session.queue = queue;
-        }
-        if let Some(messages) = patch.messages {
-            session.messages = messages;
-        }
-        if let Some(stream) = patch.stream {
-            session.stream = truncate_tail(&stream, SESSION_STREAM_LIMIT);
-        }
-        if let Some(unread) = patch.unread {
-            session.unread = unread;
-        }
-        if let Some(last_active_at) = patch.last_active_at {
-            session.last_active_at = last_active_at;
-        }
-        if let Some(claude_session_id) = patch.claude_session_id {
-            session.claude_session_id = Some(claude_session_id);
-        }
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )?;
-        Ok(session)
-    })
-}
-
-pub(crate) fn switch_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-) -> Result<SessionInfo, String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )?;
-        Ok(session)
-    })
-}
-
-pub(crate) fn archive_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-) -> Result<ArchiveEntry, String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        let archived_at = row.archived_at.unwrap_or_else(now_ts);
-        session.status = SessionStatus::Suspended;
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            Some(archived_at),
-            row.sort_order,
-        )?;
-        Ok(ArchiveEntry {
-            id: archive_entry_id(session.id, archived_at),
-            session_id: session.id,
-            mode: session.mode.clone(),
-            time: now_label(),
-            snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
-        })
-    })
-}
-
-pub(crate) fn archive_workspace_sessions(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-) -> Result<Vec<ArchiveEntry>, String> {
-    with_db(state, |conn| {
-        let mut entries = Vec::new();
-        for row in load_sessions_from_conn(conn, workspace_id, false)? {
-            let mut session = session_from_payload(&row.payload)?;
-            let archived_at = now_ts();
-            session.status = SessionStatus::Suspended;
-            session.last_active_at = archived_at;
-            persist_session_row(
-                conn,
-                workspace_id,
-                &session,
-                Some(archived_at),
-                row.sort_order,
-            )?;
-            entries.push(ArchiveEntry {
-                id: archive_entry_id(session.id, archived_at),
-                session_id: session.id,
-                mode: session.mode.clone(),
-                time: now_label(),
-                snapshot: serde_json::to_value(session).map_err(|e| e.to_string())?,
-            });
-        }
-        Ok(entries)
-    })
-}
-
 pub(crate) fn load_session_history_records(
     state: State<'_, AppState>,
 ) -> Result<Vec<SessionHistoryRecord>, String> {
     with_db(state, build_history_from_conn)
-}
-
-pub(crate) fn restore_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-) -> Result<SessionRestoreResult, String> {
-    with_db(state, |conn| {
-        let workspace = load_workspace_row(conn, workspace_id)?;
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mounted_session_ids = load_mounted_session_ids_from_conn(conn, workspace_id);
-        let mut session = session_from_payload(&row.payload)?;
-        let already_active =
-            row.archived_at.is_none() && mounted_session_ids.contains(&session.id.to_string());
-        if already_active {
-            return Ok(SessionRestoreResult {
-                session,
-                already_active: true,
-            });
-        }
-
-        let active_count = load_sessions_from_conn(conn, workspace_id, false)?
-            .into_iter()
-            .filter_map(|candidate| session_from_payload(&candidate.payload).ok())
-            .filter(|candidate| {
-                candidate.id != session.id
-                    && !matches!(
-                        candidate.status,
-                        SessionStatus::Suspended | SessionStatus::Queued
-                    )
-            })
-            .count() as u32;
-        let next_status = if active_count >= workspace.idle_policy.max_active {
-            SessionStatus::Queued
-        } else {
-            SessionStatus::Idle
-        };
-        session.status = next_status;
-        session.last_active_at = now_ts();
-        let sort_order = min_active_sort_order(conn, workspace_id)? - 1;
-        persist_session_row(conn, workspace_id, &session, None, sort_order)?;
-        Ok(SessionRestoreResult {
-            session,
-            already_active: false,
-        })
-    })
-}
-
-pub(crate) fn delete_workspace_session(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-) -> Result<(), String> {
-    with_db(state, |conn| {
-        load_session_row(conn, workspace_id, session_id)?;
-        conn.execute(
-            "DELETE FROM workspace_sessions WHERE workspace_id = ?1 AND id = ?2",
-            params![workspace_id, session_id as i64],
-        )
-        .map_err(|e| e.to_string())?;
-        conn.execute(
-            "DELETE FROM agent_lifecycle_events WHERE workspace_id = ?1 AND session_id = ?2",
-            params![workspace_id, session_id.to_string()],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    })
 }
 
 pub(crate) fn update_workspace_idle_policy(
@@ -1792,8 +2004,11 @@ pub(crate) fn patch_workspace_view_state(
     patch: WorkspaceViewPatch,
 ) -> Result<WorkspaceViewState, String> {
     with_db(state, |conn| {
-        let current = load_view_state_from_conn(conn, workspace_id)
-            .or_else(|_| Ok::<WorkspaceViewState, String>(default_view_state(1)))?;
+        let current = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
+        })?;
         let next = WorkspaceViewState {
             active_session_id: patch.active_session_id.unwrap_or(current.active_session_id),
             active_pane_id: patch.active_pane_id.unwrap_or(current.active_pane_id),
@@ -1802,6 +2017,8 @@ pub(crate) fn patch_workspace_view_state(
                 .unwrap_or(current.active_terminal_id),
             pane_layout: patch.pane_layout.unwrap_or(current.pane_layout),
             file_preview: patch.file_preview.unwrap_or(current.file_preview),
+            session_bindings: current.session_bindings,
+            supervisor: patch.supervisor.unwrap_or(current.supervisor),
         };
         save_view_state_to_conn(conn, workspace_id, &next)?;
         Ok(next)
@@ -1858,36 +2075,6 @@ pub(crate) fn append_agent_lifecycle_event(
     })
 }
 
-pub(crate) fn load_agent_lifecycle_events(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    limit: usize,
-) -> Result<Vec<AgentLifecycleHistoryEntry>, String> {
-    with_db(state, |conn| {
-        load_agent_lifecycle_events_from_conn(conn, workspace_id, limit)
-    })
-}
-
-pub(crate) fn list_workspace_ids_for_workspace_client(
-    state: State<'_, AppState>,
-    device_id: &str,
-    client_id: &str,
-) -> Result<Vec<String>, String> {
-    with_db(state, |conn| {
-        list_workspace_ids_for_workspace_client_from_conn(conn, device_id, client_id)
-    })
-}
-
-pub(crate) fn mark_workspace_client_detached(
-    state: State<'_, AppState>,
-    device_id: &str,
-    client_id: &str,
-) -> Result<(), String> {
-    with_db(state, |conn| {
-        mark_workspace_client_detached_from_conn(conn, device_id, client_id)
-    })
-}
-
 pub(crate) fn persist_workspace_terminal(
     state: State<'_, AppState>,
     workspace_id: &str,
@@ -1932,109 +2119,89 @@ pub(crate) fn delete_workspace_terminal(
     })
 }
 
-pub(crate) fn append_session_stream(
-    state: State<'_, AppState>,
-    workspace_id: &str,
-    session_id: u64,
-    chunk: &str,
-) -> Result<(), String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.stream = truncate_tail(
-            &format!("{}{}", session.stream, chunk),
-            SESSION_STREAM_LIMIT,
-        );
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )
-    })
-}
-
 #[cfg(test)]
-pub(crate) fn set_session_status(
+pub(crate) fn set_session_status<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
+    session_id: S,
     status: SessionStatus,
 ) -> Result<(), String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.status = status;
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )
-    })
+    let mut session = load_session(state, workspace_id, session_id)?;
+    session.status = status;
+    session.last_active_at = now_ts_ms();
+    crate::services::workspace::remember_live_session(state, workspace_id, &session)
 }
 
-pub(crate) fn set_session_status_if_not_archived(
+pub(crate) fn set_session_status_if_not_archived<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
+    session_id: S,
     status: SessionStatus,
 ) -> Result<bool, String> {
-    with_db(state, |conn| {
-        let row = match load_session_row(conn, workspace_id, session_id) {
-            Ok(row) => row,
-            Err(error) if error == "session_not_found" => return Ok(false),
-            Err(error) => return Err(error),
-        };
-        if row.archived_at.is_some() {
-            return Ok(false);
+    match load_session(state, workspace_id, session_id) {
+        Ok(mut session) => {
+            session.status = status;
+            session.last_active_at = now_ts_ms();
+            crate::services::workspace::remember_live_session(state, workspace_id, &session)?;
+            Ok(true)
         }
-        let mut session = session_from_payload(&row.payload)?;
-        session.status = status;
-        session.last_active_at = now_ts();
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )?;
-        Ok(true)
-    })
+        Err(error) if error == "session_not_found" => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
-pub(crate) fn set_session_claude_id(
+pub(crate) fn set_session_runtime_state_if_not_archived<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
-    claude_session_id: String,
+    session_id: S,
+    status: SessionStatus,
+    runtime_active: bool,
+    runtime_liveness: Option<SessionRuntimeLiveness>,
+) -> Result<bool, String> {
+    match load_session(state, workspace_id, session_id) {
+        Ok(mut session) => {
+            session.status = status;
+            session.runtime_active = runtime_active;
+            session.runtime_liveness = runtime_liveness;
+            session.last_active_at = now_ts_ms();
+            crate::services::workspace::remember_live_session(state, workspace_id, &session)?;
+            Ok(true)
+        }
+        Err(error) if error == "session_not_found" => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+pub(crate) fn set_session_resume_id<S: ToString>(
+    state: State<'_, AppState>,
+    workspace_id: &str,
+    session_id: S,
+    resume_id: String,
 ) -> Result<(), String> {
-    with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        let mut session = session_from_payload(&row.payload)?;
-        session.claude_session_id = Some(claude_session_id);
-        persist_session_row(
-            conn,
-            workspace_id,
-            &session,
-            row.archived_at,
-            row.sort_order,
-        )
-    })
+    let mut session = load_session(state, workspace_id, session_id)?;
+    session.resume_id = Some(resume_id);
+    crate::services::workspace::remember_live_session(state, workspace_id, &session)
 }
 
-pub(crate) fn load_session(
+pub(crate) fn load_session<S: ToString>(
     state: State<'_, AppState>,
     workspace_id: &str,
-    session_id: u64,
+    session_id: S,
 ) -> Result<SessionInfo, String> {
     with_db(state, |conn| {
-        let row = load_session_row(conn, workspace_id, session_id)?;
-        session_from_payload(&row.payload)
+        let session_id = session_id.to_string();
+        let view_state = load_view_state_from_conn(conn, workspace_id).or_else(|_| {
+            Ok::<WorkspaceViewState, String>(default_view_state(
+                DEFAULT_SESSION_SLOT_ID.to_string(),
+            ))
+        })?;
+        let binding = view_state
+            .session_bindings
+            .iter()
+            .find(|binding| binding.session_id == session_id)
+            .cloned()
+            .ok_or_else(|| "session_not_found".to_string())?;
+        Ok(session_binding_to_session_info(&binding))
     })
 }
 
@@ -2050,4 +2217,690 @@ pub(crate) fn truncate_tail(value: &str, limit: usize) -> String {
         .chars()
         .rev()
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let suffix = format!("{}-{}", std::process::id(), now_ts_ms());
+        let path = std::env::temp_dir().join(format!("{prefix}-{suffix}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn with_claude_home<T>(home_root: &Path, run: impl FnOnce() -> T) -> T {
+        let previous = std::env::var_os("CODER_STUDIO_CLAUDE_HOME");
+        std::env::set_var("CODER_STUDIO_CLAUDE_HOME", home_root);
+        let result = run();
+        if let Some(value) = previous {
+            std::env::set_var("CODER_STUDIO_CLAUDE_HOME", value);
+        } else {
+            std::env::remove_var("CODER_STUDIO_CLAUDE_HOME");
+        }
+        result
+    }
+
+    fn insert_workspace(conn: &Connection, workspace_id: &str) {
+        let now = now_ts_ms();
+        conn.execute(
+            "INSERT INTO workspaces (id, title, root_path, source_kind, source_value, git_url, target_json, idle_policy_json, created_at, updated_at, last_opened_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                workspace_id,
+                format!("Workspace {workspace_id}"),
+                format!("/tmp/{workspace_id}"),
+                "local",
+                format!("/tmp/{workspace_id}"),
+                serde_json::to_string(&ExecTarget::Native).unwrap(),
+                serde_json::to_string(&default_idle_policy()).unwrap(),
+                now,
+                now,
+                now,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn session_payload_with_id(
+        session_id: &str,
+        provider: AgentProvider,
+        resume_id: Option<&str>,
+        last_active_at: i64,
+        runtime_active: bool,
+    ) -> String {
+        json!({
+            "id": session_id,
+            "title": format!("Session {session_id}"),
+            "status": "suspended",
+            "mode": "branch",
+            "provider": provider,
+            "auto_feed": true,
+            "queue": [],
+            "messages": [],
+            "stream": "",
+            "unread": 0,
+            "last_active_at": last_active_at,
+            "resume_id": resume_id,
+            "runtime_active": runtime_active,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn init_db_does_not_create_workspace_sessions_table() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        init_db(&conn).unwrap();
+
+        let table_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workspace_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(table_exists, 0);
+    }
+
+    #[test]
+    fn session_from_payload_deserializes_string_session_ids() {
+        let session = session_from_payload(&session_payload_with_id(
+            "slot-alpha",
+            AgentProvider::claude(),
+            Some("resume-alpha"),
+            123,
+            false,
+        ))
+        .expect("string session ids should deserialize");
+
+        let serialized = serde_json::to_value(session).unwrap();
+        assert_eq!(serialized["id"], "slot-alpha");
+    }
+
+    #[test]
+    fn load_view_state_from_conn_tolerates_missing_workspace_sessions_table_for_legacy_payloads() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_view_legacy_missing_table");
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_view_legacy_missing_table",
+                json!({
+                    "active_session_id": "slot-alpha",
+                    "active_pane_id": "pane-alpha",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-alpha",
+                        "sessionId": "slot-alpha",
+                    },
+                    "file_preview": default_file_preview_value(),
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let view_state = load_view_state_from_conn(&conn, "ws_view_legacy_missing_table").unwrap();
+
+        assert!(view_state.session_bindings.is_empty());
+    }
+
+    #[test]
+    fn load_view_state_from_conn_defaults_session_bindings_for_legacy_payloads() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_view_legacy");
+        conn.execute_batch(
+            "CREATE TABLE workspace_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id TEXT NOT NULL,
+                payload TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_sessions (workspace_id, payload) VALUES (?1, ?2)",
+            params![
+                "ws_view_legacy",
+                session_payload_with_id(
+                    "slot-alpha",
+                    AgentProvider::codex(),
+                    Some("resume-alpha"),
+                    1_730_000_000_000_i64,
+                    false,
+                ),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_view_legacy",
+                json!({
+                    "active_session_id": "slot-alpha",
+                    "active_pane_id": "pane-alpha",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-alpha",
+                        "sessionId": "slot-alpha",
+                    },
+                    "file_preview": default_file_preview_value(),
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let view_state = load_view_state_from_conn(&conn, "ws_view_legacy").unwrap();
+        let serialized = serde_json::to_value(view_state).unwrap();
+        let persisted_payload: String = conn
+            .query_row(
+                "SELECT payload FROM workspace_view_state WHERE workspace_id = ?1",
+                params!["ws_view_legacy"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let persisted_value: Value = serde_json::from_str(&persisted_payload).unwrap();
+
+        assert_eq!(serialized["session_bindings"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            serialized["session_bindings"][0]["session_id"],
+            "slot-alpha"
+        );
+        assert_eq!(serialized["session_bindings"][0]["provider"], "codex");
+        assert_eq!(serialized["session_bindings"][0]["mode"], "branch");
+        assert_eq!(
+            serialized["session_bindings"][0]["resume_id"],
+            "resume-alpha"
+        );
+        assert_eq!(
+            persisted_value["session_bindings"][0]["session_id"],
+            "slot-alpha"
+        );
+        assert_eq!(persisted_value["session_bindings"][0]["provider"], "codex");
+        assert_eq!(persisted_value["session_bindings"][0]["mode"], "branch");
+        assert_eq!(
+            persisted_value["session_bindings"][0]["resume_id"],
+            "resume-alpha"
+        );
+    }
+
+    #[test]
+    fn load_view_state_from_conn_ignores_legacy_rows_without_resume_id() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_view_legacy_no_resume");
+        conn.execute_batch(
+            "CREATE TABLE workspace_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id TEXT NOT NULL,
+                payload TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_sessions (workspace_id, payload) VALUES (?1, ?2)",
+            params![
+                "ws_view_legacy_no_resume",
+                session_payload_with_id(
+                    "slot-alpha",
+                    AgentProvider::claude(),
+                    None,
+                    1_730_000_000_000_i64,
+                    false,
+                ),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_view_legacy_no_resume",
+                json!({
+                    "active_session_id": "slot-alpha",
+                    "active_pane_id": "pane-alpha",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-alpha",
+                        "sessionId": "slot-alpha",
+                    },
+                    "file_preview": default_file_preview_value(),
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let view_state = load_view_state_from_conn(&conn, "ws_view_legacy_no_resume").unwrap();
+
+        assert!(view_state.session_bindings.is_empty());
+    }
+
+    #[test]
+    fn workspace_view_state_round_trips_supervisor_binding_and_cycles() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        let workspace_id = "ws-supervisor";
+        insert_workspace(&conn, workspace_id);
+
+        let patch = WorkspaceViewPatch {
+            supervisor: Some(WorkspaceSupervisorViewState {
+                bindings: vec![WorkspaceSupervisorBinding {
+                    session_id: "slot-primary".to_string(),
+                    provider: AgentProvider::claude(),
+                    objective_text: "Ship v1 supervisor mode using xterm only".to_string(),
+                    objective_prompt: "supervisor prompt body".to_string(),
+                    objective_version: 1,
+                    status: WorkspaceSupervisorStatus::Idle,
+                    auto_inject_enabled: true,
+                    pending_objective_text: None,
+                    pending_objective_prompt: None,
+                    pending_objective_version: None,
+                    updated_at: 1,
+                    created_at: 1,
+                }],
+                cycles: vec![WorkspaceSupervisorCycle {
+                    cycle_id: "cycle-1".to_string(),
+                    session_id: "slot-primary".to_string(),
+                    source_turn_id: "turn-1".to_string(),
+                    objective_version: 1,
+                    supervisor_input: "prompt".to_string(),
+                    supervisor_reply: Some("next message".to_string()),
+                    injection_message_id: Some("inject-1".to_string()),
+                    status: WorkspaceSupervisorCycleStatus::Injected,
+                    error: None,
+                    started_at: 1,
+                    finished_at: Some(2),
+                }],
+            }),
+            ..WorkspaceViewPatch::default()
+        };
+
+        let state = AppState {
+            db: Mutex::new(Some(conn)),
+            ..AppState::default()
+        };
+        patch_workspace_view_state(&state, workspace_id, patch).unwrap();
+        let conn = state.db.lock().unwrap();
+        let stored = load_view_state_from_conn(conn.as_ref().unwrap(), workspace_id).unwrap();
+
+        assert_eq!(stored.supervisor.bindings.len(), 1);
+        assert_eq!(stored.supervisor.cycles.len(), 1);
+        assert_eq!(stored.supervisor.bindings[0].objective_version, 1);
+        assert_eq!(
+            stored.supervisor.cycles[0].supervisor_reply.as_deref(),
+            Some("next message")
+        );
+    }
+    #[test]
+    fn build_snapshot_from_conn_materializes_visible_unbound_sessions() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_snapshot_unbound_visible");
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_snapshot_unbound_visible",
+                json!({
+                    "active_session_id": "slot-visible",
+                    "active_pane_id": "pane-visible",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-visible",
+                        "sessionId": "slot-visible",
+                    },
+                    "file_preview": default_file_preview_value(),
+                    "session_bindings": [],
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let snapshot = build_snapshot_from_conn(&conn, "ws_snapshot_unbound_visible").unwrap();
+        assert_eq!(snapshot.sessions.len(), 1);
+        assert_eq!(snapshot.sessions[0].id, "slot-visible");
+        assert_eq!(snapshot.sessions[0].resume_id, None);
+        assert_eq!(snapshot.sessions[0].unavailable_reason, None);
+    }
+
+    #[test]
+    fn build_snapshot_from_conn_only_includes_visible_bound_sessions() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        insert_workspace(&conn, "ws_snapshot_visible");
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_snapshot_visible",
+                json!({
+                    "active_session_id": "slot-visible",
+                    "active_pane_id": "pane-visible",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-visible",
+                        "sessionId": "slot-visible",
+                    },
+                    "file_preview": default_file_preview_value(),
+                    "session_bindings": [
+                        {
+                            "session_id": "slot-visible",
+                            "provider": AgentProvider::claude(),
+                            "mode": SessionMode::Branch,
+                            "resume_id": Some("resume-visible".to_string()),
+                            "title_snapshot": "Visible Session",
+                            "last_seen_at": 1_730_000_000_000_i64,
+                        },
+                        {
+                            "session_id": "slot-hidden",
+                            "provider": AgentProvider::codex(),
+                            "mode": SessionMode::Branch,
+                            "resume_id": Some("resume-hidden".to_string()),
+                            "title_snapshot": "Hidden Session",
+                            "last_seen_at": 1_730_000_000_500_i64,
+                        }
+                    ],
+                })
+                .to_string(),
+                now_ts_ms(),
+            ],
+        )
+        .unwrap();
+
+        let snapshot = build_snapshot_from_conn(&conn, "ws_snapshot_visible").unwrap();
+        let session_ids = snapshot
+            .sessions
+            .into_iter()
+            .map(|session| session.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(session_ids, vec!["slot-visible".to_string()]);
+    }
+
+    #[test]
+    fn load_workspace_slot_session_resolves_from_binding_without_persisted_session_row() {
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .expect("provider env test lock");
+        let workspace_root = unique_temp_dir("db-slot-session-binding-only");
+        let claude_home = unique_temp_dir("db-slot-session-binding-only-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(
+            project_dir.join("resume-visible.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:30:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Visible Session\",\"timestamp\":1,\"project\":\"{}\",\"sessionId\":\"resume-visible\"}}\n",
+                workspace_root.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+
+        let (app, _shutdown_rx) = crate::runtime::RuntimeHandle::new();
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        *app.state().db.lock().unwrap() = Some(conn);
+        with_db(app.state(), |conn| {
+            let now = now_ts_ms();
+            conn.execute(
+                "INSERT INTO workspaces (id, title, root_path, source_kind, source_value, git_url, target_json, idle_policy_json, created_at, updated_at, last_opened_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    "ws_slot_binding_only",
+                    "Workspace ws_slot_binding_only",
+                    workspace_root.to_string_lossy().to_string(),
+                    "local",
+                    workspace_root.to_string_lossy().to_string(),
+                    serde_json::to_string(&ExecTarget::Native).unwrap(),
+                    serde_json::to_string(&default_idle_policy()).unwrap(),
+                    now,
+                    now,
+                    now,
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+                 VALUES (?1, ?2, ?3)",
+                params![
+                    "ws_slot_binding_only",
+                    json!({
+                        "active_session_id": "slot-visible",
+                        "active_pane_id": "pane-visible",
+                        "active_terminal_id": "",
+                        "pane_layout": {
+                            "type": "leaf",
+                            "id": "pane-visible",
+                            "sessionId": "slot-visible",
+                        },
+                        "file_preview": default_file_preview_value(),
+                        "session_bindings": [
+                            {
+                                "session_id": "slot-visible",
+                                "provider": AgentProvider::claude(),
+                                "mode": SessionMode::Branch,
+                                "resume_id": Some("resume-visible".to_string()),
+                                "title_snapshot": "Stale Snapshot Title",
+                                "last_seen_at": 12_i64,
+                            }
+                        ],
+                    })
+                    .to_string(),
+                    now,
+                ],
+            )
+            .unwrap();
+            Ok(())
+        })
+        .unwrap();
+
+        let session = with_claude_home(&claude_home, || {
+            load_workspace_slot_session(app.state(), "ws_slot_binding_only", "slot-visible")
+        })
+        .unwrap();
+
+        assert_eq!(session.id, "slot-visible");
+        assert_eq!(session.title, "Visible Session");
+        assert_eq!(session.provider, AgentProvider::claude());
+        assert_eq!(session.resume_id.as_deref(), Some("resume-visible"));
+        assert_eq!(session.status, SessionStatus::Interrupted);
+        assert!(!session.runtime_active);
+        assert!(session.unavailable_reason.is_none());
+        assert!(session.last_active_at >= SESSION_TIMESTAMP_MILLIS_THRESHOLD);
+
+        let _ = fs::remove_dir_all(workspace_root);
+        let _ = fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn build_history_from_conn_includes_unavailable_bound_sessions() {
+        let _guard = crate::services::provider_registry::provider_env_test_lock()
+            .lock()
+            .expect("provider env test lock");
+        let workspace_root = unique_temp_dir("db-provider-history");
+        let claude_home = unique_temp_dir("db-provider-history-home");
+        let claude_dir = claude_home.join(".claude");
+        let project_slug = workspace_root
+            .to_string_lossy()
+            .replace(['/', '\\', ':'], "-");
+        let project_dir = claude_dir.join("projects").join(project_slug);
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            project_dir.join("resume-visible.jsonl"),
+            concat!(
+                "{\"timestamp\":\"2026-04-05T10:00:00.000Z\"}\n",
+                "{\"timestamp\":\"2026-04-05T11:30:00.000Z\"}\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            claude_dir.join("history.jsonl"),
+            format!(
+                "{{\"display\":\"Visible Session\",\"timestamp\":1,\"project\":\"{}\",\"sessionId\":\"resume-visible\"}}\n",
+                workspace_root.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let now = now_ts_ms();
+        conn.execute(
+            "INSERT INTO workspaces (id, title, root_path, source_kind, source_value, git_url, target_json, idle_policy_json, created_at, updated_at, last_opened_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                "ws_provider_history_only",
+                "Workspace ws_provider_history_only",
+                workspace_root.to_string_lossy().to_string(),
+                "local",
+                workspace_root.to_string_lossy().to_string(),
+                serde_json::to_string(&ExecTarget::Native).unwrap(),
+                serde_json::to_string(&default_idle_policy()).unwrap(),
+                now,
+                now,
+                now,
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_view_state (workspace_id, payload, updated_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                "ws_provider_history_only",
+                json!({
+                    "active_session_id": "slot-visible",
+                    "active_pane_id": "pane-visible",
+                    "active_terminal_id": "",
+                    "pane_layout": {
+                        "type": "leaf",
+                        "id": "pane-visible",
+                        "sessionId": "slot-visible",
+                    },
+                    "file_preview": default_file_preview_value(),
+                    "session_bindings": [
+                        {
+                            "session_id": "slot-visible",
+                            "provider": AgentProvider::claude(),
+                            "mode": SessionMode::Branch,
+                            "resume_id": Some("resume-visible".to_string()),
+                            "title_snapshot": "Visible Session",
+                            "last_seen_at": 1_730_000_000_000_i64,
+                        },
+                        {
+                            "session_id": "slot-missing",
+                            "provider": AgentProvider::claude(),
+                            "mode": SessionMode::Branch,
+                            "resume_id": Some("resume-missing".to_string()),
+                            "title_snapshot": "Missing Session",
+                            "last_seen_at": 1_730_000_000_500_i64,
+                        }
+                    ],
+                })
+                .to_string(),
+                now,
+            ],
+        )
+        .unwrap();
+
+        let history = with_claude_home(&claude_home, || build_history_from_conn(&conn).unwrap());
+
+        assert_eq!(history.len(), 2);
+        let visible = history
+            .iter()
+            .find(|record| record.resume_id == "resume-visible")
+            .expect("visible session should remain in history");
+        assert_eq!(visible.workspace_id, "ws_provider_history_only");
+        assert_eq!(visible.provider.as_str(), "claude");
+        assert!(visible.mounted);
+        assert_eq!(visible.state, "live");
+        assert_eq!(visible.session_id.as_deref(), Some("slot-visible"));
+
+        let missing = history
+            .iter()
+            .find(|record| record.resume_id == "resume-missing")
+            .expect("missing binding should appear in history");
+        assert_eq!(missing.workspace_id, "ws_provider_history_only");
+        assert_eq!(missing.provider.as_str(), "claude");
+        assert!(!missing.mounted);
+        assert_eq!(missing.state, "unavailable");
+        assert_eq!(missing.session_id.as_deref(), Some("slot-missing"));
+        assert_eq!(missing.title, "Missing Session");
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(claude_home);
+    }
+
+    #[test]
+    fn init_db_drops_workspace_sessions_table_for_legacy_schema_versions() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE workspaces (id TEXT PRIMARY KEY);
+            CREATE TABLE workspace_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id TEXT NOT NULL,
+                payload TEXT NOT NULL
+            );
+            PRAGMA user_version = 4;",
+        )
+        .unwrap();
+
+        init_db(&conn).unwrap();
+
+        let table_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'workspace_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let current_version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+
+        assert_eq!(table_exists, 0);
+        assert_eq!(current_version, DB_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn mark_active_sessions_interrupted_on_boot_is_a_no_op_without_workspace_sessions_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        mark_active_sessions_interrupted_on_boot(&conn).unwrap();
+    }
 }

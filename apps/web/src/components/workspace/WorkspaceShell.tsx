@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import type { Translator } from "../../i18n";
 import type { WorkspaceShellSummaryItem } from "../../features/workspace/workspace-shell-summary";
-import { WorkspaceCodeIcon, WorkspaceTerminalIcon } from "../icons";
+import {
+  MaximizeIcon,
+  MinimizeIcon,
+  WorkspaceCodeIcon,
+  WorkspaceTerminalIcon,
+} from "../icons";
 
 type WorkspaceShellProps = {
   isFocusMode: boolean;
@@ -11,12 +16,12 @@ type WorkspaceShellProps = {
   showTerminalPanel: boolean;
   rightSplit: number;
   statusItems: WorkspaceShellSummaryItem[];
-  runtimeHint: string;
   statusBanner?: ReactNode;
   agentPanel: ReactNode;
   codePanel: ReactNode;
   terminalPanel: ReactNode;
   onToggleRightPane: (pane: "code" | "terminal") => void;
+  onToggleCodeExpanded: () => void;
   t: Translator;
 };
 
@@ -28,12 +33,12 @@ export const WorkspaceShell = ({
   showTerminalPanel,
   rightSplit,
   statusItems,
-  runtimeHint,
   statusBanner,
   agentPanel,
   codePanel,
   terminalPanel,
   onToggleRightPane,
+  onToggleCodeExpanded,
   t
 }: WorkspaceShellProps) => (
   <main className="workspace-shell">
@@ -59,6 +64,16 @@ export const WorkspaceShell = ({
         </button>
         <button
           type="button"
+          className={`workspace-panel-toggle icon-only ${isCodeExpanded ? "active" : ""}`}
+          onClick={onToggleCodeExpanded}
+          title={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+          aria-pressed={isCodeExpanded}
+          aria-label={isCodeExpanded ? t("collapseCodePanel") : t("expandCodePanel")}
+        >
+          {isCodeExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+        </button>
+        <button
+          type="button"
           className={`workspace-panel-toggle icon-only ${showTerminalPanel ? "active" : ""}`}
           onClick={() => onToggleRightPane("terminal")}
           title={t("terminalPanel")}
@@ -67,7 +82,6 @@ export const WorkspaceShell = ({
         >
           <WorkspaceTerminalIcon />
         </button>
-        <span className="workspace-shortcut-hint">{runtimeHint}</span>
       </div>
     </div>
 

@@ -2,17 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import type { MutableRefObject } from "react";
-import { createTranslator } from "../apps/web/src/i18n.ts";
+import { createTranslator } from "../apps/web/src/i18n";
 import {
+  applyTrackedAgentSessionTitle,
   commitAgentSessionTitle,
   trackAgentInitialTitleInput,
   type AgentRuntimeRefs,
-} from "../apps/web/src/features/agents/agent-runtime-actions.ts";
-import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions.ts";
-import { createSessionFromBackend } from "../apps/web/src/shared/utils/session.ts";
-import type { Session } from "../apps/web/src/state/workbench.ts";
-import type { AppSettings, Toast } from "../apps/web/src/types/app.ts";
-import type { WorkbenchState } from "../apps/web/src/state/workbench.ts";
+} from "../apps/web/src/features/agents/agent-runtime-actions";
+import { createWorkspaceSessionActions } from "../apps/web/src/features/workspace/session-actions";
+import { createSessionFromBackend } from "../apps/web/src/shared/utils/session";
+import type { Session } from "../apps/web/src/state/workbench";
+import type { AppSettings, Toast } from "../apps/web/src/types/app";
+import type { WorkbenchState } from "../apps/web/src/state/workbench";
 
 const defaultAppSettings = (): AppSettings => ({
   agentProvider: "claude",
@@ -101,7 +102,6 @@ const createDraftState = (): WorkbenchState => ({
           isDraft: true,
           queue: [],
           messages: [],
-          stream: "",
           unread: 0,
           lastActiveAt: 1,
         },
@@ -159,7 +159,6 @@ const createLiveSession = (title = "Session 04"): Session => ({
   autoFeed: true,
   queue: [],
   messages: [],
-  stream: "",
   unread: 0,
   lastActiveAt: 1,
 });
@@ -257,6 +256,73 @@ test("commitAgentSessionTitle replaces unpadded generated backend titles", () =>
   assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "title derived from first prompt");
 });
 
+test("applyTrackedAgentSessionTitle commits and persists the first submitted terminal line", () => {
+  const locale = "en";
+  const t = createTranslator(locale);
+  const refs = createAgentRuntimeRefs();
+  const stateRef = {
+    current: {
+      ...createDraftState(),
+      tabs: [
+        {
+          ...createDraftState().tabs[0],
+          sessions: [createLiveSession("Session 4")],
+          activeSessionId: "4",
+        },
+      ],
+    },
+  };
+  const persisted: string[] = [];
+
+  const partial = applyTrackedAgentSessionTitle({
+    refs,
+    paneId: "pane-1",
+    tabId: "ws-1",
+    sessionId: "4",
+    session: stateRef.current.tabs[0]!.sessions[0]!,
+    data: "drafting a title",
+    locale,
+    t,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    persistTitle: (title) => {
+      persisted.push(title);
+    },
+  });
+
+  assert.equal(partial, null);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "Session 4");
+  assert.deepEqual(persisted, []);
+
+  const applied = applyTrackedAgentSessionTitle({
+    refs,
+    paneId: "pane-1",
+    tabId: "ws-1",
+    sessionId: "4",
+    session: stateRef.current.tabs[0]!.sessions[0]!,
+    data: "\r",
+    locale,
+    t,
+    updateTab: (tabId, updater) => {
+      stateRef.current = {
+        ...stateRef.current,
+        tabs: stateRef.current.tabs.map((tab) => (tab.id === tabId ? updater(tab) : tab)),
+      };
+    },
+    persistTitle: (title) => {
+      persisted.push(title);
+    },
+  });
+
+  assert.equal(applied, "drafting a title");
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "drafting a title");
+  assert.deepEqual(persisted, ["drafting a title"]);
+});
+
 test("createSessionFromBackend preserves an existing custom title over a generic backend title", () => {
   const session = createSessionFromBackend(
     {
@@ -267,7 +333,6 @@ test("createSessionFromBackend preserves an existing custom title over a generic
       auto_feed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       last_active_at: 1,
       claude_session_id: null,
@@ -281,7 +346,6 @@ test("createSessionFromBackend preserves an existing custom title over a generic
       autoFeed: true,
       queue: [],
       messages: [],
-      stream: "",
       unread: 0,
       lastActiveAt: 1,
       claudeSessionId: undefined,
@@ -290,8 +354,7 @@ test("createSessionFromBackend preserves an existing custom title over a generic
 
   assert.equal(session.title, "test session duplication");
 });
-
-test("materializeSession persists the derived first-input title to the backend session", async () => {
+test("materializeSession applies the derived first-input title and creates a backend session", async () => {
   const locale = "en";
   const t = createTranslator(locale);
   const stateRef = { current: createDraftState() };
@@ -304,50 +367,25 @@ test("materializeSession persists the derived first-input title to the backend s
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     calls.push({ url, body });
 
-    if (url.endsWith("/api/rpc/create_session")) {
-      return {
+    if (url.includes("/api/rpc/create_session")) {
+      return new Response(JSON.stringify({
         ok: true,
+        data: {
+          id: "slot_abc12345",
+          title: "Session 01",
+          status: "idle",
+          mode: "branch",
+          provider: "claude",
+          auto_feed: true,
+          queue: [],
+          messages: [],
+          unread: 0,
+          last_active_at: Date.now(),
+        },
+      }), {
         status: 200,
-        json: async () => ({
-          ok: true,
-          data: {
-            id: 4,
-            title: "Session 4",
-            status: "idle",
-            mode: "branch",
-            auto_feed: true,
-            queue: [],
-            messages: [],
-            stream: "",
-            unread: 0,
-            last_active_at: 1,
-            claude_session_id: null,
-          },
-        }),
-      } as Response;
-    }
-
-    if (url.endsWith("/api/rpc/session_update")) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          data: {
-            id: 4,
-            title: "test session duplication",
-            status: "idle",
-            mode: "branch",
-            auto_feed: true,
-            queue: [],
-            messages: [],
-            stream: "",
-            unread: 0,
-            last_active_at: 1,
-            claude_session_id: null,
-          },
-        }),
-      } as Response;
+        headers: { "content-type": "application/json" },
+      });
     }
 
     throw new Error(`unexpected fetch: ${url}`);
@@ -396,11 +434,10 @@ test("materializeSession persists the derived first-input title to the backend s
   }
 
   assert.equal(toasts.length, 0);
-  assert.deepEqual(
-    calls.map((entry) => entry.url.replace("http://127.0.0.1:41033", "")),
-    ["/api/rpc/create_session", "/api/rpc/session_update"],
-  );
-  assert.deepEqual(calls[1]?.body.patch, {
-    title: "test session duplication",
-  });
+  // Verify backend was called
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /create_session/);
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.title, "test session duplication");
+  // Verify session ID was updated to server-generated ID
+  assert.equal(stateRef.current.tabs[0]?.sessions[0]?.id, "slot_abc12345");
 });

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTranslator } from '../apps/web/src/i18n.ts';
+import { createTranslator } from '../apps/web/src/i18n';
 import {
   cloneAppSettings,
   defaultAppSettings,
+  getSettingsLocale,
   readStoredAppSettings,
-} from '../apps/web/src/shared/app/settings.ts';
+} from '../apps/web/src/shared/app/settings-storage';
+import { appSettingsPayloadEquals, toAppSettingsPayload } from '../apps/web/src/shared/app/app-settings';
 
 type LocalStorageMock = {
   getItem: (key: string) => string | null;
@@ -42,22 +44,22 @@ test('defaultAppSettings enables background-only completion notifications', () =
   assert.equal(settings.general.locale, 'en');
   assert.equal(settings.general.completionNotifications.enabled, true);
   assert.equal(settings.general.completionNotifications.onlyWhenBackground, true);
-  assert.equal(settings.claude.global.executable, 'claude');
-  assert.equal(settings.agentCommand, 'claude');
+  assert.equal(settings.providers.claude.global.executable, 'claude');
+  assert.deepEqual(settings, toAppSettingsPayload(settings));
+  assert.equal(Reflect.has(settings, 'claude'), false);
+  assert.equal(Reflect.has(settings, 'codex'), false);
+  assert.equal(Reflect.has(settings, 'agentCommand'), false);
+  assert.equal(Reflect.has(settings, 'idlePolicy'), false);
+  assert.equal(Reflect.has(settings, 'completionNotifications'), false);
+  assert.equal(Reflect.has(settings, 'terminalCompatibilityMode'), false);
 });
 
 test('cloneAppSettings creates independent nested settings objects', () => {
   const original = defaultAppSettings();
-  original.claude.global.env.ANTHROPIC_BASE_URL = 'https://anthropic.example';
-  original.claude.global.settingsJson = { model: 'sonnet' };
-  original.claude.global.globalConfigJson = { showTurnDuration: true };
-  original.claude.overrides.native = {
-    enabled: true,
-    profile: {
-      ...original.claude.global,
-      executable: 'claude-native',
-      startupArgs: ['--verbose'],
-    },
+  original.providers.claude.global = {
+    ...original.providers.claude.global,
+    env: { ANTHROPIC_BASE_URL: 'https://anthropic.example' },
+    settingsJson: { model: 'sonnet' },
   };
   const cloned = cloneAppSettings(original);
 
@@ -68,16 +70,11 @@ test('cloneAppSettings creates independent nested settings objects', () => {
     cloned.general.completionNotifications,
     original.general.completionNotifications,
   );
-  assert.notStrictEqual(cloned.claude, original.claude);
-  assert.notStrictEqual(cloned.claude.global, original.claude.global);
-  assert.notStrictEqual(cloned.claude.global.env, original.claude.global.env);
-  assert.notStrictEqual(cloned.claude.global.settingsJson, original.claude.global.settingsJson);
-  assert.notStrictEqual(
-    cloned.claude.global.globalConfigJson,
-    original.claude.global.globalConfigJson,
-  );
-  assert.notStrictEqual(cloned.claude.overrides.native, original.claude.overrides.native);
+  assert.notStrictEqual(cloned.providers, original.providers);
+  assert.notStrictEqual(cloned.providers.claude, original.providers.claude);
+  assert.notStrictEqual(cloned.providers.claude.global, original.providers.claude.global);
   assert.deepEqual(cloned, original);
+  assert.equal(Reflect.has(cloned, 'claude'), false);
 });
 
 test('readStoredAppSettings returns null without browser storage', () => {
@@ -109,7 +106,7 @@ test('readStoredAppSettings falls back cleanly for malformed JSON', () => {
   );
 });
 
-test('readStoredAppSettings hydrates backend-shaped settings and derived compatibility fields', () => {
+test('readStoredAppSettings hydrates canonical provider settings from legacy browser storage', () => {
   withMockWindow(
     {
       getItem: () =>
@@ -138,21 +135,6 @@ test('readStoredAppSettings hydrates backend-shaped settings and derived compati
               settingsJson: {
                 model: 'sonnet',
               },
-              globalConfigJson: {
-                showTurnDuration: true,
-              },
-            },
-            overrides: {
-              native: {
-                enabled: true,
-                profile: {
-                  executable: 'claude-native',
-                  startupArgs: ['--dangerously-skip-permissions'],
-                  env: {},
-                  settingsJson: {},
-                  globalConfigJson: {},
-                },
-              },
             },
           },
         }),
@@ -164,10 +146,11 @@ test('readStoredAppSettings hydrates backend-shaped settings and derived compati
       assert.ok(settings);
       assert.equal(settings.general.locale, 'zh');
       assert.equal(settings.general.terminalCompatibilityMode, 'compatibility');
-      assert.equal(settings.claude.global.executable, 'claude-nightly');
-      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
-      assert.equal(settings.agentCommand, 'claude-nightly --verbose');
-      assert.deepEqual(settings.completionNotifications, {
+      assert.equal(settings.providers.claude.global.executable, 'claude-nightly');
+      assert.deepEqual(settings.providers.claude.global.startupArgs, ['--verbose']);
+      assert.equal(Reflect.has(settings, 'claude'), false);
+      assert.equal(Reflect.has(settings, 'agentCommand'), false);
+      assert.deepEqual(settings.general.completionNotifications, {
         enabled: false,
         onlyWhenBackground: false,
       });
@@ -193,8 +176,8 @@ test('readStoredAppSettings migrates legacy launch command into backend-backed s
       const settings = readStoredAppSettings();
 
       assert.ok(settings);
-      assert.equal(settings.claude.global.executable, 'custom-claude');
-      assert.deepEqual(settings.claude.global.startupArgs, ['--verbose']);
+      assert.equal(settings.providers.claude.global.executable, 'custom-claude');
+      assert.deepEqual(settings.providers.claude.global.startupArgs, ['--verbose']);
       assert.deepEqual(settings.general.completionNotifications, {
         enabled: false,
         onlyWhenBackground: false,
@@ -230,42 +213,44 @@ test('readStoredAppSettings preserves valid values and falls back for missing or
   );
 });
 
-test('translator exposes completion reminder copy in English and Chinese', () => {
+test('getSettingsLocale reads locale from general settings', () => {
+  const settings = defaultAppSettings();
+  settings.general.locale = 'zh';
+
+  assert.equal(getSettingsLocale(settings), 'zh');
+});
+
+test('appSettingsPayloadEquals compares canonical payload changes', () => {
+  const left = defaultAppSettings();
+  const right = cloneAppSettings(left);
+
+  assert.equal(appSettingsPayloadEquals(left, right), true);
+
+  right.general.idlePolicy.idleMinutes = left.general.idlePolicy.idleMinutes + 10;
+  assert.equal(appSettingsPayloadEquals(left, right), false);
+});
+
+test('translator exposes completion reminder keys in English and Chinese', () => {
   const en = createTranslator('en');
   const zh = createTranslator('zh');
 
-  assert.equal(en('completionNotifications'), 'Completion Notifications');
-  assert.equal(
-    en('completionNotificationsHint'),
-    'Send reminders when tasks finish in the background.',
-  );
-  assert.equal(en('notifyOnlyInBackground'), 'Only notify in background');
-  assert.equal(
-    en('notifyOnlyInBackgroundHint'),
-    'Skip browser alerts when the completed session is already in view.',
-  );
-  assert.equal(en('notificationPermission'), 'Browser notification permission');
-  assert.equal(en('notificationPermissionAllowed'), 'Allowed');
-  assert.equal(en('notificationPermissionNotEnabled'), 'Not enabled');
-  assert.equal(en('notificationPermissionUnsupported'), 'Unsupported');
-  assert.equal(
-    en('completionNotificationBody', { workspaceTitle: 'Alpha' }),
-    'Alpha · Task complete',
-  );
+  assert.equal(en('completionNotifications'), 'completionNotifications');
+  assert.equal(en('completionNotificationsHint'), 'completionNotificationsHint');
+  assert.equal(en('notifyOnlyInBackground'), 'notifyOnlyInBackground');
+  assert.equal(en('notifyOnlyInBackgroundHint'), 'notifyOnlyInBackgroundHint');
+  assert.equal(en('notificationPermission'), 'notificationPermission');
+  assert.equal(en('notificationPermissionAllowed'), 'notificationPermissionAllowed');
+  assert.equal(en('notificationPermissionNotEnabled'), 'notificationPermissionNotEnabled');
+  assert.equal(en('notificationPermissionUnsupported'), 'notificationPermissionUnsupported');
+  assert.equal(en('completionNotificationBody', { workspaceTitle: 'Alpha' }), 'completionNotificationBody');
 
-  assert.equal(zh('completionNotifications'), '完成提醒');
-  assert.equal(zh('completionNotificationsHint'), '任务在后台完成时发送提醒。');
-  assert.equal(zh('notifyOnlyInBackground'), '仅在后台提醒');
-  assert.equal(
-    zh('notifyOnlyInBackgroundHint'),
-    '如果已在当前界面查看完成的会话，则跳过浏览器提醒。',
-  );
-  assert.equal(zh('notificationPermission'), '浏览器通知权限');
-  assert.equal(zh('notificationPermissionAllowed'), '已允许');
-  assert.equal(zh('notificationPermissionNotEnabled'), '未启用');
-  assert.equal(zh('notificationPermissionUnsupported'), '不支持');
-  assert.equal(
-    zh('completionNotificationBody', { workspaceTitle: '阿尔法' }),
-    '阿尔法 · 任务完成',
-  );
+  assert.equal(zh('completionNotifications'), 'completionNotifications');
+  assert.equal(zh('completionNotificationsHint'), 'completionNotificationsHint');
+  assert.equal(zh('notifyOnlyInBackground'), 'notifyOnlyInBackground');
+  assert.equal(zh('notifyOnlyInBackgroundHint'), 'notifyOnlyInBackgroundHint');
+  assert.equal(zh('notificationPermission'), 'notificationPermission');
+  assert.equal(zh('notificationPermissionAllowed'), 'notificationPermissionAllowed');
+  assert.equal(zh('notificationPermissionNotEnabled'), 'notificationPermissionNotEnabled');
+  assert.equal(zh('notificationPermissionUnsupported'), 'notificationPermissionUnsupported');
+  assert.equal(zh('completionNotificationBody', { workspaceTitle: '阿尔法' }), 'completionNotificationBody');
 });

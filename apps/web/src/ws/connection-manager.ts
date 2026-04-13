@@ -1,14 +1,15 @@
-import { healthUrl, websocketUrl } from "../shared/runtime/backend.ts";
-import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service.ts";
+import { healthUrl, websocketUrl } from "../shared/runtime/backend";
+import { isAuthenticated, isPublicModeActive } from "../services/http/auth.service";
 import {
   getOrCreateClientId,
   getOrCreateDeviceId,
-} from "../features/workspace/workspace-controller.ts";
-import { WsHeartbeat } from "./heartbeat.ts";
-import { parseWsEnvelope, type WsClientEnvelope, type WsEventEnvelope } from "./protocol.ts";
-import { getReconnectDelayMs } from "./reconnect-policy.ts";
+} from "../features/workspace/workspace-controller";
+import { WsHeartbeat } from "./heartbeat";
+import { parseWsEnvelope, type WsClientEnvelope, type WsEventEnvelope } from "./protocol";
+import { getReconnectDelayMs } from "./reconnect-policy";
 
 type EventHandler<T = unknown> = (payload: T) => void;
+type AckResolver = { resolve: () => void; timer: number };
 export type WsConnectionState = {
   kind: "connected" | "reconnected" | "disconnected";
   at: number;
@@ -19,6 +20,7 @@ type ConnectionHandler = (state: WsConnectionState) => void;
 export class WsConnectionManager {
   private readonly listeners = new Map<string, Set<EventHandler<unknown>>>();
   private readonly connectionListeners = new Set<ConnectionHandler>();
+  private readonly pendingAcks = new Map<string, AckResolver>();
   private lastConnectionState: WsConnectionState | null = null;
   private socket: WebSocket | null = null;
   private reconnectTimer: number | null = null;
@@ -81,6 +83,41 @@ export class WsConnectionManager {
       this.socket?.close();
       return false;
     }
+  }
+
+  /**
+   * Send a message that requires server-side ACK confirmation.
+   * Returns a Promise that resolves when the ACK is received,
+   * or rejects after `timeoutMs` if no ACK arrives.
+   */
+  sendWithAck(message: WsClientEnvelope & { request_id?: string }, timeoutMs = 3000): Promise<boolean | null> {
+    return new Promise((resolve) => {
+      this.bindOnlineListeners();
+      this.connect();
+      if (this.socket?.readyState !== WebSocket.OPEN) {
+        // Socket not open — message cannot be sent at all. Return null so the
+        // caller knows to fall back to HTTP for guaranteed delivery.
+        resolve(null);
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      const enriched = { ...message, request_id: requestId };
+      const timer = window.setTimeout(() => {
+        this.pendingAcks.delete(requestId);
+        // ACK timed out — the message WAS sent (socket was open), we just didn't
+        // receive confirmation. Do NOT resolve(false) as an error; the caller
+        // must not fall back to HTTP because the server likely processed it.
+        resolve(false);
+      }, timeoutMs);
+      this.pendingAcks.set(requestId, { resolve: () => resolve(true), timer });
+      try {
+        this.socket!.send(JSON.stringify(enriched));
+      } catch {
+        window.clearTimeout(timer);
+        this.pendingAcks.delete(requestId);
+        resolve(false);
+      }
+    });
   }
 
   private bindOnlineListeners() {
@@ -148,7 +185,12 @@ export class WsConnectionManager {
       this.scheduleReconnect();
       return;
     }
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) && this.activeSocketUrl === nextUrl) {
+    // Treat CLOSING the same as CLOSED — if the socket is winding down,
+    // don't wait for it; create a fresh connection.
+    if (this.socket && this.socket.readyState === WebSocket.OPEN && this.activeSocketUrl === nextUrl) {
+      return;
+    }
+    if (this.socket && this.socket.readyState === WebSocket.CONNECTING && this.activeSocketUrl === nextUrl) {
       return;
     }
     if (this.socket) {
@@ -211,12 +253,27 @@ export class WsConnectionManager {
         this.heartbeat.markAlive();
         return;
       }
+      if (envelope.type === "ack") {
+        const resolver = this.pendingAcks.get(envelope.request_id);
+        if (resolver) {
+          window.clearTimeout(resolver.timer);
+          resolver.resolve();
+          this.pendingAcks.delete(envelope.request_id);
+        }
+        return;
+      }
       if (envelope.type === "ping" && this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({ type: "pong", ts: envelope.ts }));
       }
     });
     this.socket.addEventListener("close", () => {
       this.heartbeat.stop();
+      // Reject all pending ACK promises on disconnect
+      for (const [, resolver] of this.pendingAcks) {
+        window.clearTimeout(resolver.timer);
+        resolver.resolve();
+      }
+      this.pendingAcks.clear();
       this.socket = null;
       this.notifyConnectionState({ kind: "disconnected", at: Date.now(), url: nextUrl });
       this.scheduleReconnect();

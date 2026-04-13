@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   normalizeWorkbenchState,
-} from "../apps/web/src/state/workbench-core.ts";
+} from "../apps/web/src/state/workbench-core";
 import {
   applyWorkbenchUiState,
   buildWorkbenchStateFromBootstrap,
-} from "../apps/web/src/shared/utils/workspace.ts";
+} from "../apps/web/src/shared/utils/workspace";
 import {
   defaultAppSettings,
-} from "../apps/web/src/shared/app/settings.ts";
+} from "../apps/web/src/shared/app/settings-storage";
 import {
   browseWorkspaceOverlayDirectory,
-} from "../apps/web/src/features/workspace/workspace-overlay-actions.ts";
+} from "../apps/web/src/features/workspace/workspace-overlay-actions";
 
 test("empty workbench state does not auto-open the launch overlay", () => {
   const normalized = normalizeWorkbenchState({
@@ -122,11 +122,10 @@ test("workspace screen wires the no-workspace welcome screen", () => {
   );
 
   assert.match(source, /\bWorkspaceWelcomeScreen\b/);
-  assert.match(source, /const showWelcomeScreen = bootstrapReady && state\.tabs\.length === 0 && !state\.overlay\.visible;/);
+  assert.match(source, /const showWelcomeScreen = bootstrapReady && state\.tabs\.length === 0;/);
   assert.match(source, /\bonOpenWorkspacePicker\b/);
-  assert.match(source, /\bonOpenHistory\b/);
   assert.match(source, /const workspaceUiReady = bootstrapReady && \(state\.tabs\.length > 0 \|\| state\.overlay\.visible \|\| showWelcomeScreen\);/);
-  assert.match(source, /\{showWelcomeScreen \? \(\s*<WorkspaceWelcomeScreen[\s\S]*?\) : \(\s*<WorkspaceShell/);
+  assert.match(source, /\{showWelcomeScreen \? \(\s*<WorkspaceWelcomeScreen[\s\S]*?\) : hasOpenWorkspace \? \(\s*<WorkspaceShell/);
 });
 
 test("workspace launch overlay exposes a close control wired to onClose", () => {
@@ -157,6 +156,20 @@ test("workspace screen passes the shared close handler into both overlay layers"
 
   assert.match(source, /<RuntimeValidationOverlay[\s\S]*?onClose=\{onCloseWorkspaceOverlay\}[\s\S]*?\/>/);
   assert.match(source, /<WorkspaceLaunchOverlay[\s\S]*?onClose=\{onCloseWorkspaceOverlay\}[\s\S]*?\/>/);
+});
+
+test("workspace state writers use the shared workbench snapshot for global updates", () => {
+  const workspaceScreenSource = readFileSync(
+    new URL("../apps/web/src/features/workspace/WorkspaceScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  const coordinatorSource = readFileSync(
+    new URL("../apps/web/src/features/app/WorkbenchRuntimeCoordinator.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workspaceScreenSource, /\bupdateWorkbenchStateSnapshot\b/);
+  assert.match(coordinatorSource, /\bupdateWorkbenchStateSnapshot\b/);
 });
 
 test("overlay browse ignores stale results after close", async () => {

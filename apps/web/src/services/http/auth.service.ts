@@ -4,8 +4,8 @@ import {
   hasTauriRuntime,
   isAuthForceRequested,
   isLocalBrowserOrigin,
-} from "../../shared/runtime/backend.ts";
-import type { AuthStatus } from "../../types/app.ts";
+} from "../../shared/runtime/backend";
+import type { AuthStatus } from "../../types/app";
 
 type AuthEnvelope<T> = {
   ok?: boolean;

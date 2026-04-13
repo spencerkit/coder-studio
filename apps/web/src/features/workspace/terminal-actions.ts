@@ -62,6 +62,37 @@ type AddWorkspaceTerminalArgs = {
   initialSize?: TerminalGridSize | null;
 };
 
+type ReplaceWorkspaceTerminalArgs = {
+  tab: Tab;
+  terminalId: string;
+  updateTab: UpdateTab;
+  addToast: (toast: Toast) => void;
+  activeSessionId: string;
+  createToastId: () => string;
+  t: Translator;
+  initialSize?: TerminalGridSize | null;
+};
+
+export const replaceWorkspaceTerminalEntry = (
+  tab: Tab,
+  terminalId: string,
+  nextTerminal: Tab["terminals"][number],
+): Tab => {
+  if (!tab.terminals.some((terminal) => terminal.id === terminalId)) {
+    return tab;
+  }
+
+  return {
+    ...tab,
+    terminals: tab.terminals.map((terminal) => (
+      terminal.id === terminalId ? nextTerminal : terminal
+    )),
+    activeTerminalId: tab.activeTerminalId === terminalId
+      ? nextTerminal.id
+      : tab.activeTerminalId,
+  };
+};
+
 export const addWorkspaceTerminal = async ({
   tab,
   locale,
@@ -98,6 +129,61 @@ export const addWorkspaceTerminal = async ({
     };
   });
   return true;
+};
+
+export const replaceWorkspaceTerminal = async ({
+  tab,
+  terminalId,
+  updateTab,
+  addToast,
+  activeSessionId,
+  createToastId,
+  t,
+  initialSize,
+}: ReplaceWorkspaceTerminalArgs) => {
+  const activeProject = tab.project;
+  if (!activeProject?.path) {
+    addToast({ id: createToastId(), text: t("selectProjectFirst"), sessionId: activeSessionId });
+    return false;
+  }
+
+  const currentTerminal = tab.terminals.find((terminal) => terminal.id === terminalId);
+  if (!currentTerminal) {
+    return false;
+  }
+
+  try {
+    const info = await createTerminalRequest(
+      tab.id,
+      tab.controller,
+      activeProject.path,
+      activeProject.target,
+      initialSize,
+    );
+    const nextTerminal = {
+      id: `term-${info.id}`,
+      title: currentTerminal.title,
+      output: info.output ?? "",
+      recoverable: true,
+    };
+    updateTab(tab.id, (currentTab) => replaceWorkspaceTerminalEntry(currentTab, terminalId, nextTerminal));
+
+    const numericId = Number(terminalId.replace("term-", ""));
+    if (Number.isFinite(numericId)) {
+      void closeTerminalRequest(tab.id, tab.controller, numericId).catch(() => {
+        // Keep the replacement shell usable even if cleanup of the dead snapshot lags.
+      });
+    }
+    return true;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    addToast({
+      id: createToastId(),
+      text: `${t("workspaceTerminalCreateFailed")}: ${detail}`,
+      sessionId: activeSessionId,
+    });
+    return false;
+  }
 };
 
 export const selectWorkspaceTerminal = (

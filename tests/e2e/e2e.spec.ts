@@ -4,16 +4,27 @@ import fs from 'node:fs/promises';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
+const WORKSPACE_ROOT = process.cwd();
+const E2E_RUNTIME_HOME = process.env.CODER_STUDIO_HOME
+  ? path.resolve(process.env.CODER_STUDIO_HOME)
+  : path.join(WORKSPACE_ROOT, '.tmp', 'dev-stack-runtime');
+const E2E_CLAUDE_HOME = process.env.CODER_STUDIO_CLAUDE_HOME
+  ? path.resolve(process.env.CODER_STUDIO_CLAUDE_HOME)
+  : path.join(E2E_RUNTIME_HOME, 'provider-homes', 'claude-home');
+const E2E_CODEX_HOME = process.env.CODER_STUDIO_CODEX_HOME
+  ? path.resolve(process.env.CODER_STUDIO_CODEX_HOME)
+  : path.join(E2E_RUNTIME_HOME, 'provider-homes', 'codex-home');
+
 type WsEventEnvelope = {
   type: 'event';
   event: string;
   payload: Record<string, unknown>;
 };
 
-const HOME_DIR = os.homedir();
+const TEMP_DIR = os.tmpdir();
 const TAB_STABILITY_DIRS = [
-  path.join(HOME_DIR, 'coder-studio-e2e-tab-a'),
-  path.join(HOME_DIR, 'coder-studio-e2e-tab-b'),
+  path.join(TEMP_DIR, 'coder-studio-e2e-tab-a'),
+  path.join(TEMP_DIR, 'coder-studio-e2e-tab-b'),
 ];
 const TAB_STABILITY_LABELS = TAB_STABILITY_DIRS.map((dir) => path.basename(dir));
 const COMPLETION_AUDIO_EVENT_PATTERN = /play:.*task-complete(?:-[A-Za-z0-9_-]+)?\.(wav|mp3|ogg)/;
@@ -101,8 +112,14 @@ const expectWelcomeScreenVisible = async (page: Page) => {
 const openLaunchOverlay = async (page: Page) => {
   await gotoWorkspaceRoot(page);
   const overlay = page.getByTestId('overlay');
-  if (await overlay.isVisible()) {
+  const folderSelect = page.getByTestId('folder-select');
+  if (await folderSelect.isVisible().catch(() => false)) {
+    await expect(folderSelect).toBeVisible();
+    return;
+  }
+  if (await overlay.isVisible().catch(() => false)) {
     await expect(overlay).toBeVisible();
+    await expect(folderSelect).toBeVisible();
     return;
   }
 
@@ -113,24 +130,29 @@ const openLaunchOverlay = async (page: Page) => {
     try {
       await page.getByRole('button', { name: 'Add workspace' }).click();
     } catch (error) {
-      if (await overlay.isVisible()) {
+      if (await folderSelect.isVisible().catch(() => false)) {
+        await expect(folderSelect).toBeVisible();
+        return;
+      }
+      if (await overlay.isVisible().catch(() => false)) {
         await expect(overlay).toBeVisible();
+        await expect(folderSelect).toBeVisible();
         return;
       }
       throw error;
     }
   }
 
-  await page.waitForFunction(() =>
-    Boolean(document.querySelector('[data-testid="overlay"]'))
-    || Boolean(document.querySelector('[data-testid="runtime-validation-overlay"]'))
-  );
   const runtimeValidation = page.getByTestId('runtime-validation-overlay');
-  if (await runtimeValidation.count()) {
-    throw new Error('openLaunchOverlay expected the workspace launch overlay, but runtime validation is visible');
-  }
-  await expect(overlay).toBeVisible();
+  await expect.poll(async () => {
+    const overlayVisible = await overlay.isVisible().catch(() => false);
+    const folderVisible = await folderSelect.isVisible().catch(() => false);
+    const validationVisible = await runtimeValidation.isVisible().catch(() => false);
+    return overlayVisible || folderVisible || validationVisible;
+  }).toBe(true);
+  await expect(folderSelect).toBeVisible();
 };
+
 
 const launchLocalWorkspace = async (page: Page) => {
   await gotoWorkspaceRoot(page);
@@ -144,15 +166,33 @@ const launchLocalWorkspace = async (page: Page) => {
   await expect(page.getByTestId('folder-select')).toBeVisible();
 
   await page.getByRole('button', { name: 'Home' }).click();
-  const selectedPath = ((await page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong').textContent()) ?? '').trim();
+  await page.getByRole('button', { name: /workspace Click to enter$/ }).click();
+  await page.getByRole('button', { name: /coder-studio Click to enter$/ }).click();
+  const selectedPathLocator = page.locator('[data-testid="folder-select"] .web-folder-picker-paths strong');
+  await expect.poll(async () => ((await selectedPathLocator.textContent()) ?? '').trim()).toBe('/home/spencer/workspace/coder-studio');
+  const selectedPath = ((await selectedPathLocator.textContent()) ?? '').trim();
+  const expectedLabel = workspaceLabelForPath(selectedPath);
   await expect(page.getByTestId('start-workspace')).toBeEnabled();
   await page.getByTestId('start-workspace').click();
-  await expect(page.getByTestId('overlay')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
-  return workspaceLabelForPath(selectedPath);
+  await expect.poll(async () => {
+    const calls = await readRpcCalls(page);
+    return calls.filter((call) => call.command === 'launch_workspace').length;
+  }).toBeGreaterThan(0);
+  await expect(page).toHaveURL(/\/workspace\/.+/);
+  await expect(page.getByTestId('workspace-welcome-screen')).toHaveCount(0);
+  await expect(page.locator('.workspace-top-tab.active .session-top-label')).toHaveText(expectedLabel);
+  return expectedLabel;
 };
 
 const closeActiveWorkspaceFromTopBar = async (page: Page) => {
+  const { bootstrap, controllerIds } = await readScopedWorkbenchBootstrap(page);
+  const workspaceIdMatch = new URL(page.url()).pathname.match(/^\/workspace\/([^/]+)$/);
+  const activeWorkspaceId = bootstrap.ui_state.active_workspace_id
+    ?? bootstrap.ui_state.open_workspace_ids[0]
+    ?? (workspaceIdMatch?.[1] ? decodeURIComponent(workspaceIdMatch[1]) : '');
+  expect(activeWorkspaceId).toBeTruthy();
+  await currentWorkspaceController(page, activeWorkspaceId, controllerIds);
+
   const activeWorkspaceTab = page.locator('.workspace-top-tab.active');
   await expect(activeWorkspaceTab).toBeVisible();
   await activeWorkspaceTab.hover();
@@ -167,36 +207,58 @@ const invokeRpc = async <T>(page: Page, command: string, payload: Record<string,
   return body.data as T;
 };
 
-const resetAppSettings = async (page: Page) => {
-  await invokeRpc(page, 'app_settings_update', {
-    settings: {
-      general: {
-        locale: 'en',
-        terminalCompatibilityMode: 'standard',
-        completionNotifications: {
-          enabled: true,
-          onlyWhenBackground: true,
-        },
-        idlePolicy: {
-          enabled: true,
-          idleMinutes: 10,
-          maxActive: 3,
-          pressure: true,
-        },
+const readScopedWorkbenchBootstrap = async (page: Page) => {
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
+  const bootstrap = await invokeRpc<{
+    ui_state: {
+      open_workspace_ids: string[];
+      active_workspace_id?: string | null;
+    };
+    workspaces: ReminderWorkspaceSnapshot[];
+  }>(page, 'workbench_bootstrap', controllerIds);
+  return {
+    bootstrap,
+    controllerIds,
+  };
+};
+
+const patchAppSettings = async (page: Page, settings: Record<string, unknown>) => {
+  await invokeRpc(page, 'app_settings_update', { settings });
+};
+
+const seedDefaultGeneralSettings = async (page: Page) => {
+  await patchAppSettings(page, {
+    general: {
+      locale: 'en',
+      terminalCompatibilityMode: 'standard',
+      completionNotifications: {
+        enabled: true,
+        onlyWhenBackground: true,
       },
-      claude: {
-        global: {
-          executable: 'claude',
-          startupArgs: [],
-          env: {},
-          settingsJson: {},
-          globalConfigJson: {},
-        },
-        overrides: {
-          native: null,
-          wsl: null,
-        },
+      idlePolicy: {
+        enabled: true,
+        idleMinutes: 10,
+        maxActive: 3,
+        pressure: true,
       },
+    },
+    agentDefaults: {
+      provider: 'claude',
     },
   });
 };
@@ -226,13 +288,33 @@ const readSystemConfig = async (request: APIRequestContext) => {
 };
 
 const launchWorkspaceByPath = async (page: Page, workspacePath: string) => {
+  await gotoWorkspaceRoot(page);
+  const controllerIds = await page.evaluate(() => ({
+    deviceId: (() => {
+      try {
+        return window.localStorage.getItem('coder-studio.workspace-device-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+    clientId: (() => {
+      try {
+        return window.sessionStorage.getItem('coder-studio.workspace-client-id') ?? '';
+      } catch {
+        return '';
+      }
+    })(),
+  }));
   await invokeRpc(page, 'launch_workspace', {
     source: {
       kind: 'local',
       pathOrUrl: workspacePath,
       target: { type: 'native' },
     },
+    ...controllerIds,
   });
+  await page.goto('/');
+  await expect(page.getByTestId('workspace-topbar')).toBeVisible();
 };
 
 const readWorkspaceTabLabels = async (page: Page) =>
@@ -287,6 +369,52 @@ const emitLifecycleEvent = async (page: Page, payload: Record<string, unknown>) 
   await page.evaluate((message) => {
     window.__completionReminderTest?.emit(message);
   }, JSON.stringify(frame));
+};
+
+const installRpcTracker = async (page: Page) => {
+  await page.addInitScript(() => {
+    const calls: Array<{ command: string; payload: Record<string, unknown> | null }> = [];
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      const match = url.match(/\/api\/rpc\/([^/?#]+)/);
+      if (match) {
+        let payload: Record<string, unknown> | null = null;
+        if (typeof init?.body === 'string') {
+          try {
+            payload = JSON.parse(init.body) as Record<string, unknown>;
+          } catch {
+            payload = null;
+          }
+        }
+        calls.push({ command: match[1], payload });
+      }
+      return originalFetch(input, init);
+    };
+
+    window.__rpcTracker = {
+      read: () => calls.map((entry) => ({
+        command: entry.command,
+        payload: entry.payload ? { ...entry.payload } : null,
+      })),
+      clear: () => {
+        calls.length = 0;
+      },
+    };
+  });
+};
+
+const readRpcCalls = async (page: Page) => page.evaluate(() => window.__rpcTracker?.read() ?? []);
+
+const clearRpcCalls = async (page: Page) => {
+  await page.evaluate(() => {
+    window.__rpcTracker?.clear();
+  });
 };
 
 const createNotificationRecorder = async (page: Page) => {
@@ -345,27 +473,32 @@ const createNotificationRecorder = async (page: Page) => {
 };
 
 const seedDefaultAppSettings = async (page: Page) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('coder-studio.app-settings', JSON.stringify({
-      agentProvider: 'claude',
-      agentCommand: 'claude',
-      idlePolicy: {
-        enabled: true,
-        idleMinutes: 10,
-        maxActive: 3,
-        pressure: true,
-      },
-      completionNotifications: {
-        enabled: true,
-        onlyWhenBackground: true,
-      },
-      terminalCompatibilityMode: 'standard',
-    }));
-  });
+  await seedDefaultGeneralSettings(page);
 };
 
-const readNotificationEvents = async (page: Page) => page.evaluate(() => window.__completionReminderNotifications?.read() ?? []);
-const readAudioEvents = async (page: Page) => page.evaluate(() => window.__completionReminderAudio?.read() ?? []);
+const readIsolatedClaudeSettings = async () => {
+  const settingsPath = path.join(E2E_CLAUDE_HOME, '.claude', 'settings.json');
+  const raw = await fs.readFile(settingsPath, 'utf8');
+  return JSON.parse(raw) as Record<string, unknown>;
+};
+
+const readIsolatedCodexConfig = async () => {
+  const configPath = path.join(E2E_CODEX_HOME, '.codex', 'config.toml');
+  return fs.readFile(configPath, 'utf8');
+};
+
+const readIsolatedCodexAuth = async () => {
+  const authPath = path.join(E2E_CODEX_HOME, '.codex', 'auth.json');
+  const raw = await fs.readFile(authPath, 'utf8');
+  return JSON.parse(raw) as Record<string, unknown>;
+};
+const readNotificationEvents = async (page: Page) => page.evaluate(
+  () => window.__completionReminderNotifications?.read() ?? [],
+);
+
+const readAudioEvents = async (page: Page) => page.evaluate(
+  () => window.__completionReminderAudio?.read() ?? [],
+);
 
 const waitForNotificationEvent = async (page: Page, expected: string) => {
   await expect.poll(() => readNotificationEvents(page)).toContain(expected);
@@ -411,12 +544,7 @@ type ReminderWorkspaceSnapshot = {
 };
 
 const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      active_workspace_id?: string | null;
-    };
-    workspaces: ReminderWorkspaceSnapshot[];
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   return {
     activeWorkspaceId: bootstrap.ui_state.active_workspace_id ?? null,
@@ -425,8 +553,9 @@ const readWorkspaceByPath = async (page: Page, workspacePath: string) => {
 };
 
 const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
-  const backgroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-background-`));
-  const foregroundWorkspaceDir = await fs.mkdtemp(path.join(HOME_DIR, `${prefix}-foreground-`));
+  const backgroundWorkspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, `${prefix}-background-`));
+  const foregroundWorkspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, `${prefix}-foreground-`));
+  const foregroundWorkspaceLabel = path.basename(foregroundWorkspaceDir);
 
   try {
     await closeAllOpenWorkspaces(page);
@@ -440,11 +569,44 @@ const launchReminderWorkspacePair = async (page: Page, prefix: string) => {
     const foreground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
     expect(background.workspace).toBeTruthy();
     expect(foreground.workspace).toBeTruthy();
-    expect(foreground.activeWorkspaceId).toBe(foreground.workspace!.workspace.workspace_id);
+
+    await createActiveSessionForWorkspace(
+      page,
+      background.workspace!.workspace.workspace_id,
+      'Background Reminder Session',
+    );
+    await createActiveSessionForWorkspace(
+      page,
+      foreground.workspace!.workspace.workspace_id,
+      'Foreground Reminder Session',
+    );
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await waitForReminderSocket(page);
+    const { controllerIds } = await readScopedWorkbenchBootstrap(page);
+    await invokeRpc(page, 'activate_workspace', {
+      workspaceId: foreground.workspace!.workspace.workspace_id,
+      ...controllerIds,
+    });
+    await page.goto('/');
+    await expect(page.locator('.workspace-top-tab.active')).toContainText(foregroundWorkspaceLabel);
+    await waitForReminderSocket(page);
+    await expect.poll(async () => {
+      const snapshot = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+      return snapshot.activeWorkspaceId;
+    }).toBe(foreground.workspace!.workspace.workspace_id);
+
+    const hydratedBackground = await readWorkspaceByPath(page, backgroundWorkspaceDir);
+    const hydratedForeground = await readWorkspaceByPath(page, foregroundWorkspaceDir);
+    expect(hydratedBackground.workspace).toBeTruthy();
+    expect(hydratedForeground.workspace).toBeTruthy();
+    expect(hydratedForeground.activeWorkspaceId).toBe(hydratedForeground.workspace!.workspace.workspace_id);
 
     return {
-      background: background.workspace as ReminderWorkspaceSnapshot,
-      foreground: foreground.workspace as ReminderWorkspaceSnapshot,
+      background: hydratedBackground.workspace as ReminderWorkspaceSnapshot,
+      foreground: hydratedForeground.workspace as ReminderWorkspaceSnapshot,
       cleanup: async () => {
         await Promise.all([
           fs.rm(backgroundWorkspaceDir, { recursive: true, force: true }),
@@ -501,11 +663,7 @@ const currentWorkspaceController = async (
 };
 
 const closeAllOpenWorkspaces = async (page: Page) => {
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
 
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId);
@@ -513,7 +671,102 @@ const closeAllOpenWorkspaces = async (page: Page) => {
   }
 };
 
-const createArchivedSessionForWorkspace = async (
+const claudeProjectSlug = (workspacePath: string) => workspacePath.replaceAll(/[\\/:]/g, '-');
+
+const seedClaudeWorkspaceHistory = async (
+  workspacePath: string,
+  resumeId: string,
+  title: string,
+) => {
+  const claudeRoot = path.join(E2E_CLAUDE_HOME, '.claude');
+  const projectDir = path.join(claudeRoot, 'projects', claudeProjectSlug(workspacePath));
+  const transcriptPath = path.join(projectDir, `${resumeId}.jsonl`);
+  const historyPath = path.join(claudeRoot, 'history.jsonl');
+  const now = new Date();
+  const later = new Date(now.getTime() + 1000);
+  const transcript = [
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: 'Continue' }] },
+      timestamp: now.toISOString(),
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+      timestamp: later.toISOString(),
+    }),
+  ].join('\n').concat('\n');
+  const historyEntry = JSON.stringify({
+    sessionId: resumeId,
+    project: workspacePath,
+    display: title,
+  }).concat('\n');
+
+  await fs.mkdir(projectDir, { recursive: true });
+  await fs.mkdir(path.dirname(historyPath), { recursive: true });
+  await fs.writeFile(transcriptPath, transcript, 'utf8');
+  await fs.appendFile(historyPath, historyEntry, 'utf8');
+};
+
+const cleanupClaudeWorkspaceHistory = async (workspacePath: string, resumeId: string) => {
+  const claudeRoot = path.join(E2E_CLAUDE_HOME, '.claude');
+  const projectDir = path.join(claudeRoot, 'projects', claudeProjectSlug(workspacePath));
+  const transcriptPath = path.join(projectDir, `${resumeId}.jsonl`);
+  const historyPath = path.join(claudeRoot, 'history.jsonl');
+
+  await fs.rm(transcriptPath, { force: true });
+  if (await fs.stat(historyPath).then(() => true).catch(() => false)) {
+    const history = await fs.readFile(historyPath, 'utf8');
+    const retained = history
+      .split('\n')
+      .filter(Boolean)
+      .filter((line) => {
+        try {
+          const entry = JSON.parse(line) as { sessionId?: string; project?: string };
+          return !(entry.sessionId === resumeId && entry.project === workspacePath);
+        } catch {
+          return true;
+        }
+      });
+    await fs.writeFile(historyPath, retained.length ? `${retained.join('\n')}\n` : '', 'utf8');
+  }
+};
+
+const createDetachedProviderSessionForWorkspace = async (
+  page: Page,
+  workspaceId: string,
+  workspacePath: string,
+  title: string,
+) => {
+  const controller = await currentWorkspaceController(page, workspaceId);
+  const session = await invokeRpc<{ id: string }>(page, 'create_session', {
+    ...controller,
+    mode: 'branch',
+    provider: 'claude',
+  });
+  const sessionId = String(session.id);
+  const resumeId = `claude-e2e-${sessionId}`;
+  await seedClaudeWorkspaceHistory(workspacePath, resumeId, title);
+  await invokeRpc(page, 'session_update', {
+    ...controller,
+    sessionId,
+    patch: {
+      title,
+      status: 'idle',
+      resume_id: resumeId,
+    },
+  });
+  await invokeRpc(page, 'close_session', {
+    ...controller,
+    sessionId,
+  });
+  return {
+    sessionId,
+    resumeId,
+  };
+};
+
+const createActiveSessionForWorkspace = async (
   page: Page,
   workspaceId: string,
   title: string,
@@ -522,20 +775,35 @@ const createArchivedSessionForWorkspace = async (
   const session = await invokeRpc<{ id: number }>(page, 'create_session', {
     ...controller,
     mode: 'branch',
+    provider: 'claude',
   });
+  const sessionId = String(session.id);
   await invokeRpc(page, 'session_update', {
     ...controller,
-    sessionId: session.id,
+    sessionId,
     patch: {
       title,
-      status: 'idle',
     },
   });
-  await invokeRpc(page, 'archive_session', {
+  await invokeRpc(page, 'workspace_view_update', {
     ...controller,
-    sessionId: session.id,
+    patch: {
+      active_session_id: sessionId,
+      active_pane_id: `pane-${session.id}`,
+      pane_layout: {
+        type: 'leaf',
+        id: `pane-${session.id}`,
+        sessionId,
+      },
+    },
   });
-  return String(session.id);
+  await invokeRpc<{ terminal_id: number; started: boolean }>(page, 'session_runtime_start', {
+    ...controller,
+    sessionId,
+    cols: 120,
+    rows: 30,
+  });
+  return sessionId;
 };
 
 test.beforeEach(async ({ page }) => {
@@ -548,13 +816,10 @@ test.beforeEach(async ({ page }) => {
     }
   });
   await installTransportTracker(page);
+  await installRpcTracker(page);
   await installRuntimeCommandMock(page);
-  await resetAppSettings(page);
-  const bootstrap = await invokeRpc<{
-    ui_state: {
-      open_workspace_ids: string[];
-    };
-  }>(page, 'workbench_bootstrap');
+  await seedDefaultGeneralSettings(page);
+  const { bootstrap } = await readScopedWorkbenchBootstrap(page);
   for (const workspaceId of bootstrap.ui_state.open_workspace_ids) {
     const controller = await currentWorkspaceController(page, workspaceId, {
       deviceId: 'cleanup-device',
@@ -562,6 +827,8 @@ test.beforeEach(async ({ page }) => {
     });
     await invokeRpc(page, 'close_workspace', controller);
   }
+  await page.reload();
+  await expect(page.getByTestId('overlay')).toHaveCount(0);
 });
 
 test.beforeAll(async () => {
@@ -589,6 +856,17 @@ test('welcome screen can open and close the launch flow', async ({ page }) => {
 
   await page.getByTestId('launch-overlay-close').click();
   await expectWelcomeScreenVisible(page);
+});
+
+test('launch overlay keeps the welcome screen mounted when no workspace is open', async ({ page }) => {
+  await page.goto('/');
+  await expectWelcomeScreenVisible(page);
+
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+
+  await expect(page.getByTestId('overlay')).toBeVisible();
+  await expect(page.getByTestId('workspace-welcome-screen')).toBeVisible();
+  await expect(page.getByTestId('workspace-status-strip')).toHaveCount(0);
 });
 
 test('local workspace flow opens the workspace shell', async ({ page }) => {
@@ -619,17 +897,21 @@ test('flat matte UI exposes compact shell and supporting screen markers', async 
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Changes');
   await expect(page.getByTestId('workspace-status-strip')).toContainText('Queue');
   await expect(page.locator('.agent-pane-header').first()).toHaveAttribute('data-density', 'compact');
-  await expect(page.locator('.agent-pane-state-tag').first()).toBeVisible();
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
-  await expect(page.locator('.agent-pane-state-tag').first()).toHaveText(/Ready|Queued|Suspended|Running|Background/);
+  const stateTags = page.locator('.agent-pane-header').first().locator('.agent-pane-state-tag');
+  await expect(stateTags.nth(0)).toBeVisible();
+  await expect(stateTags.nth(0)).toHaveAttribute('data-tone', 'muted');
+  await expect(stateTags.nth(0)).toHaveText(/Claude|Codex/);
+  await expect(stateTags.nth(1)).toBeVisible();
+  await expect(stateTags.nth(1)).toHaveAttribute('data-tone', /active|info|queue|idle|muted/);
+  await expect(stateTags.nth(1)).toHaveText(/Ready|Queued|Suspended|Running|Background/);
 
   await page.getByRole('button', { name: 'Actions' }).click();
   await expect(page.getByTestId('command-palette-shell')).toBeVisible();
   await expect(page.getByTestId('command-palette-shell')).toHaveAttribute('data-density', 'compact');
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Code' }).click();
-  await page.getByRole('button', { name: 'Expand code area' }).click();
+  await page.getByTestId('workspace-status-strip').getByRole('button', { name: 'Code' }).click();
+  await page.getByRole('button', { name: 'Expand code panel' }).click();
   await expect(page.getByTestId('workspace-review-dock')).toBeVisible();
   await expect(page.getByTestId('workspace-review-dock-tabs')).toBeVisible();
 
@@ -725,15 +1007,6 @@ test('background turn_completed sends a completion reminder notification', async
     await emitLifecycleEvent(page, {
       workspace_id: pair.background.workspace.workspace_id,
       session_id: backgroundSessionId,
-      kind: 'tool_started',
-      source_event: 'PreToolUse',
-      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
-    });
-    await page.waitForTimeout(150);
-
-    await emitLifecycleEvent(page, {
-      workspace_id: pair.background.workspace.workspace_id,
-      session_id: backgroundSessionId,
       kind: 'turn_completed',
       source_event: 'Stop',
       data: JSON.stringify({ hook_event_name: 'Stop' }),
@@ -764,15 +1037,6 @@ test('background turn_completed still sends a reminder while viewing settings', 
     );
     expect(backgroundSession).toBeTruthy();
 
-    await emitLifecycleEvent(page, {
-      workspace_id: pair.background.workspace.workspace_id,
-      session_id: backgroundSessionId,
-      kind: 'tool_started',
-      source_event: 'PreToolUse',
-      data: JSON.stringify({ hook_event_name: 'PreToolUse' }),
-    });
-    await page.waitForTimeout(150);
-
     await page.getByTestId('settings-open').click();
     await expect(page.getByTestId('settings-page')).toBeVisible();
     await waitForReminderSocket(page);
@@ -797,22 +1061,49 @@ test('background turn_completed still sends a reminder while viewing settings', 
 });
 
 test('claude settings persist across route changes and reloads', async ({ page }) => {
-  await launchLocalWorkspace(page);
+  await launchWorkspaceByPath(page, path.resolve('.'));
   await page.getByTestId('settings-open').click();
 
   await expect(page.getByTestId('settings-page')).toBeVisible();
   await page.getByTestId('settings-max-active').fill('5');
   await page.getByTestId('settings-nav-claude').click();
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude');
-  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
-  await page.getByTestId('claude-flag-dangerously-skip-permissions').check();
-  await page.getByTestId('claude-flag-verbose').check();
-  await page.getByTestId('claude-startup-permission-mode').click();
-  await page.getByTestId('claude-startup-permission-mode-option-auto').click();
-  await page.getByTestId('claude-startup-args').fill('--debug');
-  await page.getByTestId('claude-model-input').fill('claude-3-7-sonnet');
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
-  await page.waitForTimeout(250);
+  await expect(page.getByTestId('settings-panel-header')).toBeVisible();
+  await expect(page.getByTestId('settings-panel-title')).toContainText('Claude');
+  await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-behavior')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await page.getByTestId('provider-settings-claude-startup-args').fill('--debug');
+  await page.getByTestId('provider-settings-section-behavior')
+    .getByTestId('provider-settings-claude-model')
+    .fill('claude-3-7-sonnet');
+  await page.getByTestId('provider-settings-claude-auth-token').fill('token-demo-value');
+  await page.getByTestId('provider-settings-claude-base-url').fill('https://example.test/claude');
+  await expect.poll(async () => {
+    const savedSettings = await invokeRpc<Record<string, unknown>>(page, 'app_settings_get');
+    const providers = savedSettings.providers as Record<string, { global?: Record<string, unknown> }> | undefined;
+    const claudeGlobal = providers?.claude?.global ?? {};
+    const settingsJson = (claudeGlobal.settingsJson ?? claudeGlobal.settings_json) as Record<string, unknown> | undefined;
+    const env = claudeGlobal.env as Record<string, unknown> | undefined;
+
+    return {
+      startupArgs: claudeGlobal.startupArgs ?? claudeGlobal.startup_args,
+      model: settingsJson?.model,
+      authToken: env?.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: env?.ANTHROPIC_BASE_URL,
+    };
+  }).toEqual({
+    startupArgs: ['--debug'],
+    model: 'claude-3-7-sonnet',
+    authToken: 'token-demo-value',
+    baseUrl: 'https://example.test/claude',
+  });
+
+  const isolatedClaudeSettings = await readIsolatedClaudeSettings();
+  const isolatedClaudeEnv = isolatedClaudeSettings.env as Record<string, unknown> | undefined;
+  expect(isolatedClaudeEnv?.ANTHROPIC_AUTH_TOKEN).toBe('token-demo-value');
+  expect(isolatedClaudeEnv?.ANTHROPIC_BASE_URL).toBe('https://example.test/claude');
+  expect(isolatedClaudeSettings.model).toBe('claude-3-7-sonnet');
 
   await page.getByRole('button', { name: 'Back to app' }).click();
   await expect(page.getByTestId('workspace-topbar')).toBeVisible();
@@ -821,18 +1112,42 @@ test('claude settings persist across route changes and reloads', async ({ page }
   await expect(page.getByTestId('overlay')).toHaveCount(0);
   await page.getByTestId('settings-open').click();
   await expect(page.getByTestId('settings-max-active')).toHaveValue('5');
+  await expect.poll(async () => {
+    const savedSettings = await invokeRpc<Record<string, unknown>>(page, 'app_settings_get');
+    const providers = savedSettings.providers as Record<string, { global?: Record<string, unknown> }> | undefined;
+    const claudeGlobal = providers?.claude?.global ?? {};
+    const settingsJson = (claudeGlobal.settingsJson ?? claudeGlobal.settings_json) as Record<string, unknown> | undefined;
+    const env = claudeGlobal.env as Record<string, unknown> | undefined;
+
+    return {
+      startupArgs: claudeGlobal.startupArgs ?? claudeGlobal.startup_args,
+      model: settingsJson?.model,
+      authToken: env?.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: env?.ANTHROPIC_BASE_URL,
+    };
+  }).toEqual({
+    startupArgs: ['--debug'],
+    model: 'claude-3-7-sonnet',
+    authToken: 'token-demo-value',
+    baseUrl: 'https://example.test/claude',
+  });
   await page.getByTestId('settings-nav-claude').click();
-  await expect(page.getByTestId('claude-executable-input')).toHaveCount(0);
-  await expect(page.getByTestId('claude-flag-dangerously-skip-permissions')).toBeChecked();
-  await expect(page.getByTestId('claude-flag-verbose')).toBeChecked();
-  await expect(page.getByTestId('claude-startup-permission-mode')).toContainText('auto');
-  await expect(page.getByTestId('claude-command-preview')).toContainText('claude --dangerously-skip-permissions --verbose --permission-mode auto --debug');
-  await expect(page.getByTestId('claude-startup-args')).toHaveValue('--debug');
-  await expect(page.getByTestId('claude-model-input')).toHaveValue('claude-3-7-sonnet');
+  await expect(page.getByTestId('provider-settings-summary')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-startup')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-behavior')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-section-launch-auth')).toBeVisible();
+  await expect(page.getByTestId('provider-settings-claude-startup-args')).toHaveValue('--debug');
+  await expect(
+    page.getByTestId('provider-settings-section-behavior').getByTestId('provider-settings-claude-model'),
+  ).toHaveValue('claude-3-7-sonnet');
+  await expect(page.getByTestId('provider-settings-claude-auth-token')).toHaveValue('token-demo-value');
+  await expect(page.getByTestId('provider-settings-claude-base-url')).toHaveValue('https://example.test/claude');
 });
 
-test('history drawer restores archived sessions and deletes records permanently', async ({ page }) => {
-  const workspaceDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-history-'));
+test('history drawer restores provider sessions and deletes records permanently', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-history-'));
+  let restoreResumeId = '';
+  let deleteResumeId = '';
 
   try {
     await closeAllOpenWorkspaces(page);
@@ -844,29 +1159,57 @@ test('history drawer restores archived sessions and deletes records permanently'
     expect(current.workspace).toBeTruthy();
     const workspaceId = current.workspace!.workspace.workspace_id;
 
-    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Restore Session');
-    const deleteSessionId = await createArchivedSessionForWorkspace(page, workspaceId, 'History Delete Session');
+    const restoreSession = await createDetachedProviderSessionForWorkspace(
+      page,
+      workspaceId,
+      workspaceDir,
+      'History Restore Session',
+    );
+    restoreResumeId = restoreSession.resumeId;
+    const deleteSession = await createDetachedProviderSessionForWorkspace(
+      page,
+      workspaceId,
+      workspaceDir,
+      'History Delete Session',
+    );
+    deleteResumeId = deleteSession.resumeId;
 
     await page.getByTestId('history-toggle').click();
     await expect(page.getByTestId('history-drawer')).toBeVisible();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`)).toBeVisible();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toBeVisible();
-    page.once('dialog', (dialog) => dialog.accept());
-    await page.getByTestId(`history-delete-${workspaceId}-${deleteSessionId}`).click();
-    await expect(page.getByTestId(`history-record-${workspaceId}-${deleteSessionId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${restoreSession.resumeId}`)).toBeVisible();
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${deleteSession.resumeId}`)).toBeVisible();
+    await page.getByTestId(`history-delete-${workspaceId}-claude-${deleteSession.resumeId}`).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByTestId(`history-record-${workspaceId}-claude-${deleteSession.resumeId}`)).toHaveCount(0);
 
-    await page.getByTestId(`history-record-${workspaceId}-${restoreSessionId}`).click();
-    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
+    await clearRpcCalls(page);
+    await page.getByTestId(`history-record-${workspaceId}-claude-${restoreSession.resumeId}`).click();
     await expect(page.locator('.agent-pane-title', { hasText: 'History Restore Session' })).toBeVisible();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSession.sessionId}"]`)).toHaveCount(0);
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'restore_provider_session').length;
+    }).toBeGreaterThan(0);
+
+    const restoreCalls = await readRpcCalls(page);
+    expect(restoreCalls.some((call) => call.command === 'restore_session')).toBe(false);
+    expect(restoreCalls.some((call) => call.command === 'restore_provider_session' && call.payload?.resumeId === restoreSession.resumeId)).toBe(true);
   } finally {
     await closeAllOpenWorkspaces(page);
+    await Promise.all([
+      restoreResumeId ? cleanupClaudeWorkspaceHistory(workspaceDir, restoreResumeId) : Promise.resolve(),
+      deleteResumeId ? cleanupClaudeWorkspaceHistory(workspaceDir, deleteResumeId) : Promise.resolve(),
+    ]);
     await fs.rm(workspaceDir, { recursive: true, force: true });
   }
 });
 
 test('draft pane restore only shows current workspace history and restores into the new pane', async ({ page }) => {
-  const workspaceADir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-a-'));
-  const workspaceBDir = await fs.mkdtemp(path.join(HOME_DIR, 'coder-studio-e2e-restore-b-'));
+  const workspaceADir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-restore-a-'));
+  const workspaceBDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-restore-b-'));
+  let workspaceAResumeId = '';
+  let workspaceBResumeId = '';
 
   try {
     await closeAllOpenWorkspaces(page);
@@ -884,35 +1227,152 @@ test('draft pane restore only shows current workspace history and restores into 
     const workspaceBId = workspaceB.workspace!.workspace.workspace_id;
     const workspaceALabel = path.basename(workspaceADir);
 
-    const restoreSessionId = await createArchivedSessionForWorkspace(page, workspaceAId, 'Draft Restore Alpha');
-    await createArchivedSessionForWorkspace(page, workspaceBId, 'Draft Restore Beta');
+    const restoreSession = await createDetachedProviderSessionForWorkspace(
+      page,
+      workspaceAId,
+      workspaceADir,
+      'Draft Restore Alpha',
+    );
+    workspaceAResumeId = restoreSession.resumeId;
+    const workspaceBSession = await createDetachedProviderSessionForWorkspace(
+      page,
+      workspaceBId,
+      workspaceBDir,
+      'Draft Restore Beta',
+    );
+    workspaceBResumeId = workspaceBSession.resumeId;
 
-    await page.reload();
+    await page.goto('/');
     await expect(page.getByTestId('workspace-topbar')).toBeVisible();
 
-    await page.locator('.workspace-top-tab').filter({ hasText: workspaceALabel }).first().click();
-    await expect(page.locator('.workspace-top-tab.active')).toContainText(workspaceALabel);
+    const { controllerIds } = await readScopedWorkbenchBootstrap(page);
+    await invokeRpc(page, 'activate_workspace', {
+      workspaceId: workspaceAId,
+      ...controllerIds,
+    });
+    await page.goto(`/workspace/${workspaceAId}`);
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await expect.poll(async () => {
+      const snapshot = await readWorkspaceByPath(page, workspaceADir);
+      return snapshot.activeWorkspaceId;
+    }).toBe(workspaceAId);
 
     const paneCard = page.locator('.agent-pane-card').first();
     await paneCard.hover();
     await paneCard.getByTitle('Split Vertically').click();
+    await expect.poll(async () => page.locator('.agent-pane-card').count()).toBeGreaterThan(1);
 
-    const draftLauncher = page.locator('.agent-draft-launcher').last();
+    const draftPaneCard = page.locator('.agent-pane-card').last();
+    await draftPaneCard.click();
+    const draftLauncher = draftPaneCard.locator('.agent-draft-launcher');
     await expect(draftLauncher).toBeVisible();
     await draftLauncher.locator('[data-testid^="draft-mode-restore-"]').click();
+    await expect(draftLauncher.getByRole('button', { name: 'Restore from history' })).toHaveClass(/active/);
 
+    await expect(draftLauncher.getByTestId(`restore-candidate-claude-${restoreSession.resumeId}`)).toBeVisible();
     await expect(draftLauncher.getByText('Draft Restore Alpha')).toBeVisible();
     await expect(draftLauncher.getByText('Draft Restore Beta')).toHaveCount(0);
-    await draftLauncher.getByTestId(`restore-candidate-${restoreSessionId}`).click();
+    await clearRpcCalls(page);
+    await draftLauncher.getByTestId(`restore-candidate-claude-${restoreSession.resumeId}`).click();
 
-    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSessionId}"]`)).toBeVisible();
     await expect(page.locator('.agent-pane-title', { hasText: 'Draft Restore Alpha' })).toBeVisible();
+    await expect(page.locator(`.agent-pane-card[data-session-id="${restoreSession.sessionId}"]`)).toHaveCount(0);
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'restore_provider_session').length;
+    }).toBeGreaterThan(0);
+
+    const restoreCalls = await readRpcCalls(page);
+    expect(restoreCalls.some((call) => call.command === 'restore_session')).toBe(false);
+    expect(restoreCalls.some((call) => call.command === 'restore_provider_session' && call.payload?.resumeId === restoreSession.resumeId)).toBe(true);
   } finally {
     await closeAllOpenWorkspaces(page);
     await Promise.all([
+      workspaceAResumeId ? cleanupClaudeWorkspaceHistory(workspaceADir, workspaceAResumeId) : Promise.resolve(),
+      workspaceBResumeId ? cleanupClaudeWorkspaceHistory(workspaceBDir, workspaceBResumeId) : Promise.resolve(),
       fs.rm(workspaceADir, { recursive: true, force: true }),
       fs.rm(workspaceBDir, { recursive: true, force: true }),
     ]);
+  }
+});
+
+test('split pane keeps both panels visible after starting a new draft session', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-split-new-session-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const paneCard = page.locator('.agent-pane-card').first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Split Vertically').click();
+    await expect.poll(async () => page.locator('.agent-pane-card').count()).toBeGreaterThan(1);
+
+    const draftPaneCard = page.locator('.agent-pane-card').last();
+    await draftPaneCard.click();
+    const startButton = draftPaneCard.locator('[data-testid^="draft-start-claude-"]').first();
+    await expect(startButton).toBeVisible();
+
+    await clearRpcCalls(page);
+    await startButton.click();
+
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'session_runtime_start').length;
+    }).toBeGreaterThan(0);
+
+    await expect(page.locator('.agent-pane-xterm').first()).toBeVisible();
+    await expect(page.locator('.agent-pane-card')).toHaveCount(2);
+    await expect.poll(async () => page.locator('.agent-pane-card').evaluateAll((nodes) =>
+      new Set(
+        nodes
+          .map((node) => node.getAttribute('data-session-id') ?? '')
+          .filter(Boolean),
+      ).size
+    )).toBe(2);
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
+test('closing a pane calls close_session instead of archive_session', async ({ page }) => {
+  const workspaceDir = await fs.mkdtemp(path.join(TEMP_DIR, 'coder-studio-e2e-close-session-'));
+
+  try {
+    await closeAllOpenWorkspaces(page);
+    await launchWorkspaceByPath(page, workspaceDir);
+    await page.goto('/');
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+
+    const current = await readWorkspaceByPath(page, workspaceDir);
+    expect(current.workspace).toBeTruthy();
+    const workspaceId = current.workspace!.workspace.workspace_id;
+    const sessionId = await createActiveSessionForWorkspace(page, workspaceId, 'Close Session RPC');
+
+    await page.reload();
+    await expect(page.getByTestId('workspace-topbar')).toBeVisible();
+    await clearRpcCalls(page);
+
+    const paneCard = page.locator(`.agent-pane-card[data-session-id="${sessionId}"]`).first();
+    await paneCard.hover();
+    await paneCard.getByTitle('Close').click();
+
+    await expect(page.locator(`.agent-pane-card[data-session-id="${sessionId}"]`)).toHaveCount(0);
+    await expect.poll(async () => {
+      const calls = await readRpcCalls(page);
+      return calls.filter((call) => call.command === 'close_session').length;
+    }).toBeGreaterThan(0);
+
+    const calls = await readRpcCalls(page);
+    expect(calls.some((call) => call.command === 'archive_session')).toBe(false);
+    expect(calls.some((call) => call.command === 'close_session' && call.payload?.sessionId === sessionId)).toBe(true);
+  } finally {
+    await closeAllOpenWorkspaces(page);
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   }
 });
 
