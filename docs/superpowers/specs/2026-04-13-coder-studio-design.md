@@ -38,6 +38,7 @@ Brainstorming 过程中发现 PRD 有若干需要修正的条目。写入实现�
 | 9 | §8.7 会话恢复 | Phase 1 澄清：仅恢复 resume_id，不恢复历史 PTY 输出 |
 | 10 | §11 终端系统 | **Phase 1 不持久化 PTY 输出流**；不做 "View full log"；xterm scrollback 提升到 5000 行 |
 | 11 | 附录 A 当前边界 | 新增"输出持久化 / 跨 session 搜索 / 会话回放"到未发布功能列表 |
+| 12 | §8 / §11 术语 | **Terminal 是底层原语，Session 是业务封装**。PRD 里把两者混用为 "Agent 会话终端" 的地方统一到这个分层表述；独立 shell 终端没有 Session |
 
 ### 0.4 技术栈锁定
 
@@ -178,13 +179,15 @@ Brainstorming 过程中发现 PRD 有若干需要修正的条目。写入实现�
 | 概念 | 描述 |
 |---|---|
 | **Workspace** | 一个正在开发的项目目录。每个 workspace 有独立的文件树、Git 状态、会话集合、终端集合 |
-| **Session** | 一个 Agent 会话 = 一个 PTY 里运行的 Claude/Codex CLI 进程，带独立终端 |
-| **Terminal** | 一个 PTY 进程 + xterm 终端渲染。可以是 Agent 的（嵌入 agent pane）或独立 shell 的（底部面板） |
-| **Pane** | Agent 工作区的一个面板节点。递归 split 形成树形布局 |
-| **Provider** | Agent CLI 的适配层（Claude / Codex / ...）。通过 `ProviderDefinition` 声明 |
-| **Hook Event** | Provider CLI 通过其 hooks 机制回调给 Coder Studio 的事件 (SessionStart / Stop / ...) |
-| **Capability** | Provider 的能力等级：`full` / `limited` / `unsupported` |
+| **Terminal** | **底层原语**。一个 PTY 进程 + ring buffer + xterm 终端渲染。只负责字节流和生命周期，不知道里面跑的是 Agent CLI 还是 bash。通过 `kind` 区分 `agent` / `shell` |
+| **Session** | **业务层封装**。在一个 agent-kind Terminal 之上叠加 Agent 领域语义：Provider 绑定、状态机 (`starting → running → idle → busy → ended`)、resume_id 追踪、hook 事件消化、生命周期事件发射。一个 Session 恰好对应一个 Terminal；shell 终端没有对应 Session |
+| **Pane** | Agent 工作区的一个面板节点。递归 split 形成树形布局。Pane 渲染的是 Session 卡片，通过 `session.terminalId` 找到 xterm |
+| **Provider** | Agent CLI 的适配层（Claude / Codex / ...）。通过 `ProviderDefinition` 声明。仅影响 Session 层，对 Terminal 层无感 |
+| **Hook Event** | Provider CLI 通过其 hooks 机制回调给 Coder Studio 的事件 (SessionStart / Stop / ...)。只进入 Session 层 |
+| **Capability** | Provider 的能力等级：`full` / `limited` / `unsupported`。决定 Session 层如何解析状态，Terminal 层无感 |
 | **Writer Tab** | 当前拥有写权限的浏览器 tab（Phase 1 只允许一个） |
+
+**Terminal 与 Session 的分层判断标准：** 如果一段逻辑移除后 shell 终端仍能正常工作，它属于 Session 层；如果移除后 shell 终端也坏了，它属于 Terminal 层。
 
 ### 1.3 控制流
 
@@ -260,11 +263,20 @@ coder-studio/
 │   │   │   │   ├── git-stage.ts
 │   │   │   │   ├── git-commit.ts
 │   │   │   │   └── ...
-│   │   │   ├── session/       # Session Manager
-│   │   │   │   ├── manager.ts
-│   │   │   │   ├── pty-host.ts
-│   │   │   │   ├── ring-buffer.ts
-│   │   │   │   └── lifecycle.ts
+│   │   │   ├── pty/           # Infrastructure：PTY 进程封装
+│   │   │   │   └── pty-host.ts        # node-pty 包装，唯一调用 node-pty 的地方
+│   │   │   ├── bus/           # Service 层语义事件总线
+│   │   │   │   └── event-bus.ts       # 见 §4.0
+│   │   │   ├── terminal/      # Terminal 层（底层原语，见 §4.5）
+│   │   │   │   ├── manager.ts         # TerminalManager
+│   │   │   │   ├── active-terminal.ts # 运行中的 Terminal 对象
+│   │   │   │   ├── ring-buffer.ts     # ring buffer（从 session 目录迁出）
+│   │   │   │   └── broadcaster.ts     # Broadcaster 接口定义
+│   │   │   ├── session/       # Session 层（业务封装，见 §4.6）
+│   │   │   │   ├── manager.ts         # SessionManager
+│   │   │   │   ├── active-session.ts  # 运行中的 Session 对象
+│   │   │   │   ├── state-machine.ts   # Agent 状态机
+│   │   │   │   └── lifecycle.ts       # 生命周期事件聚合
 │   │   │   ├── hooks/         # Hooks Manager
 │   │   │   │   ├── manager.ts
 │   │   │   │   ├── merge-writer.ts  # 深度合并器
@@ -582,39 +594,155 @@ workspace.<id>.supervisor.<sid>.cycle              // Supervisor 周期
 
 ## 4. 服务端架构
 
-### 4.1 启动流程
+### 4.0 分层与耦合规则
+
+服务端按四层组织，**import 只能向下**，反向禁止。违反这条规则的 PR 一律拒绝；CI 用 `eslint-plugin-import` + `zones` 强制。
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Transport 层  ws/ · commands/                      │  handlers、hub、dispatch
+├─────────────────────────────────────────────────────┤
+│  Service 层   session/ · workspace/ · hooks/ ·      │  业务逻辑、状态机、生命周期
+│               supervisor/ (P3)                       │
+├─────────────────────────────────────────────────────┤
+│  Infrastructure 层  fs/ · git/ · storage/ · auth/ · │  外部系统封装
+│                     pty/                             │
+├─────────────────────────────────────────────────────┤
+│  Core (@coder-studio/core, providers/)              │  纯类型、契约、Provider 定义
+└─────────────────────────────────────────────────────┘
+```
+
+**依赖方向规则：**
+
+| 规则 | 说明 |
+|---|---|
+| Transport → Service | Command handler 调用 manager 方法；不能反向 |
+| Service → Infrastructure | SessionManager 调 TerminalManager 调 PtyHost；反之禁止 |
+| Service → Service | 只允许**单向**调用（SessionManager → TerminalManager、WorkspaceManager → SessionManager），环依赖禁止 |
+| Infrastructure 互不依赖 | fs 不调 git、storage 不调 fs 等 |
+| 任何层 → Core | 允许 |
+| Core → 任何层 | 禁止（保持纯类型） |
+
+**Event Bus（混合 C 方案）**：不是万能消息总线，只承载"Service 层语义事件"：
+
+```typescript
+// packages/server/src/bus/event-bus.ts
+type DomainEvent =
+  | { type: "session.state.changed"; sessionId: string; from: SessionState; to: SessionState }
+  | { type: "session.lifecycle"; sessionId: string; event: "started"|"turn_completed"|"stopped" }
+  | { type: "workspace.meta.changed"; workspaceId: string; patch: Partial<Workspace> }
+  | { type: "git.state.changed"; workspaceId: string }
+  | { type: "fs.dirty"; workspaceId: string; reason: string };
+
+class EventBus {
+  emit(event: DomainEvent): void { /* 同步调用所有订阅者 */ }
+  on(type: DomainEvent["type"], handler: Handler): Unsubscribe {}
+}
+```
+
+**什么走 Event Bus，什么不走：**
+
+| 数据 | 走 Event Bus | 原因 |
+|---|---|---|
+| PTY 输出流 (`terminal.*.output`) | ❌ 直调 Broadcaster | 每秒数十次，多一跳没价值 |
+| xterm resize / input | ❌ 直调 TerminalManager | 短链路同步调用 |
+| Session 状态机转换 | ✅ | Supervisor、通知、UI 都要订阅 |
+| 会话生命周期 (`session_started` / `turn_completed`) | ✅ | 同上 |
+| Workspace 元数据变更 | ✅ | UI 多处展示 |
+| Git 状态刷新 | ✅ | 文件树 badge、Git 面板都要 |
+| FS dirty 信号 | ✅ | 节流后只是一个信号 |
+
+**订阅者的角色：**
+
+- `WsHub` 订阅全部 DomainEvent，按 topic 规则转换为 WS 事件广播给前端
+- `SupervisorScheduler`（Phase 3）只订阅 `session.lifecycle`
+- `NotificationDispatcher` 订阅 `session.lifecycle` 的 `turn_completed`
+
+`EventBus` 与 `Broadcaster` 的生命周期都是 server 进程级别，由 `createServer` 统一构造并注入。
+
+**Broadcaster 接口**（给高频流式数据用，解耦 manager 和具体 ws 实现）：
+
+```typescript
+interface Broadcaster {
+  broadcast(topic: string, data: unknown): void;
+}
+// 唯一实现：WsHub。但 TerminalManager 只看到 Broadcaster 接口，便于测试替换。
+```
+
+**DI 与构造顺序：**
+
+`createServer` 是唯一手动接线的地方，按依赖顺序自底向上构造：
 
 ```typescript
 // packages/server/src/index.ts
 export async function createServer(config: ServerConfig): Promise<Server> {
-  // 1. 初始化存储
+  // Infrastructure
   const db = await openDatabase(config.dataDir);
   await runMigrations(db);
-  
-  // 2. 初始化 runtime.json
   const runtime = new RuntimeJson(config.runtimeDir);
-  await runtime.write({ port: config.port, token: generateToken(), startedAt: Date.now() });
-  
-  // 3. 部署 bridge 脚本
-  const hooksManager = new HooksManager(config, runtime);
-  await hooksManager.deployBridgeScripts();
-  
-  // 4. 对所有注册 Provider 做全局配置 merge-write
-  for (const provider of providerRegistry.all()) {
-    await hooksManager.ensureGlobalConfig(provider);
-  }
-  
-  // 5. 启动 Fastify + WS
-  const app = buildFastifyApp({ db, hooksManager, ... });
+  const ptyHost = new PtyHost();
+
+  // 协作基础设施
+  const eventBus = new EventBus();
+  const wsHub = new WsHub({ eventBus });          // WsHub 既是 Broadcaster，也订阅 eventBus
+  const broadcaster: Broadcaster = wsHub;
+
+  // Service（按依赖顺序）
+  const terminalMgr = new TerminalManager({ ptyHost, broadcaster, db });
+  const sessionMgr  = new SessionManager({ terminalMgr, eventBus, db, providerRegistry });
+  const workspaceMgr = new WorkspaceManager({ db, sessionMgr, terminalMgr, eventBus });
+  const hooksMgr    = new HooksManager({ config, runtime, sessionMgr });
+
+  // Transport
+  const app = buildFastifyApp({
+    db, wsHub, hooksMgr,
+    commandContext: { workspaceMgr, sessionMgr, terminalMgr, hooksMgr, db },
+  });
+
+  // bootstrap
+  await hooksMgr.deployBridgeScripts();
+  for (const provider of providerRegistry.all()) await hooksMgr.ensureGlobalConfig(provider);
   await app.listen({ host: config.host, port: config.port });
-  
-  // 6. 启动后台服务
-  const sessionMgr = new SessionManager(app.websocketServer, providerRegistry);
-  const workspaceMgr = new WorkspaceManager(db, sessionMgr);
-  
-  return { app, db, runtime, stop: () => { ... } };
+
+  return { app, db, runtime, stop: async () => { /* 反向顺序关闭 */ } };
 }
 ```
+
+**Command handler 的 `ctx`：**
+
+```typescript
+interface CommandContext {
+  workspaceMgr: WorkspaceManager;
+  sessionMgr: SessionManager;
+  terminalMgr: TerminalManager;
+  hooksMgr: HooksManager;
+  db: Database;
+  // 不包含 wsHub / eventBus —— handler 不应直接广播；副作用由 service 自己发 DomainEvent
+}
+```
+
+**测试 seam：**
+
+| 被测对象 | Mock 替换 |
+|---|---|
+| SessionManager 状态机 | `FakeTerminalManager`（不 spawn 真 PTY），手动注入 hook event |
+| TerminalManager 输出广播 | `FakeBroadcaster` 收集 `broadcast` 调用 |
+| Command handler | 注入 fake ctx；断言 manager 方法被调用 |
+| WsHub 订阅转发 | 直接 `eventBus.emit(...)`，断言 WS 客户端收到对应 topic |
+| 事件总线本身 | 纯内存，无需 mock |
+
+---
+
+### 4.1 启动流程
+
+完整的 `createServer` 骨架见 §4.0 DI 段落。这里列出启动步骤的语义顺序：
+
+1. **Infrastructure 就绪**：打开 SQLite + 跑迁移 → 写 `runtime.json`（port/token）→ 初始化 PtyHost
+2. **协作基础设施**：构造 `EventBus`、`WsHub`
+3. **Service 装配**（自底向上）：`TerminalManager` → `SessionManager` → `WorkspaceManager` → `HooksManager`
+4. **Bootstrap 副作用**：部署 bridge 脚本；对每个已注册 Provider 执行全局配置 merge-write
+5. **Transport 启动**：`buildFastifyApp` 注册路由/中间件/WS → `app.listen`
+6. **返回 server 句柄**：提供 `stop()`，按反向顺序优雅关闭（先 transport、再 service、最后 infrastructure）
 
 ### 4.2 Fastify App 布局
 
@@ -731,102 +859,264 @@ async function dispatch(msg: CommandMessage, ctx: CommandContext): Promise<Resul
 
 每个 handler 只做业务逻辑，不知道 WS 细节；便于单测。
 
-### 4.5 Session Manager
+### 4.5 Terminal 层（TerminalManager）
+
+Terminal 是**底层原语**：一个 PTY 进程 + ring buffer + 输入输出通道。它对 Agent / Provider / Session 状态机一无所知。
+
+**职责清单：**
+- 创建/销毁 PTY，管理进程句柄
+- 维护 ring buffer（2 MiB/终端），供断线补发
+- 把 PTY 输出**直接**广播到 `workspace.<wsid>.terminal.<tid>.output`（不走 Event Bus）
+- 接收 `terminal.input` / `terminal.resize` 命令
+- PTY 退出时广播 `workspace.<wsid>.terminal.<tid>.exit`，并从内存表中移除
+- 持久化 Terminal 元数据到 SQLite（不持久化输出流，Phase 1）
+
+**不负责：** Provider 解析、resume_id、hook 事件、Agent 状态机——全部在 Session 层。
+
+```typescript
+// packages/server/src/terminal/manager.ts
+interface TerminalSpec {
+  workspaceId: string;
+  kind: "agent" | "shell";
+  argv: string[];
+  cwd: string;
+  env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
+  title?: string;
+}
+
+class TerminalManager {
+  private terminals = new Map<TerminalId, ActiveTerminal>();
+
+  constructor(private deps: {
+    ptyHost: PtyHost;
+    broadcaster: Broadcaster;
+    db: Database;
+  }) {}
+
+  create(spec: TerminalSpec): Terminal {
+    const id = generateId();
+    const pty = this.deps.ptyHost.spawn(spec.argv, {
+      cwd: spec.cwd,
+      env: { ...process.env, ...spec.env },
+      cols: spec.cols ?? 120,
+      rows: spec.rows ?? 30,
+    });
+
+    const ringBuffer = new RingBuffer(2 * 1024 * 1024);
+    const active = new ActiveTerminal({ id, spec, pty, ringBuffer });
+
+    pty.onData((data) => {
+      const { seq } = ringBuffer.append(data);
+      this.deps.broadcaster.broadcast(
+        `workspace.${spec.workspaceId}.terminal.${id}.output`,
+        { chunk: data.toString("base64"), size: data.length, seq },
+      );
+    });
+
+    pty.onExit(({ exitCode }) => {
+      active.alive = false;
+      active.exitCode = exitCode;
+      this.deps.broadcaster.broadcast(
+        `workspace.${spec.workspaceId}.terminal.${id}.exit`,
+        { code: exitCode },
+      );
+      // 保留 ActiveTerminal 对象 1s 供最后一次 replay，然后清理
+      setTimeout(() => this.terminals.delete(id), 1000);
+      this.deps.db.terminals.markEnded(id, Date.now(), exitCode);
+    });
+
+    this.terminals.set(id, active);
+    this.deps.db.terminals.insert(active.toRow());
+    return active.toDTO();
+  }
+
+  write(terminalId: TerminalId, bytes: Buffer): void {
+    const t = this.terminals.get(terminalId);
+    if (!t || !t.alive) throw new TerminalNotAliveError();
+    t.pty.write(bytes);
+  }
+
+  resize(terminalId: TerminalId, cols: number, rows: number): void {
+    const t = this.terminals.get(terminalId);
+    if (!t || !t.alive) return;  // resize 宽容失败
+    t.pty.resize(cols, rows);
+  }
+
+  kill(terminalId: TerminalId, signal: NodeJS.Signals = "SIGTERM"): void {
+    const t = this.terminals.get(terminalId);
+    t?.pty.kill(signal);
+  }
+
+  get(terminalId: TerminalId): ActiveTerminal | undefined {
+    return this.terminals.get(terminalId);
+  }
+
+  replay(terminalId: TerminalId, lastSeq: number): ReplayResult {
+    const t = this.terminals.get(terminalId);
+    if (!t) return { status: "unknown" };
+    return t.ringBuffer.replayFrom(lastSeq);
+  }
+}
+```
+
+**Ring Buffer（Terminal 层私有设施）：**
+
+```typescript
+// packages/server/src/terminal/ring-buffer.ts
+class RingBuffer {
+  private buf: Buffer;
+  private writePos = 0;
+  private totalBytes = 0;  // 累计字节数 → 充当 seq
+
+  constructor(private size: number) {
+    this.buf = Buffer.alloc(size);
+  }
+
+  append(chunk: Buffer): { seq: number } {
+    // 环形写入
+    this.totalBytes += chunk.length;
+    return { seq: this.totalBytes };
+  }
+
+  replayFrom(lastSeq: number): { status: "ok"; data: Buffer; seq: number } | { status: "too_old" } {
+    if (this.totalBytes - lastSeq > this.size) return { status: "too_old" };
+    // 抽取 lastSeq..totalBytes 的字节
+    // ...
+    return { status: "ok", data: /* ... */, seq: this.totalBytes };
+  }
+
+  snapshot(): Buffer { /* 当前全部有效字节 */ }
+}
+```
+
+Phase 4 可以把 `RingBuffer` 换成 `PersistentBuffer`（mmap / 磁盘 tail），对上层接口不变。
+
+### 4.6 Session 层（SessionManager）
+
+Session 是**业务封装**：在一个 agent-kind Terminal 之上叠加 Agent 领域语义。
+
+**职责清单：**
+- 通过 `providerRegistry` 查 Provider 定义，构造 `argv` / `cwd` / `env`
+- **委托** `TerminalManager.create(...)` 拿到 Terminal，记住 `terminalId`（一对一）
+- 维护 Agent 状态机 (`starting → running → idle → busy → ended`)
+- 消化 hook 事件，更新 resume_id / lifecycle / 进度
+- 向 Event Bus 发布 `session.state.changed` / `session.lifecycle` 语义事件
+- 持久化 Session 元数据，不持久化 Terminal 元数据（Terminal 层管）
+- 处理 `session.stop` / `session.resume`
+
+**不负责：** PTY 的读写、ring buffer、xterm output 广播——这些属于 Terminal 层。
 
 ```typescript
 // packages/server/src/session/manager.ts
 class SessionManager {
   private sessions = new Map<SessionId, ActiveSession>();
-  
+
+  constructor(private deps: {
+    terminalMgr: TerminalManager;
+    eventBus: EventBus;
+    db: Database;
+    providerRegistry: ProviderRegistry;
+  }) {}
+
   async create(req: CreateSessionRequest): Promise<Session> {
-    const provider = providerRegistry.get(req.providerId);
-    if (!provider) throw new Error("provider_not_found");
-    
-    // 构造启动命令
+    const provider = this.deps.providerRegistry.get(req.providerId);
+    if (!provider) throw new UnknownProviderError(req.providerId);
+
+    const sessionId = generateId();
     const cmd = provider.buildCommand(req.config, {
       workspacePath: req.workspace.path,
-      sessionId: req.sessionId,
+      sessionId,
     });
-    
-    // spawn PTY
-    const pty = spawnPty(cmd.argv, { 
-      cwd: cmd.cwd, 
-      env: { ...process.env, ...cmd.env, 
-             CODER_STUDIO_SESSION_ID: req.sessionId },
+
+    // 申请底层 Terminal（不直接 spawn PTY）
+    const terminal = this.deps.terminalMgr.create({
+      workspaceId: req.workspaceId,
+      kind: "agent",
+      argv: cmd.argv,
+      cwd: cmd.cwd,
+      env: { ...cmd.env, CODER_STUDIO_SESSION_ID: sessionId },
+      title: provider.displayName,
     });
-    
-    // 包装成 ActiveSession
-    const session = new ActiveSession({
-      id: req.sessionId,
-      provider,
-      pty,
-      ringBuffer: new RingBuffer(2 * 1024 * 1024),
+
+    const active = new ActiveSession({
+      id: sessionId,
+      workspaceId: req.workspaceId,
+      providerId: req.providerId,
+      terminalId: terminal.id,
+      capability: provider.capability,
       state: "starting",
     });
-    
-    // 订阅 PTY 输出 → 广播
-    pty.onData((data) => {
-      session.ringBuffer.append(data);
-      wsHub.broadcast(`workspace.${req.workspaceId}.terminal.${req.sessionId}.output`, {
-        chunk: data.toString("base64"),
-        size: data.length,
-      });
-    });
-    
-    pty.onExit(({ exitCode }) => {
-      session.state = "ended";
-      wsHub.broadcast(`workspace.${req.workspaceId}.terminal.${req.sessionId}.exit`, 
-                      { code: exitCode });
-      this.sessions.delete(session.id);
-    });
-    
-    this.sessions.set(session.id, session);
-    return session.toDTO();
+
+    // Terminal 意外退出 → Session 也结束
+    this.subscribeTerminalExit(active);
+
+    this.sessions.set(sessionId, active);
+    this.deps.db.sessions.insert(active.toRow());
+    this.emitStateChanged(active, null, "starting");
+    return active.toDTO();
   }
-  
-  // 由 Hooks Manager 调用
-  onHookEvent(sessionId: SessionId, event: SessionEvent) {
+
+  // 被 HooksManager 调用
+  onHookEvent(sessionId: SessionId, event: ProviderHookEvent): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;  // orphan event
-    session.applyHookEvent(event);
+    const prev = session.state;
+    session.applyHookEvent(event);  // 内部状态机
+    if (session.state !== prev) this.emitStateChanged(session, prev, session.state);
+    if (event.kind === "Stop") {
+      this.deps.eventBus.emit({
+        type: "session.lifecycle", sessionId, event: "turn_completed",
+      });
+    }
+  }
+
+  async stop(sessionId: SessionId): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.deps.terminalMgr.kill(session.terminalId);  // 走 Terminal 层
+    // Terminal 退出事件会把状态推进到 ended
+  }
+
+  async resume(sessionId: SessionId): Promise<Session> {
+    // 读归档 session → 取 resume_id → 通过 Provider 构造带 --resume 的新 argv
+    // → 创建新 Terminal、新 Session（复用 resume_id）
+  }
+
+  private emitStateChanged(s: ActiveSession, from: SessionState | null, to: SessionState) {
+    this.deps.eventBus.emit({
+      type: "session.state.changed",
+      sessionId: s.id,
+      from: from ?? "draft",
+      to,
+    });
+  }
+
+  private subscribeTerminalExit(session: ActiveSession) {
+    // TerminalManager 暴露 onExit 钩子（或 SessionManager 订阅 EventBus 的 terminal.exit）
+    // 这里用直接回调注册的简单方式
   }
 }
 ```
 
-### 4.6 PTY 输出 Ring Buffer
+**关键点：**
 
-```typescript
-// packages/server/src/session/ring-buffer.ts
-class RingBuffer {
-  private buf: Buffer;
-  private writePos = 0;
-  private totalBytes = 0;  // 累计写入量（用于 seq 推断）
-  
-  constructor(private size: number) {
-    this.buf = Buffer.alloc(size);
-  }
-  
-  append(chunk: Buffer): { seq: number } {
-    // 环形写入逻辑...
-    this.totalBytes += chunk.length;
-    return { seq: this.totalBytes };
-  }
-  
-  // 根据客户端最后看到的 seq 返回补发数据
-  replayFrom(lastSeq: number): Buffer | "too_old" {
-    if (this.totalBytes - lastSeq > this.size) return "too_old";
-    // 从环形 buffer 中提取从 lastSeq 到当前的字节
-    // ...
-  }
-  
-  // 全量快照（断线补发失败时用）
-  snapshot(): Buffer {
-    // 返回 buffer 当前逻辑顺序的内容
-  }
-}
-```
+- `SessionManager` 从未 import 过 `node-pty` 或 `PtyHost`；编译时 TypeScript 就保证它走不到 Terminal 之下
+- `SessionManager` 从未直接 `broadcaster.broadcast(...)`——它只向 `eventBus` emit 语义事件；WsHub 订阅 bus 后转成前端 topic
+- 单测 `SessionManager` 只需注入 `FakeTerminalManager`（方法数量极少：`create/write/kill/resize/replay`）+ `FakeEventBus`；完全不用 spawn 真进程
 
-Phase 4 可以重写为**基于 mmap 或磁盘 tail** 的实现，接口不变。
+**命令到层的映射：**
+
+| Command | 去向 |
+|---|---|
+| `session.create` | `SessionManager.create` → 内部调 `TerminalManager.create` |
+| `session.stop` | `SessionManager.stop` → 内部调 `TerminalManager.kill` |
+| `session.resume` | `SessionManager.resume` → 内部新建 Terminal |
+| `terminal.create` (shell) | `TerminalManager.create`（直接，绕过 Session） |
+| `terminal.input` | `TerminalManager.write` |
+| `terminal.resize` | `TerminalManager.resize` |
+| `terminal.close` | `TerminalManager.kill` |
 
 ### 4.7 Hooks Manager
 
@@ -855,13 +1145,19 @@ class WorkspaceManager {
     await this.fs.attach(workspace.id, workspace.path);
     await this.git.attach(workspace.id, workspace.path);
     
-    // 5. 广播事件
-    wsHub.broadcast(`workspace.${workspace.id}.meta`, workspace);
+    // 5. 发送语义事件（WsHub 订阅 bus 后自动广播到 workspace.<id>.meta）
+    this.deps.eventBus.emit({
+      type: "workspace.meta.changed",
+      workspaceId: workspace.id,
+      patch: workspace,
+    });
     
     return workspace;
   }
 }
 ```
+
+**注意：** WorkspaceManager 只依赖 `eventBus`，从不 import `WsHub`。Bus → Hub 的转发由 WsHub 在构造时订阅 `workspace.meta.changed` 完成，映射到 WS topic `workspace.<id>.meta`。
 
 ### 4.9 文件系统层
 
@@ -968,20 +1264,38 @@ CREATE TABLE workspaces (
   ui_state TEXT  -- JSON: 面板宽度、折叠状态等
 );
 
+CREATE TABLE terminals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,                  -- 'agent' | 'shell'
+  cwd TEXT NOT NULL,
+  argv TEXT NOT NULL,                  -- JSON array
+  env TEXT,                            -- JSON object
+  title TEXT,
+  cols INTEGER NOT NULL,
+  rows INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  exit_code INTEGER
+);
+CREATE INDEX idx_terminals_workspace ON terminals(workspace_id);
+CREATE INDEX idx_terminals_kind ON terminals(workspace_id, kind);
+
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  terminal_id TEXT NOT NULL REFERENCES terminals(id) ON DELETE CASCADE,
   provider_id TEXT NOT NULL,
   resume_id TEXT,
-  cwd TEXT NOT NULL,
-  argv TEXT NOT NULL,  -- JSON array
-  env TEXT,            -- JSON object
+  capability TEXT NOT NULL,            -- 'full' | 'limited' | 'unsupported'
+  state TEXT NOT NULL,                 -- 最终或当前状态
   started_at INTEGER NOT NULL,
   ended_at INTEGER,
-  final_state TEXT,
+  last_active_at INTEGER NOT NULL,
   archived BOOLEAN DEFAULT 0
 );
 CREATE INDEX idx_sessions_workspace ON sessions(workspace_id);
+CREATE UNIQUE INDEX idx_sessions_terminal ON sessions(terminal_id);  -- 1:1
 
 CREATE TABLE provider_configs (
   provider_id TEXT PRIMARY KEY,
@@ -1066,6 +1380,111 @@ Plugin 内部：
 ---
 
 ## 5. 前端架构
+
+### 5.0 分层与耦合规则
+
+前端四层组织，import 方向与服务端对称——**只能向下**：
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Shell 层         app/ · AppShell · routes           │  路由、顶栏、全局浮层
+├─────────────────────────────────────────────────────┤
+│  Features 层      features/<name>/                   │  业务 UI：topbar / workspace /
+│                                                       │  agent-panes / terminal-panel / ...
+├─────────────────────────────────────────────────────┤
+│  State 层         atoms/ · lib/dispatch.ts           │  Jotai atoms、命令派发、选择器
+├─────────────────────────────────────────────────────┤
+│  Transport 层     ws/                                │  WsClient、订阅、重连
+├─────────────────────────────────────────────────────┤
+│  Core (@coder-studio/core)                           │  协议 schema、领域类型
+└─────────────────────────────────────────────────────┘
+```
+
+**依赖方向规则：**
+
+| 规则 | 说明 |
+|---|---|
+| Features → State | 组件通过 `useAtomValue` / `useSetAtom` / `dispatch` 访问状态 |
+| Features → Features | **禁止** 直接 import。所有跨 feature 协作必须走 atom |
+| State → Transport | `dispatchCommandAtom` 内部调用 `WsClient.sendCommand` |
+| Transport → State | WsClient 收到 event 后通过注入的 setter 写 atom（反向在事件层允许） |
+| 任何层 → Core | 允许 |
+| Transport 独立于 UI | `WsClient` 不 import React / Jotai；通过回调接入 |
+
+**Feature 目录约定（硬性）：**
+
+```
+features/<name>/
+├── index.tsx           # 唯一对外导出：主组件
+├── components/         # 内部子组件（外部不可 import）
+├── hooks/              # feature 私有 hooks
+├── atoms.ts            # feature 私有派生 atom（可选）
+└── dispatch.ts         # feature 专用 command 封装（可选）
+```
+
+外部只能 `import { SomeFeature } from "features/<name>"`。`features/<name>/internal/...` 路径走不通——靠 ESLint `no-restricted-paths` 强制。
+
+**Atom 写入者白名单：**
+
+Atom 的 `set` 调用方**必须**属于以下三类之一，违反 = 代码 review 拒绝：
+
+| 写入者 | 写入目标 | 场景 |
+|---|---|---|
+| **WS event handler** | 服务端状态投影 atom（`workspacesAtom` / `sessionsAtom` / `gitStateAtomFamily` / ...） | 服务端事件到达后同步到前端镜像 |
+| **dispatch helpers** | 短期"乐观更新"的派生 atom | 用户点击后先改本地，成功响应到达后再 reconcile |
+| **UI 本地状态 setter** | `atomWithStorage` 系列（`focusModeAtom` / `leftPanelWidthAtom` / `paneLayoutAtomFamily`） | 纯前端偏好 |
+
+**禁止** feature 组件直接 `set` 服务端投影 atom——所有服务端状态变更必须走 Command → Event → atom 写入的链路。
+
+**Feature 典型数据流（以"保存文件"为例）：**
+
+```
+1. <CodeEditorHost> 监听 Ctrl+S
+     ↓
+2. dispatch({ op: "file.write", args: { ... } })        ← Features → State
+     ↓
+3. dispatchCommandAtom → WsClient.sendCommand()         ← State → Transport
+     ↓  WebSocket
+4. server CommandHandler.fileWrite → FileService
+     ↓
+5. server 广播 workspace.<id>.fs.dirty                  ← Event Bus → WsHub
+     ↓  WebSocket
+6. WsClient 收到 event → 调用注册的订阅 handler
+     ↓
+7. handler 写入 fileTreeStaleAtom(workspaceId)          ← Transport → State
+     ↓
+8. <FileTree> useAtomValue(...) 触发 re-render          ← State → Features
+     ↓
+9. FileTree dispatch("file.readTree") 刷新
+```
+
+关键：**第 8 步的 `<FileTree>` 完全不知道 `<CodeEditorHost>` 的存在**，两个 feature 通过 atom 解耦。
+
+**典型反模式（禁止）：**
+
+```typescript
+// ❌ features/code-editor 直接 import features/file-tree
+import { refreshFileTree } from "features/file-tree/api";
+refreshFileTree(workspaceId);
+
+// ❌ 组件绕过 dispatch 直接调 WsClient
+import { wsClient } from "ws/client";
+wsClient.sendCommand("file.write", ...);
+
+// ❌ 组件直接写服务端投影 atom
+const setSessions = useSetAtom(sessionsAtom);
+setSessions(prev => ({ ...prev, [id]: newSession }));  // 应该等 WS event 回来
+```
+
+**测试 seam：**
+
+| 被测对象 | 替换 |
+|---|---|
+| Feature 组件 | 用 `TestProvider` 包 Jotai，预设 atom；不 mock WsClient |
+| State 层（派生 atom） | 纯函数，直接断言 `get(derivedAtom)` 返回值 |
+| Transport | 用 `FakeWebSocket` 驱动消息，断言 setter 被调用 |
+
+---
 
 ### 5.1 应用层
 
@@ -2032,20 +2451,36 @@ export interface Workspace {
   uiState: UiState;
 }
 
+// Terminal 是底层原语：PTY + 元数据。不知道 Provider / Session。
+export interface Terminal {
+  id: string;
+  workspaceId: string;
+  kind: "agent" | "shell";
+  title: string;
+  cwd: string;
+  argv: string[];
+  cols: number;
+  rows: number;
+  alive: boolean;
+  createdAt: number;
+  endedAt?: number;
+  exitCode?: number;
+}
+
+// Session 是业务封装：一个 agent-kind Terminal 之上的 Agent 状态机。
+// shell 终端不生成 Session。
 export interface Session {
   id: string;
   workspaceId: string;
+  terminalId: string;                  // 1:1 指向 Terminal
   providerId: string;
   state: SessionState;
   resumeId?: string;
+  capability: "full" | "limited" | "unsupported";
   startedAt: number;
   lastActiveAt: number;
   endedAt?: number;
-  title?: string;
-  cwd: string;
-  argv: string[];
-  completionPercent?: number;
-  capability: "full" | "limited" | "unsupported";
+  completionPercent?: number;          // 仅 Full 模式有
   errorReason?: string;
 }
 
@@ -2057,17 +2492,6 @@ export type SessionState =
   | "interrupted"
   | "unavailable"
   | "ended";
-
-export interface Terminal {
-  id: string;
-  workspaceId: string;
-  kind: "agent" | "shell";
-  sessionId?: string;  // 如果是 agent 终端
-  title: string;
-  cols: number;
-  rows: number;
-  alive: boolean;
-}
 
 export interface GitStatus {
   branch: string;
@@ -2112,13 +2536,14 @@ export interface Settings {
 | 运行时校验 (§7.3) | `runtime.check` command + 非持久化 |
 | 多标签并发 (§7.6) | Phase 1 `WsHub.writerId`；Phase 3 `TabSession` |
 | Agent 草稿 (§8.4) | 前端 `DraftPane` 组件，不持久化到 server |
-| 会话状态 (§8.2) | `Session.state` |
-| 会话恢复 (§8.7) | `Session.resumeId` + `session.resume` command |
+| 会话状态 (§8.2) | `Session.state`（状态机；Terminal 的 `alive` 不参与业务） |
+| 会话恢复 (§8.7) | `Session.resumeId` + `session.resume`（内部创建新 Terminal） |
 | 空闲策略 (§8.8) | `Workspace.uiState.idlePolicy` + server 后台定时器 |
 | 文件树 (§9.3) | `FileNode` + `file.readTree` command |
 | Git 面板 (§10.1) | `GitStatus` + git.* commands |
 | Worktree 检查 (§10.3) | Phase 3 新增 `Worktree` 实体 |
-| 终端面板 (§11.2) | `Terminal` (kind=shell) |
+| Agent 会话 PTY (§8) | `Terminal` (kind=agent)，通过 `Session.terminalId` 关联 |
+| 独立 shell 面板 (§11.2) | `Terminal` (kind=shell)，**无对应 Session** |
 | 命令面板 (§12) | 纯前端，不走 server |
 | 设置 (§13) | `Settings` + `settings.get/update` |
 | 专注模式 (§14) | 前端 `focusModeAtom` |
@@ -2158,30 +2583,33 @@ User        Web        WsClient     WsHub      WorkspaceMgr    ChokidarWatcher  
 ### 12.2 启动 Agent 会话（Full 模式）
 
 ```
-User     Web          WsHub       SessionMgr     Provider     PTY        Claude CLI     Bridge      HooksEndpoint
-  │       │             │              │            │          │            │            │              │
-  │─Click▶│             │              │            │          │            │            │              │
-  │       │─cmd.create─▶│              │            │          │            │            │              │
-  │       │             │─create─────▶│             │          │            │            │              │
-  │       │             │              │─buildCmd─▶│            │            │            │              │
-  │       │             │              │◀───argv, env           │            │            │              │
-  │       │             │              │──spawn─────────────▶   │            │            │              │
-  │       │             │              │                        │─starts────▶│            │              │
-  │       │             │              │◀── pty onData ────────  │◀stdout─────│            │              │
-  │       │             │              │─broadcast(output)─▶    │            │            │              │
-  │       │             │◀─────────────│                         │            │            │              │
-  │       │◀─event──────│              │                         │            │            │              │
-  │       │             │              │                         │            │ SessionStart hook fires   │
-  │       │             │              │                         │            │─spawn bridge──▶           │
-  │       │             │              │                         │            │             │─HTTP POST─▶│
-  │       │             │              │◀──onHookEvent(start)───────────────────────────────────────────  │
-  │       │             │              │─updateState(running,resumeId)                                    │
-  │       │             │              │─broadcast(state)─▶                                               │
-  │       │             │◀─────────────│                                                                   │
-  │       │◀─event──────│                                                                                  │
-  │       │─setAtom(state=running)                                                                         │
-  │◀─UI                                                                                                    │
+User  Web    WsHub   SessionMgr   TerminalMgr   Provider   PtyHost   Claude CLI  Bridge  HooksEndpoint  EventBus
+ │     │      │          │             │           │         │          │         │          │            │
+ │─Click▶     │          │             │           │         │          │         │          │            │
+ │     │─cmd─▶│          │             │           │         │          │         │          │            │
+ │     │      │─create──▶│             │           │         │          │         │          │            │
+ │     │      │          │─buildCmd───────────────▶│          │          │         │          │            │
+ │     │      │          │◀──argv,env──│           │          │          │         │          │            │
+ │     │      │          │─create(spec)▶           │          │          │         │          │            │
+ │     │      │          │             │─spawn───▶ │          │          │         │          │            │
+ │     │      │          │             │           │─starts──▶│          │         │          │            │
+ │     │      │          │             │◀─onData──────────────│◀stdout───│         │          │            │
+ │     │      │          │             │─broadcast(terminal.output)──────────────────────────────────▶    │
+ │     │      │◀─direct broadcast──────│           │          │          │         │          │            │
+ │     │◀─ev──│          │             │           │          │          │         │          │            │
+ │     │      │          │             │           │          │          │ SessionStart hook fires        │
+ │     │      │          │             │           │          │          │─spawn bridge─▶    │            │
+ │     │      │          │             │           │          │          │         │─POST───▶│            │
+ │     │      │          │◀─onHookEvent(start,resumeId)───────────────────────────────────────│            │
+ │     │      │          │─applyHookEvent→state=running                                                    │
+ │     │      │          │─emit(session.state.changed)─────────────────────────────────────────────────▶  │
+ │     │      │◀─subscribed: broadcast(session.state)──────────────────────────────────────────────────── │
+ │     │◀─ev──│                                                                                           │
+ │     │─setAtom(state=running)                                                                            │
+ │◀UI                                                                                                      │
 ```
+
+要点：TerminalManager 的输出走**直调 Broadcaster**（高频），SessionManager 的状态变更走**EventBus → WsHub 订阅后广播**（低频语义事件）。WsHub 同时扮演 Broadcaster 和 EventBus 订阅者两个角色。
 
 ### 12.3 Ctrl+S 保存文件
 
@@ -2216,7 +2644,7 @@ User        Web         Jotai          WsHub       FileIO       Disk
 - [x] 全部 monorepo 骨架 (core / providers / server / web / cli / hook-bridge)
 - [x] Server HTTP + WebSocket（单 writer）
 - [x] 协议层完整实现（Command / Event / Subscribe / Resync）
-- [x] SQLite schema v1 (workspaces, sessions, provider_configs, user_settings, hook_registrations)
+- [x] SQLite schema v1 (workspaces, terminals, sessions, provider_configs, user_settings, hook_registrations)
 - [x] 工作区：创建、打开、关闭、切换、持久化
 - [x] 文件树：懒加载、刷新、文件搜索
 - [x] Monaco 编辑器：打开、编辑、保存、baseHash 冲突检测
