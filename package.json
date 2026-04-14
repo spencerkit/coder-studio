@@ -1,0 +1,22 @@
+{
+  "name": "coder-studio",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "tsx src/scripts/dev.ts",
+    "build": "tsx src/scripts/build.ts",
+    "acceptance:phase1": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1",
+    "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
+    "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,css,json,md}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.2.0",
+    "vitest": "^3.0.0",
+    "tsx": "^4.7.0"
+  }
+}
