@@ -95,7 +95,8 @@
     "close_terminal": "关闭终端",
     "shell": "Shell 终端",
     "agent": "Agent 终端",
-    "reconnect_hint": "连接已断开，正在重连..."
+    "reconnect_hint": "连接已断开，正在重连...",
+    "no_terminal": "暂无终端"
   },
   "file": {
     "title": "文件",
@@ -137,26 +138,53 @@
     "general": "通用",
     "appearance": "外观",
     "providers": "Providers",
+    "autosave_hint": "设置已自动保存",
+    "notifications": "通知",
+    "notifications_enabled": "启用完成通知",
+    "notifications_enabled_hint": "当 Agent 会话完成时发送通知",
+    "notify_background": "仅在后台时通知",
+    "notify_background_hint": "仅在窗口不在前台时发送通知",
+    "notification_permission": "通知权限",
+    "permission_granted": "已授权",
+    "permission_denied": "已拒绝",
+    "permission_request": "请求授权",
+    "terminal_renderer": "终端渲染器",
+    "terminal_renderer_hint": "选择终端渲染模式",
+    "terminal_standard": "标准",
+    "terminal_compatibility": "兼容模式",
     "provider": {
       "title": "Provider 设置",
       "status": "状态",
       "capability": "能力等级",
+      "capability_full": "完整支持",
+      "capability_limited": "有限支持",
+      "capability_unsupported": "不支持",
       "hooks_registered": "Hooks 已注册",
       "hooks_unregistered": "Hooks 未注册",
       "hooks_error": "Hooks 注册失败",
+      "hooks": "Hooks 集成",
+      "hooks_hint": "将 Provider 特定的 hooks 注入到当前工作区",
+      "hooks_inject": "注入 Hooks",
+      "select_hint": "选择默认的 Agent Provider",
       "configure": "配置",
-      "reset": "重置"
+      "reset": "重置",
+      "config": "配置",
+      "api_key": "API Key",
+      "api_key_placeholder": "输入 API Key...",
+      "model": "模型"
     },
     "theme": {
       "title": "主题",
       "dark": "深色",
       "light": "浅色",
-      "system": "跟随系统"
+      "system": "跟随系统",
+      "hint": "当前仅支持深色主题"
     },
     "language": {
       "title": "语言",
       "zh": "中文",
-      "en": "English"
+      "en": "English",
+      "hint": "选择界面语言"
     },
     "auth": {
       "title": "认证",
@@ -178,6 +206,7 @@
   },
   "command": {
     "palette": "命令面板",
+    "no_results": "未找到结果",
     "shortcut": {
       "save": "保存",
       "save_all": "保存全部",
@@ -185,7 +214,8 @@
       "search_files": "搜索文件",
       "command_palette": "命令面板",
       "toggle_focus": "切换专注模式",
-      "toggle_sidebar": "切换侧边栏"
+      "toggle_sidebar": "切换侧边栏",
+      "toggle_terminal": "切换终端面板"
     }
   },
   "notification": {

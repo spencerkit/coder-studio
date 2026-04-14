@@ -144,3 +144,11 @@ export function formatDate(
     { ...defaultOptions, ...options }
   ).format(timestamp);
 }
+
+/**
+ * React hook for translations
+ */
+import { useAtomValue } from 'jotai';
+export function useTranslation(): (key: string, params?: Record<string, string | number>) => string {
+  return useAtomValue(tAtom);
+}

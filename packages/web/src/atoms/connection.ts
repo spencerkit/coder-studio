@@ -60,8 +60,15 @@ export interface ServerInfo {
 export const serverInfoAtom = atom<ServerInfo | null>(null);
 
 /**
- * Command dispatch atom
- * Provides a unified interface for dispatching commands to the server
+ * Command dispatch function type
+ */
+export type DispatchCommand = <T = unknown>(
+  op: string,
+  args: unknown
+) => Promise<CommandResult<T>>;
+
+/**
+ * Command result type
  */
 export interface CommandResult<T = unknown> {
   ok: boolean;
@@ -73,37 +80,40 @@ export interface CommandResult<T = unknown> {
   };
 }
 
-export const dispatchCommandAtom = atom(
-  (get) => {
-    const client = get(wsClientAtom);
+/**
+ * Command dispatch atom
+ * Provides a unified interface for dispatching commands to the server
+ * Use with useAtomValue to get the dispatch function
+ */
+export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
+  const client = get(wsClientAtom);
 
-    return async <T = unknown>(
-      op: string,
-      args: unknown
-    ): Promise<CommandResult<T>> => {
-      if (!client) {
-        return {
-          ok: false,
-          error: {
-            code: 'no_client',
-            message: 'WebSocket client not initialized',
-          },
-        };
-      }
+  return async <T = unknown>(
+    op: string,
+    args: unknown
+  ): Promise<CommandResult<T>> => {
+    if (!client) {
+      return {
+        ok: false,
+        error: {
+          code: 'no_client',
+          message: 'WebSocket client not initialized',
+        },
+      };
+    }
 
-      try {
-        const data = await client.sendCommand<T>(op, args);
-        return { ok: true, data };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return {
-          ok: false,
-          error: {
-            code: 'command_error',
-            message,
-          },
-        };
-      }
-    };
-  }
-);
+    try {
+      const data = await client.sendCommand<T>(op, args);
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        ok: false,
+        error: {
+          code: 'command_error',
+          message,
+        },
+      };
+    }
+  };
+});
