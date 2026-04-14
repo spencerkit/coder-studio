@@ -13,11 +13,24 @@ export interface TestWorkspace {
 
 export async function createTestWorkspace(): Promise<TestWorkspace> {
   const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), 'coder-studio-phase1-'));
-  await fs.writeFile(path.join(workspacePath, 'README.md'), '# Test Workspace\n');
-  await fs.mkdir(path.join(workspacePath, 'src'));
-  await fs.writeFile(path.join(workspacePath, 'src', 'index.ts'), 'export const ok = true;\n');
-  await execFileAsync('git', ['init'], { cwd: workspacePath });
-  await execFileAsync('git', ['add', '.'], { cwd: workspacePath });
-  await execFileAsync('git', ['commit', '-m', 'init'], { cwd: workspacePath });
-  return { path: workspacePath, gitInitialized: true };
+
+  try {
+    await fs.writeFile(path.join(workspacePath, 'README.md'), '# Test Workspace\n');
+    await fs.mkdir(path.join(workspacePath, 'src'));
+    await fs.writeFile(path.join(workspacePath, 'src', 'index.ts'), 'export const ok = true;\n');
+    await execFileAsync('git', ['init'], { cwd: workspacePath });
+    await execFileAsync('git', ['add', '.'], { cwd: workspacePath });
+    await execFileAsync('git', ['commit', '-m', 'init'], { cwd: workspacePath });
+    return { path: workspacePath, gitInitialized: true };
+  } catch (error) {
+    // Clean up temp directory on failure
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {
+      // Ignore cleanup errors - original error is more important
+    });
+    throw error;
+  }
+}
+
+export async function deleteTestWorkspace(workspace: TestWorkspace): Promise<void> {
+  await fs.rm(workspace.path, { recursive: true, force: true });
 }

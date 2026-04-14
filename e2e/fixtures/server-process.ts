@@ -5,6 +5,13 @@ export interface ServerProcess {
   pid: number;
 }
 
+export class ServerStartError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServerStartError';
+  }
+}
+
 export function startServer(
   command = 'pnpm',
   args: string[] = ['dev'],
@@ -16,9 +23,18 @@ export function startServer(
     env: { ...process.env, NODE_ENV: 'test' },
   });
 
+  if (child.pid === undefined) {
+    throw new ServerStartError(`Failed to start server process: ${command} ${args.join(' ')}`);
+  }
+
+  // Handle spawn errors
+  child.on('error', (error) => {
+    console.error(`Server process error: ${error.message}`);
+  });
+
   return {
     child,
-    pid: child.pid ?? -1,
+    pid: child.pid,
   };
 }
 
