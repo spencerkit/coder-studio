@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
+import { getProviderById } from '@coder-studio/providers';
 
 // session.create
 registerCommand(
@@ -20,23 +21,19 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    // TODO: Get provider from registry
-    // For now, throw error
-    throw { code: 'provider_not_implemented', message: 'Provider registry not yet implemented' };
+    // Get provider from registry
+    const provider = getProviderById(args.providerId);
+    if (!provider) {
+      throw { code: 'unknown_provider', message: `Provider not found: ${args.providerId}` };
+    }
 
-    // Future implementation:
-    // const provider = ctx.providerRegistry.get(args.providerId);
-    // if (!provider) {
-    //   throw { code: 'unknown_provider', message: `Provider not found: ${args.providerId}` };
-    // }
-    //
-    // return ctx.sessionMgr.create({
-    //   workspaceId: args.workspaceId,
-    //   workspacePath: workspace.path,
-    //   providerId: args.providerId,
-    //   provider,
-    //   draft: args.draft,
-    // });
+    return ctx.sessionMgr.create({
+      workspaceId: args.workspaceId,
+      workspacePath: workspace.path,
+      providerId: args.providerId,
+      provider,
+      draft: args.draft,
+    });
   }
 );
 
@@ -86,12 +83,18 @@ registerCommand(
       throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
     }
 
-    // TODO: Get provider from registry
-    throw { code: 'provider_not_implemented', message: 'Provider registry not yet implemented' };
+    // Get workspace
+    const workspace = ctx.workspaceMgr.get(session.workspaceId);
+    if (!workspace) {
+      throw { code: 'workspace_not_found', message: `Workspace not found: ${session.workspaceId}` };
+    }
 
-    // Future implementation:
-    // const workspace = ctx.workspaceMgr.get(session.workspaceId);
-    // const provider = ctx.providerRegistry.get(session.providerId);
-    // return ctx.sessionMgr.resume(args.sessionId, workspace.path, provider);
+    // Get provider from registry
+    const provider = getProviderById(session.providerId);
+    if (!provider) {
+      throw { code: 'unknown_provider', message: `Provider not found: ${session.providerId}` };
+    }
+
+    return ctx.sessionMgr.resume(args.sessionId, workspace.path, provider);
   }
 );

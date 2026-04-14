@@ -4,7 +4,7 @@
  * Routes commands to handlers and validates input
  */
 
-import type { Command, Result } from '@coder-studio/core';
+import type { Command, Result, ProviderDefinition } from '@coder-studio/core';
 import type { Database } from 'better-sqlite3';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import type { SessionManager } from '../session/manager.js';
@@ -24,6 +24,7 @@ export interface CommandContext {
   eventBus: EventBus;
   broadcaster: Broadcaster;
   db: Database;
+  providerRegistry: ProviderDefinition[];
 }
 
 /**

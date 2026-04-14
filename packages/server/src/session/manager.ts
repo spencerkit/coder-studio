@@ -25,6 +25,7 @@ export interface SessionManagerDeps {
   eventBus: EventBus;
   db: SessionDatabase;
   broadcaster: Broadcaster;
+  providerRegistry: ProviderDefinition[];
 }
 
 /**

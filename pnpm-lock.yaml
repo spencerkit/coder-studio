@@ -93,6 +93,9 @@ importers:
       '@coder-studio/core':
         specifier: workspace:*
         version: link:../core
+      '@coder-studio/providers':
+        specifier: workspace:*
+        version: link:../providers
       '@fastify/static':
         specifier: ^9.1.0
         version: 9.1.0

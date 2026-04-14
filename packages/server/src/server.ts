@@ -15,6 +15,7 @@ import { WorkspaceManager } from './workspace/manager.js';
 import { SessionManager } from './session/manager.js';
 import { TerminalManager } from './terminal/manager.js';
 import { HooksManager } from './hooks/manager.js';
+import { providerRegistry } from '@coder-studio/providers';
 
 // Import command handlers to register them
 import './commands/index.js';
@@ -56,6 +57,7 @@ export async function createServer(
     eventBus,
     db: createSessionDatabase(db),
     broadcaster: wsHub,
+    providerRegistry,
   });
 
   // Workspace Manager
@@ -79,6 +81,7 @@ export async function createServer(
     eventBus,
     broadcaster: wsHub,
     db,
+    providerRegistry,
   };
 
   // Update wsHub with command context
