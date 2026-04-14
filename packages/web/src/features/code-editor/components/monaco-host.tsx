@@ -7,7 +7,7 @@
 import type { FC } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import Editor, { OnChange } from '@monaco-editor/react';
-import { useTranslation } from '../../../lib/i18n';
+import { DiffEditor } from '@monaco-editor/react';
 
 interface MonacoHostProps {
   workspaceId: string;
@@ -33,7 +33,6 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   isDiffMode,
   onContentChange,
 }) => {
-  const t = useTranslation();
   const editorRef = useRef<any>(null);
   const [originalContent, setOriginalContent] = useState('');
 
@@ -57,16 +56,15 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 
   const language = detectLanguage(filePath);
 
-  return (
-    <div className="monaco-host">
-      {isDiffMode ? (
-        <Editor
+  if (isDiffMode) {
+    return (
+      <div className="monaco-host">
+        <DiffEditor
           height="100%"
           language={language}
           theme="vs-dark"
           original={originalContent}
-          value={content}
-          onChange={handleChange}
+          modified={content}
           onMount={handleEditorDidMount}
           options={{
             fontSize: 13,
@@ -76,23 +74,27 @@ export const MonacoHost: FC<MonacoHostProps> = ({
             padding: { top: 12, bottom: 12 },
           }}
         />
-      ) : (
-        <Editor
-          height="100%"
-          language={language}
-          theme="vs-dark"
-          value={content}
-          onChange={handleChange}
-          onMount={handleEditorDidMount}
-          options={{
-            fontSize: 13,
-            fontFamily: 'JetBrains Mono, monospace',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            padding: { top: 12, bottom: 12 },
-          }}
-        />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="monaco-host">
+      <Editor
+        height="100%"
+        language={language}
+        theme="vs-dark"
+        value={content}
+        onChange={handleChange}
+        onMount={handleEditorDidMount}
+        options={{
+          fontSize: 13,
+          fontFamily: 'JetBrains Mono, monospace',
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          padding: { top: 12, bottom: 12 },
+        }}
+      />
     </div>
   );
 };

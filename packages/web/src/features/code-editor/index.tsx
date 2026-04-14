@@ -6,20 +6,18 @@
  */
 
 import type { FC } from 'react';
-import { useState, useCallback } from 'react';
-import { useAtomValue, useSetAtom, useAtom } from 'jotai';
+import { useState, useCallback, useEffect } from 'react';
+import { useAtomValue, useAtom } from 'jotai';
 import { Search, Save, AlertCircle } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import {
   openFilesAtomFamily,
   activeFilePathAtomFamily,
-  activeFileAtomFamily,
   type OpenFile,
 } from '../../atoms/fs';
 import { dispatchCommandAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { MonacoHost } from './components/monaco-host';
-import { XtermHost } from './components/xterm-host';
 
 /**
  * Code Editor Host
@@ -33,7 +31,7 @@ import { XtermHost } from './components/xterm-host';
 export const CodeEditorHost: FC = () => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isDiffMode, setIsDiffMode] = useState(false);
@@ -110,14 +108,18 @@ export const CodeEditorHost: FC = () => {
 
     if (result.ok && result.data) {
       // Update baseHash and mark as clean
-      setOpenFiles((prev) => ({
-        ...prev,
-        [currentFile.path]: {
-          ...prev[currentFile.path],
-          baseHash: result.data!.hash,
-          isDirty: false,
-        },
-      }));
+      setOpenFiles((prev) => {
+        const prevFile = prev[currentFile.path];
+        if (!prevFile) return prev;
+        return {
+          ...prev,
+          [currentFile.path]: {
+            ...prevFile,
+            baseHash: result.data!.hash,
+            isDirty: false,
+          },
+        };
+      });
     } else {
       setSaveError(result.error?.message ?? 'Failed to save file');
     }
@@ -132,14 +134,19 @@ export const CodeEditorHost: FC = () => {
     (newContent: string) => {
       if (!workspaceId || !currentFile) return;
 
-      setOpenFiles((prev) => ({
-        ...prev,
-        [currentFile.path]: {
-          ...prev[currentFile.path],
-          content: newContent,
-          isDirty: newContent !== prev[currentFile.path]?.content,
-        },
-      }));
+      setOpenFiles((prev) => {
+        const prevFile = prev[currentFile.path];
+        if (!prevFile) return prev;
+        const isDirty = newContent !== prevFile.content;
+        return {
+          ...prev,
+          [currentFile.path]: {
+            ...prevFile,
+            content: newContent,
+            isDirty,
+          },
+        };
+      });
     },
     [workspaceId, currentFile, setOpenFiles]
   );

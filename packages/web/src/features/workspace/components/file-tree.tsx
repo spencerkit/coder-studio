@@ -7,8 +7,14 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { Folder, File, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react';
+import { useAtomValue } from 'jotai';
+import {
+  Folder,
+  File,
+  ChevronRight,
+  ChevronDown,
+  RefreshCw,
+} from 'lucide-react';
 import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
 import { activeWorkspaceAtom } from '../../../atoms/workspaces';
 import { dispatchCommandAtom } from '../../../atoms/connection';
@@ -34,7 +40,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [isLoading, setIsLoading] = useState(false);
 

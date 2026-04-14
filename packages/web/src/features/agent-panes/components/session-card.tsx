@@ -6,12 +6,12 @@
  */
 
 import type { FC } from 'react';
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useState, useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import {
   X,
-  SplitHorizontal,
-  SplitVertical,
+  FlipHorizontal,
+  FlipVertical,
   Play,
   Square,
   Send,
@@ -19,7 +19,7 @@ import {
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
-import type { Session, SessionState } from '@coder-studio/core';
+import type { SessionState } from '@coder-studio/core';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
@@ -39,7 +39,7 @@ interface SessionCardProps {
 export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const t = useTranslation();
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [inputValue, setInputValue] = useState('');
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -215,14 +215,14 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
             onClick={handleSplitHorizontal}
             aria-label={t('tooltip.split_horizontal')}
           >
-            <SplitHorizontal size={13} />
+            <FlipHorizontal size={13} />
           </button>
           <button
             className="btn btn-icon btn-sm"
             onClick={handleSplitVertical}
             aria-label={t('tooltip.split_vertical')}
           >
-            <SplitVertical size={13} />
+            <FlipVertical size={13} />
           </button>
           <button
             className="btn btn-icon btn-sm"
@@ -270,11 +270,11 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
  */
 function getProgressWidth(state: SessionState): number {
   switch (state) {
-    case 'loading':
+    case 'starting':
       return 14;
     case 'running':
       return 34;
-    case 'error':
+    case 'unavailable':
       return 100;
     default:
       return 6;

@@ -5,7 +5,7 @@
  */
 
 import type { FC } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import {
   GitBranch,
   Plus,
@@ -36,7 +36,7 @@ interface GitPanelProps {
 export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [commitMessage, setCommitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -264,7 +264,6 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
   workspaceId,
 }) => {
   const t = useTranslation();
-  const dispatch = useSetAtom(dispatchCommandAtom);
 
   return (
     <div className="git-change-group">
@@ -295,7 +294,7 @@ interface GitChangeRowProps {
 
 const GitChangeRow: FC<GitChangeRowProps> = ({ change, type, workspaceId }) => {
   const t = useTranslation();
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   /**
    * Stage or unstage file
