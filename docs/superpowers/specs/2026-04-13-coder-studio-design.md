@@ -48,7 +48,10 @@ Brainstorming 过程中发现 PRD 有若干需要修正的条目。写入实现�
 | 后端框架 | **Fastify** | 性能好、插件生态成熟、TypeScript 支持一流 |
 | 实时通道 | **WebSocket** (`ws` lib) | 单连接多路复用，自主控制协议 |
 | 前端框架 | **React 18** + TypeScript | Monaco / xterm 生态原生支持 |
-| 构建工具 | **Vite** | 开发时 HMR 快，构建产物精简 |
+| 前端开发工具 | **Vite dev server** | React 前端开发、HMR 快、生态成熟 |
+| 前端生产构建 | **Vite build** | 生成浏览器静态资源产物 |
+| 后端开发运行 | **tsx watch** | Node 服务本地开发、热重启简单直接 |
+| 生产构建工具 | **esbuild** | 以 CLI 为最终入口输出稳定的 ESM/CJS 双产物 bundle |
 | 状态管理 | **Jotai** | atomFamily 天然适合每会话/终端/文件独立状态 |
 | 路由 | **TanStack Router** | TS-first、类型化路由参数 |
 | 编辑器 | **Monaco Editor** (`@monaco-editor/react`) | PRD 明确要求，原生 TS |
@@ -367,7 +370,7 @@ coder-studio/
 │       │   ├── bin.ts         # CLI argv 解析 → createServer → listen
 │       │   └── embed.ts       # 把 web 构建产物作为静态资源服务
 │       ├── package.json       # name: @coder-studio/cli, bin: coder-studio
-│       └── dist/              # tsup 输出
+│       └── dist/              # 最终 CLI 可发布产物目录
 │
 ├── e2e/                       # Playwright
 │   ├── fixtures/
@@ -405,19 +408,187 @@ core  ◄──── providers
 - `server` 和 `web` 之间**唯一耦合点**是 `core` 定义的协议 schema
 - `cli` 是唯一会 `npm publish` 的包
 
-### 2.3 构建流程
+### 2.3 构建与发布方案
 
+本节定义 Coder Studio 的开发、生产构建和发布链路。目标是同时满足：
+
+1. **开发效率高**：前端改动反馈快，后端本地开发重启快
+2. **生产构建稳定**：最终产物边界清晰，避免多层构建链路带来的复杂度
+3. **发布模型收敛**：最终只发布一个 CLI npm 包，减少分发和安装复杂度
+
+#### 2.3.1 总体原则
+
+1. **CLI 是唯一最终发布单元**  
+   Coder Studio 最终只发布一个 npm CLI 包。`server` 不单独分发，`web` 也不单独分发；二者都作为 CLI 的内部装配产物存在。
+
+2. **内部 package 用于源码组织，而非独立分发**  
+   `core`、`providers`、`server`、`cli` 等 package 的职责是源码边界、依赖边界和类型边界。生产构建时，不要求每个内部 package 单独先产出 dist，再进行多级装配。
+
+3. **生产构建以 CLI 为唯一 bundle 入口**  
+   生产环境构建时，以 `cli` 为最终入口，通过 bundler 将内部 workspace 依赖一起打入最终 bundle。只有前端静态资源和少量非 JS 资源在最终阶段额外装配。
+
+4. **三方依赖默认 external**  
+   生产构建中，npm 三方依赖默认通过 `external` 策略排除，不打入最终 CLI bundle。这样可以降低 native 模块、动态加载、运行时路径解析等风险。
+
+5. **构建脚本集中管理**  
+   所有 dev/build/assemble/publish 相关脚本统一收敛到仓库级 `src/scripts/`。各 package 只保留业务源码和必要配置，不承载构建编排逻辑。
+
+6. **不采用内部包 dist 中转链路**  
+   不采用“每个内部 package 先各自 build 出 dist，再层层迁移装配”的保守型构建链路；生产构建统一以 CLI 为中心收敛。
+
+#### 2.3.2 工具选型
+
+| 层 | 选型 | 用途 |
+|---|---|---|
+| 前端开发 | **Vite dev server** | React 前端开发与 HMR |
+| 前端生产构建 | **Vite build** | 生成浏览器静态资源 |
+| 后端开发 | **tsx watch** | 本地 server 开发与热重启 |
+| 生产构建 | **esbuild** | 以 CLI 为最终入口生成双产物 bundle |
+| 包管理 | **pnpm workspaces** | monorepo 依赖管理 |
+| 构建脚本语言 | **TypeScript** | `src/scripts/` 中统一实现构建逻辑 |
+
+#### 2.3.3 开发链路
+
+**前端开发：**
+- 前端通过 Vite dev server 运行，负责 React 页面开发、Monaco / xterm 等浏览器侧依赖联调和 HMR 热更新。
+
+**后端开发：**
+- 后端通过 `tsx watch` 运行，负责 Fastify / WebSocket 服务本地开发，以及文件系统 / Git / PTY / Session 等 Node 侧能力调试。
+
+**开发模式约束：**
+- 开发环境中，前后端分离运行：前端由 Vite 提供 dev server，后端由 `tsx watch` 直接运行 TypeScript 源码，root 层提供统一命令并行启动两者。
+
+#### 2.3.4 生产构建链路
+
+**前端构建：**
+- 前端通过 `Vite build` 独立生成静态资源目录：
+
+```text
+packages/web/dist/
+├── index.html
+└── assets/...
 ```
-pnpm build
-  ├── core:     tsc → dist/
-  ├── providers: tsc → dist/
-  ├── web:      vite build → dist/ (hash 后的静态资源)
-  ├── server:   tsup → dist/ (CJS + ESM 双输出)
-  ├── hook-bridge: cp src/*.js → dist/
-  └── cli:      tsup → dist/
-        + copy web/dist → cli/dist/web
-        + copy hook-bridge/dist → cli/dist/hook-bridge
+
+- 该产物不直接发布，而是在最终阶段复制到 CLI 产物目录供 server 加载。
+
+**CLI 构建：**
+- CLI 是唯一最终生产构建入口。构建时：
+  1. 以 `packages/cli` 的入口文件作为 esbuild 入口
+  2. 输出 **ESM bundle** 和 **CJS bundle** 两份产物
+  3. 将内部 workspace 依赖一并打入最终 bundle，包括 `server`、`core`、`providers` 及其他内部 TS/JS 依赖
+  4. 将所有三方依赖标记为 `external`
+  5. 在 bundle 完成后，将 `packages/web/dist/` 复制到 CLI 最终产物目录
+
+**最终可发布目录：**
+
+```text
+packages/cli/dist/
+├── bin.js
+├── esm/
+│   └── index.mjs
+├── cjs/
+│   └── index.js
+└── web/
+    ├── index.html
+    └── assets/...
 ```
+
+其中：
+- `bin.js`：CLI 默认执行入口 wrapper
+- `esm/index.mjs`：ESM bundle
+- `cjs/index.js`：CJS bundle
+- `web/`：前端静态资源
+- 若后续存在非 JS 资源（模板、图标、音频等），也统一装配到此目录中
+
+#### 2.3.5 bundle 边界
+
+**会被 bundle 的内容：**
+- `cli` 入口源码
+- `server` 源码
+- `core` 源码
+- `providers` 源码
+- 其他内部 workspace TS/JS 依赖
+
+**不会被 bundle 的内容：**
+- 所有 npm 三方依赖（通过 `external` 排除）
+- 前端静态资源（通过 `Vite build` 单独生成）
+- 少量非 JS 静态资源（通过 copy 装配）
+
+**原则：**
+- 生产构建中，bundle 只聚焦内部源码；对外部依赖和非 JS 资源不追求“全量塞进一个 JS 文件”，而是追求**边界清晰、构建稳定、运行时可控**。
+
+#### 2.3.6 命令层设计
+
+所有开发与构建命令统一从仓库根目录执行，`root package.json` 只暴露统一入口；实际逻辑由 `src/scripts/` 中的 TypeScript 脚本实现。
+
+| 命令 | 作用 |
+|---|---|
+| `pnpm dev:web` | 启动前端开发服务器 |
+| `pnpm dev:server` | 启动后端开发服务器（`tsx watch`） |
+| `pnpm dev` | 并行启动前后端开发环境 |
+| `pnpm build:web` | 构建前端静态资源 |
+| `pnpm build:cli` | 构建 CLI 双产物并装配 web 静态资源 |
+| `pnpm build` | 执行完整生产构建（先 `build:web`，再 `build:cli`） |
+| `pnpm publish:cli` | 校验 CLI 最终产物并执行发布 |
+
+**设计原则：**
+1. root 命令是唯一对人入口
+2. 脚本实现统一在 `src/scripts/`
+3. package 内只保留业务源码、配置和必要入口，不承载构建编排脚本
+
+#### 2.3.7 `src/scripts/` 目录结构
+
+建议的脚本目录如下：
+
+```text
+src/scripts/
+├── dev.ts
+├── dev-web.ts
+├── dev-server.ts
+├── build.ts
+├── build-web.ts
+├── build-cli.ts
+├── publish-cli.ts
+└── shared/
+    ├── paths.ts
+    ├── esbuild.ts
+    ├── copy.ts
+    ├── process.ts
+    └── logger.ts
+```
+
+**脚本职责：**
+- `dev-web.ts`：启动 Vite dev server
+- `dev-server.ts`：以 `tsx watch` 启动后端开发服务
+- `dev.ts`：并行拉起 web + server，并统一处理日志前缀、退出信号和失败退出
+- `build-web.ts`：调用 Vite build，输出 `packages/web/dist/`
+- `build-cli.ts`：以 CLI 为最终入口调用 esbuild，输出 ESM/CJS bundle，external 三方依赖，bundle 内部 workspace 依赖，并把 `packages/web/dist/` 复制到 CLI 最终产物目录
+- `build.ts`：串行执行 `build-web` → `build-cli`
+- `publish-cli.ts`：发布前检查最终产物完整性，再执行 npm/pnpm publish
+
+#### 2.3.8 CLI package 导出约定
+
+CLI package 的 `package.json` 采用如下方向：
+- `type: "module"`
+- `bin` 指向：`./dist/bin.js`
+- `exports` 只暴露 `"."`
+- `exports.import` 指向：`./dist/esm/index.mjs`
+- `exports.require` 指向：`./dist/cjs/index.js`
+- `files` 仅包含：`dist`
+
+CLI 默认执行入口 `dist/bin.js` 是一个 wrapper，并固定转发到 ESM 主入口 `dist/esm/index.mjs`。模块消费场景下，通过 `exports` 提供 ESM/CJS 双格式兼容。
+
+#### 2.3.9 发布规则
+
+1. **只发布 CLI package**
+2. **发布边界始终以 `packages/cli/dist/` 为准**
+3. **发布前必须确保以下文件存在：**
+   - `packages/cli/dist/bin.js`
+   - `packages/cli/dist/esm/index.mjs`
+   - `packages/cli/dist/cjs/index.js`
+   - `packages/cli/dist/web/index.html`
+4. **不要求内部 package 单独产出可分发 dist**
+5. **`build:web` 与 `build:cli` 是唯一允许进入正式发布链路的产物生成步骤**
 
 发布：`cd packages/cli && pnpm publish --access public`
 
