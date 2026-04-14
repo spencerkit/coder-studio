@@ -5,13 +5,14 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
-import websocket from '@fastify/websocket';
+import websocket, { type WebSocket } from '@fastify/websocket';
 import staticPlugin from '@fastify/static';
 import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
 import type { Database } from 'better-sqlite3';
 import type { HooksManager } from './hooks/manager.js';
 import type { CommandContext } from './ws/dispatch.js';
+import type { FastifyRequest } from 'fastify';
 
 interface AppDeps {
   wsHub: WsHub;
@@ -39,6 +40,16 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   });
 
+  // WebSocket plugin - routes must be registered within this scope
+  await app.register(async function (fastify) {
+    await fastify.register(websocket);
+
+    // WebSocket endpoint - connection is the WebSocket directly in v11+
+    fastify.get('/ws', { websocket: true }, (connection: WebSocket, req: FastifyRequest) => {
+      deps.wsHub.handleConnection(connection, req);
+    });
+  });
+
   // Phase 1: Auth middleware is empty passthrough
   app.addHook('onRequest', async (request, reply) => {
     // Phase 2: Implement auth here
@@ -51,13 +62,6 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
-  });
-
-  // WebSocket endpoint
-  app.register(websocket);
-
-  app.get('/ws', { websocket: true }, (connection, req) => {
-    deps.wsHub.handleConnection(connection.socket, req);
   });
 
   // Health check endpoint
