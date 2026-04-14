@@ -2,18 +2,17 @@
  * File IO operations with conflict detection.
  */
 
-import { readFile as fsReadFile, writeFile as fsWriteFile } from 'fs/promises';
-import { resolve } from 'path';
+import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir } from 'fs/promises';
+import { resolve, dirname } from 'path';
 import { createHash } from 'crypto';
-import type { Workspace } from '@coder-studio/core';
 
-export interface FileRead {
+export interface FileReadResult {
   content: string;
   baseHash: string;
-  encoding: 'utf8';
+  encoding: 'utf-8';
 }
 
-export interface FileWrite {
+export interface FileWriteResult {
   newHash: string;
 }
 
@@ -31,7 +30,7 @@ export function resolveSafe(root: string, relPath: string): string {
 
   // Prevent path escape: resolved path must be under root
   if (!abs.startsWith(absRoot + '/') && abs !== absRoot) {
-    throw new Error('path_escape');
+    throw { code: 'path_escape', message: 'Path escapes workspace root' };
   }
 
   return abs;
@@ -40,62 +39,64 @@ export function resolveSafe(root: string, relPath: string): string {
 /**
  * Reads a file from the workspace with baseHash for conflict detection.
  *
- * @param ws - Workspace
+ * @param rootPath - Workspace root path
  * @param relPath - Relative file path
  * @returns File content and hash
  */
-export async function readFile(ws: Workspace, relPath: string): Promise<FileRead> {
-  const abs = resolveSafe(ws.path, relPath);
-  const content = await fsReadFile(abs, 'utf8');
+export async function readFile(rootPath: string, relPath: string): Promise<FileReadResult> {
+  const abs = resolveSafe(rootPath, relPath);
+  const content = await fsReadFile(abs, 'utf-8');
   const baseHash = createHash('sha256').update(content).digest('hex');
 
   return {
     content,
     baseHash,
-    encoding: 'utf8',
+    encoding: 'utf-8',
   };
 }
 
 /**
  * Writes a file to the workspace with conflict detection.
  * If the file changed externally since reading (baseHash mismatch),
- * throws ConflictError.
+ * throws conflict error.
  *
- * @param ws - Workspace
+ * @param rootPath - Workspace root path
  * @param relPath - Relative file path
  * @param content - New content to write
- * @param baseHash - Hash of original content
+ * @param baseHash - Hash of original content (optional)
  * @returns New hash after write
  */
 export async function writeFile(
-  ws: Workspace,
+  rootPath: string,
   relPath: string,
   content: string,
-  baseHash: string
-): Promise<FileWrite> {
-  const abs = resolveSafe(ws.path, relPath);
+  baseHash?: string
+): Promise<FileWriteResult> {
+  const abs = resolveSafe(rootPath, relPath);
 
-  // Read current content and check for conflicts
-  const current = await fsReadFile(abs, 'utf8').catch(() => '');
-  const currentHash = createHash('sha256').update(current).digest('hex');
+  // Conflict check if baseHash provided
+  if (baseHash) {
+    const current = await fsReadFile(abs, 'utf-8').catch(() => '');
+    const currentHash = createHash('sha256').update(current).digest('hex');
 
-  if (currentHash !== baseHash) {
-    throw new ConflictError('file_changed_externally');
+    if (currentHash !== baseHash) {
+      throw {
+        code: 'conflict',
+        message: 'File has been modified externally',
+        details: {
+          expectedHash: baseHash,
+          actualHash: currentHash,
+        },
+      };
+    }
   }
 
+  // Ensure parent directory exists
+  await mkdir(dirname(abs), { recursive: true });
+
   // Write new content
-  await fsWriteFile(abs, content, 'utf8');
+  await fsWriteFile(abs, content, 'utf-8');
   const newHash = createHash('sha256').update(content).digest('hex');
 
   return { newHash };
-}
-
-/**
- * Error thrown when file changed externally during edit.
- */
-export class ConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ConflictError';
-  }
 }

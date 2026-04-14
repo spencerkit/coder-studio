@@ -10,30 +10,26 @@ registerCommand(
   'terminal.create',
   z.object({
     workspaceId: z.string(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
   }),
   async (args, ctx) => {
-    const workspace = await ctx.db.workspace.findById(args.workspaceId);
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw new Error(`Workspace not found: ${args.workspaceId}`);
+      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    // TODO: Create terminal via TerminalManager
-    // const terminal = await ctx.terminalMgr.create({
-    //   workspaceId: args.workspaceId,
-    //   cwd: workspace.path,
-    // });
-
-    // return terminal;
-
-    // Placeholder
-    return {
-      id: 'placeholder-terminal-id',
+    // Create shell terminal
+    const terminal = ctx.terminalMgr.create({
       workspaceId: args.workspaceId,
-      pid: null,
-      cols: 120,
-      rows: 30,
-      createdAt: Date.now(),
-    };
+      kind: 'shell',
+      argv: ['/bin/bash'], // TODO: Use appropriate shell for platform
+      cwd: workspace.path,
+      cols: args.cols ?? 120,
+      rows: args.rows ?? 30,
+    });
+
+    return terminal;
   }
 );
 
@@ -44,8 +40,7 @@ registerCommand(
     terminalId: z.string(),
   }),
   async (args, ctx) => {
-    // TODO: Close terminal via TerminalManager
-    // await ctx.terminalMgr.close(args.terminalId);
+    ctx.terminalMgr.kill(args.terminalId);
   }
 );
 
@@ -57,8 +52,8 @@ registerCommand(
     bytes: z.string(), // Base64 encoded
   }),
   async (args, ctx) => {
-    // TODO: Send input to terminal via TerminalManager
-    // await ctx.terminalMgr.write(args.terminalId, args.bytes);
+    const buffer = Buffer.from(args.bytes, 'base64');
+    ctx.terminalMgr.write(args.terminalId, buffer);
   }
 );
 
@@ -71,7 +66,6 @@ registerCommand(
     rows: z.number().int().positive(),
   }),
   async (args, ctx) => {
-    // TODO: Resize terminal via TerminalManager
-    // await ctx.terminalMgr.resize(args.terminalId, args.cols, args.rows);
+    ctx.terminalMgr.resize(args.terminalId, args.cols, args.rows);
   }
 );

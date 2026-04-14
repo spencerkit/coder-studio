@@ -5,19 +5,27 @@
 import { readdir, stat } from 'fs/promises';
 import { join, relative } from 'path';
 import type { FileNode } from '@coder-studio/core';
-import type { Workspace } from '@coder-studio/core';
+
+export interface ReadTreeResult {
+  path: string;
+  children: FileNode[];
+}
 
 /**
  * Builds a file tree for a workspace directory.
  * This is a lazy implementation that reads files on demand.
  *
- * @param ws - Workspace
+ * @param rootPath - Workspace root path
  * @param subdir - Optional subdirectory to start from
  * @returns File tree structure
  */
-export async function buildFileTree(ws: Workspace, subdir?: string): Promise<FileNode[]> {
-  const rootPath = subdir ? join(ws.path, subdir) : ws.path;
-  return buildTree(rootPath, ws.path);
+export async function readTree(rootPath: string, subdir?: string): Promise<ReadTreeResult> {
+  const targetPath = subdir ? join(rootPath, subdir) : rootPath;
+  const children = await buildTree(targetPath, rootPath);
+  return {
+    path: subdir || '.',
+    children,
+  };
 }
 
 /**
@@ -69,17 +77,4 @@ async function buildTree(currentPath: string, rootPath: string): Promise<FileNod
   });
 
   return nodes;
-}
-
-/**
- * Loads children for a specific directory node.
- * This enables lazy loading of the file tree.
- *
- * @param ws - Workspace
- * @param dirPath - Directory path relative to workspace
- * @returns Array of child file nodes
- */
-export async function loadDirectoryChildren(ws: Workspace, dirPath: string): Promise<FileNode[]> {
-  const fullPath = join(ws.path, dirPath);
-  return buildTree(fullPath, ws.path);
 }

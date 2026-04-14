@@ -14,30 +14,29 @@ registerCommand(
     draft: z.string().optional(),
   }),
   async (args, ctx) => {
-    // Verify workspace exists
-    const workspace = await ctx.db.workspace.findById(args.workspaceId);
+    // Get workspace
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw new Error(`Workspace not found: ${args.workspaceId}`);
+      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    // TODO: Verify provider exists
+    // TODO: Get provider from registry
+    // For now, throw error
+    throw { code: 'provider_not_implemented', message: 'Provider registry not yet implemented' };
+
+    // Future implementation:
     // const provider = ctx.providerRegistry.get(args.providerId);
     // if (!provider) {
-    //   throw new Error(`Provider not found: ${args.providerId}`);
+    //   throw { code: 'unknown_provider', message: `Provider not found: ${args.providerId}` };
     // }
-
-    // Create session
-    const session = await ctx.db.session.create({
-      workspaceId: args.workspaceId,
-      providerId: args.providerId,
-      state: 'idle',
-      draft: args.draft,
-    });
-
-    // TODO: Notify SessionManager to start session
-    // await ctx.sessionMgr.start(session.id);
-
-    return session;
+    //
+    // return ctx.sessionMgr.create({
+    //   workspaceId: args.workspaceId,
+    //   workspacePath: workspace.path,
+    //   providerId: args.providerId,
+    //   provider,
+    //   draft: args.draft,
+    // });
   }
 );
 
@@ -48,18 +47,7 @@ registerCommand(
     sessionId: z.string(),
   }),
   async (args, ctx) => {
-    const session = await ctx.db.session.findById(args.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${args.sessionId}`);
-    }
-
-    // TODO: Stop session via SessionManager
-    // await ctx.sessionMgr.stop(args.sessionId);
-
-    // Update session state
-    await ctx.db.session.update(args.sessionId, {
-      state: 'stopped',
-    });
+    await ctx.sessionMgr.stop(args.sessionId);
   }
 );
 
@@ -70,17 +58,19 @@ registerCommand(
     sessionId: z.string(),
   }),
   async (args, ctx) => {
-    const session = await ctx.db.session.findById(args.sessionId);
+    // Session removal handled by database layer
+    // For now, we just verify the session exists
+    const session = ctx.sessionMgr.get(args.sessionId);
     if (!session) {
-      throw new Error(`Session not found: ${args.sessionId}`);
+      throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
     }
 
-    // Only allow removal if session is stopped
-    if (session.state !== 'stopped' && session.state !== 'error') {
-      throw new Error(`Cannot remove session in state: ${session.state}`);
+    if (session.state !== 'ended' && session.state !== 'unavailable') {
+      throw { code: 'invalid_state', message: `Cannot remove session in state: ${session.state}` };
     }
 
-    await ctx.db.session.delete(args.sessionId);
+    // TODO: Add delete method to session manager
+    throw { code: 'not_implemented', message: 'Session removal not yet implemented' };
   }
 );
 
@@ -91,19 +81,17 @@ registerCommand(
     sessionId: z.string(),
   }),
   async (args, ctx) => {
-    const session = await ctx.db.session.findById(args.sessionId);
+    const session = ctx.sessionMgr.get(args.sessionId);
     if (!session) {
-      throw new Error(`Session not found: ${args.sessionId}`);
+      throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
     }
 
-    // TODO: Resume session via SessionManager
-    // await ctx.sessionMgr.resume(args.sessionId);
+    // TODO: Get provider from registry
+    throw { code: 'provider_not_implemented', message: 'Provider registry not yet implemented' };
 
-    // Update session state
-    await ctx.db.session.update(args.sessionId, {
-      state: 'running',
-    });
-
-    return session;
+    // Future implementation:
+    // const workspace = ctx.workspaceMgr.get(session.workspaceId);
+    // const provider = ctx.providerRegistry.get(session.providerId);
+    // return ctx.sessionMgr.resume(args.sessionId, workspace.path, provider);
   }
 );

@@ -8,15 +8,17 @@
  * - Topic-based routing
  */
 
-import type { DomainEvent, ServerToClient } from '@coder-studio/core';
+import type { DomainEvent, ServerToClient, ClientToServer, Command } from '@coder-studio/core';
 import type WebSocket from 'ws';
 import type { FastifyRequest } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { EventBus } from '../bus/event-bus.js';
 import { WsClient, ClientId } from './client.js';
+import { dispatch, type CommandContext } from './dispatch.js';
 
 interface WsHubDeps {
   eventBus: EventBus;
+  commandContext: CommandContext;
 }
 
 /**
@@ -74,15 +76,40 @@ export class WsHub implements Broadcaster {
   /**
    * Route incoming message from client
    */
-  private routeMessage(client: WsClient, msg: any): void {
-    // This will be handled by dispatch.ts
-    // For now, we just handle subscribe/unsubscribe here
-    if (msg.kind === 'subscribe') {
-      client.subscribe(msg.topics);
-    } else if (msg.kind === 'unsubscribe') {
-      client.unsubscribe(msg.topics);
+  private async routeMessage(client: WsClient, msg: ClientToServer): Promise<void> {
+    switch (msg.kind) {
+      case 'subscribe':
+        client.subscribe(msg.topics);
+        break;
+
+      case 'unsubscribe':
+        client.unsubscribe(msg.topics);
+        break;
+
+      case 'command':
+        // Dispatch command and send result
+        const result = await dispatch(msg as Command, this.deps.commandContext);
+        client.send(result);
+        break;
+
+      case 'resync':
+        // Handle resync request
+        this.handleResync(client, msg.lastSeen);
+        break;
     }
-    // Commands will be routed to dispatch
+  }
+
+  /**
+   * Handle resync request
+   */
+  private handleResync(client: WsClient, lastSeen: Record<string, number>): void {
+    // Phase 1: Basic implementation
+    // For each topic in lastSeen, send missed events
+    // This will be enhanced in Phase 2 with proper event replay
+    client.sendEvent('connection.status', {
+      status: 'resynced',
+      topics: Object.keys(lastSeen),
+    });
   }
 
   /**

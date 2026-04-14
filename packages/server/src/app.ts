@@ -7,14 +7,16 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import websocket from '@fastify/websocket';
 import staticPlugin from '@fastify/static';
-import path from 'path';
+import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
-import type { Database } from './storage/db.js';
-import { dispatch, type CommandContext } from './ws/dispatch.js';
+import type { Database } from 'better-sqlite3';
+import type { HooksManager } from './hooks/manager.js';
+import type { CommandContext } from './ws/dispatch.js';
 
 interface AppDeps {
   wsHub: WsHub;
   db: Database;
+  hooksMgr: HooksManager;
   webRoot?: string;
   commandContext: CommandContext;
   logger?: any;
@@ -43,6 +45,14 @@ export function buildFastifyApp(deps: AppDeps): FastifyInstance {
     // For now, just pass through
   });
 
+  // CORS configuration (development mode)
+  await app.register(cors, {
+    origin: true, // Allow all origins in development
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
+
   // WebSocket endpoint
   app.register(websocket);
 
@@ -55,6 +65,24 @@ export function buildFastifyApp(deps: AppDeps): FastifyInstance {
     return { ok: true };
   });
 
+  // Internal hooks endpoint (for bridge scripts)
+  app.post('/internal/hooks/:event', async (request, reply) => {
+    const event = request.params.event;
+    const payload = request.body;
+
+    try {
+      // Delegate to hooks manager
+      deps.hooksMgr.handleHookEvent(event, payload);
+      return { ok: true };
+    } catch (error) {
+      request.log.error({ error, event }, 'Failed to handle hook event');
+      return reply.status(500).send({
+        ok: false,
+        error: 'Failed to handle hook event',
+      });
+    }
+  });
+
   // Static file serving (for web UI)
   if (deps.webRoot) {
     app.register(staticPlugin, {
@@ -62,11 +90,6 @@ export function buildFastifyApp(deps: AppDeps): FastifyInstance {
       prefix: '/',
     });
   }
-
-  // WebSocket message handling
-  app.decorate('handleCommand', async (msg: any) => {
-    return dispatch(msg, deps.commandContext);
-  });
 
   return app;
 }

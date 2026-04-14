@@ -91,6 +91,7 @@ export async function createServer(
   const app = buildFastifyApp({
     wsHub,
     db,
+    hooksMgr,
     commandContext,
     webRoot,
   });

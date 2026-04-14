@@ -1,0 +1,142 @@
+/**
+ * Tests for Command Dispatch
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { dispatch, registerCommand, getRegisteredCommands } from '../ws/dispatch.js';
+import type { CommandContext } from '../ws/dispatch.js';
+import { z } from 'zod';
+
+describe('Command Dispatch', () => {
+  let ctx: CommandContext;
+
+  beforeEach(() => {
+    ctx = {
+      workspaceMgr: {} as any,
+      sessionMgr: {} as any,
+      terminalMgr: {} as any,
+      hooksMgr: {} as any,
+      eventBus: {} as any,
+      broadcaster: {} as any,
+      db: {} as any,
+    };
+  });
+
+  describe('registerCommand', () => {
+    it('should register a command handler', () => {
+      registerCommand(
+        'test.command',
+        z.object({ value: z.number() }),
+        async (args) => ({ doubled: args.value * 2 })
+      );
+
+      const commands = getRegisteredCommands();
+      expect(commands).toContain('test.command');
+    });
+
+    it('should dispatch to registered handler', async () => {
+      registerCommand(
+        'test.echo',
+        z.object({ message: z.string() }),
+        async (args) => ({ echoed: args.message })
+      );
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-id-1',
+          op: 'test.echo',
+          args: { message: 'hello' },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual({ echoed: 'hello' });
+    });
+
+    it('should return error for unknown command', async () => {
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-id-2',
+          op: 'unknown.command',
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('unknown_op');
+    });
+
+    it('should validate args with schema', async () => {
+      registerCommand(
+        'test.validated',
+        z.object({ count: z.number().min(0) }),
+        async (args) => ({ count: args.count })
+      );
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-id-3',
+          op: 'test.validated',
+          args: { count: -1 },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('validation_error');
+    });
+
+    it('should handle handler errors', async () => {
+      registerCommand(
+        'test.error',
+        z.object({}),
+        async () => {
+          throw new Error('Handler error');
+        }
+      );
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-id-4',
+          op: 'test.error',
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('internal_error');
+      expect(result.error?.message).toBe('Handler error');
+    });
+
+    it('should handle custom error codes', async () => {
+      registerCommand(
+        'test.custom_error',
+        z.object({}),
+        async () => {
+          throw { code: 'custom_error', message: 'Custom error occurred' };
+        }
+      );
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-id-5',
+          op: 'test.custom_error',
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('custom_error');
+      expect(result.error?.message).toBe('Custom error occurred');
+    });
+  });
+});

@@ -31,7 +31,11 @@ function parseArgs(argv: string[]): CliArgs {
 
       case '--port':
       case '-p':
-        args.port = parseInt(argv[++i], 10);
+        const portValue = argv[++i];
+        if (!portValue) {
+          throw new Error('Missing port value');
+        }
+        args.port = parseInt(portValue, 10);
         if (isNaN(args.port)) {
           throw new Error('Invalid port number');
         }
@@ -39,12 +43,20 @@ function parseArgs(argv: string[]): CliArgs {
 
       case '--host':
       case '-h':
-        args.host = argv[++i];
+        const hostValue = argv[++i];
+        if (!hostValue) {
+          throw new Error('Missing host value');
+        }
+        args.host = hostValue;
         break;
 
       case '--data-dir':
       case '-d':
-        args.dataDir = argv[++i];
+        const dataDirValue = argv[++i];
+        if (!dataDirValue) {
+          throw new Error('Missing data-dir value');
+        }
+        args.dataDir = dataDirValue;
         break;
 
       case '--help':
