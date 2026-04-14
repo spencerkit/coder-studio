@@ -33,9 +33,19 @@ export const sessionByIdAtomFamily = atomFamily((id: string) =>
 
 /**
  * Active session in active workspace (derived)
+ * Note: activeWorkspaceIdAtom is defined in ui.ts but accessed through a getter
+ * to avoid circular dependency issues
  */
+let _getActiveWorkspaceId: (() => string | null) | null = null;
+
+export function setActiveWorkspaceIdGetter(getter: () => string | null): void {
+  _getActiveWorkspaceId = getter;
+}
+
 export const activeSessionAtom = atom((get) => {
-  const wsId = get(activeWorkspaceIdAtom);
+  // activeWorkspaceIdAtom is defined in ui.ts
+  // We use a deferred import to avoid circular dependencies
+  const wsId = _getActiveWorkspaceId?.() ?? null;
   if (!wsId) return null;
   const sessions = get(sessionsByWorkspaceAtomFamily(wsId));
   return sessions.find((s) => s.state === 'running' || s.state === 'idle') ?? null;
@@ -48,12 +58,13 @@ export const sessionCountByStateAtomFamily = atomFamily((workspaceId: string) =>
   atom((get) => {
     const sessions = get(sessionsByWorkspaceAtomFamily(workspaceId));
     const counts: Record<SessionState, number> = {
+      draft: 0,
       starting: 0,
       running: 0,
       idle: 0,
-      busy: 0,
-      ended: 0,
+      interrupted: 0,
       unavailable: 0,
+      ended: 0,
     };
     for (const s of sessions) {
       counts[s.state]++;

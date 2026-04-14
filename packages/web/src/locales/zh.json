@@ -1,0 +1,233 @@
+{
+  "app": {
+    "name": "Coder Studio",
+    "description": "Agent-First Development Environment"
+  },
+  "action": {
+    "open_workspace": "打开工作区",
+    "close_workspace": "关闭工作区",
+    "create_session": "创建会话",
+    "stop_session": "停止会话",
+    "resume_session": "恢复会话",
+    "save_file": "保存文件",
+    "save_all": "保存全部",
+    "discard_changes": "放弃更改",
+    "commit": "提交",
+    "push": "推送",
+    "pull": "拉取",
+    "refresh": "刷新",
+    "settings": "设置",
+    "cancel": "取消",
+    "confirm": "确认",
+    "close": "关闭",
+    "apply": "应用",
+    "reset": "重置",
+    "search": "搜索",
+    "search_files": "搜索文件",
+    "search_commands": "搜索命令"
+  },
+  "label": {
+    "workspace": "工作区",
+    "session": "会话",
+    "terminal": "终端",
+    "file": "文件",
+    "git": "Git",
+    "settings": "设置",
+    "provider": "Provider",
+    "status": "状态",
+    "progress": "进度"
+  },
+  "status": {
+    "starting": "启动中",
+    "running": "运行中",
+    "idle": "空闲",
+    "busy": "忙碌",
+    "ended": "已结束",
+    "unavailable": "不可用",
+    "connecting": "连接中",
+    "connected": "已连接",
+    "disconnected": "已断开",
+    "reconnecting": "重连中",
+    "rejected": "被拒绝"
+  },
+  "workspace": {
+    "title": "工作区",
+    "open": "打开",
+    "close": "关闭",
+    "path": "路径",
+    "no_workspace": "未打开工作区",
+    "open_hint": "点击下方按钮打开一个项目目录",
+    "runtime_check": {
+      "title": "运行时检查",
+      "checking": "正在检查运行时环境...",
+      "success": "运行时环境检查通过",
+      "failed": "运行时环境检查失败",
+      "missing_git": "未找到 Git 命令",
+      "missing_node": "未找到 Node.js",
+      "missing_provider": "未找到 {provider} CLI"
+    }
+  },
+  "session": {
+    "title": "会话",
+    "create": "创建会话",
+    "stop": "停止",
+    "resume": "恢复",
+    "no_session": "无活跃会话",
+    "provider_select": "选择 Provider",
+    "state": {
+      "starting": "启动中...",
+      "running": "运行中",
+      "idle": "等待指令",
+      "busy": "执行中",
+      "ended": "已停止",
+      "unavailable": "不可用"
+    },
+    "resume_unavailable": "此会话无法恢复",
+    "progress": {
+      "thinking": "正在思考...",
+      "executing": "正在执行...",
+      "waiting": "等待响应..."
+    }
+  },
+  "terminal": {
+    "title": "终端",
+    "new_terminal": "新建终端",
+    "close_terminal": "关闭终端",
+    "shell": "Shell 终端",
+    "agent": "Agent 终端",
+    "reconnect_hint": "连接已断开，正在重连..."
+  },
+  "file": {
+    "title": "文件",
+    "modified": "已修改",
+    "unsaved": "未保存",
+    "dirty": "有未保存更改",
+    "new_file": "新建文件",
+    "new_folder": "新建文件夹",
+    "rename": "重命名",
+    "delete": "删除",
+    "delete_confirm": "确定要删除 \"{name}\" 吗？",
+    "conflict": "文件已被外部程序修改",
+    "conflict_message": "文件可能已被编辑器外部修改。要放弃本地更改并重新加载吗？"
+  },
+  "git": {
+    "title": "Git",
+    "changes": "更改",
+    "staged": "已暂存",
+    "unstaged": "未暂存",
+    "untracked": "未跟踪",
+    "no_changes": "无更改",
+    "commit": "提交",
+    "commit_message": "提交信息",
+    "commit_placeholder": "输入提交信息...",
+    "stage": "暂存",
+    "unstage": "取消暂存",
+    "stage_all": "暂存全部",
+    "unstage_all": "取消暂存全部",
+    "discard": "放弃",
+    "branch": "分支",
+    "current_branch": "当前分支",
+    "no_branch": "不在任何分支上",
+    "ahead": "领先 {count} 个提交",
+    "behind": "落后 {count} 个提交",
+    "synced": "与远程同步"
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "appearance": "外观",
+    "providers": "Providers",
+    "provider": {
+      "title": "Provider 设置",
+      "status": "状态",
+      "capability": "能力等级",
+      "hooks_registered": "Hooks 已注册",
+      "hooks_unregistered": "Hooks 未注册",
+      "hooks_error": "Hooks 注册失败",
+      "configure": "配置",
+      "reset": "重置"
+    },
+    "theme": {
+      "title": "主题",
+      "dark": "深色",
+      "light": "浅色",
+      "system": "跟随系统"
+    },
+    "language": {
+      "title": "语言",
+      "zh": "中文",
+      "en": "English"
+    },
+    "auth": {
+      "title": "认证",
+      "password": "密码",
+      "password_set": "设置密码",
+      "password_change": "修改密码",
+      "password_remove": "移除密码"
+    }
+  },
+  "connection": {
+    "title": "连接",
+    "status": "状态",
+    "reconnecting": "正在重新连接...",
+    "reconnect_failed": "重连失败",
+    "another_tab": "另一个标签页已激活",
+    "takeover": "接管控制权",
+    "server_shutdown": "服务器已关闭",
+    "backpressure_warning": "网络拥堵，部分输出可能丢失"
+  },
+  "command": {
+    "palette": "命令面板",
+    "shortcut": {
+      "save": "保存",
+      "save_all": "保存全部",
+      "search": "搜索",
+      "search_files": "搜索文件",
+      "command_palette": "命令面板",
+      "toggle_focus": "切换专注模式",
+      "toggle_sidebar": "切换侧边栏"
+    }
+  },
+  "notification": {
+    "success": "成功",
+    "error": "错误",
+    "warning": "警告",
+    "info": "信息",
+    "session_turn_completed": "会话回合完成",
+    "file_saved": "文件已保存",
+    "committed": "已提交"
+  },
+  "error": {
+    "unknown": "未知错误",
+    "network": "网络错误",
+    "not_found": "未找到",
+    "permission_denied": "权限不足",
+    "validation": "数据验证失败",
+    "conflict": "资源冲突"
+  },
+  "confirm": {
+    "save_changes": "是否保存更改？",
+    "discard_changes": "确定要放弃更改吗？",
+    "delete_file": "确定要删除此文件吗？",
+    "stop_session": "确定要停止会话吗？",
+    "close_workspace": "确定要关闭工作区吗？"
+  },
+  "placeholder": {
+    "search": "输入关键词搜索...",
+    "command": "输入命令名称或快捷键...",
+    "commit_message": "输入提交信息"
+  },
+  "tooltip": {
+    "focus_mode": "专注模式：隐藏侧边栏和底部面板",
+    "split_horizontal": "水平分割面板",
+    "split_vertical": "垂直分割面板",
+    "close_pane": "关闭面板"
+  },
+  "time": {
+    "just_now": "刚刚",
+    "seconds_ago": "{count} 秒前",
+    "minutes_ago": "{count} 分钟前",
+    "hours_ago": "{count} 小时前",
+    "days_ago": "{count} 天前"
+  }
+}

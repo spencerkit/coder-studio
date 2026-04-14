@@ -22,14 +22,12 @@ export const workspaceByIdAtomFamily = atomFamily((id: string) =>
 );
 
 /**
- * Active workspace ID (UI local state, persisted to localStorage)
- */
-export const activeWorkspaceIdAtom = atom<string | null>(null);
-
-/**
  * Active workspace (derived)
+ * Note: activeWorkspaceIdAtom is defined in ui.ts with localStorage persistence
  */
 export const activeWorkspaceAtom = atom((get) => {
+  // Import activeWorkspaceIdAtom from ui.ts
+  const { activeWorkspaceIdAtom } = require('./ui');
   const wsId = get(activeWorkspaceIdAtom);
   if (!wsId) return null;
   return get(workspaceByIdAtomFamily(wsId));

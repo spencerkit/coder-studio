@@ -290,3 +290,60 @@ input::placeholder, textarea::placeholder {
 .animate-slideInUp { animation: slideInUp var(--duration-slow) var(--ease-out); }
 .animate-spin { animation: spin 1s linear infinite; }
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+
+/* ========== App Shell ========== */
+.app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--sp-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-amber);
+  color: var(--text-inverse);
+  font-size: var(--text-sm);
+  z-index: var(--z-toast);
+}
+
+.connection-banner--error {
+  background: var(--color-error);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.welcome-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8);
+  text-align: center;
+}
+
+.welcome-container h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  margin-bottom: var(--sp-2);
+}
+
+.welcome-container p {
+  margin-bottom: var(--sp-2);
+}

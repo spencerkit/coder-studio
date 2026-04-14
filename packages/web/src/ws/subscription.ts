@@ -1,0 +1,132 @@
+/**
+ * Subscription Management
+ *
+ * Handles topic subscriptions with pattern matching and deduplication.
+ */
+
+export type EventHandler = (topic: string, payload: unknown, seq: number) => void;
+
+export interface Subscription {
+  id: string;
+  topics: string[];
+  handler: EventHandler;
+}
+
+/**
+ * Check if a topic matches a pattern
+ * Supports wildcard matching: workspace.*.session.*
+ */
+export function topicMatches(pattern: string, topic: string): boolean {
+  const patternParts = pattern.split('.');
+  const topicParts = topic.split('.');
+
+  if (patternParts.length !== topicParts.length) {
+    return false;
+  }
+
+  for (let i = 0; i < patternParts.length; i++) {
+    if (patternParts[i] !== '*' && patternParts[i] !== topicParts[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Subscription manager
+ */
+export class SubscriptionManager {
+  private subscriptions = new Map<string, Subscription>();
+  private nextId = 1;
+
+  /**
+   * Add a subscription
+   */
+  subscribe(topics: string[], handler: EventHandler): string {
+    const id = `sub_${this.nextId++}`;
+    this.subscriptions.set(id, { id, topics, handler });
+    return id;
+  }
+
+  /**
+   * Remove a subscription by ID
+   */
+  unsubscribe(id: string): void {
+    this.subscriptions.delete(id);
+  }
+
+  /**
+   * Dispatch event to matching subscriptions
+   */
+  dispatch(topic: string, payload: unknown, seq: number): void {
+    for (const sub of this.subscriptions.values()) {
+      for (const pattern of sub.topics) {
+        if (topicMatches(pattern, topic)) {
+          try {
+            sub.handler(topic, payload, seq);
+          } catch (err) {
+            console.error(`Error in subscription handler for ${topic}:`, err);
+          }
+          break; // Only call handler once per subscription
+        }
+      }
+    }
+  }
+
+  /**
+   * Get all subscribed topics
+   */
+  getTopics(): string[] {
+    const topics = new Set<string>();
+    for (const sub of this.subscriptions.values()) {
+      for (const topic of sub.topics) {
+        topics.add(topic);
+      }
+    }
+    return Array.from(topics);
+  }
+
+  /**
+   * Clear all subscriptions
+   */
+  clear(): void {
+    this.subscriptions.clear();
+  }
+
+  /**
+   * Get subscription count
+   */
+  size(): number {
+    return this.subscriptions.size;
+  }
+}
+
+/**
+ * Create a topic pattern for workspace events
+ */
+export function workspaceTopic(workspaceId: string, ...parts: string[]): string {
+  return `workspace.${workspaceId}.${parts.join('.')}`;
+}
+
+/**
+ * Create a topic pattern for terminal events
+ */
+export function terminalTopic(
+  workspaceId: string,
+  terminalId: string,
+  event: string
+): string {
+  return `workspace.${workspaceId}.terminal.${terminalId}.${event}`;
+}
+
+/**
+ * Create a topic pattern for session events
+ */
+export function sessionTopic(
+  workspaceId: string,
+  sessionId: string,
+  event: string
+): string {
+  return `workspace.${workspaceId}.session.${sessionId}.${event}`;
+}
