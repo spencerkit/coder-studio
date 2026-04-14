@@ -5,10 +5,8 @@
  */
 
 import { createServer } from '@coder-studio/server';
-import { parseServerConfig, type ServerConfig } from '@coder-studio/server';
-import { resolve, dirname } from 'path';
-import { existsSync } from 'fs';
-import { fileURLToPath } from 'url';
+import type { ServerConfig } from '@coder-studio/server';
+import { getStaticAssetsDir, hasWebAssets } from './embed.js';
 
 interface CliArgs {
   command?: 'serve' | 'help' | 'version';
@@ -138,9 +136,8 @@ async function main(): Promise<void> {
   }
 
   // Set web root for serving frontend assets
-  const webRoot = resolve(__dirname, '../web');
-  if (existsSync(webRoot)) {
-    config.webRoot = webRoot;
+  if (hasWebAssets()) {
+    config.webRoot = getStaticAssetsDir();
   } else {
     console.warn('Warning: Web assets not found. Frontend will not be available.');
   }
@@ -158,10 +155,6 @@ async function main(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }
-
-// Get current directory for resolving paths
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Run CLI
 main().catch((err) => {
