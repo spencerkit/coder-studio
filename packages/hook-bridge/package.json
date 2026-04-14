@@ -1,0 +1,23 @@
+{
+  "name": "@coder-studio/hook-bridge",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Hook bridge scripts for Coder Studio - deployed to runtime directory",
+  "scripts": {
+    "build": "echo 'No build needed - raw scripts are copied to runtime'",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "hook",
+    "bridge",
+    "coder-studio",
+    "provider"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -4,7 +4,12 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "tsx src/scripts/dev.ts",
+    "dev:web": "tsx src/scripts/dev-web.ts",
+    "dev:server": "tsx src/scripts/dev-server.ts",
     "build": "tsx src/scripts/build.ts",
+    "build:web": "tsx src/scripts/build-web.ts",
+    "build:cli": "tsx src/scripts/build-cli.ts",
+    "assemble": "tsx src/scripts/assemble.ts",
     "acceptance:phase1": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1",
     "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
     "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
@@ -17,6 +22,7 @@
     "eslint": "^9.0.0",
     "prettier": "^3.2.0",
     "vitest": "^3.0.0",
-    "tsx": "^4.7.0"
+    "tsx": "^4.7.0",
+    "esbuild": "^0.24.0"
   }
 }

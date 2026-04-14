@@ -10,6 +10,7 @@ export interface ServerConfig {
   dataDir: string;
   runtimeDir: string;
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  webRoot?: string;
 }
 
 /**
@@ -22,5 +23,6 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
     dataDir: overrides?.dataDir || process.env.DATA_DIR || './data',
     runtimeDir: overrides?.runtimeDir || process.env.RUNTIME_DIR || './runtime',
     logLevel: overrides?.logLevel || (process.env.LOG_LEVEL as any) || 'info',
+    webRoot: overrides?.webRoot,
   };
 }
