@@ -2121,9 +2121,348 @@ Phase 4 浅色主题时只需新增 `[data-theme="light"] { --bg-page: ... }` �
 
 ---
 
-## 6. Provider 系统详细设计
+## 6. 视觉规范约束
 
-### 6.1 ProviderDefinition 契约
+本章节定义 Coder Studio 的视觉规范强制约束，所有前端开发必须遵循。设计系统详情见 `docs/visual-spec.html` (Aurora Mint Design System v1.0.0)。
+
+---
+
+### 6.1 CSS 变量系统与使用规范
+
+Aurora Mint 设计系统通过 CSS 变量（Design Tokens）实现。所有前端代码必须使用预定义 token，禁止硬编码颜色、间距、字体、圆角等值。
+
+#### 6.1.1 Token 定义位置
+
+所有 token 在 `packages/web/src/styles/tokens.css` 中定义一次：
+
+```css
+/* packages/web/src/styles/tokens.css */
+:root {
+  /* Backgrounds */
+  --bg-page: #0a1014;
+  --bg-surface: #11181f;
+  --bg-sidebar: #0d141a;
+  --bg-terminal: #0b1218;
+  --bg-hover: #1a2632;
+  --bg-active: #1e3040;
+  --bg-disabled: #151f28;
+
+  /* Borders */
+  --border: #1e2a35;
+  --border-light: #263545;
+  --border-focus: #6cb6ff;
+
+  /* Text */
+  --text-primary: #e5edf3;
+  --text-secondary: #9fb0bc;
+  --text-tertiary: #728492;
+
+  /* Accents */
+  --accent-blue: #6cb6ff;
+  --accent-green: #78d7b2;
+  --accent-amber: #f1b86a;
+  --accent-pink: #ff9eb0;
+
+  /* Spacing (4px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Border Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 7px;
+  --radius-xl: 8px;
+
+  /* Typography */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 100ms;
+  --duration-normal: 150ms;
+  --duration-slow: 200ms;
+}
+```
+
+#### 6.1.2 强制使用规则
+
+| 场景 | ✅ 正确用法 | ❌ 禁止用法 |
+|------|------------|------------|
+| 颜色 | `color: var(--text-primary)` | `color: #e5edf3` |
+| 背景 | `background: var(--bg-surface)` | `background: #11181f` |
+| 边框 | `border-color: var(--border)` | `border: 1px solid #1e2a35` |
+| 间距 | `padding: var(--sp-4)` | `padding: 16px` |
+| 圆角 | `border-radius: var(--radius-md)` | `border-radius: 6px` |
+| 过渡 | `transition: all var(--duration-normal)` | `transition: all 150ms` |
+
+**原则：** 组件层只引用 token，不写死任何视觉属性值。Phase 4 浅色主题时只需在 `tokens.css` 新增 `[data-theme="light"]` 覆盖 token，零改动组件层。
+
+---
+
+### 6.2 布局与间距约束（4px Grid）
+
+所有布局遵循严格的 **4px grid system**。任何间距值（padding、margin、gap、width、height）必须是 4px 的倍数。
+
+#### 6.2.1 Spacing Token 使用
+
+预定义 spacing token 对应 4px 的倍数：
+
+| Token | 值 | 常见用途 |
+|-------|---|----------|
+| `--sp-1` | 4px | 最小间隙、图标间距 |
+| `--sp-2` | 8px | 紧凑元素内边距、徽章间距 |
+| `--sp-3` | 12px | 按钮内边距（紧凑）、表单字段间距 |
+| `--sp-4` | 16px | 卡片内边距、按钮默认内边距 |
+| `--sp-6` | 24px | 面板内边距、模态框内边距 |
+| `--sp-8` | 32px | 大型区块间距、容器内边距 |
+| `--sp-12` | 48px | 页面区块间距 |
+| `--sp-16` | 64px | 页面级分隔 |
+
+#### 6.2.2 强制约束
+
+- ✅ 所有 `padding`、`margin`、`gap` 必须使用 spacing token
+- ✅ 组件宽度/高度建议使用 spacing token 或百分比
+- ❌ 禁止非 4px 倍数的间距值（如 `15px`、`10px`）
+- ❌ 禁止自定义 spacing 值偏离预定义 token
+
+**例外：** 字体大小、行高、图标大小可使用预定义字体规范值（见 PRD §5.4），不受 4px grid 限制。
+
+---
+
+### 6.3 组件样式规范
+
+所有 UI 组件必须对齐 `visual-spec.html` 中定义的样式细节。核心组件规范如下：
+
+#### 6.3.1 按钮系统
+
+**预定义按钮类：**
+
+| 类名 | 样式 | 用途 |
+|------|------|------|
+| `.btn.btn-primary` | 蓝色背景 `var(--accent-blue)` | 主要操作、确认、启动 |
+| `.btn.btn-default` | 默认背景 `var(--bg-surface)` | 次要操作、取消 |
+| `.btn.btn-danger` | 粉色背景 `var(--accent-pink)` | 破坏性操作、删除 |
+| `.btn.btn-icon` | 无背景、仅图标 | 工具栏按钮、面板操作 |
+
+**尺寸规范：**
+
+| 尺寸 | 类名 | 高度 | 内边距 | 字体 |
+|------|------|------|--------|------|
+| Small | `.btn-sm` | 28px | `var(--sp-2) var(--sp-3)` | 12px |
+| Default | 无额外类 | 32px | `var(--sp-3) var(--sp-4)` | 13px |
+| Large | `.btn-lg` | 40px | `var(--sp-4) var(--sp-6)` | 14px |
+
+**强制规则：**
+- ✅ 使用预定义 `.btn` 类，不自定义偏离规范的按钮样式
+- ✅ 圆角统一 `var(--radius-md)` (6px)
+- ❌ 禁止自定义按钮高度、内边距偏离规范
+
+#### 6.3.2 输入框系统
+
+**预定义输入框类：**
+
+```css
+.input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.input:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+```
+
+**强制规则：**
+- ✅ 所有文本输入、下拉框使用 `.input` 类
+- ✅ Focus 状态必须使用蓝色边框 `var(--border-focus)`
+- ❌ 禁止自定义输入框样式偏离规范
+
+#### 6.3.3 卡片与面板
+
+**卡片样式：**
+
+```css
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl); /* 8px */
+  padding: var(--sp-4);
+}
+```
+
+**面板样式：**
+
+```css
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+.panel-header {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+```
+
+**强制规则：**
+- ✅ 所有容器级组件（卡片、面板、模态框）使用 `var(--radius-xl)`
+- ✅ 背景使用 `var(--bg-surface)`，边框使用 `var(--border)`
+- ❌ 禁止使用非预定义圆角值（如 `10px`）
+
+#### 6.3.4 其他核心组件
+
+| 组件 | 关键样式约束 |
+|------|-------------|
+| **徽章 (Badge)** | `--radius-sm` (4px)、紧凑内边距 `2px var(--sp-2)` |
+| **Tab** | 下划线样式 (View Switcher)、Pill 样式 (Settings Navigation) |
+| **进度条** | 高度 4px、`--radius-sm`、四色变体 (blue/green/amber/pink) |
+| **状态点** | 8px 圆形、绿色有发光效果、灰蓝/蓝色/弱化变体 |
+| **工具栏** | 32px 高度按钮组、分隔线 `var(--border)` |
+
+所有细节见 `visual-spec.html` §5-§14。
+
+---
+
+### 6.4 交互状态与动画规范
+
+#### 6.4.1 交互状态
+
+所有可交互元素必须定义以下状态：
+
+| 状态 | 样式规则 |
+|------|---------|
+| **Hover** | 背景变亮（通过 `color-mix` 或预定义 `--bg-hover`） |
+| **Active (按下)** | 背景进一步变暗（`--bg-active`），轻微缩小 (scale: 0.98) |
+| **Focus** | 强调色轮廓（`outline: 2px solid var(--border-focus)`） |
+| **Disabled** | 降低不透明度 50%（`opacity: 0.5`）、`pointer-events: none` |
+
+**示例（按钮 Hover 状态）：**
+
+```css
+.btn:hover {
+  background: color-mix(in srgb, var(--bg-surface), var(--bg-hover));
+}
+
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--accent-blue), white 20%);
+}
+```
+
+#### 6.4.2 动画系统
+
+**预定义过渡参数：**
+
+| Token | 值 | 用途 |
+|-------|---|------|
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | 所有动画的标准 easing |
+| `--duration-fast` | 100ms | 快速交互（hover、focus） |
+| `--duration-normal` | 150ms | 标准交互（按钮点击、展开） |
+| `--duration-slow` | 200ms | 较慢交互（模态框、页面切换） |
+
+**预定义动画：**
+
+```css
+/* 入场动画 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* 使用 */
+.modal-enter {
+  animation: fadeIn var(--duration-normal) var(--ease-out) both;
+}
+
+.sidebar-item-enter {
+  animation: slideIn var(--duration-normal) var(--ease-out) both;
+}
+```
+
+#### 6.4.3 面板缩放器（Resizer）
+
+- 主面板分隔条宽度：4px
+- Agent 分割分隔条宽度：8px
+- 光标：`col-resize`（垂直）、`row-resize`（水平）
+- Hover 状态：背景变为 `var(--accent-blue)`
+- 调整大小时：禁用过渡 `transition: none !important`，添加 `body.is-resizing-panels` 类
+
+**强制规则：**
+- ✅ 所有过渡必须使用预定义 duration token 和 `--ease-out`
+- ✅ Hover 状态必须符合规范（变亮而非变色）
+- ❌ 禁止自定义 easing 曲线偏离 `--ease-out`
+- ❌ 禁止动画时长写死数值（如 `200ms`）
+
+---
+
+### 6.5 实施检查清单
+
+#### 6.5.1 Phase 1 实施前必须完成
+
+- [ ] 创建 `packages/web/src/styles/tokens.css` 并定义所有 token（§6.1.1）
+- [ ] 全局样式文件引入 tokens.css (`@import './styles/tokens.css'`)
+- [ ] 移除所有硬编码颜色值，替换为 CSS 变量
+- [ ] 移除所有硬编码间距值，替换为 spacing token
+- [ ] 所有组件（按钮、输入、卡片）样式对齐 visual-spec
+- [ ] Hover/Focus/Disabled 状态符合 §6.4.1 规范
+- [ ] 过渡动画使用预定义 token（§6.4.2）
+
+#### 6.5.2 开发过程中的视觉规范验证
+
+**每次新增 UI 组件时的检查流程：**
+
+1. **颜色/间距检查**：搜索组件 CSS，确认无硬编码颜色值（`#[0-9a-f]{6}`）或非 token 间距值
+2. **组件规范对齐**：对照 `visual-spec.html` 确认样式细节（圆角、高度、内边距）
+3. **状态检查**：确认 Hover、Focus、Disabled 状态符合 §6.4.1
+4. **动画检查**：确认过渡使用预定义 duration/easing token
+5. **4px Grid 检查**：确认所有间距是 4px 的倍数
+
+**代码审查流程必须包含视觉规范检查：**
+- PR 描述中注明 "Visual spec checked: ✅"
+- Reviewer 使用 `visual-spec.html` 对照组件样式
+- 发现偏差时标记为 "visual-spec violation" 并要求修正
+
+#### 6.5.3 自动化验证（可选，Phase 4）
+
+Phase 4 可引入以下自动化验证：
+
+- **Stylelint 规则**：禁止硬编码颜色/间距值，强制使用 CSS 变量
+- **视觉回归测试**：使用 Playwright 截图对比 baseline（基于 visual-spec.html）
+- **CI 检查**：每次 PR 自动运行 Stylelint + 视觉回归测试
+
+---
+
+**总结：** 视觉规范是 Coder Studio 产品质量的基石。所有前端开发必须严格遵循本章约束，确保视觉一致性和可维护性。`visual-spec.html` 是唯一真源，任何样式决策必须对齐该文档。
+
+---
+
+## 7. Provider 系统详细设计
+
+### 7.1 ProviderDefinition 契约
 
 ```typescript
 // packages/core/src/provider/definition.ts
@@ -2201,7 +2540,7 @@ export interface ProviderEvent {
 }
 ```
 
-### 6.2 Claude Code 实现
+### 7.2 Claude Code 实现
 
 ```typescript
 // packages/providers/src/claude/definition.ts
@@ -2318,7 +2657,7 @@ export const claudeHooksDescriptor: HooksDescriptor = {
 
 **关键细节**：Claude Code CLI 的 hooks 通过 settings.json 定义，每个 hook 是一个命令行脚本；Claude 会向脚本 stdin 传 JSON payload，或通过 env 传参（具体实现阶段对照 Claude Code 最新文档）。bridge script 从 stdin 读 payload，再 POST 到 Coder Studio 的 endpoint。
 
-### 6.3 Codex 实现（Limited 模式）
+### 7.3 Codex 实现（Limited 模式）
 
 ```typescript
 // packages/providers/src/codex/definition.ts
@@ -2424,7 +2763,7 @@ class ActiveSession {
 - `markTurnCompleted({ approximate: true })` 时 toast 文案用"可能已完成"
 - Supervisor 按钮在 Limited session 上被禁用
 
-### 6.4 新 Provider 接入指南
+### 7.4 新 Provider 接入指南
 
 新 Provider 的接入只需：
 
@@ -2435,7 +2774,7 @@ class ActiveSession {
 
 如果 Provider 有 hooks 能力 → 走 Full 模式；没有 → 填 `stdoutHeuristics` 走 Limited 模式。
 
-### 6.5 Hooks Manager 工作流
+### 7.5 Hooks Manager 工作流
 
 ```
 Server 启动时
@@ -2563,13 +2902,13 @@ req.on("response", () => process.exit(0));
 
 ---
 
-## 7. Supervisor 系统（Phase 3）
+## 8. Supervisor 系统（Phase 3）
 
-### 7.1 概览
+### 8.1 概览
 
 Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝目标的进展并注入指导。
 
-### 7.2 架构
+### 8.2 架构
 
 ```
 ┌─────────────────┐
@@ -2595,17 +2934,17 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 - **Injector**：把指导结果通过 `terminal.input` 命令注入到 PTY（等同用户手动输入）
 - **History**：评估周期和结果记录
 
-### 7.3 约束
+### 8.3 约束
 
 - **仅 Full 模式 Provider 可启用 Supervisor**（见 §6）
 - 配置项放在 session 元数据里，不在 Provider 配置里（因为是会话级特性）
 - Supervisor 自己的 API 调用使用用户在设置里配置的 key（独立于 Agent 本身）
 
-### 7.4 UI
+### 8.4 UI
 
 `.agent-pane-supervisor-card`（PRD §16.3.1）作为 AgentPane 的一个子区域。通过 `supervisorAtomFamily(sessionId)` 订阅状态。
 
-### 7.5 Phase 分布
+### 8.5 Phase 分布
 
 | 特性 | Phase |
 |---|---|
@@ -2614,9 +2953,9 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 
 ---
 
-## 8. 多 Tab 并发（演进路径）
+## 9. 多 Tab 并发（演进路径）
 
-### 8.1 Phase 1：单 Writer 强制
+### 9.1 Phase 1：单 Writer 强制
 
 - `WsHub.writerId` 单值
 - 第二个 tab 连接时立即返回 `{status: "rejected", reason: "another_tab_active"}`
@@ -2628,7 +2967,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 - 所有 Command handler 的入口都通过 `assertWriter(clientId)` 中间层——Phase 1 只校验 `clientId === writerId`，Phase 2 替换成 role 判断
 - 广播函数按 `client.subscribedTopics` 过滤，Phase 1 最多 1 个 client 但多 client 广播逻辑是免费的
 
-### 8.2 Phase 2：Writer + Read-only Observer
+### 9.2 Phase 2：Writer + Read-only Observer
 
 - `WsHub.clients` 可以有多个 observer
 - 只有 writer 能发 command（server 拒绝 observer 的 command，返回 `read_only_mode` 错误）
@@ -2636,7 +2975,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 - Observer tab UI 顶栏显示 "Read only" 徽章 + "Take control" 按钮
 - Take control = 发 command `tab.takeover` → writer 收到 `takeover_requested` 事件 → 弹窗选择允许/拒绝（可配置超时自动允许）
 
-### 8.3 Phase 3：完整控制器/观察者（PRD §7.6）
+### 9.3 Phase 3：完整控制器/观察者（PRD §7.6）
 
 - Writer 周期心跳（10s/20s 分别对应 visible/hidden tab）
 - 心跳超时 → observer 自动发起接管
@@ -2647,9 +2986,9 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 
 ---
 
-## 9. 错误处理和降级清单
+## 10. 错误处理和降级清单
 
-### 9.1 错误分类
+### 10.1 错误分类
 
 | 层 | 错误类型 | 处理方式 |
 |---|---|---|
@@ -2660,7 +2999,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 | Provider 层 | Hooks 注册失败 | `notification.toast` 红色警告 + hook_registrations 表记录 |
 | 认证层（P2+） | 凭证无效、封锁等 | 走认证错误码 |
 
-### 9.2 降级清单
+### 10.2 降级清单
 
 | 场景 | 降级策略 |
 |---|---|
@@ -2684,7 +3023,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 | Git 操作失败 | 对应 command 返回 error；UI toast 显示 stderr 摘要 |
 | SQLite 写失败 | 前置问题（磁盘满？权限？）；server fatal 退出并打印错误 |
 
-### 9.3 一致性约束
+### 10.3 一致性约束
 
 - **server 是唯一真源**：前端收到的 result/event 表示"server 已确认"
 - 乐观更新仅限**纯 UI 临时态**（如点按钮后禁用按钮避免重复点击）
@@ -2692,7 +3031,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 
 ---
 
-## 10. 测试策略
+## 11. 测试策略
 
 ### 10.1 覆盖层级
 
@@ -2743,7 +3082,7 @@ Supervisor 是一个自动化评估系统，周期性地评估 Agent 会话朝�
 
 ---
 
-## 11. 数据模型
+## 12. 数据模型
 
 ### 11.1 核心实体
 
@@ -2862,7 +3201,7 @@ export interface Settings {
 
 ---
 
-## 12. 关键序列图
+## 13. 关键序列图
 
 ### 12.1 打开工作区
 
@@ -2943,7 +3282,7 @@ User        Web         Jotai          WsHub       FileIO       Disk
 
 ---
 
-## 13. Phase 路线图（详细）
+## 14. Phase 路线图（详细）
 
 ### 13.1 Phase 1 — MVP（档位 2）
 
@@ -3042,7 +3381,7 @@ Phase 2/3/4 的所有新增功能都能通过**往现有模块填代码**实现�
 
 ---
 
-## 14. 风险和未解决问题
+## 15. 风险和未解决问题
 
 ### 14.1 已识别风险
 
@@ -3075,7 +3414,7 @@ Phase 2/3/4 的所有新增功能都能通过**往现有模块填代码**实现�
 
 ---
 
-## 15. 附录
+## 16. 附录
 
 ### 15.1 目录和路径约定
 
