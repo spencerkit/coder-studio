@@ -6,10 +6,12 @@
  */
 
 import type { FC } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { Folder, File, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react';
-import { fileTreeAtomFamily } from '../../../atoms/fs';
+import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
 import { activeWorkspaceAtom } from '../../../atoms/workspaces';
+import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { FileNode } from '@coder-studio/core';
 
@@ -31,10 +33,47 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
+  const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
+  const dispatch = useSetAtom(dispatchCommandAtom);
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  /**
+   * Load file tree: dispatch file.readTree command
+   */
+  const loadFileTree = useCallback(async () => {
+    if (!workspaceId || isLoading) return;
+
+    setIsLoading(true);
+    const result = await dispatch<FileNode>('file.readTree', {
+      workspaceId,
+    });
+
+    if (!result.ok) {
+      console.error('Failed to load file tree:', result.error?.message);
+    }
+
+    setIsLoading(false);
+  }, [workspaceId, isLoading, dispatch]);
+
+  // Load file tree on mount
+  useEffect(() => {
+    if (!fileTree && !isLoading) {
+      loadFileTree();
+    }
+  }, [fileTree, isLoading, loadFileTree]);
+
+  // Reload file tree when stale
+  useEffect(() => {
+    if (fileTreeStale && !isLoading) {
+      loadFileTree();
+    }
+  }, [fileTreeStale, isLoading, loadFileTree]);
 
   const handleRefresh = () => {
-    // TODO: Dispatch file tree refresh command
-    console.log('Refresh file tree');
+    if (!isLoading) {
+      loadFileTree();
+    }
   };
 
   return (
@@ -53,18 +92,19 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
         <button
           className="btn btn-icon btn-sm"
           onClick={handleRefresh}
+          disabled={isLoading}
           aria-label={t('action.refresh')}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
         </button>
       </div>
 
       <div className="file-tree-content">
         {fileTree ? (
-          <FileTreeNode node={fileTree} depth={0} />
+          <FileTreeNode node={fileTree} depth={0} workspaceId={workspaceId} />
         ) : (
           <div className="file-tree-empty">
-            <p>{t('file.title')}</p>
+            <p>{isLoading ? 'Loading...' : t('file.title')}</p>
           </div>
         )}
       </div>
@@ -75,21 +115,29 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
 interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
+  workspaceId: string;
 }
 
 /**
  * File Tree Node (recursive)
  */
-const FileTreeNode: FC<FileTreeNodeProps> = ({ node, depth }) => {
-  const isFolder = node.type === 'directory';
+const FileTreeNode: FC<FileTreeNodeProps> = ({ node, depth, workspaceId }) => {
+  const isFolder = node.kind === 'dir';
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Use a callback to dispatch file open event
+  // This would be handled by a parent component or event bus
   const handleClick = () => {
     if (isFolder) {
       setIsExpanded(!isExpanded);
     } else {
-      // TODO: Dispatch file open command
-      console.log('Open file:', node.path);
+      // Dispatch custom event for file open
+      // The code editor will listen to this event
+      window.dispatchEvent(
+        new CustomEvent('coder-studio:file-open', {
+          detail: { path: node.path, workspaceId },
+        })
+      );
     }
   };
 
@@ -118,14 +166,17 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({ node, depth }) => {
       {isFolder && isExpanded && node.children && (
         <div className="file-tree-children">
           {node.children.map((child) => (
-            <FileTreeNode key={child.path} node={child} depth={depth + 1} />
+            <FileTreeNode
+              key={child.path}
+              node={child}
+              depth={depth + 1}
+              workspaceId={workspaceId}
+            />
           ))}
         </div>
       )}
     </div>
   );
 };
-
-import { useState } from 'react';
 
 export default FileTreePanel;

@@ -6,11 +6,23 @@
  */
 
 import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
-import { X, SplitHorizontal, SplitVertical } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import {
+  X,
+  SplitHorizontal,
+  SplitVertical,
+  Play,
+  Square,
+  Send,
+} from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
+import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { Session, SessionState } from '@coder-studio/core';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import 'xterm/css/xterm.css';
 
 interface SessionCardProps {
   sessionId: string;
@@ -27,24 +39,134 @@ interface SessionCardProps {
 export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const t = useTranslation();
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
+  const dispatch = useSetAtom(dispatchCommandAtom);
+
+  const [inputValue, setInputValue] = useState('');
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+
+  // Initialize xterm.js terminal
+  useEffect(() => {
+    if (!terminalRef.current || xtermRef.current) return;
+
+    const terminal = new Terminal({
+      fontSize: 13,
+      fontFamily: 'JetBrains Mono, monospace',
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+      },
+    });
+
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+
+    terminal.open(terminalRef.current);
+    fitAddon.fit();
+
+    xtermRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    // Handle resize
+    const handleResize = () => {
+      fitAddon.fit();
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      terminal.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, []);
+
+  // Fit terminal when session changes
+  useEffect(() => {
+    if (fitAddonRef.current) {
+      fitAddonRef.current.fit();
+    }
+  }, [session]);
 
   if (!session) {
     return null;
   }
 
-  const handleClose = () => {
-    // TODO: Dispatch session stop command
-    console.log('Close session:', sessionId);
+  /**
+   * Start session: dispatch session.start command
+   */
+  const handleStart = async () => {
+    const result = await dispatch<{ sessionId: string }>('session.start', {
+      sessionId,
+    });
+
+    if (!result.ok) {
+      console.error('Failed to start session:', result.error?.message);
+    }
   };
 
+  /**
+   * Stop session: dispatch session.stop command
+   */
+  const handleStop = async () => {
+    const result = await dispatch<void>('session.stop', {
+      sessionId,
+    });
+
+    if (!result.ok) {
+      console.error('Failed to stop session:', result.error?.message);
+    }
+  };
+
+  /**
+   * Send input: dispatch terminal.input command
+   */
+  const handleSendInput = async () => {
+    if (!inputValue.trim()) return;
+
+    const result = await dispatch<void>('terminal.input', {
+      terminalId: session.terminalId,
+      data: inputValue + '\n',
+    });
+
+    if (result.ok) {
+      setInputValue('');
+    } else {
+      console.error('Failed to send input:', result.error?.message);
+    }
+  };
+
+  /**
+   * Close session: dispatch session.stop command
+   */
+  const handleClose = async () => {
+    await handleStop();
+  };
+
+  /**
+   * Split panel horizontally
+   */
   const handleSplitHorizontal = () => {
-    // TODO: Dispatch split panel command
-    console.log('Split horizontal');
+    // Dispatch custom event for panel split
+    window.dispatchEvent(
+      new CustomEvent('coder-studio:panel-split', {
+        detail: { sessionId, direction: 'horizontal' },
+      })
+    );
   };
 
+  /**
+   * Split panel vertically
+   */
   const handleSplitVertical = () => {
-    // TODO: Dispatch split panel command
-    console.log('Split vertical');
+    // Dispatch custom event for panel split
+    window.dispatchEvent(
+      new CustomEvent('coder-studio:panel-split', {
+        detail: { sessionId, direction: 'vertical' },
+      })
+    );
   };
 
   const progressWidth = getProgressWidth(session.state);
@@ -64,11 +186,30 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
         <div className="session-header-left">
           <span className={`session-dot session-dot-${session.state}`} />
           <span className="session-title">{session.id.slice(0, 8)}</span>
-          <span className="session-provider-badge">{session.provider}</span>
-          <span className="session-status-label">{t(`session.state.${session.state}`)}</span>
+          <span className="session-provider-badge">{session.providerId}</span>
+          <span className="session-status-label">
+            {t(`session.state.${session.state}`)}
+          </span>
         </div>
 
         <div className="session-header-actions">
+          {session.state === 'idle' || session.state === 'interrupted' ? (
+            <button
+              className="btn btn-icon btn-sm"
+              onClick={handleStart}
+              aria-label="Start"
+            >
+              <Play size={13} />
+            </button>
+          ) : session.state === 'running' ? (
+            <button
+              className="btn btn-icon btn-sm"
+              onClick={handleStop}
+              aria-label="Stop"
+            >
+              <Square size={13} />
+            </button>
+          ) : null}
           <button
             className="btn btn-icon btn-sm"
             onClick={handleSplitHorizontal}
@@ -94,12 +235,32 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
       </div>
 
       {/* Terminal area */}
-      <div className="session-terminal">
-        {/* TODO: Render xterm.js terminal */}
-        <div className="session-terminal-placeholder">
-          <p>{t('terminal.title')}</p>
+      <div className="session-terminal" ref={terminalRef} />
+
+      {/* Input area */}
+      {(session.state === 'running' || session.state === 'idle') && (
+        <div className="session-input">
+          <input
+            className="input"
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSendInput();
+              }
+            }}
+            placeholder="Type a message..."
+          />
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSendInput}
+            disabled={!inputValue.trim()}
+          >
+            <Send size={14} />
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -6,14 +6,15 @@
 
 import type { FC } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { useSetAtom } from 'jotai';
 import Editor, { OnChange } from '@monaco-editor/react';
 import { useTranslation } from '../../../lib/i18n';
 
 interface MonacoHostProps {
   workspaceId: string;
   filePath: string;
+  content: string;
   isDiffMode: boolean;
+  onContentChange?: (content: string) => void;
 }
 
 /**
@@ -25,51 +26,34 @@ interface MonacoHostProps {
  *   - Diff mode (side-by-side)
  *   - Auto-save on Ctrl/Cmd + S
  */
-export const MonacoHost: FC<MonacoHostProps> = ({ workspaceId, filePath, isDiffMode }) => {
+export const MonacoHost: FC<MonacoHostProps> = ({
+  workspaceId,
+  filePath,
+  content,
+  isDiffMode,
+  onContentChange,
+}) => {
   const t = useTranslation();
   const editorRef = useRef<any>(null);
-  const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
-  const [isDirty, setIsDirty] = useState(false);
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
   };
 
   const handleChange: OnChange = (value) => {
-    setContent(value || '');
-    setIsDirty(true);
+    onContentChange?.(value || '');
   };
 
-  const handleSave = async () => {
-    if (!isDirty) return;
-    // TODO: Dispatch file save command
-    console.log('Save file:', filePath, content);
-    setIsDirty(false);
-  };
-
-  // Load file on mount
+  // Load original content for diff mode
   useEffect(() => {
-    // TODO: Dispatch file read command
-    console.log('Load file:', filePath);
-    const mockContent = '// File content would be loaded here\nconsole.log("Hello, World!");';
-    setContent(mockContent);
-    setOriginalContent(mockContent);
-    setIsDirty(false);
-  }, [filePath]);
-
-  // Keyboard shortcut for save
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDirty, content]);
+    // For diff mode, we need the original content (from baseHash)
+    // This would be loaded once when the file opens
+    // For now, we'll set it to the initial content
+    if (isDiffMode && originalContent === '') {
+      setOriginalContent(content);
+    }
+  }, [isDiffMode, content, originalContent]);
 
   const language = detectLanguage(filePath);
 
@@ -108,12 +92,6 @@ export const MonacoHost: FC<MonacoHostProps> = ({ workspaceId, filePath, isDiffM
             padding: { top: 12, bottom: 12 },
           }}
         />
-      )}
-
-      {isDirty && (
-        <div className="monaco-dirty-indicator">
-          <span>{t('file.modified')}</span>
-        </div>
       )}
     </div>
   );

@@ -5,11 +5,19 @@
  */
 
 import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
-import { GitBranch, Plus, Minus, RotateCcw, RefreshCw } from 'lucide-react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import {
+  GitBranch,
+  Plus,
+  Minus,
+  RotateCcw,
+  RefreshCw,
+  File,
+} from 'lucide-react';
 import { gitStateAtomFamily } from '../../../atoms/git';
+import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 interface GitPanelProps {
   workspaceId: string;
@@ -28,34 +36,111 @@ interface GitPanelProps {
 export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
+  const dispatch = useSetAtom(dispatchCommandAtom);
+
   const [commitMessage, setCommitMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
+  /**
+   * Load git status: dispatch git.status command
+   */
+  const loadGitStatus = useCallback(async () => {
+    if (!workspaceId || isLoading) return;
+
+    setIsLoading(true);
+    const result = await dispatch<void>('git.status', {
+      workspaceId,
+    });
+
+    if (!result.ok) {
+      console.error('Failed to load git status:', result.error?.message);
+    }
+
+    setIsLoading(false);
+  }, [workspaceId, isLoading, dispatch]);
+
+  // Load git status on mount
+  useEffect(() => {
+    if (!gitState && !isLoading) {
+      loadGitStatus();
+    }
+  }, [gitState, isLoading, loadGitStatus]);
+
+  /**
+   * Refresh git status
+   */
   const handleRefresh = () => {
-    // TODO: Dispatch git status refresh
-    console.log('Refresh git status');
+    if (!isLoading) {
+      loadGitStatus();
+    }
   };
 
-  const handleStageAll = () => {
-    // TODO: Dispatch stage all command
-    console.log('Stage all');
+  /**
+   * Stage all changes
+   */
+  const handleStageAll = async () => {
+    const result = await dispatch<void>('git.stage', {
+      workspaceId,
+      paths: gitState?.modified.map((f) => f.path) ?? [],
+    });
+
+    if (!result.ok) {
+      console.error('Failed to stage all:', result.error?.message);
+    }
   };
 
-  const handleUnstageAll = () => {
-    // TODO: Dispatch unstage all command
-    console.log('Unstage all');
+  /**
+   * Unstage all changes
+   */
+  const handleUnstageAll = async () => {
+    const result = await dispatch<void>('git.unstage', {
+      workspaceId,
+      paths: gitState?.staged.map((f) => f.path) ?? [],
+    });
+
+    if (!result.ok) {
+      console.error('Failed to unstage all:', result.error?.message);
+    }
   };
 
-  const handleDiscardAll = () => {
-    // TODO: Show confirmation dialog, then discard all
-    console.log('Discard all');
+  /**
+   * Discard all changes
+   */
+  const handleDiscardAll = async () => {
+    // TODO: Show confirmation dialog
+    const result = await dispatch<void>('git.discard', {
+      workspaceId,
+      paths: gitState?.modified.map((f) => f.path) ?? [],
+    });
+
+    if (!result.ok) {
+      console.error('Failed to discard all:', result.error?.message);
+    }
   };
 
-  const handleCommit = () => {
-    // TODO: Dispatch commit command
-    console.log('Commit:', commitMessage);
+  /**
+   * Commit staged changes
+   */
+  const handleCommit = async () => {
+    if (!commitMessage.trim() || !gitState?.staged.length) return;
+
+    const result = await dispatch<void>('git.commit', {
+      workspaceId,
+      message: commitMessage,
+    });
+
+    if (result.ok) {
+      setCommitMessage('');
+    } else {
+      console.error('Failed to commit:', result.error?.message);
+    }
   };
 
-  const hasChanges = gitState && (gitState.staged.length > 0 || gitState.changes.length > 0 || gitState.untracked.length > 0);
+  const hasChanges =
+    gitState &&
+    (gitState.staged.length > 0 ||
+      gitState.modified.length > 0 ||
+      gitState.untracked.length > 0);
 
   return (
     <div className="git-panel">
@@ -73,9 +158,10 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
         <button
           className="btn btn-icon btn-sm"
           onClick={handleRefresh}
+          disabled={isLoading}
           aria-label={t('action.refresh')}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
         </button>
 
         {hasChanges && (
@@ -116,7 +202,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
         <button
           className="btn btn-primary btn-sm"
           onClick={handleCommit}
-          disabled={!commitMessage.trim() || gitState?.staged.length === 0}
+          disabled={!commitMessage.trim() || !gitState?.staged.length}
         >
           {t('git.commit')}
         </button>
@@ -130,14 +216,16 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
                 title={t('git.staged')}
                 changes={gitState.staged}
                 type="staged"
+                workspaceId={workspaceId}
               />
             )}
 
-            {gitState.changes.length > 0 && (
+            {gitState.modified.length > 0 && (
               <GitChangeGroup
                 title={t('git.unstaged')}
-                changes={gitState.changes}
+                changes={gitState.modified}
                 type="unstaged"
+                workspaceId={workspaceId}
               />
             )}
 
@@ -146,12 +234,15 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
                 title={t('git.untracked')}
                 changes={gitState.untracked}
                 type="untracked"
+                workspaceId={workspaceId}
               />
             )}
           </>
         ) : (
           <div className="git-empty">
-            <p>{t('git.no_changes')}</p>
+            <p>
+              {isLoading ? 'Loading...' : t('git.no_changes')}
+            </p>
           </div>
         )}
       </div>
@@ -161,12 +252,19 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
 
 interface GitChangeGroupProps {
   title: string;
-  changes: Array<{ path: string; status: string }>;
+  changes: Array<{ path: string; oldPath?: string }>;
   type: 'staged' | 'unstaged' | 'untracked';
+  workspaceId: string;
 }
 
-const GitChangeGroup: FC<GitChangeGroupProps> = ({ title, changes, type }) => {
+const GitChangeGroup: FC<GitChangeGroupProps> = ({
+  title,
+  changes,
+  type,
+  workspaceId,
+}) => {
   const t = useTranslation();
+  const dispatch = useSetAtom(dispatchCommandAtom);
 
   return (
     <div className="git-change-group">
@@ -177,7 +275,12 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({ title, changes, type }) => {
 
       <div className="git-change-group-list">
         {changes.map((change) => (
-          <GitChangeRow key={change.path} change={change} type={type} />
+          <GitChangeRow
+            key={change.path}
+            change={change}
+            type={type}
+            workspaceId={workspaceId}
+          />
         ))}
       </div>
     </div>
@@ -185,30 +288,76 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({ title, changes, type }) => {
 };
 
 interface GitChangeRowProps {
-  change: { path: string; status: string };
+  change: { path: string; oldPath?: string };
   type: 'staged' | 'unstaged' | 'untracked';
+  workspaceId: string;
 }
 
-const GitChangeRow: FC<GitChangeRowProps> = ({ change, type }) => {
+const GitChangeRow: FC<GitChangeRowProps> = ({ change, type, workspaceId }) => {
   const t = useTranslation();
+  const dispatch = useSetAtom(dispatchCommandAtom);
 
-  const handleAction = () => {
-    // TODO: Dispatch appropriate action based on type
-    console.log('Action for:', change.path, type);
+  /**
+   * Stage or unstage file
+   */
+  const handleAction = async () => {
+    if (type === 'staged') {
+      // Unstage
+      const result = await dispatch<void>('git.unstage', {
+        workspaceId,
+        paths: [change.path],
+      });
+
+      if (!result.ok) {
+        console.error('Failed to unstage:', result.error?.message);
+      }
+    } else {
+      // Stage
+      const result = await dispatch<void>('git.stage', {
+        workspaceId,
+        paths: [change.path],
+      });
+
+      if (!result.ok) {
+        console.error('Failed to stage:', result.error?.message);
+      }
+    }
+  };
+
+  /**
+   * View diff
+   */
+  const handleViewDiff = async () => {
+    const result = await dispatch<{ diff: string }>('git.diff', {
+      workspaceId,
+      path: change.path,
+    });
+
+    if (result.ok && result.data) {
+      // Dispatch custom event to open diff in editor
+      window.dispatchEvent(
+        new CustomEvent('coder-studio:show-diff', {
+          detail: { path: change.path, diff: result.data.diff },
+        })
+      );
+    } else {
+      console.error('Failed to get diff:', result.error?.message);
+    }
   };
 
   const statusClass = `git-status-${type}`;
 
   return (
-    <div className="git-change-row">
+    <div className="git-change-row" onClick={handleViewDiff}>
       <File size={14} />
       <span className="git-change-path">{change.path}</span>
-      <span className={`git-change-status ${statusClass}`}>
-        {type}
-      </span>
+      <span className={`git-change-status ${statusClass}`}>{type}</span>
       <button
         className="btn btn-icon btn-sm"
-        onClick={handleAction}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAction();
+        }}
         aria-label={type === 'staged' ? t('git.unstage') : t('git.stage')}
       >
         {type === 'staged' ? <Minus size={12} /> : <Plus size={12} />}
@@ -216,7 +365,5 @@ const GitChangeRow: FC<GitChangeRowProps> = ({ change, type }) => {
     </div>
   );
 };
-
-import { File } from 'lucide-react';
 
 export default GitPanel;

@@ -2,45 +2,14 @@
  * Application Shell
  *
  * Root component that sets up:
- * - WebSocket connection
  * - Router
- * - Global providers
+ * - UI layout
  */
 
-import { useEffect } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import {
-  wsClientAtom,
-  connectionStatusAtom,
-  ConnectionStatus,
-} from './atoms';
-import { WsClient, resolveWsUrl } from './ws/client';
+import { useAtomValue } from 'jotai';
+import { connectionStatusAtom } from './atoms';
 
 function App() {
-  const [wsClient, setWsClient] = useAtom(wsClientAtom);
-  const setConnectionStatus = useSetAtom(connectionStatusAtom);
-
-  useEffect(() => {
-    // Create WebSocket client singleton
-    const client = new WsClient(resolveWsUrl());
-    setWsClient(client);
-
-    // Subscribe to connection status
-    const unsubscribe = client.onStatus((status: ConnectionStatus) => {
-      setConnectionStatus(status);
-    });
-
-    // Connect
-    client.connect().catch((err) => {
-      console.error('Failed to connect WebSocket:', err);
-    });
-
-    return () => {
-      unsubscribe();
-      client.disconnect('app_unmount');
-    };
-  }, [setWsClient, setConnectionStatus]);
-
   const connectionStatus = useAtomValue(connectionStatusAtom);
 
   return (

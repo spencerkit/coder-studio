@@ -58,3 +58,52 @@ export interface ServerInfo {
 }
 
 export const serverInfoAtom = atom<ServerInfo | null>(null);
+
+/**
+ * Command dispatch atom
+ * Provides a unified interface for dispatching commands to the server
+ */
+export interface CommandResult<T = unknown> {
+  ok: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+}
+
+export const dispatchCommandAtom = atom(
+  (get) => {
+    const client = get(wsClientAtom);
+
+    return async <T = unknown>(
+      op: string,
+      args: unknown
+    ): Promise<CommandResult<T>> => {
+      if (!client) {
+        return {
+          ok: false,
+          error: {
+            code: 'no_client',
+            message: 'WebSocket client not initialized',
+          },
+        };
+      }
+
+      try {
+        const data = await client.sendCommand<T>(op, args);
+        return { ok: true, data };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return {
+          ok: false,
+          error: {
+            code: 'command_error',
+            message,
+          },
+        };
+      }
+    };
+  }
+);
