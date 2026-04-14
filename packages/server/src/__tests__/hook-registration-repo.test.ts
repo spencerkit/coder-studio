@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { openDatabase, closeDatabase, HookRegistrationRepo, type NewHookRegistration } from '../src/storage/index.js';
+import { openDatabase, closeDatabase, HookRegistrationRepo, type NewHookRegistration } from '../storage/index.js';
 import type { Database } from 'better-sqlite3';
 import { tmpdir } from 'os';
 import { join } from 'path';

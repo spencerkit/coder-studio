@@ -8,7 +8,7 @@ import {
   type NewSession,
   type NewTerminal,
   type NewWorkspace,
-} from '../src/storage/index.js';
+} from '../storage/index.js';
 import type { Database } from 'better-sqlite3';
 import { tmpdir } from 'os';
 import { join } from 'path';
