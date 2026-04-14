@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { phase1Checklist } from './phase1-checklist';
 
+// Resolve monorepo root (2 directories up from this script)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(__dirname, '..', '..');
+
 const phase = process.argv[2] ?? 'phase-1';
-const outputDir = path.resolve('docs/验收报告', phase);
+const outputDir = path.resolve(monorepoRoot, 'docs/验收报告', phase);
 const today = new Date().toISOString().slice(0, 10);
 const reportPath = path.join(outputDir, `${today}-自动化验收.json`);
 
@@ -32,6 +37,11 @@ const report = {
   },
 };
 
-fs.mkdirSync(outputDir, { recursive: true });
-fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-console.log(reportPath);
+try {
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  console.log(reportPath);
+} catch (error) {
+  console.error(`Failed to write report: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
