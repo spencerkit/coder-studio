@@ -18,6 +18,7 @@
   "dependencies": {
     "@coder-studio/core": "workspace:*",
     "@coder-studio/providers": "workspace:*",
+    "@fastify/cors": "^11.2.0",
     "@fastify/static": "^9.1.0",
     "@fastify/websocket": "^11.2.0",
     "better-sqlite3": "^12.9.0",

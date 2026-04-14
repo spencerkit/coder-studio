@@ -4,14 +4,22 @@
  * Concrete implementation of PtyHost using node-pty
  */
 
-import * as pty from 'node-pty';
 import type { PtyHost, PtyProcess, PtySpawnOptions } from './types.js';
 
 /**
  * Real PTY host using node-pty
+ * Note: node-pty is loaded lazily to avoid native module loading errors during startup
  */
 export class NodePtyHost implements PtyHost {
   spawn(argv: string[], options: PtySpawnOptions): PtyProcess {
+    // Lazy load node-pty to avoid startup errors
+    let pty: any;
+    try {
+      pty = require('node-pty');
+    } catch (err) {
+      throw new Error('node-pty native module not available. Terminal features require node-pty to be properly compiled.');
+    }
+
     const [command, ...args] = argv;
 
     const ptyProcess = pty.spawn(command, args, {

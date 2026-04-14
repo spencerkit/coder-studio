@@ -91,7 +91,7 @@ export async function createServer(
   const webRoot = config.webRoot;
 
   // Transport: Fastify app
-  const app = buildFastifyApp({
+  const app = await buildFastifyApp({
     wsHub,
     db,
     hooksMgr,

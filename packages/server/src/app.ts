@@ -25,7 +25,7 @@ interface AppDeps {
 /**
  * Build Fastify application
  */
-export function buildFastifyApp(deps: AppDeps): FastifyInstance {
+export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: deps.logger || {
       level: 'info',
