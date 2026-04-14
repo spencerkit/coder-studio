@@ -11,6 +11,7 @@ import App from './app';
 // Import styles
 import './styles/tokens.css';
 import './styles/base.css';
+import './styles/components.css';
 
 // Mount application
 const root = ReactDOM.createRoot(

@@ -5,12 +5,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { Settings, Palette, Globe, Bell, ChevronRight, Check, AlertCircle } from 'lucide-react';
+import { useAtom, useAtomValue } from 'jotai';
+import { Settings, Palette, Globe, Check, ChevronRight } from 'lucide-react';
 import { localeAtom, themeAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import type { Settings as SettingsType, ProviderConfig } from '@coder-studio/core';
 
 type SettingsSection = 'general' | 'appearance' | 'providers';
 
@@ -299,21 +298,18 @@ interface ProviderSettingsProps {
 function ProviderSettings({ providers }: ProviderSettingsProps) {
   const t = useTranslation();
   const [selectedProvider, setSelectedProvider] = useState(providers[0]?.id);
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const provider = providers.find((p) => p.id === selectedProvider);
 
   const handleInjectHooks = async () => {
     if (!provider) return;
 
-    const result = await dispatch({
-      op: 'settings.injectHooks',
-      args: { providerId: provider.id },
-    });
+    const result = await dispatch('settings.injectHooks', { providerId: provider.id });
 
     if (result.ok) {
       console.log('Hooks injected successfully');
-    } else {
+    } else if (result.error) {
       console.error('Failed to inject hooks:', result.error);
     }
   };

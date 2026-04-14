@@ -5,8 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { Search, CornerDownLeft } from 'lucide-react';
+import { useAtom, useAtomValue } from 'jotai';
+import { Search } from 'lucide-react';
 import {
   commandPaletteOpenAtom,
   focusModeAtom,
@@ -218,7 +218,8 @@ function buildCommands(context: {
     setSidebarCollapsed,
     bottomPanelHeight,
     setBottomPanelHeight,
-    activeWorkspaceId,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    activeWorkspaceId: _activeWorkspaceId,
     workspaces,
     t,
   } = context;

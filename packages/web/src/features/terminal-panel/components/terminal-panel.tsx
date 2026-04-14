@@ -4,10 +4,10 @@
  * Bottom panel for shell terminals with multi-tab support.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useState } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
-import { terminalMetaAtomFamily, TerminalMeta } from '../../../atoms/terminals';
+import type { TerminalMeta } from '../../../atoms/terminals';
 import { activeWorkspaceIdAtom, bottomPanelHeightAtom } from '../../../atoms/ui';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
@@ -26,7 +26,7 @@ export function TerminalPanel() {
   const t = useTranslation();
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [bottomPanelHeight] = useAtom(bottomPanelHeightAtom);
-  const dispatch = useSetAtom(dispatchCommandAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [terminals, setTerminals] = useState<TerminalMeta[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
@@ -35,28 +35,23 @@ export function TerminalPanel() {
   const handleCreateTerminal = async () => {
     if (!activeWorkspaceId) return;
 
-    const result = await dispatch<{ id: string }>({
-      op: 'terminal.create',
-      args: {
-        workspaceId: activeWorkspaceId,
-        kind: 'shell',
-      },
+    const result = await dispatch('terminal.create', {
+      workspaceId: activeWorkspaceId,
+      kind: 'shell',
     });
 
     if (result.ok && result.data) {
-      setActiveTerminalId(result.data.id);
+      const data = result.data as { id: string };
+      setActiveTerminalId(data.id);
     }
   };
 
   // Close terminal
   const handleCloseTerminal = async (terminalId: string) => {
-    const result = await dispatch({
-      op: 'terminal.close',
-      args: { terminalId },
-    });
+    const result = await dispatch('terminal.close', { terminalId });
 
     if (result.ok) {
-      setTerminals((prev) => prev.filter((t) => t.id !== terminalId));
+      setTerminals((prev) => prev.filter((term) => term.id !== terminalId));
       if (activeTerminalId === terminalId) {
         setActiveTerminalId(terminals[0]?.id || null);
       }

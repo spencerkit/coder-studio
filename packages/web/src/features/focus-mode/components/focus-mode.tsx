@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import {
   focusModeAtom,
   leftPanelWidthAtom,
