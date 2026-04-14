@@ -1,1 +1,36 @@
 node_modules/
+
+# Build outputs
+dist/
+build/
+.cache/
+.turbo/
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+
+# Local tool caches
+.playwright-mcp/
+
+# Temp files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.log
+*.pid
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env overrides
+.env.local
+.env.*.local
+
+# Acceptance runtime artifacts
+docs/验收报告/
