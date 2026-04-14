@@ -1,0 +1,146 @@
+/**
+ * Aurora Mint Design System - Design Tokens
+ *
+ * All UI code MUST use these tokens. Never hardcode colors, spacing, or other values.
+ * Phase 4 light theme will add [data-theme="light"] overrides.
+ */
+
+:root {
+  /* ========== Backgrounds ========== */
+  --bg-page: #0a1014;
+  --bg-surface: #11181f;
+  --bg-sidebar: #0d141a;
+  --bg-terminal: #0b1218;
+  --bg-hover: #1a2632;
+  --bg-active: #1e3040;
+  --bg-disabled: #151f28;
+  --bg-input: #0d141a;
+
+  /* ========== Borders ========== */
+  --border: #1e2a35;
+  --border-light: #263545;
+  --border-focus: #6cb6ff;
+  --border-error: #ff9eb0;
+
+  /* ========== Text ========== */
+  --text-primary: #e5edf3;
+  --text-secondary: #9fb0bc;
+  --text-tertiary: #728492;
+  --text-disabled: #4a5b6a;
+  --text-inverse: #0a1014;
+
+  /* ========== Accents ========== */
+  --accent-blue: #6cb6ff;
+  --accent-green: #78d7b2;
+  --accent-amber: #f1b86a;
+  --accent-pink: #ff9eb0;
+  --accent-purple: #c792ea;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #78d7b2;
+  --color-warning: #f1b86a;
+  --color-error: #ff9eb0;
+  --color-info: #6cb6ff;
+
+  /* ========== Spacing (4px grid system) ========== */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ========== Border Radii ========== */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 7px;
+  --radius-xl: 8px;
+  --radius-full: 9999px;
+
+  /* ========== Typography ========== */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+
+  /* Font Sizes */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+
+  /* Line Heights */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.75;
+
+  /* Font Weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 12px rgba(120, 215, 178, 0.3);
+
+  /* ========== Transitions ========== */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-fast: 100ms;
+  --duration-normal: 150ms;
+  --duration-slow: 200ms;
+  --duration-slower: 300ms;
+
+  /* ========== Z-Index Scale ========== */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-popover: 500;
+  --z-tooltip: 600;
+  --z-toast: 700;
+
+  /* ========== Component-Specific Tokens ========== */
+
+  /* Buttons */
+  --btn-height-sm: 28px;
+  --btn-height-md: 32px;
+  --btn-height-lg: 40px;
+
+  /* Inputs */
+  --input-height-sm: 28px;
+  --input-height-md: 32px;
+  --input-height-lg: 40px;
+
+  /* Topbar */
+  --topbar-height: 48px;
+
+  /* Panels */
+  --panel-min-width: 200px;
+  --panel-max-width: 600px;
+
+  /* Terminal */
+  --terminal-font-size: 13px;
+  --terminal-line-height: 1.4;
+  --terminal-scrollback: 5000;
+
+  /* Status Dot */
+  --status-dot-size: 8px;
+
+  /* Progress Bar */
+  --progress-height: 4px;
+
+  /* Scrollbar */
+  --scrollbar-width: 8px;
+  --scrollbar-thumb: var(--border-light);
+  --scrollbar-track: transparent;
+}
