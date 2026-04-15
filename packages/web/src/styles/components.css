@@ -1841,3 +1841,116 @@ body.is-resizing-panels * {
   color: var(--text-inverse);
   font-weight: var(--font-medium);
 }
+
+/* ========== Supervisor Card (Phase 3) ========== */
+.supervisor-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin: var(--sp-2);
+}
+
+.supervisor-card-inactive {
+  border-color: var(--border);
+  opacity: 0.8;
+}
+
+.supervisor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.supervisor-icon {
+  color: var(--accent-green);
+  font-size: var(--text-sm);
+}
+
+.supervisor-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.supervisor-state-tag {
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.supervisor-state-idle {
+  background: rgba(114, 132, 146, 0.15);
+}
+
+.supervisor-state-evaluating {
+  background: rgba(108, 182, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.supervisor-state-injecting {
+  background: rgba(241, 184, 106, 0.15);
+  color: var(--accent-amber);
+}
+
+.supervisor-state-paused {
+  background: rgba(114, 132, 146, 0.2);
+}
+
+.supervisor-state-error {
+  background: rgba(255, 158, 176, 0.15);
+  color: var(--accent-pink);
+}
+
+.supervisor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.supervisor-error {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  background: rgba(255, 158, 176, 0.1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--accent-pink);
+}
+
+/* ========== Objective Dialog (Phase 3) ========== */
+.objective-preview {
+  background: var(--bg);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* Modal enhancements for objective dialog */
+.modal-card {
+  max-width: 480px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.form-group label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
