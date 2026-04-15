@@ -2123,3 +2123,102 @@ body.is-resizing-panels * {
   color: var(--text-tertiary);
   padding: var(--sp-4);
 }
+
+/* ========== Shortcuts Settings (Phase 4) ========== */
+.shortcuts-category-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+}
+
+.shortcuts-category-tab {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.shortcuts-category-tab:hover {
+  color: var(--text-primary);
+}
+
+.shortcuts-category-tab.active {
+  color: var(--text-primary);
+  background: var(--accent-blue);
+  background: rgba(108, 182, 255, 0.2);
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.shortcuts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.shortcuts-item-custom {
+  border-color: var(--accent-amber);
+  background: rgba(241, 184, 106, 0.05);
+}
+
+.shortcuts-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.shortcuts-name {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.shortcuts-desc {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.shortcuts-binding {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.shortcuts-key {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  cursor: pointer;
+  min-width: 80px;
+  text-align: center;
+}
+
+.shortcuts-key:hover {
+  border-color: var(--accent-blue);
+}
+
+.shortcuts-capture {
+  min-width: 120px;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.shortcuts-footer {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}

@@ -193,6 +193,12 @@
       "password_set": "设置密码",
       "password_change": "修改密码",
       "password_remove": "移除密码"
+    },
+    "shortcuts": {
+      "title": "快捷键",
+      "reset_all": "重置全部",
+      "capture_hint": "按下新的快捷键组合",
+      "reset_hint": "重置为默认"
     }
   },
   "connection": {

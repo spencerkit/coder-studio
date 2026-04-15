@@ -7,12 +7,13 @@
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard } from 'lucide-react';
 import { localeAtom, themeAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
+import { ShortcutsSettings } from './shortcuts-settings';
 
-type SettingsSection = 'general' | 'appearance' | 'providers';
+type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts';
 
 interface ProviderInfo {
   id: string;
@@ -152,6 +153,8 @@ export function SettingsPage() {
             setCommandPreview={setCommandPreview}
           />
         );
+      case 'shortcuts':
+        return <ShortcutsSettings />;
       default:
         return null;
     }
@@ -186,6 +189,12 @@ export function SettingsPage() {
               label={t('settings.appearance')}
               active={activeSection === 'appearance'}
               onClick={() => setActiveSection('appearance')}
+            />
+            <SettingsNavItem
+              icon={<Keyboard size={16} />}
+              label={t('settings.shortcuts.title')}
+              active={activeSection === 'shortcuts'}
+              onClick={() => setActiveSection('shortcuts')}
             />
           </nav>
         </aside>
