@@ -6,7 +6,7 @@
 
 import { runGit, GitError } from './cli.js';
 import type { GitStatus, FileNode } from '@coder-studio/core';
-import { parseGitStatus } from './status-parser.js';
+import { parseStatus } from './status-parser.js';
 
 export interface WorktreeInfo {
   /** Worktree name (usually branch name or directory name) */
@@ -94,7 +94,7 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
  */
 export async function getWorktreeStatus(worktreePath: string): Promise<GitStatus> {
   const { stdout } = await runGit(worktreePath, ['status', '--porcelain=v2', '--branch']);
-  return parseGitStatus(stdout);
+  return parseStatus(stdout);
 }
 
 /**
