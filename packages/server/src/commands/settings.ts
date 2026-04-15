@@ -17,6 +17,10 @@ const SettingsSchema = z.object({
     terminalRenderer: z.enum(['standard', 'compatibility']).optional(),
     locale: z.enum(['zh', 'en']).optional(),
   }).optional(),
+  providers: z.object({
+    apiKey: z.string().optional(),
+    model: z.string().optional(),
+  }).optional(),
 });
 
 // settings.get
@@ -24,7 +28,6 @@ registerCommand(
   'settings.get',
   z.object({}),
   async (_args, ctx) => {
-    // Get settings from database
     const row = ctx.db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>;
 
     const settings: Record<string, unknown> = {};
@@ -35,6 +38,9 @@ registerCommand(
         settings[key] = value;
       }
     }
+
+    const hookRegistrations = ctx.hooksMgr.listRegistrations();
+    settings.hookRegistrations = hookRegistrations;
 
     return settings;
   }
@@ -63,6 +69,35 @@ registerCommand(
     }
 
     return { updated: Object.keys(flatSettings) };
+  }
+);
+
+// settings.previewCommand
+registerCommand(
+  'settings.previewCommand',
+  z.object({
+    providerId: z.string(),
+    config: z.object({}).passthrough(),
+    workspacePath: z.string().optional(),
+  }),
+  async (args, ctx) => {
+    const provider = ctx.providerRegistry.find((item) => item.id === args.providerId);
+
+    if (!provider) {
+      throw new Error(`Unknown provider: ${args.providerId}`);
+    }
+
+    const command = provider.buildCommand(args.config, {
+      sessionId: 'preview-session',
+      workspacePath: args.workspacePath ?? process.cwd(),
+    });
+
+    return {
+      argv: command.argv,
+      cwd: command.cwd,
+      env: command.env,
+      preview: `${command.argv.join(' ')}${command.cwd ? `  # cwd=${command.cwd}` : ''}`,
+    };
   }
 );
 

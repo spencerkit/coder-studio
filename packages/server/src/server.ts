@@ -41,7 +41,7 @@ export async function createServer(
   const eventBus = new EventBus();
 
   // Create WsHub first (implements Broadcaster)
-  const wsHub = new WsHub({ eventBus, commandContext: null as any });
+  const wsHub = new WsHub({ eventBus, commandContext: null as any, config });
 
   // Terminal Manager (needs broadcaster)
   // Note: For Phase 1, we use a minimal PTY host implementation
@@ -97,6 +97,7 @@ export async function createServer(
     hooksMgr,
     commandContext,
     webRoot,
+    config,
   });
 
   // Start server

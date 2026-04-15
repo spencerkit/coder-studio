@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const backendHttpTarget = process.env.VITE_BACKEND_HTTP_URL || 'http://127.0.0.1:4173';
+const backendWsTarget = process.env.VITE_BACKEND_WS_URL || 'ws://127.0.0.1:4173';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -13,11 +16,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/ws': {
-        target: 'ws://127.0.0.1:4173',
+        target: backendWsTarget,
         ws: true,
       },
+      '/auth': {
+        target: backendHttpTarget,
+      },
       '/internal': {
-        target: 'http://127.0.0.1:4173',
+        target: backendHttpTarget,
       },
     },
   },

@@ -55,9 +55,15 @@ export const reconnectAttemptCountAtom = atom<number>(0);
 export interface ServerInfo {
   version: string;
   serverInstanceId: string;
+  authEnabled?: boolean;
 }
 
 export const serverInfoAtom = atom<ServerInfo | null>(null);
+
+/**
+ * Whether server auth is enabled. null means not loaded yet.
+ */
+export const authEnabledAtom = atom<boolean | null>(null);
 
 /**
  * Command dispatch function type

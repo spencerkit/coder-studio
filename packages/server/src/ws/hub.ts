@@ -15,10 +15,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventBus } from '../bus/event-bus.js';
 import { WsClient, ClientId } from './client.js';
 import { dispatch, type CommandContext } from './dispatch.js';
+import type { ServerConfig } from '../config.js';
 
 interface WsHubDeps {
   eventBus: EventBus;
   commandContext: CommandContext;
+  config: ServerConfig;
 }
 
 /**
@@ -66,6 +68,7 @@ export class WsHub implements Broadcaster {
     client.sendEvent('connection.status', {
       status: 'connected',
       clientId: client.id,
+      authEnabled: this.deps.config.auth.enabled,
     });
 
     // Setup handlers

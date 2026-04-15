@@ -13,6 +13,8 @@ import type { Database } from 'better-sqlite3';
 import type { HooksManager } from './hooks/manager.js';
 import type { CommandContext } from './ws/dispatch.js';
 import type { FastifyRequest } from 'fastify';
+import type { ServerConfig } from './config.js';
+import { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './auth/index.js';
 
 interface AppDeps {
   wsHub: WsHub;
@@ -20,6 +22,7 @@ interface AppDeps {
   hooksMgr: HooksManager;
   webRoot?: string;
   commandContext: CommandContext;
+  config: ServerConfig;
   logger?: any;
 }
 
@@ -50,11 +53,8 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   });
 
-  // Phase 1: Auth middleware is empty passthrough
-  app.addHook('onRequest', async (request, reply) => {
-    // Phase 2: Implement auth here
-    // For now, just pass through
-  });
+  // Phase 2: Configurable auth middleware
+  app.addHook('onRequest', createAuthGuard(deps.config));
 
   // CORS configuration (development mode)
   await app.register(cors, {
@@ -63,6 +63,10 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });
+
+  // Auth endpoints
+  app.get('/auth/status', registerAuthStatusRoute(deps.config));
+  app.post('/auth/login', registerAuthRoutes(deps.config));
 
   // Health check endpoint
   app.get('/healthz', async (request, reply) => {

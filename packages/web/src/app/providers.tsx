@@ -13,12 +13,14 @@ import {
   connectionStatusAtom,
   connectionErrorAtom,
   serverInfoAtom,
+  authEnabledAtom,
   reconnectAttemptCountAtom,
   lastReconnectAttemptAtom,
   isWriterAtom,
   workspacesAtom,
   sessionsAtom,
 } from '../atoms';
+import { authenticatedAtom } from '../atoms/ui';
 import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
@@ -35,6 +37,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
   const setConnectionError = useSetAtom(connectionErrorAtom);
   const setServerInfo = useSetAtom(serverInfoAtom);
+  const setAuthEnabled = useSetAtom(authEnabledAtom);
   const setReconnectCount = useSetAtom(reconnectAttemptCountAtom);
   const setLastReconnect = useSetAtom(lastReconnectAttemptAtom);
   const setIsWriter = useSetAtom(isWriterAtom);
@@ -50,6 +53,21 @@ export function AppProviders({ children }: AppProvidersProps) {
   const wsClientRef = useRef<WsClient | null>(null);
 
   useEffect(() => {
+    const loadAuthStatus = async () => {
+      try {
+        const response = await fetch('/auth/status');
+        const data = await response.json();
+        setAuthEnabled(Boolean(data.authEnabled));
+        if (data.authEnabled === false) {
+          store.set(authenticatedAtom, true);
+        }
+      } catch {
+        setAuthEnabled(false);
+      }
+    };
+
+    void loadAuthStatus();
+
     // Create WebSocket client singleton
     const client = new WsClient(resolveWsUrl());
     wsClientRef.current = client;
@@ -106,6 +124,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     setConnectionStatus,
     setConnectionError,
     setServerInfo,
+    setAuthEnabled,
     setReconnectCount,
     setLastReconnect,
     setIsWriter,
@@ -143,7 +162,10 @@ function routeEventToAtom(
 
   if (topic === 'connection.status') {
     // Connection-level status event
-    const data = payload as { status: string; message?: string };
+    const data = payload as { status: string; message?: string; authEnabled?: boolean };
+    if (data.status === 'connected' && data.authEnabled === false) {
+      store.set(authenticatedAtom, true);
+    }
     if (data.status === 'error' && data.message) {
       store.set(connectionErrorAtom, data.message);
     }

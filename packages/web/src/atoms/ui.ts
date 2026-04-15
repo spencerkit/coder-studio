@@ -69,6 +69,12 @@ export const themeAtom = atomWithStorage<'dark' | 'light'>('ui.theme', 'dark');
 export const localeAtom = atomWithStorage<string>('ui.locale', 'zh');
 
 /**
+ * Auth state
+ * Persisted: ui.authenticated
+ */
+export const authenticatedAtom = atomWithStorage<boolean>('ui.authenticated', false);
+
+/**
  * Command palette open state
  */
 export const commandPaletteOpenAtom = atom<boolean>(false);

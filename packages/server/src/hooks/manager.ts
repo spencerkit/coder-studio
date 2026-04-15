@@ -130,6 +130,10 @@ export class HooksManager {
     // 4. Route to SessionManager.onHookEvent(sessionId, event)
   }
 
+  listRegistrations() {
+    return this.hookRegistrationRepo.listAll();
+  }
+
   /**
    * Builds managed hooks configuration for a provider
    */

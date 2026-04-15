@@ -243,11 +243,38 @@ function buildCommands(context: {
       },
     },
     {
+      id: 'open-home',
+      label: t('workspace.title'),
+      description: t('action.back'),
+      action: () => navigate('/'),
+    },
+    {
+      id: 'open-settings',
+      label: t('action.settings'),
+      description: t('settings.title'),
+      shortcut: 'Ctrl+,',
+      action: () => {
+        navigate('/settings');
+      },
+    },
+    {
       id: 'toggle-focus-mode',
       label: t('tooltip.focus_mode'),
       description: focusMode ? t('action.close') : t('action.open'),
       shortcut: 'F',
       action: () => setFocusMode(!focusMode),
+    },
+    {
+      id: 'enable-focus-mode',
+      label: `${t('action.open')} Focus Mode`,
+      description: t('tooltip.focus_mode'),
+      action: () => setFocusMode(true),
+    },
+    {
+      id: 'disable-focus-mode',
+      label: `${t('action.close')} Focus Mode`,
+      description: t('tooltip.focus_mode'),
+      action: () => setFocusMode(false),
     },
     {
       id: 'toggle-sidebar',
@@ -260,6 +287,18 @@ function buildCommands(context: {
       label: t('terminal.title'),
       description: bottomPanelHeight === 0 ? t('action.open') : t('action.close'),
       action: () => setBottomPanelHeight(bottomPanelHeight === 0 ? 200 : 0),
+    },
+    {
+      id: 'show-terminal',
+      label: `${t('action.open')} ${t('terminal.title')}`,
+      description: t('command.shortcut.toggle_terminal'),
+      action: () => setBottomPanelHeight(200),
+    },
+    {
+      id: 'hide-terminal',
+      label: `${t('action.close')} ${t('terminal.title')}`,
+      description: t('command.shortcut.toggle_terminal'),
+      action: () => setBottomPanelHeight(0),
     },
     {
       id: 'open-settings',

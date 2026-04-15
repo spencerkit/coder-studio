@@ -501,6 +501,18 @@
   margin-bottom: var(--sp-2);
 }
 
+.settings-command-preview {
+  display: block;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  word-break: break-all;
+}
+
 .settings-footer {
   display: flex;
   align-items: center;

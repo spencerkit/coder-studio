@@ -1,5 +1,6 @@
 export * from './storage/index.js';
 export * from './terminal/index.js';
+export * from './auth/index.js';
 
 // Server entry point
 export { createServer } from './server.js';

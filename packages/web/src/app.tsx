@@ -8,11 +8,13 @@
 
 import { useAtomValue } from 'jotai';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { connectionStatusAtom, activeWorkspaceIdAtom } from './atoms';
+import { connectionStatusAtom, activeWorkspaceIdAtom, authEnabledAtom } from './atoms';
+import { authenticatedAtom } from './atoms/ui';
 import { WelcomePage } from './features/welcome';
 import { SettingsPage } from './features/settings';
 import { WorkspacePage } from './features/workspace';
 import { CommandPalette } from './features/command-palette';
+import { LoginPage } from './features/auth';
 
 /**
  * Root Route Component
@@ -32,6 +34,11 @@ function RootRoute() {
 
 function App() {
   const connectionStatus = useAtomValue(connectionStatusAtom);
+  const authenticated = useAtomValue(authenticatedAtom);
+  const authEnabled = useAtomValue(authEnabledAtom);
+  const authRequired = authEnabled === true;
+  const authUnknown = authEnabled === null;
+  const shouldShowLogin = (authRequired && !authenticated) || authUnknown;
 
   return (
     <BrowserRouter>
@@ -51,9 +58,17 @@ function App() {
         {/* Main content with routing */}
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<RootRoute />} />
-            <Route path="/workspace/:id" element={<WorkspacePage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            {shouldShowLogin ? (
+              <>
+                <Route path="*" element={<LoginPage />} />
+              </>
+            ) : (
+              <>
+                <Route path="/" element={<RootRoute />} />
+                <Route path="/workspace/:id" element={<WorkspacePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </>
+            )}
           </Routes>
         </main>
 

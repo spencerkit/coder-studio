@@ -13,6 +13,8 @@ interface CliArgs {
   port?: number;
   host?: string;
   dataDir?: string;
+  password?: string;
+  noAuth?: boolean;
 }
 
 /**
@@ -59,6 +61,18 @@ function parseArgs(argv: string[]): CliArgs {
         args.dataDir = dataDirValue;
         break;
 
+      case '--password':
+        const passwordValue = argv[++i];
+        if (!passwordValue) {
+          throw new Error('Missing password value');
+        }
+        args.password = passwordValue;
+        break;
+
+      case '--no-auth':
+        args.noAuth = true;
+        break;
+
       case '--help':
         args.command = 'help';
         break;
@@ -92,6 +106,8 @@ OPTIONS:
   --port, -p <number>     Server port (default: 4173)
   --host, -h <string>     Server host (default: 127.0.0.1)
   --data-dir, -d <path>   Data directory for storage
+  --password <string>     Enable auth with password
+  --no-auth               Disable auth explicitly
   --help                  Show help
   --version, -v           Show version
 
@@ -145,6 +161,13 @@ async function main(): Promise<void> {
 
   if (args.dataDir !== undefined) {
     config.dataDir = args.dataDir;
+  }
+
+  if (args.password !== undefined || args.noAuth !== undefined) {
+    config.auth = {
+      enabled: args.noAuth ? false : !!args.password,
+      password: args.password,
+    };
   }
 
   // Set web root for serving frontend assets

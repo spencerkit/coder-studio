@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/registry.ts","./src/claude/config-schema.ts","./src/claude/definition.ts","./src/claude/event-parser.ts","./src/claude/hooks-template.ts","./src/codex/definition.ts","./src/codex/stdout-heuristics.ts"],"version":"5.9.3"}
