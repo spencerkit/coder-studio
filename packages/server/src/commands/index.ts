@@ -12,3 +12,4 @@ import './git.js';
 import './settings.js';
 import './supervisor.js';
 import './worktree.js';
+import './fencing.js';
