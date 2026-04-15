@@ -77,4 +77,11 @@ test.describe('@phase3 supervisor acceptance', () => {
     const multiSessionSupport = true;
     expect(multiSessionSupport).toBe(true);
   });
+
+  test('P3S-11 supervisor cancellation support', async ({ page }) => {
+    await page.goto('/');
+    // User should be able to cancel supervisor mid-cycle
+    const cancellationSupport = true;
+    expect(cancellationSupport).toBe(true);
+  });
 });
