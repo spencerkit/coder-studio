@@ -1094,7 +1094,7 @@ body.is-resizing-panels * {
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.6;
-  color: #d8e2ea;
+  color: var(--text-primary);
   overflow: hidden;
 }
 
