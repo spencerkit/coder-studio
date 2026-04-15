@@ -158,3 +158,52 @@
   --scrollbar-thumb: var(--border-light);
   --scrollbar-track: transparent;
 }
+
+/* ========== Phase 4: Light Theme ========== */
+[data-theme="light"] {
+  /* Backgrounds - inverted for light mode */
+  --bg-page: #f8fafb;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #f4f6f8;
+  --bg-terminal: #fafbfc;
+  --bg-hover: #e8ecf0;
+  --bg-active: #dde4ea;
+  --bg-disabled: #f0f3f6;
+  --bg-input: #ffffff;
+
+  /* Borders */
+  --border: #d0d7de;
+  --border-light: #e1e4e8;
+  --border-focus: #0969da;
+  --border-error: #cf222e;
+
+  /* Text */
+  --text-primary: #1f2328;
+  --text-secondary: #57606a;
+  --text-tertiary: #8b949e;
+  --text-disabled: #6e7681;
+  --text-inverse: #ffffff;
+
+  /* Accents - adjusted for light mode visibility */
+  --accent-blue: #0969da;
+  --accent-green: #1a7f37;
+  --accent-amber: #9a6700;
+  --accent-pink: #cf222e;
+  --accent-purple: #8250df;
+
+  /* Semantic Colors */
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-error: #cf222e;
+  --color-info: #0969da;
+
+  /* Shadows - lighter for light mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
+  --shadow-glow: 0 0 12px rgba(9, 105, 218, 0.2);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #d0d7de;
+}

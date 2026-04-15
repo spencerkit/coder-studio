@@ -20,7 +20,8 @@ import {
   workspacesAtom,
   sessionsAtom,
 } from '../atoms';
-import { authenticatedAtom } from '../atoms/ui';
+import { authenticatedAtom, themeAtom } from '../atoms/ui';
+import { useHydrateAtoms } from 'jotai/utils';
 import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
@@ -51,6 +52,21 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);
+
+  // Initialize theme from localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('ui.theme');
+    if (savedTheme) {
+      try {
+        const theme = JSON.parse(savedTheme);
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const loadAuthStatus = async () => {

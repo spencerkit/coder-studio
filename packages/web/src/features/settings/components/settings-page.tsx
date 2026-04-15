@@ -52,6 +52,7 @@ export function SettingsPage() {
   const [providerCwd, setProviderCwd] = useState('');
   const [commandPreview, setCommandPreview] = useState('');
   const [locale, setLocale] = useAtom(localeAtom);
+  const [theme, setTheme] = useAtom(themeAtom);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -131,6 +132,8 @@ export function SettingsPage() {
             setLocale={setLocale}
             terminalRenderer={terminalRenderer}
             setTerminalRenderer={setTerminalRenderer}
+            theme={theme}
+            setTheme={setTheme}
           />
         );
       case 'providers':
@@ -347,6 +350,8 @@ interface AppearanceSettingsProps {
   setLocale: (value: 'zh' | 'en') => void;
   terminalRenderer: 'standard' | 'compatibility';
   setTerminalRenderer: (value: 'standard' | 'compatibility') => void;
+  theme: 'dark' | 'light';
+  setTheme: (value: 'dark' | 'light') => void;
 }
 
 function AppearanceSettings({
@@ -354,13 +359,20 @@ function AppearanceSettings({
   setLocale,
   terminalRenderer,
   setTerminalRenderer,
+  theme,
+  setTheme,
 }: AppearanceSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const [theme] = useAtom(themeAtom);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch('settings.update', { settings });
+  };
+
+  const handleThemeChange = (newTheme: 'dark' | 'light') => {
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    void saveSettings({ appearance: { theme: newTheme } });
   };
 
   return (
@@ -374,12 +386,16 @@ function AppearanceSettings({
         <div className="settings-pills">
           <button
             className={`settings-pill ${theme === 'dark' ? 'settings-pill-active' : ''}`}
-            disabled
+            onClick={() => handleThemeChange('dark')}
           >
-            <Check size={12} />
+            {theme === 'dark' && <Check size={12} />}
             <span>{t('settings.theme.dark')}</span>
           </button>
-          <button className="settings-pill settings-pill-disabled" disabled>
+          <button
+            className={`settings-pill ${theme === 'light' ? 'settings-pill-active' : ''}`}
+            onClick={() => handleThemeChange('light')}
+          >
+            {theme === 'light' && <Check size={12} />}
             <span>{t('settings.theme.light')}</span>
           </button>
         </div>
