@@ -34,15 +34,72 @@ interface ProviderInfo {
 export function SettingsPage() {
   const t = useTranslation();
   const navigate = useNavigate();
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
 
   // Provider settings state (would come from server in real implementation)
-  const [providers] = useState<ProviderInfo[]>([
+  const [providers, setProviders] = useState<ProviderInfo[]>([
     { id: 'claude', displayName: 'Claude', capability: 'full', hooksRegistered: false },
     { id: 'codex', displayName: 'Codex', capability: 'limited', hooksRegistered: false },
   ]);
   const [defaultProvider, setDefaultProvider] = useState('claude');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notifyOnlyBackground, setNotifyOnlyBackground] = useState(true);
+  const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('claude-3-sonnet');
+  const [providerCwd, setProviderCwd] = useState('');
+  const [commandPreview, setCommandPreview] = useState('');
+  const [locale, setLocale] = useAtom(localeAtom);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const result = await dispatch<Record<string, unknown>>('settings.get', {});
+      if (!result.ok || !result.data) {
+        return;
+      }
+
+      const settings = result.data;
+      if (typeof settings.defaultProviderId === 'string') {
+        setDefaultProvider(settings.defaultProviderId);
+      }
+      if (typeof settings['notifications.enabled'] === 'boolean') {
+        setNotificationsEnabled(settings['notifications.enabled']);
+      }
+      if (typeof settings['notifications.onlyWhenBackgrounded'] === 'boolean') {
+        setNotifyOnlyBackground(settings['notifications.onlyWhenBackgrounded']);
+      }
+      if (settings['appearance.terminalRenderer'] === 'standard' || settings['appearance.terminalRenderer'] === 'compatibility') {
+        setTerminalRenderer(settings['appearance.terminalRenderer']);
+      }
+      if (settings['appearance.locale'] === 'zh' || settings['appearance.locale'] === 'en') {
+        setLocale(settings['appearance.locale']);
+      }
+      if (typeof settings['providers.apiKey'] === 'string') {
+        setApiKey(settings['providers.apiKey']);
+      }
+      if (typeof settings['providers.model'] === 'string') {
+        setModel(settings['providers.model']);
+      }
+      if (typeof settings['providers.cwd'] === 'string') {
+        setProviderCwd(settings['providers.cwd']);
+      }
+      if (Array.isArray(settings.hookRegistrations)) {
+        setProviders((prev) => prev.map((provider) => {
+          const registration = (settings.hookRegistrations as Array<{ providerId: string; lastStatus?: string }>).find(
+            (item) => item.providerId === provider.id
+          );
+          return {
+            ...provider,
+            hooksRegistered: registration?.lastStatus === 'ok',
+          };
+        }));
+      }
+    };
+
+    void loadSettings();
+  }, [dispatch, setLocale]);
 
   const handleBack = () => {
     if (activeWorkspaceId) {
@@ -61,12 +118,37 @@ export function SettingsPage() {
             defaultProvider={defaultProvider}
             setDefaultProvider={setDefaultProvider}
             providers={providers}
+            notificationsEnabled={notificationsEnabled}
+            setNotificationsEnabled={setNotificationsEnabled}
+            notifyOnlyBackground={notifyOnlyBackground}
+            setNotifyOnlyBackground={setNotifyOnlyBackground}
           />
         );
       case 'appearance':
-        return <AppearanceSettings />;
+        return (
+          <AppearanceSettings
+            locale={locale}
+            setLocale={setLocale}
+            terminalRenderer={terminalRenderer}
+            setTerminalRenderer={setTerminalRenderer}
+          />
+        );
       case 'providers':
-        return <ProviderSettings providers={providers} />;
+        return (
+          <ProviderSettings
+            key={`${apiKey}:${model}:${providerCwd}`}
+            providers={providers}
+            setProviders={setProviders}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            model={model}
+            setModel={setModel}
+            providerCwd={providerCwd}
+            setProviderCwd={setProviderCwd}
+            commandPreview={commandPreview}
+            setCommandPreview={setCommandPreview}
+          />
+        );
       default:
         return null;
     }
@@ -142,13 +224,28 @@ interface GeneralSettingsProps {
   defaultProvider: string;
   setDefaultProvider: (id: string) => void;
   providers: ProviderInfo[];
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (value: boolean) => void;
+  notifyOnlyBackground: boolean;
+  setNotifyOnlyBackground: (value: boolean) => void;
 }
 
-function GeneralSettings({ defaultProvider, setDefaultProvider, providers }: GeneralSettingsProps) {
+function GeneralSettings({
+  defaultProvider,
+  setDefaultProvider,
+  providers,
+  notificationsEnabled,
+  setNotificationsEnabled,
+  notifyOnlyBackground,
+  setNotifyOnlyBackground,
+}: GeneralSettingsProps) {
   const t = useTranslation();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notifyOnlyBackground, setNotifyOnlyBackground] = useState(true);
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+
+  const saveSettings = async (settings: Record<string, unknown>) => {
+    await dispatch('settings.update', { settings });
+  };
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -176,7 +273,10 @@ function GeneralSettings({ defaultProvider, setDefaultProvider, providers }: Gen
             <button
               key={provider.id}
               className={`settings-pill ${defaultProvider === provider.id ? 'settings-pill-active' : ''}`}
-              onClick={() => setDefaultProvider(provider.id)}
+              onClick={() => {
+                setDefaultProvider(provider.id);
+                void saveSettings({ defaultProviderId: provider.id });
+              }}
             >
               {defaultProvider === provider.id && <Check size={12} />}
               <span>{provider.displayName}</span>
@@ -197,7 +297,10 @@ function GeneralSettings({ defaultProvider, setDefaultProvider, providers }: Gen
             <input
               type="checkbox"
               checked={notificationsEnabled}
-              onChange={(e) => setNotificationsEnabled(e.target.checked)}
+              onChange={(e) => {
+                setNotificationsEnabled(e.target.checked);
+                void saveSettings({ notifications: { enabled: e.target.checked } });
+              }}
             />
             <span className="settings-toggle-slider" />
           </label>
@@ -212,7 +315,10 @@ function GeneralSettings({ defaultProvider, setDefaultProvider, providers }: Gen
             <input
               type="checkbox"
               checked={notifyOnlyBackground}
-              onChange={(e) => setNotifyOnlyBackground(e.target.checked)}
+              onChange={(e) => {
+                setNotifyOnlyBackground(e.target.checked);
+                void saveSettings({ notifications: { onlyWhenBackgrounded: e.target.checked } });
+              }}
               disabled={!notificationsEnabled}
             />
             <span className="settings-toggle-slider" />
@@ -236,11 +342,26 @@ function GeneralSettings({ defaultProvider, setDefaultProvider, providers }: Gen
   );
 }
 
-function AppearanceSettings() {
+interface AppearanceSettingsProps {
+  locale: string;
+  setLocale: (value: 'zh' | 'en') => void;
+  terminalRenderer: 'standard' | 'compatibility';
+  setTerminalRenderer: (value: 'standard' | 'compatibility') => void;
+}
+
+function AppearanceSettings({
+  locale,
+  setLocale,
+  terminalRenderer,
+  setTerminalRenderer,
+}: AppearanceSettingsProps) {
   const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const [theme] = useAtom(themeAtom);
-  const [locale, setLocale] = useAtom(localeAtom);
-  const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
+
+  const saveSettings = async (settings: Record<string, unknown>) => {
+    await dispatch('settings.update', { settings });
+  };
 
   return (
     <div className="settings-section">
@@ -271,14 +392,20 @@ function AppearanceSettings() {
         <div className="settings-pills">
           <button
             className={`settings-pill ${terminalRenderer === 'standard' ? 'settings-pill-active' : ''}`}
-            onClick={() => setTerminalRenderer('standard')}
+            onClick={() => {
+              setTerminalRenderer('standard');
+              void saveSettings({ appearance: { terminalRenderer: 'standard' } });
+            }}
           >
             {terminalRenderer === 'standard' && <Check size={12} />}
             <span>{t('settings.terminal_standard')}</span>
           </button>
           <button
             className={`settings-pill ${terminalRenderer === 'compatibility' ? 'settings-pill-active' : ''}`}
-            onClick={() => setTerminalRenderer('compatibility')}
+            onClick={() => {
+              setTerminalRenderer('compatibility');
+              void saveSettings({ appearance: { terminalRenderer: 'compatibility' } });
+            }}
           >
             {terminalRenderer === 'compatibility' && <Check size={12} />}
             <span>{t('settings.terminal_compatibility')}</span>
@@ -293,14 +420,20 @@ function AppearanceSettings() {
         <div className="settings-pills">
           <button
             className={`settings-pill ${locale === 'zh' ? 'settings-pill-active' : ''}`}
-            onClick={() => setLocale('zh')}
+            onClick={() => {
+              setLocale('zh');
+              void saveSettings({ appearance: { locale: 'zh' } });
+            }}
           >
             {locale === 'zh' && <Check size={12} />}
             <span>{t('settings.language.zh')}</span>
           </button>
           <button
             className={`settings-pill ${locale === 'en' ? 'settings-pill-active' : ''}`}
-            onClick={() => setLocale('en')}
+            onClick={() => {
+              setLocale('en');
+              void saveSettings({ appearance: { locale: 'en' } });
+            }}
           >
             {locale === 'en' && <Check size={12} />}
             <span>{t('settings.language.en')}</span>
@@ -313,9 +446,29 @@ function AppearanceSettings() {
 
 interface ProviderSettingsProps {
   providers: ProviderInfo[];
+  setProviders: React.Dispatch<React.SetStateAction<ProviderInfo[]>>;
+  apiKey: string;
+  setApiKey: (value: string) => void;
+  model: string;
+  setModel: (value: string) => void;
+  providerCwd: string;
+  setProviderCwd: (value: string) => void;
+  commandPreview: string;
+  setCommandPreview: (value: string) => void;
 }
 
-function ProviderSettings({ providers }: ProviderSettingsProps) {
+function ProviderSettings({
+  providers,
+  setProviders,
+  apiKey,
+  setApiKey,
+  model,
+  setModel,
+  providerCwd,
+  setProviderCwd,
+  commandPreview,
+  setCommandPreview,
+}: ProviderSettingsProps) {
   const t = useTranslation();
   const [selectedProvider, setSelectedProvider] = useState(providers[0]?.id);
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -328,10 +481,42 @@ function ProviderSettings({ providers }: ProviderSettingsProps) {
     const result = await dispatch('settings.injectHooks', { providerId: provider.id });
 
     if (result.ok) {
-      console.log('Hooks injected successfully');
+      setProviders((prev) => prev.map((item) => item.id === provider.id ? { ...item, hooksRegistered: true } : item));
     } else if (result.error) {
-      console.error('Failed to inject hooks:', result.error);
     }
+  };
+
+  useEffect(() => {
+    const loadPreview = async () => {
+      if (!provider) {
+        setCommandPreview('');
+        return;
+      }
+
+      const config = provider.id === 'claude'
+        ? { model, additionalArgs: [], envVars: {} }
+        : { cwd: providerCwd || undefined, additionalArgs: [], envVars: {} };
+
+      const result = await dispatch<{ preview: string }>('settings.previewCommand', {
+        providerId: provider.id,
+        config,
+      });
+
+      if (result.ok && result.data) {
+        setCommandPreview(result.data.preview);
+      } else if (result.error?.code === 'no_client' || result.error?.code === 'command_error') {
+        // WebSocket not connected, retry after a short delay
+        setTimeout(() => void loadPreview(), 500);
+      } else {
+        setCommandPreview('Error loading preview');
+      }
+    };
+
+    void loadPreview();
+  }, [dispatch, provider, model, providerCwd, setCommandPreview]);
+
+  const saveSettings = async (settings: Record<string, unknown>) => {
+    await dispatch('settings.update', { settings });
   };
 
   return (
@@ -392,16 +577,48 @@ function ProviderSettings({ providers }: ProviderSettingsProps) {
                 type="password"
                 className="input"
                 placeholder={t('settings.provider.api_key_placeholder')}
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  void saveSettings({ providers: { apiKey: e.target.value } });
+                }}
               />
             </div>
 
+            {provider.id === 'claude' ? (
+              <div className="settings-config-field">
+                <label className="settings-config-label">{t('settings.provider.model')}</label>
+                <select className="input" value={model} onChange={(e) => {
+                  setModel(e.target.value);
+                  void saveSettings({ providers: { model: e.target.value } });
+                }}>
+                  <option value="claude-3-opus">Claude 3 Opus</option>
+                  <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku</option>
+                </select>
+              </div>
+            ) : (
+              <div className="settings-config-field">
+                <label className="settings-config-label">Working Directory Override</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="/path/to/project"
+                  value={providerCwd}
+                  onChange={(e) => {
+                    setProviderCwd(e.target.value);
+                    void saveSettings({ providers: { cwd: e.target.value } });
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="settings-group">
+            <h3 className="settings-group-title">Command Preview</h3>
+            <p className="settings-group-desc">Preview of the effective provider command</p>
             <div className="settings-config-field">
-              <label className="settings-config-label">{t('settings.provider.model')}</label>
-              <select className="input">
-                <option value="claude-3-opus">Claude 3 Opus</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                <option value="claude-3-haiku">Claude 3 Haiku</option>
-              </select>
+              <code className="settings-command-preview">{commandPreview}</code>
             </div>
           </div>
         </div>

@@ -6,7 +6,14 @@ import { z } from 'zod';
  */
 export const claudeConfigSchema = z.object({
   // Model selection
-  model: z.enum(['claude-sonnet-4-5', 'claude-sonnet-4-6[1m]']).default('claude-sonnet-4-6[1m]'),
+  model: z.enum([
+    'claude-3-opus',
+    'claude-3-sonnet',
+    'claude-3-haiku',
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-6',
+    'claude-opus-4-6',
+  ]).default('claude-sonnet-4-6'),
 
   // Maximum turns (null = unlimited)
   maxTurns: z.number().int().positive().nullable().default(null),

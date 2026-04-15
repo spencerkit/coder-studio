@@ -1,17 +1,17 @@
 /**
  * Build script for CLI package
- * Creates ESM + CJS bundles with esbuild and assembles web assets
+ * Creates ESM bundle with esbuild and assembles web assets
  */
 
 import * as esbuild from 'esbuild';
 import {
   CLI_DIR,
   CLI_ESM_DIR,
-  CLI_CJS_DIR,
   CLI_WEB_DIR,
   WEB_DIST_DIR,
   HOOK_BRIDGE_SRC,
   RUNTIME_HOOKS_DIR,
+  SERVER_DIR,
   log,
   info,
   success,
@@ -22,28 +22,21 @@ import {
   exists,
   createCliBuildOptions,
 } from './shared/index.js';
-import { resolve } from 'path';
-import { writeFile } from 'fs/promises';
+import { resolve, join } from 'path';
+import { writeFile, copyFile } from 'fs/promises';
 
 async function buildCli(): Promise<void> {
   step('BUILD CLI', 'Building CLI bundle with esbuild...\n');
 
   // Ensure output directories exist
   await ensureDir(CLI_ESM_DIR);
-  await ensureDir(CLI_CJS_DIR);
   await ensureDir(CLI_WEB_DIR);
 
-  // Build ESM bundle
+  // Build ESM bundle only (server uses ESM features like top-level await)
   info('Building ESM bundle...');
   const esmOptions = await createCliBuildOptions('esm');
   await esbuild.build(esmOptions);
   success(`ESM bundle: ${esmOptions.outfile}`);
-
-  // Build CJS bundle
-  info('Building CJS bundle...');
-  const cjsOptions = await createCliBuildOptions('cjs');
-  await esbuild.build(cjsOptions);
-  success(`CJS bundle: ${cjsOptions.outfile}`);
 
   // Create bin.js wrapper (for ESM)
   info('Creating bin.js entry point...');
@@ -57,6 +50,22 @@ import('./esm/index.mjs').catch((err) => {
 `;
   await writeFile(binPath, binContent, { mode: 0o755 });
   success(`bin.js: ${binPath}`);
+
+  // Copy migrations
+  info('Copying database migrations...');
+  const migrationsSrc = join(SERVER_DIR, 'src/storage/migrations');
+  const migrationsDest = join(CLI_ESM_DIR, 'migrations');
+  if (await exists(migrationsSrc)) {
+    await ensureDir(migrationsDest);
+    const { readdir } = await import('fs/promises');
+    const files = await readdir(migrationsSrc);
+    for (const file of files) {
+      await copyFile(join(migrationsSrc, file), join(migrationsDest, file));
+    }
+    success(`Migrations: ${migrationsDest}`);
+  } else {
+    error('Warning: migrations source not found, skipping');
+  }
 
   // Copy web assets
   info('Copying web assets...');
@@ -82,7 +91,6 @@ import('./esm/index.mjs').catch((err) => {
   log('\n✓ CLI build complete.');
   log(`  Entry:    ${binPath}`);
   log(`  ESM:      ${esmOptions.outfile}`);
-  log(`  CJS:      ${cjsOptions.outfile}`);
   log(`  Web:      ${CLI_WEB_DIR}`);
 }
 

@@ -26,21 +26,28 @@ async function getExternalDeps(packageDir: string): Promise<string[]> {
 
 /**
  * Create esbuild options for CLI bundle
+ * Bundles all internal workspace packages, externalizes only third-party deps
  */
 export async function createCliBuildOptions(
   format: 'esm' | 'cjs'
 ): Promise<BuildOptions> {
-  const external = await getExternalDeps(CLI_DIR);
+  const cliExternal = await getExternalDeps(CLI_DIR);
   const serverExternal = await getExternalDeps(SERVER_DIR);
   const coreExternal = await getExternalDeps(CORE_DIR);
   const providersExternal = await getExternalDeps(PROVIDERS_DIR);
 
-  const allExternal = new Set([
-    ...external,
+  // Combine all dependencies
+  const allDeps = new Set([
+    ...cliExternal,
     ...serverExternal,
     ...coreExternal,
     ...providersExternal,
   ]);
+
+  // Only externalize third-party dependencies (not internal @coder-studio/* packages)
+  const external = Array.from(allDeps).filter(
+    (dep) => !dep.startsWith('@coder-studio/')
+  );
 
   const outfile = format === 'esm'
     ? resolve(CLI_DIR, 'dist/esm/index.mjs')
@@ -53,12 +60,39 @@ export async function createCliBuildOptions(
     target: 'node20',
     format,
     outfile,
-    external: Array.from(allExternal),
+    external,
     sourcemap: true,
     minify: false,
-    packages: 'external',
+    // Resolve internal workspace packages to their source files
+    alias: {
+      '@coder-studio/server': resolve(SERVER_DIR, 'src/index.ts'),
+      '@coder-studio/core': resolve(CORE_DIR, 'src/index.ts'),
+      '@coder-studio/providers': resolve(PROVIDERS_DIR, 'src/index.ts'),
+    },
     banner: format === 'esm'
       ? { js: '// @coder-studio/cli - ESM bundle' }
       : undefined,
   };
+}
+
+/**
+ * Get list of production dependencies for assembly
+ */
+export async function getProductionDeps(): Promise<string[]> {
+  const cliExternal = await getExternalDeps(CLI_DIR);
+  const serverExternal = await getExternalDeps(SERVER_DIR);
+  const coreExternal = await getExternalDeps(CORE_DIR);
+  const providersExternal = await getExternalDeps(PROVIDERS_DIR);
+
+  // Combine all dependencies and filter out internal packages
+  const allDeps = new Set([
+    ...cliExternal,
+    ...serverExternal,
+    ...coreExternal,
+    ...providersExternal,
+  ]);
+
+  return Array.from(allDeps).filter(
+    (dep) => !dep.startsWith('@coder-studio/')
+  );
 }

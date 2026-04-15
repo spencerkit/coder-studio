@@ -21,9 +21,10 @@ export const claudeDefinition: ProviderDefinition = {
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx: LaunchContext) {
     const cfg = config as ClaudeConfig;
+    const modelArg = cfg.model ? ['--model', cfg.model] : [];
 
     return {
-      argv: ['claude', ...cfg.additionalArgs],
+      argv: ['claude', ...modelArg, ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -34,9 +35,10 @@ export const claudeDefinition: ProviderDefinition = {
 
   buildResumeCommand(resumeId: string, config: ProviderConfig, ctx: LaunchContext) {
     const cfg = config as ClaudeConfig;
+    const modelArg = cfg.model ? ['--model', cfg.model] : [];
 
     return {
-      argv: ['claude', '--resume', resumeId, ...cfg.additionalArgs],
+      argv: ['claude', '--resume', resumeId, ...modelArg, ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -48,7 +50,7 @@ export const claudeDefinition: ProviderDefinition = {
   // ===== Configuration =====
   configSchema: claudeConfigSchema,
   defaultConfig: {
-    model: 'claude-sonnet-4-6[1m]',
+    model: 'claude-sonnet-4-6',
     maxTurns: null,
     additionalArgs: [],
     envVars: {},
