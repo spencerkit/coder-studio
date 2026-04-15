@@ -1954,3 +1954,172 @@ body.is-resizing-panels * {
   resize: vertical;
   min-height: 80px;
 }
+
+/* ========== Worktree Modal (Phase 3) ========== */
+.modal-card-lg {
+  max-width: 720px;
+}
+
+.worktree-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.worktree-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.worktree-chip {
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.worktree-chip-branch {
+  color: var(--accent-blue);
+}
+
+.worktree-chip-path {
+  font-family: var(--font-mono);
+}
+
+.worktree-chip-status.worktree-clean {
+  color: var(--accent-green);
+  background: rgba(120, 215, 178, 0.15);
+}
+
+.worktree-chip-status.worktree-dirty {
+  color: var(--accent-amber);
+  background: rgba(241, 184, 106, 0.15);
+}
+
+.modal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-tab {
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.modal-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.modal-tab.active {
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent-blue);
+}
+
+.worktree-content {
+  min-height: 300px;
+}
+
+.worktree-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.worktree-status-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.worktree-info-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.worktree-info-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  min-width: 80px;
+}
+
+.worktree-info-value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.worktree-changes {
+  padding: var(--sp-3);
+  background: var(--bg);
+  border-radius: var(--radius-md);
+}
+
+.worktree-change-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+}
+
+.worktree-diff-tab {
+  overflow: hidden;
+}
+
+.worktree-diff-output {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre;
+  overflow-x: auto;
+  padding: var(--sp-3);
+  background: var(--bg);
+  border-radius: var(--radius-md);
+}
+
+.worktree-tree-tab {
+  overflow: hidden;
+}
+
+.worktree-tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+}
+
+.worktree-tree-node {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-md);
+}
+
+.worktree-tree-node:hover {
+  background: var(--bg-hover);
+}
+
+.worktree-tree-icon {
+  font-size: var(--text-sm);
+}
+
+.worktree-tree-name {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.worktree-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  padding: var(--sp-4);
+}
