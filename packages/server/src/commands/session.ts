@@ -55,8 +55,6 @@ registerCommand(
     sessionId: z.string(),
   }),
   async (args, ctx) => {
-    // Session removal handled by database layer
-    // For now, we just verify the session exists
     const session = ctx.sessionMgr.get(args.sessionId);
     if (!session) {
       throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
@@ -66,8 +64,7 @@ registerCommand(
       throw { code: 'invalid_state', message: `Cannot remove session in state: ${session.state}` };
     }
 
-    // TODO: Add delete method to session manager
-    throw { code: 'not_implemented', message: 'Session removal not yet implemented' };
+    ctx.sessionMgr.delete(args.sessionId);
   }
 );
 

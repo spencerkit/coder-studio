@@ -196,6 +196,12 @@ function createSessionDatabase(db: any) {
     findById: (id: string) => {
       return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
     },
+    findByWorkspaceId: (workspaceId: string) => {
+      return db.prepare('SELECT * FROM sessions WHERE workspace_id = ?').all(workspaceId);
+    },
+    delete: (id: string) => {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+    },
   };
 }
 

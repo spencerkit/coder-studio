@@ -2,42 +2,65 @@
  * Application Shell
  *
  * Root component that sets up:
- * - Router
- * - UI layout
+ * - Router (BrowserRouter)
+ * - UI layout with connection status banner
  */
 
 import { useAtomValue } from 'jotai';
-import { connectionStatusAtom } from './atoms';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { connectionStatusAtom, activeWorkspaceIdAtom } from './atoms';
+import { WelcomePage } from './features/welcome';
+import { SettingsPage } from './features/settings';
+import { WorkspacePage } from './features/workspace';
+import { CommandPalette } from './features/command-palette';
+
+/**
+ * Root Route Component
+ *
+ * Redirects to active workspace if one exists,
+ * otherwise shows the Welcome page.
+ */
+function RootRoute() {
+  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+
+  if (activeWorkspaceId) {
+    return <Navigate to={`/workspace/${activeWorkspaceId}`} replace />;
+  }
+
+  return <WelcomePage />;
+}
 
 function App() {
   const connectionStatus = useAtomValue(connectionStatusAtom);
 
   return (
-    <div className="app">
-      {/* Connection status indicator */}
-      {connectionStatus === 'reconnecting' && (
-        <div className="connection-banner">
-          <span>正在重新连接...</span>
-        </div>
-      )}
-      {connectionStatus === 'rejected' && (
-        <div className="connection-banner connection-banner--error">
-          <span>另一个标签页已激活</span>
-        </div>
-      )}
+    <BrowserRouter>
+      <div className="app">
+        {/* Connection status indicator */}
+        {connectionStatus === 'reconnecting' && (
+          <div className="connection-banner">
+            <span>正在重新连接...</span>
+          </div>
+        )}
+        {connectionStatus === 'rejected' && (
+          <div className="connection-banner connection-banner--error">
+            <span>另一个标签页已激活</span>
+          </div>
+        )}
 
-      {/* Main content - placeholder until router is implemented */}
-      <main className="main-content">
-        <div className="welcome-container">
-          <h1>Coder Studio</h1>
-          <p>Agent-First Development Environment</p>
-          <p className="text-secondary">Phase 1 - Web Core Layer</p>
-          <p className="text-tertiary">
-            Connection Status: {connectionStatus}
-          </p>
-        </div>
-      </main>
-    </div>
+        {/* Main content with routing */}
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/workspace/:id" element={<WorkspacePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
+
+        {/* Command Palette (global overlay) */}
+        <CommandPalette />
+      </div>
+    </BrowserRouter>
   );
 }
 

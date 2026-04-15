@@ -7,6 +7,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import type { Workspace } from '@coder-studio/core';
+import { activeWorkspaceIdAtom } from './ui';
 
 /**
  * All workspaces (server state projection)
@@ -23,11 +24,8 @@ export const workspaceByIdAtomFamily = atomFamily((id: string) =>
 
 /**
  * Active workspace (derived)
- * Note: activeWorkspaceIdAtom is defined in ui.ts with localStorage persistence
  */
 export const activeWorkspaceAtom = atom((get) => {
-  // Import activeWorkspaceIdAtom from ui.ts
-  const { activeWorkspaceIdAtom } = require('./ui');
   const wsId = get(activeWorkspaceIdAtom);
   if (!wsId) return null;
   return get(workspaceByIdAtomFamily(wsId));

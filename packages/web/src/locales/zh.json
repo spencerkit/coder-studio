@@ -24,7 +24,8 @@
     "reset": "重置",
     "search": "搜索",
     "search_files": "搜索文件",
-    "search_commands": "搜索命令"
+    "search_commands": "搜索命令",
+    "back": "返回"
   },
   "label": {
     "workspace": "工作区",

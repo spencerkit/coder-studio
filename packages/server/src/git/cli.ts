@@ -146,3 +146,145 @@ export async function commitChanges(cwd: string, message: string): Promise<{ sha
 
   return { sha };
 }
+
+/**
+ * Push changes to remote.
+ */
+export async function runGitPush(
+  cwd: string,
+  options?: {
+    remote?: string;
+    branch?: string;
+    force?: boolean;
+  }
+): Promise<{ success: boolean; message: string }> {
+  const args = ['push'];
+
+  if (options?.force) {
+    args.push('--force');
+  }
+
+  if (options?.remote && options?.branch) {
+    args.push(options.remote, options.branch);
+  } else if (options?.branch) {
+    args.push('origin', options.branch);
+  }
+
+  const { stdout, stderr } = await runGit(cwd, args);
+
+  // Combine output for message
+  const message = stdout || stderr || 'Push completed successfully';
+
+  return { success: true, message };
+}
+
+/**
+ * Pull changes from remote.
+ */
+export async function runGitPull(
+  cwd: string,
+  options?: {
+    remote?: string;
+    branch?: string;
+  }
+): Promise<{ success: boolean; message: string; updatedFiles?: string[] }> {
+  const args = ['pull'];
+
+  if (options?.remote && options?.branch) {
+    args.push(options.remote, options.branch);
+  } else if (options?.branch) {
+    args.push('origin', options.branch);
+  }
+
+  const { stdout, stderr } = await runGit(cwd, args);
+
+  // Parse updated files from output
+  const updatedFiles: string[] = [];
+  const fileMatches = stdout.matchAll(/Updating\s+([a-f0-9]+)\.\.\.([a-f0-9]+)\nFast-forward\n([\s\S]*)/g);
+  for (const match of fileMatches) {
+    const filesSection = match[3] ?? '';
+    const fileLines = filesSection.split('\n').filter(line => line.trim());
+    for (const line of fileLines) {
+      const fileMatch = line.match(/^\s+\S+\s+(\S+)/);
+      if (fileMatch && fileMatch[1]) {
+        updatedFiles.push(fileMatch[1]);
+      }
+    }
+  }
+
+  const message = stdout || stderr || 'Pull completed successfully';
+
+  return { success: true, message, updatedFiles };
+}
+
+/**
+ * Checkout a branch or commit.
+ */
+export async function runGitCheckout(
+  cwd: string,
+  ref: string,
+  options?: {
+    createBranch?: boolean;
+  }
+): Promise<{ success: boolean; message: string; branch?: string }> {
+  const args = ['checkout'];
+
+  if (options?.createBranch) {
+    args.push('-b');
+  }
+
+  args.push(ref);
+
+  const { stdout, stderr } = await runGit(cwd, args);
+
+  // Extract branch name from output
+  const branchMatch = stdout.match(/Switched to (?:a new branch|branch) '([^']+)'/);
+  const branch = branchMatch?.[1] ?? ref;
+
+  const message = stdout || stderr || `Checkout to ${ref} completed`;
+
+  return { success: true, message, branch };
+}
+
+/**
+ * Create a new branch.
+ */
+export async function runGitCreateBranch(
+  cwd: string,
+  branchName: string,
+  options?: {
+    startPoint?: string;
+  }
+): Promise<{ success: boolean; message: string; branch: string }> {
+  const args = ['branch', branchName];
+
+  if (options?.startPoint) {
+    args.push(options.startPoint);
+  }
+
+  await runGit(cwd, args);
+
+  return { success: true, message: `Branch '${branchName}' created`, branch: branchName };
+}
+
+/**
+ * List all branches.
+ */
+export async function runGitListBranches(cwd: string): Promise<{ branches: string[]; current: string }> {
+  const { stdout } = await runGit(cwd, ['branch', '--list']);
+
+  const branches: string[] = [];
+  let current = '';
+
+  const lines = stdout.split('\n').filter(line => line.trim());
+  for (const line of lines) {
+    const isCurrent = line.startsWith('*');
+    const name = line.replace(/^\*?\s+/, '').trim();
+    branches.push(name);
+    if (isCurrent) {
+      current = name;
+    }
+  }
+
+  return { branches, current };
+}

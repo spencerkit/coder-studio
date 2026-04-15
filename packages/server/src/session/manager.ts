@@ -289,6 +289,34 @@ export class SessionManager {
   }
 
   /**
+   * Delete a session
+   * Only allowed for sessions in 'ended' or 'unavailable' state
+   */
+  delete(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (session.state !== 'ended' && session.state !== 'unavailable') {
+      throw new Error(`Cannot delete session in state: ${session.state}`);
+    }
+
+    // Remove from memory
+    this.sessions.delete(sessionId);
+
+    // Delete from database
+    this.deps.db.delete(sessionId);
+
+    // Emit removed event
+    this.deps.eventBus.emit({
+      type: 'session.lifecycle',
+      sessionId,
+      event: 'removed',
+    } as DomainEvent);
+  }
+
+  /**
    * Emit state changed event
    */
   private emitStateChanged(session: ActiveSession, from: SessionState | null, to: SessionState): void {

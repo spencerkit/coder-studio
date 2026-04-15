@@ -22,7 +22,8 @@ import {
 import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
-import { WsClient, resolveWsUrl, type EventListener } from '../ws/client';
+import { WsClient, resolveWsUrl } from '../ws';
+import type { EventListener } from '../ws';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
 
 interface AppProvidersProps {

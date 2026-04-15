@@ -5,7 +5,7 @@
  * Independent of React/Jotai - uses callbacks for integration.
  */
 
-import type { ServerMessage, ClientMessage } from '@coder-studio/core';
+import type { ServerToClient, ClientToServer } from '@coder-studio/core';
 
 export type ConnectionStatus =
   | 'connecting'
@@ -82,7 +82,7 @@ export class WsClient {
 
         this.ws.onmessage = (event) => {
           try {
-            const msg = JSON.parse(event.data) as ServerMessage;
+            const msg = JSON.parse(event.data) as ServerToClient;
             this.handleMessage(msg);
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);
@@ -154,7 +154,7 @@ export class WsClient {
       });
 
       // Send command
-      const msg: ClientMessage = { kind: 'command', id, op, args };
+      const msg: ClientToServer = { kind: 'command', id, op, args };
       this.ws.send(JSON.stringify(msg));
     });
   }
@@ -172,7 +172,7 @@ export class WsClient {
 
     // Send subscribe message
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const msg: ClientMessage = { kind: 'subscribe', topics };
+      const msg: ClientToServer = { kind: 'subscribe', topics };
       this.ws.send(JSON.stringify(msg));
     }
 
@@ -213,7 +213,7 @@ export class WsClient {
   /**
    * Handle incoming message
    */
-  private handleMessage(msg: ServerMessage): void {
+  private handleMessage(msg: ServerToClient): void {
     if (msg.kind === 'result') {
       // Handle command result
       const pending = this.pendingCommands.get(msg.id);
@@ -248,7 +248,7 @@ export class WsClient {
   /**
    * Handle WebSocket close
    */
-  private handleClose(code: number, reason: string): void {
+  private handleClose(code: number, _reason: string): void {
     this.ws = null;
 
     // Check for rejection codes
@@ -297,7 +297,7 @@ export class WsClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     if (this.lastSeenSeq.size === 0) return;
 
-    const msg: ClientMessage = {
+    const msg: ClientToServer = {
       kind: 'resync',
       lastSeen: Object.fromEntries(this.lastSeenSeq),
     };
