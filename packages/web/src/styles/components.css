@@ -2222,3 +2222,103 @@ body.is-resizing-panels * {
   padding-top: var(--sp-4);
   border-top: 1px solid var(--border);
 }
+
+/* ========== MCP Settings (Phase 4) ========== */
+.mcp-provider-tabs {
+  margin-bottom: var(--sp-4);
+}
+
+.mcp-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.mcp-server-item {
+  padding: var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.mcp-server-disabled {
+  opacity: 0.6;
+}
+
+.mcp-server-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+
+.mcp-server-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.mcp-server-status {
+  font-size: var(--text-xs);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+}
+
+.mcp-server-status.enabled {
+  background: rgba(120, 215, 178, 0.15);
+  color: var(--accent-green);
+}
+
+.mcp-server-status.disabled {
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+}
+
+.mcp-server-command {
+  padding: var(--sp-2);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
+}
+
+.mcp-server-desc {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+
+.mcp-server-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.mcp-empty {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.mcp-server-form {
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.mcp-form-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--sp-4);
+}
+
+.mcp-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}

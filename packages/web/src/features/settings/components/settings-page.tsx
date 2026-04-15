@@ -7,13 +7,14 @@
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard } from 'lucide-react';
+import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard, Server } from 'lucide-react';
 import { localeAtom, themeAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
+import { McpSettings } from './mcp-settings';
 
-type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts';
+type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts' | 'mcp';
 
 interface ProviderInfo {
   id: string;
@@ -155,6 +156,8 @@ export function SettingsPage() {
         );
       case 'shortcuts':
         return <ShortcutsSettings />;
+      case 'mcp':
+        return <McpSettings />;
       default:
         return null;
     }
@@ -195,6 +198,12 @@ export function SettingsPage() {
               label={t('settings.shortcuts.title')}
               active={activeSection === 'shortcuts'}
               onClick={() => setActiveSection('shortcuts')}
+            />
+            <SettingsNavItem
+              icon={<Server size={16} />}
+              label={t('settings.mcp.title')}
+              active={activeSection === 'mcp'}
+              onClick={() => setActiveSection('mcp')}
             />
           </nav>
         </aside>

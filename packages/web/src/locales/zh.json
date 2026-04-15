@@ -199,6 +199,16 @@
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
+    },
+    "mcp": {
+      "title": "MCP Servers",
+      "hint": "配置 Claude/Codex 的 Model Context Protocol servers",
+      "no_servers": "未配置 MCP servers",
+      "add_server": "添加 Server",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "enable": "启用",
+      "disable": "禁用"
     }
   },
   "connection": {
