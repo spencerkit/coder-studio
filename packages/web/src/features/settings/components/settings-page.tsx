@@ -6,8 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
-import { Settings, Palette, Globe, Check, ChevronRight } from 'lucide-react';
-import { localeAtom, themeAtom } from '../../../atoms/ui';
+import { useNavigate } from 'react-router-dom';
+import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft } from 'lucide-react';
+import { localeAtom, themeAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 
@@ -32,6 +33,8 @@ interface ProviderInfo {
  */
 export function SettingsPage() {
   const t = useTranslation();
+  const navigate = useNavigate();
+  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
 
   // Provider settings state (would come from server in real implementation)
@@ -40,6 +43,14 @@ export function SettingsPage() {
     { id: 'codex', displayName: 'Codex', capability: 'limited', hooksRegistered: false },
   ]);
   const [defaultProvider, setDefaultProvider] = useState('claude');
+
+  const handleBack = () => {
+    if (activeWorkspaceId) {
+      navigate(`/workspace/${activeWorkspaceId}`);
+    } else {
+      navigate('/');
+    }
+  };
 
   // Render content based on active section
   const renderContent = () => {
@@ -63,32 +74,41 @@ export function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <aside className="settings-sidebar">
-        <nav className="settings-nav">
-          <SettingsNavItem
-            icon={<Settings size={16} />}
-            label={t('settings.general')}
-            active={activeSection === 'general'}
-            onClick={() => setActiveSection('general')}
-          />
-          <SettingsNavItem
-            icon={<Globe size={16} />}
-            label={t('settings.providers')}
-            active={activeSection === 'providers'}
-            onClick={() => setActiveSection('providers')}
-          />
-          <SettingsNavItem
-            icon={<Palette size={16} />}
-            label={t('settings.appearance')}
-            active={activeSection === 'appearance'}
-            onClick={() => setActiveSection('appearance')}
-          />
-        </nav>
-      </aside>
+      <header className="settings-header">
+        <button className="settings-back-btn" onClick={handleBack}>
+          <ArrowLeft size={16} />
+          <span>{t('action.back')}</span>
+        </button>
+      </header>
 
-      <main className="settings-content">
-        {renderContent()}
-      </main>
+      <div className="settings-body">
+        <aside className="settings-sidebar">
+          <nav className="settings-nav">
+            <SettingsNavItem
+              icon={<Settings size={16} />}
+              label={t('settings.general')}
+              active={activeSection === 'general'}
+              onClick={() => setActiveSection('general')}
+            />
+            <SettingsNavItem
+              icon={<Globe size={16} />}
+              label={t('settings.providers')}
+              active={activeSection === 'providers'}
+              onClick={() => setActiveSection('providers')}
+            />
+            <SettingsNavItem
+              icon={<Palette size={16} />}
+              label={t('settings.appearance')}
+              active={activeSection === 'appearance'}
+              onClick={() => setActiveSection('appearance')}
+            />
+          </nav>
+        </aside>
+
+        <main className="settings-content">
+          {renderContent()}
+        </main>
+      </div>
 
       <footer className="settings-footer">
         <span className="settings-autosave">{t('settings.autosave_hint')}</span>

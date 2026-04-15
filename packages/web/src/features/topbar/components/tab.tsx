@@ -9,7 +9,7 @@ import type { FC } from 'react';
 import { useSetAtom } from 'jotai';
 import { X } from 'lucide-react';
 import type { Workspace } from '@coder-studio/core';
-import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
+import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 
 interface WorkspaceTabProps {
@@ -39,28 +39,26 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
     // TODO: Dispatch close workspace command
   };
 
-  const statusColor = workspace.isActive ? 'running' : 'idle';
-
   return (
     <div
-      className={`workspace-tab ${isActive ? 'workspace-tab-active' : ''}`}
+      className={`topbar-tab ${isActive ? 'active' : ''}`}
       onClick={handleClick}
       role="button"
       tabIndex={0}
       aria-selected={isActive}
     >
-      <span className={`workspace-tab-dot workspace-tab-dot-${statusColor}`} />
+      <span className={`topbar-dot ${workspace.isActive ? 'active' : 'idle'}`} />
 
-      <span className="workspace-tab-name">{workspace.name}</span>
+      <span className="topbar-tab-name">{workspace.name}</span>
 
       {workspace.unreadCount && workspace.unreadCount > 0 ? (
-        <span className="workspace-tab-badge">
+        <span className="topbar-unread">
           {workspace.unreadCount > 9 ? '9+' : workspace.unreadCount}
         </span>
       ) : null}
 
       <button
-        className="workspace-tab-close"
+        className="topbar-close"
         onClick={handleClose}
         aria-label={t('action.close_workspace')}
       >

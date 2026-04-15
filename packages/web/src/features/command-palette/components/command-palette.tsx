@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import {
   commandPaletteOpenAtom,
@@ -37,11 +38,12 @@ interface Command {
  */
 export function CommandPalette() {
   const t = useTranslation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
   const [focusMode, setFocusMode] = useAtom(focusModeAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useAtom(activeWorkspaceIdAtom);
   const workspaces = useAtomValue(workspacesAtom);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,7 +59,9 @@ export function CommandPalette() {
     bottomPanelHeight,
     setBottomPanelHeight,
     activeWorkspaceId,
+    setActiveWorkspaceId,
     workspaces,
+    navigate,
     t,
   });
 
@@ -208,7 +212,9 @@ function buildCommands(context: {
   bottomPanelHeight: number;
   setBottomPanelHeight: (v: number) => void;
   activeWorkspaceId: string | null;
+  setActiveWorkspaceId: (v: string | null) => void;
   workspaces: Record<string, { id: string; path: string }>;
+  navigate: (path: string) => void;
   t: (key: string) => string;
 }): Command[] {
   const {
@@ -218,9 +224,10 @@ function buildCommands(context: {
     setSidebarCollapsed,
     bottomPanelHeight,
     setBottomPanelHeight,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    activeWorkspaceId: _activeWorkspaceId,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
     workspaces,
+    navigate,
     t,
   } = context;
 
@@ -258,9 +265,9 @@ function buildCommands(context: {
       id: 'open-settings',
       label: t('action.settings'),
       description: t('settings.title'),
+      shortcut: 'Ctrl+,',
       action: () => {
-        // TODO: Navigate to settings
-        console.log('Navigate to settings');
+        navigate('/settings');
       },
     },
   ];
@@ -272,11 +279,24 @@ function buildCommands(context: {
       label: `${t('workspace.title')}: ${ws.path.split('/').pop()}`,
       description: ws.path,
       action: () => {
-        // TODO: Switch to workspace
-        console.log('Switch to workspace:', ws.id);
+        setActiveWorkspaceId(ws.id);
+        navigate(`/workspace/${ws.id}`);
       },
     });
   });
+
+  // Add go home command if in a workspace
+  if (activeWorkspaceId) {
+    commands.push({
+      id: 'go-home',
+      label: t('action.back'),
+      description: t('workspace.no_workspace'),
+      action: () => {
+        setActiveWorkspaceId(null);
+        navigate('/');
+      },
+    });
+  }
 
   return commands;
 }

@@ -4,18 +4,16 @@
  * Main navigation bar with workspace tabs, quick actions, and settings.
  */
 
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { useAtom } from 'jotai';
 import { Plus } from 'lucide-react';
-import { useAtomCallback } from 'jotai/utils';
 import type { FC } from 'react';
-import { useCallback } from 'react';
-import { workspacesAtom, activeWorkspaceIdAtom } from '../../atoms/workspaces';
-import { commandPaletteOpenAtom } from '../../atoms/ui';
+import { useNavigate } from 'react-router-dom';
+import { workspacesAtom } from '../../atoms/workspaces';
+import { commandPaletteOpenAtom, activeWorkspaceIdAtom } from '../../atoms/ui';
 import { useTranslation } from '../../lib/i18n';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
-import type { Workspace } from '@coder-studio/core';
 
 /**
  * TopBar Component
@@ -27,6 +25,7 @@ import type { Workspace } from '@coder-studio/core';
  */
 export const TopBar: FC = () => {
   const t = useTranslation();
+  const navigate = useNavigate();
   const workspaces = useAtomValue(workspacesAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
@@ -34,25 +33,23 @@ export const TopBar: FC = () => {
   const workspaceList = Object.values(workspaces);
 
   return (
-    <header className="topbar">
-      <div className="topbar-left">
+    <header className="app-topbar">
+      <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
           <div className="topbar-empty-state">
             <span className="topbar-hint">{t('workspace.no_workspace')}</span>
           </div>
         ) : (
           <>
-            <div className="topbar-tabs">
-              {workspaceList.map((ws) => (
-                <WorkspaceTab
-                  key={ws.id}
-                  workspace={ws}
-                  isActive={ws.id === activeWorkspaceId}
-                />
-              ))}
-            </div>
+            {workspaceList.map((ws) => (
+              <WorkspaceTab
+                key={ws.id}
+                workspace={ws}
+                isActive={ws.id === activeWorkspaceId}
+              />
+            ))}
             <button
-              className="topbar-add-btn"
+              className="topbar-add"
               onClick={() => {/* TODO: Open workspace launch modal */}}
               aria-label={t('workspace.open')}
               title={t('workspace.open')}
@@ -63,22 +60,22 @@ export const TopBar: FC = () => {
         )}
       </div>
 
-      <div className="topbar-right">
+      <div className="topbar-actions">
         <ConnectionStatus />
         <button
-          className="topbar-tool"
+          className="topbar-btn"
           onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
           aria-label={t('command.palette')}
         >
-          <span className="topbar-tool-label">{t('command.palette')}</span>
+          <span className="topbar-btn-label">{t('command.palette')}</span>
         </button>
         <button
-          className="topbar-tool"
-          onClick={() => {/* TODO: Navigate to settings */}}
+          className="topbar-btn"
+          onClick={() => navigate('/settings')}
           aria-label={t('action.settings')}
           data-testid="settings-open"
         >
-          <span className="topbar-tool-label">{t('action.settings')}</span>
+          <span className="topbar-btn-label">{t('action.settings')}</span>
         </button>
       </div>
     </header>

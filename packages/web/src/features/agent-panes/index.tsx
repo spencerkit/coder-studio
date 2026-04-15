@@ -6,13 +6,15 @@
  */
 
 import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
 import { paneLayoutAtomFamily, type PaneNode } from '../../atoms/ui';
+import { dispatchCommandAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
+import type { Session } from '@coder-studio/core';
 
 /**
  * Agent Panes Container
@@ -72,7 +74,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
   // Render split container
   return (
     <PaneLayout direction={node.direction || 'horizontal'} ratio={node.ratio || 0.5}>
-      {node.children?.map((child, idx) => (
+      {node.children?.map((child) => (
         <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} />
       ))}
     </PaneLayout>
@@ -92,10 +94,26 @@ interface DraftLauncherProps {
  */
 const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
   const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
 
-  const handleSelectProvider = (provider: 'claude' | 'codex') => {
-    // TODO: Dispatch session create command
-    console.log('Start session with provider:', provider);
+  const handleSelectProvider = async (provider: 'claude' | 'codex') => {
+    const result = await dispatch<Session>('session.create', {
+      workspaceId,
+      providerId: provider,
+    });
+
+    if (result.ok && result.data) {
+      const session = result.data;
+      // Update pane layout to show the new session
+      setPaneLayout({
+        id: 'root',
+        type: 'leaf',
+        sessionId: session.id,
+      });
+    } else {
+      console.error('Failed to create session:', result.error?.message);
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 /**
  * Phase 1 Visual Acceptance Tests: Global Design System
@@ -9,16 +9,28 @@ test.describe('@phase1 visual acceptance', () => {
 
   test('V1-01 color system baseline', async ({ page }) => {
     await page.goto('/');
-    test.fail(true, 'Color system tokens not implemented yet');
+    // Check CSS variables are loaded
+    const bgColor = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--bg-page').trim()
+    );
+    expect(bgColor).toBe('#0a1014');
   });
 
   test('V1-02 spacing grid baseline', async ({ page }) => {
     await page.goto('/');
-    test.fail(true, 'Spacing grid system not implemented yet');
+    // Check spacing tokens
+    const sp4 = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--sp-4').trim()
+    );
+    expect(sp4).toBe('16px');
   });
 
   test('V1-03 typography baseline', async ({ page }) => {
     await page.goto('/');
-    test.fail(true, 'Typography system not implemented yet');
+    // Check font tokens
+    const fontSize = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--text-base').trim()
+    );
+    expect(fontSize).toBe('13px');
   });
 });

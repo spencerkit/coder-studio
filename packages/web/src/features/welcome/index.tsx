@@ -6,8 +6,9 @@
  */
 
 import type { FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../../lib/i18n';
-import { FolderOpen, Settings } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import { useSetAtom } from 'jotai';
 import { commandPaletteOpenAtom } from '../../atoms/ui';
 
@@ -21,41 +22,34 @@ import { commandPaletteOpenAtom } from '../../atoms/ui';
  */
 export const WelcomePage: FC = () => {
   const t = useTranslation();
+  const navigate = useNavigate();
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
 
   const handleOpenWorkspace = () => {
-    // TODO: Dispatch open workspace modal command
-    console.log('Open workspace modal');
+    // Open command palette for workspace selection
+    setCommandPaletteOpen(true);
   };
 
   const handleOpenSettings = () => {
-    // TODO: Navigate to settings
-    console.log('Navigate to settings');
+    navigate('/settings');
   };
 
   return (
-    <div className="welcome-page">
-      <div className="welcome-content">
-        <div className="welcome-header">
-          <h1 className="welcome-title">{t('app.name')}</h1>
-          <p className="welcome-subtitle">{t('app.description')}</p>
-        </div>
+    <div className="welcome-container">
+      <div className="welcome-card">
+        <div className="welcome-kicker">Get Started</div>
+        <h1 className="welcome-title">{t('app.name')}</h1>
+        <p className="welcome-body">{t('app.description')}</p>
 
-        <div className="welcome-actions">
-          <button className="btn btn-primary btn-lg" onClick={handleOpenWorkspace}>
-            <FolderOpen size={16} />
-            <span>{t('action.open_workspace')}</span>
-          </button>
+        <button className="welcome-btn" onClick={handleOpenWorkspace}>
+          <Plus size={16} />
+          <span>{t('action.open_workspace')}</span>
+        </button>
 
-          <button className="welcome-settings-link" onClick={handleOpenSettings}>
-            <Settings size={14} />
-            <span>{t('action.settings')}</span>
-          </button>
-        </div>
-
-        <div className="welcome-hint">
-          <p className="welcome-hint-text">{t('workspace.open_hint')}</p>
-        </div>
+        <a className="welcome-link" onClick={handleOpenSettings}>
+          <Settings size={14} />
+          <span>{t('action.settings')}</span>
+        </a>
       </div>
     </div>
   );

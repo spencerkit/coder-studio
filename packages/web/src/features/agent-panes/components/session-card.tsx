@@ -6,7 +6,7 @@
  */
 
 import type { FC } from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useAtomValue } from 'jotai';
 import {
   X,
@@ -20,9 +20,7 @@ import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { SessionState } from '@coder-studio/core';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+import { XtermHost } from '../../terminal-panel/components/xterm-host';
 
 interface SessionCardProps {
   sessionId: string;
@@ -42,68 +40,21 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [inputValue, setInputValue] = useState('');
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-
-  // Initialize xterm.js terminal
-  useEffect(() => {
-    if (!terminalRef.current || xtermRef.current) return;
-
-    const terminal = new Terminal({
-      fontSize: 13,
-      fontFamily: 'JetBrains Mono, monospace',
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-      },
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-
-    terminal.open(terminalRef.current);
-    fitAddon.fit();
-
-    xtermRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    // Handle resize
-    const handleResize = () => {
-      fitAddon.fit();
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      terminal.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, []);
-
-  // Fit terminal when session changes
-  useEffect(() => {
-    if (fitAddonRef.current) {
-      fitAddonRef.current.fit();
-    }
-  }, [session]);
 
   if (!session) {
     return null;
   }
 
   /**
-   * Start session: dispatch session.start command
+   * Resume session: dispatch session.resume command
    */
   const handleStart = async () => {
-    const result = await dispatch<{ sessionId: string }>('session.start', {
+    const result = await dispatch<{ sessionId: string }>('session.resume', {
       sessionId,
     });
 
     if (!result.ok) {
-      console.error('Failed to start session:', result.error?.message);
+      console.error('Failed to resume session:', result.error?.message);
     }
   };
 
@@ -128,7 +79,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
 
     const result = await dispatch<void>('terminal.input', {
       terminalId: session.terminalId,
-      data: inputValue + '\n',
+      bytes: btoa(inputValue + '\n'), // Base64 encode for binary-safe transport
     });
 
     if (result.ok) {
@@ -172,27 +123,27 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const progressWidth = getProgressWidth(session.state);
 
   return (
-    <div className="session-card">
+    <div className="agent-pane">
       {/* Progress bar */}
-      <div className="session-progress">
+      <div className="agent-progress">
         <div
-          className={`session-progress-bar session-progress-${session.state}`}
+          className={`fill ${session.state === 'unavailable' ? 'error' : ''}`}
           style={{ width: `${progressWidth}%` }}
         />
       </div>
 
       {/* Header */}
-      <div className="session-header">
-        <div className="session-header-left">
-          <span className={`session-dot session-dot-${session.state}`} />
-          <span className="session-title">{session.id.slice(0, 8)}</span>
-          <span className="session-provider-badge">{session.providerId}</span>
-          <span className="session-status-label">
+      <div className="agent-header">
+        <div className="agent-header-left">
+          <span className={`agent-session-dot ${session.state === 'running' ? 'active' : ''}`} />
+          <span className="agent-title">{session.id.slice(0, 8)}</span>
+          <span className="agent-badge">{session.providerId}</span>
+          <span className="agent-status">
             {t(`session.state.${session.state}`)}
           </span>
         </div>
 
-        <div className="session-header-actions">
+        <div className="agent-header-actions">
           {session.state === 'idle' || session.state === 'interrupted' ? (
             <button
               className="btn btn-icon btn-sm"
@@ -235,7 +186,12 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
       </div>
 
       {/* Terminal area */}
-      <div className="session-terminal" ref={terminalRef} />
+      <div className="agent-terminal">
+        <XtermHost
+          terminalId={session.terminalId}
+          workspaceId={session.workspaceId}
+        />
+      </div>
 
       {/* Input area */}
       {(session.state === 'running' || session.state === 'idle') && (

@@ -109,6 +109,18 @@
   --z-tooltip: 600;
   --z-toast: 700;
 
+  /* ========== Visual稿别名 (short aliases) ========== */
+  --text: var(--text-primary);
+  --text-sec: var(--text-secondary);
+  --text-ter: var(--text-tertiary);
+  --blue: var(--accent-blue);
+  --green: var(--accent-green);
+  --amber: var(--accent-amber);
+  --pink: var(--accent-pink);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --bg: var(--bg-page);
+
   /* ========== Component-Specific Tokens ========== */
 
   /* Buttons */
@@ -122,16 +134,18 @@
   --input-height-lg: 40px;
 
   /* Topbar */
-  --topbar-height: 48px;
+  --topbar-height: 36px;
 
   /* Panels */
   --panel-min-width: 200px;
   --panel-max-width: 600px;
+  --nav-width: 280px;
 
   /* Terminal */
   --terminal-font-size: 13px;
-  --terminal-line-height: 1.4;
+  --terminal-line-height: 1.6;
   --terminal-scrollback: 5000;
+  --terminal-height: 160px;
 
   /* Status Dot */
   --status-dot-size: 8px;

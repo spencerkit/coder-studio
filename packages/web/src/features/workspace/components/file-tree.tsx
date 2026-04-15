@@ -8,15 +8,7 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
-import {
-  Folder,
-  File,
-  ChevronRight,
-  ChevronDown,
-  RefreshCw,
-} from 'lucide-react';
 import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
-import { activeWorkspaceAtom } from '../../../atoms/workspaces';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { FileNode } from '@coder-studio/core';
@@ -29,15 +21,11 @@ interface FileTreePanelProps {
  * File Tree Panel
  *
  * PRD §9.3:
- *   - Header with "REPOSITORY NAVIGATOR" label
- *   - Branch chip showing current branch
- *   - Toolbar with refresh button
  *   - Tree structure with folders/files
  *   - Click to open, expand/collapse
  */
 export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
-  const workspace = useAtomValue(activeWorkspaceAtom);
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -76,44 +64,15 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
     }
   }, [fileTreeStale, isLoading, loadFileTree]);
 
-  const handleRefresh = () => {
-    if (!isLoading) {
-      loadFileTree();
-    }
-  };
-
   return (
-    <div className="file-tree-panel">
-      <div className="file-tree-header">
-        <span className="file-tree-label">{t('file.title').toUpperCase()}</span>
-        {workspace?.branch && (
-          <span className="file-tree-branch-chip">
-            <Folder size={12} />
-            <span>{workspace.branch}</span>
-          </span>
-        )}
-      </div>
-
-      <div className="file-tree-toolbar">
-        <button
-          className="btn btn-icon btn-sm"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          aria-label={t('action.refresh')}
-        >
-          <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
-        </button>
-      </div>
-
-      <div className="file-tree-content">
-        {fileTree ? (
-          <FileTreeNode node={fileTree} depth={0} workspaceId={workspaceId} />
-        ) : (
-          <div className="file-tree-empty">
-            <p>{isLoading ? 'Loading...' : t('file.title')}</p>
-          </div>
-        )}
-      </div>
+    <div className="file-tree">
+      {fileTree ? (
+        <FileTreeNode node={fileTree} depth={0} workspaceId={workspaceId} />
+      ) : (
+        <div className="file-tree-empty">
+          <p>{isLoading ? 'Loading...' : t('file.title')}</p>
+        </div>
+      )}
     </div>
   );
 };
@@ -147,30 +106,34 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({ node, depth, workspaceId }) => {
     }
   };
 
-  const paddingLeft = depth * 16;
+  const paddingLeft = depth * 12 + 16;
 
   return (
-    <div className="file-tree-node">
+    <>
       <div
-        className="file-tree-node-row"
+        className="tree-item"
         onClick={handleClick}
         style={{ paddingLeft }}
       >
         {isFolder && (
-          <span className="file-tree-chevron">
-            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <span className="tree-chevron">
+            {isExpanded ? '▼' : '▶'}
           </span>
         )}
 
-        <span className="file-tree-icon">
-          {isFolder ? <Folder size={14} /> : <File size={14} />}
+        {!isFolder && (
+          <span className="tree-chevron" style={{ visibility: 'hidden' }}>▶</span>
+        )}
+
+        <span className={`tree-icon ${isFolder ? 'folder' : ''}`}>
+          {isFolder ? '📁' : '📄'}
         </span>
 
-        <span className="file-tree-name">{node.name}</span>
+        <span className="tree-label">{node.name}</span>
       </div>
 
       {isFolder && isExpanded && node.children && (
-        <div className="file-tree-children">
+        <div className="tree-children">
           {node.children.map((child) => (
             <FileTreeNode
               key={child.path}
@@ -181,7 +144,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({ node, depth, workspaceId }) => {
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 };
 
