@@ -17,6 +17,7 @@ import {
 } from '../../../atoms/ui';
 import { workspacesAtom } from '../../../atoms/workspaces';
 import { useTranslation } from '../../../lib/i18n';
+import { WorkspaceLaunchModal } from '../../workspace/components/workspace-launch-modal';
 
 interface Command {
   id: string;
@@ -48,6 +49,7 @@ export function CommandPalette() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showWorkspaceLaunch, setShowWorkspaceLaunch] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Build command list
@@ -63,6 +65,7 @@ export function CommandPalette() {
     workspaces,
     navigate,
     t,
+    setShowWorkspaceLaunch,
   });
 
   // Filter commands by search
@@ -132,6 +135,11 @@ export function CommandPalette() {
     cmd.action();
     setIsOpen(false);
   };
+
+  // Show workspace launch modal if triggered
+  if (showWorkspaceLaunch) {
+    return <WorkspaceLaunchModal onClose={() => setShowWorkspaceLaunch(false)} />;
+  }
 
   if (!isOpen) {
     return null;
@@ -216,6 +224,7 @@ function buildCommands(context: {
   workspaces: Record<string, { id: string; path: string }>;
   navigate: (path: string) => void;
   t: (key: string) => string;
+  setShowWorkspaceLaunch: (v: boolean) => void;
 }): Command[] {
   const {
     focusMode,
@@ -229,6 +238,7 @@ function buildCommands(context: {
     workspaces,
     navigate,
     t,
+    setShowWorkspaceLaunch,
   } = context;
 
   const commands: Command[] = [
@@ -238,8 +248,7 @@ function buildCommands(context: {
       description: t('workspace.open_hint'),
       shortcut: 'Ctrl+N',
       action: () => {
-        // TODO: Open workspace launch modal
-        console.log('Open workspace launch modal');
+        setShowWorkspaceLaunch(true);
       },
     },
     {
@@ -299,15 +308,6 @@ function buildCommands(context: {
       label: `${t('action.close')} ${t('terminal.title')}`,
       description: t('command.shortcut.toggle_terminal'),
       action: () => setBottomPanelHeight(0),
-    },
-    {
-      id: 'open-settings',
-      label: t('action.settings'),
-      description: t('settings.title'),
-      shortcut: 'Ctrl+,',
-      action: () => {
-        navigate('/settings');
-      },
     },
   ];
 
