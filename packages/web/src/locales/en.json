@@ -1,0 +1,264 @@
+{
+  "app": {
+    "name": "Coder Studio",
+    "description": "Agent-First Development Environment"
+  },
+  "action": {
+    "open_workspace": "Open Workspace",
+    "close_workspace": "Close Workspace",
+    "create_session": "Create Session",
+    "stop_session": "Stop Session",
+    "resume_session": "Resume Session",
+    "save_file": "Save File",
+    "save_all": "Save All",
+    "discard_changes": "Discard Changes",
+    "commit": "Commit",
+    "push": "Push",
+    "pull": "Pull",
+    "refresh": "Refresh",
+    "settings": "Settings",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "apply": "Apply",
+    "reset": "Reset",
+    "search": "Search",
+    "search_files": "Search Files",
+    "search_commands": "Search Commands",
+    "back": "Back"
+  },
+  "label": {
+    "workspace": "Workspace",
+    "session": "Session",
+    "terminal": "Terminal",
+    "file": "File",
+    "git": "Git",
+    "settings": "Settings",
+    "provider": "Provider",
+    "status": "Status",
+    "progress": "Progress"
+  },
+  "status": {
+    "starting": "Starting",
+    "running": "Running",
+    "idle": "Idle",
+    "busy": "Busy",
+    "ended": "Ended",
+    "unavailable": "Unavailable",
+    "connecting": "Connecting",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "reconnecting": "Reconnecting",
+    "rejected": "Rejected"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "open": "Open",
+    "close": "Close",
+    "path": "Path",
+    "no_workspace": "No workspace open",
+    "open_hint": "Click the button below to open a project directory",
+    "runtime_check": {
+      "title": "Runtime Check",
+      "checking": "Checking runtime environment...",
+      "success": "Runtime environment check passed",
+      "failed": "Runtime environment check failed",
+      "missing_git": "Git command not found",
+      "missing_node": "Node.js not found",
+      "missing_provider": "{provider} CLI not found"
+    }
+  },
+  "session": {
+    "title": "Session",
+    "create": "Create Session",
+    "stop": "Stop",
+    "resume": "Resume",
+    "no_session": "No active session",
+    "provider_select": "Select Provider",
+    "state": {
+      "starting": "Starting...",
+      "running": "Running",
+      "idle": "Waiting for input",
+      "busy": "Executing",
+      "ended": "Stopped",
+      "unavailable": "Unavailable"
+    },
+    "resume_unavailable": "This session cannot be resumed",
+    "progress": {
+      "thinking": "Thinking...",
+      "executing": "Executing...",
+      "waiting": "Waiting for response..."
+    }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "new_terminal": "New Terminal",
+    "close_terminal": "Close Terminal",
+    "shell": "Shell Terminal",
+    "agent": "Agent Terminal",
+    "reconnect_hint": "Connection lost, reconnecting...",
+    "no_terminal": "No terminals"
+  },
+  "file": {
+    "title": "Files",
+    "modified": "Modified",
+    "unsaved": "Unsaved",
+    "dirty": "Has unsaved changes",
+    "new_file": "New File",
+    "new_folder": "New Folder",
+    "rename": "Rename",
+    "delete": "Delete",
+    "delete_confirm": "Are you sure you want to delete \"{name}\"?",
+    "conflict": "File has been modified externally",
+    "conflict_message": "The file may have been modified outside the editor. Discard local changes and reload?"
+  },
+  "git": {
+    "title": "Git",
+    "changes": "Changes",
+    "staged": "Staged",
+    "unstaged": "Unstaged",
+    "untracked": "Untracked",
+    "no_changes": "No changes",
+    "commit": "Commit",
+    "commit_message": "Commit Message",
+    "commit_placeholder": "Enter commit message...",
+    "stage": "Stage",
+    "unstage": "Unstage",
+    "stage_all": "Stage All",
+    "unstage_all": "Unstage All",
+    "discard": "Discard",
+    "branch": "Branch",
+    "current_branch": "Current Branch",
+    "no_branch": "Not on any branch",
+    "ahead": "{count} commits ahead",
+    "behind": "{count} commits behind",
+    "synced": "Synced with remote"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "appearance": "Appearance",
+    "providers": "Providers",
+    "autosave_hint": "Settings saved automatically",
+    "notifications": "Notifications",
+    "notifications_enabled": "Enable completion notifications",
+    "notifications_enabled_hint": "Send notification when Agent session completes",
+    "notify_background": "Notify only in background",
+    "notify_background_hint": "Only send notifications when window is not in foreground",
+    "notification_permission": "Notification Permission",
+    "permission_granted": "Granted",
+    "permission_denied": "Denied",
+    "permission_request": "Request Permission",
+    "terminal_renderer": "Terminal Renderer",
+    "terminal_renderer_hint": "Choose terminal rendering mode",
+    "terminal_standard": "Standard",
+    "terminal_compatibility": "Compatibility Mode",
+    "provider": {
+      "title": "Provider Settings",
+      "status": "Status",
+      "capability": "Capability Level",
+      "capability_full": "Full Support",
+      "capability_limited": "Limited Support",
+      "capability_unsupported": "Unsupported",
+      "hooks_registered": "Hooks Registered",
+      "hooks_unregistered": "Hooks Not Registered",
+      "hooks_error": "Hooks Registration Failed",
+      "hooks": "Hooks Integration",
+      "hooks_hint": "Inject Provider-specific hooks into current workspace",
+      "hooks_inject": "Inject Hooks",
+      "select_hint": "Select default Agent Provider",
+      "configure": "Configure",
+      "reset": "Reset",
+      "config": "Configuration",
+      "api_key": "API Key",
+      "api_key_placeholder": "Enter API Key...",
+      "model": "Model"
+    },
+    "theme": {
+      "title": "Theme",
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System",
+      "hint": "Only dark theme is currently supported"
+    },
+    "language": {
+      "title": "Language",
+      "zh": "中文",
+      "en": "English",
+      "hint": "Select interface language"
+    },
+    "auth": {
+      "title": "Authentication",
+      "password": "Password",
+      "password_set": "Set Password",
+      "password_change": "Change Password",
+      "password_remove": "Remove Password"
+    }
+  },
+  "connection": {
+    "title": "Connection",
+    "status": "Status",
+    "reconnecting": "Reconnecting...",
+    "reconnect_failed": "Reconnection failed",
+    "another_tab": "Another tab is active",
+    "takeover": "Take Control",
+    "server_shutdown": "Server has shut down",
+    "backpressure_warning": "Network congested, some output may be lost"
+  },
+  "command": {
+    "palette": "Command Palette",
+    "no_results": "No results found",
+    "shortcut": {
+      "save": "Save",
+      "save_all": "Save All",
+      "search": "Search",
+      "search_files": "Search Files",
+      "command_palette": "Command Palette",
+      "toggle_focus": "Toggle Focus Mode",
+      "toggle_sidebar": "Toggle Sidebar",
+      "toggle_terminal": "Toggle Terminal Panel"
+    }
+  },
+  "notification": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info",
+    "session_turn_completed": "Session turn completed",
+    "file_saved": "File saved",
+    "committed": "Committed"
+  },
+  "error": {
+    "unknown": "Unknown error",
+    "network": "Network error",
+    "not_found": "Not found",
+    "permission_denied": "Permission denied",
+    "validation": "Validation failed",
+    "conflict": "Resource conflict"
+  },
+  "confirm": {
+    "save_changes": "Save changes?",
+    "discard_changes": "Discard changes?",
+    "delete_file": "Delete this file?",
+    "stop_session": "Stop session?",
+    "close_workspace": "Close workspace?"
+  },
+  "placeholder": {
+    "search": "Type to search...",
+    "command": "Type a command or shortcut...",
+    "commit_message": "Enter commit message"
+  },
+  "tooltip": {
+    "focus_mode": "Focus Mode: Hide sidebar and bottom panel",
+    "split_horizontal": "Split panel horizontally",
+    "split_vertical": "Split panel vertically",
+    "close_pane": "Close panel"
+  },
+  "time": {
+    "just_now": "Just now",
+    "seconds_ago": "{count} seconds ago",
+    "minutes_ago": "{count} minutes ago",
+    "hours_ago": "{count} hours ago",
+    "days_ago": "{count} days ago"
+  }
+}

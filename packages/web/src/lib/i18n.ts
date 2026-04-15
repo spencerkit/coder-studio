@@ -2,7 +2,6 @@
  * Internationalization System
  *
  * Provides type-safe translations with localeAtom for switching.
- * Phase 1 only includes zh.json.
  */
 
 import { atom } from 'jotai';
@@ -10,13 +9,14 @@ import { localeAtom } from '../atoms/ui';
 
 // Import locale files
 import zh from '../locales/zh.json';
+import en from '../locales/en.json';
 
 /**
  * Available locales
  */
 export const LOCALES = {
   zh: { name: '中文', data: zh },
-  // en: { name: 'English', data: en }, // Phase 2
+  en: { name: 'English', data: en },
 } as const;
 
 export type LocaleCode = keyof typeof LOCALES;
