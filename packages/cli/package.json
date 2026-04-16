@@ -53,6 +53,14 @@
     "development",
     "tools"
   ],
-  "author": "",
-  "license": "MIT"
+  "author": "Coder Studio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/coder-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anthropics/coder-studio/issues"
+  },
+  "homepage": "https://github.com/anthropics/coder-studio#readme"
 }
