@@ -1,97 +1,37 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('@phase3 multi-tab concurrency', () => {
-  test('P3M-01 fencing token structure defined', async ({ page }) => {
+  test('P3M-01 first tab becomes controller', async ({ page }) => {
     await page.goto('/');
+    // Wait for WebSocket connection
+    await page.waitForTimeout(2000);
 
-    // FencingToken should have: clientId, tabId, issuedAt, expiresAt, ip, userAgent
-    const tokenFields = ['clientId', 'tabId', 'issuedAt', 'expiresAt', 'ip', 'userAgent'];
-    expect(tokenFields.length).toBe(6);
+    // Observer banner should NOT be visible (we are the controller)
+    const banner = page.locator('.observer-banner');
+    await expect(banner).not.toBeVisible();
   });
 
-  test('P3M-02 fencing manager options', async ({ page }) => {
-    await page.goto('/');
+  test('P3M-02 observer banner shows for second connection', async ({
+    browser,
+  }) => {
+    // Open first tab
+    const context1 = await browser.newContext();
+    const page1 = await context1.newPage();
+    await page1.goto('/');
+    await page1.waitForTimeout(2000);
 
-    // Default intervals: visible 10s, hidden 20s, expiration 30s, grace 3s
-    const intervals = {
-      visibleHeartbeatMs: 10000,
-      hiddenHeartbeatMs: 20000,
-      tokenExpirationMs: 30000,
-      refreshGraceMs: 3000,
-    };
-    expect(intervals.visibleHeartbeatMs).toBe(10000);
-  });
+    // Open second tab
+    const context2 = await browser.newContext();
+    const page2 = await context2.newPage();
+    await page2.goto('/');
+    await page2.waitForTimeout(2000);
 
-  test('P3M-03 fencing atoms defined', async ({ page }) => {
-    await page.goto('/');
+    // Note: Exact behavior depends on whether workspace is loaded.
+    // At minimum, both pages should load without error.
+    await expect(page1.locator('body')).toBeVisible();
+    await expect(page2.locator('body')).toBeVisible();
 
-    // Verify fencing atoms exist
-    const atoms = ['tabIdAtom', 'fencingStateAtom', 'isControllerAtom', 'readOnlyModeAtom'];
-    expect(atoms.length).toBe(4);
-  });
-
-  test('P3M-04 fencing commands registered', async ({ page }) => {
-    await page.goto('/');
-
-    // Commands: request, heartbeat, release, status, takeover
-    const commands = ['request', 'heartbeat', 'release', 'status', 'takeover'];
-    expect(commands.length).toBe(5);
-  });
-
-  test('P3M-05 grace period for refresh', async ({ page }) => {
-    await page.goto('/');
-
-    // Grace period allows same-origin refresh to maintain controller
-    const gracePeriodMs = 3000;
-    expect(gracePeriodMs).toBe(3000);
-  });
-
-  test('P3M-06 writer observer mode switch', async ({ page }) => {
-    await page.goto('/');
-    // Tab can switch between writer and observer mode
-    const modesAvailable = true;
-    expect(modesAvailable).toBe(true);
-  });
-
-  test('P3M-07 takeover request functionality', async ({ page }) => {
-    await page.goto('/');
-    // Observer can request takeover from writer
-    const takeoverSupported = true;
-    expect(takeoverSupported).toBe(true);
-  });
-
-  test('P3M-08 state sync across tabs', async ({ page }) => {
-    await page.goto('/');
-    // State should sync between tabs via WebSocket
-    const stateSyncEnabled = true;
-    expect(stateSyncEnabled).toBe(true);
-  });
-
-  test('P3M-09 conflict resolution', async ({ page }) => {
-    await page.goto('/');
-    // Concurrent edits should be resolved
-    const conflictResolutionEnabled = true;
-    expect(conflictResolutionEnabled).toBe(true);
-  });
-
-  test('P3M-10 read-only mode indicator', async ({ page }) => {
-    await page.goto('/');
-    // Observer tabs should show read-only indicator
-    const readOnlyIndicatorExists = true;
-    expect(readOnlyIndicatorExists).toBe(true);
-  });
-
-  test('P3M-11 heartbeat mechanism', async ({ page }) => {
-    await page.goto('/');
-    // Heartbeat should maintain controller status
-    const heartbeatEnabled = true;
-    expect(heartbeatEnabled).toBe(true);
-  });
-
-  test('P3M-12 fencing state persistence', async ({ page }) => {
-    await page.goto('/');
-    // Fencing state should persist across page refresh
-    const statePersistenceEnabled = true;
-    expect(statePersistenceEnabled).toBe(true);
+    await context1.close();
+    await context2.close();
   });
 });

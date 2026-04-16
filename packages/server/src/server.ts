@@ -16,6 +16,8 @@ import { SessionManager } from './session/manager.js';
 import { TerminalManager } from './terminal/manager.js';
 import { HooksManager } from './hooks/manager.js';
 import { providerRegistry } from '@coder-studio/providers';
+import { FencingManager } from './ws/fencing.js';
+import { SupervisorManager } from './supervisor/manager.js';
 
 // Import command handlers to register them
 import './commands/index.js';
@@ -40,8 +42,11 @@ export async function createServer(
   // Collaboration infrastructure: Event Bus + WebSocket Hub
   const eventBus = new EventBus();
 
-  // Create WsHub first (implements Broadcaster)
-  const wsHub = new WsHub({ eventBus, commandContext: null as any, config });
+  // Create FencingManager first
+  const fencingMgr = new FencingManager();
+
+  // Create WsHub (implements Broadcaster)
+  const wsHub = new WsHub({ eventBus, commandContext: null as any, config, fencingMgr });
 
   // Terminal Manager (needs broadcaster)
   // Note: For Phase 1, we use a minimal PTY host implementation
@@ -72,6 +77,13 @@ export async function createServer(
     {} as any // Runtime config - will be implemented
   );
 
+  // Supervisor Manager
+  const supervisorMgr = new SupervisorManager({
+    eventBus,
+    broadcaster: wsHub,
+    terminalMgr,
+  });
+
   // Command context with all managers
   const commandContext: CommandContext = {
     workspaceMgr,
@@ -82,6 +94,8 @@ export async function createServer(
     broadcaster: wsHub,
     db,
     providerRegistry,
+    fencingMgr,
+    supervisorMgr,
   };
 
   // Update wsHub with command context

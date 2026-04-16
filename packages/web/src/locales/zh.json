@@ -276,5 +276,10 @@
     "minutes_ago": "{count} 分钟前",
     "hours_ago": "{count} 小时前",
     "days_ago": "{count} 天前"
+  },
+  "fencing": {
+    "observer_mode": "只读模式 — 另一个标签页正在控制",
+    "takeover": "接管控制",
+    "takeover_failed": "接管失败 — 控制器仍然活跃"
   }
 }

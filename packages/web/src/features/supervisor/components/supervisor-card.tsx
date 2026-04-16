@@ -8,6 +8,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import type { Supervisor, SupervisorState } from '@coder-studio/core';
 import { supervisorsAtom, supervisorDialogAtom } from '../atoms';
+import { wsClientAtom } from '../../../atoms/connection';
 
 interface SupervisorCardProps {
   sessionId: string;
@@ -35,6 +36,7 @@ const STATE_CLASSES: Record<SupervisorState, string> = {
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
   const supervisors = useAtomValue(supervisorsAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const wsClient = useAtomValue(wsClientAtom);
   const supervisor = supervisors.get(sessionId);
 
   const handleEnable = useCallback(() => {
@@ -46,24 +48,40 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   }, [sessionId, setDialog]);
 
   const handlePause = useCallback(async () => {
-    // TODO: Implement pause command
-    console.log('Pause supervisor:', supervisor?.id);
-  }, [supervisor]);
+    if (!wsClient || !supervisor) return;
+    try {
+      await wsClient.sendCommand('supervisor.pause', { id: supervisor.id });
+    } catch (error) {
+      console.error('Failed to pause supervisor:', error);
+    }
+  }, [wsClient, supervisor]);
 
   const handleResume = useCallback(async () => {
-    // TODO: Implement resume command
-    console.log('Resume supervisor:', supervisor?.id);
-  }, [supervisor]);
+    if (!wsClient || !supervisor) return;
+    try {
+      await wsClient.sendCommand('supervisor.resume', { id: supervisor.id });
+    } catch (error) {
+      console.error('Failed to resume supervisor:', error);
+    }
+  }, [wsClient, supervisor]);
 
   const handleTrigger = useCallback(async () => {
-    // TODO: Implement trigger command
-    console.log('Trigger evaluation:', supervisor?.id);
-  }, [supervisor]);
+    if (!wsClient || !supervisor) return;
+    try {
+      await wsClient.sendCommand('supervisor.trigger', { id: supervisor.id });
+    } catch (error) {
+      console.error('Failed to trigger evaluation:', error);
+    }
+  }, [wsClient, supervisor]);
 
   const handleDisable = useCallback(async () => {
-    // TODO: Implement disable command
-    console.log('Disable supervisor:', supervisor?.id);
-  }, [supervisor]);
+    if (!wsClient || !supervisor) return;
+    try {
+      await wsClient.sendCommand('supervisor.delete', { id: supervisor.id });
+    } catch (error) {
+      console.error('Failed to disable supervisor:', error);
+    }
+  }, [wsClient, supervisor]);
 
   // No supervisor configured - show enable button
   if (!supervisor) {

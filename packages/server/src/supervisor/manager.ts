@@ -12,10 +12,15 @@ import type {
 } from '@coder-studio/core';
 import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from '../ws/hub.js';
+import type { TerminalManager } from '../terminal/manager.js';
+import { evaluateProgress, type EvaluationResult } from './evaluator.js';
+import { injectGuidance } from './injector.js';
+import { SupervisorScheduler } from './scheduler.js';
 
 export interface SupervisorManagerDeps {
   eventBus: EventBus;
   broadcaster: Broadcaster;
+  terminalMgr: TerminalManager;
 }
 
 export interface CreateSupervisorRequest {
@@ -54,8 +59,15 @@ function generateCycleId(): string {
 export class SupervisorManager {
   private supervisors = new Map<string, Supervisor>();
   private supervisorsBySession = new Map<string, string>();
+  private scheduler: SupervisorScheduler;
 
-  constructor(private readonly deps: SupervisorManagerDeps) {}
+  constructor(private readonly deps: SupervisorManagerDeps) {
+    this.scheduler = new SupervisorScheduler((supervisorId) => {
+      this.runEvaluation(supervisorId).catch((err) => {
+        console.error(`Scheduler evaluation failed for ${supervisorId}:`, err);
+      });
+    });
+  }
 
   /**
    * Create a new supervisor for a session
@@ -78,6 +90,10 @@ export class SupervisorManager {
 
     this.supervisors.set(id, supervisor);
     this.supervisorsBySession.set(req.sessionId, id);
+
+    // Start scheduler if interval is set
+    const intervalMs = req.intervalMs ?? 60000;
+    this.scheduler.start(id, intervalMs);
 
     // Broadcast supervisor creation
     this.deps.broadcaster.broadcast(
@@ -124,6 +140,7 @@ export class SupervisorManager {
       return;
     }
 
+    this.scheduler.stop(id);
     this.supervisors.delete(id);
     this.supervisorsBySession.delete(supervisor.sessionId);
 
@@ -138,6 +155,7 @@ export class SupervisorManager {
    * Pause supervisor evaluation
    */
   async pause(id: string): Promise<Supervisor> {
+    this.scheduler.stop(id);
     return this.setState(id, 'paused');
   }
 
@@ -145,6 +163,10 @@ export class SupervisorManager {
    * Resume supervisor evaluation
    */
   async resume(id: string): Promise<Supervisor> {
+    const supervisor = this.supervisors.get(id);
+    if (supervisor) {
+      this.scheduler.start(id, supervisor.intervalMs ?? 60000);
+    }
     return this.setState(id, 'idle');
   }
 
@@ -249,6 +271,66 @@ export class SupervisorManager {
   getBySession(sessionId: string): Supervisor | undefined {
     const id = this.supervisorsBySession.get(sessionId);
     return id ? this.supervisors.get(id) : undefined;
+  }
+
+  /**
+   * Run evaluation cycle for a supervisor
+   */
+  private async runEvaluation(supervisorId: string): Promise<void> {
+    const supervisor = this.supervisors.get(supervisorId);
+    if (!supervisor || supervisor.state === 'paused' || supervisor.state === 'inactive') {
+      return;
+    }
+
+    // Create cycle
+    const cycle = await this.triggerEvaluation(supervisorId);
+
+    try {
+      // Update cycle to evaluating
+      await this.updateCycle(supervisorId, cycle.id, 'evaluating');
+
+      // Get terminal output for evaluation
+      const terminalOutput = (this.deps.terminalMgr as any).getSessionOutput?.(supervisor.sessionId) ?? '';
+
+      // Run LLM evaluation
+      const result = await evaluateProgress(supervisor.objective, terminalOutput);
+
+      if (result.shouldInject && result.guidance) {
+        // Update state to injecting
+        await this.setState(supervisorId, 'injecting');
+
+        // Inject guidance
+        await injectGuidance(this.deps.terminalMgr, supervisor.sessionId, result.guidance);
+
+        // Complete cycle as injected
+        await this.updateCycle(supervisorId, cycle.id, 'injected', {
+          progress: result.progress,
+          result: result.summary,
+          injectedGuidance: result.guidance,
+        });
+      } else {
+        // Complete cycle as completed
+        await this.updateCycle(supervisorId, cycle.id, 'completed', {
+          progress: result.progress,
+          result: result.summary,
+        });
+      }
+
+      // Return to idle
+      await this.setState(supervisorId, 'idle');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Evaluation failed';
+      await this.updateCycle(supervisorId, cycle.id, 'failed', {
+        errorReason: message,
+      });
+      await this.setState(supervisorId, 'error');
+
+      // Update supervisor error reason
+      const updated = this.supervisors.get(supervisorId);
+      if (updated) {
+        this.supervisors.set(supervisorId, { ...updated, errorReason: message });
+      }
+    }
   }
 
   /**

@@ -260,5 +260,10 @@
     "minutes_ago": "{count} minutes ago",
     "hours_ago": "{count} hours ago",
     "days_ago": "{count} days ago"
+  },
+  "fencing": {
+    "observer_mode": "Read-only mode — another tab is the controller",
+    "takeover": "Take over",
+    "takeover_failed": "Takeover failed — controller is still active"
   }
 }

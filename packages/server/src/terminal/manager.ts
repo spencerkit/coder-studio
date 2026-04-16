@@ -189,4 +189,32 @@ export class TerminalManager {
     }
     this.terminals.clear()
   }
+
+  /**
+   * Write to terminal by session ID (helper for supervisor)
+   * Note: This is a simplified implementation that requires session→terminal mapping
+   * to be managed by the caller. For now, we assume sessionId equals terminalId.
+   */
+  writeToSession(sessionId: string, text: string): void {
+    // In the full implementation, we would resolve sessionId → terminalId
+    // For now, assume they're the same or handle the mapping elsewhere
+    const terminal = this.terminals.get(sessionId)
+    if (terminal && terminal.alive) {
+      terminal.pty.write(Buffer.from(text, 'utf-8'))
+    }
+  }
+
+  /**
+   * Get recent terminal output for a session (helper for supervisor)
+   * Note: Returns empty string for now. Full implementation would return
+   * the last N lines from the ring buffer.
+   */
+  getSessionOutput(sessionId: string): string {
+    // In the full implementation, we would:
+    // 1. Resolve sessionId → terminalId
+    // 2. Read from the ring buffer
+    // 3. Return the last N lines
+    // For now, return empty string
+    return ''
+  }
 }

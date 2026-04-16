@@ -5,7 +5,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import type { WorktreeInfo, GitStatus, FileNode } from '@coder-studio/core';
+import { wsClientAtom } from '../../../atoms/connection';
 
 type TabType = 'status' | 'diff' | 'tree';
 
@@ -15,15 +17,16 @@ interface WorktreeModalProps {
 }
 
 export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
+  const wsClient = useAtomValue(wsClientAtom);
   const [activeTab, setActiveTab] = useState<TabType>('status');
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [diff, setDiff] = useState<string>('');
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch data when worktree changes
   useEffect(() => {
-    if (!worktree) {
+    if (!worktree || !wsClient) {
       setStatus(null);
       setDiff('');
       setTree([]);
@@ -31,29 +34,39 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
     }
 
     setLoading(true);
+    setError(null);
 
-    // Fetch based on active tab
     const fetchData = async () => {
       try {
         if (activeTab === 'status') {
-          // TODO: Call worktree.status command via WebSocket
-          console.log('Fetch status for:', worktree.path);
+          const result = await wsClient.sendCommand<{ status: GitStatus }>(
+            'worktree.status',
+            { worktreePath: worktree.path }
+          );
+          setStatus(result.status);
         } else if (activeTab === 'diff') {
-          // TODO: Call worktree.diff command
-          console.log('Fetch diff for:', worktree.path);
+          const result = await wsClient.sendCommand<{ diff: string }>(
+            'worktree.diff',
+            { worktreePath: worktree.path }
+          );
+          setDiff(result.diff);
         } else if (activeTab === 'tree') {
-          // TODO: Call worktree.tree command
-          console.log('Fetch tree for:', worktree.path);
+          const result = await wsClient.sendCommand<{ tree: FileNode[] }>(
+            'worktree.tree',
+            { worktreePath: worktree.path }
+          );
+          setTree(result.tree);
         }
-      } catch (error) {
-        console.error('Failed to fetch worktree data:', error);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to load data';
+        setError(message);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [worktree, activeTab]);
+  }, [worktree, activeTab, wsClient]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
@@ -118,6 +131,9 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
 
         {/* Content */}
         <div className="modal-body worktree-content">
+          {error && (
+            <div className="worktree-error">{error}</div>
+          )}
           {loading ? (
             <div className="worktree-loading">Loading...</div>
           ) : (

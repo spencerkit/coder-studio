@@ -16,11 +16,13 @@ import { EventBus } from '../bus/event-bus.js';
 import { WsClient, ClientId } from './client.js';
 import { dispatch, type CommandContext } from './dispatch.js';
 import type { ServerConfig } from '../config.js';
+import type { FencingManager } from './fencing.js';
 
 interface WsHubDeps {
   eventBus: EventBus;
   commandContext: CommandContext;
   config: ServerConfig;
+  fencingMgr: FencingManager;
 }
 
 /**
@@ -33,7 +35,6 @@ export interface Broadcaster {
 
 export class WsHub implements Broadcaster {
   private clients = new Map<ClientId, WsClient>();
-  private writerId: ClientId | null = null;
   private eventUnsubscribers: (() => void)[] = [];
 
   constructor(private readonly deps: WsHubDeps) {
@@ -45,26 +46,9 @@ export class WsHub implements Broadcaster {
    */
   handleConnection(socket: WebSocket, _req: FastifyRequest): void {
     const client = new WsClient(socket, uuidv4());
-
-    // Phase 1: Single writer enforcement
-    if (this.writerId && this.clients.has(this.writerId)) {
-      const writer = this.clients.get(this.writerId);
-      if (writer?.alive) {
-        // Reject new connection
-        client.sendEvent('connection.status', {
-          status: 'rejected',
-          reason: 'another_tab_active',
-        });
-        setTimeout(() => client.close(4001, 'another_tab_active'), 100);
-        return;
-      }
-    }
-
-    // Accept connection
-    this.writerId = client.id;
     this.clients.set(client.id, client);
 
-    // Send connection ready
+    // Send connection ready (controller status determined later by fencing.request command)
     client.sendEvent('connection.status', {
       status: 'connected',
       clientId: client.id,
@@ -91,7 +75,7 @@ export class WsHub implements Broadcaster {
 
       case 'command':
         // Dispatch command and send result
-        const result = await dispatch(msg as Command, this.deps.commandContext);
+        const result = await dispatch(msg as Command, this.deps.commandContext, client.id);
         client.send(result);
         break;
 
@@ -121,27 +105,20 @@ export class WsHub implements Broadcaster {
   private handleClose(client: WsClient): void {
     this.clients.delete(client.id);
 
-    // Clear writer if this was the writer
-    if (this.writerId === client.id) {
-      this.writerId = null;
-    }
+    // Release fencing tokens held by this client
+    // FencingManager tracks by clientId internally
+    // Note: FencingManager doesn't have a method to release by clientId yet
+    // This will be handled by the client calling fencing.release before disconnect
   }
 
   /**
    * Takeover: Force close existing writer and accept new one
-   * Used by tab.takeover command
+   * DEPRECATED: This is now handled through fencing.takeover command
+   * Kept for backward compatibility
    */
   async takeover(newClient: WsClient): Promise<void> {
-    if (this.writerId) {
-      const old = this.clients.get(this.writerId);
-      if (old) {
-        old.sendEvent('connection.status', { status: 'takeover' });
-        old.close(4002, 'takeover');
-        this.clients.delete(old.id);
-      }
-    }
-
-    this.writerId = newClient.id;
+    // Note: This method is deprecated in favor of FencingManager
+    // Keeping for backward compatibility
     this.clients.set(newClient.id, newClient);
   }
 
@@ -167,10 +144,11 @@ export class WsHub implements Broadcaster {
 
   /**
    * Get the current writer client
+   * DEPRECATED: Writer tracking now handled by FencingManager
    */
   getWriter(): WsClient | null {
-    if (!this.writerId) return null;
-    return this.clients.get(this.writerId) || null;
+    // Note: This method is deprecated in favor of FencingManager
+    return null;
   }
 
   /**
@@ -190,7 +168,6 @@ export class WsHub implements Broadcaster {
       client.close();
     }
     this.clients.clear();
-    this.writerId = null;
   }
 
   /**

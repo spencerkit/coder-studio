@@ -12,6 +12,8 @@ import type { TerminalManager } from '../terminal/manager.js';
 import type { HooksManager } from '../hooks/manager.js';
 import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from './hub.js';
+import type { FencingManager } from './fencing.js';
+import type { SupervisorManager } from '../supervisor/manager.js';
 
 /**
  * Command context - injected dependencies for handlers
@@ -25,6 +27,8 @@ export interface CommandContext {
   broadcaster: Broadcaster;
   db: Database;
   providerRegistry: ProviderDefinition[];
+  fencingMgr: FencingManager;
+  supervisorMgr: SupervisorManager;
 }
 
 /**
@@ -32,7 +36,8 @@ export interface CommandContext {
  */
 export type CommandHandler<A = unknown, R = unknown> = (
   args: A,
-  ctx: CommandContext
+  ctx: CommandContext,
+  clientId?: string
 ) => Promise<R>;
 
 /**
@@ -62,7 +67,8 @@ export function registerCommand<A, R>(
  */
 export async function dispatch(
   msg: Command,
-  ctx: CommandContext
+  ctx: CommandContext,
+  clientId?: string
 ): Promise<Result> {
   const handler = handlers.get(msg.op);
 
@@ -88,7 +94,7 @@ export async function dispatch(
     }
 
     // Execute handler
-    const data = await handler(args, ctx);
+    const data = await handler(args, ctx, clientId);
 
     return {
       kind: 'result',

@@ -7,11 +7,13 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useState, useEffect } from 'react';
 import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
+import { wsClientAtom } from '../../../atoms/connection';
 
-export function ObjectiveDialog() {
+export function ObjectiveDialog({ workspaceId }: { workspaceId: string }) {
   const dialog = useAtomValue(supervisorDialogAtom);
   const supervisors = useAtomValue(supervisorsAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const wsClient = useAtomValue(wsClientAtom);
 
   const [objective, setObjective] = useState('');
 
@@ -33,16 +35,31 @@ export function ObjectiveDialog() {
   }, [setDialog]);
 
   const handleConfirm = useCallback(async () => {
-    if (!dialog.sessionId || !objective.trim()) {
+    if (!dialog.sessionId || !objective.trim() || !wsClient) {
       return;
     }
 
-    // TODO: Implement create/update command via WebSocket
-    console.log(`${dialog.mode} supervisor for session:`, dialog.sessionId);
-    console.log('Objective:', objective);
-
-    handleClose();
-  }, [dialog, objective, handleClose]);
+    try {
+      if (dialog.mode === 'enable') {
+        await wsClient.sendCommand('supervisor.create', {
+          sessionId: dialog.sessionId,
+          workspaceId,
+          objective: objective.trim(),
+        });
+      } else {
+        const supervisor = supervisors.get(dialog.sessionId);
+        if (supervisor) {
+          await wsClient.sendCommand('supervisor.update', {
+            id: supervisor.id,
+            objective: objective.trim(),
+          });
+        }
+      }
+      handleClose();
+    } catch (error) {
+      console.error('Failed to save supervisor:', error);
+    }
+  }, [dialog, objective, wsClient, workspaceId, supervisors, handleClose]);
 
   if (!dialog.open) {
     return null;

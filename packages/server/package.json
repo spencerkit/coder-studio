@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@coder-studio/core": "workspace:*",
     "@coder-studio/providers": "workspace:*",
     "@fastify/cors": "^11.2.0",
