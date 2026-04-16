@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * Complete Session Flow E2E Tests
  *
  * Tests the full workflow:
- * 1. Open workspace
+ * 1. Open workspace via directory browser
  * 2. Navigate to workspace page
  * 3. Agent provider selection (Claude/Codex)
  * 4. Session creation
@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('complete session flow', () => {
-  test('CSF-01 workspace page shows draft launcher', async ({ page }) => {
+  test('CSF-01 workspace page shows directory browser', async ({ page }) => {
     // Navigate to workspace page directly
     await page.goto('/');
 
@@ -20,21 +20,9 @@ test.describe('complete session flow', () => {
     await page.locator('.welcome-btn').click();
     await page.locator('.command-palette-item').first().click();
 
-    // Enter a path and submit
-    const pathInput = page.locator('.modal-content input[type="text"]');
-    await pathInput.fill('/tmp/test-workspace');
-
-    // Submit
-    const openButton = page.locator('.modal-content .btn-primary');
-    await openButton.click();
-
-    // Should navigate to workspace page or show error
-    // In test environment, workspace might not exist
-    await page.waitForTimeout(1000);
-    // Just verify the modal closed
-    const modalVisible = await page.locator('.modal-content').isVisible().catch(() => false);
-    // Modal should have closed (success or error shown)
-    expect(typeof modalVisible).toBe('boolean');
+    // Wait for modal with directory browser
+    await expect(page.locator('.modal-content')).toBeVisible();
+    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
   });
 
   test('CSF-02 draft launcher shows provider buttons', async ({ page }) => {
@@ -121,39 +109,56 @@ test.describe('complete session flow', () => {
     await expect(page.locator('.settings-page')).toBeVisible();
   });
 
-  test('CSF-07 workspace launch modal runtime selection', async ({ page }) => {
+  test('CSF-07 workspace launch modal directory selection works', async ({ page }) => {
     await page.goto('/');
 
     // Open workspace launch modal
     await page.locator('.welcome-btn').click();
     await page.locator('.command-palette-item').first().click();
 
-    // Check runtime dropdown exists
-    const runtimeSelect = page.locator('.modal-content select');
-    await expect(runtimeSelect).toBeVisible();
+    // Wait for directory list
+    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
 
-    // Verify options exist
-    const options = await runtimeSelect.locator('option').count();
-    expect(options).toBeGreaterThanOrEqual(3); // node, bun, deno
+    // Select a directory if available
+    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
+    if (await directoryItem.isVisible()) {
+      await directoryItem.click();
+
+      // Check selected path shows
+      await expect(page.locator('.selected-path')).toBeVisible();
+
+      // Open button should be enabled
+      await expect(page.locator('.modal-content .btn-primary')).toBeEnabled();
+    }
   });
 
-  test('CSF-08 workspace launch modal enter key submits', async ({ page }) => {
+  test('CSF-08 workspace launch modal parent navigation', async ({ page }) => {
     await page.goto('/');
 
     // Open workspace launch modal
     await page.locator('.welcome-btn').click();
     await page.locator('.command-palette-item').first().click();
 
-    // Enter path
-    const pathInput = page.locator('.modal-content input[type="text"]');
-    await pathInput.fill('/tmp/enter-test');
+    // Wait for directory list
+    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
 
-    // Press Enter
-    await page.keyboard.press('Enter');
+    // First, navigate into a subdirectory if possible
+    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
+    if (await directoryItem.isVisible()) {
+      await directoryItem.dblclick();
+      await page.waitForTimeout(500);
 
-    // Modal should process (close or show loading)
-    await page.waitForTimeout(500);
-    expect(true).toBe(true);
+      // Now check if parent link appears
+      const parentItem = page.locator('.directory-item--parent');
+      if (await parentItem.isVisible()) {
+        // Click to go back up
+        await parentItem.click();
+        await page.waitForTimeout(500);
+      }
+    }
+
+    // Modal should still be open
+    await expect(page.locator('.modal-content')).toBeVisible();
   });
 
   test('CSF-09 connection status visible', async ({ page }) => {

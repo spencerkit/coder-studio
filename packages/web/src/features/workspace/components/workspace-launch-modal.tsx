@@ -42,19 +42,35 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const [browsing, setBrowsing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Handle Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   // Load initial directory listing
   const loadDirectory = useCallback(async (path?: string) => {
     setBrowsing(true);
     setError(null);
     try {
-      const result = await dispatch({
+      const result = await dispatch<BrowseResult>({
         op: 'workspace.browse',
         path,
-      }) as BrowseResult;
+      });
 
-      setCurrentPath(result.currentPath);
-      setDirectories(result.directories);
-      setParentPath(result.parentPath);
+      if (!result.ok || !result.data) {
+        setError(result.error?.message || 'Failed to browse directories');
+        return;
+      }
+
+      setCurrentPath(result.data.currentPath);
+      setDirectories(result.data.directories);
+      setParentPath(result.data.parentPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,17 +101,17 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     setError(null);
 
     try {
-      const result = await dispatch({
+      const result = await dispatch<{ id: string }>({
         op: 'workspace.open',
         path: selectedPath,
       });
 
-      if (result && result.id) {
-        setActiveWorkspaceId(result.id);
-        navigate(`/workspace/${result.id}`);
+      if (result.ok && result.data?.id) {
+        setActiveWorkspaceId(result.data.id);
+        navigate(`/workspace/${result.data.id}`);
         onClose();
       } else {
-        setError(t('error.workspace_open') || 'Failed to open workspace');
+        setError(result.error?.message || t('error.workspace_open') || 'Failed to open workspace');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
