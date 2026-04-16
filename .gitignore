@@ -32,5 +32,8 @@ temp/
 .env.local
 .env.*.local
 
+# Worktrees
+.worktrees/
+
 # Acceptance runtime artifacts
 docs/验收报告/
