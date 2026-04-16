@@ -16,8 +16,8 @@ test.describe('@phase1 visual acceptance', () => {
 
   test('V1-14 focus states baseline', async ({ page }) => {
     await page.goto('/');
-    // Focus on button
-    const btn = page.locator('.welcome-btn');
+    // Focus on button (use first to avoid disabled button in confirm dialog)
+    const btn = page.locator('.welcome-btn').first();
     await btn.focus();
     await expect(btn).toBeFocused();
   });
