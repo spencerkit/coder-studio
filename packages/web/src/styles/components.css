@@ -2399,3 +2399,131 @@ body.is-resizing-panels * {
   gap: var(--sp-2);
   margin-top: var(--sp-4);
 }
+
+/* ========== Input with Button ========== */
+.input-with-button {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.input-with-button .input {
+  flex: 1;
+}
+
+.input-with-button .btn {
+  flex-shrink: 0;
+}
+
+/* ========== Workspace Launch Modal ========== */
+.workspace-launch-modal--browser {
+  width: 480px;
+  max-width: 90vw;
+}
+
+.directory-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.breadcrumb-path {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.directory-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.directory-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-8);
+  color: var(--text-tertiary);
+  gap: var(--sp-2);
+}
+
+.directory-empty {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  border-bottom: 1px solid var(--border);
+}
+
+.directory-item:last-child {
+  border-bottom: none;
+}
+
+.directory-item:hover {
+  background: var(--bg-hover);
+}
+
+.directory-item--parent {
+  color: var(--text-tertiary);
+}
+
+.directory-item--selected {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.directory-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-navigate {
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.directory-item:hover .directory-navigate {
+  opacity: 1;
+}
+
+.directory-navigate:hover {
+  color: var(--text-primary);
+}
+
+.selected-path {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--accent-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.selected-path-label {
+  color: var(--text-tertiary);
+  margin-right: var(--sp-2);
+}
+
+.selected-path-value {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  word-break: break-all;
+}

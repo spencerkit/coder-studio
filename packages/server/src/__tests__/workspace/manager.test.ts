@@ -65,12 +65,10 @@ describe('WorkspaceManager', () => {
     it('should open a valid workspace', async () => {
       const workspace = await manager.open({
         path: testDir,
-        targetRuntime: 'native',
       });
 
       expect(workspace.id).toBeDefined();
       expect(workspace.path).toBe(testDir);
-      expect(workspace.targetRuntime).toBe('native');
       expect(workspace.openedAt).toBeDefined();
       expect(workspace.uiState).toBeDefined();
     });
@@ -78,7 +76,6 @@ describe('WorkspaceManager', () => {
     it('should emit workspace.meta.changed event', async () => {
       await manager.open({
         path: testDir,
-        targetRuntime: 'native',
       });
 
       expect(events).toHaveLength(1);
@@ -89,7 +86,6 @@ describe('WorkspaceManager', () => {
       await expect(
         manager.open({
           path: join(testDir, 'nonexistent'),
-          targetRuntime: 'native',
         })
       ).rejects.toThrow();
     });
@@ -97,13 +93,11 @@ describe('WorkspaceManager', () => {
     it('should reject duplicate paths', async () => {
       await manager.open({
         path: testDir,
-        targetRuntime: 'native',
       });
 
       await expect(
         manager.open({
           path: testDir,
-          targetRuntime: 'native',
         })
       ).rejects.toThrow();
     });
@@ -111,7 +105,7 @@ describe('WorkspaceManager', () => {
 
   describe('list', () => {
     it('should list all workspaces', async () => {
-      await manager.open({ path: testDir, targetRuntime: 'native' });
+      await manager.open({ path: testDir });
 
       const workspaces = manager.list();
       expect(workspaces).toHaveLength(1);
@@ -126,7 +120,7 @@ describe('WorkspaceManager', () => {
 
   describe('get', () => {
     it('should get workspace by id', async () => {
-      const created = await manager.open({ path: testDir, targetRuntime: 'native' });
+      const created = await manager.open({ path: testDir });
       const workspace = manager.get(created.id);
 
       expect(workspace).toBeDefined();
@@ -141,7 +135,7 @@ describe('WorkspaceManager', () => {
 
   describe('close', () => {
     it('should close workspace', async () => {
-      const workspace = await manager.open({ path: testDir, targetRuntime: 'native' });
+      const workspace = await manager.open({ path: testDir });
       await manager.close(workspace.id);
 
       const workspaces = manager.list();
@@ -155,7 +149,7 @@ describe('WorkspaceManager', () => {
 
   describe('touch', () => {
     it('should update last active timestamp', async () => {
-      const workspace = await manager.open({ path: testDir, targetRuntime: 'native' });
+      const workspace = await manager.open({ path: testDir });
       const originalLastActive = workspace.lastActiveAt;
 
       // Wait a bit to ensure timestamp difference

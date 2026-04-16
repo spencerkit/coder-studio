@@ -6,12 +6,9 @@ import type { Workspace } from '@coder-studio/core';
 import type { Database } from 'better-sqlite3';
 import type { DomainEvent } from '@coder-studio/core';
 import { WorkspaceValidator } from './validator.js';
-import { runtimeCheck, RuntimeCheckFailedError } from './runtime-check.js';
-import type { TargetRuntime } from './runtime-check.js';
 
 export interface OpenWorkspaceRequest {
   path: string;
-  targetRuntime: TargetRuntime;
   wslDistro?: string;
 }
 
@@ -46,9 +43,8 @@ export class WorkspaceManager {
    * Opens a new workspace.
    *
    * 1. Validates path exists and is accessible
-   * 2. Runs runtime checks (git, node, provider CLI)
-   * 3. Persists workspace to database
-   * 4. Emits metadata change event
+   * 2. Persists workspace to database
+   * 3. Emits metadata change event
    *
    * @param req - Open workspace request
    * @returns Created workspace
@@ -57,17 +53,10 @@ export class WorkspaceManager {
     // 1. Validate path
     await this.validator.validate(req.path);
 
-    // 2. Runtime check
-    const check = await runtimeCheck(req.path, req.targetRuntime);
-    if (!check.ok) {
-      throw new RuntimeCheckFailedError(check.missing);
-    }
-
-    // 3. Persist to DB
+    // 2. Persist to DB
     const workspace: Workspace = {
       id: generateWorkspaceId(),
       path: req.path,
-      targetRuntime: req.targetRuntime,
       wslDistro: req.wslDistro,
       openedAt: Date.now(),
       lastActiveAt: Date.now(),
@@ -86,14 +75,14 @@ export class WorkspaceManager {
       .run(
         workspace.id,
         workspace.path,
-        workspace.targetRuntime,
+        'native',
         workspace.wslDistro ?? null,
         workspace.openedAt,
         workspace.lastActiveAt,
         JSON.stringify(workspace.uiState)
       );
 
-    // 4. Emit event
+    // 3. Emit event
     this.deps.eventBus.emit({
       type: 'workspace.meta.changed',
       workspaceId: workspace.id,
