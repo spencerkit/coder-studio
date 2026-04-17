@@ -322,15 +322,15 @@ function routeEventToAtom(
         return;
       }
 
-      // workspace.{id}.terminal.{terminalId}.exit
-      if (terminalSubtopic === 'exit') {
-        const data = payload as { exitCode: number };
+     // workspace.{id}.terminal.{terminalId}.exit
+     if (terminalSubtopic === 'exit') {
+        const data = payload as { code: number };
         const atom = terminalMetaAtomFamily(terminalId);
         const current = store.get(atom);
         if (current) {
           store.set(atom, {
             ...current,
-            exitCode: data.exitCode,
+            exitCode: data.code,
             alive: false,
           });
         }

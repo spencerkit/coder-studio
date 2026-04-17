@@ -18,6 +18,7 @@ import { HooksManager } from './hooks/manager.js';
 import { providerRegistry } from '@coder-studio/providers';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
+import { NodePtyHost } from './terminal/pty-host.js';
 
 // Import command handlers to register them
 import './commands/index.js';
@@ -141,15 +142,9 @@ export async function createServer(
 
 /**
  * Create PTY host adapter
- * Phase 1: Will use node-pty when available
  */
 function createPtyHost() {
-  // Placeholder - will be implemented with actual node-pty
-  return {
-    spawn: () => {
-      throw new Error('PTY host not implemented yet');
-    },
-  };
+  return new NodePtyHost();
 }
 
 /**

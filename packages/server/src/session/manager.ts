@@ -238,7 +238,7 @@ export class SessionManager {
       case 'Stop':
         // Session completed a turn
         this.deps.eventBus.emit({
-          type: 'session.lifecycle',
+          type: 'session.lifecycle', workspaceId: session.workspaceId,
           sessionId,
           event: 'turn_completed',
         } as DomainEvent);
@@ -318,7 +318,7 @@ export class SessionManager {
 
     // Emit removed event
     this.deps.eventBus.emit({
-      type: 'session.lifecycle',
+      type: 'session.lifecycle', workspaceId: session.workspaceId,
       sessionId,
       event: 'removed',
     } as DomainEvent);
