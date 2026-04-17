@@ -22,7 +22,7 @@ describe('Claude Provider Definition', () => {
   describe('buildCommand', () => {
     it('should build basic command', () => {
       const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6[1m]',
+        model: 'claude-sonnet-4-6',
         maxTurns: null,
         additionalArgs: [],
         envVars: {},
@@ -35,14 +35,14 @@ describe('Claude Provider Definition', () => {
 
       const result = claudeDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toEqual(['claude']);
+      expect(result.argv).toEqual(['claude', '--model', 'claude-sonnet-4-6']);
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
       expect(result.cwd).toBe('/workspace');
     });
 
     it('should include additional arguments', () => {
       const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6[1m]',
+        model: 'claude-sonnet-4-6',
         maxTurns: null,
         additionalArgs: ['--verbose', '--debug'],
         envVars: { API_KEY: 'test' },
@@ -55,7 +55,7 @@ describe('Claude Provider Definition', () => {
 
       const result = claudeDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toEqual(['claude', '--verbose', '--debug']);
+      expect(result.argv).toEqual(['claude', '--model', 'claude-sonnet-4-6', '--verbose', '--debug']);
       expect(result.env.API_KEY).toBe('test');
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
     });
@@ -64,7 +64,7 @@ describe('Claude Provider Definition', () => {
   describe('buildResumeCommand', () => {
     it('should build resume command', () => {
       const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6[1m]',
+        model: 'claude-sonnet-4-6',
         maxTurns: null,
         additionalArgs: [],
         envVars: {},
@@ -81,7 +81,7 @@ describe('Claude Provider Definition', () => {
         ctx
       );
 
-      expect(result?.argv).toEqual(['claude', '--resume', 'resume-id-456']);
+      expect(result?.argv).toEqual(['claude', '--resume', 'resume-id-456', '--model', 'claude-sonnet-4-6']);
       expect(result?.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
       expect(result?.cwd).toBe('/workspace');
     });
@@ -90,7 +90,7 @@ describe('Claude Provider Definition', () => {
   describe('defaultConfig', () => {
     it('should have valid default config', () => {
       expect(claudeDefinition.defaultConfig).toBeDefined();
-      expect(claudeDefinition.defaultConfig.model).toBe('claude-sonnet-4-6[1m]');
+      expect(claudeDefinition.defaultConfig.model).toBe('claude-sonnet-4-6');
       expect(claudeDefinition.defaultConfig.maxTurns).toBeNull();
       expect(claudeDefinition.defaultConfig.additionalArgs).toEqual([]);
       expect(claudeDefinition.defaultConfig.envVars).toEqual({});

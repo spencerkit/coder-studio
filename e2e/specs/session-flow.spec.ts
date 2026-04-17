@@ -97,8 +97,8 @@ test.describe('session flow', () => {
     // Wait for directory list to load
     await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
 
-    // Click on a directory item to select it
-    const directoryItem = page.locator('.directory-item').first();
+    // Click on a directory item to select it (exclude parent navigation item)
+    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
     if (await directoryItem.isVisible()) {
       await directoryItem.click();
 

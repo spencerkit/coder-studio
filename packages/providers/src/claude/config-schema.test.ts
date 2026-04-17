@@ -5,7 +5,7 @@ describe('Claude Config Schema', () => {
   it('should parse valid config with defaults', () => {
     const result = claudeConfigSchema.parse({});
 
-    expect(result.model).toBe('claude-sonnet-4-6[1m]');
+    expect(result.model).toBe('claude-sonnet-4-6');
     expect(result.maxTurns).toBeNull();
     expect(result.additionalArgs).toEqual([]);
     expect(result.envVars).toEqual({});

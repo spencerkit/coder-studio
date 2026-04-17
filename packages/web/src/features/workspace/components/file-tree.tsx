@@ -7,7 +7,7 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
@@ -28,6 +28,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
+  const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -43,12 +44,14 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId }) => {
       workspaceId,
     });
 
-    if (!result.ok) {
+    if (result.ok && result.data) {
+      setFileTree(result.data);
+    } else if (!result.ok) {
       console.error('Failed to load file tree:', result.error?.message);
     }
 
     setIsLoading(false);
-  }, [workspaceId, isLoading, dispatch]);
+  }, [workspaceId, isLoading, dispatch, setFileTree]);
 
   // Load file tree on mount
   useEffect(() => {

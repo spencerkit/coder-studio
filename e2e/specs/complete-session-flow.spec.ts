@@ -72,13 +72,14 @@ test.describe('complete session flow', () => {
     // Get initial command count
     const commands = page.locator('.command-palette-item');
     const initialCount = await commands.count();
+    expect(initialCount).toBeGreaterThan(0);
 
-    // Type to search
+    // Type to search - use Chinese term since UI is in Chinese
     const input = page.locator('.command-palette-input');
-    await input.fill('open');
+    await input.fill('工作区'); // Search for "workspace" in Chinese
     await page.waitForTimeout(300);
 
-    // Filtered count should be different or same
+    // Filtered count should be > 0 (at least workspace commands match)
     const filteredCount = await commands.count();
     expect(filteredCount).toBeGreaterThan(0);
     expect(filteredCount).toBeLessThanOrEqual(initialCount);

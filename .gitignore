@@ -10,6 +10,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+e2e-screenshots/
 
 # Local tool caches
 .playwright-mcp/
@@ -37,3 +38,18 @@ temp/
 
 # Acceptance runtime artifacts
 docs/验收报告/
+
+# Root-level screenshot artifacts
+*.png
+
+# SQLite runtime files (SQLite database + WAL/SHM)
+data
+data-shm
+data-wl
+**/data
+**/data-shm
+**/data-wl
+
+# E2E test runner scripts (ad-hoc)
+e2e/playwright.session.config.ts
+e2e/run-session-tests.*

@@ -27,7 +27,7 @@ export interface OutputBuffer {
  * useEffect in XtermHost writes chunks to xterm and immediately truncates.
  * Historical output is retained in xterm scrollback (frontend-side).
  */
-export const terminalOutputAtomFamily = atomFamily((terminalId: string) =>
+export const terminalOutputAtomFamily = atomFamily((_terminalId: string) =>
   atom<OutputBuffer>({
     chunks: [],
     lastSeq: 0,
@@ -48,17 +48,22 @@ export interface TerminalMeta {
   title?: string;
 }
 
-export const terminalMetaAtomFamily = atomFamily((terminalId: string) =>
+export const terminalMetaAtomFamily = atomFamily((_terminalId: string) =>
   atom<TerminalMeta | null>(null)
 );
 
 /**
  * Active terminal IDs in workspace (derived)
+ * 
+ * Note: Since jotai's atomFamily doesn't support iteration, the terminal panel
+ * maintains a local state registry of terminal IDs. This atom serves as the
+ * derived interface for components that need active terminal info.
+ * TerminalMeta atoms are populated by WS event handlers in providers.tsx.
  */
-export const activeTerminalsAtomFamily = atomFamily((workspaceId: string) =>
-  atom((get) => {
-    // This requires a registry atom - placeholder for now
-    // Will be populated when terminal meta events arrive
-    return [] as string[];
+export const activeTerminalsAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<string[]>((_get) => {
+    // Terminal panel tracks IDs via local state on terminal.created events.
+    // This derived atom can be enhanced with a registry atom in future.
+    return [];
   })
 );

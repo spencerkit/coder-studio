@@ -320,9 +320,17 @@ export class WsClient {
 
 /**
  * Resolve WebSocket URL based on current location
+ * In development, connect directly to backend server
  */
 export function resolveWsUrl(): string {
+  // In development mode, connect directly to backend
+  if (import.meta.env.DEV) {
+    console.log('[WS] Using development WebSocket URL: ws://127.0.0.1:4173/ws');
+    return 'ws://127.0.0.1:4173/ws';
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
-  return `${protocol}//${host}/ws`;
+  const url = `${protocol}//${host}/ws`;
+  console.log('[WS] Using production WebSocket URL:', url);
+  return url;
 }

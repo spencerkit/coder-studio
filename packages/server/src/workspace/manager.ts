@@ -43,20 +43,35 @@ export class WorkspaceManager {
    * Opens a new workspace.
    *
    * 1. Validates path exists and is accessible
-   * 2. Persists workspace to database
-   * 3. Emits metadata change event
+   * 2. Checks if workspace already exists for this path
+   * 3. Persists workspace to database (or returns existing)
+   * 4. Emits metadata change event
    *
    * @param req - Open workspace request
-   * @returns Created workspace
+   * @returns Created or existing workspace
    */
   async open(req: OpenWorkspaceRequest): Promise<Workspace> {
     // 1. Validate path
     await this.validator.validate(req.path);
 
-    // 2. Persist to DB
+    // 2. Check if workspace already exists for this path
+    const existing = this.getByPath(req.path);
+    if (existing) {
+      // Update last active timestamp and return existing
+      this.touch(existing.id);
+      this.deps.eventBus.emit({
+        type: 'workspace.meta.changed',
+        workspaceId: existing.id,
+        patch: { lastActiveAt: Date.now() },
+      });
+      return existing;
+    }
+
+    // 3. Persist to DB
     const workspace: Workspace = {
       id: generateWorkspaceId(),
       path: req.path,
+      targetRuntime: 'native',
       wslDistro: req.wslDistro,
       openedAt: Date.now(),
       lastActiveAt: Date.now(),
@@ -161,6 +176,42 @@ export class WorkspaceManager {
          WHERE id = ?`
       )
       .get(workspaceId) as {
+      id: string;
+      path: string;
+      target_runtime: string;
+      wsl_distro: string | null;
+      opened_at: number;
+      last_active_at: number;
+      ui_state: string;
+    } | undefined;
+
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      path: row.path,
+      targetRuntime: row.target_runtime as 'native' | 'wsl',
+      wslDistro: row.wsl_distro ?? undefined,
+      openedAt: row.opened_at,
+      lastActiveAt: row.last_active_at,
+      uiState: JSON.parse(row.ui_state),
+    };
+  }
+
+  /**
+   * Gets a workspace by path.
+   *
+   * @param path - Workspace path
+   * @returns Workspace or undefined
+   */
+  getByPath(path: string): Workspace | undefined {
+    const row = this.deps.db
+      .prepare(
+        `SELECT id, path, target_runtime, wsl_distro, opened_at, last_active_at, ui_state
+         FROM workspaces
+         WHERE path = ?`
+      )
+      .get(path) as {
       id: string;
       path: string;
       target_runtime: string;

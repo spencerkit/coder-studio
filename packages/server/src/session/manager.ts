@@ -5,8 +5,9 @@
  * It manages Agent domain semantics, state machine, and hook events.
  */
 
-import type { Session, SessionState, Terminal, ProviderDefinition } from '@coder-studio/core';
-import type { EventBus, DomainEvent } from '../bus/event-bus.js';
+import type { Session, SessionState, ProviderDefinition } from '@coder-studio/core';
+import type { EventBus } from '../bus/event-bus.js';
+import type { DomainEvent } from '@coder-studio/core';
 import type { TerminalManager } from '../terminal/manager.js';
 import type { TerminalSpec } from '../terminal/types.js';
 import type { SessionDatabase } from './types.js';
@@ -55,8 +56,8 @@ export class SessionManager {
   async create(req: CreateSessionRequest): Promise<Session> {
     const sessionId = generateSessionId();
 
-    // Build command from provider
-    const cmd = req.provider.buildCommand({
+    // Build command from provider (pass config and context)
+    const cmd = req.provider.buildCommand(req.provider.defaultConfig, {
       workspacePath: req.workspacePath,
       sessionId,
     });
@@ -148,11 +149,18 @@ export class SessionManager {
     }
 
     // Build resume command
-    const cmd = provider.buildCommand({
-      workspacePath,
-      sessionId,
-      resumeId: existing.resumeId,
-    });
+    const cmd = provider.buildResumeCommand!(
+      existing.resumeId,
+      provider.defaultConfig,
+      {
+        workspacePath,
+        sessionId,
+      }
+    );
+
+    if (!cmd) {
+      throw new Error('Provider buildResumeCommand returned null');
+    }
 
     // Create new terminal
     const terminalSpec: TerminalSpec = {
@@ -323,9 +331,11 @@ export class SessionManager {
     this.deps.eventBus.emit({
       type: 'session.state.changed',
       sessionId: session.id,
+      workspaceId: session.workspaceId,
       from: from ?? 'draft',
       to,
-    } as DomainEvent);
+      session: session.toDTO(),
+    } as any);
   }
 
   /**

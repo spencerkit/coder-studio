@@ -116,6 +116,7 @@ describe('readTree', () => {
     expect(result.path).toBe('subdir');
     expect(result.children).toHaveLength(1);
     expect(result.children[0].name).toBe('file.txt');
-    expect(result.children[0].path).toBe('file.txt');
+    // Path is relative to root, so it includes the subdir prefix
+    expect(result.children[0].path).toBe('subdir/file.txt');
   });
 });

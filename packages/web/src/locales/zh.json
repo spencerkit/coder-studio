@@ -4,6 +4,7 @@
     "description": "Agent-First Development Environment"
   },
   "action": {
+    "open": "打开",
     "open_workspace": "打开工作区",
     "close_workspace": "关闭工作区",
     "create_session": "创建会话",

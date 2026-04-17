@@ -7,16 +7,19 @@
 
 import type { FC } from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useParams } from 'react-router-dom';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { GitBranch, RefreshCw } from 'lucide-react';
-import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom } from '../../atoms/ui';
+import { activeWorkspaceAtom, workspacesAtom } from '../../atoms/workspaces';
+import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, activeWorkspaceIdAtom } from '../../atoms/ui';
 import { useTranslation } from '../../lib/i18n';
 import { TopBar } from '../topbar';
 import { AgentPanes } from '../agent-panes';
 import { TerminalPanel } from '../terminal-panel';
 import { FileTreePanel } from './components/file-tree';
 import { GitPanel } from './components/git-panel';
+import { dispatchCommandAtom } from '../../atoms/connection';
+import type { Workspace } from '@coder-studio/core';
 
 /** Minimum panel sizes in pixels */
 const MIN_LEFT_WIDTH = 200;
@@ -36,10 +39,41 @@ const DIVIDER_SIZE = 8;
  */
 export const WorkspacePage: FC = () => {
   const t = useTranslation();
+  const { id: urlWorkspaceId } = useParams<{ id: string }>();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const focusMode = useAtomValue(focusModeAtom);
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const workspaces = useAtomValue(workspacesAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const setWorkspaces = useSetAtom(workspacesAtom);
+
+  // Sync URL workspace ID to state
+  useEffect(() => {
+    if (urlWorkspaceId) {
+      setActiveWorkspaceId(urlWorkspaceId);
+    }
+  }, [urlWorkspaceId, setActiveWorkspaceId]);
+
+  // Fetch workspace list if current workspace not in state
+  useEffect(() => {
+    if (urlWorkspaceId && !workspaces[urlWorkspaceId]) {
+      dispatch<Workspace[]>('workspace.list', {})
+        .then((result) => {
+          if (result.ok && result.data) {
+            const wsMap: Record<string, Workspace> = {};
+            for (const ws of result.data) {
+              wsMap[ws.id] = ws;
+            }
+            setWorkspaces(wsMap);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch workspace list:', err);
+        });
+    }
+  }, [urlWorkspaceId, workspaces, dispatch, setWorkspaces]);
 
   // Sidebar tab state
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');

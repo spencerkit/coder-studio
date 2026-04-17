@@ -32,10 +32,10 @@ describe('Codex Stdout Heuristics', () => {
     });
 
     it('should extract first match when multiple patterns match', () => {
-      const output = 'Session ID: first123 and [session-second456]';
+      const output = 'Session ID: abc123 and [session-def456]';
       const result = extractSessionId(output);
 
-      expect(result).toBe('first123');
+      expect(result).toBe('abc123');
     });
   });
 

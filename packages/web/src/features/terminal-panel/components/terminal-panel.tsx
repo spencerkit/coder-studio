@@ -55,9 +55,11 @@ export function TerminalPanel() {
       [allTerminalsTopic],
       (topic, payload, _seq) => {
         const parts = topic.split('.');
+        // Topic format: workspace.{id}.terminal.{terminalId}.{event}
+        // parts:        [0]       [1]    [2]        [3]         [4]
         if (parts.length < 5) return;
 
-        // parts[3] would be terminalId, parts[4] is event
+        const terminalId = parts[3];
         const event = parts[4];
 
         if (event === 'created') {

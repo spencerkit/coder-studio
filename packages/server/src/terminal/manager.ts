@@ -4,6 +4,7 @@ import type { Terminal } from '@coder-studio/core'
 import type {
   Broadcaster,
   PtyHost,
+  PtyProcess,
   ReplayResult,
   TerminalDatabase,
   TerminalId,
@@ -44,7 +45,7 @@ export class TerminalManager {
     try {
       pty = this.deps.ptyHost.spawn(spec.argv, {
         cwd: spec.cwd,
-        env: { ...process.env, ...spec.env },
+        env: Object.fromEntries(Object.entries({ ...process.env, ...spec.env }).filter((e): e is [string, string] => e[1] != null)),
         cols: spec.cols ?? 120,
         rows: spec.rows ?? 30,
       })
@@ -65,6 +66,18 @@ export class TerminalManager {
     // Store in memory and persist to database
     this.terminals.set(id, active)
     this.deps.db.insert(active.toRow())
+
+    // Broadcast terminal.created event (after successful creation)
+    this.deps.broadcaster.broadcast(
+      `workspace.${spec.workspaceId}.terminal.${id}.created`,
+      {
+        id,
+        kind: spec.kind,
+        title: spec.title ?? '',
+        cwd: spec.cwd,
+        workspaceId: spec.workspaceId,
+      }
+    )
 
     return active.toDTO()
   }
@@ -209,7 +222,7 @@ export class TerminalManager {
    * Note: Returns empty string for now. Full implementation would return
    * the last N lines from the ring buffer.
    */
-  getSessionOutput(sessionId: string): string {
+  getSessionOutput(_sessionId: string): string {
     // In the full implementation, we would:
     // 1. Resolve sessionId → terminalId
     // 2. Read from the ring buffer

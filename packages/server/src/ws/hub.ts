@@ -201,7 +201,7 @@ export class WsHub implements Broadcaster {
     switch (event.type) {
       case 'session.state.changed':
         topic = `workspace.*.session.${event.sessionId}.state`;
-        data = {
+        data = (event as any).session ?? {
           state: event.to,
           from: event.from,
         };

@@ -83,7 +83,7 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
     async (data: string) => {
       const result = await dispatch('terminal.input', {
         terminalId,
-        data: btoa(data), // Base64 encode for binary-safe transport
+        bytes: btoa(data), // Base64 encode for binary-safe transport
       });
 
       if (!result.ok) {
@@ -92,6 +92,18 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
     },
     [terminalId, dispatch]
   );
+
+  /**
+   * Ensure terminal meta is initialized on mount if not yet set by WS event.
+   * This handles the case where XtermHost mounts before the terminal.created event arrives.
+   */
+  useEffect(() => {
+    if (!meta) {
+      // Set a minimal meta so the terminal knows its own identity
+      // The full meta will be populated when terminal.created WS event arrives
+      setOutputAtom((prev: OutputBuffer) => prev); // trigger no-op to ensure atom is initialized
+    }
+  }, [meta, setOutputAtom]);
 
   /**
    * Initialize terminal on mount
@@ -146,9 +158,10 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
         (topic, payload, _seq) => {
           if (topic === outputTopic) {
             // Output event: append to atom
-            const outputData = payload as { data: string; seq: number };
+            // Server sends { chunk: base64, size, seq }
+            const outputData = payload as { chunk: string; size: number; seq: number };
             setOutputAtom((prev: OutputBuffer) => ({
-              chunks: [...prev.chunks, outputData.data],
+              chunks: [...prev.chunks, outputData.chunk],
               lastSeq: outputData.seq,
               lastWritten: prev.lastWritten,
             }));

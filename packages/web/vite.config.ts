@@ -14,10 +14,20 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,
     proxy: {
       '/ws': {
         target: backendWsTarget,
         ws: true,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.log('WS proxy error:', err);
+          });
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            console.log('WS proxy upgrade:', req.url);
+          });
+        },
       },
       '/auth': {
         target: backendHttpTarget,

@@ -20,14 +20,20 @@ import {
   workspacesAtom,
   sessionsAtom,
 } from '../atoms';
-import { authenticatedAtom, themeAtom } from '../atoms/ui';
-import { useHydrateAtoms } from 'jotai/utils';
+import { authenticatedAtom } from '../atoms/ui';
 import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
-import type { EventListener } from '../ws';
+import type { EventListener, ConnectionStatus } from '../ws';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
+
+/**
+ * Module-level WebSocket client singleton.
+ * Prevents duplicate connections in React StrictMode.
+ */
+let globalWsClient: WsClient | null = null;
+let pendingDisconnectTimer: NodeJS.Timeout | null = null;
 
 interface AppProvidersProps {
   children: React.ReactNode;
@@ -84,13 +90,8 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     void loadAuthStatus();
 
-    // Create WebSocket client singleton
-    const client = new WsClient(resolveWsUrl());
-    wsClientRef.current = client;
-    setWsClient(client);
-
     // Subscribe to connection status changes
-    const unsubscribeStatus = client.onStatus((status) => {
+    const handleStatusChange = (status: ConnectionStatus) => {
       setConnectionStatus(status);
 
       // Track reconnect attempts
@@ -103,7 +104,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       if (status === 'disconnected' || status === 'rejected') {
         setIsWriter(false);
       }
-    });
+    };
 
     // Event handler: route WS events to atoms
     const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
@@ -120,6 +121,48 @@ export function AppProviders({ children }: AppProvidersProps) {
       'workspace.*',           // All workspace events (glob pattern)
     ];
 
+    // Reuse existing WebSocket client if available (StrictMode safety)
+    // Cancel any pending disconnect from StrictMode cleanup
+    if (pendingDisconnectTimer) {
+      clearTimeout(pendingDisconnectTimer);
+      pendingDisconnectTimer = null;
+    }
+
+    if (globalWsClient) {
+      wsClientRef.current = globalWsClient;
+      setWsClient(globalWsClient);
+
+      // Re-establish subscriptions for this mount
+      const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
+      const unsubscribeEvents = globalWsClient.subscribe(topics, handleEvent);
+
+      return () => {
+        unsubscribeStatus();
+        unsubscribeEvents();
+        wsClientRef.current = null;
+        // Deferred disconnect: wait 50ms to see if StrictMode remounts
+        if (globalWsClient) {
+          pendingDisconnectTimer = setTimeout(() => {
+            if (globalWsClient) {
+              globalWsClient.disconnect('app_unmount');
+              globalWsClient = null;
+            }
+            pendingDisconnectTimer = null;
+          }, 50);
+        }
+      };
+    }
+
+    // Create new WebSocket client singleton
+    const client = new WsClient(resolveWsUrl());
+    globalWsClient = client;
+    wsClientRef.current = client;
+    setWsClient(client);
+
+    // Subscribe to connection status changes
+    const unsubscribeStatus = client.onStatus(handleStatusChange);
+
+    // Subscribe to events
     const unsubscribeEvents = client.subscribe(topics, handleEvent);
 
     // Connect to server
@@ -132,8 +175,15 @@ export function AppProviders({ children }: AppProvidersProps) {
     return () => {
       unsubscribeStatus();
       unsubscribeEvents();
-      client.disconnect('app_unmount');
       wsClientRef.current = null;
+      // Deferred disconnect: wait 50ms to see if StrictMode remounts
+      pendingDisconnectTimer = setTimeout(() => {
+        if (globalWsClient) {
+          globalWsClient.disconnect('app_unmount');
+          globalWsClient = null;
+        }
+        pendingDisconnectTimer = null;
+      }, 50);
     };
   }, [
     setWsClient,
@@ -250,6 +300,20 @@ function routeEventToAtom(
     if (terminalMatch) {
       const terminalId = terminalMatch[1]!;
       const terminalSubtopic = terminalMatch[2]!;
+
+      // workspace.{id}.terminal.{terminalId}.created
+      if (terminalSubtopic === 'created') {
+        const data = payload as { id: string; kind: string; title?: string; cwd?: string };
+        const atom = terminalMetaAtomFamily(terminalId);
+        store.set(atom, {
+          id: data.id,
+          workspaceId,
+          kind: data.kind as 'agent' | 'shell',
+          alive: true,
+          title: data.title,
+        });
+        return;
+      }
 
       // workspace.{id}.terminal.{terminalId}.output
       if (terminalSubtopic === 'output') {

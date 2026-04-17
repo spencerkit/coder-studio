@@ -24,8 +24,13 @@ describe('WsHub', () => {
       eventBus,
       broadcaster: {} as any,
       db: {} as any,
+      providerRegistry: [],
     };
-    hub = new WsHub({ eventBus, commandContext: mockCommandContext });
+    hub = new WsHub({
+      eventBus,
+      commandContext: mockCommandContext,
+      config: { auth: { enabled: false } } as any,
+    });
   });
 
   afterEach(() => {
@@ -57,22 +62,27 @@ describe('WsHub', () => {
     );
   });
 
-  it('should reject second connection when writer exists', () => {
+  it('should accept multiple connections (writer tracking moved to FencingManager)', () => {
     const socket1 = createMockSocket();
     const socket2 = createMockSocket();
 
     hub.handleConnection(socket1, createMockRequest());
     hub.handleConnection(socket2, createMockRequest());
 
-    // First socket should be accepted
+    // Both sockets should be accepted with connected status
     expect(socket1.send).toHaveBeenCalledWith(
       expect.stringContaining('connected')
     );
-
-    // Second socket should be rejected
     expect(socket2.send).toHaveBeenCalledWith(
-      expect.stringContaining('rejected')
+      expect.stringContaining('connected')
     );
+
+    // Each client should have unique IDs
+    const send1Calls = socket1.send.mock.calls;
+    const send2Calls = socket2.send.mock.calls;
+    const clientId1 = JSON.parse(send1Calls[0][0]).data.clientId;
+    const clientId2 = JSON.parse(send2Calls[0][0]).data.clientId;
+    expect(clientId1).not.toBe(clientId2);
   });
 
   it('should broadcast to subscribed clients', () => {
@@ -154,13 +164,14 @@ describe('WsHub', () => {
     expect(socket.ping).toHaveBeenCalled();
   });
 
-  it('should return writer client', () => {
+  it('should return null for writer (deprecated - use FencingManager)', () => {
     const socket = createMockSocket();
     hub.handleConnection(socket, createMockRequest());
 
+    // getWriter() is deprecated and always returns null
+    // Writer tracking is now handled by FencingManager
     const writer = hub.getWriter();
-    expect(writer).toBeDefined();
-    expect(writer?.id).toBeDefined();
+    expect(writer).toBeNull();
   });
 
   it('should return null for writer when no connections', () => {

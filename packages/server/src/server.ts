@@ -9,7 +9,7 @@ import { EventBus } from './bus/event-bus.js';
 import { WsHub } from './ws/hub.js';
 import { buildFastifyApp } from './app.js';
 import { openDatabase, runMigrations } from './storage/db.js';
-import { parseServerConfig, type ServerConfig } from './config.js';
+import { parseServerConfig, ensureDataDir, type ServerConfig } from './config.js';
 import { type CommandContext } from './ws/dispatch.js';
 import { WorkspaceManager } from './workspace/manager.js';
 import { SessionManager } from './session/manager.js';
@@ -34,6 +34,9 @@ export async function createServer(
   configOverrides?: Partial<ServerConfig>
 ): Promise<Server> {
   const config = parseServerConfig(configOverrides);
+
+  // Ensure data directory exists (production only)
+  ensureDataDir(config);
 
   // Infrastructure: Database
   const db = openDatabase(config.dataDir);

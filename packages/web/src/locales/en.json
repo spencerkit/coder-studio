@@ -4,6 +4,7 @@
     "description": "Agent-First Development Environment"
   },
   "action": {
+    "open": "Open",
     "open_workspace": "Open Workspace",
     "close_workspace": "Close Workspace",
     "create_session": "Create Session",

@@ -90,16 +90,18 @@ describe('WorkspaceManager', () => {
       ).rejects.toThrow();
     });
 
-    it('should reject duplicate paths', async () => {
-      await manager.open({
+    it('should return existing workspace for duplicate paths (idempotent open)', async () => {
+      const first = await manager.open({
         path: testDir,
       });
 
-      await expect(
-        manager.open({
-          path: testDir,
-        })
-      ).rejects.toThrow();
+      const second = await manager.open({
+        path: testDir,
+      });
+
+      // Should return the same workspace
+      expect(second.id).toBe(first.id);
+      expect(second.path).toBe(first.path);
     });
   });
 
