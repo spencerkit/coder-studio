@@ -261,7 +261,17 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
                       <span className="fp-dir-hint">{dir.itemCount} items</span>
                     )}
                     {selectedPath === dir.path && (
-                      <span className="fp-dir-action">Enter folder →</span>
+                      <button
+                        className="fp-dir-action"
+                        type="button"
+                        aria-label={`Enter ${dir.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleNavigate(dir.path);
+                        }}
+                      >
+                        Enter folder →
+                      </button>
                     )}
                   </div>
                 ))

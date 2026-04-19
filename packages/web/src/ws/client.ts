@@ -6,6 +6,7 @@
  */
 
 import type { ServerToClient, ClientToServer } from '@coder-studio/core';
+import { topicMatches } from './subscription';
 
 export type ConnectionStatus =
   | 'connecting'
@@ -71,6 +72,12 @@ export class WsClient {
         this.ws.onopen = () => {
           this.setStatus('connected');
           this.reconnectAttempts = 0;
+
+          const subscribedTopics = Array.from(this.eventListeners.keys());
+          if (subscribedTopics.length > 0) {
+            const msg: ClientToServer = { kind: 'subscribe', topics: subscribedTopics };
+            this.ws?.send(JSON.stringify(msg));
+          }
 
           // Resync if we have lastSeen events
           if (this.lastSeenSeq.size > 0) {
@@ -163,23 +170,40 @@ export class WsClient {
    * Subscribe to topics
    */
   subscribe(topics: string[], handler: EventListener): () => void {
+    const newlyAddedTopics: string[] = [];
+
     for (const topic of topics) {
       if (!this.eventListeners.has(topic)) {
         this.eventListeners.set(topic, new Set());
+        newlyAddedTopics.push(topic);
       }
       this.eventListeners.get(topic)!.add(handler);
     }
 
     // Send subscribe message
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const msg: ClientToServer = { kind: 'subscribe', topics };
+    if (newlyAddedTopics.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const msg: ClientToServer = { kind: 'subscribe', topics: newlyAddedTopics };
       this.ws.send(JSON.stringify(msg));
     }
 
     // Return unsubscribe function
     return () => {
+      const removedTopics: string[] = [];
+
       for (const topic of topics) {
-        this.eventListeners.get(topic)?.delete(handler);
+        const listeners = this.eventListeners.get(topic);
+        if (!listeners) continue;
+
+        listeners.delete(handler);
+        if (listeners.size === 0) {
+          this.eventListeners.delete(topic);
+          removedTopics.push(topic);
+        }
+      }
+
+      if (removedTopics.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        const msg: ClientToServer = { kind: 'unsubscribe', topics: removedTopics };
+        this.ws.send(JSON.stringify(msg));
       }
     };
   }
@@ -232,8 +256,11 @@ export class WsClient {
       this.lastSeenSeq.set(msg.topic, msg.seq);
 
       // Dispatch to listeners
-      const listeners = this.eventListeners.get(msg.topic);
-      if (listeners) {
+      for (const [pattern, listeners] of this.eventListeners.entries()) {
+        if (!topicMatches(pattern, msg.topic)) {
+          continue;
+        }
+
         for (const listener of listeners) {
           try {
             listener(msg.topic, msg.data, msg.seq);

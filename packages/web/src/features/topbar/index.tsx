@@ -4,16 +4,16 @@
  * Main navigation bar with workspace tabs, quick actions, and settings.
  */
 
-import { useAtomValue } from 'jotai';
-import { useAtom } from 'jotai';
-import { Plus } from 'lucide-react';
+import { useAtomValue, useAtom } from 'jotai';
+import { Plus, Search, Settings } from 'lucide-react';
 import type { FC } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { workspacesAtom } from '../../atoms/workspaces';
 import { commandPaletteOpenAtom, activeWorkspaceIdAtom } from '../../atoms/ui';
-import { useTranslation } from '../../lib/i18n';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
+import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
 
 /**
  * TopBar Component
@@ -21,14 +21,14 @@ import { ConnectionStatus } from './components/connection-status';
  * Height: 36px (from PRD §5.1)
  * Layout:
  *   - Left: Workspace tabs + Add button
- *   - Right: Quick Actions + Settings button
+ *   - Right: ConnectionStatus, Quick Actions icon, Settings icon
  */
 export const TopBar: FC = () => {
-  const t = useTranslation();
   const navigate = useNavigate();
   const workspaces = useAtomValue(workspacesAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
+  const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
 
   const workspaceList = Object.values(workspaces);
 
@@ -37,47 +37,51 @@ export const TopBar: FC = () => {
       <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
           <div className="topbar-empty-state">
-            <span className="topbar-hint">{t('workspace.no_workspace')}</span>
+            <span className="topbar-hint">No workspaces open</span>
           </div>
         ) : (
-          <>
-            {workspaceList.map((ws) => (
-              <WorkspaceTab
-                key={ws.id}
-                workspace={ws}
-                isActive={ws.id === activeWorkspaceId}
-              />
-            ))}
-            <button
-              className="topbar-add"
-              onClick={() => {/* TODO: Open workspace launch modal */}}
-              aria-label={t('workspace.open')}
-              title={t('workspace.open')}
-            >
-              <Plus size={16} />
-            </button>
-          </>
+          workspaceList.map((ws) => (
+            <WorkspaceTab
+              key={ws.id}
+              workspace={ws}
+              isActive={ws.id === activeWorkspaceId}
+            />
+          ))
         )}
+        <button
+          className="topbar-add"
+          onClick={() => setWorkspaceLaunchOpen(true)}
+          aria-label="New workspace"
+          title="New workspace"
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
       <div className="topbar-actions">
         <ConnectionStatus />
         <button
-          className="topbar-btn"
+          className="topbar-btn topbar-quick-actions"
           onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
-          aria-label={t('command.palette')}
+          aria-label="Quick Actions"
+          title="Quick Actions"
         >
-          <span className="topbar-btn-label">{t('command.palette')}</span>
+          <Search size={14} />
+          <span className="topbar-btn-label">Quick Actions</span>
         </button>
         <button
           className="topbar-btn"
           onClick={() => navigate('/settings')}
-          aria-label={t('action.settings')}
+          aria-label="Settings"
+          title="Settings"
           data-testid="settings-open"
         >
-          <span className="topbar-btn-label">{t('action.settings')}</span>
+          <Settings size={14} />
         </button>
       </div>
+      {workspaceLaunchOpen ? (
+        <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />
+      ) : null}
     </header>
   );
 };

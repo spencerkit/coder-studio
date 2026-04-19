@@ -155,7 +155,8 @@ export function CommandPalette() {
         <div className="command-palette-header">
           <span className="command-palette-kicker">{t('command.palette').toUpperCase()}</span>
           <span className="command-palette-meta">
-            {t('command.palette')} ({filteredCommands.length})
+            {filteredCommands.length} actions
+
           </span>
         </div>
 
@@ -313,10 +314,12 @@ function buildCommands(context: {
 
   // Add workspace switch commands
   Object.values(workspaces).forEach((ws) => {
+    const workspaceLabel = ws.name || ws.path?.split('/').pop() || ws.path || ws.id;
+
     commands.push({
       id: `switch-workspace-${ws.id}`,
-      label: `${t('workspace.title')}: ${ws.path.split('/').pop()}`,
-      description: ws.path,
+      label: `${t('workspace.title')}: ${workspaceLabel}`,
+      description: ws.path || ws.id,
       action: () => {
         setActiveWorkspaceId(ws.id);
         navigate(`/workspace/${ws.id}`);

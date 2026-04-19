@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 import type { Session, SessionState } from '@coder-studio/core';
 
 /**

@@ -145,7 +145,7 @@
   --terminal-font-size: 13px;
   --terminal-line-height: 1.6;
   --terminal-scrollback: 5000;
-  --terminal-height: 160px;
+  --terminal-height: 200px;
 
   /* Status Dot */
   --status-dot-size: 8px;

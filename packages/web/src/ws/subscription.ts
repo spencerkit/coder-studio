@@ -14,23 +14,35 @@ export interface Subscription {
 
 /**
  * Check if a topic matches a pattern
- * Supports wildcard matching: workspace.*.session.*
+ * Supports wildcard matching with prefix globs, mirroring the server matcher.
+ * Examples:
+ * - workspace.* matches workspace.ws_1.meta
+ * - workspace.ws_1.terminal.* matches workspace.ws_1.terminal.term_1.created
  */
 export function topicMatches(pattern: string, topic: string): boolean {
+  if (pattern === topic || pattern === '*') {
+    return true;
+  }
+
   const patternParts = pattern.split('.');
   const topicParts = topic.split('.');
 
-  if (patternParts.length !== topicParts.length) {
-    return false;
-  }
-
   for (let i = 0; i < patternParts.length; i++) {
-    if (patternParts[i] !== '*' && patternParts[i] !== topicParts[i]) {
+    const patternPart = patternParts[i];
+
+    if (patternPart === '*') {
+      if (i === patternParts.length - 1) {
+        return true;
+      }
+      continue;
+    }
+
+    if (i >= topicParts.length || patternPart !== topicParts[i]) {
       return false;
     }
   }
 
-  return true;
+  return patternParts.length <= topicParts.length;
 }
 
 /**

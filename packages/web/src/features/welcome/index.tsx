@@ -2,32 +2,54 @@
  * Welcome Page Feature
  *
  * Landing page shown when no workspace is open.
- * Displays product info and "Open Workspace" button.
+ * Displays product info, "Open Workspace" button, and feature highlights.
  */
 
 import type { FC } from 'react';
+import { Plus, Settings, Terminal, Zap, GitBranch } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from '../../lib/i18n';
-import { Plus, Settings } from 'lucide-react';
-import { useSetAtom } from 'jotai';
-import { commandPaletteOpenAtom } from '../../atoms/ui';
+import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
+
+interface FeatureItem {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+const features: FeatureItem[] = [
+  {
+    icon: <Zap size={18} />,
+    title: 'Agent-first AI coding',
+    description: 'Launch AI sessions that write, test, and deploy code.',
+  },
+  {
+    icon: <GitBranch size={18} />,
+    title: 'Built-in Git tools',
+    description: 'Stage, commit, and manage branches without leaving the IDE.',
+  },
+  {
+    icon: <Terminal size={18} />,
+    title: 'Integrated terminals',
+    description: 'Run commands and scripts alongside your AI sessions.',
+  },
+];
 
 /**
  * Welcome Page
  *
  * PRD §7.4:
- *   - Centered panel with product info
+ *   - Centered card with product info
  *   - "Open Workspace" button (primary action)
  *   - "Open Settings" link
+ *   - Three feature highlights at bottom
  */
 export const WelcomePage: FC = () => {
-  const t = useTranslation();
   const navigate = useNavigate();
-  const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
+  const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
 
   const handleOpenWorkspace = () => {
-    // Open command palette for workspace selection
-    setCommandPaletteOpen(true);
+    setWorkspaceLaunchOpen(true);
   };
 
   const handleOpenSettings = () => {
@@ -35,23 +57,43 @@ export const WelcomePage: FC = () => {
   };
 
   return (
-    <div className="welcome-container">
-      <div className="welcome-card">
-        <div className="welcome-kicker">Get Started</div>
-        <h1 className="welcome-title">{t('app.name')}</h1>
-        <p className="welcome-body">{t('app.description')}</p>
+    <>
+      <div className="welcome-container">
+        <div className="welcome-card">
+          <div className="welcome-kicker">GET STARTED</div>
+          <h1 className="welcome-title">Welcome to Coder Studio</h1>
+          <p className="welcome-body">
+            A local-first AI coding workbench. Launch AI agent sessions, review generated code,
+            manage Git changes, and run terminals — all in one place.
+          </p>
+          <button className="welcome-btn" onClick={handleOpenWorkspace}>
+            <Plus size={18} />
+            <span>Open Workspace</span>
+          </button>
+          <button className="welcome-link" onClick={handleOpenSettings}>
+            <Settings size={14} />
+            <span>Open Settings</span>
+          </button>
 
-        <button className="welcome-btn" onClick={handleOpenWorkspace}>
-          <Plus size={16} />
-          <span>{t('action.open_workspace')}</span>
-        </button>
+          <div className="welcome-divider" />
 
-        <a className="welcome-link" onClick={handleOpenSettings}>
-          <Settings size={14} />
-          <span>{t('action.settings')}</span>
-        </a>
+          <div className="welcome-features">
+            {features.map((f, i) => (
+              <div className="welcome-feature" key={i}>
+                <div className="welcome-feature-icon">{f.icon}</div>
+                <div className="welcome-feature-text">
+                  <div className="welcome-feature-title">{f.title}</div>
+                  <div className="welcome-feature-desc">{f.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
+      {workspaceLaunchOpen ? (
+        <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />
+      ) : null}
+    </>
   );
 };
 

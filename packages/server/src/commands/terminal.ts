@@ -5,6 +5,20 @@
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
+// terminal.list
+registerCommand(
+  'terminal.list',
+  z.object({
+    workspaceId: z.string(),
+  }),
+  async (args, ctx) => {
+    return ctx.terminalMgr
+      .getAll()
+      .map((terminal) => terminal.toDTO())
+      .filter((terminal) => terminal.workspaceId === args.workspaceId);
+  }
+);
+
 // terminal.create
 registerCommand(
   'terminal.create',
@@ -30,6 +44,28 @@ registerCommand(
     });
 
     return terminal;
+  }
+);
+
+// terminal.replay
+registerCommand(
+  'terminal.replay',
+  z.object({
+    terminalId: z.string(),
+    lastSeq: z.number().int().nonnegative().optional(),
+  }),
+  async (args, ctx) => {
+    const replay = ctx.terminalMgr.replay(args.terminalId, args.lastSeq ?? 0);
+
+    if (replay.status !== 'ok') {
+      return replay;
+    }
+
+    return {
+      status: 'ok' as const,
+      chunk: replay.data.toString('base64'),
+      seq: replay.seq,
+    };
   }
 );
 

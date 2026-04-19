@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useStore } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
 import { terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { activeWorkspaceIdAtom, bottomPanelHeightAtom } from '../../../atoms/ui';
@@ -15,6 +15,24 @@ import { Topics } from '@coder-studio/core';
 import { XtermHost } from './xterm-host';
 import { TerminalTab } from './terminal-tab';
 import { TerminalSelectorItem } from './terminal-selector-item';
+import { formatTerminalTitle } from './title-format';
+import type { Terminal as TerminalDto } from '@coder-studio/core';
+
+const EMPTY_TERMINAL_ID = '__terminal_panel_empty__';
+
+function mergeTerminalIds(existing: string[], incoming: string[]): string[] {
+  const seen = new Set(incoming);
+  const merged = [...incoming];
+
+  for (const id of existing) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      merged.push(id);
+    }
+  }
+
+  return merged;
+}
 
 /**
  * Terminal Panel
@@ -32,20 +50,73 @@ export function TerminalPanel() {
   const [bottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
+  const store = useStore();
 
-  // Track terminal IDs in local state
   const [terminalIds, setTerminalIds] = useState<string[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Get active terminal metadata (hook at top level)
-  const activeTerminalMeta = activeTerminalId
-    ? useAtomValue(terminalMetaAtomFamily(activeTerminalId))
-    : null;
+  const activeTerminalMetaState = useAtomValue(
+    terminalMetaAtomFamily(activeTerminalId ?? EMPTY_TERMINAL_ID)
+  );
+  const activeTerminalMeta = activeTerminalId ? activeTerminalMetaState : null;
+  const activeTerminalIndex = activeTerminalId ? terminalIds.indexOf(activeTerminalId) : 0;
+  const activeTerminalTitle = formatTerminalTitle(
+    activeTerminalMeta,
+    activeTerminalIndex >= 0 ? activeTerminalIndex : 0,
+    t('terminal.shell')
+  );
 
-  /**
-   * Subscribe to terminal events for the active workspace
-   */
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setTerminalIds([]);
+      setActiveTerminalId(null);
+      return;
+    }
+
+    let cancelled = false;
+    setTerminalIds([]);
+    setActiveTerminalId(null);
+
+    dispatch<TerminalDto[]>('terminal.list', { workspaceId: activeWorkspaceId })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          console.error('Failed to fetch terminals:', result.error?.message);
+          return;
+        }
+
+        const shellTerminals = result.data.filter((terminal) => terminal.kind === 'shell');
+        const shellIds = shellTerminals.map((terminal) => terminal.id);
+
+        for (const terminal of shellTerminals) {
+          store.set(terminalMetaAtomFamily(terminal.id), {
+            id: terminal.id,
+            workspaceId: terminal.workspaceId,
+            kind: terminal.kind,
+            alive: terminal.alive,
+            exitCode: terminal.exitCode,
+            title: terminal.title,
+          });
+        }
+
+        setTerminalIds((current) => mergeTerminalIds(current, shellIds));
+        setActiveTerminalId((current) => current ?? shellIds[0] ?? null);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to fetch terminals:', error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, dispatch, store]);
+
   useEffect(() => {
     if (!wsClient || !activeWorkspaceId) return;
 
@@ -55,8 +126,6 @@ export function TerminalPanel() {
       [allTerminalsTopic],
       (topic, payload, _seq) => {
         const parts = topic.split('.');
-        // Topic format: workspace.{id}.terminal.{terminalId}.{event}
-        // parts:        [0]       [1]    [2]        [3]         [4]
         if (parts.length < 5) return;
 
         const terminalId = parts[3];
@@ -64,6 +133,10 @@ export function TerminalPanel() {
 
         if (event === 'created') {
           const createData = payload as { id: string; kind: 'shell' | 'agent' };
+          if (createData.kind !== 'shell') {
+            return;
+          }
+
           setTerminalIds((prev) => {
             if (prev.includes(createData.id)) return prev;
             return [...prev, createData.id];
@@ -80,9 +153,6 @@ export function TerminalPanel() {
     };
   }, [wsClient, activeWorkspaceId]);
 
-  /**
-   * Create new terminal
-   */
   const handleCreateTerminal = useCallback(async () => {
     if (!activeWorkspaceId) return;
 
@@ -104,9 +174,6 @@ export function TerminalPanel() {
     }
   }, [activeWorkspaceId, dispatch]);
 
-  /**
-   * Close terminal
-   */
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
       const result = await dispatch('terminal.close', { terminalId });
@@ -123,14 +190,10 @@ export function TerminalPanel() {
     [dispatch, activeTerminalId, terminalIds]
   );
 
-  /**
-   * Switch active terminal
-   */
   const handleSwitchTerminal = useCallback((terminalId: string) => {
     setActiveTerminalId(terminalId);
   }, []);
 
-  // Don't render if panel is collapsed
   if (bottomPanelHeight === 0) {
     return null;
   }
@@ -141,12 +204,12 @@ export function TerminalPanel() {
     <div className="bottom-terminal">
       <div className="terminal-toolbar">
         <div className="terminal-toolbar-left">
-          <span className="terminal-kicker">{t('terminal.title').toUpperCase()}</span>
-          {activeTerminalMeta && (
-            <span className="terminal-title">
-              {activeTerminalMeta.title || t('terminal.shell')}
-            </span>
-          )}
+          <div className="terminal-title-stack">
+            <span className="terminal-kicker">TERMINAL</span>
+            {activeTerminalMeta ? (
+              <span className="terminal-title">{activeTerminalTitle}</span>
+            ) : null}
+          </div>
         </div>
 
         <div className="terminal-toolbar-right">
@@ -154,41 +217,49 @@ export function TerminalPanel() {
             <>
               <div className="terminal-selector">
                 <button className="terminal-selector-btn">
-                  <Terminal size={14} />
-                  <span>{activeTerminalMeta?.title || t('terminal.shell')}</span>
+                  <span>{activeTerminalTitle}</span>
                   <ChevronDown size={12} />
                 </button>
 
-                <div className="terminal-selector-dropdown">
-                  {terminalIds.map((id) => (
-                    <TerminalSelectorItem
-                      key={id}
-                      id={id}
-                      isActive={id === activeTerminalId}
-                      onSelect={() => handleSwitchTerminal(id)}
-                      onClose={() => handleCloseTerminal(id)}
-                    />
-                  ))}
-                </div>
+                {terminalIds.length > 1 ? (
+                  <div className="terminal-selector-dropdown">
+                    {terminalIds.map((id, index) => (
+                      <TerminalSelectorItem
+                        key={id}
+                        id={id}
+                        index={index}
+                        isActive={id === activeTerminalId}
+                        onSelect={() => handleSwitchTerminal(id)}
+                        onClose={() => handleCloseTerminal(id)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
-              <button
-                className="btn btn-icon btn-sm"
-                onClick={() => activeTerminalId && handleCloseTerminal(activeTerminalId)}
-                aria-label={t('terminal.close_terminal')}
-              >
-                <X size={14} />
-              </button>
+              <div className="terminal-toolbar-actions">
+                <button
+                  className="panel-toolbar-btn"
+                  onClick={() => activeTerminalId && handleCloseTerminal(activeTerminalId)}
+                  aria-label={t('terminal.close_terminal')}
+                  title="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </>
           )}
 
-          <button
-            className="btn btn-icon btn-sm"
-            onClick={handleCreateTerminal}
-            aria-label={t('terminal.new_terminal')}
-          >
-            <Plus size={14} />
-          </button>
+          <div className="terminal-toolbar-actions">
+            <button
+              className="panel-toolbar-btn"
+              onClick={handleCreateTerminal}
+              aria-label={t('terminal.new_terminal')}
+              title="Add"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -197,32 +268,39 @@ export function TerminalPanel() {
           <div className="bottom-terminal-empty">
             <Terminal size={32} className="bottom-terminal-empty-icon" />
             <p className="bottom-terminal-empty-text">{t('terminal.no_terminal')}</p>
-            <button className="btn btn-primary" onClick={handleCreateTerminal}>
+            <p className="bottom-terminal-empty-hint">
+              Launch a shell to inspect files, run commands, and verify changes without leaving the workspace.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={handleCreateTerminal}>
               <Plus size={14} />
               <span>{t('terminal.new_terminal')}</span>
             </button>
           </div>
         ) : (
-          <div className="bottom-terminal-tabs">
-            {terminalIds.map((id) => (
-              <TerminalTab
-                key={id}
-                id={id}
-                isActive={id === activeTerminalId}
-                onSelect={() => handleSwitchTerminal(id)}
-                onClose={() => handleCloseTerminal(id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {activeTerminalMeta && activeWorkspaceId && (
-          <div className="bottom-terminal-xterm">
-            <XtermHost
-              terminalId={activeTerminalMeta.id}
-              workspaceId={activeWorkspaceId}
-            />
-          </div>
+          <>
+            {terminalIds.length > 1 ? (
+              <div className="bottom-terminal-tabs">
+                {terminalIds.map((id, index) => (
+                  <TerminalTab
+                    key={id}
+                    id={id}
+                    index={index}
+                    isActive={id === activeTerminalId}
+                    onSelect={() => handleSwitchTerminal(id)}
+                    onClose={() => handleCloseTerminal(id)}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {activeTerminalMeta && activeWorkspaceId && (
+              <div className="bottom-terminal-xterm">
+                <XtermHost
+                  terminalId={activeTerminalMeta.id}
+                  workspaceId={activeWorkspaceId}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

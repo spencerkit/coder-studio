@@ -385,6 +385,7 @@ class ActiveSession {
     this.capability = data.capability;
     this.state = data.state;
     this.draft = data.draft;
+    this.startedAt = Date.now();
     this.lastActiveAt = Date.now();
   }
 
@@ -413,7 +414,7 @@ class ActiveSession {
       state: this.state,
       resume_id: this.resumeId ?? null,
       capability: this.capability,
-      started_at: this.startedAt ?? null,
+      started_at: this.startedAt ?? this.lastActiveAt,
       last_active_at: this.lastActiveAt,
       ended_at: this.endedAt ?? null,
       completion_percent: this.completionPercent ?? null,

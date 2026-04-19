@@ -6,9 +6,11 @@
  */
 
 import type { FC } from 'react';
+import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { ArrowRight, Bot, Sparkles } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import { sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
+import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
 import { paneLayoutAtomFamily, type PaneNode } from '../../atoms/ui';
 import { dispatchCommandAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
@@ -28,6 +30,52 @@ import type { Session } from '@coder-studio/core';
 export const AgentPanes: FC = () => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
+  const workspaceId = workspace?.id ?? '__workspace_empty__';
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
+  const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
+  const setSessions = useSetAtom(sessionsAtom);
+  const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
+
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    dispatch<Session[]>('session.list', { workspaceId: workspace.id })
+      .then((result) => {
+        if (!result.ok || !result.data) {
+          console.error('Failed to fetch sessions:', result.error?.message);
+          return;
+        }
+
+        const nextSessions = result.data;
+        const nextSessionIds = new Set(nextSessions.map((session) => session.id));
+
+        setSessions((prev) => {
+          const next = Object.fromEntries(
+            Object.entries(prev).filter(([, session]) => session.workspaceId !== workspace.id)
+          );
+
+          for (const session of nextSessions) {
+            next[session.id] = session;
+          }
+
+          return next;
+        });
+
+        if (nextSessions.length > 0 && !paneLayoutHasSession(paneLayout, nextSessionIds)) {
+          setPaneLayout({
+            id: 'root',
+            type: 'leaf',
+            sessionId: nextSessions[0]!.id,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch sessions:', error);
+      });
+  }, [workspace, dispatch, setSessions, paneLayout, setPaneLayout]);
 
   if (!workspace) {
     return (
@@ -37,18 +85,15 @@ export const AgentPanes: FC = () => {
     );
   }
 
-  const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspace.id));
-  const paneLayout = useAtomValue(paneLayoutAtomFamily(workspace.id));
-
   // If no sessions, show draft launcher
   if (sessions.length === 0) {
-    return <DraftLauncher workspaceId={workspace.id} />;
+    return <DraftLauncher workspaceId={workspaceId} />;
   }
 
   // Render pane tree recursively
   return (
     <div className="agent-panes">
-      <PaneNodeRenderer node={paneLayout} workspaceId={workspace.id} />
+      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} />
     </div>
   );
 };
@@ -119,19 +164,47 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
   return (
     <div className="agent-draft-launcher">
       <div className="agent-draft-content">
+        <span className="agent-draft-kicker">SESSION LAUNCHER</span>
         <h3 className="agent-draft-title">{t('session.provider_select')}</h3>
+        <p className="agent-draft-description">
+          选择一个 AI 会话，在当前 workspace 里继续查看文件、运行命令和推进代码修改。
+        </p>
         <div className="agent-draft-providers">
           <button
-            className="btn btn-primary"
+            className="btn btn-secondary agent-provider-card agent-provider-card-claude"
             onClick={() => handleSelectProvider('claude')}
           >
-            Claude
+            <span className="agent-provider-card-icon">
+              <Sparkles size={18} />
+            </span>
+            <span className="agent-provider-card-body">
+              <span className="agent-provider-card-title-row">
+                <span className="agent-provider-card-title">Claude</span>
+                <span className="agent-provider-card-meta">analysis</span>
+              </span>
+              <span className="agent-provider-card-desc">
+                更适合长上下文梳理、方案分析和代码审查。
+              </span>
+            </span>
+            <ArrowRight size={16} className="agent-provider-card-arrow" />
           </button>
           <button
-            className="btn btn-primary"
+            className="btn btn-secondary agent-provider-card agent-provider-card-codex"
             onClick={() => handleSelectProvider('codex')}
           >
-            Codex
+            <span className="agent-provider-card-icon">
+              <Bot size={18} />
+            </span>
+            <span className="agent-provider-card-body">
+              <span className="agent-provider-card-title-row">
+                <span className="agent-provider-card-title">Codex</span>
+                <span className="agent-provider-card-meta">workspace</span>
+              </span>
+              <span className="agent-provider-card-desc">
+                更适合终端操作、直接改文件和逐步修复问题。
+              </span>
+            </span>
+            <ArrowRight size={16} className="agent-provider-card-arrow" />
           </button>
         </div>
       </div>
@@ -140,3 +213,11 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
 };
 
 export default AgentPanes;
+
+function paneLayoutHasSession(node: PaneNode, sessionIds: Set<string>): boolean {
+  if (node.type === 'leaf') {
+    return node.sessionId ? sessionIds.has(node.sessionId) : false;
+  }
+
+  return node.children?.some((child) => paneLayoutHasSession(child, sessionIds)) ?? false;
+}

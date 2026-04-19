@@ -89,7 +89,7 @@ export function LoginPage() {
           {statusUnavailable ? <p className="auth-error">{t('status.unavailable')}</p> : null}
           {error ? <p className="auth-error">{error}</p> : null}
           <button className="welcome-btn" type="submit" disabled={checkingStatus || submitting || !password.trim()}>
-            {checkingStatus ? t('status.connecting') : submitting ? t('status.connecting') : t('confirm.confirm')}
+            {checkingStatus ? t('status.connecting') : submitting ? t('status.connecting') : t('action.confirm')}
           </button>
         </form>
       </div>

@@ -6,9 +6,12 @@
  */
 
 import type { FC } from 'react';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '@coder-studio/core';
+import { dispatchCommandAtom } from '../../../atoms/connection';
+import { workspacesAtom } from '../../../atoms/workspaces';
 import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 
@@ -29,27 +32,63 @@ interface WorkspaceTabProps {
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
   const t = useTranslation();
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
+  const workspaces = useAtomValue(workspacesAtom);
+  const setWorkspaces = useSetAtom(workspacesAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const navigate = useNavigate();
+  const displayName =
+    workspace.name || workspace.path?.split('/').filter(Boolean).pop() || workspace.path || workspace.id;
 
   const handleClick = () => {
     setActiveWorkspace(workspace.id);
+    navigate(`/workspace/${workspace.id}`);
   };
 
-  const handleClose = (e: React.MouseEvent) => {
+  const handleClose = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // TODO: Dispatch close workspace command
+
+    const result = await dispatch<void>('workspace.close', {
+      id: workspace.id,
+    });
+
+    if (!result.ok) {
+      console.error('Failed to close workspace:', result.error?.message);
+      return;
+    }
+
+    const remainingIds = Object.keys(workspaces).filter((id) => id !== workspace.id);
+
+    setWorkspaces((prev) => {
+      const next = { ...prev };
+      delete next[workspace.id];
+      return next;
+    });
+
+    if (isActive) {
+      const nextWorkspaceId = remainingIds[0] ?? null;
+      setActiveWorkspace(nextWorkspaceId);
+      navigate(nextWorkspaceId ? `/workspace/${nextWorkspaceId}` : '/');
+    }
   };
 
   return (
     <div
       className={`topbar-tab ${isActive ? 'active' : ''}`}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       role="button"
       tabIndex={0}
       aria-selected={isActive}
+      title={workspace.path || workspace.id}
     >
       <span className={`topbar-dot ${workspace.isActive ? 'active' : 'idle'}`} />
 
-      <span className="topbar-tab-name">{workspace.name}</span>
+      <span className="topbar-tab-name">{displayName}</span>
 
       {workspace.unreadCount && workspace.unreadCount > 0 ? (
         <span className="topbar-unread">

@@ -19,11 +19,19 @@ export const ConnectionStatus: FC = () => {
   const t = useTranslation();
   const status = useAtomValue(connectionStatusAtom);
 
+  if (status === 'connected') {
+    return null;
+  }
+
   const statusClass = `connection-status-${status}`;
 
   return (
-    <div className={`connection-status ${statusClass}`}>
-      <span className="connection-status-dot" />
+    <div
+      className={`connection-status ${statusClass}`}
+      title={t(`status.${status}`)}
+      aria-label={t(`status.${status}`)}
+    >
+      <span className={`connection-status-dot connection-status-dot-${status}`} />
       <span className="connection-status-text">{t(`status.${status}`)}</span>
     </div>
   );

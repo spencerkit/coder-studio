@@ -1,6 +1,9 @@
 // Core domain types (spec §12.1)
 
 export interface Workspace {
+  name?: string;
+  isActive?: boolean;
+  unreadCount?: number;
   id: string;
   path: string;
   targetRuntime: 'native' | 'wsl';

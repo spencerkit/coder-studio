@@ -246,11 +246,23 @@ function routeEventToAtom(
 
     // workspace.{id}.meta - workspace metadata update
     if (subtopic === 'meta') {
-      const workspace = payload as Workspace;
-      store.set(workspacesAtom, (prev: Record<string, Workspace>) => ({
-        ...prev,
-        [workspace.id]: workspace,
-      }));
+      const patch = payload as Partial<Workspace>;
+      store.set(workspacesAtom, (prev: Record<string, Workspace>) => {
+        const existing = prev[workspaceId];
+
+        if (!existing && !patch.path) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [workspaceId]: {
+            ...existing,
+            ...patch,
+            id: workspaceId,
+          } as Workspace,
+        };
+      });
       return;
     }
 

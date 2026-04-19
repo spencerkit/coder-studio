@@ -25,6 +25,7 @@ function generateId(): string {
  */
 export class TerminalManager {
   private terminals = new Map<TerminalId, ActiveTerminal>()
+  private archivedReplayBuffers = new Map<TerminalId, RingBuffer>()
 
   constructor(
     private readonly deps: {
@@ -108,6 +109,7 @@ export class TerminalManager {
     pty.onExit(({ exitCode }: { exitCode: number }) => {
       active.alive = false
       active.exitCode = exitCode
+      this.archivedReplayBuffers.set(id, ringBuffer)
 
       // Broadcast exit event
       this.deps.broadcaster.broadcast(
@@ -177,11 +179,16 @@ export class TerminalManager {
    */
   replay(terminalId: TerminalId, lastSeq: number): ReplayResult {
     const terminal = this.terminals.get(terminalId)
-    if (!terminal) {
-      return { status: 'unknown' }
+    if (terminal) {
+      return terminal.ringBuffer.replayFrom(lastSeq)
     }
 
-    return terminal.ringBuffer.replayFrom(lastSeq)
+    const archivedRingBuffer = this.archivedReplayBuffers.get(terminalId)
+    if (archivedRingBuffer) {
+      return archivedRingBuffer.replayFrom(lastSeq)
+    }
+
+    return { status: 'unknown' }
   }
 
   /**
@@ -201,6 +208,7 @@ export class TerminalManager {
       }
     }
     this.terminals.clear()
+    this.archivedReplayBuffers.clear()
   }
 
   /**

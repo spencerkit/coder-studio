@@ -16,6 +16,7 @@ import {
   runGitCreateBranch,
   runGitListBranches,
 } from '../git/cli.js';
+import { getFileDiff } from '../git/diff.js';
 
 // git.status
 registerCommand(
@@ -47,6 +48,26 @@ registerCommand(
     }
 
     return stageFiles(workspace.path, args.paths);
+  }
+);
+
+// git.diff
+registerCommand(
+  'git.diff',
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    staged: z.boolean().optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return {
+      diff: await getFileDiff(workspace.path, args.path, args.staged ?? false),
+    };
   }
 );
 

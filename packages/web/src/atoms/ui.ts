@@ -5,7 +5,8 @@
  */
 
 import { atom } from 'jotai';
-import { atomWithStorage, atomFamily } from 'jotai/utils';
+import { atomWithStorage } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 
 /**
  * Focus mode toggle (hides left/bottom panels)

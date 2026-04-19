@@ -5,22 +5,26 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
+import { Provider, createStore } from 'jotai';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost } from '../components/xterm-host';
+import { terminalOutputAtomFamily } from '../../../atoms/terminals';
+import { wsClientAtom } from '../../../atoms/connection';
+
+const mockTerminal = {
+  open: vi.fn(),
+  onData: vi.fn(() => vi.fn()), // Return dispose function
+  write: vi.fn(),
+  writeln: vi.fn(),
+  dispose: vi.fn(),
+  focus: vi.fn(),
+  loadAddon: vi.fn(),
+  options: {},
+};
 
 // Mock xterm.js modules
 vi.mock('xterm', () => {
-  const mockTerminal = {
-    open: vi.fn(),
-    onData: vi.fn(() => vi.fn()), // Return dispose function
-    write: vi.fn(),
-    writeln: vi.fn(),
-    dispose: vi.fn(),
-    focus: vi.fn(),
-    loadAddon: vi.fn(),
-  };
-
   return {
     Terminal: vi.fn(() => mockTerminal),
   };
@@ -47,6 +51,25 @@ describe('XtermHost', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('does not crash on unmount when terminal disposal fails', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockTerminal.dispose.mockImplementationOnce(() => {
+      throw new Error('dispose failed');
+    });
+
+    const { unmount } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="test-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    expect(() => unmount()).not.toThrow();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to dispose xterm instance:',
+      expect.any(Error)
+    );
   });
 
   it('renders without crashing', () => {
@@ -147,5 +170,53 @@ describe('XtermHost', () => {
         lineHeight: 1.4,
       })
     );
+  });
+
+  it('decodes utf-8 terminal output without mojibake', async () => {
+    const store = createStore();
+    const chunk = Buffer.from('你好─Codex', 'utf8').toString('base64');
+
+    store.set(terminalOutputAtomFamily('utf-terminal'), {
+      chunks: [chunk],
+      lastSeq: 1,
+      lastWritten: 0,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="utf-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledWith('你好─Codex');
+    });
+  });
+
+  it('does not send terminal input when rendered in read-only mode', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'unknown' });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="readonly-terminal" workspaceId="test-workspace" readOnly />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('ls -la\n');
+
+    expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+      terminalId: 'readonly-terminal',
+      lastSeq: 0,
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith('terminal.input', expect.anything());
   });
 });

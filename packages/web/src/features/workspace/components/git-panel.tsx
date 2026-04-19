@@ -1,249 +1,372 @@
-/**
- * Git Panel Component
- *
- * Displays Git changes, staging area, and commit interface.
- */
-
 import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtomValue, useStore } from 'jotai';
 import {
-  GitBranch,
-  Plus,
-  Minus,
-  RotateCcw,
-  RefreshCw,
+  ArrowUp,
   File,
+  Minus,
+  Plus,
+  RefreshCw,
+  RotateCcw,
 } from 'lucide-react';
-import { gitStateAtomFamily } from '../../../atoms/git';
+import type { GitFileChange, GitStatus } from '@coder-studio/core';
+import {
+  gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
+  type GitDiffPreview,
+} from '../../../atoms/git';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
-import { useState, useCallback, useEffect } from 'react';
 
 interface GitPanelProps {
   workspaceId: string;
+  refreshToken?: number;
 }
 
-/**
- * Git Panel
- *
- * PRD §10:
- *   - Header with "SOURCE CONTROL" label and branch info
- *   - Toolbar with stage/unstage/discard/commit buttons
- *   - Commit message input
- *   - Change groups: Staged / Changes / Untracked
- *   - Per-file actions: stage, unstage, discard
- */
-export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
+type GitChangeType = 'staged' | 'modified' | 'untracked' | 'deleted';
+
+interface GitChangeGroupDescriptor {
+  title: string;
+  type: GitChangeType;
+  changes: GitFileChange[];
+}
+
+function getFirstChange(status: GitStatus): { change: GitFileChange; type: GitChangeType } | null {
+  const groups: GitChangeGroupDescriptor[] = [
+    { title: 'Staged', type: 'staged', changes: status.staged },
+    { title: 'Changes', type: 'modified', changes: status.modified },
+    { title: 'Deleted', type: 'deleted', changes: status.deleted },
+    { title: 'Untracked', type: 'untracked', changes: status.untracked },
+  ];
+
+  for (const group of groups) {
+    if (group.changes[0]) {
+      return { change: group.changes[0], type: group.type };
+    }
+  }
+
+  return null;
+}
+
+function getChangeByPath(
+  status: GitStatus,
+  path: string
+): { change: GitFileChange; type: GitChangeType } | null {
+  const groups: Array<{ type: GitChangeType; changes: GitFileChange[] }> = [
+    { type: 'staged', changes: status.staged },
+    { type: 'modified', changes: status.modified },
+    { type: 'deleted', changes: status.deleted },
+    { type: 'untracked', changes: status.untracked },
+  ];
+
+  for (const group of groups) {
+    const change = group.changes.find((item) => item.path === path);
+    if (change) {
+      return { change, type: group.type };
+    }
+  }
+
+  return null;
+}
+
+export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) => {
   const t = useTranslation();
+  const store = useStore();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
+  const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [commitMessage, setCommitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
-  /**
-   * Load git status: dispatch git.status command
-   */
+  const setGitState = useCallback(
+    (status: GitStatus | null) => {
+      store.set(gitStateAtomFamily(workspaceId), status);
+    },
+    [store, workspaceId]
+  );
+
+  const setDiffPreview = useCallback(
+    (preview: GitDiffPreview | null) => {
+      store.set(gitDiffPreviewAtomFamily(workspaceId), preview);
+    },
+    [store, workspaceId]
+  );
+
+  const requestDiff = useCallback(
+    async (change: GitFileChange, type: GitChangeType) => {
+      const result = await dispatch<{ diff: string }>('git.diff', {
+        workspaceId,
+        path: change.path,
+        staged: type === 'staged',
+      });
+
+      if (!result.ok || !result.data) {
+        console.error('Failed to get diff:', result.error?.message);
+        return;
+      }
+
+      const preview: GitDiffPreview = {
+        path: change.path,
+        diff: result.data.diff,
+        staged: type === 'staged',
+      };
+
+      setDiffPreview(preview);
+
+      window.dispatchEvent(
+        new CustomEvent('coder-studio:show-diff', {
+          detail: preview,
+        })
+      );
+    },
+    [dispatch, setDiffPreview, workspaceId]
+  );
+
   const loadGitStatus = useCallback(async () => {
-    if (!workspaceId || isLoading) return;
+    if (!workspaceId || isLoadingRef.current) {
+      return;
+    }
 
+    isLoadingRef.current = true;
     setIsLoading(true);
-    const result = await dispatch<void>('git.status', {
-      workspaceId,
-    });
 
-    if (!result.ok) {
-      console.error('Failed to load git status:', result.error?.message);
+    try {
+      const result = await dispatch<GitStatus>('git.status', {
+        workspaceId,
+      });
+
+      if (!result.ok || !result.data) {
+        console.error('Failed to load git status:', result.error?.message);
+        return;
+      }
+
+      setGitState(result.data);
+
+      const nextPreviewTarget =
+        (diffPreview ? getChangeByPath(result.data, diffPreview.path) : null) ??
+        getFirstChange(result.data);
+
+      if (!nextPreviewTarget) {
+        setDiffPreview(null);
+        return;
+      }
+
+      if (
+        !diffPreview ||
+        diffPreview.path !== nextPreviewTarget.change.path ||
+        Boolean(diffPreview.staged) !== (nextPreviewTarget.type === 'staged')
+      ) {
+        await requestDiff(nextPreviewTarget.change, nextPreviewTarget.type);
+      }
+    } finally {
+      isLoadingRef.current = false;
+      setIsLoading(false);
     }
+  }, [diffPreview, dispatch, requestDiff, setDiffPreview, setGitState, workspaceId]);
 
-    setIsLoading(false);
-  }, [workspaceId, isLoading, dispatch]);
-
-  // Load git status on mount
   useEffect(() => {
-    if (!gitState && !isLoading) {
-      loadGitStatus();
+    if (!gitState && !isLoadingRef.current) {
+      void loadGitStatus();
     }
-  }, [gitState, isLoading, loadGitStatus]);
+  }, [gitState, loadGitStatus]);
 
-  /**
-   * Refresh git status
-   */
-  const handleRefresh = () => {
-    if (!isLoading) {
-      loadGitStatus();
+  useEffect(() => {
+    if (!gitState || diffPreview) {
+      return;
     }
-  };
 
-  /**
-   * Stage all changes
-   */
-  const handleStageAll = async () => {
-    const result = await dispatch<void>('git.stage', {
-      workspaceId,
-      paths: gitState?.modified.map((f) => f.path) ?? [],
-    });
-
-    if (!result.ok) {
-      console.error('Failed to stage all:', result.error?.message);
+    const firstChange = getFirstChange(gitState);
+    if (!firstChange) {
+      return;
     }
-  };
 
-  /**
-   * Unstage all changes
-   */
-  const handleUnstageAll = async () => {
-    const result = await dispatch<void>('git.unstage', {
-      workspaceId,
-      paths: gitState?.staged.map((f) => f.path) ?? [],
-    });
+    void requestDiff(firstChange.change, firstChange.type);
+  }, [gitState, diffPreview, requestDiff]);
 
-    if (!result.ok) {
-      console.error('Failed to unstage all:', result.error?.message);
+  useEffect(() => {
+    if (refreshToken > 0 && !isLoadingRef.current) {
+      void loadGitStatus();
     }
-  };
+  }, [refreshToken, loadGitStatus]);
 
-  /**
-   * Discard all changes
-   */
-  const handleDiscardAll = async () => {
-    // TODO: Show confirmation dialog
-    const result = await dispatch<void>('git.discard', {
-      workspaceId,
-      paths: gitState?.modified.map((f) => f.path) ?? [],
-    });
+  const runGitMutation = useCallback(
+    async (
+      op: 'git.stage' | 'git.unstage' | 'git.discard' | 'git.commit',
+      args: Record<string, unknown>,
+      errorMessage: string,
+      afterSuccess?: () => void
+    ) => {
+      const result = await dispatch<void>(op, args);
+      if (!result.ok) {
+        console.error(errorMessage, result.error?.message);
+        return;
+      }
 
-    if (!result.ok) {
-      console.error('Failed to discard all:', result.error?.message);
+      afterSuccess?.();
+      await loadGitStatus();
+    },
+    [dispatch, loadGitStatus]
+  );
+
+  const handleStageAll = useCallback(async () => {
+    const paths = [
+      ...(gitState?.modified.map((file) => file.path) ?? []),
+      ...(gitState?.deleted.map((file) => file.path) ?? []),
+      ...(gitState?.untracked.map((file) => file.path) ?? []),
+    ];
+
+    await runGitMutation(
+      'git.stage',
+      { workspaceId, paths },
+      'Failed to stage all:'
+    );
+  }, [gitState, runGitMutation, workspaceId]);
+
+  const handleUnstageAll = useCallback(async () => {
+    await runGitMutation(
+      'git.unstage',
+      {
+        workspaceId,
+        paths: gitState?.staged.map((file) => file.path) ?? [],
+      },
+      'Failed to unstage all:'
+    );
+  }, [gitState, runGitMutation, workspaceId]);
+
+  const handleDiscardAll = useCallback(async () => {
+    await runGitMutation(
+      'git.discard',
+      {
+        workspaceId,
+        paths: [
+          ...(gitState?.modified.map((file) => file.path) ?? []),
+          ...(gitState?.deleted.map((file) => file.path) ?? []),
+        ],
+      },
+      'Failed to discard all:'
+    );
+  }, [gitState, runGitMutation, workspaceId]);
+
+  const handleCommit = useCallback(async () => {
+    if (!commitMessage.trim() || !gitState?.staged.length) {
+      return;
     }
-  };
 
-  /**
-   * Commit staged changes
-   */
-  const handleCommit = async () => {
-    if (!commitMessage.trim() || !gitState?.staged.length) return;
+    await runGitMutation(
+      'git.commit',
+      {
+        workspaceId,
+        message: commitMessage.trim(),
+      },
+      'Failed to commit:',
+      () => setCommitMessage('')
+    );
+  }, [commitMessage, gitState?.staged.length, runGitMutation, workspaceId]);
 
-    const result = await dispatch<void>('git.commit', {
-      workspaceId,
-      message: commitMessage,
-    });
-
-    if (result.ok) {
-      setCommitMessage('');
-    } else {
-      console.error('Failed to commit:', result.error?.message);
-    }
-  };
-
-  const hasChanges =
+  const hasChanges = Boolean(
     gitState &&
-    (gitState.staged.length > 0 ||
-      gitState.modified.length > 0 ||
-      gitState.untracked.length > 0);
+      (
+        gitState.staged.length > 0 ||
+        gitState.modified.length > 0 ||
+        gitState.untracked.length > 0 ||
+        gitState.deleted.length > 0
+      )
+  );
+
+  const groups = useMemo<GitChangeGroupDescriptor[]>(
+    () => [
+      { title: 'Staged', type: 'staged', changes: gitState?.staged ?? [] },
+      { title: 'Changes', type: 'modified', changes: gitState?.modified ?? [] },
+      { title: 'Deleted', type: 'deleted', changes: gitState?.deleted ?? [] },
+      { title: 'Untracked', type: 'untracked', changes: gitState?.untracked ?? [] },
+    ].filter((group) => group.changes.length > 0),
+    [gitState]
+  );
 
   return (
     <div className="git-panel">
-      <div className="git-header">
-        <span className="git-label">{t('git.title').toUpperCase()}</span>
-        {gitState?.branch && (
-          <span className="git-branch-chip">
-            <GitBranch size={12} />
-            <span>{gitState.branch}</span>
-          </span>
-        )}
+      <div className="panel-toolbar git-panel-toolbar">
+        <div className="git-toolbar-cluster">
+          <button
+            className="panel-toolbar-btn"
+            onClick={() => void loadGitStatus()}
+            disabled={isLoading}
+            title="Refresh"
+            type="button"
+          >
+            <RefreshCw size={14} className={isLoading ? 'spin' : undefined} />
+          </button>
+
+          {hasChanges && (
+            <>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => void handleStageAll()}
+                title="Stage All"
+                type="button"
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => void handleUnstageAll()}
+                title="Unstage All"
+                type="button"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => void handleDiscardAll()}
+                title="Discard All"
+                type="button"
+              >
+                <RotateCcw size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn git-panel-commit-btn"
+                onClick={() => void handleCommit()}
+                disabled={!commitMessage.trim() || !gitState?.staged.length}
+                title="Commit"
+                type="button"
+              >
+                <ArrowUp size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="git-toolbar">
-        <button
-          className="btn btn-icon btn-sm"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          aria-label={t('action.refresh')}
-        >
-          <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
-        </button>
+      <textarea
+        className="git-commit-input"
+        placeholder="Enter commit message..."
+        value={commitMessage}
+        onChange={(event) => setCommitMessage(event.target.value)}
+        rows={1}
+      />
 
-        {hasChanges && (
-          <>
-            <button
-              className="btn btn-icon btn-sm"
-              onClick={handleStageAll}
-              aria-label={t('git.stage_all')}
-            >
-              <Plus size={14} />
-            </button>
-            <button
-              className="btn btn-icon btn-sm"
-              onClick={handleUnstageAll}
-              aria-label={t('git.unstage_all')}
-            >
-              <Minus size={14} />
-            </button>
-            <button
-              className="btn btn-icon btn-sm"
-              onClick={handleDiscardAll}
-              aria-label={t('git.discard')}
-            >
-              <RotateCcw size={14} />
-            </button>
-          </>
-        )}
-      </div>
-
-      <div className="git-commit-input">
-        <textarea
-          className="input"
-          value={commitMessage}
-          onChange={(e) => setCommitMessage(e.target.value)}
-          placeholder={t('git.commit_placeholder')}
-          rows={3}
-        />
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={handleCommit}
-          disabled={!commitMessage.trim() || !gitState?.staged.length}
-        >
-          {t('git.commit')}
-        </button>
-      </div>
-
-      <div className="git-changes">
+      <div className="git-list">
         {gitState ? (
-          <>
-            {gitState.staged.length > 0 && (
+          groups.length > 0 ? (
+            groups.map((group) => (
               <GitChangeGroup
-                title={t('git.staged')}
-                changes={gitState.staged}
-                type="staged"
+                key={group.title}
+                title={group.title}
+                changes={group.changes}
+                type={group.type}
+                selectedPath={diffPreview?.path ?? null}
+                onViewDiff={requestDiff}
+                onRunMutation={runGitMutation}
                 workspaceId={workspaceId}
               />
-            )}
-
-            {gitState.modified.length > 0 && (
-              <GitChangeGroup
-                title={t('git.unstaged')}
-                changes={gitState.modified}
-                type="unstaged"
-                workspaceId={workspaceId}
-              />
-            )}
-
-            {gitState.untracked.length > 0 && (
-              <GitChangeGroup
-                title={t('git.untracked')}
-                changes={gitState.untracked}
-                type="untracked"
-                workspaceId={workspaceId}
-              />
-            )}
-          </>
+            ))
+          ) : (
+            <div className="git-empty">{t('git.no_changes')}</div>
+          )
         ) : (
-          <div className="git-empty">
-            <p>
-              {isLoading ? 'Loading...' : t('git.no_changes')}
-            </p>
-          </div>
+          <div className="git-empty">{isLoading ? 'Loading...' : t('git.no_changes')}</div>
         )}
       </div>
     </div>
@@ -252,115 +375,167 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId }) => {
 
 interface GitChangeGroupProps {
   title: string;
-  changes: Array<{ path: string; oldPath?: string }>;
-  type: 'staged' | 'unstaged' | 'untracked';
+  changes: GitFileChange[];
+  type: GitChangeType;
+  selectedPath: string | null;
   workspaceId: string;
+  onViewDiff: (change: GitFileChange, type: GitChangeType) => Promise<void>;
+  onRunMutation: (
+    op: 'git.stage' | 'git.unstage' | 'git.discard' | 'git.commit',
+    args: Record<string, unknown>,
+    errorMessage: string,
+    afterSuccess?: () => void
+  ) => Promise<void>;
 }
 
 const GitChangeGroup: FC<GitChangeGroupProps> = ({
   title,
   changes,
   type,
+  selectedPath,
   workspaceId,
-}) => {
-  const t = useTranslation();
-
-  return (
-    <div className="git-change-group">
-      <div className="git-change-group-header">
-        <span className="git-change-group-title">{title}</span>
-        <span className="git-change-group-count">{changes.length}</span>
-      </div>
-
-      <div className="git-change-group-list">
-        {changes.map((change) => (
-          <GitChangeRow
-            key={change.path}
-            change={change}
-            type={type}
-            workspaceId={workspaceId}
-          />
-        ))}
-      </div>
+  onViewDiff,
+  onRunMutation,
+}) => (
+  <div className="git-group">
+    <div className="git-group-header">
+      <span>{title}</span>
+      <span className="git-group-count">{changes.length}</span>
     </div>
-  );
-};
+
+    {changes.map((change) => (
+      <GitChangeRow
+        key={change.path}
+        change={change}
+        type={type}
+        workspaceId={workspaceId}
+        selected={selectedPath === change.path}
+        onViewDiff={onViewDiff}
+        onRunMutation={onRunMutation}
+      />
+    ))}
+  </div>
+);
 
 interface GitChangeRowProps {
-  change: { path: string; oldPath?: string };
-  type: 'staged' | 'unstaged' | 'untracked';
+  change: GitFileChange;
+  type: GitChangeType;
   workspaceId: string;
+  selected: boolean;
+  onViewDiff: (change: GitFileChange, type: GitChangeType) => Promise<void>;
+  onRunMutation: (
+    op: 'git.stage' | 'git.unstage' | 'git.discard' | 'git.commit',
+    args: Record<string, unknown>,
+    errorMessage: string,
+    afterSuccess?: () => void
+  ) => Promise<void>;
 }
 
-const GitChangeRow: FC<GitChangeRowProps> = ({ change, type, workspaceId }) => {
-  const t = useTranslation();
-  const dispatch = useAtomValue(dispatchCommandAtom);
+const GitChangeRow: FC<GitChangeRowProps> = ({
+  change,
+  type,
+  workspaceId,
+  selected,
+  onViewDiff,
+  onRunMutation,
+}) => {
+  const pathParts = change.path.split('/');
+  const fileName = pathParts[pathParts.length - 1] ?? change.path;
+  const dirName = pathParts.length > 1 ? `${pathParts.slice(0, -1).join('/')}/` : '';
 
-  /**
-   * Stage or unstage file
-   */
-  const handleAction = async () => {
+  const badgeLabel =
+    type === 'staged'
+      ? 'Staged'
+      : type === 'modified'
+        ? 'Modified'
+        : type === 'deleted'
+          ? 'Deleted'
+          : 'Untracked';
+
+  const iconTone =
+    type === 'modified'
+      ? 'modified'
+      : type === 'deleted'
+        ? 'deleted'
+        : type === 'staged'
+          ? 'staged'
+          : 'untracked';
+
+  const handleToggleStage = async () => {
     if (type === 'staged') {
-      // Unstage
-      const result = await dispatch<void>('git.unstage', {
-        workspaceId,
-        paths: [change.path],
-      });
-
-      if (!result.ok) {
-        console.error('Failed to unstage:', result.error?.message);
-      }
-    } else {
-      // Stage
-      const result = await dispatch<void>('git.stage', {
-        workspaceId,
-        paths: [change.path],
-      });
-
-      if (!result.ok) {
-        console.error('Failed to stage:', result.error?.message);
-      }
-    }
-  };
-
-  /**
-   * View diff
-   */
-  const handleViewDiff = async () => {
-    const result = await dispatch<{ diff: string }>('git.diff', {
-      workspaceId,
-      path: change.path,
-    });
-
-    if (result.ok && result.data) {
-      // Dispatch custom event to open diff in editor
-      window.dispatchEvent(
-        new CustomEvent('coder-studio:show-diff', {
-          detail: { path: change.path, diff: result.data.diff },
-        })
+      await onRunMutation(
+        'git.unstage',
+        { workspaceId, paths: [change.path] },
+        'Failed to unstage:'
       );
-    } else {
-      console.error('Failed to get diff:', result.error?.message);
+      return;
     }
+
+    await onRunMutation(
+      'git.stage',
+      { workspaceId, paths: [change.path] },
+      'Failed to stage:'
+    );
   };
 
-  const statusClass = `git-status-${type}`;
+  const handleDiscard = async () => {
+    await onRunMutation(
+      'git.discard',
+      { workspaceId, paths: [change.path] },
+      'Failed to discard:'
+    );
+  };
 
   return (
-    <div className="git-change-row" onClick={handleViewDiff}>
-      <File size={14} />
-      <span className="git-change-path">{change.path}</span>
-      <span className={`git-change-status ${statusClass}`}>{type}</span>
-      <button
-        className="btn btn-icon btn-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAction();
-        }}
-        aria-label={type === 'staged' ? t('git.unstage') : t('git.stage')}
-      >
-        {type === 'staged' ? <Minus size={12} /> : <Plus size={12} />}
-      </button>
+    <div
+      className={`git-row ${selected ? 'active' : ''}`}
+      onClick={() => void onViewDiff(change, type)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          void onViewDiff(change, type);
+        }
+      }}
+    >
+      <span className={`git-row-icon git-row-icon-${iconTone}`}>
+        <File size={14} />
+      </span>
+
+      <span className="git-row-name">{fileName}</span>
+
+      {dirName ? <span className="git-row-dir">{dirName}</span> : null}
+
+      <span className={`git-status-badge ${iconTone}`}>{badgeLabel}</span>
+
+      <div className="git-row-actions">
+        <button
+          className="git-row-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleToggleStage();
+          }}
+          title={type === 'staged' ? 'Unstage' : 'Stage'}
+          type="button"
+        >
+          {type === 'staged' ? <Minus size={12} /> : <Plus size={12} />}
+        </button>
+
+        {type !== 'staged' ? (
+          <button
+            className="git-row-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDiscard();
+            }}
+            title="Discard"
+            type="button"
+          >
+            <RotateCcw size={12} />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 };

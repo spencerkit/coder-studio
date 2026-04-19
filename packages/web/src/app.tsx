@@ -38,7 +38,7 @@ function App() {
   const authEnabled = useAtomValue(authEnabledAtom);
   const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
-  const shouldShowLogin = (authRequired && !authenticated) || authUnknown;
+  const shouldShowLogin = authRequired && !authenticated;
 
   return (
     <BrowserRouter>
@@ -57,19 +57,29 @@ function App() {
 
         {/* Main content with routing */}
         <main className="main-content">
-          <Routes>
-            {shouldShowLogin ? (
-              <>
-                <Route path="*" element={<LoginPage />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<RootRoute />} />
-                <Route path="/workspace/:id" element={<WorkspacePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </>
-            )}
-          </Routes>
+          {authUnknown ? (
+            <div className="app-loading-shell">
+              <div className="app-loading-card">
+                <div className="app-loading-kicker">CODER STUDIO</div>
+                <h1 className="app-loading-title">正在连接工作区...</h1>
+                <p className="app-loading-desc">正在同步认证与连接状态，随后会自动进入当前 workspace。</p>
+              </div>
+            </div>
+          ) : (
+            <Routes>
+              {shouldShowLogin ? (
+                <>
+                  <Route path="*" element={<LoginPage />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/" element={<RootRoute />} />
+                  <Route path="/workspace/:id" element={<WorkspacePage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                </>
+              )}
+            </Routes>
+          )}
         </main>
 
         {/* Command Palette (global overlay) */}

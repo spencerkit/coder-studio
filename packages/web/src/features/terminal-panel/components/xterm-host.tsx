@@ -12,7 +12,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAtomValue, useAtom } from 'jotai';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { WebglAddon } from 'xterm-addon-webgl';
 import { wsClientAtom } from '../../../atoms/connection';
 import { terminalOutputAtomFamily, terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { dispatchCommandAtom } from '../../../atoms/connection';
@@ -48,13 +47,29 @@ const AURORA_MINT_THEME = {
   brightWhite: '#e5edf3',
 };
 
+const terminalOutputDecoder = new TextDecoder();
+
+function decodeTerminalChunk(chunk: string): string {
+  const binary = atob(chunk);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return terminalOutputDecoder.decode(bytes);
+}
+
 interface XtermHostProps {
   /** Terminal ID */
   terminalId: string;
   /** Workspace ID for topic subscription */
   workspaceId: string;
+  /** Prevent stdin dispatch for historical or ended terminals */
+  readOnly?: boolean;
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
+}
+
+interface ReplayPayload {
+  status: 'ok' | 'too_old' | 'unknown';
+  chunk?: string;
+  seq?: number;
 }
 
 /**
@@ -65,22 +80,54 @@ interface XtermHostProps {
  * 2. Update: write new output chunks from atom, fit on resize
  * 3. Unmount: dispose Terminal, unsubscribe from events
  */
-export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
+export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHostProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const fitFrameRef = useRef<number | null>(null);
+  const interactiveRef = useRef(true);
 
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
+  const isInteractive = !readOnly && meta?.alive !== false;
+
+  useEffect(() => {
+    interactiveRef.current = isInteractive;
+
+    if (terminalRef.current) {
+      terminalRef.current.options.disableStdin = !isInteractive;
+      terminalRef.current.options.cursorBlink = isInteractive;
+    }
+  }, [isInteractive]);
+
+  const scheduleFit = useCallback(() => {
+    if (fitFrameRef.current !== null) {
+      cancelAnimationFrame(fitFrameRef.current);
+    }
+
+    fitFrameRef.current = requestAnimationFrame(() => {
+      fitFrameRef.current = null;
+
+      try {
+        fitAddonRef.current?.fit();
+      } catch (error) {
+        console.error('Failed to fit xterm instance:', error);
+      }
+    });
+  }, []);
 
   /**
    * Handle user input - dispatch to server
    */
   const handleInput = useCallback(
     async (data: string) => {
+      if (!interactiveRef.current) {
+        return;
+      }
+
       const result = await dispatch('terminal.input', {
         terminalId,
         bytes: btoa(data), // Base64 encode for binary-safe transport
@@ -118,24 +165,15 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
       fontSize: 13,
       lineHeight: 1.4,
       scrollback: 5000,
-      cursorBlink: true,
+      cursorBlink: isInteractive,
       cursorStyle: 'block',
+      disableStdin: !isInteractive,
       allowProposedApi: true,
     });
 
     // Create FitAddon
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-
-    // Try WebGL renderer for better performance
-    if (containerRef.current) {
-      try {
-        const webglAddon = new WebglAddon();
-        terminal.loadAddon(webglAddon);
-      } catch {
-        // WebGL not supported, fallback to canvas
-      }
-    }
 
     // Open terminal in container
     terminal.open(containerRef.current);
@@ -144,6 +182,7 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
     // Store refs
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    scheduleFit();
 
     // Handle user input
     terminal.onData(handleInput);
@@ -176,19 +215,46 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
       );
     }
 
+    dispatch<ReplayPayload>('terminal.replay', {
+      terminalId,
+      lastSeq: 0,
+    })
+      .then((result) => {
+        if (!result.ok || !result.data || result.data.status !== 'ok' || !result.data.chunk) {
+          return;
+        }
+
+        try {
+          terminal.write(decodeTerminalChunk(result.data.chunk));
+        } catch {
+          terminal.write(atob(result.data.chunk));
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to replay terminal output:', error);
+      });
+
     // Cleanup on unmount
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
+      if (fitFrameRef.current !== null) {
+        cancelAnimationFrame(fitFrameRef.current);
+        fitFrameRef.current = null;
+      }
       if (terminalRef.current) {
-        terminalRef.current.dispose();
+        try {
+          terminalRef.current.dispose();
+        } catch (error) {
+          console.error('Failed to dispose xterm instance:', error);
+        }
         terminalRef.current = null;
         fitAddonRef.current = null;
       }
     };
-  }, [terminalId, workspaceId, wsClient, handleInput, setOutputAtom]);
+  }, [terminalId, workspaceId, wsClient, handleInput, setOutputAtom, scheduleFit, isInteractive]);
 
   /**
    * Write new output chunks to terminal
@@ -205,7 +271,7 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
       if (!chunk) continue;
 
       try {
-        const decoded = atob(chunk);
+        const decoded = decodeTerminalChunk(chunk);
         terminal.write(decoded);
       } catch {
         // If decode fails, write raw
@@ -233,7 +299,7 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
     if (!container || !fitAddon) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
+      scheduleFit();
     });
 
     resizeObserver.observe(container);
@@ -241,7 +307,7 @@ export function XtermHost({ terminalId, workspaceId }: XtermHostProps) {
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [scheduleFit]);
 
   /**
    * Focus terminal when it becomes active

@@ -50,11 +50,12 @@ async function buildTree(currentPath: string, rootPath: string): Promise<FileNod
     const relPath = relative(rootPath, fullPath);
 
     if (entry.isDirectory()) {
+      const children = await buildTree(fullPath, rootPath);
       nodes.push({
         name: entry.name,
         path: relPath,
         kind: 'dir',
-        children: [], // Lazy: children loaded on demand
+        children,
       });
     } else if (entry.isFile()) {
       const stats = await stat(fullPath);

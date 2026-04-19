@@ -8,19 +8,21 @@ import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 import { terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { useTranslation } from '../../../lib/i18n';
+import { formatTerminalTitle } from './title-format';
 
 interface TerminalTabProps {
   id: string;
+  index: number;
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
 }
 
-export function TerminalTab({ id, isActive, onSelect, onClose }: TerminalTabProps) {
+export function TerminalTab({ id, index, isActive, onSelect, onClose }: TerminalTabProps) {
   const t = useTranslation();
   const meta = useAtomValue(terminalMetaAtomFamily(id));
 
-  const title = meta?.title || t('terminal.shell');
+  const title = formatTerminalTitle(meta, index, t('terminal.shell'));
 
   return (
     <div className={`terminal-tab ${isActive ? 'terminal-tab-active' : ''}`}>

@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { useTranslation } from '../../../lib/i18n';
 import type { SessionState } from '@coder-studio/core';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
 
@@ -35,7 +34,6 @@ interface SessionCardProps {
  *   - Terminal area (xterm.js)
  */
 export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
-  const t = useTranslation();
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const dispatch = useAtomValue(dispatchCommandAtom);
 
@@ -45,9 +43,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     return null;
   }
 
-  /**
-   * Resume session: dispatch session.resume command
-   */
   const handleStart = async () => {
     const result = await dispatch<{ sessionId: string }>('session.resume', {
       sessionId,
@@ -58,9 +53,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
-  /**
-   * Stop session: dispatch session.stop command
-   */
   const handleStop = async () => {
     const result = await dispatch<void>('session.stop', {
       sessionId,
@@ -71,15 +63,12 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
-  /**
-   * Send input: dispatch terminal.input command
-   */
   const handleSendInput = async () => {
     if (!inputValue.trim()) return;
 
     const result = await dispatch<void>('terminal.input', {
       terminalId: session.terminalId,
-      bytes: btoa(inputValue + '\n'), // Base64 encode for binary-safe transport
+      bytes: btoa(inputValue + '\n'),
     });
 
     if (result.ok) {
@@ -89,18 +78,11 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
-  /**
-   * Close session: dispatch session.stop command
-   */
   const handleClose = async () => {
     await handleStop();
   };
 
-  /**
-   * Split panel horizontally
-   */
   const handleSplitHorizontal = () => {
-    // Dispatch custom event for panel split
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-split', {
         detail: { sessionId, direction: 'horizontal' },
@@ -108,11 +90,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     );
   };
 
-  /**
-   * Split panel vertically
-   */
   const handleSplitVertical = () => {
-    // Dispatch custom event for panel split
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-split', {
         detail: { sessionId, direction: 'vertical' },
@@ -121,79 +99,78 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   };
 
   const progressWidth = getProgressWidth(session.state);
+  const sessionTitle = formatSessionLabel(session.id);
+  const providerLabel = formatProviderLabel(session.providerId);
+  const sessionStateLabel = formatSessionStateLabel(session.state);
 
   return (
-    <div className="agent-pane">
-      {/* Progress bar */}
-      <div className="agent-progress">
+    <div className="session-card agent-pane">
+      <div className="session-progress">
         <div
-          className={`fill ${session.state === 'unavailable' ? 'error' : ''}`}
+          className={`session-progress-bar ${getSessionProgressClass(session.state)}`}
           style={{ width: `${progressWidth}%` }}
         />
       </div>
 
-      {/* Header */}
-      <div className="agent-header">
-        <div className="agent-header-left">
-          <span className={`agent-session-dot ${session.state === 'running' ? 'active' : ''}`} />
-          <span className="agent-title">{session.id.slice(0, 8)}</span>
-          <span className="agent-badge">{session.providerId}</span>
-          <span className="agent-status">
-            {t(`session.state.${session.state}`)}
-          </span>
+      <div className="session-header">
+        <div className="session-header-left">
+          <span className={`session-dot ${getSessionDotClass(session.state)}`} />
+          <div className="session-header-copy">
+            <div className="session-title-row">
+              <span className="session-title">{sessionTitle}</span>
+              <span className="badge badge-blue session-provider-badge">{providerLabel}</span>
+              <span className={`session-state-badge ${getSessionBadgeClass(session.state)}`}>
+                {sessionStateLabel}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="agent-header-actions">
+        <div className="session-header-actions">
           {session.state === 'idle' || session.state === 'interrupted' ? (
-            <button
-              className="btn btn-icon btn-sm"
-              onClick={handleStart}
-              aria-label="Start"
-            >
+            <button className="session-action-btn" onClick={handleStart} title="Start" aria-label="Start">
               <Play size={13} />
             </button>
           ) : session.state === 'running' ? (
-            <button
-              className="btn btn-icon btn-sm"
-              onClick={handleStop}
-              aria-label="Stop"
-            >
+            <button className="session-action-btn" onClick={handleStop} title="Stop" aria-label="Stop">
               <Square size={13} />
             </button>
           ) : null}
           <button
-            className="btn btn-icon btn-sm"
+            className="session-action-btn"
             onClick={handleSplitHorizontal}
-            aria-label={t('tooltip.split_horizontal')}
+            title="Split horizontal"
+            aria-label="Split horizontal"
           >
             <FlipHorizontal size={13} />
           </button>
           <button
-            className="btn btn-icon btn-sm"
+            className="session-action-btn"
             onClick={handleSplitVertical}
-            aria-label={t('tooltip.split_vertical')}
+            title="Split vertical"
+            aria-label="Split vertical"
           >
             <FlipVertical size={13} />
           </button>
           <button
-            className="btn btn-icon btn-sm"
+            className="session-action-btn session-action-btn-close"
             onClick={handleClose}
-            aria-label={t('action.close')}
+            title="Close"
+            aria-label="Close"
           >
             <X size={14} />
           </button>
         </div>
       </div>
 
-      {/* Terminal area */}
-      <div className="agent-terminal">
+      <div className="session-terminal">
         <XtermHost
           terminalId={session.terminalId}
           workspaceId={session.workspaceId}
+          readOnly={!isSessionInteractive(session.state)}
         />
       </div>
 
-      {/* Input area */}
       {(session.state === 'running' || session.state === 'idle') && (
         <div className="session-input">
           <input
@@ -206,7 +183,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
                 handleSendInput();
               }
             }}
-            placeholder="Type a message..."
+            placeholder="Ask the agent to inspect, edit, or run a command"
           />
           <button
             className="btn btn-primary btn-sm"
@@ -221,20 +198,96 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   );
 };
 
-/**
- * Get progress bar width based on session state
- */
 function getProgressWidth(state: SessionState): number {
   switch (state) {
     case 'starting':
-      return 14;
+      return 18;
     case 'running':
-      return 34;
+      return 42;
+    case 'ended':
+      return 100;
     case 'unavailable':
       return 100;
     default:
-      return 6;
+      return 8;
   }
+}
+
+function getSessionProgressClass(state: SessionState) {
+  switch (state) {
+    case 'starting':
+      return 'session-progress-starting';
+    case 'running':
+      return 'session-progress-running';
+    case 'idle':
+      return 'session-progress-idle';
+    case 'interrupted':
+      return 'session-progress-interrupted';
+    case 'ended':
+      return 'session-progress-complete';
+    case 'unavailable':
+      return 'session-progress-unavailable';
+    default:
+      return 'session-progress-idle';
+  }
+}
+
+function getSessionDotClass(state: SessionState) {
+  switch (state) {
+    case 'starting':
+      return 'session-dot-starting';
+    case 'running':
+      return 'session-dot-running';
+    case 'interrupted':
+      return 'session-dot-interrupted';
+    case 'ended':
+      return 'session-dot-complete';
+    case 'unavailable':
+      return 'session-dot-unavailable';
+    default:
+      return 'session-dot-idle';
+  }
+}
+
+function getSessionBadgeClass(state: SessionState) {
+  switch (state) {
+    case 'starting':
+      return 'badge badge-amber';
+    case 'running':
+      return 'badge badge-green';
+    case 'interrupted':
+      return 'badge badge-pink';
+    case 'ended':
+      return 'badge badge-blue';
+    case 'unavailable':
+      return 'badge badge-pink';
+    default:
+      return 'badge badge-gray';
+  }
+}
+
+function formatSessionLabel(sessionId: string) {
+  const numericId = sessionId.match(/(\d+)/)?.[1];
+
+  if (numericId) {
+    return `SESSION-${numericId.slice(-2).padStart(2, '0')}`;
+  }
+
+  return sessionId.replace(/[_-]/g, ' ').toUpperCase();
+}
+
+function formatSessionStateLabel(state: SessionState) {
+  return state
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatProviderLabel(providerId: string) {
+  return providerId.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isSessionInteractive(state: SessionState) {
+  return state === 'running' || state === 'idle';
 }
 
 export default SessionCard;

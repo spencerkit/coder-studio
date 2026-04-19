@@ -4,7 +4,10 @@
  * Concrete implementation of PtyHost using node-pty
  */
 
+import { createRequire } from 'node:module';
 import type { PtyHost, PtyProcess, PtySpawnOptions } from './types.js';
+
+const require = createRequire(import.meta.url);
 
 /**
  * Real PTY host using node-pty
@@ -17,7 +20,8 @@ export class NodePtyHost implements PtyHost {
     try {
       pty = require('node-pty');
     } catch (err) {
-      throw new Error('node-pty native module not available. Terminal features require node-pty to be properly compiled.');
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`node-pty native module not available. ${message}`);
     }
 
     const [command, ...args] = argv;

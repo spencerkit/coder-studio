@@ -362,6 +362,31 @@ describe('TerminalManager', () => {
 
       expect(result.status).toBe('unknown')
     })
+
+    it('keeps replay history available after terminal exit cleanup', async () => {
+      const spec: TerminalSpec = {
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      }
+
+      const terminal = manager.create(spec)
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
+      const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+
+      onDataCallback('session output')
+      onExitCallback({ exitCode: 0 })
+
+      await new Promise((resolve) => setTimeout(resolve, 1100))
+
+      const result = manager.replay(terminal.id, 0)
+
+      expect(result.status).toBe('ok')
+      if (result.status === 'ok') {
+        expect(result.data.toString()).toBe('session output')
+      }
+    })
   })
 
   describe('get', () => {

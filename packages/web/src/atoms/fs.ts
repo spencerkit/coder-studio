@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 import type { FileNode } from '@coder-studio/core';
 
 /**
@@ -13,7 +13,7 @@ import type { FileNode } from '@coder-studio/core';
  * Written by: WS event handler for workspace.*.fs.tree
  */
 export const fileTreeAtomFamily = atomFamily((workspaceId: string) =>
-  atom<FileNode | null>(null)
+  atom<FileNode[] | null>(null)
 );
 
 /**

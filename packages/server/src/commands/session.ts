@@ -6,6 +6,17 @@ import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 import { getProviderById } from '@coder-studio/providers';
 
+// session.list
+registerCommand(
+  'session.list',
+  z.object({
+    workspaceId: z.string(),
+  }),
+  async (args, ctx) => {
+    return ctx.sessionMgr.getForWorkspace(args.workspaceId);
+  }
+);
+
 // session.create
 registerCommand(
   'session.create',

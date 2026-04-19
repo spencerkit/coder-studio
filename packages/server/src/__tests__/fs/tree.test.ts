@@ -33,6 +33,7 @@ describe('readTree', () => {
   it('should list files and directories', async () => {
     await writeFile(join(testDir, 'file.txt'), 'content');
     await mkdirAsync(join(testDir, 'subdir'));
+    await writeFile(join(testDir, 'subdir', 'nested.txt'), 'nested');
 
     const result = await readTree(testDir);
 
@@ -41,7 +42,8 @@ describe('readTree', () => {
     const dir = result.children.find((n) => n.name === 'subdir');
     expect(dir).toBeDefined();
     expect(dir?.kind).toBe('dir');
-    expect(dir?.children).toEqual([]);
+    expect(dir?.children).toHaveLength(1);
+    expect(dir?.children?.[0]?.name).toBe('nested.txt');
 
     const file = result.children.find((n) => n.name === 'file.txt');
     expect(file).toBeDefined();
@@ -104,6 +106,7 @@ describe('readTree', () => {
     const result = await readTree(testDir);
 
     expect(result.children[0].path).toBe('subdir');
+    expect(result.children[0].children?.[0]?.path).toBe('subdir/file.txt');
   });
 
   it('should support subdir parameter', async () => {

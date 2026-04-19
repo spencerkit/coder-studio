@@ -8,6 +8,8 @@ import { Provider } from 'jotai';
 import { AppProviders } from './app/providers';
 import App from './app';
 
+import 'xterm/css/xterm.css';
+
 // Import styles
 import './styles/tokens.css';
 import './styles/base.css';
@@ -19,11 +21,9 @@ const root = ReactDOM.createRoot(
 );
 
 root.render(
-  <React.StrictMode>
-    <Provider>
-      <AppProviders>
-        <App />
-      </AppProviders>
-    </Provider>
-  </React.StrictMode>
+  <Provider>
+    <AppProviders>
+      <App />
+    </AppProviders>
+  </Provider>
 );

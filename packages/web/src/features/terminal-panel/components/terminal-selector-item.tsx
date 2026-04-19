@@ -8,9 +8,11 @@ import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
 import { terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { useTranslation } from '../../../lib/i18n';
+import { formatTerminalTitle } from './title-format';
 
 interface TerminalSelectorItemProps {
   id: string;
+  index: number;
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
@@ -18,6 +20,7 @@ interface TerminalSelectorItemProps {
 
 export function TerminalSelectorItem({
   id,
+  index,
   isActive,
   onSelect,
   onClose,
@@ -25,16 +28,20 @@ export function TerminalSelectorItem({
   const t = useTranslation();
   const meta = useAtomValue(terminalMetaAtomFamily(id));
 
-  const title = meta?.title || t('terminal.shell');
+  const title = formatTerminalTitle(meta, index, t('terminal.shell'));
 
   return (
-    <button
+    <div
       className={`terminal-selector-item ${
         isActive ? 'terminal-selector-item-active' : ''
       }`}
-      onClick={onSelect}
     >
-      <span className="terminal-selector-item-title">{title}</span>
+      <button
+        className="terminal-selector-item-trigger"
+        onClick={onSelect}
+      >
+        <span className="terminal-selector-item-title">{title}</span>
+      </button>
       <button
         className="terminal-selector-item-close"
         onClick={(e) => {
@@ -44,7 +51,7 @@ export function TerminalSelectorItem({
       >
         <X size={12} />
       </button>
-    </button>
+    </div>
   );
 }
 

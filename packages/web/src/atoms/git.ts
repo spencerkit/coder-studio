@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 import type { GitStatus } from '@coder-studio/core';
 
 /**
@@ -14,6 +14,16 @@ import type { GitStatus } from '@coder-studio/core';
  */
 export const gitStateAtomFamily = atomFamily((workspaceId: string) =>
   atom<GitStatus | null>(null)
+);
+
+export interface GitDiffPreview {
+  path: string;
+  diff: string;
+  staged?: boolean;
+}
+
+export const gitDiffPreviewAtomFamily = atomFamily((workspaceId: string) =>
+  atom<GitDiffPreview | null>(null)
 );
 
 /**
