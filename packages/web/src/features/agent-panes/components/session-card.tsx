@@ -192,15 +192,15 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
             className="input"
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onInput={(e) => setInputValue((e.target as HTMLInputElement).value)}
             onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
+            onCompositionEnd={(e) => {
+              setIsComposing(false);
+              // Sync value after composition ends
+              setInputValue((e.target as HTMLInputElement).value);
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                if (isComposing || e.nativeEvent.isComposing) {
-                  return;
-                }
-
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                 handleSendInput();
               }
             }}
