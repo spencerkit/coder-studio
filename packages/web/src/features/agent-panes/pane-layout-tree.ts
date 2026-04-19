@@ -177,7 +177,19 @@ export function sanitizePaneLayout(
 
   // For splits, recursively sanitize all children and keep the structure intact
   const children = node.children ?? [];
-  const nextChildren = children.map((child) => sanitizePaneLayout(child, liveSessionIds));
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = sanitizePaneLayout(child, liveSessionIds);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  // If no children changed, return the same node to preserve reference equality
+  if (!changed) {
+    return node;
+  }
 
   // If all children collapsed to a single leaf, simplify
   if (nextChildren.length === 1) {
