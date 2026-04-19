@@ -85,36 +85,37 @@ export function assignSessionToPane(node: PaneNode, paneId: string, sessionId: s
 }
 
 export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {
-  const nextNode = closeNode(node, sessionId);
-
-  return nextNode ?? createDraftLeaf(node.id);
+  return closeNodePreserveStructure(node, sessionId);
 }
 
-function closeNode(node: PaneNode, sessionId: string): PaneNode | null {
+/**
+ * Close a session pane by replacing it with a draft leaf.
+ * Unlike the previous implementation, this preserves the full split
+ * structure so that layout survives page refresh.
+ */
+function closeNodePreserveStructure(node: PaneNode, sessionId: string): PaneNode {
   if (node.type === 'leaf') {
-    return node.sessionId === sessionId ? null : node;
+    if (node.sessionId === sessionId) {
+      return { id: node.id, type: 'leaf' };
+    }
+    return node;
   }
 
   const children = node.children ?? [];
   let changed = false;
-  const nextChildren = children
-    .map((child) => {
-      const nextChild = closeNode(child, sessionId);
-      if (nextChild !== child) {
-        changed = true;
-      }
-      return nextChild;
-    })
-    .filter((child): child is PaneNode => child !== null);
+  const nextChildren = children.map((child) => {
+    const nextChild = closeNodePreserveStructure(child, sessionId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
 
   if (!changed) {
     return node;
   }
 
-  if (nextChildren.length === 0) {
-    return null;
-  }
-
+  // If split collapsed to a single child after close, keep it simple
   if (nextChildren.length === 1) {
     return nextChildren[0]!;
   }

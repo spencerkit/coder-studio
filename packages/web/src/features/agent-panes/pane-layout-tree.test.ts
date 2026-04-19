@@ -25,7 +25,7 @@ describe('pane-layout-tree', () => {
     );
   });
 
-  it('collapses split nodes when closing a child pane', () => {
+  it('replaces closed session with draft leaf while preserving split structure', () => {
     const layout: PaneNode = {
       id: 'root',
       type: 'split',
@@ -39,10 +39,14 @@ describe('pane-layout-tree', () => {
 
     const nextLayout = closePaneBySessionId(layout, 'sess_1');
 
+    // Split structure is preserved; left pane becomes a draft leaf
     expect(nextLayout).toEqual(
       expect.objectContaining({
-        type: 'leaf',
-        sessionId: 'sess_2',
+        type: 'split',
+        children: [
+          expect.objectContaining({ type: 'leaf', id: 'left' }),
+          expect.objectContaining({ type: 'leaf', sessionId: 'sess_2', id: 'right' }),
+        ],
       })
     );
   });

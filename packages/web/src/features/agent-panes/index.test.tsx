@@ -150,12 +150,16 @@ describe('AgentPanes', () => {
     });
 
     await waitFor(() => {
-      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(
-        expect.objectContaining({
-          type: 'leaf',
-          sessionId: 'sess_2',
-        })
-      );
+      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+        id: 'root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          { id: 'left', type: 'leaf' },
+          { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+        ],
+      });
     });
 
     expect(sendCommand).not.toHaveBeenCalledWith('session.stop', expect.anything());
@@ -187,10 +191,17 @@ describe('AgentPanes', () => {
       );
     });
 
+    // After close, both panes become draft leaves, split structure is preserved
     await waitFor(() => {
       expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-        id: 'right',
-        type: 'leaf',
+        id: 'root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          { id: 'left', type: 'leaf' },
+          { id: 'right', type: 'leaf' },
+        ],
       });
     });
   });
