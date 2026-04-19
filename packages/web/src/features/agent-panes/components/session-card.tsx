@@ -80,10 +80,18 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   };
 
   /**
-   * Close only removes the session from the pane layout.
-   * It does NOT stop or kill the underlying session process.
+   * Close stops the session, removes it from the server, and closes the pane.
    */
-  const handleClose = () => {
+  const handleClose = async () => {
+    // Stop the session process (sets state to 'ended')
+    const stopResult = await dispatch<void>('session.stop', { sessionId });
+
+    if (stopResult.ok) {
+      // Remove the ended session from the server
+      await dispatch<void>('session.remove', { sessionId });
+    }
+
+    // Then remove from pane layout
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-close', {
         detail: { sessionId },

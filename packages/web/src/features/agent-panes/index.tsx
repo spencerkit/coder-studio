@@ -102,11 +102,14 @@ export const AgentPanes: FC = () => {
             (id) => !nextSessionIds.has(id) && !pendingSessionIdsRef.current.has(id)
           );
 
-          if (allReferencedGone) {
+          const liveSessions = nextSessions.filter(
+            (s) => s.state !== 'ended' && s.state !== 'unavailable'
+          );
+          if (allReferencedGone && liveSessions.length > 0) {
             setPaneLayout({
               id: 'root',
               type: 'leaf',
-              sessionId: nextSessions[0]!.id,
+              sessionId: liveSessions[0]!.id,
             });
           }
         }

@@ -125,7 +125,7 @@ describe('SessionCard', () => {
     });
   });
 
-  it('closes only the pane and does not stop the session process', () => {
+  it('stops the session, removes it, and closes the pane when close is clicked', async () => {
     const { store, sendCommand } = createSessionStore({
       terminalId: 'term-live',
       state: 'running',
@@ -146,10 +146,17 @@ describe('SessionCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
-    window.removeEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
+    await waitFor(() => {
+      // Should stop the session first
+      expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_123456' });
+      // Then remove the ended session
+      expect(sendCommand).toHaveBeenCalledWith('session.remove', { sessionId: 'sess_123456' });
+    });
 
+    // Then close the pane
     expect(closeEvents).toHaveLength(1);
     expect(closeEvents[0]?.detail).toEqual({ sessionId: 'sess_123456' });
-    expect(sendCommand).not.toHaveBeenCalled();
+
+    window.removeEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
   });
 });
