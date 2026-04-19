@@ -148,6 +148,18 @@ export function paneLayoutReferencesMissingSession(
 }
 
 /**
+ * Collect all session IDs referenced in a pane layout tree.
+ */
+export function collectSessionIds(node: PaneNode): string[] {
+  if (node.type === 'leaf') {
+    return node.sessionId ? [node.sessionId] : [];
+  }
+  return (
+    node.children?.flatMap((child) => collectSessionIds(child)) ?? []
+  );
+}
+
+/**
  * Sanitize pane layout: replace references to ended/removed sessions with draft leaves.
  * Preserves the entire split structure so layout is maintained on page refresh.
  */

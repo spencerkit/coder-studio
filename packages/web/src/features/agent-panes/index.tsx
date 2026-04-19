@@ -20,10 +20,9 @@ import type { Session } from '@coder-studio/core';
 import {
   assignSessionToPane,
   closePaneBySessionId,
-  paneLayoutHasSession,
-  paneLayoutReferencesMissingSession,
   splitPaneBySessionId,
   sanitizePaneLayout,
+  collectSessionIds,
 } from './pane-layout-tree';
 
 interface PanelSplitDetail {
@@ -309,14 +308,5 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId, onSessionC
     </div>
   );
 };
-
-function collectSessionIds(node: PaneNode): string[] {
-  if (node.type === 'leaf') {
-    return node.sessionId ? [node.sessionId] : [];
-  }
-  return (
-    node.children?.flatMap((child) => collectSessionIds(child)) ?? []
-  );
-}
 
 export default AgentPanes;
