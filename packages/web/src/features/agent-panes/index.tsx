@@ -72,12 +72,6 @@ export const AgentPanes: FC = () => {
 
         const nextSessions = result.data;
         const nextSessionIds = new Set(nextSessions.map((session) => session.id));
-        const isFirstLoadForWorkspace = initializedWorkspaceRef.current !== workspace.id;
-        const layoutHasLiveSession = paneLayoutHasSession(paneLayout, nextSessionIds);
-        const layoutReferencesRemovedSession = paneLayoutReferencesMissingSession(
-          paneLayout,
-          nextSessionIds
-        );
 
         setSessions((prev) => {
           const next = Object.fromEntries(
@@ -91,39 +85,28 @@ export const AgentPanes: FC = () => {
           return next;
         });
 
-        // Sanitize layout: replace references to removed/ended sessions with draft leaves
-        // while preserving the split structure for remaining live sessions
+        // Always sanitize: replace ended/removed session references with draft leaves
+        // while preserving the full split structure.
         const liveSessionIds = new Set(
           nextSessions
             .filter((s) => s.state !== 'ended' && s.state !== 'unavailable')
             .map((s) => s.id)
         );
 
-        if (paneLayoutReferencesMissingSession(paneLayout, nextSessionIds)) {
-          const sanitized = sanitizePaneLayout(paneLayout, liveSessionIds);
-          if (sanitized !== paneLayout) {
-            setPaneLayout(sanitized);
-            return;
-          }
+        const sanitized = sanitizePaneLayout(paneLayout, liveSessionIds);
+        if (sanitized !== paneLayout) {
+          setPaneLayout(sanitized);
+          initializedWorkspaceRef.current = workspace.id;
+          return;
         }
 
-        if (
-          nextSessions.length > 0 &&
-          isFirstLoadForWorkspace &&
-          !layoutHasLiveSession
-        ) {
-          // Only reset layout if all session IDs it references are actually
-          // gone from the server. Sessions we just created locally may not
-          // have arrived via WS yet.
-          const idsInLayout = collectSessionIds(paneLayout);
-          const allReferencedGone = idsInLayout.every(
-            (id) => !nextSessionIds.has(id) && !pendingSessionIdsRef.current.has(id)
-          );
-
+        // Only auto-assign first live session if layout has no sessions at all
+        const hasAnySessionInLayout = collectSessionIds(paneLayout).length > 0;
+        if (!hasAnySessionInLayout) {
           const liveSessions = nextSessions.filter(
             (s) => s.state !== 'ended' && s.state !== 'unavailable'
           );
-          if (allReferencedGone && liveSessions.length > 0) {
+          if (liveSessions.length > 0) {
             setPaneLayout({
               id: 'root',
               type: 'leaf',
