@@ -53,10 +53,12 @@ export const AgentPanes: FC = () => {
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
   const initializedWorkspaceRef = useRef<string | null>(null);
+  const pendingSessionIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!workspace) {
       initializedWorkspaceRef.current = null;
+      pendingSessionIdsRef.current.clear();
       return;
     }
 
@@ -92,11 +94,21 @@ export const AgentPanes: FC = () => {
           nextSessions.length > 0 &&
           ((isFirstLoadForWorkspace && !layoutHasLiveSession) || layoutReferencesRemovedSession)
         ) {
-          setPaneLayout({
-            id: 'root',
-            type: 'leaf',
-            sessionId: nextSessions[0]!.id,
-          });
+          // Only reset layout if all session IDs it references are actually
+          // gone from the server. Sessions we just created locally may not
+          // have arrived via WS yet.
+          const idsInLayout = collectSessionIds(paneLayout);
+          const allReferencedGone = idsInLayout.every(
+            (id) => !nextSessionIds.has(id) && !pendingSessionIdsRef.current.has(id)
+          );
+
+          if (allReferencedGone) {
+            setPaneLayout({
+              id: 'root',
+              type: 'leaf',
+              sessionId: nextSessions[0]!.id,
+            });
+          }
         }
 
         initializedWorkspaceRef.current = workspace.id;
@@ -136,6 +148,13 @@ export const AgentPanes: FC = () => {
     };
   }, [setPaneLayout]);
 
+  // Allow child DraftLaunchers to register newly created sessions so
+  // the session.list refetch doesn't clobber splits.
+  const handleSessionCreated = (sessionId: string) => {
+    pendingSessionIdsRef.current.add(sessionId);
+    setTimeout(() => pendingSessionIdsRef.current.delete(sessionId), 8000);
+  };
+
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
@@ -146,13 +165,13 @@ export const AgentPanes: FC = () => {
 
   // If no sessions, show draft launcher
   if (sessions.length === 0) {
-    return <DraftLauncher workspaceId={workspaceId} />;
+    return <DraftLauncher workspaceId={workspaceId} onSessionCreated={handleSessionCreated} />;
   }
 
   // Render pane tree recursively
   return (
     <div className="agent-panes">
-      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} />
+      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} onSessionCreated={handleSessionCreated} />
     </div>
   );
 };
@@ -160,18 +179,19 @@ export const AgentPanes: FC = () => {
 interface PaneNodeRendererProps {
   node: PaneNode;
   workspaceId: string;
+  onSessionCreated?: (sessionId: string) => void;
 }
 
 /**
  * Recursively render pane tree
  */
-const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
+const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId, onSessionCreated }) => {
   if (node.type === 'leaf') {
     // Render session card or draft launcher
     if (node.sessionId) {
       return <SessionCard sessionId={node.sessionId} />;
     } else {
-      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} />;
+      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} onSessionCreated={onSessionCreated} />;
     }
   }
 
@@ -179,7 +199,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
   return (
     <PaneLayout direction={node.direction || 'horizontal'} ratio={node.ratio || 0.5}>
       {node.children?.map((child) => (
-        <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} />
+        <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} onSessionCreated={onSessionCreated} />
       ))}
     </PaneLayout>
   );
@@ -188,6 +208,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
 interface DraftLauncherProps {
   workspaceId: string;
   paneId?: string;
+  onSessionCreated?: (sessionId: string) => void;
 }
 
 /**
@@ -197,7 +218,7 @@ interface DraftLauncherProps {
  *   - Provider selection buttons (Claude, Codex)
  *   - Click to start new session
  */
-const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
+const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId, onSessionCreated }) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
@@ -215,6 +236,9 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
         ...prev,
         [session.id]: session,
       }));
+
+      // Register so session.list refetch doesn't clobber split layout
+      onSessionCreated?.(session.id);
 
       // Update pane layout to show the new session
       setPaneLayout((current) =>
@@ -281,5 +305,14 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
     </div>
   );
 };
+
+function collectSessionIds(node: PaneNode): string[] {
+  if (node.type === 'leaf') {
+    return node.sessionId ? [node.sessionId] : [];
+  }
+  return (
+    node.children?.flatMap((child) => collectSessionIds(child)) ?? []
+  );
+}
 
 export default AgentPanes;

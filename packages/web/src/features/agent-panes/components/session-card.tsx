@@ -80,6 +80,10 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
+  /**
+   * Close only removes the session from the pane layout.
+   * It does NOT stop or kill the underlying session process.
+   */
   const handleClose = () => {
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-close', {
@@ -88,6 +92,11 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     );
   };
 
+  /**
+   * Split fires a custom event that the AgentPanes container
+   * handles by updating the pane layout tree. It does NOT
+   * stop or restart the session.
+   */
   const handleSplitHorizontal = () => {
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-split', {

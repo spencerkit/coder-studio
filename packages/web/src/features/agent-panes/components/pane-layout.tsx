@@ -6,7 +6,7 @@
  */
 
 import type { FC, ReactNode } from 'react';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface PaneLayoutProps {
   direction: 'horizontal' | 'vertical';
@@ -67,7 +67,7 @@ export const PaneLayout: FC<PaneLayoutProps> = ({ direction, ratio, children }) 
     : { gridTemplateRows: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` };
 
   return (
-    <div ref={containerRef} className={`pane-layout pane-layout-${direction}`} style={style}>
+    <div ref={containerRef} className={`pane-layout pane-layout-${direction}`} style={{ display: 'grid', ...style }}>
       <div className="pane-layout-child">{first}</div>
       <div
         className="pane-layout-divider"
@@ -80,6 +80,5 @@ export const PaneLayout: FC<PaneLayoutProps> = ({ direction, ratio, children }) 
   );
 };
 
-import { useEffect } from 'react';
 
 export default PaneLayout;
