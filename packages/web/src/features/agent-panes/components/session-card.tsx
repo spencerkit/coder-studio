@@ -39,7 +39,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [inputValue, setInputValue] = useState('');
-  const [isComposing, setIsComposing] = useState(false);
 
   if (!session) {
     return null;
@@ -186,17 +185,14 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
         />
       </div>
 
-      {(session.state === 'running' || session.state === 'idle') && (
+      {isSessionInteractive(session.state) && (
         <div className="session-input">
           <input
             className="input"
             type="text"
             value={inputValue}
             onInput={(e) => setInputValue((e.target as HTMLInputElement).value)}
-            onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={(e) => {
-              setIsComposing(false);
-              // Sync value after composition ends
               setInputValue((e.target as HTMLInputElement).value);
             }}
             onKeyDown={(e) => {
@@ -308,7 +304,7 @@ function formatProviderLabel(providerId: string) {
 }
 
 function isSessionInteractive(state: SessionState) {
-  return state === 'running' || state === 'idle';
+  return state !== 'ended' && state !== 'unavailable';
 }
 
 export default SessionCard;

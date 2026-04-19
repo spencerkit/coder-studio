@@ -80,7 +80,7 @@ describe('SessionCard', () => {
     );
 
     const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '你好，Codex' } });
+    fireEvent.input(input, { target: { value: '你好，Codex' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
@@ -105,9 +105,9 @@ describe('SessionCard', () => {
     );
 
     const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '你好' } });
+    fireEvent.input(input, { target: { value: '你好' } });
     fireEvent.compositionStart(input);
-    fireEvent.keyDown(input, { key: 'Enter', nativeEvent: { isComposing: true } });
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
 
     expect(sendCommand).not.toHaveBeenCalledWith(
       'terminal.input',
