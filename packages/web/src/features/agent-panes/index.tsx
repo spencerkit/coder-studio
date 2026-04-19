@@ -23,6 +23,7 @@ import {
   paneLayoutHasSession,
   paneLayoutReferencesMissingSession,
   splitPaneBySessionId,
+  sanitizePaneLayout,
 } from './pane-layout-tree';
 
 interface PanelSplitDetail {
@@ -90,9 +91,26 @@ export const AgentPanes: FC = () => {
           return next;
         });
 
+        // Sanitize layout: replace references to removed/ended sessions with draft leaves
+        // while preserving the split structure for remaining live sessions
+        const liveSessionIds = new Set(
+          nextSessions
+            .filter((s) => s.state !== 'ended' && s.state !== 'unavailable')
+            .map((s) => s.id)
+        );
+
+        if (paneLayoutReferencesMissingSession(paneLayout, nextSessionIds)) {
+          const sanitized = sanitizePaneLayout(paneLayout, liveSessionIds);
+          if (sanitized !== paneLayout) {
+            setPaneLayout(sanitized);
+            return;
+          }
+        }
+
         if (
           nextSessions.length > 0 &&
-          ((isFirstLoadForWorkspace && !layoutHasLiveSession) || layoutReferencesRemovedSession)
+          isFirstLoadForWorkspace &&
+          !layoutHasLiveSession
         ) {
           // Only reset layout if all session IDs it references are actually
           // gone from the server. Sessions we just created locally may not

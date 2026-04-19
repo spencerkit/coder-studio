@@ -145,3 +145,60 @@ export function paneLayoutReferencesMissingSession(
     node.children?.some((child) => paneLayoutReferencesMissingSession(child, sessionIds)) ?? false
   );
 }
+
+/**
+ * Sanitize pane layout: replace references to missing sessions with draft leaves.
+ * Preserves the split structure while removing dead session references.
+ */
+export function sanitizePaneLayout(
+  node: PaneNode,
+  validSessionIds: Set<string>
+): PaneNode {
+  if (node.type === 'leaf') {
+    if (node.sessionId && !validSessionIds.has(node.sessionId)) {
+      return createDraftLeaf(node.id);
+    }
+    return node;
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = sanitizePaneLayout(child, validSessionIds);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  if (!changed) {
+    return node;
+  }
+
+  // If all children became draft leaves and there are exactly 2, keep the split
+  // If only 1 child remains after filtering, collapse the split
+  const validChildren = nextChildren.filter(
+    (c) => c.type === 'split' || (c.type === 'leaf' && c.sessionId)
+  );
+
+  if (validChildren.length === 1 && nextChildren.length > 1) {
+    // Keep draft leaves alongside active sessions - don't collapse
+    return {
+      ...node,
+      children: nextChildren,
+    };
+  }
+
+  if (nextChildren.length === 1) {
+    return nextChildren[0]!;
+  }
+
+  if (nextChildren.length === 0) {
+    return createDraftLeaf(node.id);
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
