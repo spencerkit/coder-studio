@@ -125,7 +125,7 @@ describe('SessionCard', () => {
     });
   });
 
-  it('stops the session, removes it, and closes the pane when close is clicked', async () => {
+  it('stops the session and closes the pane when close is clicked', async () => {
     const { store, sendCommand } = createSessionStore({
       terminalId: 'term-live',
       state: 'running',
@@ -147,10 +147,8 @@ describe('SessionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     await waitFor(() => {
-      // Should stop the session first
+      // Should stop the session (sets state to ended)
       expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_123456' });
-      // Then remove the ended session
-      expect(sendCommand).toHaveBeenCalledWith('session.remove', { sessionId: 'sess_123456' });
     });
 
     // Then close the pane

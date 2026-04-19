@@ -80,18 +80,16 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   };
 
   /**
-   * Close stops the session, removes it from the server, and closes the pane.
+   * Close stops the session and removes it from the pane layout.
+   * The session is NOT removed from the server - it remains with state='ended'
+   * so that the layout sanitizer can properly replace it with a draft leaf
+   * while preserving the split structure.
    */
   const handleClose = async () => {
     // Stop the session process (sets state to 'ended')
-    const stopResult = await dispatch<void>('session.stop', { sessionId });
+    await dispatch<void>('session.stop', { sessionId });
 
-    if (stopResult.ok) {
-      // Remove the ended session from the server
-      await dispatch<void>('session.remove', { sessionId });
-    }
-
-    // Then remove from pane layout
+    // Remove from pane layout
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-close', {
         detail: { sessionId },
