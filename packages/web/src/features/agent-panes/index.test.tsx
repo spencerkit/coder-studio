@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { AgentPanes } from './index';
 import { wsClientAtom } from '../../atoms/connection';
@@ -21,7 +21,10 @@ vi.mock('./components/pane-layout', () => ({
   ),
 }));
 
-function createAgentPaneStore(initialLayout?: unknown) {
+function createAgentPaneStore(
+  initialLayout?: unknown,
+  customSendCommand?: ReturnType<typeof vi.fn>
+) {
   const store = createStore();
   const sessions = [
     {
@@ -45,13 +48,15 @@ function createAgentPaneStore(initialLayout?: unknown) {
       lastActiveAt: Date.now() - 500,
     },
   ];
-  const sendCommand = vi.fn(async (op: string) => {
-    if (op === 'session.list') {
-      return sessions;
-    }
+  const sendCommand =
+    customSendCommand ??
+    vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return sessions;
+      }
 
-    return undefined;
-  });
+      return undefined;
+    });
 
   store.set(wsClientAtom, {
     sendCommand,
@@ -79,7 +84,7 @@ function createAgentPaneStore(initialLayout?: unknown) {
     }
   );
 
-  return { store, sendCommand };
+  return { store, sendCommand, sessions };
 }
 
 describe('AgentPanes', () => {
@@ -156,8 +161,8 @@ describe('AgentPanes', () => {
     expect(sendCommand).not.toHaveBeenCalledWith('session.stop', expect.anything());
   });
 
-  it('does not resurrect a closed session pane when only a draft pane remains', async () => {
-    const { store, sendCommand } = createAgentPaneStore({
+  it('keeps the remaining draft pane visible after closing the last session pane', async () => {
+    const { store } = createAgentPaneStore({
       id: 'root',
       type: 'split',
       direction: 'horizontal',
@@ -183,15 +188,87 @@ describe('AgentPanes', () => {
     });
 
     await waitFor(() => {
-      expect(
-        sendCommand.mock.calls.filter(([op]) => op === 'session.list').length
-      ).toBeGreaterThan(1);
+      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+        id: 'right',
+        type: 'leaf',
+      });
+    });
+  });
+
+  it('assigns a created session to the draft pane instead of replacing the full layout', async () => {
+    const createdSession = {
+      id: 'sess_3',
+      workspaceId: 'ws-1',
+      terminalId: 'term-3',
+      providerId: 'codex',
+      state: 'starting',
+      capability: 'full',
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+    };
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [
+          {
+            id: 'sess_1',
+            workspaceId: 'ws-1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'running',
+            capability: 'full',
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+        ];
+      }
+
+      if (op === 'session.create') {
+        return createdSession;
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(
+      {
+        id: 'root',
+        type: 'split',
+        direction: 'vertical',
+        ratio: 0.5,
+        children: [
+          { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+          { id: 'right', type: 'leaf' },
+        ],
+      },
+      sendCommand
+    );
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Codex/ }));
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.create', {
+        workspaceId: 'ws-1',
+        providerId: 'codex',
+      });
     });
 
     await waitFor(() => {
       expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-        id: 'right',
-        type: 'leaf',
+        id: 'root',
+        type: 'split',
+        direction: 'vertical',
+        ratio: 0.5,
+        children: [
+          { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+          { id: 'right', type: 'leaf', sessionId: 'sess_3' },
+        ],
       });
     });
   });

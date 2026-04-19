@@ -18,6 +18,7 @@ import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
 import type { Session } from '@coder-studio/core';
 import {
+  assignSessionToPane,
   closePaneBySessionId,
   paneLayoutHasSession,
   paneLayoutReferencesMissingSession,
@@ -103,7 +104,7 @@ export const AgentPanes: FC = () => {
       .catch((error) => {
         console.error('Failed to fetch sessions:', error);
       });
-  }, [workspace, dispatch, setSessions, paneLayout, setPaneLayout]);
+  }, [workspace, dispatch, setSessions, setPaneLayout]);
 
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {
@@ -170,7 +171,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
     if (node.sessionId) {
       return <SessionCard sessionId={node.sessionId} />;
     } else {
-      return <DraftLauncher workspaceId={workspaceId} />;
+      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} />;
     }
   }
 
@@ -186,6 +187,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
 
 interface DraftLauncherProps {
   workspaceId: string;
+  paneId?: string;
 }
 
 /**
@@ -195,9 +197,10 @@ interface DraftLauncherProps {
  *   - Provider selection buttons (Claude, Codex)
  *   - Click to start new session
  */
-const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
+const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
 
   const handleSelectProvider = async (provider: 'claude' | 'codex') => {
@@ -208,12 +211,21 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
 
     if (result.ok && result.data) {
       const session = result.data;
+      setSessions((prev) => ({
+        ...prev,
+        [session.id]: session,
+      }));
+
       // Update pane layout to show the new session
-      setPaneLayout({
-        id: 'root',
-        type: 'leaf',
-        sessionId: session.id,
-      });
+      setPaneLayout((current) =>
+        paneId
+          ? assignSessionToPane(current, paneId, session.id)
+          : {
+              id: 'root',
+              type: 'leaf',
+              sessionId: session.id,
+            }
+      );
     } else {
       console.error('Failed to create session:', result.error?.message);
     }

@@ -91,6 +91,40 @@ describe('SessionCard', () => {
     });
   });
 
+  it('does not submit while the session input is still composing with an IME', async () => {
+    const { store, sendCommand } = createSessionStore({
+      terminalId: 'term-ime',
+      state: 'idle',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '你好' } });
+    fireEvent.compositionStart(input);
+    fireEvent.keyDown(input, { key: 'Enter', nativeEvent: { isComposing: true } });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      'terminal.input',
+      expect.objectContaining({ terminalId: 'term-ime' })
+    );
+
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
+        terminalId: 'term-ime',
+        bytes: Buffer.from('你好\n', 'utf8').toString('base64'),
+      });
+    });
+  });
+
   it('closes only the pane and does not stop the session process', () => {
     const { store, sendCommand } = createSessionStore({
       terminalId: 'term-live',

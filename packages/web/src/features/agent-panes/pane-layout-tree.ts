@@ -51,6 +51,38 @@ export function splitPaneBySessionId(
   };
 }
 
+export function assignSessionToPane(node: PaneNode, paneId: string, sessionId: string): PaneNode {
+  if (node.type === 'leaf') {
+    if (node.id !== paneId) {
+      return node;
+    }
+
+    return {
+      ...node,
+      sessionId,
+    };
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = assignSessionToPane(child, paneId, sessionId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  if (!changed) {
+    return node;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
 export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {
   const nextNode = closeNode(node, sessionId);
 

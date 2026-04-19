@@ -39,6 +39,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [inputValue, setInputValue] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
 
   if (!session) {
     return null;
@@ -183,8 +184,14 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
+                if (isComposing || e.nativeEvent.isComposing) {
+                  return;
+                }
+
                 handleSendInput();
               }
             }}
