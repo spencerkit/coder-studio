@@ -7,7 +7,7 @@
 
 import type { FC } from 'react';
 import { useEffect, useRef } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { ArrowRight, Bot, Sparkles } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
@@ -52,6 +52,7 @@ export const AgentPanes: FC = () => {
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
+  const store = useStore();
   const initializedWorkspaceRef = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
 
@@ -84,6 +85,9 @@ export const AgentPanes: FC = () => {
           return next;
         });
 
+        // Read layout from store to ensure we have the latest value
+        const currentLayout = store.get(paneLayoutAtomFamily(workspaceId));
+
         // Always sanitize: replace ended/removed session references with draft leaves
         // while preserving the full split structure.
         const liveSessionIds = new Set(
@@ -92,15 +96,15 @@ export const AgentPanes: FC = () => {
             .map((s) => s.id)
         );
 
-        const sanitized = sanitizePaneLayout(paneLayout, liveSessionIds);
-        if (sanitized !== paneLayout) {
+        const sanitized = sanitizePaneLayout(currentLayout, liveSessionIds);
+        if (sanitized !== currentLayout) {
           setPaneLayout(sanitized);
           initializedWorkspaceRef.current = workspace.id;
           return;
         }
 
         // Only auto-assign first live session if layout has no sessions at all
-        const hasAnySessionInLayout = collectSessionIds(paneLayout).length > 0;
+        const hasAnySessionInLayout = collectSessionIds(currentLayout).length > 0;
         if (!hasAnySessionInLayout) {
           const liveSessions = nextSessions.filter(
             (s) => s.state !== 'ended' && s.state !== 'unavailable'
@@ -119,7 +123,7 @@ export const AgentPanes: FC = () => {
       .catch((error) => {
         console.error('Failed to fetch sessions:', error);
       });
-  }, [workspace, dispatch, setSessions, setPaneLayout]);
+  }, [workspace, dispatch, setSessions, setPaneLayout, store]);
 
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {
