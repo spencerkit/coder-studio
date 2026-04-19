@@ -19,14 +19,15 @@ export function splitPaneBySessionId(
       return node;
     }
 
+    const splitId = `split-${node.id}-${direction}-${Date.now()}`;
     return {
-      id: node.id,
+      id: splitId,
       type: 'split',
       direction,
       ratio: 0.5,
       children: [
         { ...node },
-        createDraftLeaf(`${node.id}-${direction}-draft`),
+        createDraftLeaf(`${splitId}-draft`),
       ],
     };
   }
