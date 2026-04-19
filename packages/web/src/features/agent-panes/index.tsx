@@ -6,7 +6,7 @@
  */
 
 import type { FC } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { ArrowRight, Bot, Sparkles } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
@@ -17,6 +17,21 @@ import { useTranslation } from '../../lib/i18n';
 import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
 import type { Session } from '@coder-studio/core';
+import {
+  closePaneBySessionId,
+  paneLayoutHasSession,
+  paneLayoutReferencesMissingSession,
+  splitPaneBySessionId,
+} from './pane-layout-tree';
+
+interface PanelSplitDetail {
+  sessionId?: string;
+  direction?: 'horizontal' | 'vertical';
+}
+
+interface PanelCloseDetail {
+  sessionId?: string;
+}
 
 /**
  * Agent Panes Container
@@ -36,9 +51,11 @@ export const AgentPanes: FC = () => {
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
+  const initializedWorkspaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!workspace) {
+      initializedWorkspaceRef.current = null;
       return;
     }
 
@@ -51,6 +68,12 @@ export const AgentPanes: FC = () => {
 
         const nextSessions = result.data;
         const nextSessionIds = new Set(nextSessions.map((session) => session.id));
+        const isFirstLoadForWorkspace = initializedWorkspaceRef.current !== workspace.id;
+        const layoutHasLiveSession = paneLayoutHasSession(paneLayout, nextSessionIds);
+        const layoutReferencesRemovedSession = paneLayoutReferencesMissingSession(
+          paneLayout,
+          nextSessionIds
+        );
 
         setSessions((prev) => {
           const next = Object.fromEntries(
@@ -64,18 +87,53 @@ export const AgentPanes: FC = () => {
           return next;
         });
 
-        if (nextSessions.length > 0 && !paneLayoutHasSession(paneLayout, nextSessionIds)) {
+        if (
+          nextSessions.length > 0 &&
+          ((isFirstLoadForWorkspace && !layoutHasLiveSession) || layoutReferencesRemovedSession)
+        ) {
           setPaneLayout({
             id: 'root',
             type: 'leaf',
             sessionId: nextSessions[0]!.id,
           });
         }
+
+        initializedWorkspaceRef.current = workspace.id;
       })
       .catch((error) => {
         console.error('Failed to fetch sessions:', error);
       });
   }, [workspace, dispatch, setSessions, paneLayout, setPaneLayout]);
+
+  useEffect(() => {
+    const handlePanelSplit = (event: Event) => {
+      const detail = (event as CustomEvent<PanelSplitDetail>).detail;
+
+      if (!detail?.sessionId || !detail.direction) {
+        return;
+      }
+
+      setPaneLayout((current) => splitPaneBySessionId(current, detail.sessionId!, detail.direction!));
+    };
+
+    const handlePanelClose = (event: Event) => {
+      const detail = (event as CustomEvent<PanelCloseDetail>).detail;
+
+      if (!detail?.sessionId) {
+        return;
+      }
+
+      setPaneLayout((current) => closePaneBySessionId(current, detail.sessionId!));
+    };
+
+    window.addEventListener('coder-studio:panel-split', handlePanelSplit as EventListener);
+    window.addEventListener('coder-studio:panel-close', handlePanelClose as EventListener);
+
+    return () => {
+      window.removeEventListener('coder-studio:panel-split', handlePanelSplit as EventListener);
+      window.removeEventListener('coder-studio:panel-close', handlePanelClose as EventListener);
+    };
+  }, [setPaneLayout]);
 
   if (!workspace) {
     return (
@@ -213,11 +271,3 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId }) => {
 };
 
 export default AgentPanes;
-
-function paneLayoutHasSession(node: PaneNode, sessionIds: Set<string>): boolean {
-  if (node.type === 'leaf') {
-    return node.sessionId ? sessionIds.has(node.sessionId) : false;
-  }
-
-  return node.children?.some((child) => paneLayoutHasSession(child, sessionIds)) ?? false;
-}

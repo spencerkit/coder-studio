@@ -219,4 +219,30 @@ describe('XtermHost', () => {
     });
     expect(sendCommand).not.toHaveBeenCalledWith('terminal.input', expect.anything());
   });
+
+  it('encodes Chinese terminal input as UTF-8 base64 before dispatching', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="stdin-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('你好，终端');
+
+    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
+      terminalId: 'stdin-terminal',
+      bytes: Buffer.from('你好，终端', 'utf8').toString('base64'),
+    });
+  });
 });

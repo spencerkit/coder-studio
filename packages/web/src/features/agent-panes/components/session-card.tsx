@@ -20,6 +20,7 @@ import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import type { SessionState } from '@coder-studio/core';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
+import { encodeUtf8ToBase64 } from '../../../lib/base64';
 
 interface SessionCardProps {
   sessionId: string;
@@ -68,7 +69,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
 
     const result = await dispatch<void>('terminal.input', {
       terminalId: session.terminalId,
-      bytes: btoa(inputValue + '\n'),
+      bytes: encodeUtf8ToBase64(inputValue + '\n'),
     });
 
     if (result.ok) {
@@ -78,8 +79,12 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
-  const handleClose = async () => {
-    await handleStop();
+  const handleClose = () => {
+    window.dispatchEvent(
+      new CustomEvent('coder-studio:panel-close', {
+        detail: { sessionId },
+      })
+    );
   };
 
   const handleSplitHorizontal = () => {

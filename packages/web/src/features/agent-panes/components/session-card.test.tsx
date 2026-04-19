@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { SessionCard } from './session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
+import { wsClientAtom } from '../../../atoms/connection';
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
@@ -12,27 +13,42 @@ vi.mock('../../terminal-panel/components/xterm-host', () => ({
   XtermHost: (props: Record<string, unknown>) => mockXtermHost(props),
 }));
 
+function createSessionStore(
+  overrides: Partial<Record<string, unknown>> = {},
+  sendCommand = vi.fn().mockResolvedValue(undefined)
+) {
+  const store = createStore();
+
+  store.set(wsClientAtom, {
+    sendCommand,
+    subscribe: vi.fn(() => () => {}),
+  } as never);
+
+  store.set(sessionsAtom, {
+    sess_123456: {
+      id: 'sess_123456',
+      workspaceId: 'ws-123',
+      terminalId: 'term-ended',
+      providerId: 'codex',
+      state: 'ended',
+      capability: 'full',
+      startedAt: Date.now() - 5_000,
+      lastActiveAt: Date.now() - 1_000,
+      endedAt: Date.now(),
+      ...overrides,
+    },
+  });
+
+  return { store, sendCommand };
+}
+
 describe('SessionCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders ended sessions with a read-only terminal host', () => {
-    const store = createStore();
-
-    store.set(sessionsAtom, {
-      sess_123456: {
-        id: 'sess_123456',
-        workspaceId: 'ws-123',
-        terminalId: 'term-ended',
-        providerId: 'codex',
-        state: 'ended',
-        capability: 'full',
-        startedAt: Date.now() - 5_000,
-        lastActiveAt: Date.now() - 1_000,
-        endedAt: Date.now(),
-      },
-    });
+    const { store } = createSessionStore();
 
     render(
       <Provider store={store}>
@@ -48,5 +64,58 @@ describe('SessionCard', () => {
         readOnly: true,
       })
     );
+  });
+
+  it('encodes Chinese session input as UTF-8 base64 before dispatching', async () => {
+    const { store, sendCommand } = createSessionStore({
+      terminalId: 'term-cn',
+      state: 'idle',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '你好，Codex' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
+        terminalId: 'term-cn',
+        bytes: Buffer.from('你好，Codex\n', 'utf8').toString('base64'),
+      });
+    });
+  });
+
+  it('closes only the pane and does not stop the session process', () => {
+    const { store, sendCommand } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'running',
+      endedAt: undefined,
+    });
+    const closeEvents: CustomEvent[] = [];
+    const handleCloseEvent = (event: Event) => {
+      closeEvents.push(event as CustomEvent);
+    };
+
+    window.addEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    window.removeEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
+
+    expect(closeEvents).toHaveLength(1);
+    expect(closeEvents[0]?.detail).toEqual({ sessionId: 'sess_123456' });
+    expect(sendCommand).not.toHaveBeenCalled();
   });
 });

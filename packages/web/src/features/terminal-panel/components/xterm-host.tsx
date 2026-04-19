@@ -17,6 +17,7 @@ import { terminalOutputAtomFamily, terminalMetaAtomFamily } from '../../../atoms
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../../atoms/terminals';
+import { encodeUtf8ToBase64 } from '../../../lib/base64';
 
 /**
  * Aurora Mint theme for xterm.js
@@ -130,7 +131,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
 
       const result = await dispatch('terminal.input', {
         terminalId,
-        bytes: btoa(data), // Base64 encode for binary-safe transport
+        bytes: encodeUtf8ToBase64(data),
       });
 
       if (!result.ok) {
