@@ -212,12 +212,26 @@ function createSessionDatabase(db: any) {
         session.last_active_at
       );
     },
-    update: (id: string, patch: any) => {
+    update: (id: string, patch: Record<string, unknown>) => {
       const keys = Object.keys(patch);
       if (keys.length === 0) return;
 
-      const setClause = keys.map((k) => `${k.replace(/([A-Z])/g, '_$1').toLowerCase()} = ?`).join(', ');
-      const values = keys.map((k) => patch[k]);
+      // Whitelist allowed columns to prevent SQL injection via crafted keys
+      const ALLOWED_COLS = new Set([
+        'resume_id', 'transcript_path', 'state', 'started_at',
+        'ended_at', 'completion_percent', 'error_reason', 'last_active_at',
+      ]);
+
+      const setClauses: string[] = [];
+      const values: unknown[] = [];
+      for (const key of keys) {
+        const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+        if (!ALLOWED_COLS.has(col)) continue;
+        setClauses.push(`${col} = ?`);
+        values.push(patch[key]);
+      }
+      if (setClauses.length === 0) return;
+      const setClause = setClauses.join(', ');
 
       db.prepare(`UPDATE sessions SET ${setClause} WHERE id = ?`).run(...values, id);
     },

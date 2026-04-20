@@ -26,10 +26,14 @@ const home = process.env.HOME;
 const threadId = process.env.FAKE_CODEX_THREAD_ID || 'fake-uuid-1';
 const turnId = 'turn-1';
 
-// Write rollout fixture
-const rolloutDir = path.join(home, '.codex', 'sessions', '2026', '04', '20');
+// Write rollout fixture under today's date (computed at runtime)
+const now = new Date();
+const yyyy = String(now.getFullYear());
+const mm = String(now.getMonth() + 1).padStart(2, '0');
+const dd = String(now.getDate()).padStart(2, '0');
+const rolloutDir = path.join(home, '.codex', 'sessions', yyyy, mm, dd);
 fs.mkdirSync(rolloutDir, { recursive: true });
-const rolloutPath = path.join(rolloutDir, `rollout-2026-04-20T10-${threadId}.jsonl`);
+const rolloutPath = path.join(rolloutDir, `rollout-${yyyy}-${mm}-${dd}T10-${threadId}.jsonl`);
 fs.writeFileSync(rolloutPath, JSON.stringify({ turn: 1 }) + '\n');
 
 if (!notifyCmd) process.exit(0);

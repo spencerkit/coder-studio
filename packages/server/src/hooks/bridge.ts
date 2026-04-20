@@ -65,6 +65,8 @@ const req = http.request({
   headers: { "Content-Type": "application/json" },
   timeout: 500,
 });
+const bodyJson = JSON.stringify(body);
+req.setHeader("Content-Length", Buffer.byteLength(bodyJson));
 
 req.on("error", () => process.exit(0));
 req.on("timeout", () => { req.destroy(); process.exit(0); });

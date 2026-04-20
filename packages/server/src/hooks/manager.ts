@@ -151,10 +151,11 @@ export class HooksManager {
   }
 
   private resolveSessionIdFromProviderEvent(ev: ProviderEvent): string | null {
+    if (!this.routeDeps) return null;
     // Claude-style: sessionId carries the provider's own resume id; reverse lookup.
     const candidate = ev.sessionId || (ev.payload?.resumeId as string | undefined);
     if (!candidate) return null;
-    const row = this.routeDeps!.sessionDb.findByResumeId(candidate);
+    const row = this.routeDeps.sessionDb.findByResumeId(candidate);
     return row?.id ?? null;
   }
 
