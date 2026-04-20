@@ -85,39 +85,93 @@ export function assignSessionToPane(node: PaneNode, paneId: string, sessionId: s
 }
 
 export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {
-  return closeNodePreserveStructure(node, sessionId);
+  // Handle draft pane closure: __draft__<paneId>
+  if (sessionId.startsWith('__draft__')) {
+    const paneId = sessionId.replace('__draft__', '');
+    return closeDraftPane(node, paneId) ?? { id: node.id, type: 'leaf' };
+  }
+  return closeNodePreserveStructure(node, sessionId) ?? { id: node.id, type: 'leaf' };
 }
 
 /**
- * Close a session pane by replacing it with a draft leaf.
- * Unlike the previous implementation, this preserves the full split
- * structure so that layout survives page refresh.
+ * Close a draft pane (leaf with no sessionId) by paneId
  */
-function closeNodePreserveStructure(node: PaneNode, sessionId: string): PaneNode {
+function closeDraftPane(node: PaneNode, paneId: string): PaneNode | null {
   if (node.type === 'leaf') {
-    if (node.sessionId === sessionId) {
-      return { id: node.id, type: 'leaf' };
+    if (node.id === paneId && !node.sessionId) {
+      return null;
     }
     return node;
   }
 
   const children = node.children ?? [];
   let changed = false;
-  const nextChildren = children.map((child) => {
-    const nextChild = closeNodePreserveStructure(child, sessionId);
+  const nextChildren: PaneNode[] = [];
+  for (const child of children) {
+    const nextChild = closeDraftPane(child, paneId);
     if (nextChild !== child) {
       changed = true;
     }
-    return nextChild;
-  });
+    if (nextChild !== null) {
+      nextChildren.push(nextChild);
+    }
+  }
 
   if (!changed) {
     return node;
   }
 
-  // If split collapsed to a single child after close, keep it simple
   if (nextChildren.length === 1) {
     return nextChildren[0]!;
+  }
+
+  if (nextChildren.length === 0) {
+    return null;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
+/**
+ * Close a session pane by removing it from the layout.
+ * Returns null to signal the node should be removed.
+ */
+function closeNodePreserveStructure(node: PaneNode, sessionId: string): PaneNode | null {
+  if (node.type === 'leaf') {
+    if (node.sessionId === sessionId) {
+      return null; // Remove this node
+    }
+    return node;
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren: PaneNode[] = [];
+  for (const child of children) {
+    const nextChild = closeNodePreserveStructure(child, sessionId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    if (nextChild !== null) {
+      nextChildren.push(nextChild);
+    }
+  }
+
+  if (!changed) {
+    return node;
+  }
+
+  // Split collapsed to a single child — promote it
+  if (nextChildren.length === 1) {
+    return nextChildren[0]!;
+  }
+
+  // All children removed
+  if (nextChildren.length === 0) {
+    return null;
   }
 
   return {

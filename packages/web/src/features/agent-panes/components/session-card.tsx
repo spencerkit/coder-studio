@@ -86,15 +86,15 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
    * while preserving the split structure.
    */
   const handleClose = async () => {
-    // Stop the session process (sets state to 'ended')
-    await dispatch<void>('session.stop', { sessionId });
-
-    // Remove from pane layout
+    // Remove from pane layout immediately (don't wait for stop to avoid UI flicker)
     window.dispatchEvent(
       new CustomEvent('coder-studio:panel-close', {
         detail: { sessionId },
       })
     );
+
+    // Stop the session process
+    await dispatch<void>('session.stop', { sessionId }).catch(() => {});
   };
 
   /**
