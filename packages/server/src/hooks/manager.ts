@@ -1,10 +1,18 @@
 import { join } from 'path';
 import { homedir } from 'os';
-import type { ProviderDefinition } from '@coder-studio/core';
+import type { ProviderDefinition, ProviderEvent } from '@coder-studio/core';
 import { HookRegistrationRepo, type NewHookRegistration } from '../storage/repositories/hook-registration-repo';
-import { writeRuntimeConfig, type RuntimeConfig } from './runtime-json';
 import { deployBridgeScript, getBridgeScriptPath } from './bridge';
+import type { RuntimeConfig } from './runtime-json.js';
 import { mergeWriteConfig } from './merge-writer';
+import type { ProviderHookEvent } from '../session/manager.js';
+import type { HookEventContext } from './endpoint.js';
+
+export interface HookRouteDeps {
+  sessionMgr: { onHookEvent(sessionId: string, event: ProviderHookEvent): void };
+  providerRegistry: ProviderDefinition[];
+  sessionDb: { findByResumeId(resumeId: string): { id: string } | null | undefined };
+}
 
 /**
  * Hooks Manager
@@ -19,22 +27,20 @@ export class HooksManager {
 
   constructor(
     private readonly hookRegistrationRepo: HookRegistrationRepo,
-    private readonly runtime: RuntimeConfig
+    _runtime: RuntimeConfig,
+    private readonly routeDeps?: HookRouteDeps
   ) {}
 
   /**
    * Deploys bridge scripts for all registered providers
-   * Called during server startup
    */
   async deployBridgeScripts(): Promise<void> {
-    // This will be implemented when we have provider registry access
-    // For now, this is a placeholder that will be called from server initialization
+    // Will be implemented with provider registry access
     throw new Error('deployBridgeScripts requires provider registry - implement in server initialization');
   }
 
   /**
    * Deploys bridge script and ensures global config for a single provider
-   * Called during server startup for each registered provider
    */
   async ensureGlobalConfig(provider: ProviderDefinition): Promise<void> {
     try {
@@ -61,7 +67,6 @@ export class HooksManager {
         const existing = this.hookRegistrationRepo.get(provider.id);
 
         if (existing) {
-          // Update existing registration
           this.hookRegistrationRepo.updateInjection(
             provider.id,
             provider.hooks.markerVersion,
@@ -69,7 +74,6 @@ export class HooksManager {
           );
           this.hookRegistrationRepo.updateCheckStatus(provider.id, now, 'ok');
         } else {
-          // Create new registration
           const registration: NewHookRegistration = {
             providerId: provider.id,
             markerVersion: provider.hooks.markerVersion,
@@ -81,7 +85,6 @@ export class HooksManager {
           this.hookRegistrationRepo.create(registration);
         }
       } else {
-        // Track error
         const now = Date.now();
         const existing = this.hookRegistrationRepo.get(provider.id);
 
@@ -105,29 +108,54 @@ export class HooksManager {
           this.hookRegistrationRepo.create(registration);
         }
 
-        // Log error (in production, this would go to proper logger)
         console.error(`Failed to ensure global config for ${provider.id}:`, result.error);
       }
     } catch (error) {
-      // Unexpected error - log and continue
       console.error(`Unexpected error ensuring global config for ${provider.id}:`, error);
     }
   }
 
   /**
-   * Handles hook event received from bridge script
-   * Routes event to appropriate session manager
+   * Handles hook event received from bridge script.
+   * Routes event to SessionManager via provider parsing.
    */
-  handleHookEvent(event: string, payload: unknown): void {
-    // This will be implemented when we have SessionManager
-    // For now, this is a placeholder that logs events
-    console.log('Hook event received:', { event, payload });
+  handleHookEvent(event: string, payload: unknown, ctx: HookEventContext = {}): void {
+    if (!this.routeDeps) {
+      console.warn('Hook event received before router wiring:', event);
+      return;
+    }
 
-    // Future implementation:
-    // 1. Detect provider from event name or payload structure
-    // 2. Parse event using provider.hooks.parseEvent()
-    // 3. Extract sessionId from parsed event
-    // 4. Route to SessionManager.onHookEvent(sessionId, event)
+    // 1. Find a provider that parses this event.
+    let match: { provider: ProviderDefinition; providerEvent: ProviderEvent } | null = null;
+    for (const provider of this.routeDeps.providerRegistry) {
+      const parsed = provider.hooks.parseEvent(event, payload);
+      if (parsed) {
+        match = { provider, providerEvent: parsed };
+        break;
+      }
+    }
+    if (!match) return;
+
+    // 2. Resolve coder-studio sessionId.
+    const sessionId =
+      ctx.coderStudioSessionId ??
+      this.resolveSessionIdFromProviderEvent(match.providerEvent);
+    if (!sessionId) return;
+
+    // 3. Convert to internal ProviderHookEvent.
+    const hookEvent = toHookEvent(match.providerEvent);
+    if (!hookEvent) return;
+
+    // 4. Route.
+    this.routeDeps.sessionMgr.onHookEvent(sessionId, hookEvent);
+  }
+
+  private resolveSessionIdFromProviderEvent(ev: ProviderEvent): string | null {
+    // Claude-style: sessionId carries the provider's own resume id; reverse lookup.
+    const candidate = ev.sessionId || (ev.payload?.resumeId as string | undefined);
+    if (!candidate) return null;
+    const row = this.routeDeps!.sessionDb.findByResumeId(candidate);
+    return row?.id ?? null;
   }
 
   listRegistrations() {
@@ -154,5 +182,31 @@ export class HooksManager {
     // Progress hooks will be added in Phase 3
 
     return { commands };
+  }
+}
+
+/**
+ * Convert ProviderEvent to internal ProviderHookEvent
+ */
+function toHookEvent(ev: ProviderEvent): ProviderHookEvent | null {
+  switch (ev.type) {
+    case 'session_start':
+      return {
+        kind: 'SessionStart',
+        resumeId: (ev.payload.resumeId as string) ?? ev.sessionId,
+        transcriptPath: ev.payload.transcriptPath as string | undefined,
+      };
+    case 'turn_completed':
+      return {
+        kind: 'TurnCompleted',
+        resumeId: (ev.payload.resumeId as string) ?? '',
+        turnId: (ev.payload.turnId as string) ?? '',
+      };
+    case 'stop':
+      return { kind: 'Stop' };
+    case 'progress':
+      return { kind: 'Progress', percent: (ev.payload.percent as number) ?? 0 };
+    default:
+      return null;
   }
 }

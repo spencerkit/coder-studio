@@ -15,6 +15,8 @@ import { WorkspaceManager } from './workspace/manager.js';
 import { SessionManager } from './session/manager.js';
 import { TerminalManager } from './terminal/manager.js';
 import { HooksManager } from './hooks/manager.js';
+import { getBridgeScriptPath } from './hooks/bridge.js';
+import { HookRegistrationRepo } from './storage/repositories/hook-registration-repo.js';
 import { providerRegistry } from '@coder-studio/providers';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
@@ -26,6 +28,7 @@ import './commands/index.js';
 export interface Server {
   app: FastifyInstance;
   stop: () => Promise<void>;
+  __test__?: { sessionMgr: any; hooksMgr: any; commandContext: any };
 }
 
 /**
@@ -61,12 +64,15 @@ export async function createServer(
   });
 
   // Session Manager (needs terminal manager)
+  const sessionDb = createSessionDatabase(db);
+
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
-    db: createSessionDatabase(db),
+    db: sessionDb,
     broadcaster: wsHub,
     providerRegistry,
+    resolveBridgeScriptPath: (providerId) => getBridgeScriptPath(providerId),
   });
 
   // Workspace Manager
@@ -76,9 +82,16 @@ export async function createServer(
   });
 
   // Hooks Manager
+  const hookRegistrationRepo = new HookRegistrationRepo(db);
+
   const hooksMgr = new HooksManager(
-    createHookRegistrationRepo(db),
-    {} as any // Runtime config - will be implemented
+    hookRegistrationRepo,
+    {} as any, // Runtime config - pre-existing stub
+    {
+      sessionMgr,
+      providerRegistry,
+      sessionDb,
+    }
   );
 
   // Supervisor Manager
@@ -137,6 +150,8 @@ export async function createServer(
       eventBus.clear();
       db.close();
     },
+    // Exposed for integration tests. Not part of the public API.
+    __test__: { sessionMgr, hooksMgr, commandContext },
   };
 }
 
@@ -215,48 +230,16 @@ function createSessionDatabase(db: any) {
     delete: (id: string) => {
       db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
     },
+    findByResumeId: (resumeId: string) => {
+      return db.prepare('SELECT * FROM sessions WHERE resume_id = ?').get(resumeId) as { id: string } | null | undefined;
+    },
   };
 }
 
 /**
  * Create hook registration repository
  */
-function createHookRegistrationRepo(db: any) {
-  return {
-    get: (providerId: string) => {
-      return db.prepare('SELECT * FROM hook_registrations WHERE provider_id = ?').get(providerId);
-    },
-    create: (registration: any) => {
-      db.prepare(`
-        INSERT INTO hook_registrations (provider_id, marker_version, injected_at, global_config_path, last_check_at, last_status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        registration.providerId,
-        registration.markerVersion,
-        registration.injectedAt,
-        registration.globalConfigPath,
-        registration.lastCheckAt,
-        registration.lastStatus
-      );
-    },
-    updateInjection: (providerId: string, markerVersion: string, injectedAt: number) => {
-      db.prepare(`
-        UPDATE hook_registrations SET marker_version = ?, injected_at = ? WHERE provider_id = ?
-      `).run(markerVersion, injectedAt, providerId);
-    },
-    updateCheckStatus: (providerId: string, checkAt: number, status: string, error?: string) => {
-      if (error) {
-        db.prepare(`
-          UPDATE hook_registrations SET last_check_at = ?, last_status = ?, last_error = ? WHERE provider_id = ?
-        `).run(checkAt, status, error, providerId);
-      } else {
-        db.prepare(`
-          UPDATE hook_registrations SET last_check_at = ?, last_status = ? WHERE provider_id = ?
-        `).run(checkAt, status, providerId);
-      }
-    },
-  };
-}
+
 
 /**
  * Main entry point when run directly

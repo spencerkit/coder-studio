@@ -43,7 +43,7 @@ describe('Provider Registry', () => {
       const result = getProviderById('codex');
       expect(result).toBeDefined();
       expect(result?.id).toBe('codex');
-      expect(result?.capability).toBe('limited');
+      expect(result?.capability).toBe('full');
     });
 
     it('should return undefined for unknown provider', () => {
@@ -76,14 +76,14 @@ describe('Provider Registry', () => {
   describe('getProvidersByCapability', () => {
     it('should return full capability providers', () => {
       const fullProviders = getProvidersByCapability('full');
-      expect(fullProviders.length).toBe(1);
-      expect(fullProviders[0].id).toBe('claude');
+      expect(fullProviders.length).toBe(2);
+      const ids = fullProviders.map(p => p.id).sort();
+      expect(ids).toEqual(['claude', 'codex']);
     });
 
-    it('should return limited capability providers', () => {
+    it('should return no limited capability providers (codex upgraded to full)', () => {
       const limitedProviders = getProvidersByCapability('limited');
-      expect(limitedProviders.length).toBe(1);
-      expect(limitedProviders[0].id).toBe('codex');
+      expect(limitedProviders.length).toBe(0);
     });
 
     it('should return empty array for unsupported capability', () => {

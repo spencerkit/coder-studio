@@ -61,4 +61,10 @@ export const claudeDefinition: ProviderDefinition = {
 
   // ===== Hooks integration =====
   hooks: claudeHooksDescriptor,
+
+  // ===== Transcript resolution =====
+  async resolveTranscriptPath(session): Promise<string | null> {
+    // Claude stores transcripts at the path reported in the SessionStart hook payload.
+    return session.transcriptPath ?? null;
+  },
 };

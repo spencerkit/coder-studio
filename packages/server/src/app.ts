@@ -75,12 +75,14 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Internal hooks endpoint (for bridge scripts)
   app.post('/internal/hooks/:event', async (request, reply) => {
-    const event = request.params.event;
+    const event = (request.params as any).event;
     const payload = request.body;
+    const query = (request.query as any) || {};
 
     try {
-      // Delegate to hooks manager
-      deps.hooksMgr.handleHookEvent(event, payload);
+      deps.hooksMgr.handleHookEvent(event, payload, {
+        coderStudioSessionId: query.coder_studio_session_id as string | undefined,
+      });
       return { ok: true };
     } catch (error) {
       request.log.error({ error, event }, 'Failed to handle hook event');

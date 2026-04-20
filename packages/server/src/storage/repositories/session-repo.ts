@@ -18,6 +18,7 @@ export interface SessionRow {
   completion_percent: number | null;
   error_reason: string | null;
   archived: number; // SQLite uses 0/1 for boolean
+  transcript_path: string | null;
 }
 
 /**
@@ -35,6 +36,7 @@ export interface NewSession {
   lastActiveAt: number;
   completionPercent?: number;
   errorReason?: string;
+  transcriptPath?: string;
 }
 
 /**
@@ -84,8 +86,8 @@ export class SessionRepo {
    */
   create(session: NewSession): Session {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at, completion_percent, error_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at, completion_percent, error_reason, transcript_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -99,7 +101,8 @@ export class SessionRepo {
       session.startedAt,
       session.lastActiveAt,
       session.completionPercent ?? null,
-      session.errorReason ?? null
+      session.errorReason ?? null,
+      session.transcriptPath ?? null
     );
 
     return this.findById(session.id)!;
@@ -186,6 +189,7 @@ export class SessionRepo {
       endedAt: row.ended_at ?? undefined,
       completionPercent: row.completion_percent ?? undefined,
       errorReason: row.error_reason ?? undefined,
+      transcriptPath: row.transcript_path ?? undefined,
     };
   }
 }
