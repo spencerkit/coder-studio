@@ -27,6 +27,7 @@ export interface SessionManagerDeps {
   db: SessionDatabase;
   broadcaster: Broadcaster;
   providerRegistry: ProviderDefinition[];
+  resolveBridgeScriptPath?: (providerId: string) => string | undefined;
 }
 
 /**
@@ -60,6 +61,7 @@ export class SessionManager {
     const cmd = req.provider.buildCommand(req.provider.defaultConfig, {
       workspacePath: req.workspacePath,
       sessionId,
+      bridgeScriptPath: this.deps.resolveBridgeScriptPath?.(req.providerId),
     });
 
     // Create terminal spec
@@ -155,6 +157,7 @@ export class SessionManager {
       {
         workspacePath,
         sessionId,
+        bridgeScriptPath: this.deps.resolveBridgeScriptPath?.(existing.providerId),
       }
     );
 
@@ -225,15 +228,40 @@ export class SessionManager {
     switch (event.kind) {
       case 'SessionStart':
         session.resumeId = event.resumeId;
+        if (event.transcriptPath) session.transcriptPath = event.transcriptPath;
         session.state = 'running';
         session.startedAt = Date.now();
 
         this.deps.db.update(sessionId, {
           resumeId: event.resumeId,
+          transcriptPath: event.transcriptPath,
           state: 'running',
           startedAt: session.startedAt,
         });
         break;
+
+      case 'TurnCompleted': {
+        if (!session.resumeId) session.resumeId = event.resumeId;
+        if (session.state === 'starting') session.state = 'running';
+
+        this.deps.db.update(sessionId, {
+          resumeId: session.resumeId,
+          state: session.state,
+        });
+
+        this.deps.eventBus.emit({
+          type: 'session.lifecycle',
+          workspaceId: session.workspaceId,
+          sessionId,
+          event: 'turn_completed',
+        } as DomainEvent);
+
+        // Resolve transcript path asynchronously on first turn
+        if (!session.transcriptPath) {
+          this.resolveTranscriptPathAsync(session);
+        }
+        break;
+      }
 
       case 'Stop':
         // Session completed a turn
@@ -254,6 +282,24 @@ export class SessionManager {
 
     if (session.state !== prev) {
       this.emitStateChanged(session, prev, session.state);
+    }
+  }
+
+  /**
+   * Asynchronously resolve transcript path via provider
+   */
+  private async resolveTranscriptPathAsync(session: ActiveSession): Promise<void> {
+    const provider = this.deps.providerRegistry.find((p) => p.id === session.providerId);
+    if (!provider?.resolveTranscriptPath || !session.resumeId) return;
+
+    try {
+      const path = await provider.resolveTranscriptPath(session.toDTO());
+      if (path) {
+        session.transcriptPath = path;
+        this.deps.db.update(session.id, { transcriptPath: path });
+      }
+    } catch {
+      // Never throw from transcript resolution
     }
   }
 
@@ -368,6 +414,7 @@ class ActiveSession {
   completionPercent?: number;
   exitCode?: number;
   draft?: string;
+  transcriptPath?: string;
 
   constructor(data: {
     id: string;
@@ -419,6 +466,7 @@ class ActiveSession {
       ended_at: this.endedAt ?? null,
       completion_percent: this.completionPercent ?? null,
       draft: this.draft ?? null,
+      transcript_path: this.transcriptPath ?? null,
     };
   }
 }
@@ -427,8 +475,9 @@ class ActiveSession {
  * Provider hook event types
  */
 export type ProviderHookEvent =
-  | { kind: 'SessionStart'; resumeId: string }
+  | { kind: 'SessionStart'; resumeId: string; transcriptPath?: string }
   | { kind: 'Stop' }
+  | { kind: 'TurnCompleted'; resumeId: string; turnId: string }
   | { kind: 'Progress'; percent: number };
 
 /**
@@ -447,4 +496,5 @@ export interface SessionRow {
   ended_at: number | null;
   completion_percent: number | null;
   draft: string | null;
+  transcript_path: string | null;
 }
