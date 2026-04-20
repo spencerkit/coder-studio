@@ -1,5 +1,5 @@
 import type { ZodSchema } from 'zod';
-import type { ProviderConfig } from '../domain/types';
+import type { ProviderConfig, Session } from '../domain/types';
 
 export interface ProviderDefinition {
   // Metadata
@@ -34,11 +34,17 @@ export interface ProviderDefinition {
 
   // Hooks integration
   hooks: HooksDescriptor;
+
+  // Optional transcript path resolver.
+  // Returns absolute path or null if not yet discoverable.
+  // Must not throw.
+  resolveTranscriptPath?(session: Session): Promise<string | null>;
 }
 
 export interface LaunchContext {
   sessionId: string;
   workspacePath: string;
+  bridgeScriptPath?: string;
 }
 
 export interface HooksDescriptor {

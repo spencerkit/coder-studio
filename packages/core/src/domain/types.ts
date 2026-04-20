@@ -48,6 +48,7 @@ export interface Session {
   endedAt?: number;
   completionPercent?: number;
   errorReason?: string;
+  transcriptPath?: string;
 }
 
 export type SessionState =
