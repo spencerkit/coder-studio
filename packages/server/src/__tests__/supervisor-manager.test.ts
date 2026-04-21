@@ -1,42 +1,127 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('../supervisor/evaluator.js', () => ({
-  evaluateProgress: vi.fn(async () => ({
-    progress: 50,
-    summary: 'in progress',
-    shouldInject: false,
-  })),
-}));
-
-vi.mock('../supervisor/injector.js', () => ({
-  injectGuidance: vi.fn(async () => {}),
-}));
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SupervisorManager } from '../supervisor/manager.js';
 
-describe('SupervisorManager cycle triggers', () => {
-  let manager: SupervisorManager;
+function createManagerDeps() {
+  const supervisors = new Map<string, any>();
+  const cyclesBySupervisor = new Map<string, any[]>();
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    manager = new SupervisorManager({
-      eventBus: { on: vi.fn(), emit: vi.fn() } as any,
-      broadcaster: { broadcast: vi.fn() } as any,
-      terminalMgr: {
-        writeToSession: vi.fn(),
-        getSessionOutput: vi.fn().mockReturnValue(''),
-      } as any,
-    });
+  const hydrateSupervisor = (supervisor: any) => ({
+    ...supervisor,
+    cycles: [...(cyclesBySupervisor.get(supervisor.id) ?? [])],
   });
 
-  afterEach(async () => {
-    const supervisors = ['sess-manual', 'sess-auto']
-      .map((sessionId) => manager.getBySession(sessionId))
-      .filter(Boolean);
+  return {
+    eventBus: { on: vi.fn(() => () => {}), emit: vi.fn() },
+    broadcaster: { broadcast: vi.fn() },
+    terminalMgr: {
+      write: vi.fn(),
+      get: vi.fn(() => ({
+        ringBuffer: { snapshot: () => Buffer.from('terminal fallback output') },
+      })),
+    },
+    workspaceMgr: { get: vi.fn(() => ({ id: 'ws-1', path: process.cwd() })) },
+    sessionMgr: {
+      get: vi.fn((sessionId: string) => ({
+        id: sessionId,
+        terminalId: `term-${sessionId}`,
+        workspaceId: 'ws-1',
+        providerId: 'claude',
+        state: 'running',
+        capability: 'full',
+        startedAt: 1,
+        lastActiveAt: 1,
+      })),
+    },
+    providerRegistry: [
+      {
+        id: 'claude',
+        capability: 'full',
+        readTranscriptExcerpt: vi.fn(async () => null),
+      },
+      {
+        id: 'codex',
+        capability: 'full',
+        buildSupervisorEvalCommand: vi.fn(() => ({
+          argv: [
+            'node',
+            '-e',
+            `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 50, summary: 'on track', shouldInject: false, confidence: 0.8 }))})`,
+          ],
+          cwd: process.cwd(),
+          env: {},
+        })),
+      },
+    ],
+    providerConfigRepo: {
+      get: vi.fn((providerId: string) =>
+        providerId === 'codex' ? { additionalArgs: [], envVars: {} } : undefined
+      ),
+    },
+    supervisorRepo: {
+      create: vi.fn((value: any) => {
+        const supervisor = { ...value, cycles: [] };
+        supervisors.set(supervisor.id, { ...supervisor });
+        return hydrateSupervisor(supervisor);
+      }),
+      update: vi.fn((id: string, patch: any) => {
+        const current = supervisors.get(id);
+        if (!current) {
+          throw new Error(`Supervisor not found: ${id}`);
+        }
+        const next = { ...current, ...patch };
+        supervisors.set(id, next);
+        return hydrateSupervisor(next);
+      }),
+      findById: vi.fn((id: string) => {
+        const supervisor = supervisors.get(id);
+        return supervisor ? hydrateSupervisor(supervisor) : undefined;
+      }),
+      getBySessionId: vi.fn((sessionId: string) => {
+        const supervisor = [...supervisors.values()].find((value) => value.sessionId === sessionId);
+        return supervisor ? hydrateSupervisor(supervisor) : undefined;
+      }),
+      listAll: vi.fn(() => [...supervisors.values()].map((value) => hydrateSupervisor(value))),
+      delete: vi.fn((id: string) => {
+        supervisors.delete(id);
+        cyclesBySupervisor.delete(id);
+      }),
+    },
+    cycleRepo: {
+      create: vi.fn((cycle: any) => {
+        const next = [cycle, ...(cyclesBySupervisor.get(cycle.supervisorId) ?? [])];
+        cyclesBySupervisor.set(cycle.supervisorId, next);
+        return cycle;
+      }),
+      update: vi.fn((id: string, patch: any) => {
+        for (const [supervisorId, cycles] of cyclesBySupervisor.entries()) {
+          const index = cycles.findIndex((cycle) => cycle.id === id);
+          if (index === -1) {
+            continue;
+          }
+          const updated = { ...cycles[index], ...patch };
+          const next = [...cycles];
+          next[index] = updated;
+          cyclesBySupervisor.set(supervisorId, next);
+          return updated;
+        }
+        throw new Error(`Cycle not found: ${id}`);
+      }),
+      listRecentForSupervisor: vi.fn((supervisorId: string) => [
+        ...(cyclesBySupervisor.get(supervisorId) ?? []),
+      ]),
+      pruneOldest: vi.fn(),
+    },
+  };
+}
 
-    for (const supervisor of supervisors) {
-      await manager.delete(supervisor!.id);
-    }
+describe('SupervisorManager cycle triggers', () => {
+  let deps: ReturnType<typeof createManagerDeps>;
+  let manager: SupervisorManager;
+
+  beforeEach(async () => {
+    deps = createManagerDeps();
+    manager = new SupervisorManager(deps as any);
+    await manager.hydrate();
   });
 
   it('queues manual triggerEvaluation cycles with manual trigger', async () => {
@@ -44,7 +129,7 @@ describe('SupervisorManager cycle triggers', () => {
       sessionId: 'sess-manual',
       workspaceId: 'ws-1',
       objective: 'Ship the fix',
-      evaluatorProviderId: 'claude',
+      evaluatorProviderId: 'codex',
     });
 
     const cycle = await manager.triggerEvaluation(supervisor.id);
@@ -57,7 +142,7 @@ describe('SupervisorManager cycle triggers', () => {
       sessionId: 'sess-auto',
       workspaceId: 'ws-1',
       objective: 'Ship the fix',
-      evaluatorProviderId: 'claude',
+      evaluatorProviderId: 'codex',
     });
 
     await (manager as any).runEvaluation(supervisor.id);
