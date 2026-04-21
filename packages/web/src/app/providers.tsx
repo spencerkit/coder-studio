@@ -26,6 +26,8 @@ import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus } from '../ws';
+import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
+import type { Supervisor, SupervisorCycle } from '@coder-studio/core';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
 
 /**
@@ -52,6 +54,9 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Server state atoms
   const setWorkspaces = useSetAtom(workspacesAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  // Supervisor state atoms
+  const setSupervisors = useSetAtom(supervisorsAtom);
+  const setSupervisorCycles = useSetAtom(supervisorCyclesAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
@@ -196,6 +201,8 @@ export function AppProviders({ children }: AppProvidersProps) {
     setIsWriter,
     setWorkspaces,
     setSessions,
+    setSupervisors,
+    setSupervisorCycles,
     store,
   ]);
 
@@ -205,7 +212,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 /**
  * Route incoming WebSocket events to appropriate Jotai atoms
  */
-function routeEventToAtom(
+export function routeEventToAtom(
   topic: string,
   payload: unknown,
   store: ReturnType<typeof useStore>
@@ -303,6 +310,57 @@ function routeEventToAtom(
         // Progress updates can be handled separately if needed
         // For now, we'll just log them
         console.log(`Session ${sessionId} progress:`, payload);
+        return;
+      }
+
+      // workspace.{id}.session.{sessionId}.supervisor.state
+      if (sessionSubtopic === 'supervisor.state') {
+        const data = payload as { supervisor?: Supervisor; supervisorId?: string; event: string };
+        if (data.event === 'deleted' && data.supervisorId) {
+          store.set(supervisorsAtom, (prev: Map<string, Supervisor>) => {
+            const next = new Map(prev);
+            // Find and remove by supervisor ID
+            for (const [sessId, sup] of next.entries()) {
+              if (sup.id === data.supervisorId) {
+                next.delete(sessId);
+                break;
+              }
+            }
+            return next;
+          });
+          store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
+            const next = new Map(prev);
+            next.delete(data.supervisorId!);
+            return next;
+          });
+        } else if (data.supervisor) {
+          store.set(supervisorsAtom, (prev: Map<string, Supervisor>) => {
+            const next = new Map(prev);
+            next.set(data.supervisor.sessionId, data.supervisor);
+            return next;
+          });
+          if (Array.isArray(data.supervisor.cycles)) {
+            store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
+              const next = new Map(prev);
+              next.set(data.supervisor!.id, data.supervisor!.cycles);
+              return next;
+            });
+          }
+        }
+        return;
+      }
+
+      // workspace.{id}.session.{sessionId}.supervisor.cycle
+      if (sessionSubtopic === 'supervisor.cycle') {
+        const data = payload as { cycle: SupervisorCycle; event: string };
+        const supervisorId = data.cycle.supervisorId;
+        store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
+          const next = new Map(prev);
+          const cycles = next.get(supervisorId) ?? [];
+          const deduped = cycles.filter((cycle) => cycle.id !== data.cycle.id);
+          next.set(supervisorId, [data.cycle, ...deduped].slice(0, 20));
+          return next;
+        });
         return;
       }
     }

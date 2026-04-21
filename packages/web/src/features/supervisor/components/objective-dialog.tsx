@@ -1,113 +1,192 @@
 /**
  * Supervisor Objective Dialog Component (Phase 3)
  *
- * Modal dialog for defining and editing supervisor objectives.
+ * Modal dialog for enabling, editing, and disabling supervisors.
  */
 
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useState, useEffect } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
+import { useCallback } from 'react';
 import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
-import { wsClientAtom } from '../../../atoms/connection';
+import { dispatchCommandAtom } from '../../../atoms/connection';
 
-export function ObjectiveDialog({ workspaceId }: { workspaceId: string }) {
-  const dialog = useAtomValue(supervisorDialogAtom);
+const EVALUATOR_OPTIONS = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+] as const;
+
+interface ObjectiveDialogProps {
+  workspaceId: string;
+  sessionId?: string;
+}
+
+export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps) {
+  const [dialog, setDialog] = useAtom(supervisorDialogAtom);
   const supervisors = useAtomValue(supervisorsAtom);
-  const setDialog = useSetAtom(supervisorDialogAtom);
-  const wsClient = useAtomValue(wsClientAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
-  const [objective, setObjective] = useState('');
+  const supervisor = dialog.sessionId ? supervisors.get(dialog.sessionId) : undefined;
 
-  // Load existing objective when editing
-  useEffect(() => {
-    if (dialog.sessionId) {
-      const supervisor = supervisors.get(dialog.sessionId);
-      if (supervisor) {
-        setObjective(supervisor.objective);
-      } else {
-        setObjective('');
-      }
-    }
-  }, [dialog.sessionId, supervisors]);
-
-  const handleClose = useCallback(() => {
-    setDialog({ open: false, sessionId: null, mode: 'enable' });
-    setObjective('');
+  const close = useCallback(() => {
+    setDialog({
+      open: false,
+      sessionId: null,
+      mode: 'enable',
+      draftObjective: '',
+      draftEvaluatorProviderId: 'claude',
+    });
   }, [setDialog]);
 
-  const handleConfirm = useCallback(async () => {
-    if (!dialog.sessionId || !objective.trim() || !wsClient) {
+  const updateDraft = useCallback(
+    (
+      patch: Partial<{
+        draftObjective: string;
+        draftEvaluatorProviderId: 'claude' | 'codex';
+      }>
+    ) => {
+      setDialog((current) => ({ ...current, ...patch }));
+    },
+    [setDialog]
+  );
+
+  const confirm = useCallback(async () => {
+    if (!dialog.sessionId) {
       return;
     }
 
-    try {
-      if (dialog.mode === 'enable') {
-        await wsClient.sendCommand('supervisor.create', {
-          sessionId: dialog.sessionId,
-          workspaceId,
-          objective: objective.trim(),
-        });
-      } else {
-        const supervisor = supervisors.get(dialog.sessionId);
-        if (supervisor) {
-          await wsClient.sendCommand('supervisor.update', {
-            id: supervisor.id,
-            objective: objective.trim(),
-          });
-        }
+    if (dialog.mode === 'disable') {
+      if (!supervisor) {
+        return;
       }
-      handleClose();
-    } catch (error) {
-      console.error('Failed to save supervisor:', error);
+      const result = await dispatch('supervisor.delete', { id: supervisor.id });
+      if (result.ok) {
+        close();
+      }
+      return;
     }
-  }, [dialog, objective, wsClient, workspaceId, supervisors, handleClose]);
+
+    const objective = dialog.draftObjective.trim();
+    if (!objective) {
+      return;
+    }
+
+    if (dialog.mode === 'enable') {
+      const result = await dispatch('supervisor.create', {
+        sessionId: dialog.sessionId,
+        workspaceId,
+        objective,
+        evaluatorProviderId: dialog.draftEvaluatorProviderId,
+      });
+
+      if (result.ok) {
+        close();
+      }
+      return;
+    }
+
+    if (!supervisor) {
+      return;
+    }
+
+    const result = await dispatch('supervisor.update', {
+      id: supervisor.id,
+      objective,
+      evaluatorProviderId: dialog.draftEvaluatorProviderId,
+    });
+
+    if (result.ok) {
+      close();
+    }
+  }, [close, dialog, dispatch, supervisor, workspaceId]);
 
   if (!dialog.open) {
     return null;
   }
 
-  const title = dialog.mode === 'enable' ? '启用 Supervisor' : '编辑 Supervisor 目标';
-  const confirmLabel = dialog.mode === 'enable' ? '启用' : '保存';
+  if (sessionId && dialog.sessionId !== sessionId) {
+    return null;
+  }
+
+  const disableObjective = supervisor?.objective ?? dialog.draftObjective;
+  const title =
+    dialog.mode === 'disable'
+      ? '禁用 Supervisor'
+      : dialog.mode === 'edit'
+        ? '编辑 Supervisor'
+        : '启用 Supervisor';
+  const confirmLabel =
+    dialog.mode === 'disable' ? '禁用' : dialog.mode === 'edit' ? '保存' : '启用';
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={close}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="btn btn-ghost btn-sm" onClick={handleClose}>
+          <button className="btn btn-ghost btn-sm" onClick={close} aria-label="关闭">
             ✕
           </button>
         </div>
 
         <div className="modal-body">
-          <div className="form-group">
-            <label htmlFor="objective">目标描述</label>
-            <textarea
-              id="objective"
-              className="input textarea"
-              rows={5}
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              placeholder="描述 Supervisor 应该评估的目标，例如：&#10;- 完成用户认证功能的实现&#10;- 修复所有测试失败&#10;- 优化性能至响应时间 < 100ms"
-              autoFocus
-            />
-          </div>
-
-          {objective.trim() && (
+          {dialog.mode === 'disable' ? (
             <div className="form-group">
-              <label>预览</label>
-              <pre className="objective-preview">{objective}</pre>
+              <p className="dialog-helper">禁用会停止评估并清空历史</p>
+              <pre className="objective-preview">{disableObjective}</pre>
             </div>
+          ) : (
+            <>
+              <div className="form-group">
+                <label htmlFor="objective">目标描述</label>
+                <textarea
+                  id="objective"
+                  className="input textarea"
+                  rows={5}
+                  value={dialog.draftObjective}
+                  onChange={(event) => updateDraft({ draftObjective: event.target.value })}
+                  placeholder="描述 Supervisor 应该评估的目标，例如：&#10;- 完成用户认证功能的实现&#10;- 修复所有测试失败&#10;- 优化性能至响应时间 < 100ms"
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="evaluator-provider">Evaluator Provider</label>
+                <select
+                  id="evaluator-provider"
+                  className="input"
+                  value={dialog.draftEvaluatorProviderId}
+                  onChange={(event) =>
+                    updateDraft({
+                      draftEvaluatorProviderId: event.target.value as 'claude' | 'codex',
+                    })
+                  }
+                >
+                  {EVALUATOR_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {dialog.draftObjective.trim() ? (
+                <div className="form-group">
+                  <label>预览</label>
+                  <pre className="objective-preview">{dialog.draftObjective}</pre>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={handleClose}>
+          <button className="btn btn-secondary" onClick={close}>
             取消
           </button>
           <button
-            className="btn btn-primary"
-            onClick={handleConfirm}
-            disabled={!objective.trim()}
+            className={`btn ${dialog.mode === 'disable' ? 'btn-danger' : 'btn-primary'}`}
+            onClick={() => {
+              void confirm();
+            }}
+            disabled={dialog.mode !== 'disable' && !dialog.draftObjective.trim()}
           >
             {confirmLabel}
           </button>

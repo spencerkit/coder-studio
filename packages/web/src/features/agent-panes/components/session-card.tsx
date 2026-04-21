@@ -19,6 +19,9 @@ import {
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import type { SessionState } from '@coder-studio/core';
+import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
+import { SupervisorCard } from '../../supervisor/components/supervisor-card';
+import { useSupervisor } from '../../supervisor/hooks/use-supervisor';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
 import { encodeUtf8ToBase64 } from '../../../lib/base64';
 
@@ -39,6 +42,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [inputValue, setInputValue] = useState('');
+  useSupervisor(session);
 
   if (!session) {
     return null;
@@ -182,6 +186,16 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
           </button>
         </div>
       </div>
+
+      {session.capability === 'full' &&
+      session.state !== 'draft' &&
+      session.state !== 'ended' &&
+      session.state !== 'unavailable' ? (
+        <>
+          <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
+          <ObjectiveDialog workspaceId={session.workspaceId} sessionId={session.id} />
+        </>
+      ) : null}
 
       <div className="session-terminal">
         <XtermHost

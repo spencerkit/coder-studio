@@ -2051,6 +2051,70 @@ body.is-resizing-panels * {
   gap: var(--sp-1);
 }
 
+.supervisor-objective-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.supervisor-objective-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.supervisor-provider-pill {
+  flex-shrink: 0;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: rgba(108, 182, 255, 0.12);
+  color: var(--accent-blue);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+  text-transform: lowercase;
+}
+
+.supervisor-progress-block {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.supervisor-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(114, 132, 146, 0.18);
+  overflow: hidden;
+}
+
+.supervisor-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+}
+
+.supervisor-history-list {
+  display: grid;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.supervisor-history-item {
+  display: grid;
+  grid-template-columns: 56px 44px minmax(0, 1fr);
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
 .supervisor-error {
   margin-top: var(--sp-2);
   padding: var(--sp-2);
@@ -2070,6 +2134,12 @@ body.is-resizing-panels * {
   font-family: var(--font-mono);
   white-space: pre-wrap;
   overflow-x: auto;
+}
+
+.dialog-helper {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
 }
 
 /* ========== Workspace Launch Modal ========== */

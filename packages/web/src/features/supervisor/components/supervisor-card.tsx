@@ -1,14 +1,18 @@
 /**
  * Supervisor Card Component (Phase 3)
  *
- * Displays supervisor state and action buttons for an agent session.
+ * Displays supervisor state, recent evaluation history, and actions.
  */
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback } from 'react';
-import type { Supervisor, SupervisorState } from '@coder-studio/core';
-import { supervisorsAtom, supervisorDialogAtom } from '../atoms';
-import { wsClientAtom } from '../../../atoms/connection';
+import { useCallback, useMemo } from 'react';
+import type { SupervisorCycle, SupervisorState } from '@coder-studio/core';
+import {
+  supervisorCyclesAtom,
+  supervisorDialogAtom,
+  supervisorsAtom,
+} from '../atoms';
+import { dispatchCommandAtom } from '../../../atoms/connection';
 
 interface SupervisorCardProps {
   sessionId: string;
@@ -35,61 +39,69 @@ const STATE_CLASSES: Record<SupervisorState, string> = {
 
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
   const supervisors = useAtomValue(supervisorsAtom);
+  const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
-  const wsClient = useAtomValue(wsClientAtom);
   const supervisor = supervisors.get(sessionId);
 
-  const handleEnable = useCallback(() => {
-    setDialog({ open: true, sessionId, mode: 'enable' });
-  }, [sessionId, setDialog]);
+  const openDialog = useCallback(
+    (mode: 'enable' | 'edit' | 'disable') => {
+      setDialog({
+        open: true,
+        sessionId,
+        mode,
+        draftObjective: supervisor?.objective ?? '',
+        draftEvaluatorProviderId:
+          (supervisor?.evaluatorProviderId as 'claude' | 'codex') ?? 'claude',
+      });
+    },
+    [sessionId, setDialog, supervisor]
+  );
 
-  const handleEdit = useCallback(() => {
-    setDialog({ open: true, sessionId, mode: 'edit' });
-  }, [sessionId, setDialog]);
+  const cycles = useMemo(() => {
+    if (!supervisor) {
+      return [] as SupervisorCycle[];
+    }
+
+    return [...(cyclesBySupervisor.get(supervisor.id) ?? supervisor.cycles ?? [])].sort(
+      (left, right) =>
+        (right.completedAt ?? right.createdAt) - (left.completedAt ?? left.createdAt)
+    );
+  }, [cyclesBySupervisor, supervisor]);
+
+  const latestCycle = cycles[0];
+  const progress = Math.max(0, Math.min(latestCycle?.progress ?? 0, 100));
 
   const handlePause = useCallback(async () => {
-    if (!wsClient || !supervisor) return;
-    try {
-      await wsClient.sendCommand('supervisor.pause', { id: supervisor.id });
-    } catch (error) {
-      console.error('Failed to pause supervisor:', error);
+    if (!supervisor) {
+      return;
     }
-  }, [wsClient, supervisor]);
+
+    await dispatch('supervisor.pause', { id: supervisor.id });
+  }, [dispatch, supervisor]);
 
   const handleResume = useCallback(async () => {
-    if (!wsClient || !supervisor) return;
-    try {
-      await wsClient.sendCommand('supervisor.resume', { id: supervisor.id });
-    } catch (error) {
-      console.error('Failed to resume supervisor:', error);
+    if (!supervisor) {
+      return;
     }
-  }, [wsClient, supervisor]);
+
+    await dispatch('supervisor.resume', { id: supervisor.id });
+  }, [dispatch, supervisor]);
 
   const handleTrigger = useCallback(async () => {
-    if (!wsClient || !supervisor) return;
-    try {
-      await wsClient.sendCommand('supervisor.trigger', { id: supervisor.id });
-    } catch (error) {
-      console.error('Failed to trigger evaluation:', error);
+    if (!supervisor) {
+      return;
     }
-  }, [wsClient, supervisor]);
 
-  const handleDisable = useCallback(async () => {
-    if (!wsClient || !supervisor) return;
-    try {
-      await wsClient.sendCommand('supervisor.delete', { id: supervisor.id });
-    } catch (error) {
-      console.error('Failed to disable supervisor:', error);
-    }
-  }, [wsClient, supervisor]);
+    await dispatch('supervisor.trigger', { id: supervisor.id });
+  }, [dispatch, supervisor]);
 
-  // No supervisor configured - show enable button
   if (!supervisor) {
     return (
       <div className="supervisor-card supervisor-card-inactive">
         <button
           className="btn btn-secondary btn-sm"
-          onClick={handleEnable}
+          onClick={() => openDialog('enable')}
           title="启用 Supervisor"
         >
           <span className="icon">▶</span>
@@ -100,7 +112,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   }
 
   return (
-    <div className={`supervisor-card ${STATE_CLASSES[supervisor.state]}`}>
+    <div className={`supervisor-card ${STATE_CLASSES[supervisor.state]}`} data-workspace-id={workspaceId}>
       <div className="supervisor-header">
         <span className="supervisor-icon">✓</span>
         <span className="supervisor-label">Supervisor</span>
@@ -109,11 +121,36 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         </span>
       </div>
 
+      <div className="supervisor-objective-row">
+        <span className="supervisor-objective-text" title={supervisor.objective}>
+          {supervisor.objective}
+        </span>
+        <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
+      </div>
+
+      {latestCycle ? (
+        <div className="supervisor-progress-block">
+          <div className="supervisor-progress-track" aria-hidden="true">
+            <div className="supervisor-progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+          <ol className="supervisor-history-list">
+            {cycles.slice(0, 3).map((cycle) => (
+              <li key={cycle.id} className="supervisor-history-item">
+                <span>{cycle.trigger === 'manual' ? 'Manual' : 'Auto'}</span>
+                <span>{cycle.progress ?? 0}%</span>
+                <span>{cycle.result ?? cycle.errorReason ?? '等待评估结果'}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+
       <div className="supervisor-actions">
         <button
           className="btn btn-ghost btn-sm"
-          onClick={handleEdit}
+          onClick={() => openDialog('edit')}
           title="编辑目标"
+          aria-label="编辑目标"
         >
           ✎
         </button>
@@ -121,16 +158,22 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         {supervisor.state === 'paused' ? (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={handleResume}
+            onClick={() => {
+              void handleResume();
+            }}
             title="恢复"
+            aria-label="恢复"
           >
             ▶
           </button>
         ) : (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={handlePause}
+            onClick={() => {
+              void handlePause();
+            }}
             title="暂停"
+            aria-label="暂停"
             disabled={supervisor.state === 'evaluating' || supervisor.state === 'injecting'}
           >
             ⏸
@@ -139,8 +182,11 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
         <button
           className="btn btn-ghost btn-sm"
-          onClick={handleTrigger}
+          onClick={() => {
+            void handleTrigger();
+          }}
           title="触发评估"
+          aria-label="触发评估"
           disabled={supervisor.state === 'evaluating' || supervisor.state === 'injecting'}
         >
           ↑
@@ -148,18 +194,15 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
         <button
           className="btn btn-ghost btn-sm btn-danger"
-          onClick={handleDisable}
-          title="禁用"
+          onClick={() => openDialog('disable')}
+          title="禁用 Supervisor"
+          aria-label="禁用 Supervisor"
         >
           ■
         </button>
       </div>
 
-      {supervisor.errorReason && (
-        <div className="supervisor-error">
-          {supervisor.errorReason}
-        </div>
-      )}
+      {supervisor.errorReason ? <div className="supervisor-error">{supervisor.errorReason}</div> : null}
     </div>
   );
 }

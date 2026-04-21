@@ -125,6 +125,41 @@ describe('SessionCard', () => {
     });
   });
 
+  it('hydrates supervisor state for full-capability sessions and renders the card above the terminal', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'supervisor.get') {
+        return {
+          supervisor: {
+            id: 'sup-1',
+            sessionId: 'sess_123456',
+            workspaceId: 'ws-123',
+            state: 'idle',
+            objective: 'Keep the agent on track',
+            evaluatorProviderId: 'claude',
+            cycles: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        };
+      }
+      return undefined;
+    });
+
+    const { store } = createSessionStore({ state: 'running', capability: 'full' }, sendCommand);
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('supervisor.get', { sessionId: 'sess_123456' });
+    });
+
+    expect(screen.getByText('Supervisor')).toBeInTheDocument();
+  });
+
   it('stops the session and closes the pane when close is clicked', async () => {
     const { store, sendCommand } = createSessionStore({
       terminalId: 'term-live',
