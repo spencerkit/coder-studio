@@ -13,9 +13,11 @@ import type {
 import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from '../ws/hub.js';
 import type { TerminalManager } from '../terminal/manager.js';
-import { evaluateProgress, type EvaluationResult } from './evaluator.js';
+import { evaluateProgress } from './evaluator.js';
 import { injectGuidance } from './injector.js';
 import { SupervisorScheduler } from './scheduler.js';
+
+const LEGACY_SUPERVISOR_INTERVAL_MS = 60000;
 
 export interface SupervisorManagerDeps {
   eventBus: EventBus;
@@ -27,12 +29,12 @@ export interface CreateSupervisorRequest {
   sessionId: string;
   workspaceId: string;
   objective: string;
-  intervalMs?: number;
+  evaluatorProviderId: string;
 }
 
 export interface UpdateSupervisorRequest {
   objective?: string;
-  intervalMs?: number;
+  evaluatorProviderId?: string;
 }
 
 /**
@@ -82,8 +84,8 @@ export class SupervisorManager {
       workspaceId: req.workspaceId,
       state: 'idle',
       objective: req.objective,
+      evaluatorProviderId: req.evaluatorProviderId,
       cycles: [],
-      intervalMs: req.intervalMs,
       createdAt: now,
       updatedAt: now,
     };
@@ -91,9 +93,8 @@ export class SupervisorManager {
     this.supervisors.set(id, supervisor);
     this.supervisorsBySession.set(req.sessionId, id);
 
-    // Start scheduler if interval is set
-    const intervalMs = req.intervalMs ?? 60000;
-    this.scheduler.start(id, intervalMs);
+    // Preserve current MVP cadence internally without storing it on the domain object.
+    this.scheduler.start(id, LEGACY_SUPERVISOR_INTERVAL_MS);
 
     // Broadcast supervisor creation
     this.deps.broadcaster.broadcast(
@@ -105,7 +106,7 @@ export class SupervisorManager {
   }
 
   /**
-   * Update supervisor objective or interval
+   * Update supervisor objective or evaluator provider
    */
   async update(id: string, req: UpdateSupervisorRequest): Promise<Supervisor> {
     const supervisor = this.supervisors.get(id);
@@ -116,7 +117,8 @@ export class SupervisorManager {
     const updated: Supervisor = {
       ...supervisor,
       objective: req.objective ?? supervisor.objective,
-      intervalMs: req.intervalMs ?? supervisor.intervalMs,
+      evaluatorProviderId:
+        req.evaluatorProviderId ?? supervisor.evaluatorProviderId,
       updatedAt: Date.now(),
     };
 
@@ -165,7 +167,7 @@ export class SupervisorManager {
   async resume(id: string): Promise<Supervisor> {
     const supervisor = this.supervisors.get(id);
     if (supervisor) {
-      this.scheduler.start(id, supervisor.intervalMs ?? 60000);
+      this.scheduler.start(id, LEGACY_SUPERVISOR_INTERVAL_MS);
     }
     return this.setState(id, 'idle');
   }
@@ -185,7 +187,10 @@ export class SupervisorManager {
       sessionId: supervisor.sessionId,
       supervisorId: id,
       status: 'queued',
+      trigger: 'manual',
+      evidenceSource: 'terminal_fallback',
       objective: supervisor.objective,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
       createdAt: Date.now(),
     };
 
@@ -228,11 +233,30 @@ export class SupervisorManager {
     }
 
     const cycle = supervisor.cycles[cycleIndex];
+    if (!cycle) {
+      return undefined;
+    }
+    const completedAt =
+      status === 'completed' || status === 'failed' || status === 'injected'
+        ? Date.now()
+        : data?.completedAt ?? cycle.completedAt;
     const updatedCycle: SupervisorCycle = {
-      ...cycle,
-      ...data,
+      id: cycle.id,
+      supervisorId: cycle.supervisorId,
+      sessionId: cycle.sessionId,
       status,
-      completedAt: status === 'completed' || status === 'failed' ? Date.now() : undefined,
+      trigger: data?.trigger ?? cycle.trigger,
+      evidenceSource: data?.evidenceSource ?? cycle.evidenceSource,
+      objective: data?.objective ?? cycle.objective,
+      evaluatorProviderId:
+        data?.evaluatorProviderId ?? cycle.evaluatorProviderId,
+      turnId: data?.turnId ?? cycle.turnId,
+      progress: data?.progress ?? cycle.progress,
+      result: data?.result ?? cycle.result,
+      injectedGuidance: data?.injectedGuidance ?? cycle.injectedGuidance,
+      createdAt: cycle.createdAt,
+      completedAt,
+      errorReason: data?.errorReason ?? cycle.errorReason,
     };
 
     const updatedSupervisor: Supervisor = {

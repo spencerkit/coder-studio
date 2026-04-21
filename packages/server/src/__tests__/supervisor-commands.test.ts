@@ -115,4 +115,39 @@ describe('supervisor commands', () => {
       objective: undefined,
     });
   });
+
+  it('rejects supervisor.update with no patch fields', async () => {
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'cmd-4',
+        op: 'supervisor.update',
+        args: {
+          id: 'sup-1',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('validation_error');
+  });
+
+  it('rejects legacy intervalMs on supervisor.update', async () => {
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'cmd-5',
+        op: 'supervisor.update',
+        args: {
+          id: 'sup-1',
+          intervalMs: 60000,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('validation_error');
+  });
 });

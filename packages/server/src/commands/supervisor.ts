@@ -2,18 +2,33 @@ import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
 const supervisorObjectiveSchema = z.string().trim().min(1).max(4000);
+const createSupervisorSchema = z
+  .object({
+    sessionId: z.string(),
+    workspaceId: z.string(),
+    objective: supervisorObjectiveSchema,
+    evaluatorProviderId: z.string(),
+  })
+  .strict();
+const updateSupervisorSchema = z
+  .object({
+    id: z.string(),
+    objective: supervisorObjectiveSchema.optional(),
+    evaluatorProviderId: z.string().optional(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.objective !== undefined || input.evaluatorProviderId !== undefined,
+    'objective or evaluatorProviderId is required'
+  );
+const sessionIdSchema = z.object({ sessionId: z.string() });
+const supervisorIdSchema = z.object({ id: z.string() });
 
 // supervisor.create
-registerCommand(
+registerCommand<z.infer<typeof createSupervisorSchema>, { supervisor: unknown }>(
   'supervisor.create',
-  z
-    .object({
-      sessionId: z.string(),
-      workspaceId: z.string(),
-      objective: supervisorObjectiveSchema,
-      evaluatorProviderId: z.string(),
-    })
-    .strict(),
+  createSupervisorSchema,
   async (args, ctx) => {
     return {
       supervisor: await ctx.supervisorMgr.create({
@@ -27,30 +42,18 @@ registerCommand(
 );
 
 // supervisor.get
-registerCommand(
+registerCommand<z.infer<typeof sessionIdSchema>, { supervisor: unknown | null }>(
   'supervisor.get',
-  z.object({ sessionId: z.string() }),
+  sessionIdSchema,
   async (args, ctx) => {
     return { supervisor: ctx.supervisorMgr.getBySession(args.sessionId) ?? null };
   }
 );
 
 // supervisor.update
-registerCommand(
+registerCommand<z.infer<typeof updateSupervisorSchema>, { supervisor: unknown }>(
   'supervisor.update',
-  z
-    .object({
-      id: z.string(),
-      objective: supervisorObjectiveSchema.optional(),
-      evaluatorProviderId: z.string().optional(),
-    })
-    .strict()
-    .refine(
-      (input) =>
-        input.objective !== undefined ||
-        input.evaluatorProviderId !== undefined,
-      'objective or evaluatorProviderId is required'
-    ),
+  updateSupervisorSchema,
   async (args, ctx) => {
     return {
       supervisor: await ctx.supervisorMgr.update(args.id, {
@@ -62,9 +65,9 @@ registerCommand(
 );
 
 // supervisor.delete
-registerCommand(
+registerCommand<z.infer<typeof supervisorIdSchema>, Record<string, never>>(
   'supervisor.delete',
-  z.object({ id: z.string() }),
+  supervisorIdSchema,
   async (args, ctx) => {
     await ctx.supervisorMgr.delete(args.id);
     return {};
@@ -72,27 +75,27 @@ registerCommand(
 );
 
 // supervisor.pause
-registerCommand(
+registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
   'supervisor.pause',
-  z.object({ id: z.string() }),
+  supervisorIdSchema,
   async (args, ctx) => {
     return { supervisor: await ctx.supervisorMgr.pause(args.id) };
   }
 );
 
 // supervisor.resume
-registerCommand(
+registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
   'supervisor.resume',
-  z.object({ id: z.string() }),
+  supervisorIdSchema,
   async (args, ctx) => {
     return { supervisor: await ctx.supervisorMgr.resume(args.id) };
   }
 );
 
 // supervisor.trigger
-registerCommand(
+registerCommand<z.infer<typeof supervisorIdSchema>, { cycle: unknown }>(
   'supervisor.trigger',
-  z.object({ id: z.string() }),
+  supervisorIdSchema,
   async (args, ctx) => {
     return { cycle: await ctx.supervisorMgr.triggerEvaluation(args.id) };
   }
