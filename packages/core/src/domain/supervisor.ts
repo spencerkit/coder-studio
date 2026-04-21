@@ -15,12 +15,20 @@ export type CycleStatus =
   | 'injected'
   | 'failed';
 
+export type CycleTrigger = 'turn_completed' | 'manual';
+
+export type EvidenceSource = 'transcript' | 'terminal_fallback';
+
 export interface SupervisorCycle {
   id: string;
-  sessionId: string;
   supervisorId: string;
+  sessionId: string;
   status: CycleStatus;
+  trigger: CycleTrigger;
+  evidenceSource: EvidenceSource;
   objective: string;
+  evaluatorProviderId: string;
+  turnId?: string;
   progress?: number;
   result?: string;
   injectedGuidance?: string;
@@ -35,22 +43,23 @@ export interface Supervisor {
   workspaceId: string;
   state: SupervisorState;
   objective: string;
+  evaluatorProviderId: string;
   cycles: SupervisorCycle[];
   lastCycleAt?: number;
+  lastEvaluatedTurnId?: string;
   errorReason?: string;
   createdAt: number;
   updatedAt: number;
-  intervalMs?: number;
 }
 
 export interface SupervisorConfig {
-  defaultIntervalMs: number;
   maxCyclesPerSession: number;
   terminalLinesForEvaluation: number;
+  guidanceMaxChars: number;
 }
 
 export const DEFAULT_SUPERVISOR_CONFIG: SupervisorConfig = {
-  defaultIntervalMs: 60000, // 1 minute
   maxCyclesPerSession: 100,
   terminalLinesForEvaluation: 500,
+  guidanceMaxChars: 2000,
 };

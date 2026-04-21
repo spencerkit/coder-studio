@@ -1,22 +1,26 @@
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
+const supervisorObjectiveSchema = z.string().trim().min(1).max(4000);
+
 // supervisor.create
 registerCommand(
   'supervisor.create',
-  z.object({
-    sessionId: z.string(),
-    workspaceId: z.string(),
-    objective: z.string().min(1),
-    intervalMs: z.number().positive().optional(),
-  }),
+  z
+    .object({
+      sessionId: z.string(),
+      workspaceId: z.string(),
+      objective: supervisorObjectiveSchema,
+      evaluatorProviderId: z.string(),
+    })
+    .strict(),
   async (args, ctx) => {
     return {
       supervisor: await ctx.supervisorMgr.create({
         sessionId: args.sessionId,
         workspaceId: args.workspaceId,
         objective: args.objective,
-        intervalMs: args.intervalMs,
+        evaluatorProviderId: args.evaluatorProviderId,
       }),
     };
   }
@@ -34,16 +38,24 @@ registerCommand(
 // supervisor.update
 registerCommand(
   'supervisor.update',
-  z.object({
-    id: z.string(),
-    objective: z.string().optional(),
-    intervalMs: z.number().positive().optional(),
-  }),
+  z
+    .object({
+      id: z.string(),
+      objective: supervisorObjectiveSchema.optional(),
+      evaluatorProviderId: z.string().optional(),
+    })
+    .strict()
+    .refine(
+      (input) =>
+        input.objective !== undefined ||
+        input.evaluatorProviderId !== undefined,
+      'objective or evaluatorProviderId is required'
+    ),
   async (args, ctx) => {
     return {
       supervisor: await ctx.supervisorMgr.update(args.id, {
         objective: args.objective,
-        intervalMs: args.intervalMs,
+        evaluatorProviderId: args.evaluatorProviderId,
       }),
     };
   }

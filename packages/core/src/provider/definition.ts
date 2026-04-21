@@ -1,6 +1,20 @@
 import type { ZodSchema } from 'zod';
 import type { ProviderConfig, Session } from '../domain/types';
 
+export interface SupervisorEvalCommandRequest {
+  prompt: string;
+  sessionId: string;
+  workspacePath: string;
+  apiKey?: string;
+  model?: string;
+}
+
+export interface TranscriptExcerptRequest {
+  transcriptPath: string;
+  maxChars: number;
+  maxTurns: number;
+}
+
 export interface ProviderDefinition {
   // Metadata
   id: string;
@@ -24,6 +38,25 @@ export interface ProviderDefinition {
     env: Record<string, string>;
     cwd: string;
   } | null;
+
+  buildSupervisorEvalCommand?(
+    config: ProviderConfig,
+    req: SupervisorEvalCommandRequest
+  ): {
+    argv: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+  } | null;
+
+  readTranscriptExcerpt?(
+    req: TranscriptExcerptRequest
+  ): Promise<
+    | {
+        excerpt: string;
+        lastTurnId?: string;
+      }
+    | null
+  >;
 
   // Configuration
   configSchema: ZodSchema<ProviderConfig>;
