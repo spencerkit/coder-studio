@@ -10,5 +10,12 @@ export {
   type HookRegistration,
   type NewHookRegistration,
 } from './repositories/hook-registration-repo.js';
-export { SupervisorRepo, type NewSupervisor } from './repositories/supervisor-repo.js';
-export { SupervisorCycleRepo } from './repositories/supervisor-cycle-repo.js';
+export {
+  SupervisorRepo,
+  type NewSupervisor,
+  type SupervisorUpdatePatch,
+} from './repositories/supervisor-repo.js';
+export {
+  SupervisorCycleRepo,
+  type SupervisorCycleUpdatePatch,
+} from './repositories/supervisor-cycle-repo.js';

@@ -75,7 +75,7 @@ describe('runMigrations', () => {
     db.close();
   });
 
-  it('migration 003 creates supervisor tables and indexes', async () => {
+  it('migration 003 creates supervisor tables and composite integrity indexes', async () => {
     const { runMigrations } = await import('./db');
     const db = new Database(dbPath);
     runMigrations(db);
@@ -88,8 +88,10 @@ describe('runMigrations', () => {
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>;
     expect(indexes.map((item) => item.name)).toEqual(
       expect.arrayContaining([
+        'idx_sessions_id_workspace',
         'idx_supervisors_workspace',
         'idx_supervisors_session',
+        'idx_supervisors_id_session',
         'idx_supervisor_cycles_supervisor',
         'idx_supervisor_cycles_session',
       ])

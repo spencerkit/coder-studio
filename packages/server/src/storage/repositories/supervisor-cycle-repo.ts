@@ -19,6 +19,15 @@ interface SupervisorCycleRow {
   completed_at: number | null;
 }
 
+export interface SupervisorCycleUpdatePatch {
+  status?: SupervisorCycle['status'];
+  progress?: number | null;
+  result?: string | null;
+  injectedGuidance?: string | null;
+  errorReason?: string | null;
+  completedAt?: number | null;
+}
+
 export class SupervisorCycleRepo {
   constructor(private readonly db: Database.Database) {}
 
@@ -59,25 +68,48 @@ export class SupervisorCycleRepo {
     return rows.map((row) => this.rowToCycle(row));
   }
 
-  update(id: string, patch: Partial<SupervisorCycle>): SupervisorCycle {
-    this.db.prepare(
-      `UPDATE supervisor_cycles
-       SET status = COALESCE(@status, status),
-           progress = COALESCE(@progress, progress),
-           result = COALESCE(@result, result),
-           injected_guidance = COALESCE(@injectedGuidance, injected_guidance),
-           error_reason = COALESCE(@errorReason, error_reason),
-           completed_at = COALESCE(@completedAt, completed_at)
-       WHERE id = @id`
-    ).run({
-      id,
-      status: patch.status ?? null,
-      progress: patch.progress ?? null,
-      result: patch.result ?? null,
-      injectedGuidance: patch.injectedGuidance ?? null,
-      errorReason: patch.errorReason ?? null,
-      completedAt: patch.completedAt ?? null,
-    });
+  update(id: string, patch: SupervisorCycleUpdatePatch): SupervisorCycle {
+    const assignments: string[] = [];
+    const params: Record<string, number | string | null> = { id };
+
+    if (patch.status !== undefined) {
+      assignments.push('status = @status');
+      params.status = patch.status;
+    }
+    if (patch.progress !== undefined) {
+      assignments.push('progress = @progress');
+      params.progress = patch.progress;
+    }
+    if (patch.result !== undefined) {
+      assignments.push('result = @result');
+      params.result = patch.result;
+    }
+    if (patch.injectedGuidance !== undefined) {
+      assignments.push('injected_guidance = @injectedGuidance');
+      params.injectedGuidance = patch.injectedGuidance;
+    }
+    if (patch.errorReason !== undefined) {
+      assignments.push('error_reason = @errorReason');
+      params.errorReason = patch.errorReason;
+    }
+    if (patch.completedAt !== undefined) {
+      assignments.push('completed_at = @completedAt');
+      params.completedAt = patch.completedAt;
+    }
+
+    if (assignments.length === 0) {
+      const existing = this.findById(id);
+      if (!existing) {
+        throw new Error(`Supervisor cycle not found: ${id}`);
+      }
+      return existing;
+    }
+
+    const result = this.db.prepare(`UPDATE supervisor_cycles SET ${assignments.join(', ')} WHERE id = @id`).run(params);
+
+    if (result.changes === 0) {
+      throw new Error(`Supervisor cycle not found: ${id}`);
+    }
 
     return this.findById(id)!;
   }

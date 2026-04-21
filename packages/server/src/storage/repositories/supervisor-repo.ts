@@ -29,6 +29,16 @@ export interface NewSupervisor {
   updatedAt: number;
 }
 
+export interface SupervisorUpdatePatch {
+  state?: SupervisorState;
+  objective?: string;
+  evaluatorProviderId?: string;
+  lastCycleAt?: number | null;
+  lastEvaluatedTurnId?: string | null;
+  errorReason?: string | null;
+  updatedAt?: number;
+}
+
 export class SupervisorRepo {
   constructor(private readonly db: Database.Database) {}
 
@@ -68,27 +78,43 @@ export class SupervisorRepo {
     return rows.map((row) => this.rowToSupervisor(row));
   }
 
-  update(id: string, patch: Partial<NewSupervisor>): Supervisor {
-    this.db.prepare(
-      `UPDATE supervisors
-       SET state = COALESCE(@state, state),
-           objective = COALESCE(@objective, objective),
-           evaluator_provider_id = COALESCE(@evaluatorProviderId, evaluator_provider_id),
-           last_cycle_at = COALESCE(@lastCycleAt, last_cycle_at),
-           last_evaluated_turn_id = COALESCE(@lastEvaluatedTurnId, last_evaluated_turn_id),
-           error_reason = @errorReason,
-           updated_at = @updatedAt
-       WHERE id = @id`
-    ).run({
+  update(id: string, patch: SupervisorUpdatePatch): Supervisor {
+    const assignments = ['updated_at = @updatedAt'];
+    const params: Record<string, number | string | null> = {
       id,
-      state: patch.state ?? null,
-      objective: patch.objective ?? null,
-      evaluatorProviderId: patch.evaluatorProviderId ?? null,
-      lastCycleAt: patch.lastCycleAt ?? null,
-      lastEvaluatedTurnId: patch.lastEvaluatedTurnId ?? null,
-      errorReason: patch.errorReason ?? null,
       updatedAt: patch.updatedAt ?? Date.now(),
-    });
+    };
+
+    if (patch.state !== undefined) {
+      assignments.push('state = @state');
+      params.state = patch.state;
+    }
+    if (patch.objective !== undefined) {
+      assignments.push('objective = @objective');
+      params.objective = patch.objective;
+    }
+    if (patch.evaluatorProviderId !== undefined) {
+      assignments.push('evaluator_provider_id = @evaluatorProviderId');
+      params.evaluatorProviderId = patch.evaluatorProviderId;
+    }
+    if (patch.lastCycleAt !== undefined) {
+      assignments.push('last_cycle_at = @lastCycleAt');
+      params.lastCycleAt = patch.lastCycleAt;
+    }
+    if (patch.lastEvaluatedTurnId !== undefined) {
+      assignments.push('last_evaluated_turn_id = @lastEvaluatedTurnId');
+      params.lastEvaluatedTurnId = patch.lastEvaluatedTurnId;
+    }
+    if (patch.errorReason !== undefined) {
+      assignments.push('error_reason = @errorReason');
+      params.errorReason = patch.errorReason;
+    }
+
+    const result = this.db.prepare(`UPDATE supervisors SET ${assignments.join(', ')} WHERE id = @id`).run(params);
+
+    if (result.changes === 0) {
+      throw new Error(`Supervisor not found: ${id}`);
+    }
 
     return this.findById(id)!;
   }
