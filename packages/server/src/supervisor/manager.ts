@@ -9,6 +9,7 @@ import type {
   SupervisorCycle,
   SupervisorState,
   CycleStatus,
+  CycleTrigger,
 } from '@coder-studio/core';
 import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from '../ws/hub.js';
@@ -176,6 +177,13 @@ export class SupervisorManager {
    * Trigger manual evaluation cycle
    */
   async triggerEvaluation(id: string): Promise<SupervisorCycle> {
+    return this.createQueuedCycle(id, 'manual');
+  }
+
+  private async createQueuedCycle(
+    id: string,
+    trigger: CycleTrigger
+  ): Promise<SupervisorCycle> {
     const supervisor = this.supervisors.get(id);
     if (!supervisor) {
       throw new Error(`Supervisor not found: ${id}`);
@@ -187,7 +195,7 @@ export class SupervisorManager {
       sessionId: supervisor.sessionId,
       supervisorId: id,
       status: 'queued',
-      trigger: 'manual',
+      trigger,
       evidenceSource: 'terminal_fallback',
       objective: supervisor.objective,
       evaluatorProviderId: supervisor.evaluatorProviderId,
@@ -307,7 +315,7 @@ export class SupervisorManager {
     }
 
     // Create cycle
-    const cycle = await this.triggerEvaluation(supervisorId);
+    const cycle = await this.createQueuedCycle(supervisorId, 'turn_completed');
 
     try {
       // Update cycle to evaluating
