@@ -1,55 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { EventBus } from '../bus/event-bus.js';
 import { SupervisorScheduler } from './scheduler.js';
 
 describe('SupervisorScheduler', () => {
-  let scheduler: SupervisorScheduler;
-  let onTick: ReturnType<typeof vi.fn>;
+  it('only reacts to session.lifecycle turn_completed', () => {
+    const eventBus = new EventBus();
+    const onTurnCompleted = vi.fn();
+    const scheduler = new SupervisorScheduler({ eventBus, onTurnCompleted });
 
-  beforeEach(() => {
-    vi.useFakeTimers();
-    onTick = vi.fn();
-    scheduler = new SupervisorScheduler(onTick);
-  });
+    scheduler.start();
+    eventBus.emit({
+      type: 'session.lifecycle',
+      workspaceId: 'ws-1',
+      sessionId: 'sess-1',
+      event: 'started',
+    });
+    eventBus.emit({
+      type: 'session.lifecycle',
+      workspaceId: 'ws-1',
+      sessionId: 'sess-1',
+      event: 'turn_completed',
+    });
 
-  afterEach(() => {
-    scheduler.stopAll();
-    vi.useRealTimers();
-  });
-
-  it('calls onTick at the specified interval', () => {
-    scheduler.start('sup-1', 1000);
-    expect(onTick).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1000);
-    expect(onTick).toHaveBeenCalledWith('sup-1');
-    expect(onTick).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(1000);
-    expect(onTick).toHaveBeenCalledTimes(2);
-  });
-
-  it('stops a specific schedule', () => {
-    scheduler.start('sup-1', 1000);
-    scheduler.stop('sup-1');
-
-    vi.advanceTimersByTime(5000);
-    expect(onTick).not.toHaveBeenCalled();
-  });
-
-  it('stops all schedules', () => {
-    scheduler.start('sup-1', 1000);
-    scheduler.start('sup-2', 2000);
-    scheduler.stopAll();
-
-    vi.advanceTimersByTime(5000);
-    expect(onTick).not.toHaveBeenCalled();
-  });
-
-  it('does not duplicate schedules for the same supervisor', () => {
-    scheduler.start('sup-1', 1000);
-    scheduler.start('sup-1', 1000);
-
-    vi.advanceTimersByTime(1000);
-    expect(onTick).toHaveBeenCalledTimes(1);
+    expect(onTurnCompleted).toHaveBeenCalledTimes(1);
+    expect(onTurnCompleted).toHaveBeenCalledWith('sess-1');
   });
 });

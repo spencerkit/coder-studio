@@ -1,48 +1,109 @@
-import { describe, it, expect, vi } from 'vitest';
-import { evaluateProgress, type EvaluationResult } from './evaluator.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SupervisorEvaluator } from './evaluator.js';
 
-// Mock the Anthropic SDK
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class MockAnthropic {
-    messages = {
-      create: vi.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              progress: 50,
-              summary: 'Test is progressing',
-              shouldInject: false,
-            }),
-          },
-        ],
-      }),
-    };
-  },
-}));
-
-describe('evaluateProgress', () => {
-  it('returns evaluation result with progress percentage', async () => {
-    const result = await evaluateProgress(
-      'Complete the login feature',
-      'Last 10 lines of terminal output...',
-      'diff --git a/login.ts'
-    );
-
-    expect(result).toHaveProperty('progress');
-    expect(result).toHaveProperty('summary');
-    expect(result).toHaveProperty('shouldInject');
-    expect(typeof result.progress).toBe('number');
-    expect(result.progress).toBeGreaterThanOrEqual(0);
-    expect(result.progress).toBeLessThanOrEqual(100);
+describe('SupervisorEvaluator', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
   });
 
-  it('returns shouldInject=false when progress is adequate', async () => {
-    const result = await evaluateProgress(
-      'Complete the login feature',
-      'Login feature implemented successfully'
+  it('uses supervisor.evaluatorProviderId instead of the session provider', async () => {
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [
+        {
+          id: 'codex',
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: [
+              'node',
+              '-e',
+              `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 60, summary: 'codex evaluator', shouldInject: false, confidence: 0.9 }))})`,
+            ],
+            cwd: process.cwd(),
+            env: {},
+          })),
+        },
+      ] as any,
+      providerConfigRepo: {
+        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
+      } as any,
+      timeoutMs: 5000,
+    });
+
+    const result = await evaluator.evaluate(
+      {
+        id: 'sup-1',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        state: 'idle',
+        objective: 'Finish the evaluator runner',
+        evaluatorProviderId: 'codex',
+        cycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        objective: 'Finish the evaluator runner',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        workspacePath: process.cwd(),
+        sessionProviderId: 'claude',
+        evaluatorProviderId: 'codex',
+        sessionState: 'running',
+        evidenceSource: 'terminal_fallback',
+        terminalExcerpt: 'build passes',
+      }
     );
 
-    expect(result.shouldInject).toBe(false);
+    expect(result.summary).toBe('codex evaluator');
+    expect(result.progress).toBe(60);
+  });
+
+  it('falls back to provider.defaultConfig when evaluator config is missing', async () => {
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [
+        {
+          id: 'claude',
+          defaultConfig: { model: 'claude-sonnet-4-6', additionalArgs: [], envVars: {} },
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: [
+              'node',
+              '-e',
+              `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 25, summary: 'default config used', shouldInject: false, confidence: 0.4 }))})`,
+            ],
+            cwd: process.cwd(),
+            env: {},
+          })),
+        },
+      ] as any,
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+      timeoutMs: 5000,
+    });
+
+    const result = await evaluator.evaluate(
+      {
+        id: 'sup-1',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        state: 'idle',
+        objective: 'Finish the evaluator runner',
+        evaluatorProviderId: 'claude',
+        cycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        objective: 'Finish the evaluator runner',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        workspacePath: process.cwd(),
+        sessionProviderId: 'codex',
+        evaluatorProviderId: 'claude',
+        sessionState: 'running',
+        evidenceSource: 'terminal_fallback',
+        terminalExcerpt: 'build passes',
+      }
+    );
+
+    expect(result.summary).toBe('default config used');
+    expect(result.progress).toBe(25);
   });
 });

@@ -1,0 +1,112 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { dispatch } from '../ws/dispatch.js';
+import { createServer, type Server } from '../server.js';
+
+describe('Supervisor integration', () => {
+  let server: Server;
+
+  beforeEach(async () => {
+    server = await createServer({
+      dataDir: ':memory:',
+      host: '127.0.0.1',
+      port: 0,
+    } as any);
+
+    const ctx = server.__test__!.commandContext;
+
+    ctx.db
+      .prepare(
+        'INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .run('ws-1', process.cwd(), 'native', 1, 1, '{}');
+    ctx.db
+      .prepare(
+        'INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run('term-1', 'ws-1', 'agent', process.cwd(), '[]', 120, 30, 1);
+    ctx.db
+      .prepare(
+        'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run('sess-1', 'ws-1', 'term-1', 'claude', null, 'full', 'running', 1, 1);
+
+    ctx.workspaceMgr.get = () => ({ id: 'ws-1', path: process.cwd() });
+    ctx.sessionMgr.get = () => ({
+      id: 'sess-1',
+      workspaceId: 'ws-1',
+      terminalId: 'term-1',
+      providerId: 'claude',
+      state: 'running',
+      capability: 'full',
+      startedAt: 1,
+      lastActiveAt: 1,
+      transcriptPath: undefined,
+    });
+
+    (ctx.supervisorMgr as any).deps.providerConfigRepo.get = () => ({
+      model: 'claude-sonnet-4-6',
+      additionalArgs: [],
+      envVars: {},
+    });
+    (ctx.supervisorMgr as any).contextBuilder = {
+      build: async () => ({
+        objective: 'Verify end-to-end persistence',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        workspacePath: process.cwd(),
+        sessionProviderId: 'claude',
+        evaluatorProviderId: 'claude',
+        sessionState: 'running',
+        transcriptExcerpt: 'assistant: built the persistent supervisor repos',
+        evidenceSource: 'transcript',
+        lastTurnId: 'turn-1',
+      }),
+    };
+    (ctx.supervisorMgr as any).evaluator = {
+      evaluate: async () => ({
+        progress: 30,
+        summary: 'manual trigger works',
+        shouldInject: false,
+        confidence: 0.7,
+      }),
+    };
+  });
+
+  afterEach(async () => {
+    await server.stop();
+  });
+
+  it('creates a cycle on manual trigger and persists it into supervisor.get', async () => {
+    const ctx = server.__test__!.commandContext;
+
+    const created = await ctx.supervisorMgr.create({
+      sessionId: 'sess-1',
+      workspaceId: 'ws-1',
+      objective: 'Verify end-to-end persistence',
+      evaluatorProviderId: 'claude',
+    });
+
+    const cycle = await ctx.supervisorMgr.triggerEvaluation(created.id);
+    const fetched = await dispatch<{ supervisor: any | null }>(
+      {
+        kind: 'command',
+        id: 'cmd-supervisor-get',
+        op: 'supervisor.get',
+        args: { sessionId: 'sess-1' },
+      },
+      ctx
+    );
+
+    expect(cycle.status).toBe('completed');
+    expect(cycle.result).toBe('manual trigger works');
+    expect(fetched.ok).toBe(true);
+    expect(fetched.data?.supervisor?.cycles).toHaveLength(1);
+    expect(fetched.data?.supervisor?.cycles[0]).toEqual(
+      expect.objectContaining({
+        trigger: 'manual',
+        progress: 30,
+        result: 'manual trigger works',
+      })
+    );
+  });
+});
