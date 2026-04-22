@@ -102,6 +102,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const fitFrameRef = useRef<number | null>(null);
   const interactiveRef = useRef(true);
+  const lastReportedSizeRef = useRef<{ cols: number; rows: number } | null>(null);
 
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -156,6 +157,32 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     [terminalId, dispatch]
   );
 
+  const handleResize = useCallback(
+    async ({ cols, rows }: { cols: number; rows: number }) => {
+      if (!interactiveRef.current) {
+        return;
+      }
+
+      const previousSize = lastReportedSizeRef.current;
+      if (previousSize && previousSize.cols === cols && previousSize.rows === rows) {
+        return;
+      }
+
+      lastReportedSizeRef.current = { cols, rows };
+
+      const result = await dispatch('terminal.resize', {
+        terminalId,
+        cols,
+        rows,
+      });
+
+      if (!result.ok) {
+        console.error('Failed to sync terminal size:', result.error);
+      }
+    },
+    [terminalId, dispatch]
+  );
+
   /**
    * Ensure terminal meta is initialized on mount if not yet set by WS event.
    * This handles the case where XtermHost mounts before the terminal.created event arrives.
@@ -190,6 +217,10 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     // Create FitAddon
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+
+    terminal.onResize((size) => {
+      void handleResize(size);
+    });
 
     // Open terminal in container
     terminal.open(containerRef.current);
@@ -270,7 +301,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         fitAddonRef.current = null;
       }
     };
-  }, [terminalId, workspaceId, wsClient, handleInput, setOutputAtom, scheduleFit, isInteractive]);
+  }, [terminalId, workspaceId, wsClient, handleInput, handleResize, setOutputAtom, scheduleFit, isInteractive]);
 
   /**
    * Write new output chunks to terminal

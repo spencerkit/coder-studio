@@ -15,6 +15,7 @@ import { wsClientAtom } from '../../../atoms/connection';
 const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
+  onResize: vi.fn(() => vi.fn()),
   write: vi.fn(),
   writeln: vi.fn(),
   dispose: vi.fn(),
@@ -298,6 +299,33 @@ describe('XtermHost', () => {
       terminalId: 'submit-terminal',
       bytes: Buffer.from('\r', 'utf8').toString('base64'),
       activity: 'submit',
+    });
+  });
+
+  it('syncs xterm resize events back to the server PTY', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="resize-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onResizeCallback = mockTerminal.onResize.mock.calls[0]?.[0];
+    expect(onResizeCallback).toBeTypeOf('function');
+
+    await onResizeCallback?.({ cols: 132, rows: 36 });
+
+    expect(sendCommand).toHaveBeenCalledWith('terminal.resize', {
+      terminalId: 'resize-terminal',
+      cols: 132,
+      rows: 36,
     });
   });
 });

@@ -2,8 +2,21 @@
  * Terminal Commands
  */
 
+import { basename } from 'node:path';
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
+
+function resolveShellCommand(): { argv: string[]; title: string } {
+  const shellPath =
+    process.platform === 'win32'
+      ? process.env.ComSpec || process.env.COMSPEC || 'cmd.exe'
+      : process.env.SHELL || '/bin/bash';
+
+  return {
+    argv: [shellPath],
+    title: basename(shellPath) || shellPath,
+  };
+}
 
 // terminal.list
 registerCommand(
@@ -33,11 +46,14 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
+    const shell = resolveShellCommand();
+
     // Create shell terminal
     const terminal = ctx.terminalMgr.create({
       workspaceId: args.workspaceId,
       kind: 'shell',
-      argv: ['/bin/bash'], // TODO: Use appropriate shell for platform
+      argv: shell.argv,
+      title: shell.title,
       cwd: workspace.path,
       cols: args.cols ?? 120,
       rows: args.rows ?? 30,
