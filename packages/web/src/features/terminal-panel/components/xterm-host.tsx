@@ -19,6 +19,20 @@ import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../../atoms/terminals';
 import { encodeUtf8ToBase64 } from '../../../lib/base64';
 
+type TerminalInputActivity = 'typing' | 'submit' | 'system';
+
+function classifyTerminalInput(data: string): TerminalInputActivity {
+  if (data === '\x1b[I' || data === '\x1b[O') {
+    return 'system';
+  }
+
+  if (data.includes('\r') || data.includes('\n')) {
+    return 'submit';
+  }
+
+  return 'typing';
+}
+
 /**
  * Aurora Mint theme for xterm.js
  * Matches design tokens from tokens.css
@@ -132,6 +146,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       const result = await dispatch('terminal.input', {
         terminalId,
         bytes: encodeUtf8ToBase64(data),
+        activity: classifyTerminalInput(data),
       });
 
       if (!result.ok) {

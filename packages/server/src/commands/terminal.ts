@@ -86,10 +86,12 @@ registerCommand(
   z.object({
     terminalId: z.string(),
     bytes: z.string(), // Base64 encoded
+    activity: z.enum(['typing', 'submit', 'system']).optional(),
   }),
   async (args, ctx) => {
     const buffer = Buffer.from(args.bytes, 'base64');
     ctx.terminalMgr.write(args.terminalId, buffer);
+    ctx.sessionMgr.onTerminalInput(args.terminalId, args.activity);
   }
 );
 

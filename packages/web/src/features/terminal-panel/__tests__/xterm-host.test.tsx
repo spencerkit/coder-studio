@@ -243,6 +243,61 @@ describe('XtermHost', () => {
     expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
       terminalId: 'stdin-terminal',
       bytes: Buffer.from('你好，终端', 'utf8').toString('base64'),
+      activity: 'typing',
+    });
+  });
+
+  it('marks focus reporting bytes as system activity before dispatching', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="focus-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('\x1b[I');
+
+    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
+      terminalId: 'focus-terminal',
+      bytes: Buffer.from('\x1b[I', 'utf8').toString('base64'),
+      activity: 'system',
+    });
+  });
+
+  it('marks enter key input as submit activity before dispatching', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="submit-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('\r');
+
+    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
+      terminalId: 'submit-terminal',
+      bytes: Buffer.from('\r', 'utf8').toString('base64'),
+      activity: 'submit',
     });
   });
 });

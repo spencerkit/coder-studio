@@ -87,6 +87,7 @@ describe('SessionCard', () => {
       expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
         terminalId: 'term-cn',
         bytes: Buffer.from('你好，Codex\n', 'utf8').toString('base64'),
+        activity: 'submit',
       });
     });
   });
@@ -121,6 +122,7 @@ describe('SessionCard', () => {
       expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
         terminalId: 'term-ime',
         bytes: Buffer.from('你好\n', 'utf8').toString('base64'),
+        activity: 'submit',
       });
     });
   });

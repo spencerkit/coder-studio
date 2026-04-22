@@ -351,6 +351,7 @@ describe('Session Integration', () => {
           args: {
             terminalId,
             bytes: btoa('Hello Agent\n'),
+            activity: 'submit',
           },
         },
         ctx
@@ -386,6 +387,7 @@ describe('Session Integration', () => {
           args: {
             terminalId: 'non-existent-terminal',
             bytes: btoa('test\n'),
+            activity: 'submit',
           },
         },
         ctx
@@ -498,6 +500,111 @@ describe('Session Integration', () => {
       // Note: resume might fail in test without proper setup
       // but we verify the command is dispatched correctly
       expect(result.ok).toBeDefined();
+    });
+  });
+
+  describe('Idle state transitions', () => {
+    let workspaceId: string;
+    let sessionId: string;
+    let terminalId: string;
+
+    beforeEach(async () => {
+      const openResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'setup-idle-1',
+          op: 'workspace.open',
+          args: { path: testDir },
+        },
+        ctx
+      );
+
+      workspaceId = openResult.data!.id;
+
+      const sessionResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'setup-idle-2',
+          op: 'session.create',
+          args: {
+            workspaceId,
+            providerId: 'codex',
+          },
+        },
+        ctx
+      );
+
+      sessionId = sessionResult.data!.id;
+      terminalId = sessionResult.data!.terminalId;
+    });
+
+    it('moves a session to idle when a turn completes', () => {
+      sessionMgr.onHookEvent(sessionId, {
+        kind: 'TurnCompleted',
+        resumeId: 'resume-1',
+        turnId: 'turn-1',
+      });
+
+      const session = sessionMgr.get(sessionId);
+      expect(session?.state).toBe('idle');
+    });
+
+    it('moves a session to idle when a stop hook marks the turn complete', () => {
+      sessionMgr.onHookEvent(sessionId, {
+        kind: 'SessionStart',
+        resumeId: 'resume-1',
+      });
+
+      sessionMgr.onHookEvent(sessionId, {
+        kind: 'Stop',
+      });
+
+      const session = sessionMgr.get(sessionId);
+      expect(session?.state).toBe('idle');
+    });
+
+    it('does not move an idle session back to running on typing input', async () => {
+      const internalSession = (sessionMgr as any).sessions.get(sessionId);
+      internalSession.state = 'idle';
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'idle-test-input',
+          op: 'terminal.input',
+          args: {
+            terminalId,
+            bytes: btoa('next turn\n'),
+            activity: 'typing',
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(sessionMgr.get(sessionId)?.state).toBe('idle');
+    });
+
+    it('moves an idle session back to running when the user submits input', async () => {
+      const internalSession = (sessionMgr as any).sessions.get(sessionId);
+      internalSession.state = 'idle';
+
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'idle-test-submit',
+          op: 'terminal.input',
+          args: {
+            terminalId,
+            bytes: btoa('next turn\n'),
+            activity: 'submit',
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(sessionMgr.get(sessionId)?.state).toBe('running');
     });
   });
 

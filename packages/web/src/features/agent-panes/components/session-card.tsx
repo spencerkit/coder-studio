@@ -74,6 +74,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     const result = await dispatch<void>('terminal.input', {
       terminalId: session.terminalId,
       bytes: encodeUtf8ToBase64(inputValue + '\n'),
+      activity: 'submit',
     });
 
     if (result.ok) {

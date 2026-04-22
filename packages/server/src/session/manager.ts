@@ -242,7 +242,9 @@ export class SessionManager {
 
       case 'TurnCompleted': {
         if (!session.resumeId) session.resumeId = event.resumeId;
-        if (session.state === 'starting') session.state = 'running';
+        if (session.state === 'starting' || session.state === 'running') {
+          session.state = 'idle';
+        }
 
         this.deps.db.update(sessionId, {
           resumeId: session.resumeId,
@@ -264,6 +266,13 @@ export class SessionManager {
       }
 
       case 'Stop':
+        if (session.state === 'starting' || session.state === 'running') {
+          session.state = 'idle';
+        }
+        this.deps.db.update(sessionId, {
+          state: session.state,
+        });
+
         // Session completed a turn
         this.deps.eventBus.emit({
           type: 'session.lifecycle', workspaceId: session.workspaceId,
@@ -317,6 +326,32 @@ export class SessionManager {
     return Array.from(this.sessions.values())
       .filter((s) => s.workspaceId === workspaceId)
       .map((s) => s.toDTO());
+  }
+
+  /**
+   * Mark a session as actively running again after a submitted message reaches its terminal.
+   */
+  onTerminalInput(
+    terminalId: string,
+    activity: 'typing' | 'submit' | 'system' = 'typing'
+  ): void {
+    for (const session of this.sessions.values()) {
+      if (session.terminalId !== terminalId) continue;
+      if (activity !== 'submit') return;
+      if (session.state !== 'idle' && session.state !== 'interrupted') return;
+
+      const prev = session.state;
+      session.state = 'running';
+      session.lastActiveAt = Date.now();
+
+      this.deps.db.update(session.id, {
+        state: 'running',
+        lastActiveAt: session.lastActiveAt,
+      });
+
+      this.emitStateChanged(session, prev, 'running');
+      return;
+    }
   }
 
   /**
