@@ -28,7 +28,9 @@ registerCommand(
   'settings.get',
   z.object({}),
   async (_args, ctx) => {
-    const row = ctx.db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>;
+    const row = ctx.db
+      .prepare('SELECT key, value FROM user_settings')
+      .all() as Array<{ key: string; value: string }>;
 
     const settings: Record<string, unknown> = {};
     for (const { key, value } of row) {
@@ -41,6 +43,16 @@ registerCommand(
 
     const hookRegistrations = ctx.hooksMgr.listRegistrations();
     settings.hookRegistrations = hookRegistrations;
+
+    // Surface config drift (Codex config.toml interfering settings) so the
+    // web UI can show a banner + cleanup action. Cheap to compute on every
+    // settings.get — it's a single file read + a couple regex passes.
+    try {
+      settings.externalConfigAudit = ctx.hooksMgr.auditExternalConfigs();
+    } catch {
+      // Never let a broken audit take down settings fetch.
+      settings.externalConfigAudit = null;
+    }
 
     return settings;
   }
@@ -58,17 +70,37 @@ registerCommand(
 
     // Update each setting
     const stmt = ctx.db.prepare(`
-      INSERT INTO settings (key, value, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      INSERT INTO user_settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `);
 
-    const now = Date.now();
     for (const [key, value] of Object.entries(flatSettings)) {
-      stmt.run(key, JSON.stringify(value), now);
+      stmt.run(key, JSON.stringify(value));
     }
 
     return { updated: Object.keys(flatSettings) };
+  }
+);
+
+// settings.cleanupCodexConfig — user opts in to removing interfering entries
+// from `~/.codex/config.toml`. A backup is written next to the file before
+// any mutation; the backup path is returned so the UI can show it.
+registerCommand(
+  'settings.cleanupCodexConfig',
+  z.object({
+    removeIds: z
+      .array(z.enum(['toml_notify', 'toml_codex_hooks']))
+      .min(1),
+  }),
+  async (args, ctx) => {
+    const result = ctx.hooksMgr.cleanupCodexConfig(args.removeIds);
+    return {
+      removed: result.removed,
+      backupPath: result.backupPath,
+      noop: result.noop,
+      audit: ctx.hooksMgr.auditExternalConfigs(),
+    };
   }
 );
 

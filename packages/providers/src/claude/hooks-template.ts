@@ -1,4 +1,6 @@
 import type { HooksDescriptor, ManagedHooks, ProviderEvent } from '@coder-studio/core';
+import { homedir } from 'os';
+import { join } from 'path';
 
 /**
  * Claude Code hooks descriptor
@@ -11,9 +13,7 @@ export const claudeHooksDescriptor: HooksDescriptor = {
    * Resolve Claude's global config path
    */
   resolveGlobalConfigPath(): string {
-    // Will be implemented with actual path resolution
-    // ~/.claude/settings.json
-    return '';
+    return join(homedir(), '.claude', 'settings.json');
   },
 
   /**
@@ -50,7 +50,12 @@ export const claudeHooksDescriptor: HooksDescriptor = {
         {
           _cs_managed: true,
           _cs_version: 'cs-v1',
-          command: managed.commands.SessionStart,
+          hooks: [
+            {
+              type: 'command',
+              command: managed.commands.SessionStart,
+            },
+          ],
         },
       ];
     }
@@ -61,7 +66,12 @@ export const claudeHooksDescriptor: HooksDescriptor = {
         {
           _cs_managed: true,
           _cs_version: 'cs-v1',
-          command: managed.commands.Stop,
+          hooks: [
+            {
+              type: 'command',
+              command: managed.commands.Stop,
+            },
+          ],
         },
       ];
     }
@@ -189,8 +199,24 @@ function extractManagedFromHookArray(
     }
 
     const h = hook as Record<string, unknown>;
-    if (h._cs_managed && typeof h.command === 'string') {
-      return { command: h.command };
+    if (!h._cs_managed) {
+      continue;
+    }
+
+    const nestedHooks = h.hooks;
+    if (!Array.isArray(nestedHooks)) {
+      continue;
+    }
+
+    for (const nested of nestedHooks) {
+      if (!nested || typeof nested !== 'object') {
+        continue;
+      }
+
+      const nestedHook = nested as Record<string, unknown>;
+      if (nestedHook.type === 'command' && typeof nestedHook.command === 'string') {
+        return { command: nestedHook.command };
+      }
     }
   }
 

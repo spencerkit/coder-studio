@@ -4,7 +4,21 @@ import type { ServerConfig } from '../config.js';
 const AUTH_COOKIE_NAME = 'coder_studio_auth';
 
 const isPublicPath = (path: string) => {
-  return path === '/healthz' || path === '/ws' || path === '/auth/status' || path.startsWith('/assets/') || path.startsWith('/@') || path === '/favicon.ico';
+  // `/internal/hooks/*` is called by the per-provider bridge scripts
+  // (Claude `~/.claude/settings.json` SessionStart hook, Codex `-c notify=...`
+  // payload). Those scripts don't carry the auth cookie but do authenticate
+  // via the per-process token in `~/.coder-studio/runtime.json`, enforced by
+  // `registerHooksEndpoint`. The endpoint is additionally bound to localhost
+  // only, so skipping the cookie guard here does not widen the attack surface.
+  return (
+    path === '/healthz' ||
+    path === '/ws' ||
+    path === '/auth/status' ||
+    path.startsWith('/assets/') ||
+    path.startsWith('/@') ||
+    path === '/favicon.ico' ||
+    path.startsWith('/internal/hooks/')
+  );
 };
 
 const parseCookies = (cookieHeader?: string) => {

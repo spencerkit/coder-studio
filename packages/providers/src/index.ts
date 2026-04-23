@@ -17,6 +17,7 @@ export { parseClaudeEvent } from './claude/event-parser.js';
 export { claudeHooksDescriptor } from './claude/hooks-template.js';
 
 // Codex-specific exports
+export { codexConfigSchema, type CodexConfig } from './codex/config-schema.js';
 export {
   extractSessionId,
   detectIdlePrompt,

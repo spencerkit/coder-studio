@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
 import type { HooksDescriptor, ManagedHooks } from '@coder-studio/core';
 
@@ -80,7 +80,6 @@ export function mergeWriteConfig(
     writeFileSync(tempPath, JSON.stringify(mergedConfig, null, 2), 'utf-8');
 
     // Rename temp to final (atomic on most filesystems)
-    const { renameSync } = require('fs');
     renameSync(tempPath, configPath);
 
     return { success: true, backupPath };

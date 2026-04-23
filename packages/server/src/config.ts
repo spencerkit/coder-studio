@@ -23,6 +23,22 @@ export interface ServerConfig {
     enabled: boolean;
     password?: string;
   };
+  /**
+   * Whether to persist the per-process runtime handshake ({port, token,
+   * serverInstanceId, startedAt}) to `~/.coder-studio/runtime.json`.
+   *
+   * The bridge scripts deployed into Claude/Codex global configs read this
+   * file to locate the running server and authenticate hook events. It must
+   * be `true` for the hook chain (SessionStart, agent-turn-complete, …) to
+   * work end-to-end.
+   *
+   * Tests set it to `false` to avoid racing on the shared `~/.coder-studio/`
+   * directory when multiple `createServer` instances run in parallel.
+   *
+   * Defaults: `true` normally; `false` when the server is invoked from a
+   * vitest run (detected via VITEST/NODE_ENV=test).
+   */
+  writeRuntime: boolean;
 }
 
 /**
@@ -47,10 +63,14 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
   const noAuth = process.env.NO_AUTH === 'true';
   const password = process.env.AUTH_PASSWORD;
   const dataDir = resolveDbPath(overrides?.dataDir || process.env.DATA_DIR);
+  const isTestRun =
+    process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
+  // NOTE: use `??` on port so callers can pass 0 to request an
+  // OS-assigned port. `||` would silently fall through to 3000 for port=0.
   return {
     host: overrides?.host || process.env.HOST || 'localhost',
-    port: overrides?.port || parseInt(process.env.PORT || '3000', 10),
+    port: overrides?.port ?? parseInt(process.env.PORT || '3000', 10),
     dataDir,
     runtimeDir: overrides?.runtimeDir || process.env.RUNTIME_DIR || './runtime',
     logLevel: overrides?.logLevel || (process.env.LOG_LEVEL as any) || 'info',
@@ -59,6 +79,7 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
       enabled: !noAuth && !!password,
       password,
     },
+    writeRuntime: overrides?.writeRuntime ?? !isTestRun,
   };
 }
 

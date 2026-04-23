@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type {
   HooksDescriptor,
   LaunchContext,
@@ -9,28 +8,15 @@ import type {
   Session,
 } from '@coder-studio/core';
 
+import { codexConfigSchema, type CodexConfig } from './config-schema.js';
 import {
   idleDebounceMs,
   idlePromptPatterns,
   sessionIdPatterns,
 } from './stdout-heuristics.js';
 import { resolveCodexTranscriptPath } from './resolve-transcript.js';
-
-/**
- * Codex configuration schema
- */
-const codexConfigSchema = z.object({
-  // Additional CLI arguments
-  additionalArgs: z.array(z.string()).default([]),
-
-  // Environment variables
-  envVars: z.record(z.string()).default({}),
-
-  // Working directory override
-  cwd: z.string().optional(),
-});
-
-type CodexConfig = z.infer<typeof codexConfigSchema>;
+import { buildCodexSupervisorEvalCommand } from './supervisor-eval.js';
+import { readCodexTranscriptExcerpt } from './transcript-excerpt.js';
 
 /**
  * Codex hooks descriptor for full-capability mode.
@@ -164,6 +150,8 @@ export const codexDefinition: ProviderDefinition = {
 
   // Full mode: no resume support yet (Codex CLI may support it later)
   buildResumeCommand: undefined,
+  buildSupervisorEvalCommand: buildCodexSupervisorEvalCommand,
+  readTranscriptExcerpt: readCodexTranscriptExcerpt,
 
   // ===== Configuration =====
   configSchema: codexConfigSchema,

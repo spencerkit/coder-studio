@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { claudeHooksDescriptor } from './hooks-template.js';
 import type { ManagedHooks } from '@coder-studio/core';
+import { homedir } from 'os';
+import { join } from 'path';
 
 describe('Claude Hooks Descriptor', () => {
+  describe('resolveGlobalConfigPath', () => {
+    it('should point at ~/.claude/settings.json', () => {
+      expect(claudeHooksDescriptor.resolveGlobalConfigPath()).toBe(
+        join(homedir(), '.claude', 'settings.json')
+      );
+    });
+  });
+
   describe('mergeInto', () => {
     it('should create new config when existing is undefined', () => {
       const managed: ManagedHooks = {
@@ -48,6 +58,18 @@ describe('Claude Hooks Descriptor', () => {
       // Second should be managed
       expect((result as any).hooks.SessionStart[1]._cs_managed).toBe(true);
       expect((result as any).hooks.Stop[1]._cs_managed).toBe(true);
+      expect((result as any).hooks.SessionStart[1].hooks).toEqual([
+        {
+          type: 'command',
+          command: 'node /path/to/bridge SessionStart',
+        },
+      ]);
+      expect((result as any).hooks.Stop[1].hooks).toEqual([
+        {
+          type: 'command',
+          command: 'node /path/to/bridge Stop',
+        },
+      ]);
     });
 
     it('should replace old managed hooks', () => {
@@ -76,6 +98,12 @@ describe('Claude Hooks Descriptor', () => {
       expect((result as any).hooks.Stop).toHaveLength(1);
       expect((result as any).hooks.SessionStart[0]._cs_version).toBe('cs-v1');
       expect((result as any).hooks.Stop[0]._cs_version).toBe('cs-v1');
+      expect((result as any).hooks.SessionStart[0].hooks[0].command).toBe(
+        'node /new-bridge SessionStart'
+      );
+      expect((result as any).hooks.Stop[0].hooks[0].command).toBe(
+        'node /new-bridge Stop'
+      );
     });
 
     it('should not mutate existing config', () => {
@@ -104,10 +132,18 @@ describe('Claude Hooks Descriptor', () => {
       const config = {
         hooks: {
           SessionStart: [
-            { _cs_managed: true, _cs_version: 'cs-v1', command: 'bridge-cmd' },
+            {
+              _cs_managed: true,
+              _cs_version: 'cs-v1',
+              hooks: [{ type: 'command', command: 'bridge-start' }],
+            },
           ],
           Stop: [
-            { _cs_managed: true, _cs_version: 'cs-v1', command: 'bridge-cmd' },
+            {
+              _cs_managed: true,
+              _cs_version: 'cs-v1',
+              hooks: [{ type: 'command', command: 'bridge-stop' }],
+            },
           ],
         },
       };
@@ -115,8 +151,8 @@ describe('Claude Hooks Descriptor', () => {
       const result = claudeHooksDescriptor.extractManaged(config);
 
       expect(result).toBeDefined();
-      expect(result?.commands.SessionStart).toBe('bridge-cmd');
-      expect(result?.commands.Stop).toBe('bridge-cmd');
+      expect(result?.commands.SessionStart).toBe('bridge-start');
+      expect(result?.commands.Stop).toBe('bridge-stop');
     });
 
     it('should return null for non-managed config', () => {

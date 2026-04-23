@@ -16,7 +16,16 @@ import { SessionManager } from './session/manager.js';
 import { TerminalManager } from './terminal/manager.js';
 import { HooksManager } from './hooks/manager.js';
 import { getBridgeScriptPath } from './hooks/bridge.js';
+import {
+  deleteRuntimeConfig,
+  writeRuntimeConfig,
+  type RuntimeConfig,
+} from './hooks/runtime-json.js';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { HookRegistrationRepo } from './storage/repositories/hook-registration-repo.js';
+import { ProviderConfigRepo } from './storage/repositories/provider-config-repo.js';
+import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-repo.js';
+import { SupervisorRepo } from './storage/repositories/supervisor-repo.js';
 import { providerRegistry } from '@coder-studio/providers';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
@@ -41,6 +50,24 @@ export async function createServer(
 
   // Ensure data directory exists (production only)
   ensureDataDir(config);
+
+  // Runtime handshake: shared state between this server process and the
+  // per-provider bridge scripts (Claude SessionStart hook, Codex -c notify,
+  // …). Generated here, consumed by registerHooksEndpoint (for token check)
+  // and — if config.writeRuntime — persisted to ~/.coder-studio/runtime.json
+  // after `app.listen()` so bridge scripts can locate and authenticate us.
+  //
+  // Port is filled in post-listen (config.port may be 0 to let the OS pick).
+  // We mutate the same object instead of replacing it so that the endpoint
+  // registered in buildFastifyApp still sees the final port through its
+  // captured reference (not strictly required — the endpoint only reads
+  // `token` — but keeps the object truthful everywhere else).
+  const runtime: RuntimeConfig = {
+    port: config.port,
+    token: randomBytes(32).toString('hex'),
+    serverInstanceId: randomUUID(),
+    startedAt: Date.now(),
+  };
 
   // Infrastructure: Database
   const db = openDatabase(config.dataDir);
@@ -86,7 +113,7 @@ export async function createServer(
 
   const hooksMgr = new HooksManager(
     hookRegistrationRepo,
-    {} as any, // Runtime config - pre-existing stub
+    runtime,
     {
       sessionMgr,
       providerRegistry,
@@ -94,12 +121,54 @@ export async function createServer(
     }
   );
 
+  // Deploy per-provider bridge scripts and merge managed hook entries into
+  // each provider's global config. Without this, Claude's SessionStart hook
+  // never runs and Codex's `-c notify=[...]` points at a non-existent
+  // script — both providers' sessions would then be stuck in 'starting'.
+  //
+  // In tests we skip this (see ServerConfig.writeRuntime) to keep runs from
+  // racing on the shared `~/.claude/settings.json` + `~/.coder-studio/hooks`
+  // files. Tests that need the hook chain exercise HooksManager directly.
+  if (config.writeRuntime) {
+    try {
+      await hooksMgr.deployBridgeScripts(providerRegistry);
+    } catch (err) {
+      console.warn('Failed to deploy provider bridge scripts — hooks may not fire:', err);
+    }
+
+    // Warn (but don't modify) if the user's Codex config.toml has settings
+    // that would interfere with our `-c notify=` argv injection. The actual
+    // remediation is user-initiated via the `settings.cleanupCodexConfig`
+    // WS command — we never touch their TOML without consent.
+    try {
+      const audit = hooksMgr.auditExternalConfigs();
+      for (const finding of audit.codex.findings) {
+        console.warn(
+          `[codex-config] ${audit.codex.configPath}:${finding.startLine} ${finding.message}`
+        );
+      }
+    } catch (err) {
+      // Strictly best-effort: a broken audit must never block startup.
+      console.warn('Codex config audit failed (non-fatal):', err);
+    }
+  }
+
   // Supervisor Manager
+  const providerConfigRepo = new ProviderConfigRepo(db);
+  const supervisorRepo = new SupervisorRepo(db);
+  const cycleRepo = new SupervisorCycleRepo(db);
   const supervisorMgr = new SupervisorManager({
     eventBus,
     broadcaster: wsHub,
     terminalMgr,
+    workspaceMgr,
+    sessionMgr,
+    providerRegistry,
+    providerConfigRepo,
+    supervisorRepo,
+    cycleRepo,
   });
+  await supervisorMgr.hydrate();
 
   // Command context with all managers
   const commandContext: CommandContext = {
@@ -129,6 +198,7 @@ export async function createServer(
     commandContext,
     webRoot,
     config,
+    runtime,
   });
 
   // Start server
@@ -137,14 +207,49 @@ export async function createServer(
     port: config.port,
   });
 
-  console.log(`Server listening on http://${config.host}:${config.port}`);
+  // Resolve the real port before persisting runtime.json: callers may pass
+  // port 0 (tests, dev tooling) to let the OS pick a free port, and bridge
+  // scripts need the actual number to POST back.
+  const actualPort = extractListenPort(app) ?? config.port;
+  runtime.port = actualPort;
 
-  // Return server handle
+  if (config.writeRuntime) {
+    try {
+      writeRuntimeConfig(runtime);
+    } catch (err) {
+      // Non-fatal: server itself is up and the WS API keeps working. Hooks
+      // (SessionStart, agent-turn-complete) will silently no-op until the
+      // user resolves the disk issue, but that's strictly better than
+      // refusing to boot.
+      console.warn('Failed to write runtime.json — provider hooks will not reach the server:', err);
+    }
+  }
+
+  console.log(`Server listening on http://${config.host}:${actualPort}`);
+
+  let stopped = false;
+
   return {
     app,
     stop: async () => {
+      if (stopped) return;
+      stopped = true;
+
+      // Clean up the on-disk handshake first so any bridge script that
+      // spawns during shutdown silently no-ops instead of POSTing to a
+      // dying server (or worse, a next server instance with a different
+      // token listening on the same port).
+      if (config.writeRuntime) {
+        try {
+          deleteRuntimeConfig();
+        } catch {
+          // Best-effort cleanup; do not block shutdown on it.
+        }
+      }
+
       // Graceful shutdown in reverse order
       await app.close();
+      supervisorMgr.stop();
       terminalMgr.shutdown();
       wsHub.destroy();
       eventBus.clear();
@@ -153,6 +258,18 @@ export async function createServer(
     // Exposed for integration tests. Not part of the public API.
     __test__: { sessionMgr, hooksMgr, commandContext },
   };
+}
+
+/**
+ * Fastify hides the actual port on the underlying HTTP server; expose it
+ * safely without assuming a specific Node typing.
+ */
+function extractListenPort(app: FastifyInstance): number | undefined {
+  const address = app.server.address();
+  if (address && typeof address === 'object' && typeof address.port === 'number') {
+    return address.port;
+  }
+  return undefined;
 }
 
 /**

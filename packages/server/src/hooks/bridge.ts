@@ -55,7 +55,7 @@ try {
 }
 `}
 
-const event = process.argv[2] || body.type || "unknown";
+const event = ${isCodex ? `body.type || "unknown"` : `process.argv[2] || body.type || "unknown"`};
 
 const req = http.request({
   hostname: "127.0.0.1",

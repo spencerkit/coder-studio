@@ -25,7 +25,7 @@ describe('pane-layout-tree', () => {
     );
   });
 
-  it('removes closed session and collapses split to remaining pane', () => {
+  it('turns the closed session pane into a draft leaf while preserving split layout', () => {
     const layout: PaneNode = {
       id: 'root',
       type: 'split',
@@ -39,11 +39,15 @@ describe('pane-layout-tree', () => {
 
     const nextLayout = closePaneBySessionId(layout, 'sess_1');
 
-    // Closed pane is removed; split collapses to the remaining session pane
     expect(nextLayout).toEqual({
-      id: 'right',
-      type: 'leaf',
-      sessionId: 'sess_2',
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'left', type: 'leaf' },
+        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+      ],
     });
   });
 

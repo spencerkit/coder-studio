@@ -124,7 +124,7 @@ describe('SupervisorManager cycle triggers', () => {
     await manager.hydrate();
   });
 
-  it('queues manual triggerEvaluation cycles with manual trigger', async () => {
+  it('returns an in-flight cycle immediately on manual triggerEvaluation', async () => {
     const supervisor = await manager.create({
       sessionId: 'sess-manual',
       workspaceId: 'ws-1',
@@ -135,6 +135,20 @@ describe('SupervisorManager cycle triggers', () => {
     const cycle = await manager.triggerEvaluation(supervisor.id);
 
     expect(cycle.trigger).toBe('manual');
+    expect(cycle.status).toBe('evaluating');
+
+    // Wait for the background finishCycle to drain.
+    await waitFor(() => {
+      const current = manager.get(supervisor.id);
+      const latest = current?.cycles.find((c) => c.id === cycle.id);
+      if (!latest || latest.status === 'evaluating') {
+        throw new Error('cycle still in flight');
+      }
+    });
+
+    const finished = manager.get(supervisor.id)?.cycles.find((c) => c.id === cycle.id);
+    expect(finished?.status).toBe('completed');
+    expect(finished?.result).toBe('on track');
   });
 
   it('queues scheduler evaluations with turn_completed trigger', async () => {
@@ -150,5 +164,88 @@ describe('SupervisorManager cycle triggers', () => {
     const updated = manager.get(supervisor.id);
     expect(updated?.cycles).toHaveLength(1);
     expect(updated?.cycles[0]?.trigger).toBe('turn_completed');
+    expect(updated?.cycles[0]?.status).toBe('completed');
+  });
+
+  it('rejects manual triggerEvaluation when the session is still starting', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-starting',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    // Flip the session to "starting" — the real-world case where the provider
+    // CLI hasn't finished its first turn, so the injector cannot deliver
+    // guidance yet. We must fail fast instead of burning evaluator tokens.
+    deps.sessionMgr.get.mockImplementation((sessionId: string) => ({
+      id: sessionId,
+      terminalId: `term-${sessionId}`,
+      workspaceId: 'ws-1',
+      providerId: 'claude',
+      state: 'starting',
+      capability: 'full',
+      startedAt: 1,
+      lastActiveAt: 1,
+    }));
+
+    await expect(manager.triggerEvaluation(supervisor.id)).rejects.toMatchObject({
+      code: 'supervisor_session_not_ready',
+      message: expect.stringContaining('starting up'),
+    });
+
+    // No cycle should have been recorded, and no evaluator command should
+    // have been built — we bailed before either side-effect.
+    expect(manager.get(supervisor.id)?.cycles).toHaveLength(0);
+    const codexProvider = deps.providerRegistry.find((p) => p.id === 'codex');
+    expect(codexProvider?.buildSupervisorEvalCommand).not.toHaveBeenCalled();
+  });
+
+  it('marks orphaned cycles as failed during hydrate', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-orphan',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    // Simulate a cycle left behind by a crashed process: directly insert a
+    // "queued" cycle into the cycle repo and re-hydrate.
+    deps.cycleRepo.create({
+      id: 'legacy-queued',
+      supervisorId: supervisor.id,
+      sessionId: 'sess-orphan',
+      status: 'queued',
+      trigger: 'manual',
+      evidenceSource: 'terminal_fallback',
+      objective: supervisor.objective,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      createdAt: Date.now(),
+    });
+
+    await manager.hydrate();
+
+    const recovered = deps.cycleRepo.listRecentForSupervisor(supervisor.id, 10);
+    const legacy = recovered.find((c) => c.id === 'legacy-queued');
+    expect(legacy?.status).toBe('failed');
+    expect(legacy?.errorReason).toBeTruthy();
   });
 });
+
+async function waitFor(
+  fn: () => void,
+  { timeoutMs = 500, intervalMs = 5 } = {}
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      fn();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('waitFor timed out');
+}

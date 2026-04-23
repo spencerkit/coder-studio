@@ -3,10 +3,7 @@
  */
 
 import { execFile } from 'child_process';
-import { promisify } from 'util';
 import type { GitStatus, GitFileChange } from '@coder-studio/core';
-
-const execFileAsync = promisify(execFile);
 
 export interface GitCommandResult {
   stdout: string;
@@ -61,8 +58,8 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
   let behind = 0;
   const aheadBehindMatch = statusOutput.match(/branch\.ab \+(\d+) -(\d+)/);
   if (aheadBehindMatch) {
-    ahead = parseInt(aheadBehindMatch[1], 10);
-    behind = parseInt(aheadBehindMatch[2], 10);
+    ahead = parseInt(aheadBehindMatch[1] ?? '0', 10);
+    behind = parseInt(aheadBehindMatch[2] ?? '0', 10);
   }
 
   // Parse file changes
@@ -78,6 +75,9 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
       const parts = line.split(' ');
       const xy = parts[1];
       const path = parts[parts.length - 1];
+      if (!xy || !path) {
+        continue;
+      }
 
       const x = xy[0]; // Staged status
       const y = xy[1]; // Unstaged status
@@ -108,6 +108,22 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
     untracked,
     deleted,
   };
+}
+
+/**
+ * Get compact git status text for supervisor evaluation prompts.
+ */
+export async function getGitStatusSummary(cwd: string): Promise<string> {
+  const { stdout } = await runGit(cwd, ['status', '--short']);
+  return stdout.trim();
+}
+
+/**
+ * Get compact git diff stats for supervisor evaluation prompts.
+ */
+export async function getGitDiffStatSummary(cwd: string): Promise<string> {
+  const { stdout } = await runGit(cwd, ['diff', '--stat']);
+  return stdout.trim();
 }
 
 /**
@@ -142,7 +158,7 @@ export async function commitChanges(cwd: string, message: string): Promise<{ sha
 
   // Extract SHA from output
   const match = stdout.match(/\[.* ([a-f0-9]+)\]/);
-  const sha = match ? match[1] : '';
+  const sha = match?.[1] ?? '';
 
   return { sha };
 }

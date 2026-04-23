@@ -70,6 +70,24 @@ export const themeAtom = atomWithStorage<'dark' | 'light'>('ui.theme', 'dark');
 export const localeAtom = atomWithStorage<string>('ui.locale', 'zh');
 
 /**
+ * Notification preferences
+ * Persisted so the notification engine can respect the latest settings
+ * even before the user re-opens Settings.
+ */
+export interface NotificationPreferences {
+  enabled: boolean;
+  onlyWhenBackgrounded: boolean;
+}
+
+export const notificationPreferencesAtom = atomWithStorage<NotificationPreferences>(
+  'ui.notificationPreferences',
+  {
+    enabled: true,
+    onlyWhenBackgrounded: true,
+  }
+);
+
+/**
  * Auth state
  * Persisted: ui.authenticated
  */

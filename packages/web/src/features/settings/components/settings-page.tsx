@@ -5,14 +5,20 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard, Server } from 'lucide-react';
-import { localeAtom, themeAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
+import {
+  localeAtom,
+  themeAtom,
+  activeWorkspaceIdAtom,
+  notificationPreferencesAtom,
+} from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { McpSettings } from './mcp-settings';
+import { ConfigDriftBanner } from '../../config-drift-banner';
 
 type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts' | 'mcp';
 
@@ -35,6 +41,7 @@ interface ProviderInfo {
  */
 export function SettingsPage() {
   const t = useTranslation();
+  const settingsLoadFailedUnknown = t('settings.load_failed_unknown');
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
@@ -53,17 +60,27 @@ export function SettingsPage() {
   const [model, setModel] = useState('claude-3-sonnet');
   const [providerCwd, setProviderCwd] = useState('');
   const [commandPreview, setCommandPreview] = useState('');
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
+  const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
+  const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadSettings = async () => {
       const result = await dispatch<Record<string, unknown>>('settings.get', {});
       if (!result.ok || !result.data) {
+        if (!cancelled) {
+          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknown);
+        }
         return;
       }
 
       const settings = result.data;
+      if (cancelled) return;
+      setSettingsLoadError(null);
       if (typeof settings.defaultProviderId === 'string') {
         setDefaultProvider(settings.defaultProviderId);
       }
@@ -73,6 +90,14 @@ export function SettingsPage() {
       if (typeof settings['notifications.onlyWhenBackgrounded'] === 'boolean') {
         setNotifyOnlyBackground(settings['notifications.onlyWhenBackgrounded']);
       }
+      setNotificationPreferences({
+        enabled: typeof settings['notifications.enabled'] === 'boolean'
+          ? settings['notifications.enabled']
+          : true,
+        onlyWhenBackgrounded: typeof settings['notifications.onlyWhenBackgrounded'] === 'boolean'
+          ? settings['notifications.onlyWhenBackgrounded']
+          : true,
+      });
       if (settings['appearance.terminalRenderer'] === 'standard' || settings['appearance.terminalRenderer'] === 'compatibility') {
         setTerminalRenderer(settings['appearance.terminalRenderer']);
       }
@@ -102,7 +127,10 @@ export function SettingsPage() {
     };
 
     void loadSettings();
-  }, [dispatch, setLocale]);
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
 
   const handleBack = () => {
     if (activeWorkspaceId) {
@@ -209,6 +237,22 @@ export function SettingsPage() {
         </aside>
 
         <main className="settings-content">
+          {settingsLoadError && (
+            <div className="settings-page__notice settings-page__notice--error" role="alert">
+              <div className="settings-page__notice-copy">
+                <span className="settings-page__notice-title">{t('settings.load_failed')}</span>
+                <span className="settings-page__notice-message">{settingsLoadError}</span>
+              </div>
+              <button
+                type="button"
+                className="settings-link"
+                onClick={() => setSettingsRefreshKey((value) => value + 1)}
+              >
+                {t('action.refresh')}
+              </button>
+            </div>
+          )}
+          <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
           {renderContent()}
         </main>
       </div>
@@ -262,10 +306,18 @@ function GeneralSettings({
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch('settings.update', { settings });
+  };
+
+  const syncNotificationPreferences = (next: {
+    enabled: boolean;
+    onlyWhenBackgrounded: boolean;
+  }) => {
+    setNotificationPreferences(next);
   };
 
   useEffect(() => {
@@ -319,8 +371,13 @@ function GeneralSettings({
               type="checkbox"
               checked={notificationsEnabled}
               onChange={(e) => {
-                setNotificationsEnabled(e.target.checked);
-                void saveSettings({ notifications: { enabled: e.target.checked } });
+                const nextEnabled = e.target.checked;
+                setNotificationsEnabled(nextEnabled);
+                syncNotificationPreferences({
+                  enabled: nextEnabled,
+                  onlyWhenBackgrounded: notifyOnlyBackground,
+                });
+                void saveSettings({ notifications: { enabled: nextEnabled } });
               }}
             />
             <span className="settings-toggle-slider" />
@@ -337,8 +394,13 @@ function GeneralSettings({
               type="checkbox"
               checked={notifyOnlyBackground}
               onChange={(e) => {
-                setNotifyOnlyBackground(e.target.checked);
-                void saveSettings({ notifications: { onlyWhenBackgrounded: e.target.checked } });
+                const nextOnlyWhenBackgrounded = e.target.checked;
+                setNotifyOnlyBackground(nextOnlyWhenBackgrounded);
+                syncNotificationPreferences({
+                  enabled: notificationsEnabled,
+                  onlyWhenBackgrounded: nextOnlyWhenBackgrounded,
+                });
+                void saveSettings({ notifications: { onlyWhenBackgrounded: nextOnlyWhenBackgrounded } });
               }}
               disabled={!notificationsEnabled}
             />

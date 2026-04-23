@@ -15,6 +15,8 @@ import type { CommandContext } from './ws/dispatch.js';
 import type { FastifyRequest } from 'fastify';
 import type { ServerConfig } from './config.js';
 import { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './auth/index.js';
+import { registerHooksEndpoint } from './hooks/endpoint.js';
+import type { RuntimeConfig } from './hooks/runtime-json.js';
 
 interface AppDeps {
   wsHub: WsHub;
@@ -23,6 +25,7 @@ interface AppDeps {
   webRoot?: string;
   commandContext: CommandContext;
   config: ServerConfig;
+  runtime: RuntimeConfig;
   logger?: any;
 }
 
@@ -73,24 +76,15 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     return { ok: true };
   });
 
-  // Internal hooks endpoint (for bridge scripts)
-  app.post('/internal/hooks/:event', async (request, reply) => {
-    const event = (request.params as any).event;
-    const payload = request.body;
-    const query = (request.query as any) || {};
-
-    try {
-      deps.hooksMgr.handleHookEvent(event, payload, {
-        coderStudioSessionId: query.coder_studio_session_id as string | undefined,
-      });
-      return { ok: true };
-    } catch (error) {
-      request.log.error({ error, event }, 'Failed to handle hook event');
-      return reply.status(500).send({
-        ok: false,
-        error: 'Failed to handle hook event',
-      });
-    }
+  // Internal hooks endpoint (for bridge scripts). Enforces:
+  // - localhost-only origin
+  // - per-process token from runtime.json
+  // Auth cookie is skipped for this path (see `auth/plugin.ts::isPublicPath`)
+  // because bridge scripts don't and can't carry cookies.
+  registerHooksEndpoint(app, deps.runtime, (event, payload, ctx) => {
+    deps.hooksMgr.handleHookEvent(event, payload, {
+      coderStudioSessionId: ctx.coderStudioSessionId,
+    });
   });
 
   // Static file serving (for web UI)

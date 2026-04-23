@@ -13,7 +13,7 @@ const SERVER_HOST = '127.0.0.1';
 async function devServer(): Promise<void> {
   info('Starting tsx watch for backend...');
 
-  const serverProcess = runBackground('pnpm', ['tsx', 'watch', 'src/index.ts'], {
+  const serverProcess = runBackground('pnpm', ['tsx', 'watch', 'src/server.ts'], {
     cwd: SERVER_DIR,
     stdio: 'inherit',
     env: {

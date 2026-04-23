@@ -123,7 +123,7 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('closes only the target pane and collapses the split layout', async () => {
+  it('closes only the target pane and preserves the split layout as a draft leaf', async () => {
     const { store, sendCommand } = createAgentPaneStore({
       id: 'root',
       type: 'split',

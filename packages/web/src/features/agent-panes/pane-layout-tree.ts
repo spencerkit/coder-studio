@@ -90,7 +90,7 @@ export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNod
     const paneId = sessionId.replace('__draft__', '');
     return closeDraftPane(node, paneId) ?? { id: node.id, type: 'leaf' };
   }
-  return closeNodePreserveStructure(node, sessionId) ?? { id: node.id, type: 'leaf' };
+  return replaceSessionWithDraft(node, sessionId);
 }
 
 /**
@@ -136,42 +136,34 @@ function closeDraftPane(node: PaneNode, paneId: string): PaneNode | null {
 }
 
 /**
- * Close a session pane by removing it from the layout.
- * Returns null to signal the node should be removed.
+ * Close a session pane by turning it into a draft leaf while preserving the
+ * existing split structure. This matches the session-card close behavior:
+ * the session ends, but the workspace layout remains stable so the user can
+ * immediately launch a replacement session in the same pane.
  */
-function closeNodePreserveStructure(node: PaneNode, sessionId: string): PaneNode | null {
+function replaceSessionWithDraft(node: PaneNode, sessionId: string): PaneNode {
   if (node.type === 'leaf') {
     if (node.sessionId === sessionId) {
-      return null; // Remove this node
+      return {
+        id: node.id,
+        type: 'leaf',
+      };
     }
     return node;
   }
 
   const children = node.children ?? [];
   let changed = false;
-  const nextChildren: PaneNode[] = [];
-  for (const child of children) {
-    const nextChild = closeNodePreserveStructure(child, sessionId);
+  const nextChildren = children.map((child) => {
+    const nextChild = replaceSessionWithDraft(child, sessionId);
     if (nextChild !== child) {
       changed = true;
     }
-    if (nextChild !== null) {
-      nextChildren.push(nextChild);
-    }
-  }
+    return nextChild;
+  });
 
   if (!changed) {
     return node;
-  }
-
-  // Split collapsed to a single child — promote it
-  if (nextChildren.length === 1) {
-    return nextChildren[0]!;
-  }
-
-  // All children removed
-  if (nextChildren.length === 0) {
-    return null;
   }
 
   return {

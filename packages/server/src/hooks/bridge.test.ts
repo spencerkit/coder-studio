@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, rmSync, readFileSync } from 'fs';
+import { existsSync, rmSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
+import { createServer } from 'http';
+import { spawnSync } from 'child_process';
 import {
   generateBridgeScript,
   deployBridgeScript,
@@ -48,6 +50,78 @@ describe('bridge', () => {
       expect(claudeScript).not.toBe(codexScript);
       expect(claudeScript).toContain('claude');
       expect(codexScript).toContain('codex');
+    });
+
+    it('should post Codex events using payload.type instead of the raw argv JSON', async () => {
+      const tempHome = mkdtempSync(join(tmpdir(), 'cs-codex-bridge-'));
+      const runtimeDir = join(tempHome, '.coder-studio');
+      mkdirSync(runtimeDir, { recursive: true });
+
+      const requestPromise = new Promise<{ url: string; body: unknown }>((resolve) => {
+        const server = createServer((req, res) => {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+            resolve({
+              url: req.url || '',
+              body: JSON.parse(body || '{}'),
+            });
+            server.close();
+          });
+        });
+
+        server.listen(0, '127.0.0.1', () => {
+          const address = server.address();
+          if (!address || typeof address === 'string') {
+            throw new Error('Failed to resolve bridge test server address');
+          }
+
+          writeFileSync(
+            join(runtimeDir, 'runtime.json'),
+            JSON.stringify({
+              port: address.port,
+              token: 'test-token',
+              serverInstanceId: 'bridge-test',
+              startedAt: Date.now(),
+            }),
+            'utf-8'
+          );
+
+          const scriptPath = join(tempHome, 'codex-bridge.js');
+          writeFileSync(scriptPath, generateBridgeScript('codex'), 'utf-8');
+
+          const payload = {
+            type: 'agent-turn-complete',
+            'thread-id': 'thread-1',
+            'turn-id': 'turn-1',
+          };
+
+          spawnSync(process.execPath, [scriptPath, JSON.stringify(payload)], {
+            env: {
+              ...process.env,
+              HOME: tempHome,
+              CODER_STUDIO_SESSION_ID: 'sess-bridge-1',
+            },
+            stdio: 'ignore',
+          });
+        });
+      });
+
+      const request = await requestPromise;
+      expect(request.url).toBe(
+        '/internal/hooks/agent-turn-complete?token=test-token&coder_studio_session_id=sess-bridge-1'
+      );
+      expect(request.body).toEqual({
+        type: 'agent-turn-complete',
+        'thread-id': 'thread-1',
+        'turn-id': 'turn-1',
+      });
+
+      rmSync(tempHome, { recursive: true, force: true });
     });
   });
 

@@ -141,6 +141,8 @@
     "appearance": "Appearance",
     "providers": "Providers",
     "autosave_hint": "Settings saved automatically",
+    "load_failed": "Failed to load settings",
+    "load_failed_unknown": "Server did not return settings data",
     "notifications": "Notifications",
     "notifications_enabled": "Enable completion notifications",
     "notifications_enabled_hint": "Send notification when Agent session completes",
@@ -227,7 +229,11 @@
     "info": "Info",
     "session_turn_completed": "Session turn completed",
     "file_saved": "File saved",
-    "committed": "Committed"
+    "committed": "Committed",
+    "session_completed_title": "{session} completed",
+    "session_completed_body": "Agent session has finished executing",
+    "session_ended": "Session ended",
+    "session_ended_hint": "The session has stopped running"
   },
   "error": {
     "unknown": "Unknown error",
@@ -266,5 +272,23 @@
     "observer_mode": "Read-only mode — another tab is the controller",
     "takeover": "Take over",
     "takeover_failed": "Takeover failed — controller is still active"
+  },
+  "codex_audit": {
+    "title": "Codex config conflicts ({count})",
+    "load_failed_title": "Codex config check unavailable",
+    "load_failed_unknown": "Server did not return config audit data",
+    "show_details": "Show details",
+    "collapse": "Collapse",
+    "cleanup_select": "Select entries to clean up",
+    "cleanup_action": "Clean up {count} selected",
+    "cleaning": "Cleaning up...",
+    "cleanup_done": "Cleanup complete",
+    "cleanup_done_with_backup": "Cleanup complete. Backup saved to {path}",
+    "cleanup_noop": "Nothing to clean up",
+    "cleanup_failed": "Cleanup failed",
+    "finding": {
+      "toml_notify": "Top-level notify = [...]",
+      "toml_codex_hooks": "[features] codex_hooks = true"
+    }
   }
 }

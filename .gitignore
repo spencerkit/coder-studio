@@ -53,3 +53,8 @@ data-wl
 # E2E test runner scripts (ad-hoc)
 e2e/playwright.session.config.ts
 e2e/run-session-tests.*
+.playwright-cli/
+superpowers/
+.coder-studio/
+.codex
+tsconfig.tsbuildinfo    

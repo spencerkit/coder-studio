@@ -56,10 +56,12 @@ export interface SupervisorConfig {
   maxCyclesPerSession: number;
   terminalLinesForEvaluation: number;
   guidanceMaxChars: number;
+  guidanceDedupeWindow: number;
 }
 
 export const DEFAULT_SUPERVISOR_CONFIG: SupervisorConfig = {
   maxCyclesPerSession: 100,
   terminalLinesForEvaluation: 500,
   guidanceMaxChars: 2000,
+  guidanceDedupeWindow: 2,
 };

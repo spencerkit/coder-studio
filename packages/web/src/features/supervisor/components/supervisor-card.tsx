@@ -1,11 +1,21 @@
 /**
- * Supervisor Card Component (Phase 3)
+ * Supervisor Strip Component (Phase 3)
  *
- * Displays supervisor state, recent evaluation history, and actions.
+ * Compact supervisor controls rendered directly under the session header.
+ * Shows: state pill · objective · progress · latest cycle banner · actions.
+ * The full cycle history lives in a dedicated drawer (not rendered here).
  */
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ArrowUpCircle,
+  Eye,
+  Pause,
+  Pencil,
+  Play,
+  PowerOff,
+} from 'lucide-react';
 import type { SupervisorCycle, SupervisorState } from '@coder-studio/core';
 import {
   supervisorCyclesAtom,
@@ -43,6 +53,13 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const supervisor = supervisors.get(sessionId);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = window.setTimeout(() => setActionError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [actionError]);
 
   const openDialog = useCallback(
     (mode: 'enable' | 'edit' | 'disable') => {
@@ -72,137 +89,162 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   const latestCycle = cycles[0];
   const progress = Math.max(0, Math.min(latestCycle?.progress ?? 0, 100));
 
-  const handlePause = useCallback(async () => {
-    if (!supervisor) {
-      return;
-    }
+  const runAction = useCallback(
+    async (op: string, id: string, failureLabel: string) => {
+      setActionError(null);
+      const result = await dispatch(op, { id });
+      if (!result.ok) {
+        setActionError(
+          result.error?.message
+            ? `${failureLabel}: ${result.error.message}`
+            : failureLabel
+        );
+      }
+    },
+    [dispatch]
+  );
 
-    await dispatch('supervisor.pause', { id: supervisor.id });
-  }, [dispatch, supervisor]);
+  const handlePause = useCallback(async () => {
+    if (!supervisor) return;
+    await runAction('supervisor.pause', supervisor.id, '暂停失败');
+  }, [runAction, supervisor]);
 
   const handleResume = useCallback(async () => {
-    if (!supervisor) {
-      return;
-    }
-
-    await dispatch('supervisor.resume', { id: supervisor.id });
-  }, [dispatch, supervisor]);
+    if (!supervisor) return;
+    await runAction('supervisor.resume', supervisor.id, '恢复失败');
+  }, [runAction, supervisor]);
 
   const handleTrigger = useCallback(async () => {
-    if (!supervisor) {
-      return;
-    }
-
-    await dispatch('supervisor.trigger', { id: supervisor.id });
-  }, [dispatch, supervisor]);
+    if (!supervisor) return;
+    await runAction('supervisor.trigger', supervisor.id, '触发评估失败');
+  }, [runAction, supervisor]);
 
   if (!supervisor) {
     return (
       <div className="supervisor-card supervisor-card-inactive">
         <button
-          className="btn btn-secondary btn-sm"
+          className="supervisor-enable-btn"
           onClick={() => openDialog('enable')}
           title="启用 Supervisor"
         >
-          <span className="icon">▶</span>
+          <Eye size={13} />
           <span>启用 Supervisor</span>
         </button>
       </div>
     );
   }
 
+  const isBusy = supervisor.state === 'evaluating' || supervisor.state === 'injecting';
+
   return (
-    <div className={`supervisor-card ${STATE_CLASSES[supervisor.state]}`} data-workspace-id={workspaceId}>
-      <div className="supervisor-header">
-        <span className="supervisor-icon">✓</span>
-        <span className="supervisor-label">Supervisor</span>
+    <div
+      className={`supervisor-card ${STATE_CLASSES[supervisor.state]}`}
+      data-workspace-id={workspaceId}
+    >
+      <div className="supervisor-strip-row">
+        <span className="supervisor-strip-eyebrow">
+          <span className={`supervisor-pulse ${STATE_CLASSES[supervisor.state]}`} aria-hidden="true" />
+          <span className="supervisor-label">Supervisor</span>
+        </span>
+
         <span className={`supervisor-state-tag ${STATE_CLASSES[supervisor.state]}`}>
           {STATE_LABELS[supervisor.state]}
         </span>
+
+        <div className="supervisor-actions">
+          <button
+            className="supervisor-icon-btn"
+            onClick={() => openDialog('edit')}
+            title="编辑目标"
+            aria-label="编辑目标"
+          >
+            <Pencil size={12} />
+          </button>
+
+          {supervisor.state === 'paused' ? (
+            <button
+              className="supervisor-icon-btn"
+              onClick={() => {
+                void handleResume();
+              }}
+              title="恢复"
+              aria-label="恢复"
+            >
+              <Play size={12} />
+            </button>
+          ) : (
+            <button
+              className="supervisor-icon-btn"
+              onClick={() => {
+                void handlePause();
+              }}
+              title="暂停"
+              aria-label="暂停"
+              disabled={isBusy}
+            >
+              <Pause size={12} />
+            </button>
+          )}
+
+          <button
+            className="supervisor-icon-btn"
+            onClick={() => {
+              void handleTrigger();
+            }}
+            title="触发评估"
+            aria-label="触发评估"
+            disabled={isBusy}
+          >
+            <ArrowUpCircle size={12} />
+          </button>
+
+          <button
+            className="supervisor-icon-btn supervisor-icon-btn-danger"
+            onClick={() => openDialog('disable')}
+            title="禁用 Supervisor"
+            aria-label="禁用 Supervisor"
+          >
+            <PowerOff size={12} />
+          </button>
+        </div>
       </div>
 
-      <div className="supervisor-objective-row">
+      <div className="supervisor-objective-row" onDoubleClick={() => openDialog('edit')}>
         <span className="supervisor-objective-text" title={supervisor.objective}>
           {supervisor.objective}
         </span>
         <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
       </div>
 
-      {latestCycle ? (
-        <div className="supervisor-progress-block">
-          <div className="supervisor-progress-track" aria-hidden="true">
-            <div className="supervisor-progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-          <ol className="supervisor-history-list">
-            {cycles.slice(0, 3).map((cycle) => (
-              <li key={cycle.id} className="supervisor-history-item">
-                <span>{cycle.trigger === 'manual' ? 'Manual' : 'Auto'}</span>
-                <span>{cycle.progress ?? 0}%</span>
-                <span>{cycle.result ?? cycle.errorReason ?? '等待评估结果'}</span>
-              </li>
-            ))}
-          </ol>
+      <div className="supervisor-progress-block">
+        <div className="supervisor-progress-track" aria-hidden="true">
+          <div className="supervisor-progress-fill" style={{ width: `${progress}%` }} />
         </div>
-      ) : null}
 
-      <div className="supervisor-actions">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => openDialog('edit')}
-          title="编辑目标"
-          aria-label="编辑目标"
-        >
-          ✎
-        </button>
-
-        {supervisor.state === 'paused' ? (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              void handleResume();
-            }}
-            title="恢复"
-            aria-label="恢复"
-          >
-            ▶
-          </button>
-        ) : (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              void handlePause();
-            }}
-            title="暂停"
-            aria-label="暂停"
-            disabled={supervisor.state === 'evaluating' || supervisor.state === 'injecting'}
-          >
-            ⏸
-          </button>
-        )}
-
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            void handleTrigger();
-          }}
-          title="触发评估"
-          aria-label="触发评估"
-          disabled={supervisor.state === 'evaluating' || supervisor.state === 'injecting'}
-        >
-          ↑
-        </button>
-
-        <button
-          className="btn btn-ghost btn-sm btn-danger"
-          onClick={() => openDialog('disable')}
-          title="禁用 Supervisor"
-          aria-label="禁用 Supervisor"
-        >
-          ■
-        </button>
+        {latestCycle ? (
+          <ol className="supervisor-history-list" aria-label="最近一次评估">
+            <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
+              <span className="supervisor-history-trigger">
+                {latestCycle.trigger === 'manual' ? 'MANUAL' : 'AUTO'}
+              </span>
+              <span className="supervisor-history-progress">{latestCycle.progress ?? 0}%</span>
+              <span className="supervisor-history-result">
+                {latestCycle.result ?? latestCycle.errorReason ?? '等待评估结果'}
+              </span>
+            </li>
+          </ol>
+        ) : null}
       </div>
 
-      {supervisor.errorReason ? <div className="supervisor-error">{supervisor.errorReason}</div> : null}
+      {actionError ? (
+        <div className="supervisor-error" role="alert">
+          {actionError}
+        </div>
+      ) : supervisor.errorReason ? (
+        <div className="supervisor-error" role="alert">
+          {supervisor.errorReason}
+        </div>
+      ) : null}
     </div>
   );
 }

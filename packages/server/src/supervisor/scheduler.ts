@@ -1,37 +1,33 @@
-export type SchedulerCallback = (supervisorId: string) => void;
+import type { DomainEvent } from '@coder-studio/core';
+import type { EventBus } from '../bus/event-bus.js';
+
+type SessionLifecycleEvent = Extract<DomainEvent, { type: 'session.lifecycle' }>;
 
 export class SupervisorScheduler {
-  private timers = new Map<string, NodeJS.Timeout>();
+  private unsubscribe: (() => void) | null = null;
 
-  constructor(private readonly onTick: SchedulerCallback) {}
-
-  start(supervisorId: string, intervalMs: number): void {
-    // Stop existing schedule first to prevent duplicates
-    this.stop(supervisorId);
-
-    const timer = setInterval(() => {
-      this.onTick(supervisorId);
-    }, intervalMs);
-
-    this.timers.set(supervisorId, timer);
-  }
-
-  stop(supervisorId: string): void {
-    const timer = this.timers.get(supervisorId);
-    if (timer) {
-      clearInterval(timer);
-      this.timers.delete(supervisorId);
+  constructor(
+    private readonly deps: {
+      eventBus: EventBus;
+      onTurnCompleted: (sessionId: string) => void;
     }
+  ) {}
+
+  start(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = this.deps.eventBus.on(
+      'session.lifecycle',
+      (event: SessionLifecycleEvent) => {
+        if (event.event !== 'turn_completed') {
+          return;
+        }
+        this.deps.onTurnCompleted(event.sessionId);
+      }
+    );
   }
 
-  stopAll(): void {
-    for (const timer of this.timers.values()) {
-      clearInterval(timer);
-    }
-    this.timers.clear();
-  }
-
-  isRunning(supervisorId: string): boolean {
-    return this.timers.has(supervisorId);
+  stop(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
   }
 }

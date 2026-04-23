@@ -1,21 +1,34 @@
 import { test, expect } from '@playwright/test';
+import { enableSupervisor, launchClaudeSession } from './supervisor.helpers';
 
 test.describe('@phase3 supervisor acceptance', () => {
-  test('P3S-01 app loads with supervisor module', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForTimeout(2000);
-    // App loads without error, supervisor commands registered
-    await expect(page.locator('body')).toBeVisible();
-  });
-
-  test('P3S-02 supervisor card renders enable button when session active', async ({
+  test('P3S-01 enables, triggers, pauses, resumes, and disables supervisor from the agent pane', async ({
     page,
   }) => {
-    await page.goto('/');
-    await page.waitForTimeout(2000);
-    // Verify the enable supervisor button exists in the DOM
-    // (visible when a session is active)
-    const body = await page.locator('body').textContent();
-    expect(body).toBeTruthy();
+    await launchClaudeSession(page);
+    const supervisorCard = await enableSupervisor(
+      page,
+      'Keep the implementation focused on persistence and event-driven scheduling',
+      'codex'
+    );
+
+    await expect(supervisorCard.getByText('Supervisor')).toBeVisible();
+    await expect(supervisorCard.locator('.supervisor-provider-pill')).toContainText('codex');
+
+    await page.getByRole('button', { name: '触发评估' }).click();
+    await expect(page.locator('.supervisor-history-item').first()).toBeVisible({
+      timeout: 20000,
+    });
+
+    await page.getByRole('button', { name: '暂停' }).click();
+    await expect(page.getByRole('button', { name: '恢复' })).toBeVisible();
+
+    await page.getByRole('button', { name: '恢复' }).click();
+    await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
+
+    await page.getByRole('button', { name: '禁用 Supervisor' }).click();
+    await expect(page.getByText('禁用会停止评估并清空历史')).toBeVisible();
+    await page.locator('.modal-card').getByRole('button', { name: '禁用', exact: true }).click();
+    await expect(page.getByRole('button', { name: '启用 Supervisor' })).toBeVisible();
   });
 });

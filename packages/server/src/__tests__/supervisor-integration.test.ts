@@ -87,6 +87,19 @@ describe('Supervisor integration', () => {
     });
 
     const cycle = await ctx.supervisorMgr.triggerEvaluation(created.id);
+    // `triggerEvaluation` now returns as soon as the in-flight cycle is
+    // created and broadcast — the evaluator + repo writes finish in the
+    // background. Wait for the cycle to drain before checking persistence.
+    expect(cycle.trigger).toBe('manual');
+    expect(cycle.status).toBe('evaluating');
+    await waitFor(async () => {
+      const current = ctx.supervisorMgr.get(created.id);
+      const latest = current?.cycles.find((c: any) => c.id === cycle.id);
+      if (!latest || latest.status === 'evaluating') {
+        throw new Error('cycle still in flight');
+      }
+    });
+
     const fetched = await dispatch<{ supervisor: any | null }>(
       {
         kind: 'command',
@@ -97,16 +110,33 @@ describe('Supervisor integration', () => {
       ctx
     );
 
-    expect(cycle.status).toBe('completed');
-    expect(cycle.result).toBe('manual trigger works');
     expect(fetched.ok).toBe(true);
     expect(fetched.data?.supervisor?.cycles).toHaveLength(1);
     expect(fetched.data?.supervisor?.cycles[0]).toEqual(
       expect.objectContaining({
         trigger: 'manual',
+        status: 'completed',
         progress: 30,
         result: 'manual trigger works',
       })
     );
   });
 });
+
+async function waitFor(
+  fn: () => Promise<void> | void,
+  { timeoutMs = 1000, intervalMs = 10 } = {}
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      await fn();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('waitFor timed out');
+}

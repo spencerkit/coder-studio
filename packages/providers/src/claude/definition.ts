@@ -6,6 +6,8 @@ import type { ProviderConfig } from '@coder-studio/core';
 
 import { claudeConfigSchema, type ClaudeConfig } from './config-schema.js';
 import { claudeHooksDescriptor } from './hooks-template.js';
+import { buildClaudeSupervisorEvalCommand } from './supervisor-eval.js';
+import { readClaudeTranscriptExcerpt } from './transcript-excerpt.js';
 
 /**
  * Claude Code provider definition
@@ -46,6 +48,9 @@ export const claudeDefinition: ProviderDefinition = {
       cwd: ctx.workspacePath,
     };
   },
+
+  buildSupervisorEvalCommand: buildClaudeSupervisorEvalCommand,
+  readTranscriptExcerpt: readClaudeTranscriptExcerpt,
 
   // ===== Configuration =====
   configSchema: claudeConfigSchema,

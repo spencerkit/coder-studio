@@ -3,6 +3,8 @@ import type { SessionManager } from '../session/manager.js';
 import type { TerminalManager } from '../terminal/manager.js';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import { getGitDiffStatSummary, getGitStatusSummary } from '../git/cli.js';
+import type { SupervisorLogger } from './logger.js';
+import { noopLogger } from './logger.js';
 
 const TRANSCRIPT_MAX_CHARS = 12_000;
 const TRANSCRIPT_MAX_TURNS = 12;
@@ -27,18 +29,23 @@ export interface SupervisorEvaluationContext {
 }
 
 export class SupervisorContextBuilder {
+  private readonly logger: SupervisorLogger;
+
   constructor(
     private readonly deps: {
       workspaceMgr: WorkspaceManager;
       sessionMgr: SessionManager;
       terminalMgr: TerminalManager;
       providerRegistry: ProviderDefinition[];
+      logger?: SupervisorLogger;
       git?: {
         getStatusSummary?: typeof getGitStatusSummary;
         getDiffStatSummary?: typeof getGitDiffStatSummary;
       };
     }
-  ) {}
+  ) {
+    this.logger = deps.logger ?? noopLogger;
+  }
 
   async build(supervisor: Supervisor): Promise<SupervisorEvaluationContext> {
     const session = this.deps.sessionMgr.get(supervisor.sessionId);
@@ -52,16 +59,23 @@ export class SupervisorContextBuilder {
     }
 
     const provider = this.deps.providerRegistry.find((item) => item.id === session.providerId);
-    const transcript =
-      session.transcriptPath && provider?.readTranscriptExcerpt
-        ? await provider
-            .readTranscriptExcerpt({
-              transcriptPath: session.transcriptPath,
-              maxChars: TRANSCRIPT_MAX_CHARS,
-              maxTurns: TRANSCRIPT_MAX_TURNS,
-            })
-            .catch(() => null)
-        : null;
+    let transcript: { excerpt: string; lastTurnId?: string } | null = null;
+    if (session.transcriptPath && provider?.readTranscriptExcerpt) {
+      try {
+        transcript =
+          (await provider.readTranscriptExcerpt({
+            transcriptPath: session.transcriptPath,
+            maxChars: TRANSCRIPT_MAX_CHARS,
+            maxTurns: TRANSCRIPT_MAX_TURNS,
+          })) ?? null;
+      } catch (error) {
+        this.logger.warn(
+          { err: error, sessionId: session.id, transcriptPath: session.transcriptPath },
+          'Supervisor transcript read failed; falling back to terminal snapshot'
+        );
+        transcript = null;
+      }
+    }
 
     const terminalSnapshot =
       this.deps.terminalMgr.get(session.terminalId)?.ringBuffer.snapshot().toString('utf8') ?? '';
@@ -76,10 +90,22 @@ export class SupervisorContextBuilder {
 
     const gitStatusSummary = await getStatusSummary(workspace.path)
       .then((value) => value.slice(-GIT_SUMMARY_MAX_CHARS))
-      .catch(() => '');
+      .catch((error) => {
+        this.logger.warn(
+          { err: error, workspaceId: workspace.id },
+          'Supervisor git status read failed'
+        );
+        return '';
+      });
     const gitDiffStat = await getDiffStatSummary(workspace.path)
       .then((value) => value.slice(-GIT_SUMMARY_MAX_CHARS))
-      .catch(() => '');
+      .catch((error) => {
+        this.logger.warn(
+          { err: error, workspaceId: workspace.id },
+          'Supervisor git diff read failed'
+        );
+        return '';
+      });
 
     return {
       objective: supervisor.objective,

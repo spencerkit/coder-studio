@@ -87,6 +87,32 @@ describe('Claude Provider Definition', () => {
     });
   });
 
+  describe('buildSupervisorEvalCommand', () => {
+    it('builds a supervisor eval command with claude -p --output-format json', () => {
+      const result = claudeDefinition.buildSupervisorEvalCommand?.(
+        {
+          model: 'claude-sonnet-4-6',
+          maxTurns: null,
+          additionalArgs: [],
+          envVars: { ANTHROPIC_API_KEY: 'sk-test' },
+        },
+        {
+          prompt: 'Return strict JSON',
+          sessionId: 'sess-1',
+          workspacePath: '/workspace',
+        }
+      );
+
+      expect(result?.argv[0]).toBe('claude');
+      expect(result?.argv).toContain('-p');
+      // We rely on the `--output-format json` envelope to extract the model reply.
+      expect(result?.argv).toEqual(expect.arrayContaining(['--output-format', 'json']));
+      expect(result?.argv).toEqual(expect.arrayContaining(['--model', 'claude-sonnet-4-6']));
+      expect(result?.cwd).toBe('/workspace');
+      expect(result?.env?.ANTHROPIC_API_KEY).toBe('sk-test');
+    });
+  });
+
   describe('defaultConfig', () => {
     it('should have valid default config', () => {
       expect(claudeDefinition.defaultConfig).toBeDefined();

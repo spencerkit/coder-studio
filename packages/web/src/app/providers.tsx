@@ -26,6 +26,7 @@ import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus } from '../ws';
+import { useSessionNotifications } from '../features/notifications';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
 import type { Supervisor, SupervisorCycle } from '@coder-studio/core';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
@@ -60,6 +61,8 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
+
+  useSessionNotifications();
 
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);

@@ -6,6 +6,7 @@
 
 import { useAtom, useAtomValue } from 'jotai';
 import { useCallback } from 'react';
+import { AlertTriangle, Eye, Pencil, PowerOff, X } from 'lucide-react';
 import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 
@@ -17,6 +18,32 @@ const EVALUATOR_OPTIONS = [
 interface ObjectiveDialogProps {
   workspaceId: string;
   sessionId?: string;
+}
+
+type DialogMode = 'enable' | 'edit' | 'disable';
+
+const MODE_COPY: Record<DialogMode, { title: string; subtitle: string; confirm: string }> = {
+  enable: {
+    title: '启用 Supervisor',
+    subtitle: '描述一个目标,Supervisor 会在每轮结束后自动评估并提示下一步',
+    confirm: '启用',
+  },
+  edit: {
+    title: '编辑 Supervisor',
+    subtitle: '调整目标描述或切换评估方,历史评估不会被清除',
+    confirm: '保存',
+  },
+  disable: {
+    title: '禁用 Supervisor',
+    subtitle: '停止自动评估。当前会话的监督周期将被移除',
+    confirm: '禁用',
+  },
+};
+
+function ModeIcon({ mode }: { mode: DialogMode }) {
+  if (mode === 'enable') return <Eye size={14} />;
+  if (mode === 'edit') return <Pencil size={14} />;
+  return <PowerOff size={14} />;
 }
 
 export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps) {
@@ -106,32 +133,54 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
     return null;
   }
 
+  const mode = dialog.mode;
+  const copy = MODE_COPY[mode];
   const disableObjective = supervisor?.objective ?? dialog.draftObjective;
-  const title =
-    dialog.mode === 'disable'
-      ? '禁用 Supervisor'
-      : dialog.mode === 'edit'
-        ? '编辑 Supervisor'
-        : '启用 Supervisor';
-  const confirmLabel =
-    dialog.mode === 'disable' ? '禁用' : dialog.mode === 'edit' ? '保存' : '启用';
+  const isDisable = mode === 'disable';
 
   return (
     <div className="modal-overlay" onClick={close}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal-card supervisor-dialog"
+        data-mode={mode}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
-          <h3>{title}</h3>
+          <div className="supervisor-dialog-header">
+            <span className="supervisor-dialog-header-icon" aria-hidden="true">
+              <ModeIcon mode={mode} />
+            </span>
+            <div>
+              <h3>{copy.title}</h3>
+              <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
+            </div>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={close} aria-label="关闭">
-            ✕
+            <X size={14} />
           </button>
         </div>
 
         <div className="modal-body">
-          {dialog.mode === 'disable' ? (
-            <div className="form-group">
-              <p className="dialog-helper">禁用会停止评估并清空历史</p>
-              <pre className="objective-preview">{disableObjective}</pre>
-            </div>
+          {isDisable ? (
+            <>
+              <div className="supervisor-danger-callout" role="alert">
+                <AlertTriangle
+                  size={16}
+                  className="supervisor-danger-callout-icon"
+                  aria-hidden="true"
+                />
+                <div className="supervisor-danger-callout-copy">
+                  <strong>禁用后会停止评估周期</strong>
+                  <small>
+                    当前会话的 supervisor 将被移除,历史 cycles 会一并清理。可重新启用,但无法恢复记录。
+                  </small>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>当前目标</label>
+                <pre className="objective-preview">{disableObjective}</pre>
+              </div>
+            </>
           ) : (
             <>
               <div className="form-group">
@@ -142,13 +191,21 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
                   rows={5}
                   value={dialog.draftObjective}
                   onChange={(event) => updateDraft({ draftObjective: event.target.value })}
-                  placeholder="描述 Supervisor 应该评估的目标，例如：&#10;- 完成用户认证功能的实现&#10;- 修复所有测试失败&#10;- 优化性能至响应时间 < 100ms"
+                  placeholder={
+                    '描述希望 Supervisor 盯住的目标,例如:\n' +
+                    '· 完成用户认证功能的实现\n' +
+                    '· 修复所有失败的单元测试\n' +
+                    '· 把 P95 响应时间压到 100ms 以内'
+                  }
                   autoFocus
                 />
+                <span className="dialog-helper">
+                  越具体、越可衡量,评估效果越好。建议包含完成条件。
+                </span>
               </div>
 
               <div className="form-group">
-                <label htmlFor="evaluator-provider">Evaluator Provider</label>
+                <label htmlFor="evaluator-provider">评估方 (Evaluator)</label>
                 <select
                   id="evaluator-provider"
                   className="input"
@@ -165,14 +222,10 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
                     </option>
                   ))}
                 </select>
+                <span className="dialog-helper">
+                  用于评估进度并生成下一步指引的 provider,与执行方可不相同。
+                </span>
               </div>
-
-              {dialog.draftObjective.trim() ? (
-                <div className="form-group">
-                  <label>预览</label>
-                  <pre className="objective-preview">{dialog.draftObjective}</pre>
-                </div>
-              ) : null}
             </>
           )}
         </div>
@@ -182,13 +235,13 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
             取消
           </button>
           <button
-            className={`btn ${dialog.mode === 'disable' ? 'btn-danger' : 'btn-primary'}`}
+            className={`btn ${isDisable ? 'btn-danger' : 'btn-primary'}`}
             onClick={() => {
               void confirm();
             }}
-            disabled={dialog.mode !== 'disable' && !dialog.draftObjective.trim()}
+            disabled={!isDisable && !dialog.draftObjective.trim()}
           >
-            {confirmLabel}
+            {copy.confirm}
           </button>
         </div>
       </div>

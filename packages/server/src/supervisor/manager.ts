@@ -1,29 +1,56 @@
-/**
- * Supervisor Manager (Phase 3)
- *
- * Manages supervisor lifecycle, evaluation cycles, and guidance injection.
- */
-
-import type {
-  Supervisor,
-  SupervisorCycle,
-  SupervisorState,
-  CycleStatus,
-  CycleTrigger,
+import {
+  DEFAULT_SUPERVISOR_CONFIG,
+  type CycleStatus,
+  type DomainEvent,
+  type ProviderDefinition,
+  type Supervisor,
+  type SupervisorConfig,
+  type SupervisorCycle,
+  type SupervisorState,
 } from '@coder-studio/core';
 import type { EventBus } from '../bus/event-bus.js';
-import type { Broadcaster } from '../ws/hub.js';
+import type { SessionManager } from '../session/manager.js';
+import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
+import type { SupervisorCycleRepo } from '../storage/repositories/supervisor-cycle-repo.js';
+import type { SupervisorRepo } from '../storage/repositories/supervisor-repo.js';
 import type { TerminalManager } from '../terminal/manager.js';
-import { evaluateProgress } from './evaluator.js';
-import { injectGuidance } from './injector.js';
+import type { Broadcaster } from '../ws/hub.js';
+import type { WorkspaceManager } from '../workspace/manager.js';
+import type { SupervisorEvaluationContext } from './context-builder.js';
+import { SupervisorContextBuilder } from './context-builder.js';
+import { SupervisorEvaluator } from './evaluator.js';
+import {
+  INJECTABLE_SESSION_STATES,
+  SupervisorInjector,
+  describeNonInjectableState,
+} from './injector.js';
 import { SupervisorScheduler } from './scheduler.js';
+import type { SupervisorLogger } from './logger.js';
+import { noopLogger } from './logger.js';
 
-const LEGACY_SUPERVISOR_INTERVAL_MS = 60000;
+type SessionLifecycleEvent = Extract<DomainEvent, { type: 'session.lifecycle' }>;
+
+/**
+ * Internal handoff between the synchronous `beginCycle` and the async
+ * `finishCycle` phases of a supervisor evaluation.
+ */
+interface StartedCycle {
+  cycle: SupervisorCycle;
+  context: SupervisorEvaluationContext;
+}
 
 export interface SupervisorManagerDeps {
   eventBus: EventBus;
   broadcaster: Broadcaster;
   terminalMgr: TerminalManager;
+  workspaceMgr: WorkspaceManager;
+  sessionMgr: SessionManager;
+  providerRegistry: ProviderDefinition[];
+  providerConfigRepo: ProviderConfigRepo;
+  supervisorRepo: SupervisorRepo;
+  cycleRepo: SupervisorCycleRepo;
+  logger?: SupervisorLogger;
+  config?: SupervisorConfig;
 }
 
 export interface CreateSupervisorRequest {
@@ -38,356 +65,657 @@ export interface UpdateSupervisorRequest {
   evaluatorProviderId?: string;
 }
 
-/**
- * Generate unique supervisor ID
- */
 function generateSupervisorId(): string {
-  return `sup_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  return `sup_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * Generate unique cycle ID
- */
 function generateCycleId(): string {
-  return `cycle_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  return `cycle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * Supervisor Manager handles:
- * - Creating and deleting supervisors
- * - Managing supervisor state
- * - Creating and tracking evaluation cycles
- * - Broadcasting supervisor events
- */
+function messageOf(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const value = (error as { message: unknown }).message;
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return fallback;
+}
+
 export class SupervisorManager {
-  private supervisors = new Map<string, Supervisor>();
-  private supervisorsBySession = new Map<string, string>();
-  private scheduler: SupervisorScheduler;
+  private readonly supervisors = new Map<string, Supervisor>();
+  private readonly supervisorsBySession = new Map<string, string>();
+  private readonly inFlight = new Set<string>();
+  private readonly pendingDeletes = new Set<string>();
+  private readonly scheduler: SupervisorScheduler;
+  private readonly contextBuilder: SupervisorContextBuilder;
+  private readonly evaluator: SupervisorEvaluator;
+  private readonly injector: SupervisorInjector;
+  private readonly logger: SupervisorLogger;
+  private readonly config: SupervisorConfig;
+  private lifecycleUnsubscribe: (() => void) | null = null;
 
   constructor(private readonly deps: SupervisorManagerDeps) {
-    this.scheduler = new SupervisorScheduler((supervisorId) => {
-      this.runEvaluation(supervisorId).catch((err) => {
-        console.error(`Scheduler evaluation failed for ${supervisorId}:`, err);
-      });
+    this.logger = deps.logger ?? noopLogger;
+    this.config = deps.config ?? DEFAULT_SUPERVISOR_CONFIG;
+    this.contextBuilder = new SupervisorContextBuilder({
+      workspaceMgr: deps.workspaceMgr,
+      sessionMgr: deps.sessionMgr,
+      terminalMgr: deps.terminalMgr,
+      providerRegistry: deps.providerRegistry,
+      logger: this.logger,
+    });
+    this.evaluator = new SupervisorEvaluator({
+      providerRegistry: deps.providerRegistry,
+      providerConfigRepo: deps.providerConfigRepo,
+      config: this.config,
+    });
+    this.injector = new SupervisorInjector({
+      sessionMgr: deps.sessionMgr,
+      terminalMgr: deps.terminalMgr,
+      config: this.config,
+    });
+    this.scheduler = new SupervisorScheduler({
+      eventBus: deps.eventBus,
+      onTurnCompleted: (sessionId) => {
+        const supervisorId = this.supervisorsBySession.get(sessionId);
+        if (supervisorId) {
+          void this.runEvaluation(supervisorId).catch((error) => {
+            this.logger.warn(
+              { err: error, supervisorId },
+              'Supervisor auto-evaluation failed'
+            );
+          });
+        }
+      },
     });
   }
 
-  /**
-   * Create a new supervisor for a session
-   */
-  async create(req: CreateSupervisorRequest): Promise<Supervisor> {
-    const id = generateSupervisorId();
-    const now = Date.now();
+  async hydrate(): Promise<void> {
+    this.supervisors.clear();
+    this.supervisorsBySession.clear();
 
-    const supervisor: Supervisor = {
-      id,
-      sessionId: req.sessionId,
-      workspaceId: req.workspaceId,
-      state: 'idle',
-      objective: req.objective,
-      evaluatorProviderId: req.evaluatorProviderId,
-      cycles: [],
-      createdAt: now,
-      updatedAt: now,
-    };
+    for (const supervisor of this.deps.supervisorRepo.listAll()) {
+      const normalizedState =
+        supervisor.state === 'evaluating' || supervisor.state === 'injecting'
+          ? 'idle'
+          : supervisor.state;
 
-    this.supervisors.set(id, supervisor);
-    this.supervisorsBySession.set(req.sessionId, id);
+      const recovered =
+        normalizedState === supervisor.state
+          ? supervisor
+          : this.deps.supervisorRepo.update(supervisor.id, {
+              state: normalizedState,
+              errorReason: null,
+              updatedAt: Date.now(),
+            });
 
-    // Preserve current MVP cadence internally without storing it on the domain object.
-    this.scheduler.start(id, LEGACY_SUPERVISOR_INTERVAL_MS);
+      // Any cycle still in a transient state belongs to a previous server
+      // process (or a long-fixed buggy code path). Mark it as failed so it
+      // doesn't sit forever in the UI as "queued"/"evaluating".
+      const stale = this.deps.cycleRepo
+        .listRecentForSupervisor(supervisor.id, this.config.maxCyclesPerSession)
+        .filter(
+          (cycle) => cycle.status === 'queued' || cycle.status === 'evaluating'
+        );
+      for (const cycle of stale) {
+        try {
+          this.deps.cycleRepo.update(cycle.id, {
+            status: 'failed',
+            errorReason: 'Orphaned before server restart',
+            completedAt: Date.now(),
+          });
+        } catch (error) {
+          this.logger.warn(
+            { err: error, cycleId: cycle.id, supervisorId: supervisor.id },
+            'Failed to clean up stale cycle on hydrate'
+          );
+        }
+      }
 
-    // Broadcast supervisor creation
-    this.deps.broadcaster.broadcast(
-      `workspace.${req.workspaceId}.session.${req.sessionId}.supervisor.state`,
-      { supervisor, event: 'created' }
+      this.storeSnapshot(this.attachCycles(recovered));
+    }
+
+    this.lifecycleUnsubscribe?.();
+    this.lifecycleUnsubscribe = this.deps.eventBus.on(
+      'session.lifecycle',
+      (event: SessionLifecycleEvent) => {
+        if (event.event !== 'removed') {
+          return;
+        }
+        const supervisorId = this.supervisorsBySession.get(event.sessionId);
+        if (supervisorId) {
+          void this.delete(supervisorId).catch((error) => {
+            this.logger.warn(
+              { err: error, supervisorId },
+              'Auto-delete on session removal failed'
+            );
+          });
+        }
+      }
     );
 
-    return supervisor;
+    this.scheduler.start();
   }
 
-  /**
-   * Update supervisor objective or evaluator provider
-   */
-  async update(id: string, req: UpdateSupervisorRequest): Promise<Supervisor> {
-    const supervisor = this.supervisors.get(id);
-    if (!supervisor) {
-      throw new Error(`Supervisor not found: ${id}`);
-    }
-
-    const updated: Supervisor = {
-      ...supervisor,
-      objective: req.objective ?? supervisor.objective,
-      evaluatorProviderId:
-        req.evaluatorProviderId ?? supervisor.evaluatorProviderId,
-      updatedAt: Date.now(),
-    };
-
-    this.supervisors.set(id, updated);
-
-    // Broadcast update
-    this.deps.broadcaster.broadcast(
-      `workspace.${updated.workspaceId}.session.${updated.sessionId}.supervisor.state`,
-      { supervisor: updated, event: 'updated' }
-    );
-
-    return updated;
+  stop(): void {
+    this.scheduler.stop();
+    this.lifecycleUnsubscribe?.();
+    this.lifecycleUnsubscribe = null;
   }
 
-  /**
-   * Delete a supervisor
-   */
-  async delete(id: string): Promise<void> {
-    const supervisor = this.supervisors.get(id);
-    if (!supervisor) {
-      return;
-    }
-
-    this.scheduler.stop(id);
-    this.supervisors.delete(id);
-    this.supervisorsBySession.delete(supervisor.sessionId);
-
-    // Broadcast deletion
-    this.deps.broadcaster.broadcast(
-      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.state`,
-      { supervisorId: id, event: 'deleted' }
-    );
-  }
-
-  /**
-   * Pause supervisor evaluation
-   */
-  async pause(id: string): Promise<Supervisor> {
-    this.scheduler.stop(id);
-    return this.setState(id, 'paused');
-  }
-
-  /**
-   * Resume supervisor evaluation
-   */
-  async resume(id: string): Promise<Supervisor> {
-    const supervisor = this.supervisors.get(id);
-    if (supervisor) {
-      this.scheduler.start(id, LEGACY_SUPERVISOR_INTERVAL_MS);
-    }
-    return this.setState(id, 'idle');
-  }
-
-  /**
-   * Trigger manual evaluation cycle
-   */
-  async triggerEvaluation(id: string): Promise<SupervisorCycle> {
-    return this.createQueuedCycle(id, 'manual');
-  }
-
-  private async createQueuedCycle(
-    id: string,
-    trigger: CycleTrigger
-  ): Promise<SupervisorCycle> {
-    const supervisor = this.supervisors.get(id);
-    if (!supervisor) {
-      throw new Error(`Supervisor not found: ${id}`);
-    }
-
-    // Create new cycle
-    const cycle: SupervisorCycle = {
-      id: generateCycleId(),
-      sessionId: supervisor.sessionId,
-      supervisorId: id,
-      status: 'queued',
-      trigger,
-      evidenceSource: 'terminal_fallback',
-      objective: supervisor.objective,
-      evaluatorProviderId: supervisor.evaluatorProviderId,
-      createdAt: Date.now(),
-    };
-
-    // Add cycle to supervisor
-    const updated: Supervisor = {
-      ...supervisor,
-      state: 'evaluating',
-      cycles: [...supervisor.cycles, cycle],
-      updatedAt: Date.now(),
-    };
-
-    this.supervisors.set(id, updated);
-
-    // Broadcast cycle creation
-    this.deps.broadcaster.broadcast(
-      `workspace.${updated.workspaceId}.session.${updated.sessionId}.supervisor.cycle`,
-      { cycle, event: 'created' }
-    );
-
-    return cycle;
-  }
-
-  /**
-   * Update cycle status
-   */
-  async updateCycle(
-    supervisorId: string,
-    cycleId: string,
-    status: CycleStatus,
-    data?: Partial<SupervisorCycle>
-  ): Promise<SupervisorCycle | undefined> {
-    const supervisor = this.supervisors.get(supervisorId);
-    if (!supervisor) {
-      return undefined;
-    }
-
-    const cycleIndex = supervisor.cycles.findIndex((c) => c.id === cycleId);
-    if (cycleIndex === -1) {
-      return undefined;
-    }
-
-    const cycle = supervisor.cycles[cycleIndex];
-    if (!cycle) {
-      return undefined;
-    }
-    const completedAt =
-      status === 'completed' || status === 'failed' || status === 'injected'
-        ? Date.now()
-        : data?.completedAt ?? cycle.completedAt;
-    const updatedCycle: SupervisorCycle = {
-      id: cycle.id,
-      supervisorId: cycle.supervisorId,
-      sessionId: cycle.sessionId,
-      status,
-      trigger: data?.trigger ?? cycle.trigger,
-      evidenceSource: data?.evidenceSource ?? cycle.evidenceSource,
-      objective: data?.objective ?? cycle.objective,
-      evaluatorProviderId:
-        data?.evaluatorProviderId ?? cycle.evaluatorProviderId,
-      turnId: data?.turnId ?? cycle.turnId,
-      progress: data?.progress ?? cycle.progress,
-      result: data?.result ?? cycle.result,
-      injectedGuidance: data?.injectedGuidance ?? cycle.injectedGuidance,
-      createdAt: cycle.createdAt,
-      completedAt,
-      errorReason: data?.errorReason ?? cycle.errorReason,
-    };
-
-    const updatedSupervisor: Supervisor = {
-      ...supervisor,
-      state: status === 'evaluating' ? 'evaluating' : 'idle',
-      cycles: [
-        ...supervisor.cycles.slice(0, cycleIndex),
-        updatedCycle,
-        ...supervisor.cycles.slice(cycleIndex + 1),
-      ],
-      lastCycleAt: updatedCycle.completedAt,
-      updatedAt: Date.now(),
-    };
-
-    this.supervisors.set(supervisorId, updatedSupervisor);
-
-    // Broadcast cycle update
-    this.deps.broadcaster.broadcast(
-      `workspace.${updatedSupervisor.workspaceId}.session.${updatedSupervisor.sessionId}.supervisor.cycle`,
-      { cycle: updatedCycle, event: 'updated' }
-    );
-
-    return updatedCycle;
-  }
-
-  /**
-   * Get supervisor by ID
-   */
   get(id: string): Supervisor | undefined {
     return this.supervisors.get(id);
   }
 
-  /**
-   * Get supervisor by session ID
-   */
   getBySession(sessionId: string): Supervisor | undefined {
-    const id = this.supervisorsBySession.get(sessionId);
-    return id ? this.supervisors.get(id) : undefined;
+    const supervisorId = this.supervisorsBySession.get(sessionId);
+    return supervisorId ? this.supervisors.get(supervisorId) : undefined;
   }
 
-  /**
-   * Run evaluation cycle for a supervisor
-   */
-  private async runEvaluation(supervisorId: string): Promise<void> {
-    const supervisor = this.supervisors.get(supervisorId);
-    if (!supervisor || supervisor.state === 'paused' || supervisor.state === 'inactive') {
+  async create(req: CreateSupervisorRequest): Promise<Supervisor> {
+    const session = this.deps.sessionMgr.get(req.sessionId);
+    if (!session) {
+      throw {
+        code: 'supervisor_not_found',
+        message: `Session ${req.sessionId} not found`,
+      };
+    }
+    if (session.state === 'draft') {
+      throw {
+        code: 'supervisor_unsupported_provider',
+        message: 'Draft sessions cannot enable supervisor',
+      };
+    }
+    if (session.capability !== 'full') {
+      throw {
+        code: 'supervisor_unsupported_provider',
+        message: 'Supervisor requires a full-capability session provider',
+      };
+    }
+    if (this.supervisorsBySession.has(req.sessionId)) {
+      throw {
+        code: 'supervisor_already_exists',
+        message: `Supervisor already exists for ${req.sessionId}`,
+      };
+    }
+
+    this.assertEvaluatorProvider(req.evaluatorProviderId);
+
+    const now = Date.now();
+    const supervisor = this.attachCycles(
+      this.deps.supervisorRepo.create({
+        id: generateSupervisorId(),
+        sessionId: req.sessionId,
+        workspaceId: req.workspaceId,
+        state: 'idle',
+        objective: req.objective.trim(),
+        evaluatorProviderId: req.evaluatorProviderId,
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+
+    this.storeSnapshot(supervisor);
+    this.broadcastState(supervisor, 'created');
+    return supervisor;
+  }
+
+  async update(id: string, patch: UpdateSupervisorRequest): Promise<Supervisor> {
+    const current = this.requireSupervisor(id);
+
+    if (patch.evaluatorProviderId) {
+      this.assertEvaluatorProvider(patch.evaluatorProviderId);
+    }
+
+    const updated = this.attachCycles(
+      this.deps.supervisorRepo.update(id, {
+        objective:
+          patch.objective !== undefined ? patch.objective.trim() : current.objective,
+        evaluatorProviderId:
+          patch.evaluatorProviderId ?? current.evaluatorProviderId,
+        state: current.state === 'error' ? 'idle' : current.state,
+        errorReason: null,
+        updatedAt: Date.now(),
+      })
+    );
+
+    this.storeSnapshot(updated);
+    this.broadcastState(updated, 'updated');
+    return updated;
+  }
+
+  async pause(id: string): Promise<Supervisor> {
+    const updated = this.attachCycles(
+      this.deps.supervisorRepo.update(id, {
+        state: 'paused',
+        updatedAt: Date.now(),
+      })
+    );
+
+    this.storeSnapshot(updated);
+    this.broadcastState(updated, 'state_changed');
+    return updated;
+  }
+
+  async resume(id: string): Promise<Supervisor> {
+    const updated = this.attachCycles(
+      this.deps.supervisorRepo.update(id, {
+        state: 'idle',
+        errorReason: null,
+        updatedAt: Date.now(),
+      })
+    );
+
+    this.storeSnapshot(updated);
+    this.broadcastState(updated, 'state_changed');
+    return updated;
+  }
+
+  async delete(id: string): Promise<void> {
+    const supervisor = this.requireSupervisor(id);
+
+    if (this.inFlight.has(id)) {
+      this.pendingDeletes.add(id);
       return;
     }
 
-    // Create cycle
-    const cycle = await this.createQueuedCycle(supervisorId, 'turn_completed');
+    this.deleteNow(supervisor);
+  }
+
+  /**
+   * Start a manual evaluation cycle and return as soon as the cycle is
+   * created. The heavy evaluator+injector work continues in the background
+   * and broadcasts cycle/state updates as it progresses.
+   *
+   * This is what the WS `supervisor.trigger` command calls, so the web
+   * client never has to wait for the (potentially slow) evaluator to finish.
+   */
+  async triggerEvaluation(id: string): Promise<SupervisorCycle> {
+    const started = await this.beginCycle(id, 'manual');
+    if (!started) {
+      throw {
+        code: 'supervisor_internal_error',
+        message: `Supervisor ${id} could not start an evaluation cycle`,
+      };
+    }
+
+    // Fire-and-forget the rest of the evaluation. Errors are surfaced via
+    // broadcasts (cycle → failed, state → error).
+    void this.finishCycle(started).catch((error) => {
+      this.logger.warn(
+        { err: error, supervisorId: id, cycleId: started.cycle.id },
+        'Supervisor manual evaluation failed'
+      );
+    });
+
+    return started.cycle;
+  }
+
+  /**
+   * Run a supervisor evaluation synchronously end-to-end. Used for the
+   * auto trigger path (scheduler) and for tests that want to observe the
+   * final cycle outcome.
+   */
+  async runEvaluation(supervisorId: string): Promise<SupervisorCycle | null> {
+    const started = await this.beginCycle(supervisorId, 'turn_completed');
+    if (!started) {
+      return null;
+    }
+    return await this.finishCycle(started);
+  }
+
+  /**
+   * Synchronous portion of an evaluation cycle: validates preconditions,
+   * builds evaluator context, flips state → 'evaluating', creates an
+   * in-flight cycle row, and broadcasts both.
+   *
+   * Returns `null` when auto triggers should be skipped silently
+   * (duplicate turnId, wrong state, ...). Throws for manual trigger
+   * preconditions the user needs to know about (paused, busy, missing
+   * session). Always releases `inFlight` if we bail out before handing
+   * off to {@link finishCycle}.
+   */
+  private async beginCycle(
+    id: string,
+    trigger: 'turn_completed' | 'manual'
+  ): Promise<StartedCycle | null> {
+    const supervisor = this.requireSupervisor(id);
+    const session = this.deps.sessionMgr.get(supervisor.sessionId);
+
+    if (!session) {
+      throw {
+        code: 'supervisor_not_found',
+        message: `Session ${supervisor.sessionId} not found`,
+      };
+    }
+
+    if (this.inFlight.has(id)) {
+      if (trigger === 'manual') {
+        throw {
+          code: 'supervisor_busy',
+          message: `Supervisor ${id} is already evaluating`,
+        };
+      }
+      return null;
+    }
+
+    if (supervisor.state === 'paused') {
+      if (trigger === 'manual') {
+        throw {
+          code: 'supervisor_paused',
+          message: `Supervisor ${id} is paused`,
+        };
+      }
+      return null;
+    }
+
+    if (
+      trigger === 'turn_completed' &&
+      (supervisor.state !== 'idle' ||
+        (session.state !== 'running' && session.state !== 'idle'))
+    ) {
+      return null;
+    }
+
+    // Manual trigger: fail fast if the session can't receive injection yet.
+    // Without this guard we would burn an evaluator turn only to have the
+    // injector reject the session right after (e.g. Codex sessions stuck in
+    // 'starting' because the provider hasn't reported TurnCompleted).
+    if (trigger === 'manual' && !INJECTABLE_SESSION_STATES.has(session.state)) {
+      throw {
+        code: 'supervisor_session_not_ready',
+        message: `Supervisor ${id} cannot evaluate now: ${describeNonInjectableState(session.state)}`,
+      };
+    }
+
+    this.inFlight.add(id);
 
     try {
-      // Update cycle to evaluating
-      await this.updateCycle(supervisorId, cycle.id, 'evaluating');
-
-      // Get terminal output for evaluation
-      const terminalOutput = (this.deps.terminalMgr as any).getSessionOutput?.(supervisor.sessionId) ?? '';
-
-      // Run LLM evaluation
-      const result = await evaluateProgress(supervisor.objective, terminalOutput);
-
-      if (result.shouldInject && result.guidance) {
-        // Update state to injecting
-        await this.setState(supervisorId, 'injecting');
-
-        // Inject guidance
-        await injectGuidance(this.deps.terminalMgr, supervisor.sessionId, result.guidance);
-
-        // Complete cycle as injected
-        await this.updateCycle(supervisorId, cycle.id, 'injected', {
-          progress: result.progress,
-          result: result.summary,
-          injectedGuidance: result.guidance,
-        });
-      } else {
-        // Complete cycle as completed
-        await this.updateCycle(supervisorId, cycle.id, 'completed', {
-          progress: result.progress,
-          result: result.summary,
-        });
+      const context = await this.contextBuilder.build(supervisor);
+      if (
+        trigger === 'turn_completed' &&
+        context.lastTurnId &&
+        context.lastTurnId === supervisor.lastEvaluatedTurnId
+      ) {
+        this.inFlight.delete(id);
+        return null;
       }
 
-      // Return to idle
-      await this.setState(supervisorId, 'idle');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Evaluation failed';
-      await this.updateCycle(supervisorId, cycle.id, 'failed', {
-        errorReason: message,
+      const evaluatingSupervisor = this.attachCycles(
+        this.deps.supervisorRepo.update(supervisor.id, {
+          state: 'evaluating',
+          errorReason: null,
+          updatedAt: Date.now(),
+        })
+      );
+      this.storeSnapshot(evaluatingSupervisor);
+      this.broadcastState(evaluatingSupervisor, 'state_changed');
+
+      const activeCycle = this.deps.cycleRepo.create({
+        id: generateCycleId(),
+        supervisorId: supervisor.id,
+        sessionId: supervisor.sessionId,
+        status: 'evaluating',
+        trigger,
+        evidenceSource: context.evidenceSource,
+        objective: supervisor.objective,
+        evaluatorProviderId: supervisor.evaluatorProviderId,
+        turnId: context.lastTurnId,
+        createdAt: Date.now(),
       });
-      await this.setState(supervisorId, 'error');
+      this.broadcastCycle(evaluatingSupervisor, activeCycle, 'created');
 
-      // Update supervisor error reason
-      const updated = this.supervisors.get(supervisorId);
-      if (updated) {
-        this.supervisors.set(supervisorId, { ...updated, errorReason: message });
-      }
+      return { cycle: activeCycle, context };
+    } catch (error: unknown) {
+      // Error happened BEFORE we created a cycle (usually contextBuilder or
+      // the state→evaluating write). Make sure we don't leave the
+      // supervisor stuck and release inFlight ourselves.
+      this.inFlight.delete(id);
+      this.markSupervisorError(id, error);
+      throw error;
     }
   }
 
   /**
-   * Set supervisor state
+   * Asynchronous portion of an evaluation cycle: runs the evaluator, optionally
+   * injects guidance, persists the final cycle outcome, and flips state back
+   * to 'idle' (or 'error'/'paused'). Always releases `inFlight`.
    */
-  private async setState(id: string, state: SupervisorState): Promise<Supervisor> {
+  private async finishCycle(started: StartedCycle): Promise<SupervisorCycle> {
+    const { cycle: activeCycle, context } = started;
+    const supervisorId = activeCycle.supervisorId;
+
+    try {
+      const supervisorForEval =
+        this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
+
+      const evaluation = await this.evaluator.evaluate(supervisorForEval, context);
+
+      let injected = false;
+      let injectedText: string | undefined;
+      let injectionError: string | undefined;
+
+      if (evaluation.shouldInject && evaluation.guidance) {
+        const injectingSupervisor = this.attachCycles(
+          this.deps.supervisorRepo.update(supervisorId, {
+            state: 'injecting',
+            updatedAt: Date.now(),
+          })
+        );
+        this.storeSnapshot(injectingSupervisor);
+        this.broadcastState(injectingSupervisor, 'state_changed');
+
+        // Fetch dedupeWindow + 1 so we can safely drop the in-flight cycle
+        // (already persisted via cycleRepo.create above) before passing the
+        // previous N cycles into the injector's dedupe check.
+        const recentCycles = this.deps
+          .cycleRepo
+          .listRecentForSupervisor(
+            supervisorId,
+            this.config.guidanceDedupeWindow + 1
+          )
+          .filter((cycle) => cycle.id !== activeCycle.id);
+
+        try {
+          const injection = await this.injector.inject(
+            injectingSupervisor,
+            {
+              summary: evaluation.summary,
+              guidance: evaluation.guidance,
+            },
+            recentCycles
+          );
+          injected = injection.injected;
+          injectedText = injection.injected ? injection.text : undefined;
+        } catch (error) {
+          // Injection failed (e.g. session gone away). Keep the evaluation
+          // result but mark the cycle as failed instead of 'injected'.
+          injectionError = messageOf(error, 'Guidance injection failed');
+          this.logger.warn(
+            { err: error, supervisorId, cycleId: activeCycle.id },
+            'Supervisor guidance injection failed'
+          );
+        }
+      }
+
+      const finalStatus: CycleStatus = injectionError
+        ? 'failed'
+        : injected
+          ? 'injected'
+          : 'completed';
+
+      const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+        status: finalStatus,
+        progress: evaluation.progress,
+        result: evaluation.summary,
+        injectedGuidance: injectedText,
+        errorReason: injectionError ?? null,
+        completedAt: Date.now(),
+      });
+
+      const latestState = this.supervisors.get(supervisorId)?.state;
+      const nextState: SupervisorState =
+        latestState === 'paused'
+          ? 'paused'
+          : injectionError
+            ? 'error'
+            : 'idle';
+      const finishedSupervisor = this.attachCycles(
+        this.deps.supervisorRepo.update(supervisorId, {
+          state: nextState,
+          lastCycleAt: finishedCycle.completedAt,
+          lastEvaluatedTurnId: context.lastTurnId ?? undefined,
+          errorReason: injectionError ?? null,
+          updatedAt: Date.now(),
+        })
+      );
+
+      this.storeSnapshot(finishedSupervisor);
+      this.broadcastCycle(finishedSupervisor, finishedCycle, 'updated');
+      this.broadcastState(finishedSupervisor, 'state_changed');
+      this.deps.cycleRepo.pruneOldest(
+        supervisorId,
+        this.config.maxCyclesPerSession
+      );
+
+      if (this.pendingDeletes.has(supervisorId)) {
+        this.pendingDeletes.delete(supervisorId);
+        this.deleteNow(finishedSupervisor);
+      }
+
+      return finishedCycle;
+    } catch (error: unknown) {
+      const reason = messageOf(error, 'Supervisor evaluation failed');
+      const failedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+        status: 'failed',
+        errorReason: reason,
+        completedAt: Date.now(),
+      });
+      const failedSupervisor = this.attachCycles(
+        this.deps.supervisorRepo.update(supervisorId, {
+          state: 'error',
+          errorReason: reason,
+          updatedAt: Date.now(),
+        })
+      );
+
+      this.storeSnapshot(failedSupervisor);
+      this.broadcastCycle(failedSupervisor, failedCycle, 'updated');
+      this.broadcastState(failedSupervisor, 'state_changed');
+
+      if (this.pendingDeletes.has(supervisorId)) {
+        this.pendingDeletes.delete(supervisorId);
+        this.deleteNow(failedSupervisor);
+      }
+
+      throw error;
+    } finally {
+      this.inFlight.delete(supervisorId);
+    }
+  }
+
+  /**
+   * Flip a supervisor to 'error' state when something blows up before we
+   * had a chance to create a cycle. Without this the supervisor can get
+   * stuck in whatever state it happened to be in (usually 'evaluating').
+   */
+  private markSupervisorError(id: string, error: unknown): void {
+    const reason = messageOf(error, 'Supervisor evaluation failed');
+    try {
+      const failed = this.attachCycles(
+        this.deps.supervisorRepo.update(id, {
+          state: 'error',
+          errorReason: reason,
+          updatedAt: Date.now(),
+        })
+      );
+      this.storeSnapshot(failed);
+      this.broadcastState(failed, 'state_changed');
+    } catch (writeError) {
+      this.logger.warn(
+        { err: writeError, supervisorId: id },
+        'Failed to persist supervisor error state'
+      );
+    }
+  }
+
+  private assertEvaluatorProvider(providerId: string): void {
+    const provider = this.deps.providerRegistry.find((item) => item.id === providerId);
+    if (!provider?.buildSupervisorEvalCommand) {
+      throw {
+        code: 'supervisor_invalid_evaluator_provider',
+        message: `Provider ${providerId} cannot evaluate supervisors`,
+      };
+    }
+    const hasConfig =
+      this.deps.providerConfigRepo.get(providerId) ?? provider.defaultConfig;
+    if (!hasConfig) {
+      throw {
+        code: 'missing_evaluator_config',
+        message: `Missing config for evaluator provider ${providerId}`,
+      };
+    }
+  }
+
+  private attachCycles(supervisor: Supervisor): Supervisor {
+    return {
+      ...supervisor,
+      cycles: this.deps.cycleRepo.listRecentForSupervisor(supervisor.id, 20),
+    };
+  }
+
+  private storeSnapshot(supervisor: Supervisor): void {
+    this.supervisors.set(supervisor.id, supervisor);
+    this.supervisorsBySession.set(supervisor.sessionId, supervisor.id);
+  }
+
+  private deleteNow(supervisor: Supervisor): void {
+    this.deps.supervisorRepo.delete(supervisor.id);
+    this.supervisors.delete(supervisor.id);
+    this.supervisorsBySession.delete(supervisor.sessionId);
+    this.pendingDeletes.delete(supervisor.id);
+    this.inFlight.delete(supervisor.id);
+
+    this.deps.broadcaster.broadcast(
+      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.state`,
+      { supervisorId: supervisor.id, event: 'deleted' }
+    );
+  }
+
+  private requireSupervisor(id: string): Supervisor {
     const supervisor = this.supervisors.get(id);
     if (!supervisor) {
-      throw new Error(`Supervisor not found: ${id}`);
+      throw {
+        code: 'supervisor_not_found',
+        message: `Supervisor ${id} not found`,
+      };
     }
+    return supervisor;
+  }
 
-    const updated: Supervisor = {
-      ...supervisor,
-      state,
-      updatedAt: Date.now(),
-    };
-
-    this.supervisors.set(id, updated);
-
-    // Broadcast state change
+  private broadcastState(
+    supervisor: Supervisor,
+    event: 'created' | 'updated' | 'state_changed'
+  ): void {
     this.deps.broadcaster.broadcast(
-      `workspace.${updated.workspaceId}.session.${updated.sessionId}.supervisor.state`,
-      { supervisor: updated, event: 'state_changed' }
+      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.state`,
+      { supervisor, event }
     );
+  }
 
-    return updated;
+  private broadcastCycle(
+    supervisor: Supervisor,
+    cycle: SupervisorCycle,
+    event: 'created' | 'updated'
+  ): void {
+    this.deps.broadcaster.broadcast(
+      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.cycle`,
+      { cycle, event }
+    );
   }
 }

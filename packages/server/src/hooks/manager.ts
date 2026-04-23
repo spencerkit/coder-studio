@@ -7,6 +7,13 @@ import type { RuntimeConfig } from './runtime-json.js';
 import { mergeWriteConfig } from './merge-writer';
 import type { ProviderHookEvent } from '../session/manager.js';
 import type { HookEventContext } from './endpoint.js';
+import {
+  auditCodexConfigToml,
+  cleanupCodexConfigToml,
+  type CodexAuditFindingType,
+  type CodexCleanupResult,
+  type CodexConfigAudit,
+} from './codex-config-audit.js';
 
 export interface HookRouteDeps {
   sessionMgr: { onHookEvent(sessionId: string, event: ProviderHookEvent): void };
@@ -32,11 +39,16 @@ export class HooksManager {
   ) {}
 
   /**
-   * Deploys bridge scripts for all registered providers
+   * Deploys bridge scripts for all registered providers.
+   *
+   * Returns after attempting every provider; individual failures are logged
+   * via `ensureGlobalConfig`'s own best-effort handling and do not abort the
+   * loop. Called once at server startup.
    */
-  async deployBridgeScripts(): Promise<void> {
-    // Will be implemented with provider registry access
-    throw new Error('deployBridgeScripts requires provider registry - implement in server initialization');
+  async deployBridgeScripts(providers: ProviderDefinition[]): Promise<void> {
+    for (const provider of providers) {
+      await this.ensureGlobalConfig(provider);
+    }
   }
 
   /**
@@ -50,8 +62,35 @@ export class HooksManager {
       // 2. Build managed hooks configuration
       const managedHooks = this.buildManagedHooks(provider);
 
-      // 3. Get provider's global config path
+      // 3. Get provider's global config path. Providers that don't use a
+      //    global config file (Codex wires its notify command through argv
+      //    in `buildCommand`, so `resolveGlobalConfigPath` returns '') skip
+      //    the merge-write step — attempting it would write a stray `.tmp`
+      //    into the process cwd.
       const configPath = provider.hooks.resolveGlobalConfigPath();
+      if (!configPath) {
+        const now = Date.now();
+        const existing = this.hookRegistrationRepo.get(provider.id);
+        const registration: NewHookRegistration = {
+          providerId: provider.id,
+          markerVersion: provider.hooks.markerVersion,
+          injectedAt: now,
+          globalConfigPath: '',
+          lastCheckAt: now,
+          lastStatus: 'ok',
+        };
+        if (existing) {
+          this.hookRegistrationRepo.updateInjection(
+            provider.id,
+            provider.hooks.markerVersion,
+            now
+          );
+          this.hookRegistrationRepo.updateCheckStatus(provider.id, now, 'ok');
+        } else {
+          this.hookRegistrationRepo.create(registration);
+        }
+        return;
+      }
 
       // 4. Merge-write global config
       const result = mergeWriteConfig(
@@ -161,6 +200,25 @@ export class HooksManager {
 
   listRegistrations() {
     return this.hookRegistrationRepo.listAll();
+  }
+
+  /**
+   * Audit external provider config files for settings that would interfere
+   * with Coder Studio's hook integration. Currently only scans Codex's
+   * `config.toml` (see `codex-config-audit.ts` for the rationale). Safe to
+   * call on every `settings.get` — it just reads a file and runs regexes.
+   */
+  auditExternalConfigs(): { codex: CodexConfigAudit } {
+    return { codex: auditCodexConfigToml() };
+  }
+
+  /**
+   * Apply a user-selected cleanup to `~/.codex/config.toml`. Always creates
+   * a timestamped backup next to the file before mutating it.
+   */
+  cleanupCodexConfig(removeIds: CodexAuditFindingType[]): CodexCleanupResult {
+    const audit = auditCodexConfigToml();
+    return cleanupCodexConfigToml(audit.configPath, { removeIds });
   }
 
   /**

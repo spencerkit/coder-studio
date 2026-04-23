@@ -25,7 +25,7 @@ describe('ObjectiveDialog', () => {
       </Provider>
     );
 
-    fireEvent.change(screen.getByLabelText('Evaluator Provider'), {
+    fireEvent.change(screen.getByLabelText('评估方 (Evaluator)'), {
       target: { value: 'claude' },
     });
     fireEvent.click(screen.getByRole('button', { name: '启用' }));
@@ -76,7 +76,7 @@ describe('ObjectiveDialog', () => {
       </Provider>
     );
 
-    expect(screen.getByText('禁用会停止评估并清空历史')).toBeInTheDocument();
+    expect(screen.getByText('禁用后会停止评估周期')).toBeInTheDocument();
     expect(screen.getByText('Finish the server refactor')).toBeInTheDocument();
   });
 });

@@ -96,6 +96,56 @@ describe('Codex Provider Definition', () => {
     });
   });
 
+  describe('buildSupervisorEvalCommand', () => {
+    it('builds a supervisor eval command with codex exec --json', () => {
+      const result = codexDefinition.buildSupervisorEvalCommand?.(
+        {
+          additionalArgs: [],
+          envVars: { OPENAI_API_KEY: 'sk-openai' },
+          cwd: '/workspace',
+        },
+        {
+          prompt: 'Return strict JSON',
+          sessionId: 'sess-1',
+          workspacePath: '/workspace',
+        }
+      );
+
+      expect(result?.argv.slice(0, 2)).toEqual(['codex', 'exec']);
+      // --json produces a JSONL event stream we can actually parse.
+      expect(result?.argv).toContain('--json');
+      // Evaluations must never mutate the workspace.
+      expect(result?.argv).toEqual(expect.arrayContaining(['-s', 'read-only']));
+      // Don't choke when the evaluator is pointed at a non-git dir.
+      expect(result?.argv).toContain('--skip-git-repo-check');
+      // The prompt is the last argv entry so it's treated as the positional prompt.
+      expect(result?.argv[result.argv.length - 1]).toBe('Return strict JSON');
+      expect(result?.cwd).toBe('/workspace');
+      expect(result?.env?.OPENAI_API_KEY).toBe('sk-openai');
+    });
+
+    it('places additionalArgs before the prompt positional', () => {
+      const result = codexDefinition.buildSupervisorEvalCommand?.(
+        {
+          additionalArgs: ['-c', 'model_reasoning_effort="low"'],
+          envVars: {},
+        },
+        {
+          prompt: 'Return strict JSON',
+          sessionId: 'sess-1',
+          workspacePath: '/workspace',
+        }
+      );
+
+      const argv = result?.argv ?? [];
+      const configIdx = argv.indexOf('-c');
+      const promptIdx = argv.indexOf('Return strict JSON');
+      expect(configIdx).toBeGreaterThan(-1);
+      expect(promptIdx).toBe(argv.length - 1);
+      expect(configIdx).toBeLessThan(promptIdx);
+    });
+  });
+
   describe('defaultConfig', () => {
     it('should have valid default config', () => {
       expect(codexDefinition.defaultConfig).toBeDefined();
