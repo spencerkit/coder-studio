@@ -3,6 +3,7 @@ node_modules/
 # Build outputs
 dist/
 build/
+output/
 .cache/
 .turbo/
 
@@ -37,10 +38,10 @@ temp/
 .worktrees/
 
 # Acceptance runtime artifacts
-docs/验收报告/
+docs/验收报告/**/*.json
 
 # Root-level screenshot artifacts
-*.png
+/*.png
 
 # SQLite runtime files (SQLite database + WAL/SHM)
 data
@@ -54,7 +55,7 @@ data-wl
 e2e/playwright.session.config.ts
 e2e/run-session-tests.*
 .playwright-cli/
-superpowers/
-.coder-studio/
-.codex
+/superpowers/
+/.coder-studio/
+/.codex
 tsconfig.tsbuildinfo    
