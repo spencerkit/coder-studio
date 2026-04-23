@@ -66,7 +66,7 @@ describe('terminal commands', () => {
     expect(result.ok).toBe(true);
     expect(ctx.terminalMgr.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        argv: ['/bin/zsh'],
+        argv: ['/bin/zsh', '-il'],
         title: 'zsh',
       })
     );

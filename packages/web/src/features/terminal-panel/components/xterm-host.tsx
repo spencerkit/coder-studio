@@ -202,11 +202,13 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     if (!containerRef.current) return;
 
     // Create Terminal instance
+    // lineHeight is left at xterm.js default (1.0) so that box-drawing
+    // characters used by TUIs (claude, codex) render as a continuous frame
+    // with no gaps between rows.
     const terminal = new Terminal({
       theme: AURORA_MINT_THEME,
       fontFamily: 'JetBrains Mono, Fira Code, SF Mono, monospace',
       fontSize: 13,
-      lineHeight: 1.4,
       scrollback: 5000,
       cursorBlink: isInteractive,
       cursorStyle: 'block',

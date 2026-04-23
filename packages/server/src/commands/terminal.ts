@@ -7,14 +7,24 @@ import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
 function resolveShellCommand(): { argv: string[]; title: string } {
-  const shellPath =
-    process.platform === 'win32'
-      ? process.env.ComSpec || process.env.COMSPEC || 'cmd.exe'
-      : process.env.SHELL || '/bin/bash';
+  if (process.platform === 'win32') {
+    const shellPath = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe';
+    return {
+      argv: [shellPath],
+      title: basename(shellPath) || shellPath,
+    };
+  }
+
+  const shellPath = process.env.SHELL || '/bin/bash';
+  const shellName = basename(shellPath);
+  // Launch as interactive login shell so the user's rc/profile files load.
+  // Without this, PS1 colors and `ls --color=auto` aliases never get defined
+  // and the xterm pane renders everything in a single foreground color.
+  const argv = shellName === 'cmd.exe' ? [shellPath] : [shellPath, '-il'];
 
   return {
-    argv: [shellPath],
-    title: basename(shellPath) || shellPath,
+    argv,
+    title: shellName || shellPath,
   };
 }
 

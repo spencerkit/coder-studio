@@ -120,6 +120,50 @@ describe('TerminalManager', () => {
       expect(spawnOptions.env.MY_VAR).toBe('my_value')
     })
 
+    it('forces color env vars regardless of parent env', () => {
+      vi.stubEnv('TERM', 'screen-256color')
+      vi.stubEnv('COLORTERM', '')
+      vi.stubEnv('FORCE_COLOR', '0')
+
+      const spec: TerminalSpec = {
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      }
+
+      try {
+        manager.create(spec)
+
+        const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1]
+        expect(spawnOptions.env.TERM).toBe('xterm-256color')
+        expect(spawnOptions.env.COLORTERM).toBe('truecolor')
+        expect(spawnOptions.env.FORCE_COLOR).toBe('3')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('allows spec.env to override color env vars when explicitly provided', () => {
+      const spec: TerminalSpec = {
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+        env: {
+          TERM: 'dumb',
+          FORCE_COLOR: '0',
+        },
+      }
+
+      manager.create(spec)
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1]
+      expect(spawnOptions.env.TERM).toBe('dumb')
+      expect(spawnOptions.env.COLORTERM).toBe('truecolor')
+      expect(spawnOptions.env.FORCE_COLOR).toBe('0')
+    })
+
     it('should throw error on spawn failure', () => {
       const spawnError = new Error('Command not found')
       mockPtyHost.spawn = vi.fn().mockImplementation(() => {

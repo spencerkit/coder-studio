@@ -41,12 +41,27 @@ export class TerminalManager {
   create(spec: TerminalSpec): Terminal {
     const id = generateId()
 
-    // Spawn PTY process
+    // The PTY output is always rendered by xterm.js on the frontend, so force
+    // a full-color terminal environment regardless of the server's parent TTY
+    // (e.g. tmux's screen-256color, kitty's xterm-kitty, or CI's dumb).
+    // FORCE_COLOR makes agent CLIs that are spawned directly (e.g. Claude Code
+    // via Ink/chalk, Codex) emit ANSI colors without relying on the user's
+    // shell rc to set it. spec.env can still override explicitly.
+    const terminalEnv: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter((e): e is [string, string] => e[1] != null)
+      ),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      FORCE_COLOR: '3',
+      ...spec.env,
+    }
+
     let pty: PtyProcess
     try {
       pty = this.deps.ptyHost.spawn(spec.argv, {
         cwd: spec.cwd,
-        env: Object.fromEntries(Object.entries({ ...process.env, ...spec.env }).filter((e): e is [string, string] => e[1] != null)),
+        env: terminalEnv,
         cols: spec.cols ?? 120,
         rows: spec.rows ?? 30,
       })
