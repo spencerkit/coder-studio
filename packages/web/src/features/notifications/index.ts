@@ -9,4 +9,14 @@
 
 export { useSessionNotifications } from './use-session-notifications';
 export { ToastContainer } from './toast-container';
-export { toastsAtom, pushToastAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
+export { focusSession, type FocusSessionOptions } from './focus-session';
+export {
+  toastsAtom,
+  pushToastAtom,
+  dismissToastAtom,
+  sessionOutputTailAtom,
+  appendSessionOutputAtom,
+  clearSessionOutputAtom,
+  type Toast,
+  type ToastKind,
+} from './atoms';

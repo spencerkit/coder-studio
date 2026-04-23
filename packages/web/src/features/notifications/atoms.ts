@@ -37,3 +37,51 @@ export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, 'id' | 'cr
 export const dismissToastAtom = atom(null, (get, set, id: string) => {
   set(toastsAtom, (prev) => prev.filter((t) => t.id !== id));
 });
+
+/* ------------------------------------------------------------------ *
+ * Per-session output tail buffer
+ *
+ * The notification engine pulls a short text summary from the agent's
+ * most recent stdout when firing "turn complete". We keep at most
+ * SESSION_OUTPUT_TAIL_BYTES of UTF-8 text per session, already stripped
+ * of ANSI escapes and control characters, in this single atom.
+ *
+ * Written by: WS event router in `app/providers.tsx` on every
+ *             `workspace.{ws}.terminal.{tid}.output` event whose
+ *             terminal is associated with a known session.
+ * Read by:    useSessionNotifications when assembling the summary.
+ * ------------------------------------------------------------------ */
+
+/** Keep at most this many characters per session. Trim from the head. */
+export const SESSION_OUTPUT_TAIL_BYTES = 4_096;
+
+export const sessionOutputTailAtom = atom<Record<string, string>>({});
+
+/**
+ * Append a chunk of cleaned text to the tail buffer for `sessionId`,
+ * truncating from the head so we never exceed the byte cap.
+ */
+export const appendSessionOutputAtom = atom(
+  null,
+  (get, set, payload: { sessionId: string; text: string }) => {
+    if (!payload.text) return;
+    const current = get(sessionOutputTailAtom)[payload.sessionId] ?? '';
+    const merged = current + payload.text;
+    const trimmed = merged.length > SESSION_OUTPUT_TAIL_BYTES
+      ? merged.slice(merged.length - SESSION_OUTPUT_TAIL_BYTES)
+      : merged;
+    set(sessionOutputTailAtom, (prev) => ({ ...prev, [payload.sessionId]: trimmed }));
+  }
+);
+
+/** Drop a session's tail buffer (call when the session is removed). */
+export const clearSessionOutputAtom = atom(
+  null,
+  (get, set, sessionId: string) => {
+    const current = get(sessionOutputTailAtom);
+    if (!(sessionId in current)) return;
+    const next = { ...current };
+    delete next[sessionId];
+    set(sessionOutputTailAtom, next);
+  }
+);

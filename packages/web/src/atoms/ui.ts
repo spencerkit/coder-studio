@@ -73,17 +73,25 @@ export const localeAtom = atomWithStorage<string>('ui.locale', 'zh');
  * Notification preferences
  * Persisted so the notification engine can respect the latest settings
  * even before the user re-opens Settings.
+ *
+ * Channel selection is automatic based on workspace focus + page visibility:
+ *   - Active workspace + page visible → suppressed
+ *   - Inactive workspace + page visible → in-app banner toast
+ *   - Page hidden → system (browser) push notification
+ *
+ * `enabled`      master switch for any notification (sound, toast, system push)
+ * `soundEnabled` whether to play the completion chime when a notification fires
  */
 export interface NotificationPreferences {
   enabled: boolean;
-  onlyWhenBackgrounded: boolean;
+  soundEnabled: boolean;
 }
 
 export const notificationPreferencesAtom = atomWithStorage<NotificationPreferences>(
   'ui.notificationPreferences',
   {
     enabled: true,
-    onlyWhenBackgrounded: true,
+    soundEnabled: true,
   }
 );
 
@@ -97,6 +105,22 @@ export const authenticatedAtom = atomWithStorage<boolean>('ui.authenticated', fa
  * Command palette open state
  */
 export const commandPaletteOpenAtom = atom<boolean>(false);
+
+/**
+ * Pending session-focus request.
+ *
+ * Set when something outside the workspace UI (e.g. a toast click or a
+ * system notification) wants to bring a specific session into view.
+ * The corresponding `<SessionCard>` watches this atom and, when its own id
+ * appears, scrolls itself into view, briefly highlights itself, and
+ * clears the value back to `null`.
+ *
+ * In-memory only: the marker only needs to bridge a single same-tab route
+ * change, and React Router transitions are synchronous within the same tab.
+ * Persisting to (session|local)Storage would risk re-firing the highlight
+ * on every page reload.
+ */
+export const pendingFocusSessionAtom = atom<string | null>(null);
 
 /**
  * Sidebar collapsed state

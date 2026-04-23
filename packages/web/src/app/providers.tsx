@@ -26,7 +26,12 @@ import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus } from '../ws';
-import { useSessionNotifications } from '../features/notifications';
+import {
+  useSessionNotifications,
+  appendSessionOutputAtom,
+  clearSessionOutputAtom,
+} from '../features/notifications';
+import { stripAnsi } from '../features/notifications/format';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
 import type { Supervisor, SupervisorCycle } from '@coder-studio/core';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
@@ -37,6 +42,21 @@ import type { Workspace, Session, GitStatus } from '@coder-studio/core';
  */
 let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Shared decoder for terminal output chunks. PTY data is a UTF-8 byte stream
+ * shipped over WS as base64 strings. Decoding once-per-event is cheap, but
+ * keeping the TextDecoder around saves allocations at high stream rates.
+ */
+const sessionOutputDecoder = new TextDecoder('utf-8', { fatal: false });
+function decodeBase64Utf8(chunk: string): string {
+  const binary = atob(chunk);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return sessionOutputDecoder.decode(bytes);
+}
 
 interface AppProvidersProps {
   children: React.ReactNode;
@@ -390,8 +410,27 @@ export function routeEventToAtom(
 
       // workspace.{id}.terminal.{terminalId}.output
       if (terminalSubtopic === 'output') {
-        // Terminal output is typically handled by the terminal component itself
-        // We'll skip storing it in global state for now
+        // Terminal panels render output directly into xterm.js. We skim a
+        // copy here only when the terminal is bound to a known *agent* session,
+        // so the notification engine can include a tail summary in its body.
+        // Shell terminals (no session) are ignored to keep the buffer small.
+        const data = payload as { chunk: string; size?: number; seq?: number };
+        if (!data?.chunk) return;
+        const sessions = store.get(sessionsAtom);
+        const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
+        if (!session) return;
+        try {
+          const decoded = decodeBase64Utf8(data.chunk);
+          const cleaned = stripAnsi(decoded);
+          if (cleaned) {
+            store.set(appendSessionOutputAtom, {
+              sessionId: session.id,
+              text: cleaned,
+            });
+          }
+        } catch {
+          // Malformed base64 — drop the chunk silently; xterm path is unaffected.
+        }
         return;
       }
 
@@ -406,6 +445,13 @@ export function routeEventToAtom(
             exitCode: data.code,
             alive: false,
           });
+        }
+        // Clean up the output tail buffer for the session this terminal belonged
+        // to (if any). Avoids unbounded growth across long-lived browser tabs.
+        const sessions = store.get(sessionsAtom);
+        const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
+        if (session) {
+          store.set(clearSessionOutputAtom, session.id);
         }
         return;
       }

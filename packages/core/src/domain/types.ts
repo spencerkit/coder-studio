@@ -88,7 +88,7 @@ export interface Settings {
   defaultProviderId: string;
   notifications: {
     enabled: boolean;
-    onlyWhenBackgrounded: boolean;
+    soundEnabled: boolean;
   };
   appearance: {
     theme: 'dark';

@@ -44,7 +44,7 @@ describe('settings commands', () => {
             defaultProviderId: 'codex',
             notifications: {
               enabled: true,
-              onlyWhenBackgrounded: false,
+              soundEnabled: false,
             },
           },
         },
@@ -60,7 +60,7 @@ describe('settings commands', () => {
       db.prepare('SELECT value FROM user_settings WHERE key = ?').get('notifications.enabled')
     ).toEqual({ value: 'true' });
     expect(
-      db.prepare('SELECT value FROM user_settings WHERE key = ?').get('notifications.onlyWhenBackgrounded')
+      db.prepare('SELECT value FROM user_settings WHERE key = ?').get('notifications.soundEnabled')
     ).toEqual({ value: 'false' });
   });
 

@@ -5907,6 +5907,10 @@ textarea.input {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
+  /* Notification engine composes a 2-line body (metadata + summary)
+     separated by `\n`; preserve those breaks while still wrapping long lines. */
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 .toast__close {
@@ -5952,5 +5956,49 @@ textarea.input {
     right: var(--sp-3);
     bottom: var(--sp-3);
     max-width: none;
+  }
+}
+
+/* ─── Session-card focus pulse ──────────────────────────────────────────
+ * Applied for ~1.4s when a notification (toast click or system push) brings
+ * the user back to a specific session. The double-pulse is intentional —
+ * a single ring is easy to miss when the user has just regained focus on
+ * the tab, two read as "look here". outline + box-shadow combo lets us
+ * cheat past container clipping that would otherwise hide a pure shadow.
+ */
+.session-card--focus-pulse {
+  animation: session-card-focus-pulse 1.4s ease-out 1;
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes session-card-focus-pulse {
+  0% {
+    outline: 2px solid var(--color-success, #5ad7a4);
+    outline-offset: -2px;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #5ad7a4) 60%, transparent);
+  }
+  35% {
+    outline: 2px solid var(--color-success, #5ad7a4);
+    outline-offset: -2px;
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success, #5ad7a4) 0%, transparent);
+  }
+  60% {
+    outline: 2px solid var(--color-success, #5ad7a4);
+    outline-offset: -2px;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #5ad7a4) 45%, transparent);
+  }
+  100% {
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--color-success, #5ad7a4) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-card--focus-pulse {
+    animation: none;
+    outline: 2px solid var(--color-success, #5ad7a4);
+    outline-offset: -2px;
   }
 }

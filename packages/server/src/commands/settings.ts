@@ -10,6 +10,10 @@ const SettingsSchema = z.object({
   defaultProviderId: z.string().optional(),
   notifications: z.object({
     enabled: z.boolean().optional(),
+    soundEnabled: z.boolean().optional(),
+    // Legacy field — accepted for backward compat with older clients but
+    // no longer surfaced in the UI. The web client now picks the channel
+    // automatically based on workspace focus + page visibility.
     onlyWhenBackgrounded: z.boolean().optional(),
   }).optional(),
   appearance: z.object({

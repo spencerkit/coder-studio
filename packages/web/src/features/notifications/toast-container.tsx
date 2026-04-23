@@ -11,6 +11,8 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { toastsAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
+import { pendingFocusSessionAtom } from '../../atoms/ui';
+import { focusSession } from './focus-session';
 
 const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: string }> = {
   success: { icon: CheckCircle, className: 'toast--success' },
@@ -21,6 +23,7 @@ const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: stri
 
 function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useSetAtom(dismissToastAtom);
+  const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const navigate = useNavigate();
   const config = KIND_CONFIG[toast.kind];
   const Icon = config.icon;
@@ -34,11 +37,22 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [toast.id, duration, dismiss]);
 
   const handleClick = useCallback(() => {
-    if (toast.workspaceId) {
+    // If the toast was emitted with both a workspace AND a session id (the
+    // session-completion path always is), route through `focusSession` so
+    // the target SessionCard scrolls into view and pulses. Workspace-only
+    // toasts (rare/legacy) just navigate.
+    if (toast.workspaceId && toast.sessionId) {
+      focusSession({
+        workspaceId: toast.workspaceId,
+        sessionId: toast.sessionId,
+        setPendingFocus,
+        navigate,
+      });
+    } else if (toast.workspaceId) {
       navigate(`/workspace/${toast.workspaceId}`);
     }
     dismiss(toast.id);
-  }, [toast.workspaceId, navigate, dismiss]);
+  }, [toast.workspaceId, toast.sessionId, navigate, dismiss, setPendingFocus]);
 
   return (
     <div

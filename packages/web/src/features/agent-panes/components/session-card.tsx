@@ -6,8 +6,8 @@
  */
 
 import type { FC } from 'react';
-import { useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { useEffect, useRef, useState } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   X,
   FlipHorizontal,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
+import { pendingFocusSessionAtom } from '../../../atoms/ui';
 import type { SessionState } from '@coder-studio/core';
 import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
 import { SupervisorCard } from '../../supervisor/components/supervisor-card';
@@ -40,9 +41,29 @@ interface SessionCardProps {
 export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const pendingFocus = useAtomValue(pendingFocusSessionAtom);
+  const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
 
   const [inputValue, setInputValue] = useState('');
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [highlight, setHighlight] = useState(false);
   useSupervisor(session);
+
+  // React to a pending-focus request whose target is this card. The atom
+  // is shared by all session cards on the page, but only the matching one
+  // will (a) scroll itself into view, (b) toggle the pulse class, and
+  // (c) clear the marker so siblings stay quiet.
+  useEffect(() => {
+    if (pendingFocus !== sessionId) return;
+    const node = cardRef.current;
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+    setHighlight(true);
+    setPendingFocus(null);
+    const timer = setTimeout(() => setHighlight(false), 1_400);
+    return () => clearTimeout(timer);
+  }, [pendingFocus, sessionId, setPendingFocus]);
 
   if (!session) {
     return null;
@@ -129,7 +150,11 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const sessionStateLabel = formatSessionStateLabel(session.state);
 
   return (
-    <div className="session-card agent-pane">
+    <div
+      ref={cardRef}
+      className={`session-card agent-pane${highlight ? ' session-card--focus-pulse' : ''}`}
+      data-session-id={sessionId}
+    >
       <div className="session-progress">
         <div
           className={`session-progress-bar ${getSessionProgressClass(session.state)}`}

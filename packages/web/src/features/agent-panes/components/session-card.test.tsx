@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { SessionCard } from './session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
 import { wsClientAtom } from '../../../atoms/connection';
+import { pendingFocusSessionAtom } from '../../../atoms/ui';
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
@@ -160,6 +161,62 @@ describe('SessionCard', () => {
     });
 
     expect(screen.getByText('Supervisor')).toBeInTheDocument();
+  });
+
+  it('reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker', async () => {
+    const scrollSpy = vi.fn();
+    // jsdom doesn't implement scrollIntoView; provide a stub before render.
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy,
+    });
+
+    const { store } = createSessionStore({ state: 'idle', endedAt: undefined });
+    store.set(pendingFocusSessionAtom, 'sess_123456');
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const card = document.querySelector('[data-session-id="sess_123456"]');
+    expect(card).not.toBeNull();
+    expect(card?.classList.contains('session-card--focus-pulse')).toBe(true);
+    // Marker should self-clear so siblings don't also fire on re-render.
+    expect(store.get(pendingFocusSessionAtom)).toBeNull();
+  });
+
+  it('ignores a pending-focus request targeting a different session', async () => {
+    const scrollSpy = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy,
+    });
+
+    const { store } = createSessionStore({ state: 'idle', endedAt: undefined });
+    store.set(pendingFocusSessionAtom, 'some-other-session');
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    // Let any effects flush (none should change anything for this card).
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+    const card = document.querySelector('[data-session-id="sess_123456"]');
+    expect(card?.classList.contains('session-card--focus-pulse')).toBe(false);
+    // Untouched.
+    expect(store.get(pendingFocusSessionAtom)).toBe('some-other-session');
   });
 
   it('stops the session and closes the pane when close is clicked', async () => {

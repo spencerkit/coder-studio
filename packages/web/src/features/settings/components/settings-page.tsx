@@ -54,7 +54,7 @@ export function SettingsPage() {
   ]);
   const [defaultProvider, setDefaultProvider] = useState('claude');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notifyOnlyBackground, setNotifyOnlyBackground] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('claude-3-sonnet');
@@ -87,15 +87,15 @@ export function SettingsPage() {
       if (typeof settings['notifications.enabled'] === 'boolean') {
         setNotificationsEnabled(settings['notifications.enabled']);
       }
-      if (typeof settings['notifications.onlyWhenBackgrounded'] === 'boolean') {
-        setNotifyOnlyBackground(settings['notifications.onlyWhenBackgrounded']);
+      if (typeof settings['notifications.soundEnabled'] === 'boolean') {
+        setSoundEnabled(settings['notifications.soundEnabled']);
       }
       setNotificationPreferences({
         enabled: typeof settings['notifications.enabled'] === 'boolean'
           ? settings['notifications.enabled']
           : true,
-        onlyWhenBackgrounded: typeof settings['notifications.onlyWhenBackgrounded'] === 'boolean'
-          ? settings['notifications.onlyWhenBackgrounded']
+        soundEnabled: typeof settings['notifications.soundEnabled'] === 'boolean'
+          ? settings['notifications.soundEnabled']
           : true,
       });
       if (settings['appearance.terminalRenderer'] === 'standard' || settings['appearance.terminalRenderer'] === 'compatibility') {
@@ -151,8 +151,8 @@ export function SettingsPage() {
             providers={providers}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
-            notifyOnlyBackground={notifyOnlyBackground}
-            setNotifyOnlyBackground={setNotifyOnlyBackground}
+            soundEnabled={soundEnabled}
+            setSoundEnabled={setSoundEnabled}
           />
         );
       case 'appearance':
@@ -291,8 +291,8 @@ interface GeneralSettingsProps {
   providers: ProviderInfo[];
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
-  notifyOnlyBackground: boolean;
-  setNotifyOnlyBackground: (value: boolean) => void;
+  soundEnabled: boolean;
+  setSoundEnabled: (value: boolean) => void;
 }
 
 function GeneralSettings({
@@ -301,8 +301,8 @@ function GeneralSettings({
   providers,
   notificationsEnabled,
   setNotificationsEnabled,
-  notifyOnlyBackground,
-  setNotifyOnlyBackground,
+  soundEnabled,
+  setSoundEnabled,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -315,7 +315,7 @@ function GeneralSettings({
 
   const syncNotificationPreferences = (next: {
     enabled: boolean;
-    onlyWhenBackgrounded: boolean;
+    soundEnabled: boolean;
   }) => {
     setNotificationPreferences(next);
   };
@@ -360,6 +360,7 @@ function GeneralSettings({
 
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.notifications')}</h3>
+        <p className="settings-group-desc">{t('settings.notifications_channel_hint')}</p>
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
@@ -375,7 +376,7 @@ function GeneralSettings({
                 setNotificationsEnabled(nextEnabled);
                 syncNotificationPreferences({
                   enabled: nextEnabled,
-                  onlyWhenBackgrounded: notifyOnlyBackground,
+                  soundEnabled,
                 });
                 void saveSettings({ notifications: { enabled: nextEnabled } });
               }}
@@ -386,21 +387,21 @@ function GeneralSettings({
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t('settings.notify_background')}</span>
-            <span className="settings-toggle-desc">{t('settings.notify_background_hint')}</span>
+            <span className="settings-toggle-label">{t('settings.notification_sound')}</span>
+            <span className="settings-toggle-desc">{t('settings.notification_sound_hint')}</span>
           </div>
           <label className="settings-toggle">
             <input
               type="checkbox"
-              checked={notifyOnlyBackground}
+              checked={soundEnabled}
               onChange={(e) => {
-                const nextOnlyWhenBackgrounded = e.target.checked;
-                setNotifyOnlyBackground(nextOnlyWhenBackgrounded);
+                const nextSoundEnabled = e.target.checked;
+                setSoundEnabled(nextSoundEnabled);
                 syncNotificationPreferences({
                   enabled: notificationsEnabled,
-                  onlyWhenBackgrounded: nextOnlyWhenBackgrounded,
+                  soundEnabled: nextSoundEnabled,
                 });
-                void saveSettings({ notifications: { onlyWhenBackgrounded: nextOnlyWhenBackgrounded } });
+                void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
               }}
               disabled={!notificationsEnabled}
             />
