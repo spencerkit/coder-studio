@@ -16,6 +16,7 @@ import type { FastifyRequest } from 'fastify';
 import type { ServerConfig } from './config.js';
 import { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './auth/index.js';
 import { registerHooksEndpoint } from './hooks/endpoint.js';
+import { registerFileAssetRoutes } from './routes/file-asset.js';
 import type { RuntimeConfig } from './hooks/runtime-json.js';
 
 interface AppDeps {
@@ -85,6 +86,13 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     deps.hooksMgr.handleHookEvent(event, payload, {
       coderStudioSessionId: ctx.coderStudioSessionId,
     });
+  });
+
+  // /api/file — binary streaming endpoint used by the editor's image preview.
+  // Auth is inherited from the global onRequest cookie guard above, so this
+  // only needs its own path-safety and allowlist checks.
+  registerFileAssetRoutes(app, {
+    workspaceMgr: deps.commandContext.workspaceMgr,
   });
 
   // Static file serving (for web UI)

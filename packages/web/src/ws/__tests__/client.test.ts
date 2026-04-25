@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WsClient } from '../client';
+import { WsClient, resolveWsUrl } from '../client';
 
 class MockWebSocket {
   static CONNECTING = 0;
@@ -50,6 +50,7 @@ describe('web WsClient', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     globalThis.WebSocket = originalWebSocket;
   });
 
@@ -96,5 +97,17 @@ describe('web WsClient', () => {
       { state: 'starting' },
       3
     );
+  });
+
+  it('uses the configured development WebSocket URL when provided', () => {
+    vi.stubEnv('VITE_BACKEND_WS_URL', 'ws://127.0.0.1:43173/ws');
+
+    expect(resolveWsUrl()).toBe('ws://127.0.0.1:43173/ws');
+  });
+
+  it('appends the WebSocket path when the configured development URL is host-only', () => {
+    vi.stubEnv('VITE_BACKEND_WS_URL', 'ws://127.0.0.1:43173');
+
+    expect(resolveWsUrl()).toBe('ws://127.0.0.1:43173/ws');
   });
 });

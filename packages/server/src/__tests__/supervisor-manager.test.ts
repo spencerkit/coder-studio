@@ -4,6 +4,10 @@ import { SupervisorManager } from '../supervisor/manager.js';
 function createManagerDeps() {
   const supervisors = new Map<string, any>();
   const cyclesBySupervisor = new Map<string, any[]>();
+  const logger = {
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
 
   const hydrateSupervisor = (supervisor: any) => ({
     ...supervisor,
@@ -31,16 +35,32 @@ function createManagerDeps() {
         startedAt: 1,
         lastActiveAt: 1,
       })),
+      getOutputTail: vi.fn(() => Buffer.from('terminal fallback output')),
+      sendInput: vi.fn(),
     },
     providerRegistry: [
       {
         id: 'claude',
         capability: 'full',
+        hooks: {
+          events: {
+            sessionStart: true,
+            completion: true,
+            progress: false,
+          },
+        },
         readTranscriptExcerpt: vi.fn(async () => null),
       },
       {
         id: 'codex',
         capability: 'full',
+        hooks: {
+          events: {
+            sessionStart: false,
+            completion: true,
+            progress: false,
+          },
+        },
         buildSupervisorEvalCommand: vi.fn(() => ({
           argv: [
             'node',
@@ -57,6 +77,7 @@ function createManagerDeps() {
         providerId === 'codex' ? { additionalArgs: [], envVars: {} } : undefined
       ),
     },
+    logger,
     supervisorRepo: {
       create: vi.fn((value: any) => {
         const supervisor = { ...value, cycles: [] };
@@ -229,6 +250,100 @@ describe('SupervisorManager cycle triggers', () => {
     const legacy = recovered.find((c) => c.id === 'legacy-queued');
     expect(legacy?.status).toBe('failed');
     expect(legacy?.errorReason).toBeTruthy();
+  });
+
+  it('allows supervisor creation when the session provider exposes completion hooks even if the UI capability label is limited', async () => {
+    deps.sessionMgr.get.mockImplementation((sessionId: string) => ({
+      id: sessionId,
+      terminalId: `term-${sessionId}`,
+      workspaceId: 'ws-1',
+      providerId: 'claude',
+      state: 'running',
+      capability: 'limited',
+      startedAt: 1,
+      lastActiveAt: 1,
+    }));
+    deps.providerRegistry[0] = {
+      ...deps.providerRegistry[0],
+      capability: 'limited',
+      hooks: {
+        events: {
+          sessionStart: true,
+          completion: true,
+          progress: false,
+        },
+      },
+    };
+
+    await expect(
+      manager.create({
+        sessionId: 'sess-limited-label',
+        workspaceId: 'ws-1',
+        objective: 'Ship the fix',
+        evaluatorProviderId: 'codex',
+      })
+    ).resolves.toMatchObject({
+      sessionId: 'sess-limited-label',
+      workspaceId: 'ws-1',
+    });
+  });
+
+  it('logs evaluation failures with the original error and keeps the persisted reason concise', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-eval-error',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    const evaluationError = new Error('Evaluator exploded');
+    vi.spyOn((manager as any).evaluator, 'evaluate').mockRejectedValueOnce(evaluationError);
+
+    await expect((manager as any).runEvaluation(supervisor.id)).rejects.toThrow(
+      'Evaluator exploded'
+    );
+
+    const updated = manager.get(supervisor.id);
+    expect(updated?.state).toBe('error');
+    expect(updated?.errorReason).toBe('Evaluator exploded');
+    expect(updated?.cycles[0]?.status).toBe('failed');
+    expect(updated?.cycles[0]?.errorReason).toBe('Evaluator exploded');
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: evaluationError,
+        supervisorId: supervisor.id,
+        cycleId: expect.any(String),
+      }),
+      'Supervisor evaluation failed'
+    );
+  });
+
+  it('logs pre-cycle failures with the original error and leaves the persisted reason concise', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-context-error',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    const contextError = new Error('Context build exploded');
+    vi.spyOn((manager as any).contextBuilder, 'build').mockRejectedValueOnce(contextError);
+
+    await expect((manager as any).runEvaluation(supervisor.id)).rejects.toThrow(
+      'Context build exploded'
+    );
+
+    const updated = manager.get(supervisor.id);
+    expect(updated?.state).toBe('error');
+    expect(updated?.errorReason).toBe('Context build exploded');
+    expect(updated?.cycles).toHaveLength(0);
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: contextError,
+        supervisorId: supervisor.id,
+      }),
+      'Supervisor evaluation failed before cycle creation'
+    );
   });
 });
 

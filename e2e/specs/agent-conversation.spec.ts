@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { openWorkspace } from './phase3/supervisor.helpers';
 
 /**
  * Agent Conversation E2E Tests
@@ -11,343 +12,165 @@ import { test, expect } from '@playwright/test';
  * 5. Test input submission
  */
 
+const getSessionCard = (page: Page) =>
+  page.locator('.session-card.agent-pane[data-session-id]').first();
+
+const isVisible = async (locator: Locator) => locator.isVisible().catch(() => false);
+
+const ensureWorkspaceOpen = async (page: Page) => {
+  await openWorkspace(page);
+  await expect(page).toHaveURL(/\/workspace$/, { timeout: 15000 });
+};
+
+const ensureClaudeSession = async (page: Page): Promise<Locator> => {
+  await ensureWorkspaceOpen(page);
+
+  const existingSession = getSessionCard(page);
+  if (await isVisible(existingSession)) {
+    return existingSession;
+  }
+
+  const claudeBtn = page.locator('.agent-provider-card-claude, .agent-draft-providers .btn').first();
+  await expect(claudeBtn).toBeVisible({ timeout: 15000 });
+  await claudeBtn.click();
+
+  const sessionCard = getSessionCard(page);
+  await expect(sessionCard).toBeVisible({ timeout: 15000 });
+  return sessionCard;
+};
+
 test.describe('agent conversation workflow', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-  });
-
   test('AC-01 open workspace via directory browser', async ({ page }) => {
-    // Click open workspace button
-    await page.locator('.welcome-btn').click();
+    await ensureWorkspaceOpen(page);
 
-    // Command palette should open
-    await expect(page.locator('.command-palette')).toBeVisible();
+    const draftLauncher = page.locator('.agent-draft-launcher');
+    const hasDraftLauncher = await isVisible(draftLauncher);
+    const hasSession = await isVisible(getSessionCard(page));
 
-    // Click the first command (Open Workspace)
-    await page.locator('.command-palette-item').first().click();
-
-    // Workspace launch modal should appear with directory browser
-    await expect(page.locator('.modal-content')).toBeVisible();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
-
-    // Select a directory
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    const itemCount = await page.locator('.directory-item:not(.directory-item--parent)').count();
-
-    // Skip test if no directories available
-    if (itemCount === 0) {
-      test.skip();
-      return;
-    }
-
-    await directoryItem.click();
-
-    // Verify selection shows
-    await expect(page.locator('.selected-path')).toBeVisible();
-
-    // Click Open button
-    const openButton = page.locator('.modal-content .btn-primary');
-    await expect(openButton).toBeEnabled();
-    await openButton.click();
-
-    // Wait for workspace to open or error to show
-    await page.waitForTimeout(3000);
-
-    // Check if workspace opened successfully or if there was an error
-    const url = page.url();
-    const modalClosed = await page.locator('.modal-content').isVisible().catch(() => false);
-    const errorVisible = await page.locator('.form-error').isVisible().catch(() => false);
-
-    // Either workspace opened successfully, modal closed without error (success),
-    // or there was an error (which is acceptable for some directories)
-    if (!modalClosed && !errorVisible) {
-      // If modal is still visible without error, wait more
-      await page.waitForTimeout(2000);
-    }
-
-    // Final check: either we're on workspace page, modal closed, or error shown
-    const finalUrl = page.url();
-    const finalModalClosed = await page.locator('.modal-content').isVisible().catch(() => false);
-
-    // Accept: successfully opened workspace, or modal closed (success), or still in modal (waiting)
-    expect(
-      finalUrl.includes('/workspace') ||
-      finalModalClosed === false ||
-      errorVisible
-    ).toBe(true);
+    expect(hasDraftLauncher || hasSession).toBe(true);
   });
 
   test('AC-02 provider selection buttons visible after workspace open', async ({ page }) => {
-    // Open workspace via directory browser
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    await ensureWorkspaceOpen(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
+    const draftLauncher = page.locator('.agent-draft-launcher');
+    const hasDraftLauncher = await isVisible(draftLauncher);
+    const hasSession = await isVisible(getSessionCard(page));
 
-      // Check for draft launcher (provider selection)
-      const draftLauncher = page.locator('.agent-draft-launcher');
-      if (await draftLauncher.isVisible()) {
-        // Check for Claude and Codex buttons
-        await expect(page.locator('.agent-draft-providers .btn')).toHaveCount(2);
-      }
+    expect(hasDraftLauncher || hasSession).toBe(true);
+
+    if (hasDraftLauncher) {
+      await expect(page.locator('.agent-draft-providers .btn')).toHaveCount(2);
+      await expect(page.locator('.agent-provider-card-claude')).toBeVisible();
     }
   });
 
   test('AC-03 click claude provider button triggers session creation', async ({ page }) => {
-    // Open workspace
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    await ensureWorkspaceOpen(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(3000);
-
-      // Check if workspace opened
-      const url = page.url();
-      if (!url.includes('/workspace')) {
-        test.skip();
-        return;
-      }
-
-      // Find and click Claude button
-      const claudeBtn = page.locator('.agent-draft-providers .btn').first();
-      if (await claudeBtn.isVisible()) {
-        await claudeBtn.click();
-
-        // Wait longer for session creation (terminal spawn takes time)
-        await page.waitForTimeout(3000);
-
-        // Either session card appears or error handling
-        const sessionCard = page.locator('.agent-pane');
-        const errorToast = page.locator('.toast-error');
-        const formError = page.locator('.form-error');
-
-        // One of these should be visible
-        const hasSession = await sessionCard.isVisible().catch(() => false);
-        const hasError = await errorToast.isVisible().catch(() => false);
-        const hasFormError = await formError.isVisible().catch(() => false);
-
-        // Accept: session created, or some error shown (command may fail if no real provider)
-        expect(hasSession || hasError || hasFormError || true).toBe(true);
-      }
+    const existingSession = getSessionCard(page);
+    if (await isVisible(existingSession)) {
+      await expect(existingSession).toBeVisible();
+      return;
     }
+
+    const claudeBtn = page.locator('.agent-provider-card-claude, .agent-draft-providers .btn').first();
+    await expect(claudeBtn).toBeVisible({ timeout: 15000 });
+    await claudeBtn.click();
+
+    await page.waitForSelector('.session-card.agent-pane[data-session-id], .toast-error, .form-error', {
+      timeout: 15000,
+    }).catch(() => null);
+
+    const sessionCard = getSessionCard(page);
+    const errorToast = page.locator('.toast-error');
+    const formError = page.locator('.form-error');
+
+    const hasSession = await isVisible(sessionCard);
+    const hasErrorToast = await isVisible(errorToast);
+    const hasFormError = await isVisible(formError);
+
+    expect(hasSession || hasErrorToast || hasFormError).toBe(true);
   });
 
   test('AC-04 session card shows correct structure', async ({ page }) => {
-    // Open workspace and create session
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    const sessionCard = await ensureClaudeSession(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
+    await expect(sessionCard.locator('.session-header')).toBeVisible();
+    await expect(sessionCard.locator('.session-terminal')).toBeVisible();
 
-      const claudeBtn = page.locator('.agent-draft-providers .btn').first();
-      if (await claudeBtn.isVisible()) {
-        await claudeBtn.click();
-        await page.waitForTimeout(1500);
-
-        const sessionCard = page.locator('.agent-pane');
-        if (await sessionCard.isVisible()) {
-          // Check session card structure
-          await expect(sessionCard.locator('.agent-header')).toBeVisible();
-          await expect(sessionCard.locator('.agent-terminal')).toBeVisible();
-
-          // Check status elements
-          const statusDot = sessionCard.locator('.agent-session-dot');
-          const statusLabel = sessionCard.locator('.agent-status');
-          await expect(statusDot).toBeVisible();
-          await expect(statusLabel).toBeVisible();
-        }
-      }
-    }
+    const statusDot = sessionCard.locator('.session-dot');
+    const statusLabel = sessionCard.locator('.session-state-badge');
+    await expect(statusDot).toBeVisible();
+    await expect(statusLabel).toBeVisible();
   });
 
   test('AC-05 session input field exists', async ({ page }) => {
-    // Open workspace and create session
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    const sessionCard = await ensureClaudeSession(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
+    const inputField = sessionCard.locator('.session-input input');
+    const sendButton = sessionCard.locator('.session-input .btn');
 
-      const claudeBtn = page.locator('.agent-draft-providers .btn').first();
-      if (await claudeBtn.isVisible()) {
-        await claudeBtn.click();
-        await page.waitForTimeout(1500);
-
-        const sessionCard = page.locator('.agent-pane');
-        if (await sessionCard.isVisible()) {
-          // Check input field
-          const inputField = sessionCard.locator('.session-input input');
-          const sendButton = sessionCard.locator('.session-input .btn');
-
-          // Input field may or may not be visible depending on session state
-          const inputVisible = await inputField.isVisible().catch(() => false);
-          if (inputVisible) {
-            await expect(inputField).toBeVisible();
-            await expect(sendButton).toBeVisible();
-          }
-        }
-      }
+    const inputVisible = await isVisible(inputField);
+    if (inputVisible) {
+      await expect(inputField).toBeVisible();
+      await expect(sendButton).toBeVisible();
     }
   });
 
   test('AC-06 session stop button exists', async ({ page }) => {
-    // Open workspace and create session
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    const sessionCard = await ensureClaudeSession(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
+    const headerActions = sessionCard.locator('.session-header-actions');
+    await expect(headerActions).toBeVisible();
 
-      const claudeBtn = page.locator('.agent-draft-providers .btn').first();
-      if (await claudeBtn.isVisible()) {
-        await claudeBtn.click();
-        await page.waitForTimeout(1500);
-
-        const sessionCard = page.locator('.agent-pane');
-        if (await sessionCard.isVisible()) {
-          // Check action buttons in header
-          const headerActions = sessionCard.locator('.agent-header-actions');
-          await expect(headerActions).toBeVisible();
-
-          // Should have close button at minimum
-          const closeBtn = headerActions.locator('button').last();
-          await expect(closeBtn).toBeVisible();
-        }
-      }
-    }
+    const closeBtn = headerActions.locator('button').last();
+    await expect(closeBtn).toBeVisible();
   });
 
   test('AC-07 websocket connection established', async ({ page }) => {
-    // Navigate to app
+    await page.goto('/');
     await expect(page.locator('.welcome-container')).toBeVisible();
-
-    // Check if connection status is visible somewhere
-    // This test verifies the app can connect to backend
     await page.waitForTimeout(1000);
 
-    // App should not show connection error
     const connectionError = page.locator('.connection-error, .offline-indicator');
-    const hasConnectionError = await connectionError.isVisible().catch(() => false);
+    const hasConnectionError = await isVisible(connectionError);
 
     expect(hasConnectionError).toBe(false);
   });
 
   test('AC-08 workspace persists across navigation', async ({ page }) => {
-    // Open workspace
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    await ensureWorkspaceOpen(page);
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
+    const url = page.url();
+    expect(url).toMatch(/\/workspace/);
 
-      // Verify workspace opened
-      const url = page.url();
-      expect(url).toMatch(/\/workspace/);
+    await page.goto('/settings');
+    await page.waitForTimeout(500);
 
-      // Navigate to settings and back
-      await page.goto('/settings');
-      await page.waitForTimeout(500);
+    await page.goBack();
+    await page.waitForTimeout(500);
 
-      // Go back - workspace should still be accessible
-      await page.goBack();
-      await page.waitForTimeout(500);
-
-      // Verify we're back at workspace
-      const currentUrl = page.url();
-      expect(currentUrl).toMatch(/\/workspace|\/$/);
-    }
+    const currentUrl = page.url();
+    expect(currentUrl).toMatch(/\/workspace|\/$/);
   });
 });
 
 test.describe('agent conversation error handling', () => {
   test('ACE-01 invalid provider shows error', async ({ page }) => {
-    // This test verifies error handling for invalid operations
-    await page.goto('/');
+    await ensureWorkspaceOpen(page);
 
-    // Open workspace
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
+    const hasDraftLauncher = await isVisible(page.locator('.agent-draft-launcher'));
+    const hasSession = await isVisible(getSessionCard(page));
+    const hasError = await isVisible(page.locator('.form-error, .toast-error'));
 
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    const itemCount = await page.locator('.directory-item:not(.directory-item--parent)').count();
-
-    if (itemCount === 0) {
-      test.skip();
-      return;
-    }
-
-    await directoryItem.click();
-    await page.locator('.modal-content .btn-primary').click();
-    await page.waitForTimeout(3000);
-
-    // Check result: workspace opened, modal closed, or error shown
-    const url = page.url();
-    const modalClosed = await page.locator('.modal-content').isVisible().catch(() => false);
-    const errorVisible = await page.locator('.form-error').isVisible().catch(() => false);
-
-    // Accept various outcomes
-    expect(
-      url.includes('/workspace') ||
-      modalClosed === false ||
-      errorVisible
-    ).toBe(true);
+    expect(hasDraftLauncher || hasSession || hasError).toBe(true);
   });
 
   test('ACE-02 terminal output area exists', async ({ page }) => {
-    await page.goto('/');
+    const sessionCard = await ensureClaudeSession(page);
+    const terminalArea = sessionCard.locator('.session-terminal, .xterm').first();
 
-    // Open workspace and create session
-    await page.locator('.welcome-btn').click();
-    await page.locator('.command-palette-item').first().click();
-    await expect(page.locator('.directory-list')).toBeVisible({ timeout: 5000 });
-
-    const directoryItem = page.locator('.directory-item:not(.directory-item--parent)').first();
-    if (await directoryItem.isVisible()) {
-      await directoryItem.click();
-      await page.locator('.modal-content .btn-primary').click();
-      await page.waitForTimeout(2000);
-
-      const claudeBtn = page.locator('.agent-draft-providers .btn').first();
-      if (await claudeBtn.isVisible()) {
-        await claudeBtn.click();
-        await page.waitForTimeout(1500);
-
-        // Terminal area should exist (xterm.js)
-        const terminalArea = page.locator('.agent-terminal, .xterm');
-        const hasTerminal = await terminalArea.isVisible().catch(() => false);
-
-        // If session was created, terminal should be visible
-        if (await page.locator('.agent-pane').isVisible()) {
-          expect(hasTerminal).toBe(true);
-        }
-      }
-    }
+    await expect(terminalArea).toBeVisible({ timeout: 15000 });
   });
 });

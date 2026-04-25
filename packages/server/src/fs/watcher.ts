@@ -2,6 +2,7 @@
  * WorkspaceWatcher - File system watcher with throttled dirty signal.
  */
 
+import { Topics } from '@coder-studio/core';
 import type { FSWatcher } from 'chokidar';
 import chokidar from 'chokidar';
 
@@ -39,7 +40,7 @@ export class WorkspaceWatcher {
     if (this.dirtyTimer) return; // Already pending
 
     this.dirtyTimer = setTimeout(() => {
-      this.broadcaster.broadcast(`workspace.${this.workspaceId}.fs.dirty`, {
+      this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
         reason: 'fs_change',
       });
       this.dirtyTimer = null;

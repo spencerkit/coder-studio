@@ -3,13 +3,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { TerminalManager } from './manager'
 import { RingBuffer } from './ring-buffer'
-import type { PtyProcess, PtyHost, Broadcaster, TerminalDatabase, TerminalSpec } from './types'
+import { EventBus } from '../bus/event-bus'
+import type { PtyProcess, PtyHost, TerminalDatabase, TerminalSpec } from './types'
 import type { Terminal } from '@coder-studio/core'
 
 describe('TerminalManager', () => {
   let manager: TerminalManager
   let mockPtyHost: PtyHost
-  let mockBroadcaster: Broadcaster
+  let eventBus: EventBus
   let mockDb: TerminalDatabase
   let mockPty: PtyProcess
 
@@ -28,10 +29,8 @@ describe('TerminalManager', () => {
       spawn: vi.fn().mockReturnValue(mockPty),
     }
 
-    // Create mock broadcaster
-    mockBroadcaster = {
-      broadcast: vi.fn(),
-    }
+    // Create event bus
+    eventBus = new EventBus()
 
     // Create mock database
     mockDb = {
@@ -41,7 +40,7 @@ describe('TerminalManager', () => {
 
     manager = new TerminalManager({
       ptyHost: mockPtyHost,
-      broadcaster: mockBroadcaster,
+      eventBus,
       db: mockDb,
     })
   })
@@ -182,7 +181,7 @@ describe('TerminalManager', () => {
   })
 
   describe('PTY event handling', () => {
-    it('should broadcast output on PTY data', () => {
+    it('should emit terminal.output event on PTY data', () => {
       const spec: TerminalSpec = {
         workspaceId: 'ws-123',
         kind: 'shell',
@@ -192,6 +191,10 @@ describe('TerminalManager', () => {
 
       const terminal = manager.create(spec)
 
+      // Track emitted events
+      const emittedEvents: any[] = []
+      eventBus.on('terminal.output', (event) => emittedEvents.push(event))
+
       // Get the onData callback
       const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
 
@@ -199,15 +202,15 @@ describe('TerminalManager', () => {
       const output = 'Hello, world!'
       onDataCallback(output)
 
-      // Should broadcast output
-      expect(mockBroadcaster.broadcast).toHaveBeenCalledWith(
-        `workspace.${spec.workspaceId}.terminal.${terminal.id}.output`,
-        expect.objectContaining({
-          chunk: Buffer.from(output).toString('base64'),
-          size: output.length,
-          seq: output.length,
-        })
-      )
+      // Should emit terminal.output event
+      expect(emittedEvents).toHaveLength(1)
+      expect(emittedEvents[0]).toEqual({
+        type: 'terminal.output',
+        workspaceId: spec.workspaceId,
+        terminalId: terminal.id,
+        chunk: Buffer.from(output),
+        seq: output.length,
+      })
     })
 
     it('should handle PTY exit', async () => {
@@ -220,6 +223,10 @@ describe('TerminalManager', () => {
 
       const terminal = manager.create(spec)
 
+      // Track emitted events
+      const emittedEvents: any[] = []
+      eventBus.on('terminal.exited', (event) => emittedEvents.push(event))
+
       // Get the onExit callback
       const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
 
@@ -231,11 +238,14 @@ describe('TerminalManager', () => {
       expect(activeTerminal?.alive).toBe(false)
       expect(activeTerminal?.exitCode).toBe(0)
 
-      // Should broadcast exit event
-      expect(mockBroadcaster.broadcast).toHaveBeenCalledWith(
-        `workspace.${spec.workspaceId}.terminal.${terminal.id}.exit`,
-        { code: 0 }
-      )
+      // Should emit terminal.exited event
+      expect(emittedEvents).toHaveLength(1)
+      expect(emittedEvents[0]).toEqual({
+        type: 'terminal.exited',
+        workspaceId: spec.workspaceId,
+        terminalId: terminal.id,
+        exitCode: 0,
+      })
 
       // Should mark as ended in database
       expect(mockDb.markEnded).toHaveBeenCalledWith(

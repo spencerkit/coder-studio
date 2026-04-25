@@ -173,6 +173,42 @@ describe('merge-writer', () => {
             {
               _cs_managed: true,
               _cs_version: 'test-v1',
+              command: 'node /same/path/bridge.js SessionStart',
+            },
+          ],
+        },
+      };
+      mkdirSync(dirname(testConfigPath), { recursive: true });
+      require('fs').writeFileSync(testConfigPath, JSON.stringify(configWithManagedHooks, null, 2));
+
+      const managedHooks: ManagedHooks = {
+        commands: {
+          SessionStart: 'node /same/path/bridge.js SessionStart',
+        },
+      };
+
+      const result = mergeWriteConfig(
+        testConfigPath,
+        mockHooksDescriptor,
+        managedHooks,
+        testBackupDir
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.backupPath).toBeUndefined(); // No backup needed
+
+      // Config should remain unchanged
+      const config = JSON.parse(readFileSync(testConfigPath, 'utf-8'));
+      expect(config.hooks.SessionStart[0].command).toBe('node /same/path/bridge.js SessionStart');
+    });
+
+    it('should rewrite when managed command drifts even if a managed hook already exists', () => {
+      const configWithManagedHooks = {
+        hooks: {
+          SessionStart: [
+            {
+              _cs_managed: true,
+              _cs_version: 'test-v1',
               command: 'node /old/path/bridge.js SessionStart',
             },
           ],
@@ -195,11 +231,45 @@ describe('merge-writer', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.backupPath).toBeUndefined(); // No backup needed
+      expect(result.backupPath).toBeDefined();
 
-      // Config should remain unchanged
       const config = JSON.parse(readFileSync(testConfigPath, 'utf-8'));
-      expect(config.hooks.SessionStart[0].command).toBe('node /old/path/bridge.js SessionStart');
+      expect(config.hooks.SessionStart[0].command).toBe('node /new/path/bridge.js SessionStart');
+    });
+
+    it('should rewrite when the stored managed marker version is stale', () => {
+      const configWithManagedHooks = {
+        hooks: {
+          SessionStart: [
+            {
+              _cs_managed: true,
+              _cs_version: 'test-v0',
+              command: 'node /same/path/bridge.js SessionStart',
+            },
+          ],
+        },
+      };
+      mkdirSync(dirname(testConfigPath), { recursive: true });
+      require('fs').writeFileSync(testConfigPath, JSON.stringify(configWithManagedHooks, null, 2));
+
+      const managedHooks: ManagedHooks = {
+        commands: {
+          SessionStart: 'node /same/path/bridge.js SessionStart',
+        },
+      };
+
+      const result = mergeWriteConfig(
+        testConfigPath,
+        mockHooksDescriptor,
+        managedHooks,
+        testBackupDir
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.backupPath).toBeDefined();
+
+      const config = JSON.parse(readFileSync(testConfigPath, 'utf-8'));
+      expect(config.hooks.SessionStart[0]._cs_version).toBe('test-v1');
     });
 
     it('should handle malformed existing config', () => {

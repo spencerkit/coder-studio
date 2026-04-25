@@ -16,11 +16,11 @@ export function buildClaudeSupervisorEvalCommand(
       '--output-format',
       'json',
       ...(model ? ['--model', model] : []),
-      ...cfg.additionalArgs,
+      ...(cfg.additionalArgs ?? []),
     ],
     cwd: req.workspacePath,
     env: {
-      ...cfg.envVars,
+      ...(cfg.envVars ?? {}),
       ...(req.apiKey ? { ANTHROPIC_API_KEY: req.apiKey } : {}),
       CODER_STUDIO_SESSION_ID: req.sessionId,
     },

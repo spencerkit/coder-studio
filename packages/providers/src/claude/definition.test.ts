@@ -20,13 +20,8 @@ describe('Claude Provider Definition', () => {
   });
 
   describe('buildCommand', () => {
-    it('should build basic command', () => {
-      const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6',
-        maxTurns: null,
-        additionalArgs: [],
-        envVars: {},
-      };
+    it('should build basic command without a model flag when no model is configured', () => {
+      const config: ProviderConfig = {};
 
       const ctx = {
         sessionId: 'session-123',
@@ -35,7 +30,7 @@ describe('Claude Provider Definition', () => {
 
       const result = claudeDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toEqual(['claude', '--model', 'claude-sonnet-4-6']);
+      expect(result.argv).toEqual(['claude']);
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
       expect(result.cwd).toBe('/workspace');
     });
@@ -62,13 +57,8 @@ describe('Claude Provider Definition', () => {
   });
 
   describe('buildResumeCommand', () => {
-    it('should build resume command', () => {
-      const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6',
-        maxTurns: null,
-        additionalArgs: [],
-        envVars: {},
-      };
+    it('should build resume command without a model flag when no model is configured', () => {
+      const config: ProviderConfig = {};
 
       const ctx = {
         sessionId: 'session-123',
@@ -81,7 +71,7 @@ describe('Claude Provider Definition', () => {
         ctx
       );
 
-      expect(result?.argv).toEqual(['claude', '--resume', 'resume-id-456', '--model', 'claude-sonnet-4-6']);
+      expect(result?.argv).toEqual(['claude', '--resume', 'resume-id-456']);
       expect(result?.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
       expect(result?.cwd).toBe('/workspace');
     });
@@ -111,15 +101,26 @@ describe('Claude Provider Definition', () => {
       expect(result?.cwd).toBe('/workspace');
       expect(result?.env?.ANTHROPIC_API_KEY).toBe('sk-test');
     });
+
+    it('omits the model flag for supervisor eval when no model is configured', () => {
+      const result = claudeDefinition.buildSupervisorEvalCommand?.(
+        {},
+        {
+          prompt: 'Return strict JSON',
+          sessionId: 'sess-1',
+          workspacePath: '/workspace',
+        }
+      );
+
+      expect(result?.argv[0]).toBe('claude');
+      expect(result?.argv).not.toContain('--model');
+    });
   });
 
   describe('defaultConfig', () => {
-    it('should have valid default config', () => {
+    it('should not inject Claude-specific defaults', () => {
       expect(claudeDefinition.defaultConfig).toBeDefined();
-      expect(claudeDefinition.defaultConfig.model).toBe('claude-sonnet-4-6');
-      expect(claudeDefinition.defaultConfig.maxTurns).toBeNull();
-      expect(claudeDefinition.defaultConfig.additionalArgs).toEqual([]);
-      expect(claudeDefinition.defaultConfig.envVars).toEqual({});
+      expect(claudeDefinition.defaultConfig).toEqual({});
     });
   });
 

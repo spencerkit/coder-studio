@@ -1,0 +1,199 @@
+import { test, expect } from '@playwright/test';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { spawn, type ChildProcess } from 'node:child_process';
+
+const HOST = '127.0.0.1';
+const SERVER_PORT = 43173;
+const WEB_PORT = 53173;
+const BACKEND_HTTP_URL = `http://${HOST}:${SERVER_PORT}`;
+const BASE_URL = `http://${HOST}:${WEB_PORT}`;
+const WORKSPACE_ID = 'ws-hydrate-e2e';
+const INTERRUPTED_SESSION_ID = 'sess-hydrate-interrupted';
+const UNAVAILABLE_SESSION_ID = 'sess-hydrate-unavailable';
+const HYDRATED_PANE_LAYOUT = {
+  id: 'root',
+  type: 'split' as const,
+  direction: 'horizontal' as const,
+  ratio: 0.5,
+  children: [
+    { id: 'left', type: 'leaf' as const, sessionId: INTERRUPTED_SESSION_ID },
+    { id: 'right', type: 'leaf' as const, sessionId: UNAVAILABLE_SESSION_ID },
+  ],
+};
+
+let sandboxDir: string;
+let workspaceDir: string;
+let dbPath: string;
+let runtimeDir: string;
+let userDataDir: string;
+let backendProcess: ChildProcess | undefined;
+let webProcess: ChildProcess | undefined;
+
+function startProcess(
+  command: string,
+  args: string[],
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  }
+): ChildProcess {
+  const child = spawn(command, args, {
+    cwd: options.cwd,
+    env: {
+      ...process.env,
+      ...options.env,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', () => {});
+  child.stderr?.on('data', () => {});
+  child.on('error', (error) => {
+    throw error;
+  });
+
+  return child;
+}
+
+async function waitForHttp(url: string, timeoutMs = 30000): Promise<void> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // keep polling
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
+test.describe('session hydrate refresh acceptance', () => {
+  test.beforeAll(async () => {
+    sandboxDir = mkdtempSync(join(tmpdir(), 'coder-studio-hydrate-e2e-'));
+    workspaceDir = join(sandboxDir, 'workspace');
+    dbPath = join(sandboxDir, 'coder-studio.db');
+    runtimeDir = join(sandboxDir, 'runtime');
+    userDataDir = join(sandboxDir, 'pw-user-data');
+
+    mkdirSync(join(workspaceDir, '.git'), { recursive: true });
+    mkdirSync(runtimeDir, { recursive: true });
+    mkdirSync(userDataDir, { recursive: true });
+    writeFileSync(join(workspaceDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+
+    const seed = spawn('pnpm', [
+      'exec',
+      'tsx',
+      'e2e/fixtures/seed-hydrate-refresh-db.ts',
+      dbPath,
+      workspaceDir,
+    ], {
+      cwd: '/home/spencer/workspace/coder-studio',
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      let stderr = '';
+      seed.stderr?.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      seed.on('exit', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(stderr || `seed exited with code ${code}`));
+      });
+      seed.on('error', reject);
+    });
+
+    backendProcess = startProcess('pnpm', ['exec', 'tsx', 'packages/server/src/server.ts'], {
+      cwd: '/home/spencer/workspace/coder-studio',
+      env: {
+        HOST,
+        PORT: String(SERVER_PORT),
+        DATA_DIR: dbPath,
+        RUNTIME_DIR: runtimeDir,
+        NO_AUTH: 'true',
+      },
+    });
+
+    await waitForHttp(`${BACKEND_HTTP_URL}/healthz`);
+
+    webProcess = startProcess('pnpm', ['exec', 'vite', '--host', HOST, '--port', String(WEB_PORT)], {
+      cwd: '/home/spencer/workspace/coder-studio/packages/web',
+      env: {
+        VITE_BACKEND_HTTP_URL: BACKEND_HTTP_URL,
+        VITE_BACKEND_WS_URL: `ws://${HOST}:${SERVER_PORT}/ws`,
+      },
+    });
+
+    await waitForHttp(`${BASE_URL}/`);
+  });
+
+  test.afterAll(async () => {
+    const kill = async (child: ChildProcess | undefined) => {
+      if (!child || child.killed) return;
+      child.kill('SIGTERM');
+      await new Promise((resolve) => child.once('exit', resolve));
+    };
+
+    await kill(webProcess);
+    await kill(backendProcess);
+    rmSync(sandboxDir, { recursive: true, force: true });
+  });
+
+  test.use({
+    baseURL: BASE_URL,
+  });
+
+  test('keeps hydrated interrupted and unavailable sessions mounted after refresh', async ({ page }) => {
+    await page.addInitScript(({ workspaceId, paneLayout }) => {
+      window.localStorage.setItem(`ui.paneLayout.${workspaceId}`, JSON.stringify(paneLayout));
+    }, {
+      workspaceId: WORKSPACE_ID,
+      paneLayout: HYDRATED_PANE_LAYOUT,
+    });
+
+    await page.goto('/workspace');
+    await expect(page.getByTestId('workspace-resolving-shell')).toHaveCount(0, { timeout: 20000 });
+    await expect(page.locator('.session-card.agent-pane')).toHaveCount(2, { timeout: 20000 });
+
+    const interruptedCard = page.locator(`.session-card.agent-pane[data-session-id="${INTERRUPTED_SESSION_ID}"]`);
+    const unavailableCard = page.locator(`.session-card.agent-pane[data-session-id="${UNAVAILABLE_SESSION_ID}"]`);
+
+    await expect(interruptedCard).toBeVisible();
+    await expect(unavailableCard).toBeVisible();
+    await expect(interruptedCard.locator('.session-state-badge')).toHaveText('Interrupted');
+    await expect(unavailableCard.locator('.session-title')).toHaveText('Unavailable');
+    await expect(unavailableCard.locator('.session-state-badge')).toHaveText('Unavailable');
+    await expect(interruptedCard.getByRole('button', { name: 'Start' })).toBeVisible();
+    await expect(unavailableCard.getByRole('button', { name: 'Start' })).toHaveCount(0);
+
+    const interruptedTextarea = interruptedCard.locator('.xterm textarea');
+    const unavailableTextarea = unavailableCard.locator('.xterm textarea');
+
+    await expect(interruptedTextarea).toHaveAttribute('readonly', '');
+    await expect(unavailableTextarea).toHaveAttribute('readonly', '');
+
+    await page.reload();
+
+    await expect(page.getByTestId('workspace-resolving-shell')).toHaveCount(0, { timeout: 20000 });
+    await expect(interruptedCard).toBeVisible();
+    await expect(unavailableCard).toBeVisible();
+    await expect(interruptedCard.getByRole('button', { name: 'Start' })).toBeVisible();
+    await expect(unavailableCard.getByRole('button', { name: 'Start' })).toHaveCount(0);
+    await expect(interruptedTextarea).toHaveAttribute('readonly', '');
+    await expect(unavailableTextarea).toHaveAttribute('readonly', '');
+  });
+});

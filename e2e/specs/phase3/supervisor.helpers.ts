@@ -41,8 +41,8 @@ export async function openWorkspace(page: Page): Promise<void> {
   await expect(startButton).toBeEnabled();
   await startButton.click();
 
-  await expect(page).toHaveURL(/\/workspace\/[^/]+$/, { timeout: 15000 });
-  await page.waitForSelector('.agent-provider-card-claude, .session-card.agent-pane', {
+  await expect(page).toHaveURL(/\/workspace$/, { timeout: 15000 });
+  await page.waitForSelector('.agent-provider-card-claude, .session-card.agent-pane[data-session-id]', {
     state: 'visible',
     timeout: 15000,
   });
@@ -51,25 +51,43 @@ export async function openWorkspace(page: Page): Promise<void> {
 export async function launchClaudeSession(page: Page): Promise<Locator> {
   await openWorkspace(page);
 
-  const existingSession = page.locator('.session-card.agent-pane').first();
+  const existingSession = page.locator('.session-card.agent-pane[data-session-id]').first();
   if (await existingSession.isVisible().catch(() => false)) {
-    await expect(page.getByRole('button', { name: /启用 Supervisor|禁用 Supervisor/ })).toBeVisible({
-      timeout: 15000,
+    const stateBadge = existingSession.locator('.session-state-badge');
+    const sessionState = ((await stateBadge.textContent()) ?? '').trim();
+    const supervisorButton = existingSession.getByRole('button', {
+      name: /启用 Supervisor|禁用 Supervisor/,
     });
-    return existingSession;
+
+    if (
+      /^(Running|Idle)$/.test(sessionState) &&
+      (await supervisorButton.isVisible().catch(() => false))
+    ) {
+      return existingSession;
+    }
+
+    await existingSession.getByRole('button', { name: 'Close' }).click();
   }
 
-  const claudeButton = page.locator('.agent-provider-card-claude');
+  const claudeButton = page.locator('.agent-provider-card-claude').first();
   await expect(claudeButton).toBeVisible({ timeout: 15000 });
   await claudeButton.click();
 
-  const sessionCard = page.locator('.session-card.agent-pane').first();
+  const sessionCard = page.locator('.session-card.agent-pane[data-session-id]').first();
   await expect(sessionCard).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole('button', { name: '启用 Supervisor' })).toBeVisible({
+  await expect(sessionCard.getByRole('button', { name: '启用 Supervisor' })).toBeVisible({
     timeout: 15000,
   });
 
   return sessionCard;
+}
+
+export async function waitForSessionReady(page: Page): Promise<void> {
+  const sessionCard = page.locator('.session-card.agent-pane[data-session-id]').first();
+  await expect(sessionCard).toBeVisible({ timeout: 15000 });
+  await expect(sessionCard.locator('.session-state-badge')).toHaveText(/^(Running|Idle)$/,
+    { timeout: 20000 }
+  );
 }
 
 export async function enableSupervisor(
@@ -85,7 +103,7 @@ export async function enableSupervisor(
     const dialog = page.locator('.modal-card');
     await expect(dialog.getByLabel('目标描述')).toBeVisible({ timeout: 10000 });
     await dialog.getByLabel('目标描述').fill(objective);
-    await dialog.getByLabel('Evaluator Provider').selectOption(evaluatorProviderId);
+    await dialog.getByLabel('评估方 (Evaluator)').selectOption(evaluatorProviderId);
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
@@ -101,7 +119,7 @@ export async function enableSupervisor(
   await page.getByRole('button', { name: '启用 Supervisor' }).click();
   const dialog = page.locator('.modal-card');
   await dialog.getByLabel('目标描述').fill(objective);
-  await dialog.getByLabel('Evaluator Provider').selectOption(evaluatorProviderId);
+  await dialog.getByLabel('评估方 (Evaluator)').selectOption(evaluatorProviderId);
   await dialog.getByRole('button', { name: '启用', exact: true }).click();
   await expect(dialog).not.toBeVisible({ timeout: 10000 });
 

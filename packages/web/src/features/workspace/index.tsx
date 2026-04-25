@@ -12,12 +12,18 @@
 
 import type { FC } from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { GitBranch, RefreshCw } from 'lucide-react';
-import { activeWorkspaceAtom, workspacesAtom } from '../../atoms/workspaces';
-import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, activeWorkspaceIdAtom } from '../../atoms/ui';
+import {
+  activeWorkspaceAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadErrorAtom,
+  workspacesLoadStateAtom,
+} from '../../atoms/workspaces';
+import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom } from '../../atoms/ui';
 import { gitStateAtomFamily } from '../../atoms/git';
+import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { useTranslation } from '../../lib/i18n';
 import { TopBar } from '../topbar';
 import { AgentPanes } from '../agent-panes';
@@ -25,7 +31,8 @@ import { TerminalPanel } from '../terminal-panel';
 import { FileTreePanel } from './components/file-tree';
 import { GitPanel } from './components/git-panel';
 import { GitDiffViewer } from './components/git-diff-viewer';
-import { dispatchCommandAtom } from '../../atoms/connection';
+import { CodeEditorHost } from '../code-editor';
+import { dispatchCommandAtom, connectionStatusAtom } from '../../atoms/connection';
 import type { GitStatus, Workspace } from '@coder-studio/core';
 
 /** Minimum panel sizes in pixels */
@@ -47,28 +54,20 @@ const MAX_BOTTOM_HEIGHT = 400;
  */
 export const WorkspacePage: FC = () => {
   const t = useTranslation();
-  const { id: urlWorkspaceId } = useParams<{ id: string }>();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspace?.id ?? '__workspace_placeholder__'));
   const focusMode = useAtomValue(focusModeAtom);
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const store = useStore();
-  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
-  const workspaces = useAtomValue(workspacesAtom);
+  const workspacesLoadState = useAtomValue(workspacesLoadStateAtom);
+  const workspacesLoadError = useAtomValue(workspacesLoadErrorAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
-  const [resolvingWorkspaceId, setResolvingWorkspaceId] = useState<string | null>(() =>
-    urlWorkspaceId && !workspaces[urlWorkspaceId] ? urlWorkspaceId : null
-  );
-  const lastWorkspaceFetchRef = useRef<string | null>(null);
-
-  // Sync URL workspace ID to state
-  useEffect(() => {
-    if (urlWorkspaceId) {
-      setActiveWorkspaceId(urlWorkspaceId);
-    }
-  }, [urlWorkspaceId, setActiveWorkspaceId]);
+  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
+  const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
+  const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
 
   useEffect(() => {
     if (leftPanelWidth === 200 || leftPanelWidth === 220 || leftPanelWidth === 264) {
@@ -102,68 +101,57 @@ export const WorkspacePage: FC = () => {
     };
   }, [workspace, gitState, dispatch, store]);
 
-  // Fetch workspace list if current workspace not in state
+  const loadWorkspaces = useCallback(async () => {
+    setWorkspacesLoadState('loading');
+    setWorkspacesLoadError(null);
+
+    const result = await dispatch<Workspace[]>('workspace.list', {});
+
+    if (!result.ok) {
+      const message = result.error?.message ?? 'Failed to fetch workspace list';
+      console.error('Failed to fetch workspace list:', message);
+      setWorkspacesLoadState('error');
+      setWorkspacesLoadError(message);
+      return;
+    }
+
+    const nextWorkspaces = Array.isArray(result.data) ? result.data : [];
+    const wsMap: Record<string, Workspace> = {};
+
+    for (const nextWorkspace of nextWorkspaces) {
+      wsMap[nextWorkspace.id] = nextWorkspace;
+    }
+
+    setWorkspaces(wsMap);
+    setWorkspaceOrder(nextWorkspaces.map((nextWorkspace) => nextWorkspace.id));
+    setWorkspacesLoadState('ready');
+    setWorkspacesLoadError(null);
+  }, [
+    dispatch,
+    setWorkspaceOrder,
+    setWorkspaces,
+    setWorkspacesLoadError,
+    setWorkspacesLoadState,
+  ]);
+
   useEffect(() => {
-    if (!urlWorkspaceId) {
-      setResolvingWorkspaceId(null);
-      lastWorkspaceFetchRef.current = null;
+    if (connectionStatus !== 'connected' || workspacesLoadState !== 'idle') {
       return;
     }
 
-    if (workspaces[urlWorkspaceId]) {
-      setResolvingWorkspaceId(null);
-      lastWorkspaceFetchRef.current = null;
-      return;
-    }
-
-    if (lastWorkspaceFetchRef.current === urlWorkspaceId) {
-      return;
-    }
-
-    lastWorkspaceFetchRef.current = urlWorkspaceId;
-    setResolvingWorkspaceId(urlWorkspaceId);
-
-    let cancelled = false;
-
-    dispatch<Workspace[]>('workspace.list', {})
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (result.ok && result.data) {
-          const wsMap: Record<string, Workspace> = {};
-          for (const ws of result.data) {
-            wsMap[ws.id] = ws;
-          }
-
-          setWorkspaces((current) => ({
-            ...current,
-            ...wsMap,
-          }));
-
-          if (wsMap[urlWorkspaceId]) {
-            return;
-          }
-        }
-
-        setResolvingWorkspaceId((current) => (current === urlWorkspaceId ? null : current));
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error('Failed to fetch workspace list:', err);
-          setResolvingWorkspaceId((current) => (current === urlWorkspaceId ? null : current));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [urlWorkspaceId, workspaces, dispatch, setWorkspaces]);
+    void loadWorkspaces();
+  }, [connectionStatus, loadWorkspaces, workspacesLoadState]);
 
   // Sidebar tab state
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');
   const [panelRefreshToken, setPanelRefreshToken] = useState(0);
+
+  // Active file path drives the central area: when set (and the Files tab is
+  // active) we swap AgentPanes out for the code editor, mirroring how Git Diff
+  // swaps in its own viewer when selected.
+  const activeFilePath = useAtomValue(
+    activeFilePathAtomFamily(workspace?.id ?? '__workspace_placeholder__')
+  );
 
   // Resizer drag state
   const isDraggingLeft = useRef(false);
@@ -221,64 +209,81 @@ export const WorkspacePage: FC = () => {
     };
   }, [handleLeftMouseMove, handleLeftMouseUp, handleBottomMouseMove, handleBottomMouseUp]);
 
-  const isResolvingWorkspace = Boolean(
-    urlWorkspaceId && !workspace && resolvingWorkspaceId === urlWorkspaceId
-  );
-
-  if (!workspace) {
+  if (workspacesLoadState === 'idle' || workspacesLoadState === 'loading') {
     return (
       <div className="workspace-page">
         <TopBar />
-        {isResolvingWorkspace ? (
-          <div className="workspace-resolving-shell" data-testid="workspace-resolving-shell">
-            <div className="workspace-resolving-card">
-              <div className="workspace-resolving-kicker">WORKSPACE INITIALIZING</div>
-              <h1 className="workspace-resolving-title">正在进入工作区...</h1>
-              <p className="workspace-resolving-desc">
-                正在同步 workspace 元数据、会话和文件树，界面准备完成后会自动展开。
-              </p>
+        <div className="workspace-resolving-shell" data-testid="workspace-resolving-shell">
+          <div className="workspace-resolving-card">
+            <div className="workspace-resolving-kicker">WORKSPACE INITIALIZING</div>
+            <h1 className="workspace-resolving-title">正在进入工作区...</h1>
+            <p className="workspace-resolving-desc">
+              正在同步 workspace 元数据、会话和文件树，界面准备完成后会自动展开。
+            </p>
 
-              <div className="workspace-resolving-preview" aria-hidden="true">
-                <div className="workspace-resolving-preview-topbar">
-                  <span className="workspace-resolving-pill workspace-resolving-pill-active" />
-                  <span className="workspace-resolving-pill" />
-                  <span className="workspace-resolving-pill workspace-resolving-pill-short" />
+            <div className="workspace-resolving-preview" aria-hidden="true">
+              <div className="workspace-resolving-preview-topbar">
+                <span className="workspace-resolving-pill workspace-resolving-pill-active" />
+                <span className="workspace-resolving-pill" />
+                <span className="workspace-resolving-pill workspace-resolving-pill-short" />
+              </div>
+
+              <div className="workspace-resolving-preview-body">
+                <div className="workspace-resolving-preview-sidebar">
+                  <span className="workspace-resolving-line workspace-resolving-line-label" />
+                  <span className="workspace-resolving-line workspace-resolving-line-strong" />
+                  <span className="workspace-resolving-line" />
+                  <span className="workspace-resolving-line workspace-resolving-line-wide" />
+                  <span className="workspace-resolving-line" />
                 </div>
 
-                <div className="workspace-resolving-preview-body">
-                  <div className="workspace-resolving-preview-sidebar">
-                    <span className="workspace-resolving-line workspace-resolving-line-label" />
-                    <span className="workspace-resolving-line workspace-resolving-line-strong" />
-                    <span className="workspace-resolving-line" />
-                    <span className="workspace-resolving-line workspace-resolving-line-wide" />
-                    <span className="workspace-resolving-line" />
+                <div className="workspace-resolving-preview-main">
+                  <div className="workspace-resolving-console">
+                    <span className="workspace-resolving-console-status" />
+                    <span className="workspace-resolving-console-line workspace-resolving-console-line-title" />
+                    <span className="workspace-resolving-console-line" />
+                    <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
+                    <span className="workspace-resolving-console-line workspace-resolving-console-line-short" />
                   </div>
 
-                  <div className="workspace-resolving-preview-main">
-                    <div className="workspace-resolving-console">
-                      <span className="workspace-resolving-console-status" />
-                      <span className="workspace-resolving-console-line workspace-resolving-console-line-title" />
-                      <span className="workspace-resolving-console-line" />
-                      <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
-                      <span className="workspace-resolving-console-line workspace-resolving-console-line-short" />
-                    </div>
-
-                    <div className="workspace-resolving-terminal">
-                      <span className="workspace-resolving-line workspace-resolving-line-label" />
-                      <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
-                    </div>
+                  <div className="workspace-resolving-terminal">
+                    <span className="workspace-resolving-line workspace-resolving-line-label" />
+                    <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        ) : (
-          <div className="workspace-empty-content">
-            <div className="workspace-empty-inner">
-              <p>{t('workspace.no_workspace') || 'No workspace loaded'}</p>
-            </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (workspacesLoadState === 'error') {
+    return (
+      <div className="workspace-page">
+        <TopBar />
+        <div className="workspace-empty-content" data-testid="workspace-error-shell">
+          <div className="workspace-empty-inner">
+            <p>{workspacesLoadError ?? 'Failed to fetch workspace list'}</p>
+            <button type="button" onClick={() => void loadWorkspaces()}>
+              Retry
+            </button>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!workspace) {
+    return (
+      <div className="workspace-page">
+        <TopBar />
+        <div className="workspace-empty-content">
+          <div className="workspace-empty-inner">
+            <p>{t('workspace.no_workspace') || 'No workspace loaded'}</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -359,9 +364,17 @@ export const WorkspacePage: FC = () => {
 
         {/* Central area: agent panes + terminal panel */}
         <div className="workspace-main-area">
-          {/* Agent Panes - takes remaining space */}
+          {/* Central area routing:
+           *   - Git tab  → GitDiffViewer
+           *   - Files tab + a file selected → CodeEditorHost (editable Monaco)
+           *   - Files tab + no file selected → AgentPanes (default)
+           * The editor replaces AgentPanes exactly the way GitDiffViewer does,
+           * so behavior stays symmetrical with the existing Git workflow.
+           */}
           {activeTab === 'git' ? (
             <GitDiffViewer workspaceId={workspace.id} />
+          ) : activeFilePath ? (
+            <CodeEditorHost />
           ) : (
             <div className="agent-panes">
               <AgentPanes />

@@ -5,6 +5,7 @@ import { join } from 'path';
 import Database from 'better-sqlite3';
 import { HooksManager, type HookRouteDeps } from '../hooks/manager.js';
 import { HookRegistrationRepo } from '../storage/repositories/hook-registration-repo.js';
+import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 import { SessionManager, type ProviderHookEvent } from '../session/manager.js';
 import { TerminalManager } from '../terminal/manager.js';
 import { EventBus } from '../bus/event-bus.js';
@@ -96,6 +97,10 @@ describe('Codex notify hook integration', () => {
         draft TEXT,
         transcript_path TEXT
       );
+      CREATE TABLE IF NOT EXISTS provider_configs (
+        provider_id TEXT PRIMARY KEY,
+        config TEXT NOT NULL
+      );
       INSERT INTO _migrations (name, applied_at) VALUES ('001_init', ${Date.now()});
       INSERT INTO _migrations (name, applied_at) VALUES ('002_transcript_path', ${Date.now()});
     `);
@@ -107,7 +112,7 @@ describe('Codex notify hook integration', () => {
     const mockPtyHost = createMockPtyHost();
     const terminalMgr = new TerminalManager({
       ptyHost: mockPtyHost,
-      broadcaster: mockBroadcaster,
+      eventBus,
       db: { insert: () => {}, markEnded: () => {} },
     });
 
@@ -151,6 +156,7 @@ describe('Codex notify hook integration', () => {
       db: sessionDb,
       broadcaster: mockBroadcaster,
       providerRegistry: [codex],
+      providerConfigRepo: new ProviderConfigRepo(db),
     });
 
     const hookRegistrationRepo = new HookRegistrationRepo(db);

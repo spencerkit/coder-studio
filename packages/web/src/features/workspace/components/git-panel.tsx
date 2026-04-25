@@ -2,12 +2,14 @@ import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useStore } from 'jotai';
 import {
+  AlertTriangle,
   ArrowUp,
   File,
   Minus,
   Plus,
   RefreshCw,
   RotateCcw,
+  X,
 } from 'lucide-react';
 import type { GitFileChange, GitStatus } from '@coder-studio/core';
 import {
@@ -29,6 +31,12 @@ interface GitChangeGroupDescriptor {
   title: string;
   type: GitChangeType;
   changes: GitFileChange[];
+}
+
+interface PendingDiscardConfirmation {
+  scope: 'single' | 'all';
+  paths: string[];
+  filePath?: string;
 }
 
 function getFirstChange(status: GitStatus): { change: GitFileChange; type: GitChangeType } | null {
@@ -78,6 +86,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
 
   const [commitMessage, setCommitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
 
   const setGitState = useCallback(
@@ -235,19 +244,51 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
     );
   }, [gitState, runGitMutation, workspaceId]);
 
-  const handleDiscardAll = useCallback(async () => {
+  const handleDiscardAll = useCallback(() => {
+    const paths = [
+      ...(gitState?.modified.map((file) => file.path) ?? []),
+      ...(gitState?.deleted.map((file) => file.path) ?? []),
+    ];
+
+    if (!paths.length) {
+      return;
+    }
+
+    setPendingDiscard({
+      scope: 'all',
+      paths,
+    });
+  }, [gitState]);
+
+  const handleRequestDiscardSingle = useCallback((path: string) => {
+    setPendingDiscard({
+      scope: 'single',
+      paths: [path],
+      filePath: path,
+    });
+  }, []);
+
+  const handleCancelDiscard = useCallback(() => {
+    setPendingDiscard(null);
+  }, []);
+
+  const handleConfirmDiscard = useCallback(async () => {
+    if (!pendingDiscard) {
+      return;
+    }
+
+    const nextDiscard = pendingDiscard;
+    setPendingDiscard(null);
+
     await runGitMutation(
       'git.discard',
       {
         workspaceId,
-        paths: [
-          ...(gitState?.modified.map((file) => file.path) ?? []),
-          ...(gitState?.deleted.map((file) => file.path) ?? []),
-        ],
+        paths: nextDiscard.paths,
       },
-      'Failed to discard all:'
+      nextDiscard.scope === 'all' ? 'Failed to discard all:' : 'Failed to discard:'
     );
-  }, [gitState, runGitMutation, workspaceId]);
+  }, [pendingDiscard, runGitMutation, workspaceId]);
 
   const handleCommit = useCallback(async () => {
     if (!commitMessage.trim() || !gitState?.staged.length) {
@@ -359,6 +400,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
                 selectedPath={diffPreview?.path ?? null}
                 onViewDiff={requestDiff}
                 onRunMutation={runGitMutation}
+                onRequestDiscard={handleRequestDiscardSingle}
                 workspaceId={workspaceId}
               />
             ))
@@ -369,6 +411,12 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
           <div className="git-empty">{isLoading ? 'Loading...' : t('git.no_changes')}</div>
         )}
       </div>
+
+      <GitDiscardConfirmModal
+        discard={pendingDiscard}
+        onCancel={handleCancelDiscard}
+        onConfirm={handleConfirmDiscard}
+      />
     </div>
   );
 };
@@ -386,6 +434,7 @@ interface GitChangeGroupProps {
     errorMessage: string,
     afterSuccess?: () => void
   ) => Promise<void>;
+  onRequestDiscard: (path: string) => void;
 }
 
 const GitChangeGroup: FC<GitChangeGroupProps> = ({
@@ -396,6 +445,7 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
   workspaceId,
   onViewDiff,
   onRunMutation,
+  onRequestDiscard,
 }) => (
   <div className="git-group">
     <div className="git-group-header">
@@ -412,6 +462,7 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
         selected={selectedPath === change.path}
         onViewDiff={onViewDiff}
         onRunMutation={onRunMutation}
+        onRequestDiscard={onRequestDiscard}
       />
     ))}
   </div>
@@ -429,6 +480,7 @@ interface GitChangeRowProps {
     errorMessage: string,
     afterSuccess?: () => void
   ) => Promise<void>;
+  onRequestDiscard: (path: string) => void;
 }
 
 const GitChangeRow: FC<GitChangeRowProps> = ({
@@ -438,6 +490,7 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   selected,
   onViewDiff,
   onRunMutation,
+  onRequestDiscard,
 }) => {
   const pathParts = change.path.split('/');
   const fileName = pathParts[pathParts.length - 1] ?? change.path;
@@ -475,14 +528,6 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       'git.stage',
       { workspaceId, paths: [change.path] },
       'Failed to stage:'
-    );
-  };
-
-  const handleDiscard = async () => {
-    await onRunMutation(
-      'git.discard',
-      { workspaceId, paths: [change.path] },
-      'Failed to discard:'
     );
   };
 
@@ -527,7 +572,7 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
             className="git-row-action"
             onClick={(event) => {
               event.stopPropagation();
-              void handleDiscard();
+              onRequestDiscard(change.path);
             }}
             title="Discard"
             type="button"
@@ -535,6 +580,73 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
             <RotateCcw size={12} />
           </button>
         ) : null}
+      </div>
+    </div>
+  );
+};
+
+interface GitDiscardConfirmModalProps {
+  discard: PendingDiscardConfirmation | null;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+const GitDiscardConfirmModal: FC<GitDiscardConfirmModalProps> = ({
+  discard,
+  onCancel,
+  onConfirm,
+}) => {
+  const t = useTranslation();
+
+  if (!discard) {
+    return null;
+  }
+
+  const title =
+    discard.scope === 'all'
+      ? t('git.discard_all_confirm_title')
+      : t('git.discard_file_confirm_title');
+  const message =
+    discard.scope === 'all'
+      ? t('git.discard_all_confirm_message', { count: discard.paths.length })
+      : t('git.discard_file_confirm_message', {
+          path: discard.filePath ?? discard.paths[0] ?? '',
+        });
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div
+        className="modal-card"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-title">
+            <AlertTriangle size={16} />
+            <h3>{title}</h3>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel} aria-label={t('action.close')}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <p>{message}</p>
+          <p className="dialog-helper">{t('git.discard_confirm_irreversible')}</p>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancel}>
+            {t('action.cancel')}
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              void onConfirm();
+            }}
+          >
+            {t('git.discard')}
+          </button>
+        </div>
       </div>
     </div>
   );

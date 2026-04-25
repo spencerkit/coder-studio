@@ -106,6 +106,63 @@ describe('Claude Hooks Descriptor', () => {
       );
     });
 
+    it('should canonicalize an equivalent unmanaged bridge hook instead of duplicating it', () => {
+      const existing = {
+        hooks: {
+          SessionStart: [
+            {
+              matcher: '.*',
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node /bridge SessionStart',
+                },
+              ],
+            },
+          ],
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'node /bridge Stop',
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const managed: ManagedHooks = {
+        commands: {
+          SessionStart: 'node /bridge SessionStart',
+          Stop: 'node /bridge Stop',
+        },
+      };
+
+      const result = claudeHooksDescriptor.mergeInto(existing, managed);
+
+      expect((result as any).hooks.SessionStart).toHaveLength(1);
+      expect((result as any).hooks.Stop).toHaveLength(1);
+      expect((result as any).hooks.SessionStart[0]._cs_managed).toBe(true);
+      expect((result as any).hooks.Stop[0]._cs_managed).toBe(true);
+      expect((result as any).hooks.SessionStart[0]._cs_version).toBe('cs-v1');
+      expect((result as any).hooks.Stop[0]._cs_version).toBe('cs-v1');
+      expect((result as any).hooks.SessionStart[0].matcher).toBe('.*');
+      expect((result as any).hooks.SessionStart[0].hooks).toEqual([
+        {
+          type: 'command',
+          command: 'node /bridge SessionStart',
+        },
+      ]);
+      expect((result as any).hooks.Stop[0].hooks).toEqual([
+        {
+          type: 'command',
+          command: 'node /bridge Stop',
+        },
+      ]);
+    });
+
     it('should not mutate existing config', () => {
       const existing = {
         hooks: {

@@ -8,23 +8,45 @@ import {
   generateBridgeScript,
   deployBridgeScript,
   getBridgeScriptPath,
-  HOOKS_BRIDGE_DIR,
+  getHooksBridgeDir,
 } from './bridge.js';
 
 describe('bridge', () => {
-  const testHooksDir = HOOKS_BRIDGE_DIR;
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  let testHomeDir: string;
 
   beforeEach(() => {
-    // Clean up before each test
+    testHomeDir = mkdtempSync(join(tmpdir(), 'cs-bridge-home-'));
+    process.env.HOME = testHomeDir;
+    process.env.USERPROFILE = testHomeDir;
+
+    const testHooksDir = getHooksBridgeDir();
     if (existsSync(testHooksDir)) {
       rmSync(testHooksDir, { recursive: true });
     }
   });
 
   afterEach(() => {
-    // Clean up after each test
+    const testHooksDir = getHooksBridgeDir();
     if (existsSync(testHooksDir)) {
       rmSync(testHooksDir, { recursive: true });
+    }
+
+    if (existsSync(testHomeDir)) {
+      rmSync(testHomeDir, { recursive: true, force: true });
+    }
+
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
     }
   });
 
@@ -127,6 +149,7 @@ describe('bridge', () => {
 
   describe('deployBridgeScript', () => {
     it('should create hooks directory if it does not exist', () => {
+      const testHooksDir = getHooksBridgeDir();
       expect(existsSync(testHooksDir)).toBe(false);
 
       deployBridgeScript('claude');
@@ -186,7 +209,7 @@ describe('bridge', () => {
   describe('getBridgeScriptPath', () => {
     it('should return correct path for provider', () => {
       const path = getBridgeScriptPath('claude');
-      expect(path).toBe(join(homedir(), '.coder-studio', 'hooks', 'claude-bridge.js'));
+      expect(path).toBe(join(testHomeDir, '.coder-studio', 'hooks', 'claude-bridge.js'));
     });
 
     it('should return different paths for different providers', () => {

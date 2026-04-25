@@ -110,6 +110,22 @@ export class RingBuffer {
   }
 
   /**
+   * Read the last N bytes currently retained in the buffer.
+   */
+  tail(bytes: number): Buffer {
+    if (bytes <= 0) {
+      return Buffer.alloc(0)
+    }
+
+    const snapshot = this.snapshot()
+    if (snapshot.length <= bytes) {
+      return snapshot
+    }
+
+    return snapshot.subarray(snapshot.length - bytes)
+  }
+
+  /**
    * Get current sequence number (total bytes written)
    */
   getSeq(): number {

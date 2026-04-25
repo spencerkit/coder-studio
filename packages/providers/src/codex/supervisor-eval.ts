@@ -29,7 +29,7 @@ export function buildCodexSupervisorEvalCommand(
       ...cfg.additionalArgs,
       req.prompt,
     ],
-    cwd: cfg.cwd ?? req.workspacePath,
+    cwd: req.workspacePath,
     env: {
       ...cfg.envVars,
       ...(req.apiKey ? { OPENAI_API_KEY: req.apiKey } : {}),

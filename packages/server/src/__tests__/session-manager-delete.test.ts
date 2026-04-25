@@ -57,6 +57,7 @@ describe('SessionManager.delete', () => {
       db: mockDb as any,
       broadcaster: {} as Broadcaster,
       providerRegistry: [],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
     };
 
     sessionMgr = new SessionManager(deps);
@@ -107,7 +108,7 @@ describe('SessionManager.delete', () => {
     expect(mockDb.delete).not.toHaveBeenCalled();
   });
 
-  it('should throw error when deleting running session', async () => {
+  it('should throw error when deleting an active session', async () => {
     mockDb.insert.mockImplementation(() => {});
     mockDb.update.mockImplementation(() => {});
 
@@ -123,9 +124,12 @@ describe('SessionManager.delete', () => {
       } as any,
     });
 
-    // Session is in 'starting' state after create
+    // Stub provider has no HooksDescriptor, so SessionManager treats it as
+    // "no SessionStart signal" and optimistically advances to `idle` on
+    // create. Either way, delete must reject any non-terminal state.
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
     expect(() => sessionMgr.delete(session.id)).toThrow(
-      'Cannot delete session in state: starting'
+      'Cannot delete session in state: idle'
     );
     expect(mockDb.delete).not.toHaveBeenCalled();
   });

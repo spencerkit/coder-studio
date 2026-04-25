@@ -1,14 +1,26 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
-import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { SettingsPage } from './settings-page';
+
+const routerMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+}));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => routerMocks.navigate,
+  };
+});
 
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    routerMocks.navigate.mockReset();
   });
 
   it('shows the config drift banner inside settings when codex findings exist', async () => {
@@ -39,7 +51,6 @@ describe('SettingsPage', () => {
     });
 
     store.set(connectionStatusAtom, 'connected');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
     store.set(
       wsClientAtom,
       {
@@ -66,7 +77,6 @@ describe('SettingsPage', () => {
     const sendCommand = vi.fn().mockRejectedValue(new Error('settings exploded'));
 
     store.set(connectionStatusAtom, 'connected');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
     store.set(
       wsClientAtom,
       {
@@ -88,5 +98,204 @@ describe('SettingsPage', () => {
     });
 
     expect(screen.getByText('settings exploded')).toBeInTheDocument();
+  });
+
+  it('does not render default Agent Provider selection in general settings', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'settings.get') {
+        return {
+          defaultProviderId: 'codex',
+        };
+      }
+      return {};
+    });
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
+    });
+
+    expect(screen.queryByText('选择默认的 Agent Provider')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Codex' })).not.toBeInTheDocument();
+  });
+
+  it('does not render the MCP Servers settings section', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'settings.get') {
+        return {};
+      }
+      return {};
+    });
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
+    });
+
+    expect(screen.queryByRole('button', { name: 'MCP Servers' })).not.toBeInTheDocument();
+  });
+
+  it('uses provider-specific startup command args without working directory override', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === 'settings.get') {
+        return {
+          'providers.claude.additionalArgs': ['--verbose'],
+          'providers.codex.additionalArgs': ['-c', 'model_reasoning_effort="low"'],
+        };
+      }
+      if (op === 'settings.previewCommand') {
+        const previewArgs = args as { config: { additionalArgs?: string[] } };
+        return {
+          preview: ['preview', ...(previewArgs.config.additionalArgs ?? [])].join(' '),
+        };
+      }
+      return {};
+    });
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('模型')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();
+
+    const argsInput = screen.getByLabelText('启动命令参数');
+    expect(argsInput).toHaveValue('--verbose');
+    expect(argsInput).toHaveClass('settings-provider-args-input');
+
+    fireEvent.change(argsInput, {
+      target: {
+        value: '--verbose\n--debug\n\n--print',
+      },
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.update', {
+        settings: {
+          providers: {
+            claude: {
+              additionalArgs: ['--verbose', '--debug', '--print'],
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.previewCommand', {
+        providerId: 'claude',
+        config: {
+          additionalArgs: ['--verbose', '--debug', '--print'],
+        },
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('启动命令参数')).toHaveValue('-c\nmodel_reasoning_effort=\"low\"');
+    });
+
+    fireEvent.change(screen.getByLabelText('启动命令参数'), {
+      target: {
+        value: '--sandbox\n--full-auto',
+      },
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.update', {
+        settings: {
+          providers: {
+            codex: {
+              additionalArgs: ['--sandbox', '--full-auto'],
+            },
+          },
+        },
+      });
+    });
+
+    expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();
+  });
+
+  it('returns to /workspace from settings', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({});
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith('/workspace');
   });
 });

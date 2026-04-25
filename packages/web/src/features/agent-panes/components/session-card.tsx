@@ -14,7 +14,6 @@ import {
   FlipVertical,
   Play,
   Square,
-  Send,
 } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
@@ -24,7 +23,6 @@ import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
 import { SupervisorCard } from '../../supervisor/components/supervisor-card';
 import { useSupervisor } from '../../supervisor/hooks/use-supervisor';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
-import { encodeUtf8ToBase64 } from '../../../lib/base64';
 
 interface SessionCardProps {
   sessionId: string;
@@ -44,7 +42,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
 
-  const [inputValue, setInputValue] = useState('');
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
   useSupervisor(session);
@@ -89,22 +86,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
     }
   };
 
-  const handleSendInput = async () => {
-    if (!inputValue.trim()) return;
-
-    const result = await dispatch<void>('terminal.input', {
-      terminalId: session.terminalId,
-      bytes: encodeUtf8ToBase64(inputValue + '\n'),
-      activity: 'submit',
-    });
-
-    if (result.ok) {
-      setInputValue('');
-    } else {
-      console.error('Failed to send input:', result.error?.message);
-    }
-  };
-
   /**
    * Close stops the session and removes it from the pane layout.
    * The session is NOT removed from the server - it remains with state='ended'
@@ -145,7 +126,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   };
 
   const progressWidth = getProgressWidth(session.state);
-  const sessionTitle = formatSessionLabel(session.id);
+  const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state);
 
@@ -230,33 +211,6 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
           readOnly={!isSessionInteractive(session.state)}
         />
       </div>
-
-      {isSessionInteractive(session.state) && (
-        <div className="session-input">
-          <input
-            className="input"
-            type="text"
-            value={inputValue}
-            onInput={(e) => setInputValue((e.target as HTMLInputElement).value)}
-            onCompositionEnd={(e) => {
-              setInputValue((e.target as HTMLInputElement).value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                handleSendInput();
-              }
-            }}
-            placeholder="Ask the agent to inspect, edit, or run a command"
-          />
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleSendInput}
-            disabled={!inputValue.trim()}
-          >
-            <Send size={14} />
-          </button>
-        </div>
-      )}
     </div>
   );
 };
@@ -350,7 +304,7 @@ function formatProviderLabel(providerId: string) {
 }
 
 function isSessionInteractive(state: SessionState) {
-  return state !== 'ended' && state !== 'unavailable';
+  return state === 'running' || state === 'idle' || state === 'starting';
 }
 
 export default SessionCard;

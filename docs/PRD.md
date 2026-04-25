@@ -103,9 +103,8 @@ Coder Studio
 
 | Route | Description |
 |-------|-------------|
-| `/` | Redirects to `/workspace` |
-| `/workspace` | Main workspace screen with no specific workspace selected |
-| `/workspace/:id` | Opens a specific workspace tab by its identifier |
+| `/` | Welcome screen for launching or reopening a workspace |
+| `/workspace` | Main workspace screen; the active workspace is resolved by frontend state |
 | `/settings` | Settings page |
 
 ---

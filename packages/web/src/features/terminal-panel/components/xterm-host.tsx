@@ -5,16 +5,17 @@
  * - FitAddon for responsive sizing
  * - WebSocket event subscription for output
  * - User input dispatch to server
- * - Aurora Mint dark theme
+ * - Aurora Mint theme that follows the current UI mode
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAtomValue, useAtom } from 'jotai';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { wsClientAtom } from '../../../atoms/connection';
 import { terminalOutputAtomFamily, terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { dispatchCommandAtom } from '../../../atoms/connection';
+import { themeAtom } from '../../../atoms/ui';
 import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../../atoms/terminals';
 import { encodeUtf8ToBase64 } from '../../../lib/base64';
@@ -34,33 +35,64 @@ function classifyTerminalInput(data: string): TerminalInputActivity {
 }
 
 /**
- * Aurora Mint theme for xterm.js
- * Matches design tokens from tokens.css
+ * Aurora Mint terminal themes for xterm.js.
+ * These mirror the light/dark tokens so terminals stay legible when the user
+ * switches themes without needing a full remount.
  */
-const AURORA_MINT_THEME = {
-  background: '#0b1218',
-  foreground: '#e5edf3',
-  cursor: '#78d7b2',
-  cursorAccent: '#0b1218',
-  selectionBackground: '#1e3040',
-  selectionForeground: '#e5edf3',
-  black: '#0a1014',
-  red: '#ff9eb0',
-  green: '#78d7b2',
-  yellow: '#f1b86a',
-  blue: '#6cb6ff',
-  magenta: '#c792ea',
-  cyan: '#78d7b2',
-  white: '#9fb0bc',
-  brightBlack: '#4a5b6a',
-  brightRed: '#ff9eb0',
-  brightGreen: '#78d7b2',
-  brightYellow: '#f1b86a',
-  brightBlue: '#6cb6ff',
-  brightMagenta: '#c792ea',
-  brightCyan: '#78d7b2',
-  brightWhite: '#e5edf3',
+const AURORA_MINT_THEMES = {
+  dark: {
+    background: '#0b1218',
+    foreground: '#e5edf3',
+    cursor: '#78d7b2',
+    cursorAccent: '#0b1218',
+    selectionBackground: '#1e3040',
+    selectionForeground: '#e5edf3',
+    black: '#0a1014',
+    red: '#ff9eb0',
+    green: '#78d7b2',
+    yellow: '#f1b86a',
+    blue: '#6cb6ff',
+    magenta: '#c792ea',
+    cyan: '#78d7b2',
+    white: '#9fb0bc',
+    brightBlack: '#4a5b6a',
+    brightRed: '#ff9eb0',
+    brightGreen: '#78d7b2',
+    brightYellow: '#f1b86a',
+    brightBlue: '#6cb6ff',
+    brightMagenta: '#c792ea',
+    brightCyan: '#78d7b2',
+    brightWhite: '#e5edf3',
+  },
+  light: {
+    background: '#fafbfc',
+    foreground: '#1f2328',
+    cursor: '#0969da',
+    cursorAccent: '#fafbfc',
+    selectionBackground: '#dde4ea',
+    selectionForeground: '#1f2328',
+    black: '#24292f',
+    red: '#cf222e',
+    green: '#1a7f37',
+    yellow: '#9a6700',
+    blue: '#0969da',
+    magenta: '#8250df',
+    cyan: '#1b7c83',
+    white: '#57606a',
+    brightBlack: '#8b949e',
+    brightRed: '#cf222e',
+    brightGreen: '#1a7f37',
+    brightYellow: '#9a6700',
+    brightBlue: '#0969da',
+    brightMagenta: '#8250df',
+    brightCyan: '#1b7c83',
+    brightWhite: '#1f2328',
+  },
 };
+
+function getTerminalTheme(theme: 'dark' | 'light') {
+  return AURORA_MINT_THEMES[theme];
+}
 
 const terminalOutputDecoder = new TextDecoder();
 
@@ -96,19 +128,43 @@ interface ReplayPayload {
  * 3. Unmount: dispose Terminal, unsubscribe from events
  */
 export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHostProps) {
+  const uiTheme = useAtomValue(themeAtom);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const fitFrameRef = useRef<number | null>(null);
+  const mountedRef = useRef(false);
+  const fitResolversRef = useRef<Array<() => void>>([]);
   const interactiveRef = useRef(true);
   const lastReportedSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  // Buffer WS output chunks that arrive before the replay response resolves,
+  // so we can reconcile them against the replay snapshot instead of writing
+  // the overlapping bytes twice into xterm.
+  const pendingReplayChunksRef = useRef<Array<{ chunk: string; seq: number }>>([]);
+  const replayCompletedRef = useRef(false);
+  const replayedSeqRef = useRef(0);
+  const initialThemeRef = useRef(uiTheme);
 
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
   const isInteractive = !readOnly && meta?.alive !== false;
+
+  // Latest copies of callback identities used inside the mount effect, exposed
+  // via refs so the effect's cleanup/re-creation is not tied to their churn.
+  const handleInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
+  const handleResizeRef = useRef<(size: { cols: number; rows: number }) => void | Promise<void>>(
+    () => {}
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     interactiveRef.current = isInteractive;
@@ -118,6 +174,12 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       terminalRef.current.options.cursorBlink = isInteractive;
     }
   }, [isInteractive]);
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.options.theme = getTerminalTheme(uiTheme);
+    }
+  }, [uiTheme]);
 
   const scheduleFit = useCallback(() => {
     if (fitFrameRef.current !== null) {
@@ -131,7 +193,19 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         fitAddonRef.current?.fit();
       } catch (error) {
         console.error('Failed to fit xterm instance:', error);
+      } finally {
+        const resolvers = fitResolversRef.current;
+        fitResolversRef.current = [];
+        for (const resolve of resolvers) {
+          resolve();
+        }
       }
+    });
+  }, []);
+
+  const waitForNextFit = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      fitResolversRef.current.push(resolve);
     });
   }, []);
 
@@ -183,60 +257,73 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     [terminalId, dispatch]
   );
 
-  /**
-   * Ensure terminal meta is initialized on mount if not yet set by WS event.
-   * This handles the case where XtermHost mounts before the terminal.created event arrives.
-   */
+  // Keep callback refs in sync so the mount effect can call the latest version
+  // without listing the callbacks as dependencies.
   useEffect(() => {
-    if (!meta) {
-      // Set a minimal meta so the terminal knows its own identity
-      // The full meta will be populated when terminal.created WS event arrives
-      setOutputAtom((prev: OutputBuffer) => prev); // trigger no-op to ensure atom is initialized
-    }
-  }, [meta, setOutputAtom]);
+    handleInputRef.current = handleInput;
+  }, [handleInput]);
+
+  useEffect(() => {
+    handleResizeRef.current = handleResize;
+  }, [handleResize]);
 
   /**
-   * Initialize terminal on mount
+   * Initialize terminal on mount.
+   *
+   * Deliberately scoped to (terminalId, workspaceId, wsClient): we do NOT
+   * re-create the xterm instance when isInteractive, handleInput/handleResize,
+   * scheduleFit, or setOutputAtom churn — those are consumed via refs. Tearing
+   * down the Terminal means losing every rendered row and re-running the
+   * replay, which used to amplify "blank line" artifacts on benign renders.
    */
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Create Terminal instance
+    replayCompletedRef.current = false;
+    replayedSeqRef.current = 0;
+    pendingReplayChunksRef.current = [];
+    lastReportedSizeRef.current = null;
+
+    // Create Terminal instance.
     // lineHeight is left at xterm.js default (1.0) so that box-drawing
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: AURORA_MINT_THEME,
+      theme: getTerminalTheme(initialThemeRef.current),
       fontFamily: 'JetBrains Mono, Fira Code, SF Mono, monospace',
       fontSize: 13,
       scrollback: 5000,
-      cursorBlink: isInteractive,
+      cursorBlink: interactiveRef.current,
       cursorStyle: 'block',
-      disableStdin: !isInteractive,
+      disableStdin: !interactiveRef.current,
       allowProposedApi: true,
     });
 
-    // Create FitAddon
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
 
     terminal.onResize((size) => {
-      void handleResize(size);
+      void handleResizeRef.current(size);
+    });
+    terminal.onData((data) => {
+      void handleInputRef.current(data);
     });
 
-    // Open terminal in container
     terminal.open(containerRef.current);
-    fitAddon.fit();
-
-    // Store refs
+    // Defer the first fit to the next frame so flex layout has settled;
+    // calling fit() synchronously right after open() sometimes runs against a
+    // zero- or partial-height container and produces an off-by-one row count
+    // whose leftover pixels render as a blank strip.
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     scheduleFit();
+    const initialFitReady = waitForNextFit();
 
-    // Handle user input
-    terminal.onData(handleInput);
+    const initialReplayReady = initialFitReady.then(async () => {
+      const { cols, rows } = terminal;
+      await handleResizeRef.current({ cols, rows });
+    });
 
-    // Subscribe to terminal output events
     const outputTopic = Topics.terminalOutput(workspaceId, terminalId);
     const exitTopic = Topics.terminalExit(workspaceId, terminalId);
 
@@ -245,16 +332,28 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         [outputTopic, exitTopic],
         (topic, payload, _seq) => {
           if (topic === outputTopic) {
-            // Output event: append to atom
             // Server sends { chunk: base64, size, seq }
             const outputData = payload as { chunk: string; size: number; seq: number };
+
+            if (!replayCompletedRef.current) {
+              // Replay is still in flight — buffer the chunk until we know
+              // which bytes are already covered by the replay snapshot. This
+              // prevents writing the overlapping prefix twice to xterm, which
+              // otherwise manifests as "extra blank lines" because control
+              // sequences (\r, \x1b[K, cursor moves) re-execute.
+              pendingReplayChunksRef.current.push({
+                chunk: outputData.chunk,
+                seq: outputData.seq,
+              });
+              return;
+            }
+
             setOutputAtom((prev: OutputBuffer) => ({
               chunks: [...prev.chunks, outputData.chunk],
               lastSeq: outputData.seq,
               lastWritten: prev.lastWritten,
             }));
           } else if (topic === exitTopic) {
-            // Exit event: terminal closed
             const exitData = payload as { code: number };
             if (terminalRef.current) {
               terminalRef.current.writeln(`\r\n[Process exited with code ${exitData.code}]`);
@@ -264,26 +363,69 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       );
     }
 
-    dispatch<ReplayPayload>('terminal.replay', {
-      terminalId,
-      lastSeq: 0,
-    })
+    (async () => {
+      await initialReplayReady;
+      if (!mountedRef.current) {
+        return null;
+      }
+      return dispatch<ReplayPayload>('terminal.replay', {
+        terminalId,
+        lastSeq: 0,
+      });
+    })()
       .then((result) => {
-        if (!result.ok || !result.data || result.data.status !== 'ok' || !result.data.chunk) {
+        if (!mountedRef.current || !terminalRef.current || !result) {
           return;
         }
 
-        try {
-          terminal.write(decodeTerminalChunk(result.data.chunk));
-        } catch {
-          terminal.write(atob(result.data.chunk));
+        let replayedSeq = 0;
+        if (result.ok && result.data?.status === 'ok' && result.data.chunk) {
+          try {
+            terminal.write(decodeTerminalChunk(result.data.chunk));
+          } catch {
+            terminal.write(atob(result.data.chunk));
+          }
+          replayedSeq = result.data.seq ?? 0;
         }
+
+        replayedSeqRef.current = replayedSeq;
+        replayCompletedRef.current = true;
+
+        // Flush WS chunks that accumulated while the replay was in flight,
+        // skipping any whose seq is already covered by the replay snapshot.
+        const pending = pendingReplayChunksRef.current;
+        pendingReplayChunksRef.current = [];
+        for (const entry of pending) {
+          if (entry.seq <= replayedSeq) continue;
+          try {
+            terminal.write(decodeTerminalChunk(entry.chunk));
+          } catch {
+            terminal.write(entry.chunk);
+          }
+        }
+
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error('Failed to replay terminal output:', error);
+        await initialReplayReady;
+        if (!mountedRef.current || !terminalRef.current) {
+          return;
+        }
+        // On failure we still need to surface any buffered chunks so live
+        // output is not dropped. Treat replayedSeq as 0 (no dedup).
+        const pending = pendingReplayChunksRef.current;
+        pendingReplayChunksRef.current = [];
+        replayCompletedRef.current = true;
+        replayedSeqRef.current = 0;
+        for (const entry of pending) {
+          try {
+            terminal.write(decodeTerminalChunk(entry.chunk));
+          } catch {
+            terminal.write(entry.chunk);
+          }
+        }
       });
 
-    // Cleanup on unmount
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
@@ -303,7 +445,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         fitAddonRef.current = null;
       }
     };
-  }, [terminalId, workspaceId, wsClient, handleInput, handleResize, setOutputAtom, scheduleFit, isInteractive]);
+  }, [terminalId, workspaceId, wsClient, dispatch, scheduleFit, setOutputAtom]);
 
   /**
    * Write new output chunks to terminal

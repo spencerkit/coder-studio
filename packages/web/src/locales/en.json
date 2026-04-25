@@ -128,6 +128,11 @@
     "stage_all": "Stage All",
     "unstage_all": "Unstage All",
     "discard": "Discard",
+    "discard_file_confirm_title": "Discard File Changes",
+    "discard_file_confirm_message": "Are you sure you want to discard changes in \"{path}\"?",
+    "discard_all_confirm_title": "Discard All Changes",
+    "discard_all_confirm_message": "Are you sure you want to discard changes in {count} files?",
+    "discard_confirm_irreversible": "This action cannot be undone.",
     "branch": "Branch",
     "current_branch": "Current Branch",
     "no_branch": "Not on any branch",
@@ -170,13 +175,12 @@
       "hooks": "Hooks Integration",
       "hooks_hint": "Inject Provider-specific hooks into current workspace",
       "hooks_inject": "Inject Hooks",
-      "select_hint": "Select default Agent Provider",
       "configure": "Configure",
       "reset": "Reset",
       "config": "Configuration",
-      "api_key": "API Key",
-      "api_key_placeholder": "Enter API Key...",
-      "model": "Model"
+      "startup_args": "Startup Command Args",
+      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
+      "startup_args_placeholder": "--verbose\n--debug"
     },
     "theme": {
       "title": "Theme",

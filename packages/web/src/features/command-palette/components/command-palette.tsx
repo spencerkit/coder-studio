@@ -5,8 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
-import { useNavigate } from 'react-router-dom';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import {
   commandPaletteOpenAtom,
@@ -15,9 +15,10 @@ import {
   sidebarCollapsedAtom,
   bottomPanelHeightAtom,
 } from '../../../atoms/ui';
-import { workspacesAtom } from '../../../atoms/workspaces';
+import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useTranslation } from '../../../lib/i18n';
 import { WorkspaceLaunchModal } from '../../workspace/components/workspace-launch-modal';
+import type { Workspace } from '@coder-studio/core';
 
 interface Command {
   id: string;
@@ -39,13 +40,15 @@ interface Command {
  */
 export function CommandPalette() {
   const t = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
   const [focusMode, setFocusMode] = useAtom(focusModeAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useAtom(activeWorkspaceIdAtom);
-  const workspaces = useAtomValue(workspacesAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const workspaces = useAtomValue(orderedWorkspacesAtom);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -63,6 +66,7 @@ export function CommandPalette() {
     activeWorkspaceId,
     setActiveWorkspaceId,
     workspaces,
+    locationPathname: location.pathname,
     navigate,
     t,
     setShowWorkspaceLaunch,
@@ -222,7 +226,8 @@ function buildCommands(context: {
   setBottomPanelHeight: (v: number) => void;
   activeWorkspaceId: string | null;
   setActiveWorkspaceId: (v: string | null) => void;
-  workspaces: Record<string, { id: string; path: string }>;
+  workspaces: Workspace[];
+  locationPathname: string;
   navigate: (path: string) => void;
   t: (key: string) => string;
   setShowWorkspaceLaunch: (v: boolean) => void;
@@ -237,6 +242,7 @@ function buildCommands(context: {
     activeWorkspaceId,
     setActiveWorkspaceId,
     workspaces,
+    locationPathname,
     navigate,
     t,
     setShowWorkspaceLaunch,
@@ -313,7 +319,7 @@ function buildCommands(context: {
   ];
 
   // Add workspace switch commands
-  Object.values(workspaces).forEach((ws) => {
+  workspaces.forEach((ws) => {
     const workspaceLabel = ws.name || ws.path?.split('/').pop() || ws.path || ws.id;
 
     commands.push({
@@ -322,7 +328,9 @@ function buildCommands(context: {
       description: ws.path || ws.id,
       action: () => {
         setActiveWorkspaceId(ws.id);
-        navigate(`/workspace/${ws.id}`);
+        if (locationPathname !== '/workspace') {
+          navigate('/workspace');
+        }
       },
     });
   });

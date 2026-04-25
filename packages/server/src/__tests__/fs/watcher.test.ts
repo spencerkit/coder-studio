@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, rmdir } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { Topics } from '@coder-studio/core';
 import { WorkspaceWatcher } from '../../fs/watcher.js';
 
 describe('WorkspaceWatcher', () => {
@@ -46,6 +47,23 @@ describe('WorkspaceWatcher', () => {
   it('should have broadcaster reference', () => {
     const watcher = new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
     expect(broadcaster.broadcast).toBeDefined();
+  });
+
+  it('broadcasts fs dirty updates using the Topics builder', () => {
+    vi.useFakeTimers();
+    try {
+      const watcher = new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+      (watcher as any).markDirty();
+      vi.advanceTimersByTime(100);
+
+      expect(broadcaster.broadcast).toHaveBeenCalledWith(
+        Topics.workspaceFsDirty('test-workspace-id'),
+        { reason: 'fs_change' }
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

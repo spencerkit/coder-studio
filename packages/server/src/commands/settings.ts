@@ -4,6 +4,14 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
+import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
+import {
+  ProviderLaunchConfigInputSchema,
+  ProviderSettingsSchema,
+  isSupportedProviderId,
+  mergeProviderLaunchConfig,
+  sanitizeProviderLaunchConfig,
+} from '../provider-config.js';
 
 // Settings schema
 const SettingsSchema = z.object({
@@ -21,10 +29,7 @@ const SettingsSchema = z.object({
     terminalRenderer: z.enum(['standard', 'compatibility']).optional(),
     locale: z.enum(['zh', 'en']).optional(),
   }).optional(),
-  providers: z.object({
-    apiKey: z.string().optional(),
-    model: z.string().optional(),
-  }).optional(),
+  providers: ProviderSettingsSchema.optional(),
 });
 
 // settings.get
@@ -38,11 +43,25 @@ registerCommand(
 
     const settings: Record<string, unknown> = {};
     for (const { key, value } of row) {
+      if (key.startsWith('providers.')) {
+        continue;
+      }
+
       try {
         settings[key] = JSON.parse(value);
       } catch {
         settings[key] = value;
       }
+    }
+
+    const providerConfigRepo = new ProviderConfigRepo(ctx.db);
+    const providerConfigs = providerConfigRepo.getAll();
+    for (const [providerId, config] of Object.entries(providerConfigs)) {
+      if (!isSupportedProviderId(providerId)) {
+        continue;
+      }
+
+      Object.assign(settings, flattenSettings(sanitizeProviderLaunchConfig(config), `providers.${providerId}`));
     }
 
     const hookRegistrations = ctx.hooksMgr.listRegistrations();
@@ -69,8 +88,16 @@ registerCommand(
     settings: SettingsSchema,
   }),
   async (args, ctx) => {
+    const providerConfigRepo = new ProviderConfigRepo(ctx.db);
+    const nextSettings = args.settings as Record<string, unknown>;
+    const providers =
+      nextSettings.providers && typeof nextSettings.providers === 'object' && !Array.isArray(nextSettings.providers)
+        ? (nextSettings.providers as Record<string, unknown>)
+        : undefined;
+    const { providers: _providers, ...nonProviderSettings } = nextSettings;
+
     // Flatten settings to key-value pairs
-    const flatSettings = flattenSettings(args.settings);
+    const flatSettings = flattenSettings(nonProviderSettings);
 
     // Update each setting
     const stmt = ctx.db.prepare(`
@@ -83,7 +110,18 @@ registerCommand(
       stmt.run(key, JSON.stringify(value));
     }
 
-    return { updated: Object.keys(flatSettings) };
+    if (providers) {
+      for (const [providerId, config] of Object.entries(providers)) {
+        providerConfigRepo.set(providerId, sanitizeProviderLaunchConfig(config));
+      }
+    }
+
+    return {
+      updated: [
+        ...Object.keys(flatSettings),
+        ...Object.keys(providers ?? {}).map((providerId) => `providers.${providerId}`),
+      ],
+    };
   }
 );
 
@@ -113,7 +151,7 @@ registerCommand(
   'settings.previewCommand',
   z.object({
     providerId: z.string(),
-    config: z.object({}).passthrough(),
+    config: ProviderLaunchConfigInputSchema,
     workspacePath: z.string().optional(),
   }),
   async (args, ctx) => {
@@ -123,7 +161,7 @@ registerCommand(
       throw new Error(`Unknown provider: ${args.providerId}`);
     }
 
-    const command = provider.buildCommand(args.config, {
+    const command = provider.buildCommand(mergeProviderLaunchConfig(provider, args.config), {
       sessionId: 'preview-session',
       workspacePath: args.workspacePath ?? process.cwd(),
     });

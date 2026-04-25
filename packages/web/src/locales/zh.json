@@ -128,6 +128,11 @@
     "stage_all": "暂存全部",
     "unstage_all": "取消暂存全部",
     "discard": "放弃",
+    "discard_file_confirm_title": "放弃文件更改",
+    "discard_file_confirm_message": "确定要放弃 “{path}” 的更改吗？",
+    "discard_all_confirm_title": "放弃所有更改",
+    "discard_all_confirm_message": "确定要放弃 {count} 个文件的更改吗？",
+    "discard_confirm_irreversible": "此操作不可恢复。",
     "branch": "分支",
     "current_branch": "当前分支",
     "no_branch": "不在任何分支上",
@@ -170,13 +175,12 @@
       "hooks": "Hooks 集成",
       "hooks_hint": "将 Provider 特定的 hooks 注入到当前工作区",
       "hooks_inject": "注入 Hooks",
-      "select_hint": "选择默认的 Agent Provider",
       "configure": "配置",
       "reset": "重置",
       "config": "配置",
-      "api_key": "API Key",
-      "api_key_placeholder": "输入 API Key...",
-      "model": "模型"
+      "startup_args": "启动命令参数",
+      "startup_args_hint": "每行填写一个启动参数，保存后会追加到 Provider 启动命令后面。",
+      "startup_args_placeholder": "--verbose\n--debug"
     },
     "theme": {
       "title": "主题",
@@ -203,16 +207,6 @@
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
-    },
-    "mcp": {
-      "title": "MCP Servers",
-      "hint": "配置 Claude/Codex 的 Model Context Protocol servers",
-      "no_servers": "未配置 MCP servers",
-      "add_server": "添加 Server",
-      "enabled": "已启用",
-      "disabled": "已禁用",
-      "enable": "启用",
-      "disable": "禁用"
     }
   },
   "connection": {

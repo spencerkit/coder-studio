@@ -67,9 +67,9 @@ describe('SessionCard', () => {
     );
   });
 
-  it('encodes Chinese session input as UTF-8 base64 before dispatching', async () => {
-    const { store, sendCommand } = createSessionStore({
-      terminalId: 'term-cn',
+  it('renders interactive sessions without the extra command input', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
       state: 'idle',
       endedAt: undefined,
     });
@@ -80,52 +80,13 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    const input = screen.getByRole('textbox');
-    fireEvent.input(input, { target: { value: '你好，Codex' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
-        terminalId: 'term-cn',
-        bytes: Buffer.from('你好，Codex\n', 'utf8').toString('base64'),
-        activity: 'submit',
-      });
-    });
-  });
-
-  it('does not submit while the session input is still composing with an IME', async () => {
-    const { store, sendCommand } = createSessionStore({
-      terminalId: 'term-ime',
-      state: 'idle',
-      endedAt: undefined,
-    });
-
-    render(
-      <Provider store={store}>
-        <SessionCard sessionId="sess_123456" />
-      </Provider>
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term-live',
+        readOnly: false,
+      })
     );
-
-    const input = screen.getByRole('textbox');
-    fireEvent.input(input, { target: { value: '你好' } });
-    fireEvent.compositionStart(input);
-    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
-
-    expect(sendCommand).not.toHaveBeenCalledWith(
-      'terminal.input',
-      expect.objectContaining({ terminalId: 'term-ime' })
-    );
-
-    fireEvent.compositionEnd(input);
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
-        terminalId: 'term-ime',
-        bytes: Buffer.from('你好\n', 'utf8').toString('base64'),
-        activity: 'submit',
-      });
-    });
   });
 
   it('hydrates supervisor state for full-capability sessions and renders the card above the terminal', async () => {
@@ -217,6 +178,85 @@ describe('SessionCard', () => {
     expect(card?.classList.contains('session-card--focus-pulse')).toBe(false);
     // Untouched.
     expect(store.get(pendingFocusSessionAtom)).toBe('some-other-session');
+  });
+
+  it('shows the session title when the server has assigned one', () => {
+    const { store } = createSessionStore({
+      state: 'running',
+      endedAt: undefined,
+      title: 'fix bug',
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByText('fix bug')).toBeInTheDocument();
+    // The SESSION-XX fallback should not also render in the header.
+    expect(screen.queryByText(/^SESSION-/)).toBeNull();
+  });
+
+  it('falls back to SESSION-XX while the session has no title yet', () => {
+    const { store } = createSessionStore({
+      state: 'running',
+      endedAt: undefined,
+      // title intentionally omitted
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByText('SESSION-56')).toBeInTheDocument();
+  });
+
+  it('renders interrupted sessions as read-only terminals with a resume action', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-interrupted',
+      state: 'interrupted',
+      resumeId: 'resume-1',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term-interrupted',
+        readOnly: true,
+      })
+    );
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+  });
+
+  it('renders unavailable sessions as read-only terminals without a resume action', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-unavailable',
+      state: 'unavailable',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term-unavailable',
+        readOnly: true,
+      })
+    );
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
   });
 
   it('stops the session and closes the pane when close is clicked', async () => {

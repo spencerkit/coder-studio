@@ -1,5 +1,6 @@
 import {
   DEFAULT_SUPERVISOR_CONFIG,
+  Topics,
   type CycleStatus,
   type DomainEvent,
   type ProviderDefinition,
@@ -84,6 +85,20 @@ function messageOf(error: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+function logFailure(
+  logger: SupervisorLogger,
+  error: unknown,
+  context: Record<string, unknown>,
+  message: string
+): void {
+  const payload = { ...context, err: error };
+  if (logger.error) {
+    logger.error(payload, message);
+    return;
+  }
+  logger.warn(payload, message);
 }
 
 export class SupervisorManager {
@@ -231,10 +246,11 @@ export class SupervisorManager {
         message: 'Draft sessions cannot enable supervisor',
       };
     }
-    if (session.capability !== 'full') {
+    const sessionProvider = this.requireSessionProvider(session.providerId);
+    if (!this.supportsSupervisor(sessionProvider)) {
       throw {
         code: 'supervisor_unsupported_provider',
-        message: 'Supervisor requires a full-capability session provider',
+        message: `Provider ${session.providerId} does not expose the hooks required for supervisor-driven sessions`,
       };
     }
     if (this.supervisorsBySession.has(req.sessionId)) {
@@ -590,6 +606,12 @@ export class SupervisorManager {
 
       return finishedCycle;
     } catch (error: unknown) {
+      logFailure(
+        this.logger,
+        error,
+        { supervisorId, cycleId: activeCycle.id },
+        'Supervisor evaluation failed'
+      );
       const reason = messageOf(error, 'Supervisor evaluation failed');
       const failedCycle = this.deps.cycleRepo.update(activeCycle.id, {
         status: 'failed',
@@ -625,6 +647,12 @@ export class SupervisorManager {
    * stuck in whatever state it happened to be in (usually 'evaluating').
    */
   private markSupervisorError(id: string, error: unknown): void {
+    logFailure(
+      this.logger,
+      error,
+      { supervisorId: id },
+      'Supervisor evaluation failed before cycle creation'
+    );
     const reason = messageOf(error, 'Supervisor evaluation failed');
     try {
       const failed = this.attachCycles(
@@ -642,6 +670,21 @@ export class SupervisorManager {
         'Failed to persist supervisor error state'
       );
     }
+  }
+
+  private requireSessionProvider(providerId: string): ProviderDefinition {
+    const provider = this.deps.providerRegistry.find((item) => item.id === providerId);
+    if (!provider) {
+      throw {
+        code: 'supervisor_unsupported_provider',
+        message: `Provider ${providerId} is not registered`,
+      };
+    }
+    return provider;
+  }
+
+  private supportsSupervisor(provider: ProviderDefinition): boolean {
+    return Boolean(provider.hooks?.events?.completion);
   }
 
   private assertEvaluatorProvider(providerId: string): void {
@@ -682,7 +725,7 @@ export class SupervisorManager {
     this.inFlight.delete(supervisor.id);
 
     this.deps.broadcaster.broadcast(
-      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.state`,
+      Topics.supervisorState(supervisor.workspaceId, supervisor.sessionId),
       { supervisorId: supervisor.id, event: 'deleted' }
     );
   }
@@ -703,7 +746,7 @@ export class SupervisorManager {
     event: 'created' | 'updated' | 'state_changed'
   ): void {
     this.deps.broadcaster.broadcast(
-      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.state`,
+      Topics.supervisorState(supervisor.workspaceId, supervisor.sessionId),
       { supervisor, event }
     );
   }
@@ -714,7 +757,7 @@ export class SupervisorManager {
     event: 'created' | 'updated'
   ): void {
     this.deps.broadcaster.broadcast(
-      `workspace.${supervisor.workspaceId}.session.${supervisor.sessionId}.supervisor.cycle`,
+      Topics.supervisorCycle(supervisor.workspaceId, supervisor.sessionId),
       { cycle, event }
     );
   }

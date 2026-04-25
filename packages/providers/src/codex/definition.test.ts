@@ -71,23 +71,6 @@ describe('Codex Provider Definition', () => {
       expect(result.env.TOKEN).toBe('abc');
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
     });
-
-    it('should use custom cwd if specified', () => {
-      const config: ProviderConfig = {
-        additionalArgs: [],
-        envVars: {},
-        cwd: '/custom/path',
-      };
-
-      const ctx = {
-        sessionId: 'session-123',
-        workspacePath: '/workspace',
-      };
-
-      const result = codexDefinition.buildCommand(config, ctx);
-
-      expect(result.cwd).toBe('/custom/path');
-    });
   });
 
   describe('buildResumeCommand', () => {
@@ -102,7 +85,6 @@ describe('Codex Provider Definition', () => {
         {
           additionalArgs: [],
           envVars: { OPENAI_API_KEY: 'sk-openai' },
-          cwd: '/workspace',
         },
         {
           prompt: 'Return strict JSON',

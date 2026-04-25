@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { X, Home, ArrowUp, Folder, Loader2 } from 'lucide-react';
 import { useTranslation } from '../../../lib/i18n';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 
@@ -33,10 +33,9 @@ interface WorkspaceLaunchModalProps {
 
 type LaunchChoice = 'local' | 'remote';
 
-type ExecutionTarget = 'native' | 'wsl';
-
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const t = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
@@ -50,8 +49,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Launch configuration
-  const [launchChoice] = useState<LaunchChoice>('local');
-  const [executionTarget, setExecutionTarget] = useState<ExecutionTarget>('native');
+  const launchChoice: LaunchChoice = 'local';
 
   // Root paths for quick navigation
   const rootPaths = ['/', '~', '/home/spencer'];
@@ -118,7 +116,9 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
       if (result.ok && result.data?.id) {
         setActiveWorkspaceId(result.data.id);
-        navigate(`/workspace/${result.data.id}`);
+        if (location.pathname !== '/workspace') {
+          navigate('/workspace');
+        }
         onClose();
       } else {
         setError(result.error?.message || t('error.workspace_open') || 'Failed to open workspace');
@@ -128,7 +128,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     } finally {
       setLoading(false);
     }
-  }, [selectedPath, dispatch, navigate, setActiveWorkspaceId, onClose, t]);
+  }, [selectedPath, dispatch, location.pathname, navigate, setActiveWorkspaceId, onClose, t]);
 
   const getShortPath = (path: string) => {
     if (path === '~') return '~';
@@ -158,9 +158,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
           </div>
           <div className="launch-header-right">
             <div className="launch-path-display">{getShortPath(currentPath) || '/'}</div>
-            <div className="launch-target-hint">
-              Target: {executionTarget === 'native' ? 'Native' : 'WSL'}
-            </div>
             <div
               className="launch-close-btn"
               onClick={onClose}
@@ -185,22 +182,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               <div className="launch-choice-title">Remote Git</div>
               <div className="launch-choice-desc">Clone a repository (Coming Soon)</div>
             </div>
-          </div>
-
-          {/* Execution Target */}
-          <div className="launch-target-row">
-            <button
-              className={`launch-target-btn ${executionTarget === 'native' ? 'active' : ''}`}
-              onClick={() => setExecutionTarget('native')}
-            >
-              Native
-            </button>
-            <button
-              className={`launch-target-btn ${executionTarget === 'wsl' ? 'active' : ''}`}
-              onClick={() => setExecutionTarget('wsl')}
-            >
-              WSL
-            </button>
           </div>
 
           {/* Folder Picker */}

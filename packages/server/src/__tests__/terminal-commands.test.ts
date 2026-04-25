@@ -14,7 +14,11 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
         path: '/tmp/workspace',
       }),
     } as never,
-    sessionMgr: {} as never,
+    sessionMgr: {
+      findSessionIdByTerminal: vi.fn(),
+      sendInput: vi.fn(),
+      resize: vi.fn(),
+    } as never,
     terminalMgr: {
       create: vi.fn().mockImplementation((spec) => ({
         id: 'term-1',
@@ -66,9 +70,125 @@ describe('terminal commands', () => {
     expect(result.ok).toBe(true);
     expect(ctx.terminalMgr.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        argv: ['/bin/zsh', '-il'],
+        argv: ['/bin/zsh', '-i'],
         title: 'zsh',
       })
     );
+  });
+
+  it('delegates terminal.input to sessionMgr.sendInput when a session owns the terminal', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+    const bytes = Buffer.from('hi').toString('base64');
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          bytes,
+          activity: 'submit',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.findSessionIdByTerminal).toHaveBeenCalledWith('term-1');
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('hi'), 'submit');
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
+  });
+
+  it('falls back to terminalMgr.write for terminal.input when no session owns the terminal', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue(undefined),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+    const bytes = Buffer.from('ls\n').toString('base64');
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-2',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-shell',
+          bytes,
+          activity: 'submit',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.terminalMgr.write).toHaveBeenCalledWith('term-shell', Buffer.from('ls\n'));
+    expect(ctx.sessionMgr.sendInput).not.toHaveBeenCalled();
+  });
+
+  it('delegates terminal.resize to sessionMgr.resize when a session owns the terminal', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-resize-1',
+        op: 'terminal.resize',
+        args: {
+          terminalId: 'term-1',
+          cols: 120,
+          rows: 40,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.findSessionIdByTerminal).toHaveBeenCalledWith('term-1');
+    expect(ctx.sessionMgr.resize).toHaveBeenCalledWith('sess-1', 120, 40);
+    expect(ctx.terminalMgr.resize).not.toHaveBeenCalled();
+  });
+
+  it('falls back to terminalMgr.resize when no session owns the terminal', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue(undefined),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-resize-2',
+        op: 'terminal.resize',
+        args: {
+          terminalId: 'term-shell',
+          cols: 80,
+          rows: 24,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.terminalMgr.resize).toHaveBeenCalledWith('term-shell', 80, 24);
+    expect(ctx.sessionMgr.resize).not.toHaveBeenCalled();
   });
 });

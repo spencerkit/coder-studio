@@ -11,7 +11,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { toastsAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
-import { pendingFocusSessionAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
 import { focusSession } from './focus-session';
 
 const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: string }> = {
@@ -23,6 +23,7 @@ const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: stri
 
 function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useSetAtom(dismissToastAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const navigate = useNavigate();
   const config = KIND_CONFIG[toast.kind];
@@ -46,13 +47,17 @@ function ToastItem({ toast }: { toast: Toast }) {
         workspaceId: toast.workspaceId,
         sessionId: toast.sessionId,
         setPendingFocus,
+        setActiveWorkspaceId,
         navigate,
       });
     } else if (toast.workspaceId) {
-      navigate(`/workspace/${toast.workspaceId}`);
+      setActiveWorkspaceId(toast.workspaceId);
+      if (window.location.pathname !== '/workspace') {
+        navigate('/workspace');
+      }
     }
     dismiss(toast.id);
-  }, [toast.workspaceId, toast.sessionId, navigate, dismiss, setPendingFocus]);
+  }, [toast.workspaceId, toast.sessionId, navigate, dismiss, setActiveWorkspaceId, setPendingFocus]);
 
   return (
     <div

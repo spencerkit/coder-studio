@@ -3,8 +3,9 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { TerminalPanel } from '../components/terminal-panel';
 import { wsClientAtom } from '../../../atoms/connection';
-import { activeWorkspaceIdAtom, bottomPanelHeightAtom } from '../../../atoms/ui';
+import { bottomPanelHeightAtom } from '../../../atoms/ui';
 import { terminalMetaAtomFamily, type TerminalMeta } from '../../../atoms/terminals';
+import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
 
 vi.mock('../components/xterm-host', () => ({
@@ -37,7 +38,20 @@ describe('TerminalPanel', () => {
     });
     const sendCommand = vi.fn().mockResolvedValue([]);
 
-    store.set(activeWorkspaceIdAtom, 'ws-test');
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
     store.set(bottomPanelHeightAtom, 240);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
@@ -88,7 +102,20 @@ describe('TerminalPanel', () => {
     });
     const sendCommand = vi.fn().mockResolvedValue([]);
 
-    store.set(activeWorkspaceIdAtom, 'ws-test');
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
     store.set(bottomPanelHeightAtom, 240);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 

@@ -7,8 +7,8 @@
  */
 
 import { useAtomValue } from 'jotai';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { connectionStatusAtom, activeWorkspaceIdAtom, authEnabledAtom } from './atoms';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { connectionStatusAtom, authEnabledAtom } from './atoms';
 import { authenticatedAtom } from './atoms/ui';
 import { WelcomePage } from './features/welcome';
 import { SettingsPage } from './features/settings';
@@ -21,16 +21,9 @@ import { ToastContainer } from './features/notifications';
 /**
  * Root Route Component
  *
- * Redirects to active workspace if one exists,
- * otherwise shows the Welcome page.
+ * Shows the Welcome page.
  */
 function RootRoute() {
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
-
-  if (activeWorkspaceId) {
-    return <Navigate to={`/workspace/${activeWorkspaceId}`} replace />;
-  }
-
   return <WelcomePage />;
 }
 
@@ -86,7 +79,7 @@ function AppShell() {
             ) : (
               <>
                 <Route path="/" element={<RootRoute />} />
-                <Route path="/workspace/:id" element={<WorkspacePage />} />
+                <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </>
             )}

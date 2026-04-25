@@ -20,7 +20,11 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
+import {
+  activeFilePathAtomFamily,
+  fileTreeAtomFamily,
+  fileTreeStaleAtomFamily,
+} from '../../../atoms/fs';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { FileNode } from '@coder-studio/core';
@@ -50,7 +54,11 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // Selection is mirrored to the shared activeFilePath atom so the tree
+  // highlight stays in sync with the code editor (and disappears when the
+  // editor is closed, since closing clears that atom).
+  const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
 
   /**
    * Load file tree: dispatch file.readTree command
@@ -101,8 +109,8 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
             node={node}
             depth={0}
             workspaceId={workspaceId}
-            selectedPath={selectedPath}
-            onSelectFile={setSelectedPath}
+            selectedPath={activeFilePath}
+            onSelectFile={setActiveFilePath}
           />
         ))
       ) : (
@@ -137,20 +145,14 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     isFolder && depth === 0 && ['app', 'packages', 'src'].includes(node.name.toLowerCase());
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  // Use a callback to dispatch file open event
-  // This would be handled by a parent component or event bus
+  // Selecting a file updates the shared activeFilePath atom. The code editor
+  // watches that atom and lazily fetches the file contents via file.read,
+  // so there's a single source of truth rather than an out-of-band event bus.
   const handleClick = () => {
     if (isFolder) {
       setIsExpanded(!isExpanded);
     } else {
       onSelectFile(node.path);
-      // Dispatch custom event for file open
-      // The code editor will listen to this event
-      window.dispatchEvent(
-        new CustomEvent('coder-studio:file-open', {
-          detail: { path: node.path, workspaceId },
-        })
-      );
     }
   };
 

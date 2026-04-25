@@ -4,7 +4,7 @@ import type {
 } from '@coder-studio/core';
 import type { ProviderConfig } from '@coder-studio/core';
 
-import { claudeConfigSchema, type ClaudeConfig } from './config-schema.js';
+import { claudeConfigSchema } from './config-schema.js';
 import { claudeHooksDescriptor } from './hooks-template.js';
 import { buildClaudeSupervisorEvalCommand } from './supervisor-eval.js';
 import { readClaudeTranscriptExcerpt } from './transcript-excerpt.js';
@@ -22,13 +22,13 @@ export const claudeDefinition: ProviderDefinition = {
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx: LaunchContext) {
-    const cfg = config as ClaudeConfig;
+    const cfg = claudeConfigSchema.parse(config);
     const modelArg = cfg.model ? ['--model', cfg.model] : [];
 
     return {
-      argv: ['claude', ...modelArg, ...cfg.additionalArgs],
+      argv: ['claude', ...modelArg, ...(cfg.additionalArgs ?? [])],
       env: {
-        ...cfg.envVars,
+        ...(cfg.envVars ?? {}),
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
       },
       cwd: ctx.workspacePath,
@@ -36,13 +36,13 @@ export const claudeDefinition: ProviderDefinition = {
   },
 
   buildResumeCommand(resumeId: string, config: ProviderConfig, ctx: LaunchContext) {
-    const cfg = config as ClaudeConfig;
+    const cfg = claudeConfigSchema.parse(config);
     const modelArg = cfg.model ? ['--model', cfg.model] : [];
 
     return {
-      argv: ['claude', '--resume', resumeId, ...modelArg, ...cfg.additionalArgs],
+      argv: ['claude', '--resume', resumeId, ...modelArg, ...(cfg.additionalArgs ?? [])],
       env: {
-        ...cfg.envVars,
+        ...(cfg.envVars ?? {}),
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
       },
       cwd: ctx.workspacePath,
@@ -54,12 +54,7 @@ export const claudeDefinition: ProviderDefinition = {
 
   // ===== Configuration =====
   configSchema: claudeConfigSchema,
-  defaultConfig: {
-    model: 'claude-sonnet-4-6',
-    maxTurns: null,
-    additionalArgs: [],
-    envVars: {},
-  } satisfies ClaudeConfig,
+  defaultConfig: {},
 
   // ===== Runtime requirements =====
   requiredCommands: ['claude'],

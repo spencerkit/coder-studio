@@ -38,7 +38,7 @@ import { useEffect, useRef } from 'react';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { workspacesAtom } from '../../atoms/workspaces';
+import { resolvedActiveWorkspaceIdAtom, workspacesAtom } from '../../atoms/workspaces';
 import {
   activeWorkspaceIdAtom,
   notificationPreferencesAtom,
@@ -74,8 +74,12 @@ interface SessionTrace {
   notifiedForTurn: boolean;
 }
 
+// States that represent "a turn is in flight and we should notify the user
+// when it finishes". We intentionally exclude `starting` because it only
+// tracks provider-CLI boot, not a user-submitted turn — otherwise the first
+// SessionStart→idle transition after boot would fire a bogus
+// "session completed" toast before the user has done anything.
 const ACTIVE_STATES: ReadonlySet<SessionState> = new Set([
-  'starting',
   'running',
   'interrupted',
 ]);
@@ -158,6 +162,7 @@ interface BrowserNotificationOptions {
   tag: string;
   workspaceId: string;
   sessionId: string;
+  setActiveWorkspaceId: (workspaceId: string | null) => void;
   /** Set the pending-focus marker so the target SessionCard reacts on
    *  mount (or the next render if it's already mounted). */
   setPendingFocus: (sessionId: string | null) => void;
@@ -184,6 +189,7 @@ function showBrowserNotification(opts: BrowserNotificationOptions): void {
       focusSession({
         workspaceId: opts.workspaceId,
         sessionId: opts.sessionId,
+        setActiveWorkspaceId: opts.setActiveWorkspaceId,
         setPendingFocus: opts.setPendingFocus,
         // No router available here — focusSession falls back to
         // history.pushState + popstate, which the SPA router handles.
@@ -207,7 +213,8 @@ export function useSessionNotifications(): void {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const notificationPreferences = useAtomValue(notificationPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const t = useTranslation();
@@ -352,6 +359,7 @@ export function useSessionNotifications(): void {
           tag,
           workspaceId: session.workspaceId,
           sessionId: session.id,
+          setActiveWorkspaceId,
           setPendingFocus,
         });
       } else {
@@ -373,7 +381,16 @@ export function useSessionNotifications(): void {
         traces.delete(id);
       }
     }
-  }, [sessions, notificationPreferences, activeWorkspaceId, pushToast, setPendingFocus, store, t]);
+  }, [
+    sessions,
+    notificationPreferences,
+    activeWorkspaceId,
+    pushToast,
+    setActiveWorkspaceId,
+    setPendingFocus,
+    store,
+    t,
+  ]);
 }
 
 function formatSessionLabel(sessionId: string): string {

@@ -20,6 +20,10 @@ export interface ProviderDefinition {
   id: string;
   displayName: string;
   badge: string;
+  /**
+   * Declarative label for UI badges and docs only.
+   * Runtime behavior must read hooks/events directly.
+   */
   capability: 'full' | 'limited' | 'unsupported';
 
   // Command construction

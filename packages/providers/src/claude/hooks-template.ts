@@ -34,47 +34,16 @@ export const claudeHooksDescriptor: HooksDescriptor = {
       ...config,
       hooks: {
         ...existingHooks,
-        SessionStart: removeManagedHooks(
-          existingHooks.SessionStart as unknown[] | undefined
+        SessionStart: mergeHookArray(
+          existingHooks.SessionStart as unknown[] | undefined,
+          managed.commands.SessionStart
         ),
-        Stop: removeManagedHooks(
-          existingHooks.Stop as unknown[] | undefined
+        Stop: mergeHookArray(
+          existingHooks.Stop as unknown[] | undefined,
+          managed.commands.Stop
         ),
       },
     };
-
-    // Add managed hooks
-    if (managed.commands.SessionStart) {
-      newConfig.hooks.SessionStart = [
-        ...newConfig.hooks.SessionStart,
-        {
-          _cs_managed: true,
-          _cs_version: 'cs-v1',
-          hooks: [
-            {
-              type: 'command',
-              command: managed.commands.SessionStart,
-            },
-          ],
-        },
-      ];
-    }
-
-    if (managed.commands.Stop) {
-      newConfig.hooks.Stop = [
-        ...newConfig.hooks.Stop,
-        {
-          _cs_managed: true,
-          _cs_version: 'cs-v1',
-          hooks: [
-            {
-              type: 'command',
-              command: managed.commands.Stop,
-            },
-          ],
-        },
-      ];
-    }
 
     return newConfig;
   },
@@ -164,23 +133,101 @@ export const claudeHooksDescriptor: HooksDescriptor = {
 };
 
 /**
- * Remove Coder Studio managed hooks from a hook array
- * Preserves user-defined hooks
+ * Remove old managed hooks, and fold any equivalent unmanaged bridge hook
+ * into the new managed entry so we do not double-register the same command.
  */
-function removeManagedHooks(hooks: unknown[] | undefined): unknown[] {
+function mergeHookArray(
+  hooks: unknown[] | undefined,
+  managedCommand: string | undefined
+): unknown[] {
   if (!hooks || !Array.isArray(hooks)) {
-    return [];
+    return managedCommand ? [buildManagedHookEntry(managedCommand)] : [];
   }
 
-  return hooks.filter((hook) => {
+  const preserved: unknown[] = [];
+  let adoptedManaged: Record<string, unknown> | null = null;
+
+  for (const hook of hooks) {
     if (!hook || typeof hook !== 'object') {
-      return true; // Keep non-object hooks
+      preserved.push(hook);
+      continue;
     }
 
     const h = hook as Record<string, unknown>;
-    // Remove hooks marked as managed by Coder Studio
-    return !h._cs_managed;
-  });
+    if (h._cs_managed) {
+      continue;
+    }
+
+    if (managedCommand && isEquivalentBridgeHook(h, managedCommand)) {
+      adoptedManaged ??= adoptManagedHookEntry(h, managedCommand);
+      continue;
+    }
+
+    preserved.push(hook);
+  }
+
+  if (managedCommand) {
+    preserved.push(adoptedManaged ?? buildManagedHookEntry(managedCommand));
+  }
+
+  return preserved;
+}
+
+function isEquivalentBridgeHook(hook: Record<string, unknown>, managedCommand: string): boolean {
+  if (typeof hook.command === 'string') {
+    return hook.command === managedCommand;
+  }
+
+  const nestedHooks = hook.hooks;
+  if (!Array.isArray(nestedHooks) || nestedHooks.length !== 1) {
+    return false;
+  }
+
+  const nested = nestedHooks[0];
+  if (!nested || typeof nested !== 'object') {
+    return false;
+  }
+
+  const nestedHook = nested as Record<string, unknown>;
+  return nestedHook.type === 'command' && nestedHook.command === managedCommand;
+}
+
+function adoptManagedHookEntry(
+  hook: Record<string, unknown>,
+  managedCommand: string
+): Record<string, unknown> {
+  const {
+    _cs_managed: _ignoredManaged,
+    _cs_version: _ignoredVersion,
+    command: _ignoredCommand,
+    hooks: _ignoredHooks,
+    ...rest
+  } = hook;
+
+  return {
+    ...rest,
+    _cs_managed: true,
+    _cs_version: 'cs-v1',
+    hooks: [
+      {
+        type: 'command',
+        command: managedCommand,
+      },
+    ],
+  };
+}
+
+function buildManagedHookEntry(managedCommand: string): Record<string, unknown> {
+  return {
+    _cs_managed: true,
+    _cs_version: 'cs-v1',
+    hooks: [
+      {
+        type: 'command',
+        command: managedCommand,
+      },
+    ],
+  };
 }
 
 /**

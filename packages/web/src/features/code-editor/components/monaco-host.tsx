@@ -1,19 +1,20 @@
 /**
  * Monaco Host Component
  *
- * Monaco editor wrapper with file loading and saving.
+ * Monaco editor wrapper for viewing and editing a single file. Diff view lives
+ * in the Git Diff feature and is deliberately not surfaced here.
  */
 
 import type { FC } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import Editor, { OnChange } from '@monaco-editor/react';
-import { DiffEditor } from '@monaco-editor/react';
+import { themeAtom } from '../../../atoms/ui';
 
 interface MonacoHostProps {
   workspaceId: string;
   filePath: string;
   content: string;
-  isDiffMode: boolean;
   onContentChange?: (content: string) => void;
 }
 
@@ -23,20 +24,20 @@ interface MonacoHostProps {
  * PRD §9.5.3:
  *   - Syntax highlighting
  *   - Line numbers
- *   - Diff mode (side-by-side)
- *   - Auto-save on Ctrl/Cmd + S
+ *   - Auto-save on Ctrl/Cmd + S (handled by parent)
  */
 export const MonacoHost: FC<MonacoHostProps> = ({
-  workspaceId,
+  // workspaceId is accepted for future per-workspace editor settings; Monaco
+  // itself doesn't need it today.
+  workspaceId: _workspaceId,
   filePath,
   content,
-  isDiffMode,
   onContentChange,
 }) => {
-  const editorRef = useRef<any>(null);
-  const [originalContent, setOriginalContent] = useState('');
+  const uiTheme = useAtomValue(themeAtom);
+  const editorRef = useRef<unknown>(null);
 
-  const handleEditorDidMount = (editor: any) => {
+  const handleEditorDidMount = (editor: unknown) => {
     editorRef.current = editor;
   };
 
@@ -44,46 +45,15 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     onContentChange?.(value || '');
   };
 
-  // Load original content for diff mode
-  useEffect(() => {
-    // For diff mode, we need the original content (from baseHash)
-    // This would be loaded once when the file opens
-    // For now, we'll set it to the initial content
-    if (isDiffMode && originalContent === '') {
-      setOriginalContent(content);
-    }
-  }, [isDiffMode, content, originalContent]);
-
   const language = detectLanguage(filePath);
-
-  if (isDiffMode) {
-    return (
-      <div className="monaco-host">
-        <DiffEditor
-          height="100%"
-          language={language}
-          theme="vs-dark"
-          original={originalContent}
-          modified={content}
-          onMount={handleEditorDidMount}
-          options={{
-            fontSize: 13,
-            fontFamily: 'JetBrains Mono, monospace',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            padding: { top: 12, bottom: 12 },
-          }}
-        />
-      </div>
-    );
-  }
+  const editorTheme = uiTheme === 'light' ? 'vs' : 'vs-dark';
 
   return (
     <div className="monaco-host">
       <Editor
         height="100%"
         language={language}
-        theme="vs-dark"
+        theme={editorTheme}
         value={content}
         onChange={handleChange}
         onMount={handleEditorDidMount}

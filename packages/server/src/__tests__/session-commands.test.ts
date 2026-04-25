@@ -5,6 +5,7 @@ import { openDatabase, runMigrations } from '../storage/db.js';
 import { WorkspaceManager } from '../workspace/manager.js';
 import { SessionManager } from '../session/manager.js';
 import { EventBus } from '../bus/event-bus.js';
+import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 
 // Import command handlers to register them
 import '../commands/workspace.js';
@@ -27,7 +28,21 @@ describe('Session Commands', () => {
 
     // Create managers
     workspaceMgr = new WorkspaceManager({ db, eventBus });
-    sessionMgr = new SessionManager({ db, eventBus });
+    sessionMgr = new SessionManager({
+      terminalMgr: {
+        create: () => ({ id: 'terminal-1' }),
+        kill: () => {},
+      } as any,
+      eventBus,
+      db: {
+        insert: () => {},
+        update: () => {},
+        delete: () => {},
+      } as any,
+      broadcaster: { broadcast: () => {} } as any,
+      providerRegistry: [],
+      providerConfigRepo: new ProviderConfigRepo(db),
+    });
 
     // Create context with required dependencies
     ctx = {

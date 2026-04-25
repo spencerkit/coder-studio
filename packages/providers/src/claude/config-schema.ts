@@ -13,16 +13,16 @@ export const claudeConfigSchema = z.object({
     'claude-sonnet-4-5',
     'claude-sonnet-4-6',
     'claude-opus-4-6',
-  ]).default('claude-sonnet-4-6'),
+  ]).optional(),
 
   // Maximum turns (null = unlimited)
-  maxTurns: z.number().int().positive().nullable().default(null),
+  maxTurns: z.number().int().positive().nullable().optional(),
 
   // Additional CLI arguments
-  additionalArgs: z.array(z.string()).default([]),
+  additionalArgs: z.array(z.string()).optional(),
 
   // Environment variables to pass to Claude CLI
-  envVars: z.record(z.string()).default({}),
+  envVars: z.record(z.string(), z.string()).optional(),
 });
 
 export type ClaudeConfig = z.infer<typeof claudeConfigSchema>;

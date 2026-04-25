@@ -5,6 +5,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import type Database from 'better-sqlite3';
 import { EventBus } from './bus/event-bus.js';
 import { WsHub } from './ws/hub.js';
 import { buildFastifyApp } from './app.js';
@@ -26,6 +27,7 @@ import { HookRegistrationRepo } from './storage/repositories/hook-registration-r
 import { ProviderConfigRepo } from './storage/repositories/provider-config-repo.js';
 import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-repo.js';
 import { SupervisorRepo } from './storage/repositories/supervisor-repo.js';
+import { rowToSession, type SessionRow } from './storage/repositories/session-repo.js';
 import { providerRegistry } from '@coder-studio/providers';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
@@ -82,16 +84,17 @@ export async function createServer(
   // Create WsHub (implements Broadcaster)
   const wsHub = new WsHub({ eventBus, commandContext: null as any, config, fencingMgr });
 
-  // Terminal Manager (needs broadcaster)
+  // Terminal Manager (needs eventBus)
   // Note: For Phase 1, we use a minimal PTY host implementation
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(), // Will be implemented with node-pty
-    broadcaster: wsHub,
+    eventBus,
     db: createTerminalDatabase(db),
   });
 
   // Session Manager (needs terminal manager)
   const sessionDb = createSessionDatabase(db);
+  const providerConfigRepo = new ProviderConfigRepo(db);
 
   const sessionMgr = new SessionManager({
     terminalMgr,
@@ -99,6 +102,7 @@ export async function createServer(
     db: sessionDb,
     broadcaster: wsHub,
     providerRegistry,
+    providerConfigRepo,
     resolveBridgeScriptPath: (providerId) => getBridgeScriptPath(providerId),
   });
 
@@ -154,7 +158,6 @@ export async function createServer(
   }
 
   // Supervisor Manager
-  const providerConfigRepo = new ProviderConfigRepo(db);
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
   const supervisorMgr = new SupervisorManager({
@@ -168,6 +171,7 @@ export async function createServer(
     supervisorRepo,
     cycleRepo,
   });
+  await sessionMgr.hydrate();
   await supervisorMgr.hydrate();
 
   // Command context with all managers
@@ -311,9 +315,9 @@ function createTerminalDatabase(db: any) {
 /**
  * Create session database adapter
  */
-function createSessionDatabase(db: any) {
+function createSessionDatabase(db: Database.Database) {
   return {
-    insert: (session: any) => {
+    insert: (session: SessionRow) => {
       db.prepare(`
         INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, state, resume_id, capability, started_at, last_active_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -333,10 +337,10 @@ function createSessionDatabase(db: any) {
       const keys = Object.keys(patch);
       if (keys.length === 0) return;
 
-      // Whitelist allowed columns to prevent SQL injection via crafted keys
       const ALLOWED_COLS = new Set([
-        'resume_id', 'transcript_path', 'state', 'started_at',
+        'resume_id', 'transcript_path', 'terminal_id', 'state', 'started_at',
         'ended_at', 'completion_percent', 'error_reason', 'last_active_at',
+        'title',
       ]);
 
       const setClauses: string[] = [];
@@ -353,10 +357,18 @@ function createSessionDatabase(db: any) {
       db.prepare(`UPDATE sessions SET ${setClause} WHERE id = ?`).run(...values, id);
     },
     findById: (id: string) => {
-      return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
+      const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+      return row ? rowToSession(row) : undefined;
     },
     findByWorkspaceId: (workspaceId: string) => {
-      return db.prepare('SELECT * FROM sessions WHERE workspace_id = ?').all(workspaceId);
+      const rows = db.prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC').all(workspaceId) as SessionRow[];
+      return rows.map(rowToSession);
+    },
+    listHydratable: () => {
+      const rows = db.prepare(
+        `SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC`
+      ).all() as SessionRow[];
+      return rows.map(rowToSession);
     },
     delete: (id: string) => {
       db.prepare('DELETE FROM sessions WHERE id = ?').run(id);

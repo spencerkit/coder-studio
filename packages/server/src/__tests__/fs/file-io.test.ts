@@ -63,15 +63,60 @@ describe('readFile', () => {
     const filePath = join(testDir, 'test.txt');
     await writeFile(filePath, 'Hello, World!');
 
-    const result = await readWorkspaceFile(testDir, 'test.txt');
+    const result = await readWorkspaceFile('ws-1', testDir, 'test.txt');
 
-    expect(result.content).toBe('Hello, World!');
-    expect(result.baseHash).toBeDefined();
-    expect(result.encoding).toBe('utf-8');
+    expect(result.kind).toBe('text');
+    if (result.kind === 'text') {
+      expect(result.content).toBe('Hello, World!');
+      expect(result.baseHash).toBeDefined();
+      expect(result.encoding).toBe('utf-8');
+    }
   });
 
   it('should throw for non-existent file', async () => {
-    await expect(readWorkspaceFile(testDir, 'nonexistent.txt')).rejects.toThrow();
+    await expect(readWorkspaceFile('ws-1', testDir, 'nonexistent.txt')).rejects.toThrow();
+  });
+
+  it('should return an image descriptor with a signed-in asset URL for png files', async () => {
+    // Minimal 1x1 PNG so we exercise the binary branch without depending on
+    // fixture files; exact bytes don't matter since the endpoint just streams
+    // them — we only assert the metadata here.
+    const pngBytes = Buffer.from(
+      '89504E470D0A1A0A0000000D4948445200000001000000010806000000' +
+        '1F15C4890000000A49444154789C63000100000005000157CFC4A30000' +
+        '0000049454E44AE426082',
+      'hex'
+    );
+    const filePath = join(testDir, 'pixel.png');
+    await writeFile(filePath, pngBytes);
+
+    const result = await readWorkspaceFile('ws-42', testDir, 'pixel.png');
+
+    expect(result.kind).toBe('image');
+    if (result.kind === 'image') {
+      expect(result.mime).toBe('image/png');
+      expect(result.size).toBe(pngBytes.length);
+      expect(result.isTextBacked).toBe(false);
+      expect(result.url).toMatch(/^\/api\/file\?/);
+      // Both query params must round-trip correctly since the client feeds
+      // the URL straight into <img src>.
+      const url = new URL(result.url, 'http://local');
+      expect(url.searchParams.get('workspaceId')).toBe('ws-42');
+      expect(url.searchParams.get('path')).toBe('pixel.png');
+    }
+  });
+
+  it('should flag svg as image but text-backed so the UI can offer edit-as-text', async () => {
+    const filePath = join(testDir, 'icon.svg');
+    await writeFile(filePath, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    const result = await readWorkspaceFile('ws-1', testDir, 'icon.svg');
+
+    expect(result.kind).toBe('image');
+    if (result.kind === 'image') {
+      expect(result.mime).toBe('image/svg+xml');
+      expect(result.isTextBacked).toBe(true);
+    }
   });
 });
 
@@ -104,7 +149,8 @@ describe('writeFile', () => {
     const filePath = join(testDir, 'test.txt');
     await writeFile(filePath, 'Original');
 
-    const read = await readWorkspaceFile(testDir, 'test.txt');
+    const read = await readWorkspaceFile('ws-1', testDir, 'test.txt');
+    if (read.kind !== 'text') throw new Error('expected text kind');
     const result = await writeWorkspaceFile(testDir, 'test.txt', 'Updated', read.baseHash);
 
     expect(result.newHash).toBeDefined();

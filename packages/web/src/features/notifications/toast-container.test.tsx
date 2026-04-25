@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastContainer } from './toast-container';
 import { toastsAtom, type Toast } from './atoms';
-import { pendingFocusSessionAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -51,9 +51,10 @@ describe('ToastContainer', () => {
 
     fireEvent.click(screen.getByRole('alert'));
 
-    expect(navigate).toHaveBeenCalledWith('/workspace/ws-9');
+    expect(navigate).toHaveBeenCalledWith('/workspace');
+    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-9');
     expect(store.get(pendingFocusSessionAtom)).toBe('sess-77');
-    expect(window.localStorage.getItem('ui.activeWorkspaceId')).toBe(JSON.stringify('ws-9'));
+    expect(window.localStorage.length).toBe(0);
   });
 
   it('clicking a workspace-only toast (no sessionId) navigates but does not set focus marker', () => {
@@ -65,7 +66,8 @@ describe('ToastContainer', () => {
 
     fireEvent.click(screen.getByRole('alert'));
 
-    expect(navigate).toHaveBeenCalledWith('/workspace/ws-3');
+    expect(navigate).toHaveBeenCalledWith('/workspace');
+    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-3');
     expect(store.get(pendingFocusSessionAtom)).toBeNull();
   });
 });

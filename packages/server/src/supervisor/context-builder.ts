@@ -77,8 +77,7 @@ export class SupervisorContextBuilder {
       }
     }
 
-    const terminalSnapshot =
-      this.deps.terminalMgr.get(session.terminalId)?.ringBuffer.snapshot().toString('utf8') ?? '';
+    const terminalSnapshot = this.deps.sessionMgr.getOutputTail(session.id, TERMINAL_MAX_CHARS).toString('utf8');
     const terminalExcerpt = terminalSnapshot
       .split('\n')
       .slice(-TERMINAL_MAX_LINES)

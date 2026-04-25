@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import App from './app';
+import { activeWorkspaceIdAtom } from './atoms';
 import { authEnabledAtom, connectionStatusAtom } from './atoms/connection';
 import { authenticatedAtom } from './atoms/ui';
 
@@ -25,9 +26,17 @@ vi.mock('./features/auth', () => ({
   LoginPage: () => <div>LoginPage</div>,
 }));
 
+vi.mock('./features/config-drift-banner', () => ({
+  ConfigDriftBanner: () => null,
+}));
+
+vi.mock('./features/notifications', () => ({
+  ToastContainer: () => null,
+}));
+
 describe('App auth gating', () => {
   beforeEach(() => {
-    window.history.replaceState({}, '', '/workspace/ws-123');
+    window.history.replaceState({}, '', '/');
   });
 
   it('shows a loading shell while auth status is still unknown', () => {
@@ -59,5 +68,39 @@ describe('App auth gating', () => {
     );
 
     expect(screen.getByText('LoginPage')).toBeInTheDocument();
+  });
+
+  it('keeps the root route on WelcomePage even when an active workspace exists', () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(activeWorkspaceIdAtom, 'ws-123');
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    expect(screen.queryByText('WorkspacePage')).not.toBeInTheDocument();
+  });
+
+  it('renders WorkspacePage on /workspace', () => {
+    window.history.replaceState({}, '', '/workspace');
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
   });
 });

@@ -5,12 +5,12 @@
   "description": "Hook bridge scripts for Coder Studio - deployed to runtime directory",
   "scripts": {
     "build": "echo 'No build needed - raw scripts are copied to runtime'",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "vitest": "^3.0.0"
+    "@types/node": "^25.6.0",
+    "vitest": "^4.1.5"
   },
   "keywords": [
     "hook",

@@ -35,6 +35,9 @@ export default defineConfig({
       '/internal': {
         target: backendHttpTarget,
       },
+      '/api': {
+        target: backendHttpTarget,
+      },
     },
   },
   build: {
@@ -42,9 +45,21 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'monaco-editor': ['@monaco-editor/react'],
-          'xterm': ['xterm', 'xterm-addon-fit', 'xterm-addon-webgl'],
+        manualChunks(id) {
+          if (id.includes('monaco-editor') || id.includes('@monaco-editor/react')) {
+            return 'monaco-editor';
+          }
+
+          if (
+            id.includes('@xterm/xterm') ||
+            id.includes('@xterm+xterm') ||
+            id.includes('@xterm/addon-fit') ||
+            id.includes('@xterm+addon-fit') ||
+            id.includes('@xterm/addon-webgl') ||
+            id.includes('@xterm+addon-webgl')
+          ) {
+            return 'xterm';
+          }
         },
       },
     },

@@ -23,14 +23,33 @@ import {
   createCliBuildOptions,
 } from './shared/index.js';
 import { resolve, join } from 'path';
-import { writeFile, copyFile } from 'fs/promises';
+import { writeFile, copyFile, rm } from 'fs/promises';
+
+export interface CliOutputDirs {
+  cliDistDir: string;
+  cliEsmDir: string;
+  cliWebDir: string;
+}
+
+export async function prepareCliOutputDirs({
+  cliDistDir,
+  cliEsmDir,
+  cliWebDir,
+}: CliOutputDirs): Promise<void> {
+  await rm(cliDistDir, { recursive: true, force: true });
+  await ensureDir(cliEsmDir);
+  await ensureDir(cliWebDir);
+}
 
 async function buildCli(): Promise<void> {
   step('BUILD CLI', 'Building CLI bundle with esbuild...\n');
 
-  // Ensure output directories exist
-  await ensureDir(CLI_ESM_DIR);
-  await ensureDir(CLI_WEB_DIR);
+  // Start from a clean package dist so stale hashed assets are never published.
+  await prepareCliOutputDirs({
+    cliDistDir: resolve(CLI_DIR, 'dist'),
+    cliEsmDir: CLI_ESM_DIR,
+    cliWebDir: CLI_WEB_DIR,
+  });
 
   // Build ESM bundle only (server uses ESM features like top-level await)
   info('Building ESM bundle...');

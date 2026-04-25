@@ -1,7 +1,6 @@
 {
   "name": "coder-studio",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "tsx src/scripts/dev.ts",
     "dev:web": "tsx src/scripts/dev-web.ts",
@@ -10,19 +9,20 @@
     "build:web": "tsx src/scripts/build-web.ts",
     "build:cli": "tsx src/scripts/build-cli.ts",
     "assemble": "tsx src/scripts/assemble.ts",
+    "publish:cli": "tsx src/scripts/publish-cli.ts",
+    "release:check-version": "tsx src/scripts/check-release-version.ts",
     "acceptance:phase1": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1",
     "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
     "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
-    "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx,css,json,md}\""
+    "lint": "biome lint .",
+    "format": "biome format --write ."
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.8.0",
-    "eslint": "^9.0.0",
-    "prettier": "^3.2.0",
-    "vitest": "^3.0.0",
-    "tsx": "^4.7.0",
-    "esbuild": "^0.24.0"
+    "@biomejs/biome": "^2.4.12",
+    "@types/node": "^25.6.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }

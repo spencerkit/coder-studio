@@ -44,7 +44,11 @@ export function mergeWriteConfig(
     // Check if upgrade is needed
     const currentManaged = hooksDescriptor.extractManaged(existingConfig);
 
-    if (currentManaged && hooksDescriptor.markerVersion === hooksDescriptor.markerVersion) {
+    if (
+      currentManaged &&
+      hasManagedMarkerVersion(existingConfig, hooksDescriptor.markerVersion) &&
+      managedCommandsEqual(currentManaged, managedHooks)
+    ) {
       // Already up to date, skip
       return { success: true };
     }
@@ -106,4 +110,39 @@ export function readConfigFile(configPath: string): unknown | null {
   } catch {
     return null;
   }
+}
+
+function managedCommandsEqual(a: ManagedHooks, b: ManagedHooks): boolean {
+  const aKeys = Object.keys(a.commands).sort();
+  const bKeys = Object.keys(b.commands).sort();
+
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+
+  for (let i = 0; i < aKeys.length; i++) {
+    const key = aKeys[i];
+    if (key !== bKeys[i] || a.commands[key] !== b.commands[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function hasManagedMarkerVersion(value: unknown, markerVersion: string): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasManagedMarkerVersion(item, markerVersion));
+  }
+
+  const record = value as Record<string, unknown>;
+  if (record._cs_managed === true && record._cs_version === markerVersion) {
+    return true;
+  }
+
+  return Object.values(record).some((item) => hasManagedMarkerVersion(item, markerVersion));
 }

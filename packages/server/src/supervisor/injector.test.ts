@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SupervisorInjector, describeNonInjectableState } from './injector.js';
 import type { SessionState } from '@coder-studio/core';
 
-function makeInjector(writeSpy = vi.fn(), state: SessionState = 'running') {
+function makeInjector(sendInputSpy = vi.fn(), state: SessionState = 'running') {
   return new SupervisorInjector({
     sessionMgr: {
       get: vi.fn(() => ({
@@ -15,8 +15,9 @@ function makeInjector(writeSpy = vi.fn(), state: SessionState = 'running') {
         startedAt: 1,
         lastActiveAt: 1,
       })),
+      sendInput: sendInputSpy,
     } as any,
-    terminalMgr: { write: writeSpy } as any,
+    terminalMgr: {} as any,
   });
 }
 
@@ -33,9 +34,9 @@ const supervisor = {
 };
 
 describe('SupervisorInjector', () => {
-  it('writes guidance through terminalMgr.write using the session terminalId', async () => {
-    const writeSpy = vi.fn();
-    const injector = makeInjector(writeSpy);
+  it('writes guidance through sessionMgr.sendInput using system activity', async () => {
+    const sendInputSpy = vi.fn();
+    const injector = makeInjector(sendInputSpy);
 
     await injector.inject(
       supervisor,
@@ -46,12 +47,12 @@ describe('SupervisorInjector', () => {
       []
     );
 
-    expect(writeSpy).toHaveBeenCalledWith('term-1', expect.any(Buffer));
+    expect(sendInputSpy).toHaveBeenCalledWith('sess-1', expect.any(Buffer), 'system');
   });
 
   it('flattens multi-line guidance to a single TUI-safe line with bracketed paste + CR', async () => {
-    const writeSpy = vi.fn();
-    const injector = makeInjector(writeSpy);
+    const sendInputSpy = vi.fn();
+    const injector = makeInjector(sendInputSpy);
 
     await injector.inject(
       supervisor,
@@ -62,22 +63,18 @@ describe('SupervisorInjector', () => {
       []
     );
 
-    const buffer = writeSpy.mock.calls[0]![1] as Buffer;
+    const buffer = sendInputSpy.mock.calls[0]![1] as Buffer;
     const payload = buffer.toString('utf8');
-    // Must start with bracketed-paste start, end with bracketed-paste end + \r
     expect(payload.startsWith('\x1b[200~')).toBe(true);
     expect(payload.endsWith('\x1b[201~\r')).toBe(true);
-    // Must NOT contain raw \n (would otherwise leave guidance half-typed or
-    // submit only partial input in Claude Code / Codex TUIs).
     expect(payload.includes('\n')).toBe(false);
-    // Must include the flattened guidance as a single line.
     expect(payload).toContain('Do: 1. step one 2. step two');
     expect(payload).toContain('Line one. Line two.');
   });
 
   it('refuses to write into a session that has not finished handshake (state=starting)', async () => {
-    const writeSpy = vi.fn();
-    const injector = makeInjector(writeSpy, 'starting');
+    const sendInputSpy = vi.fn();
+    const injector = makeInjector(sendInputSpy, 'starting');
 
     await expect(
       injector.inject(
@@ -87,20 +84,15 @@ describe('SupervisorInjector', () => {
       )
     ).rejects.toMatchObject({
       code: 'inject_target_unavailable',
-      // The message must describe the lifecycle phase (not just repeat the raw
-      // state name) so the operator knows what to do about it.
       message: expect.stringContaining('still starting up'),
     });
 
-    expect(writeSpy).not.toHaveBeenCalled();
+    expect(sendInputSpy).not.toHaveBeenCalled();
   });
 });
 
 describe('describeNonInjectableState', () => {
   it('returns actionable copy for every non-injectable session state', () => {
-    // Guard against silent regressions if someone adds a new SessionState: the
-    // default branch still produces a string, but these specific ones must
-    // carry operator-facing copy rather than the raw enum.
     expect(describeNonInjectableState('starting')).toMatch(/starting up/);
     expect(describeNonInjectableState('interrupted')).toMatch(/resume/);
     expect(describeNonInjectableState('unavailable')).toMatch(/unavailable/);

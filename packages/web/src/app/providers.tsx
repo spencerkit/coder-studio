@@ -18,6 +18,9 @@ import {
   lastReconnectAttemptAtom,
   isWriterAtom,
   workspacesAtom,
+  workspaceOrderAtom,
+  workspacesLoadErrorAtom,
+  workspacesLoadStateAtom,
   sessionsAtom,
 } from '../atoms';
 import { authenticatedAtom } from '../atoms/ui';
@@ -277,22 +280,29 @@ export function routeEventToAtom(
     // workspace.{id}.meta - workspace metadata update
     if (subtopic === 'meta') {
       const patch = payload as Partial<Workspace>;
-      store.set(workspacesAtom, (prev: Record<string, Workspace>) => {
-        const existing = prev[workspaceId];
+      const existing = store.get(workspacesAtom)[workspaceId];
+      const shouldAcceptWorkspace = Boolean(existing || patch.path);
 
-        if (!existing && !patch.path) {
+      if (!shouldAcceptWorkspace) {
+        return;
+      }
+
+      store.set(workspacesAtom, (prev: Record<string, Workspace>) => ({
+        ...prev,
+        [workspaceId]: {
+          ...prev[workspaceId],
+          ...patch,
+          id: workspaceId,
+        } as Workspace,
+      }));
+      store.set(workspaceOrderAtom, (prev: string[]) => {
+        if (prev.includes(workspaceId)) {
           return prev;
         }
-
-        return {
-          ...prev,
-          [workspaceId]: {
-            ...existing,
-            ...patch,
-            id: workspaceId,
-          } as Workspace,
-        };
+        return [...prev, workspaceId];
       });
+      store.set(workspacesLoadStateAtom, 'ready');
+      store.set(workspacesLoadErrorAtom, null);
       return;
     }
 

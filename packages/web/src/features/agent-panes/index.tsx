@@ -6,13 +6,13 @@
  */
 
 import type { FC } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { ArrowRight, Bot, Sparkles, FlipHorizontal, FlipVertical, X } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
 import { paneLayoutAtomFamily, type PaneNode } from '../../atoms/ui';
-import { dispatchCommandAtom } from '../../atoms/connection';
+import { dispatchCommandAtom, connectionStatusAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
@@ -48,6 +48,7 @@ export const AgentPanes: FC = () => {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceId = workspace?.id ?? '__workspace_empty__';
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
   const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
   const setSessions = useSetAtom(sessionsAtom);
@@ -55,11 +56,21 @@ export const AgentPanes: FC = () => {
   const store = useStore();
   const initializedWorkspaceRef = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
+  const [hasLoadedInitialSessions, setHasLoadedInitialSessions] = useState(false);
 
   useEffect(() => {
     if (!workspace) {
       initializedWorkspaceRef.current = null;
       pendingSessionIdsRef.current.clear();
+      setHasLoadedInitialSessions(false);
+      return;
+    }
+
+    if (initializedWorkspaceRef.current !== workspace.id) {
+      setHasLoadedInitialSessions(false);
+    }
+
+    if (connectionStatus !== 'connected') {
       return;
     }
 
@@ -71,7 +82,6 @@ export const AgentPanes: FC = () => {
         }
 
         const nextSessions = result.data;
-        const nextSessionIds = new Set(nextSessions.map((session) => session.id));
 
         setSessions((prev) => {
           const next = Object.fromEntries(
@@ -92,7 +102,7 @@ export const AgentPanes: FC = () => {
         // while preserving the full split structure.
         const liveSessionIds = new Set(
           nextSessions
-            .filter((s) => s.state !== 'ended' && s.state !== 'unavailable')
+            .filter((s) => s.state !== 'ended')
             .map((s) => s.id)
         );
 
@@ -100,6 +110,7 @@ export const AgentPanes: FC = () => {
         if (sanitized !== currentLayout) {
           setPaneLayout(sanitized);
           initializedWorkspaceRef.current = workspace.id;
+          setHasLoadedInitialSessions(true);
           return;
         }
 
@@ -107,7 +118,7 @@ export const AgentPanes: FC = () => {
         const hasAnySessionInLayout = collectSessionIds(currentLayout).length > 0;
         if (!hasAnySessionInLayout) {
           const liveSessions = nextSessions.filter(
-            (s) => s.state !== 'ended' && s.state !== 'unavailable'
+            (s) => s.state !== 'ended'
           );
           if (liveSessions.length > 0) {
             setPaneLayout({
@@ -119,11 +130,12 @@ export const AgentPanes: FC = () => {
         }
 
         initializedWorkspaceRef.current = workspace.id;
+        setHasLoadedInitialSessions(true);
       })
       .catch((error) => {
         console.error('Failed to fetch sessions:', error);
       });
-  }, [workspace, dispatch, setSessions, setPaneLayout, store]);
+  }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
 
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {
@@ -162,10 +174,25 @@ export const AgentPanes: FC = () => {
     setTimeout(() => pendingSessionIdsRef.current.delete(sessionId), 8000);
   };
 
+  const isLoadingInitialSessions = Boolean(
+    workspace && (!hasLoadedInitialSessions || connectionStatus !== 'connected') && sessions.length === 0
+  );
+
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
         <p>{t('workspace.no_workspace')}</p>
+      </div>
+    );
+  }
+
+  if (isLoadingInitialSessions) {
+    return (
+      <div className="agent-panes-loading" data-testid="agent-panes-loading-shell">
+        <div className="agent-panes-loading-card">
+          <div className="agent-panes-loading-kicker">SESSION SYNC</div>
+          <p className="agent-panes-loading-desc">正在恢复当前 workspace 的会话与面板布局...</p>
+        </div>
       </div>
     );
   }

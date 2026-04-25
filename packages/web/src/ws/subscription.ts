@@ -4,6 +4,8 @@
  * Handles topic subscriptions with pattern matching and deduplication.
  */
 
+import { Topics } from '@coder-studio/core';
+
 export type EventHandler = (topic: string, payload: unknown, seq: number) => void;
 
 export interface Subscription {
@@ -118,7 +120,17 @@ export class SubscriptionManager {
  * Create a topic pattern for workspace events
  */
 export function workspaceTopic(workspaceId: string, ...parts: string[]): string {
-  return `workspace.${workspaceId}.${parts.join('.')}`;
+  const key = parts.join('.');
+  switch (key) {
+    case 'meta':
+      return Topics.workspaceMeta(workspaceId);
+    case 'git.state':
+      return Topics.workspaceGitState(workspaceId);
+    case 'fs.dirty':
+      return Topics.workspaceFsDirty(workspaceId);
+    default:
+      return `workspace.${workspaceId}.${key}`;
+  }
 }
 
 /**
@@ -129,7 +141,16 @@ export function terminalTopic(
   terminalId: string,
   event: string
 ): string {
-  return `workspace.${workspaceId}.terminal.${terminalId}.${event}`;
+  switch (event) {
+    case 'created':
+      return Topics.terminalCreated(workspaceId, terminalId);
+    case 'output':
+      return Topics.terminalOutput(workspaceId, terminalId);
+    case 'exit':
+      return Topics.terminalExit(workspaceId, terminalId);
+    default:
+      return `workspace.${workspaceId}.terminal.${terminalId}.${event}`;
+  }
 }
 
 /**
@@ -140,5 +161,16 @@ export function sessionTopic(
   sessionId: string,
   event: string
 ): string {
-  return `workspace.${workspaceId}.session.${sessionId}.${event}`;
+  switch (event) {
+    case 'state':
+      return Topics.sessionState(workspaceId, sessionId);
+    case 'progress':
+      return Topics.sessionProgress(workspaceId, sessionId);
+    case 'supervisor.state':
+      return Topics.supervisorState(workspaceId, sessionId);
+    case 'supervisor.cycle':
+      return Topics.supervisorCycle(workspaceId, sessionId);
+    default:
+      return `workspace.${workspaceId}.session.${sessionId}.${event}`;
+  }
 }

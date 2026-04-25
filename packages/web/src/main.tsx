@@ -8,7 +8,7 @@ import { Provider } from 'jotai';
 import { AppProviders } from './app/providers';
 import App from './app';
 
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 // Import styles
 import './styles/tokens.css';

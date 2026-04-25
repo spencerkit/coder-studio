@@ -8,6 +8,7 @@ import {
 } from '@coder-studio/core';
 import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 import type { SupervisorEvaluationContext } from './context-builder.js';
+import { mergeProviderLaunchConfig } from '../provider-config.js';
 
 const EvalResultSchema = z
   .object({
@@ -62,13 +63,7 @@ export class SupervisorEvaluator {
       };
     }
 
-    const config = this.deps.providerConfigRepo.get(provider.id) ?? provider.defaultConfig;
-    if (!config) {
-      throw {
-        code: 'missing_evaluator_config',
-        message: `Missing config for evaluator provider ${provider.id}`,
-      };
-    }
+    const config = mergeProviderLaunchConfig(provider, this.deps.providerConfigRepo.get(provider.id));
 
     const prompt = buildPrompt(context);
     const command = provider.buildSupervisorEvalCommand(config, {

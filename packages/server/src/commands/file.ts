@@ -37,7 +37,7 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return readFile(workspace.path, args.path);
+    return readFile(args.workspaceId, workspace.path, args.path);
   }
 );
 

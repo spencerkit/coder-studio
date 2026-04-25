@@ -2,7 +2,7 @@
  * Supervisor Strip Component (Phase 3)
  *
  * Compact supervisor controls rendered directly under the session header.
- * Shows: state pill · objective · progress · latest cycle banner · actions.
+ * Shows: state pill · objective · latest cycle banner · actions.
  * The full cycle history lives in a dedicated drawer (not rendered here).
  */
 
@@ -87,7 +87,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   }, [cyclesBySupervisor, supervisor]);
 
   const latestCycle = cycles[0];
-  const progress = Math.max(0, Math.min(latestCycle?.progress ?? 0, 100));
 
   const runAction = useCallback(
     async (op: string, id: string, failureLabel: string) => {
@@ -216,25 +215,18 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
       </div>
 
-      <div className="supervisor-progress-block">
-        <div className="supervisor-progress-track" aria-hidden="true">
-          <div className="supervisor-progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-
-        {latestCycle ? (
-          <ol className="supervisor-history-list" aria-label="最近一次评估">
-            <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
-              <span className="supervisor-history-trigger">
-                {latestCycle.trigger === 'manual' ? 'MANUAL' : 'AUTO'}
-              </span>
-              <span className="supervisor-history-progress">{latestCycle.progress ?? 0}%</span>
-              <span className="supervisor-history-result">
-                {latestCycle.result ?? latestCycle.errorReason ?? '等待评估结果'}
-              </span>
-            </li>
-          </ol>
-        ) : null}
-      </div>
+      {latestCycle ? (
+        <ol className="supervisor-history-list" aria-label="最近一次评估">
+          <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
+            <span className="supervisor-history-trigger">
+              {latestCycle.trigger === 'manual' ? 'MANUAL' : 'AUTO'}
+            </span>
+            <span className="supervisor-history-result">
+              {latestCycle.result ?? latestCycle.errorReason ?? '等待评估结果'}
+            </span>
+          </li>
+        </ol>
+      ) : null}
 
       {actionError ? (
         <div className="supervisor-error" role="alert">

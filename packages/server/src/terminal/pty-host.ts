@@ -10,9 +10,29 @@ import type { PtyHost, PtyProcess, PtySpawnOptions } from './types.js';
 const require = createRequire(import.meta.url);
 
 /**
- * Send signal to process and all its children (process group)
+ * Options for kill escalation polling
  */
-function killProcessGroup(pid: number, signal: NodeJS.Signals): boolean {
+export interface KillEscalationOptions {
+  /** Poll interval in milliseconds */
+  pollIntervalMs?: number;
+  /** Maximum time to wait before escalating to SIGKILL */
+  timeoutMs?: number;
+}
+
+/** Default polling interval */
+const DEFAULT_POLL_INTERVAL_MS = 50;
+
+/** Default timeout before SIGKILL escalation */
+const DEFAULT_TIMEOUT_MS = 2000;
+
+/**
+ * Send signal to process and all its children (process group)
+ *
+ * @param pid - Process ID (will use -pid for process group)
+ * @param signal - Signal to send
+ * @returns true if signal was sent successfully, false otherwise
+ */
+export function killProcessGroup(pid: number, signal: NodeJS.Signals): boolean {
   try {
     // Negative PID means kill the process group
     // This ensures all child processes are terminated as well
@@ -27,6 +47,83 @@ function killProcessGroup(pid: number, signal: NodeJS.Signals): boolean {
       return false;
     }
   }
+}
+
+/**
+ * Check if a process group or process is still alive
+ *
+ * Mirrors the same group-first, pid-fallback semantics used when sending signals.
+ *
+ * @param pid - Process ID (will use -pid for process group first)
+ * @returns true if the process group or process exists, false otherwise
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Escalate from SIGTERM to SIGKILL with polling
+ *
+ * This function sends SIGTERM, then polls to check if the process
+ * has exited. If it hasn't exited within the timeout window, SIGKILL
+ * is sent.
+ *
+ * @param pid - Process ID
+ * @param signal - Initial signal to send
+ * @param options - Polling options
+ * @returns Promise resolving to true if any signal was sent, false if initial signal failed
+ */
+export async function escalateKillWithPolling(
+  pid: number,
+  signal: NodeJS.Signals,
+  options?: KillEscalationOptions
+): Promise<boolean> {
+  const pollIntervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  // For non-SIGTERM signals, just send directly without polling
+  if (signal !== 'SIGTERM') {
+    return killProcessGroup(pid, signal);
+  }
+
+  // Send SIGTERM
+  const sent = killProcessGroup(pid, 'SIGTERM');
+  if (!sent) {
+    return false;
+  }
+
+  // Check immediately if process already exited
+  if (!isProcessAlive(pid)) {
+    return true;
+  }
+
+  // Poll until timeout
+  const startTime = Date.now();
+  const deadline = startTime + timeoutMs;
+
+  while (Date.now() < deadline) {
+    // Wait for next poll interval
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+    // Check if process group has exited
+    if (!isProcessAlive(pid)) {
+      return true;
+    }
+  }
+
+  // Process survived timeout, escalate to SIGKILL
+  killProcessGroup(pid, 'SIGKILL');
+  return true;
 }
 
 /**
@@ -58,7 +155,7 @@ export class NodePtyHost implements PtyHost {
         ptyProcess.onData(callback);
       },
       onExit: (callback) => {
-        ptyProcess.onExit(({ exitCode }) => callback({ exitCode }));
+        ptyProcess.onExit(({ exitCode }: { exitCode: number }) => callback({ exitCode }));
       },
       write: (data) => {
         if (Buffer.isBuffer(data)) {
@@ -70,7 +167,7 @@ export class NodePtyHost implements PtyHost {
       resize: (cols, rows) => {
         ptyProcess.resize(cols, rows);
       },
-      kill: (signal) => {
+      kill: (signal: NodeJS.Signals = 'SIGTERM') => {
         const pid = ptyProcess.pid;
 
         if (pid > 0) {
@@ -83,22 +180,9 @@ export class NodePtyHost implements PtyHost {
 
           // Also send to process group to ensure child processes are terminated
           // This handles cases where shell spawns child processes
-          if (signal === 'SIGTERM') {
-            // Give process a moment to handle SIGTERM, then SIGKILL if still alive
-            const killed = killProcessGroup(pid, 'SIGTERM');
-            if (!killed) return;
-
-            setTimeout(() => {
-              try {
-                process.kill(-pid, 0); // Check if process group still exists
-                killProcessGroup(pid, 'SIGKILL');
-              } catch {
-                // Process already terminated
-              }
-            }, 100);
-          } else {
-            killProcessGroup(pid, signal);
-          }
+          escalateKillWithPolling(pid, signal).catch(() => {
+            // Silently ignore errors from escalation polling
+          });
         }
       },
     };

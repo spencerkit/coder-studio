@@ -5,8 +5,7 @@ import { z } from 'zod';
  */
 export const codexConfigSchema = z.object({
   additionalArgs: z.array(z.string()).default([]),
-  envVars: z.record(z.string()).default({}),
-  cwd: z.string().optional(),
+  envVars: z.record(z.string(), z.string()).default({}),
 });
 
 export type CodexConfig = z.infer<typeof codexConfigSchema>;

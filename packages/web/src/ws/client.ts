@@ -38,6 +38,10 @@ const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
 
 const COMMAND_TIMEOUT_MS = 30000;
 
+const normalizeWsUrl = (url: string): string => {
+  return url.endsWith('/ws') ? url : `${url.replace(/\/+$/, '')}/ws`;
+};
+
 export class WsClient {
   private ws: WebSocket | null = null;
   private pendingCommands = new Map<string, PendingCommand>();
@@ -350,14 +354,12 @@ export class WsClient {
  * In development, connect directly to backend server
  */
 export function resolveWsUrl(): string {
-  // In development mode, connect directly to backend
+  // In development mode, prefer the explicitly configured backend.
   if (import.meta.env.DEV) {
-    console.log('[WS] Using development WebSocket URL: ws://127.0.0.1:4173/ws');
-    return 'ws://127.0.0.1:4173/ws';
+    const configuredUrl = import.meta.env.VITE_BACKEND_WS_URL;
+    return normalizeWsUrl(configuredUrl || 'ws://127.0.0.1:4173/ws');
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
-  const url = `${protocol}//${host}/ws`;
-  console.log('[WS] Using production WebSocket URL:', url);
-  return url;
+  return `${protocol}//${host}/ws`;
 }

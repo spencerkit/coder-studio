@@ -14,11 +14,15 @@ export const Topics = {
   // Session-level
   sessionState: (workspaceId: string, sessionId: string) =>
     `workspace.${workspaceId}.session.${sessionId}.state`,
+  sessionLifecycle: (workspaceId: string, sessionId: string) =>
+    `workspace.${workspaceId}.session.${sessionId}.lifecycle`,
   sessionProgress: (workspaceId: string, sessionId: string) =>
     `workspace.${workspaceId}.session.${sessionId}.progress`,
   sessionsAll: (workspaceId: string) => `workspace.${workspaceId}.session.*`,
 
   // Terminal-level
+  terminalCreated: (workspaceId: string, terminalId: string) =>
+    `workspace.${workspaceId}.terminal.${terminalId}.created`,
   terminalOutput: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.output`,
   terminalExit: (workspaceId: string, terminalId: string) =>

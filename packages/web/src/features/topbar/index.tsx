@@ -9,8 +9,8 @@ import { Plus, Search, Settings } from 'lucide-react';
 import type { FC } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { workspacesAtom } from '../../atoms/workspaces';
-import { commandPaletteOpenAtom, activeWorkspaceIdAtom } from '../../atoms/ui';
+import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
+import { commandPaletteOpenAtom } from '../../atoms/ui';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
 import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
@@ -25,12 +25,10 @@ import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-m
  */
 export const TopBar: FC = () => {
   const navigate = useNavigate();
-  const workspaces = useAtomValue(workspacesAtom);
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+  const workspaceList = useAtomValue(orderedWorkspacesAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
-
-  const workspaceList = Object.values(workspaces);
 
   return (
     <header className="app-topbar">

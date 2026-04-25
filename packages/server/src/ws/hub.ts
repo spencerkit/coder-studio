@@ -9,6 +9,7 @@
  */
 
 import type { DomainEvent, ServerToClient, ClientToServer, Command } from '@coder-studio/core';
+import { Topics } from '@coder-studio/core';
 import type WebSocket from 'ws';
 import type { FastifyRequest } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
@@ -181,6 +182,9 @@ export class WsHub implements Broadcaster {
       'workspace.meta.changed',
       'git.state.changed',
       'fs.dirty',
+      'terminal.created',
+      'terminal.output',
+      'terminal.exited',
     ];
 
     for (const type of eventTypes) {
@@ -200,7 +204,7 @@ export class WsHub implements Broadcaster {
 
     switch (event.type) {
       case 'session.state.changed':
-        topic = `workspace.${event.workspaceId}.session.${event.sessionId}.state`;
+        topic = Topics.sessionState(event.workspaceId, event.sessionId);
         data = (event as any).session ?? {
           state: event.to,
           from: event.from,
@@ -208,25 +212,52 @@ export class WsHub implements Broadcaster {
         break;
 
       case 'session.lifecycle':
-        topic = `workspace.${event.workspaceId}.session.${event.sessionId}.lifecycle`;
+        topic = Topics.sessionLifecycle(event.workspaceId, event.sessionId);
         data = {
           event: event.event,
         };
         break;
 
       case 'workspace.meta.changed':
-        topic = `workspace.${event.workspaceId}.meta`;
+        topic = Topics.workspaceMeta(event.workspaceId);
         data = event.patch;
         break;
 
       case 'git.state.changed':
-        topic = `workspace.${event.workspaceId}.git.state`;
+        topic = Topics.workspaceGitState(event.workspaceId);
         data = {}; // Actual git status will be fetched by client
         break;
 
       case 'fs.dirty':
-        topic = `workspace.${event.workspaceId}.fs.dirty`;
+        topic = Topics.workspaceFsDirty(event.workspaceId);
         data = { reason: event.reason };
+        break;
+
+      case 'terminal.created':
+        topic = Topics.terminalCreated(event.workspaceId, event.terminalId);
+        data = {
+          id: event.terminalId,
+          kind: event.kind,
+          title: event.title,
+          cwd: event.cwd,
+          workspaceId: event.workspaceId,
+        };
+        break;
+
+      case 'terminal.output':
+        topic = Topics.terminalOutput(event.workspaceId, event.terminalId);
+        data = {
+          chunk: event.chunk.toString('base64'),
+          size: event.chunk.length,
+          seq: event.seq,
+        };
+        break;
+
+      case 'terminal.exited':
+        topic = Topics.terminalExit(event.workspaceId, event.terminalId);
+        data = {
+          code: event.exitCode,
+        };
         break;
 
       default:

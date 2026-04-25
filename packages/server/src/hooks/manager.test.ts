@@ -6,15 +6,18 @@ import { HookRegistrationRepo } from '../storage/repositories/hook-registration-
 import type { RuntimeConfig } from './runtime-json.js';
 import type { ProviderDefinition, ManagedHooks } from '@coder-studio/core';
 import Database from 'better-sqlite3';
-import { existsSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 
 describe('manager', () => {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   let manager: HooksManager;
   let hookRegistrationRepo: HookRegistrationRepo;
   let runtime: RuntimeConfig;
   let db: Database.Database;
   let testDbPath: string;
+  let testHomeDir: string;
 
   const mockProvider: ProviderDefinition = {
     id: 'test-provider',
@@ -56,6 +59,10 @@ describe('manager', () => {
   };
 
   beforeEach(() => {
+    testHomeDir = mkdtempSync(join(tmpdir(), 'cs-hooks-manager-home-'));
+    process.env.HOME = testHomeDir;
+    process.env.USERPROFILE = testHomeDir;
+
     testDbPath = join(tmpdir(), `test-${Date.now()}.db`);
     db = new Database(testDbPath);
     db.pragma('journal_mode = WAL');
@@ -81,6 +88,23 @@ describe('manager', () => {
     if (existsSync(testDbPath)) rmSync(testDbPath);
     const backupDir = join(homedir(), '.coder-studio', 'backups');
     if (existsSync(backupDir)) rmSync(backupDir, { recursive: true });
+    const bridgeDir = join(homedir(), '.coder-studio', 'hooks');
+    if (existsSync(bridgeDir)) rmSync(bridgeDir, { recursive: true });
+    const providerDir = join(homedir(), '.test-provider');
+    if (existsSync(providerDir)) rmSync(providerDir, { recursive: true, force: true });
+    if (existsSync(testHomeDir)) rmSync(testHomeDir, { recursive: true, force: true });
+
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
+    }
   });
 
   describe('ensureGlobalConfig', () => {

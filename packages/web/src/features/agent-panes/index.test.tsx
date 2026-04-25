@@ -2,10 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { AgentPanes } from './index';
-import { wsClientAtom } from '../../atoms/connection';
-import { workspacesAtom } from '../../atoms/workspaces';
+import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
 import { activeWorkspaceIdAtom, paneLayoutAtomFamily } from '../../atoms/ui';
+import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
 const mockSessionCard = vi.fn(({ sessionId }: { sessionId: string }) => (
   <div data-testid="session-card">{sessionId}</div>
@@ -23,7 +23,8 @@ vi.mock('./components/pane-layout', () => ({
 
 function createAgentPaneStore(
   initialLayout?: unknown,
-  customSendCommand?: ReturnType<typeof vi.fn>
+  customSendCommand?: ReturnType<typeof vi.fn>,
+  connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected' = 'connected'
 ) {
   const store = createStore();
   const sessions = [
@@ -58,19 +59,27 @@ function createAgentPaneStore(
       return undefined;
     });
 
+  store.set(connectionStatusAtom, connectionStatus);
   store.set(wsClientAtom, {
     sendCommand,
     subscribe: vi.fn(() => () => {}),
   } as never);
   store.set(activeWorkspaceIdAtom, 'ws-1');
-  store.set(workspacesAtom, {
+  seedReadyWorkspaceState(store, {
     'ws-1': {
       id: 'ws-1',
-      rootPath: '/tmp/repo',
-      gitBranch: 'main',
       name: 'repo',
+      path: '/tmp/repo',
+      targetRuntime: 'native',
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
     },
-  } as never);
+  });
   store.set(
     sessionsAtom,
     Object.fromEntries(sessions.map((session) => [session.id, session]))
@@ -206,17 +215,30 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('assigns a created session to the draft pane instead of replacing the full layout', async () => {
-    const createdSession = {
-      id: 'sess_3',
-      workspaceId: 'ws-1',
-      terminalId: 'term-3',
-      providerId: 'codex',
-      state: 'starting',
-      capability: 'full',
-      startedAt: Date.now(),
-      lastActiveAt: Date.now(),
-    };
+  it('waits for the websocket connection before requesting session.list', async () => {
+    const sendCommand = vi.fn().mockResolvedValue([]);
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connecting');
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await act(async () => {});
+    expect(sendCommand).not.toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    expect(screen.queryByText('SESSION LAUNCHER')).not.toBeInTheDocument();
+
+    act(() => {
+      store.set(connectionStatusAtom, 'connected');
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+  });
+
+  it('mounts only the first live session when no pane layout has been persisted yet', async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
         return [
@@ -225,16 +247,23 @@ describe('AgentPanes', () => {
             workspaceId: 'ws-1',
             terminalId: 'term-1',
             providerId: 'claude',
-            state: 'running',
+            state: 'interrupted',
+            resumeId: 'resume-1',
             capability: 'full',
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
           },
+          {
+            id: 'sess_2',
+            workspaceId: 'ws-1',
+            terminalId: 'term-2',
+            providerId: 'codex',
+            state: 'unavailable',
+            capability: 'full',
+            startedAt: Date.now() - 8_000,
+            lastActiveAt: Date.now() - 500,
+          },
         ];
-      }
-
-      if (op === 'session.create') {
-        return createdSession;
       }
 
       return undefined;
@@ -242,16 +271,12 @@ describe('AgentPanes', () => {
     const { store } = createAgentPaneStore(
       {
         id: 'root',
-        type: 'split',
-        direction: 'vertical',
-        ratio: 0.5,
-        children: [
-          { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-          { id: 'right', type: 'leaf' },
-        ],
+        type: 'leaf',
       },
-      sendCommand
+      sendCommand,
+      'connected'
     );
+    store.set(sessionsAtom, {});
 
     render(
       <Provider store={store}>
@@ -259,28 +284,112 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Codex/ }));
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
     });
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.create', {
-        workspaceId: 'ws-1',
-        providerId: 'codex',
-      });
+    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+      id: 'root',
+      type: 'leaf',
+      sessionId: 'sess_1',
     });
+    expect(mockSessionCard).toHaveBeenCalledWith({ sessionId: 'sess_1' });
+    expect(mockSessionCard).not.toHaveBeenCalledWith({ sessionId: 'sess_2' });
+  });
 
-    await waitFor(() => {
-      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+  it('keeps interrupted sessions mounted in the pane layout after session.list hydration', async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [
+          {
+            id: 'sess_1',
+            workspaceId: 'ws-1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'interrupted',
+            resumeId: 'resume-1',
+            capability: 'full',
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+        ];
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(
+      {
         id: 'root',
-        type: 'split',
-        direction: 'vertical',
-        ratio: 0.5,
-        children: [
-          { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-          { id: 'right', type: 'leaf', sessionId: 'sess_3' },
-        ],
-      });
+        type: 'leaf',
+        sessionId: 'sess_1',
+      },
+      sendCommand,
+      'connected'
+    );
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+
+    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+      id: 'root',
+      type: 'leaf',
+      sessionId: 'sess_1',
+    });
+    expect(mockSessionCard).toHaveBeenCalledWith({ sessionId: 'sess_1' });
+  });
+
+  it('keeps unavailable sessions mounted in the pane layout after session.list hydration', async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [
+          {
+            id: 'sess_1',
+            workspaceId: 'ws-1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'unavailable',
+            capability: 'full',
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+        ];
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(
+      {
+        id: 'root',
+        type: 'leaf',
+        sessionId: 'sess_1',
+      },
+      sendCommand,
+      'connected'
+    );
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+
+    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
+      id: 'root',
+      type: 'leaf',
+      sessionId: 'sess_1',
     });
   });
 });

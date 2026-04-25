@@ -8,7 +8,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAtom, useAtomValue, useStore } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
 import { terminalMetaAtomFamily } from '../../../atoms/terminals';
-import { activeWorkspaceIdAtom, bottomPanelHeightAtom } from '../../../atoms/ui';
+import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
+import { bottomPanelHeightAtom } from '../../../atoms/ui';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import { Topics } from '@coder-studio/core';
@@ -46,7 +47,7 @@ function mergeTerminalIds(existing: string[], incoming: string[]): string[] {
  */
 export function TerminalPanel() {
   const t = useTranslation();
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [bottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);

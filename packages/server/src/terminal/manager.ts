@@ -1,8 +1,7 @@
 // Terminal manager implementation (spec §4.5)
 
-import type { Terminal } from '@coder-studio/core'
+import type { Terminal, DomainEvent } from '@coder-studio/core'
 import type {
-  Broadcaster,
   PtyHost,
   PtyProcess,
   ReplayResult,
@@ -10,6 +9,7 @@ import type {
   TerminalId,
   TerminalSpec,
 } from './types'
+import type { EventBus } from '../bus/event-bus'
 import { ActiveTerminal } from './active-terminal'
 import { RingBuffer } from './ring-buffer'
 
@@ -30,7 +30,7 @@ export class TerminalManager {
   constructor(
     private readonly deps: {
       ptyHost: PtyHost
-      broadcaster: Broadcaster
+      eventBus: EventBus
       db: TerminalDatabase
     }
   ) {}
@@ -83,17 +83,16 @@ export class TerminalManager {
     this.terminals.set(id, active)
     this.deps.db.insert(active.toRow())
 
-    // Broadcast terminal.created event (after successful creation)
-    this.deps.broadcaster.broadcast(
-      `workspace.${spec.workspaceId}.terminal.${id}.created`,
-      {
-        id,
-        kind: spec.kind,
-        title: spec.title ?? '',
-        cwd: spec.cwd,
-        workspaceId: spec.workspaceId,
-      }
-    )
+    // Emit terminal.created DomainEvent
+    const event: DomainEvent = {
+      type: 'terminal.created',
+      workspaceId: spec.workspaceId,
+      terminalId: id,
+      kind: spec.kind,
+      title: spec.title ?? '',
+      cwd: spec.cwd,
+    } satisfies DomainEvent
+    this.deps.eventBus.emit(event)
 
     return active.toDTO()
   }
@@ -109,15 +108,15 @@ export class TerminalManager {
       const buffer = Buffer.from(data, 'utf-8')
       const { seq } = ringBuffer.append(buffer)
 
-      // Broadcast output directly (not through EventBus)
-      this.deps.broadcaster.broadcast(
-        `workspace.${spec.workspaceId}.terminal.${id}.output`,
-        {
-          chunk: buffer.toString('base64'),
-          size: buffer.length,
-          seq,
-        }
-      )
+      // Emit terminal.output DomainEvent
+      const event: DomainEvent = {
+        type: 'terminal.output',
+        workspaceId: spec.workspaceId,
+        terminalId: id,
+        chunk: buffer,
+        seq,
+      } satisfies DomainEvent
+      this.deps.eventBus.emit(event)
     })
 
     // Handle PTY exit
@@ -126,13 +125,14 @@ export class TerminalManager {
       active.exitCode = exitCode
       this.archivedReplayBuffers.set(id, ringBuffer)
 
-      // Broadcast exit event
-      this.deps.broadcaster.broadcast(
-        `workspace.${spec.workspaceId}.terminal.${id}.exit`,
-        {
-          code: exitCode,
-        }
-      )
+      // Emit terminal.exited DomainEvent
+      const event: DomainEvent = {
+        type: 'terminal.exited',
+        workspaceId: spec.workspaceId,
+        terminalId: id,
+        exitCode,
+      } satisfies DomainEvent
+      this.deps.eventBus.emit(event)
 
       // Keep ActiveTerminal object for 1s to allow replay, then cleanup
       setTimeout(() => {
@@ -207,6 +207,23 @@ export class TerminalManager {
   }
 
   /**
+   * Read the last N bytes of terminal output from the active or archived ring buffer.
+   */
+  getRingBufferTail(terminalId: TerminalId, bytes: number): Buffer {
+    const terminal = this.terminals.get(terminalId)
+    if (terminal) {
+      return terminal.ringBuffer.tail(bytes)
+    }
+
+    const archivedRingBuffer = this.archivedReplayBuffers.get(terminalId)
+    if (archivedRingBuffer) {
+      return archivedRingBuffer.tail(bytes)
+    }
+
+    return Buffer.alloc(0)
+  }
+
+  /**
    * Get all active terminals
    */
   getAll(): ActiveTerminal[] {
@@ -224,33 +241,5 @@ export class TerminalManager {
     }
     this.terminals.clear()
     this.archivedReplayBuffers.clear()
-  }
-
-  /**
-   * Write to terminal by session ID (helper for supervisor)
-   * Note: This is a simplified implementation that requires session→terminal mapping
-   * to be managed by the caller. For now, we assume sessionId equals terminalId.
-   */
-  writeToSession(sessionId: string, text: string): void {
-    // In the full implementation, we would resolve sessionId → terminalId
-    // For now, assume they're the same or handle the mapping elsewhere
-    const terminal = this.terminals.get(sessionId)
-    if (terminal && terminal.alive) {
-      terminal.pty.write(Buffer.from(text, 'utf-8'))
-    }
-  }
-
-  /**
-   * Get recent terminal output for a session (helper for supervisor)
-   * Note: Returns empty string for now. Full implementation would return
-   * the last N lines from the ring buffer.
-   */
-  getSessionOutput(_sessionId: string): string {
-    // In the full implementation, we would:
-    // 1. Resolve sessionId → terminalId
-    // 2. Read from the ring buffer
-    // 3. Return the last N lines
-    // For now, return empty string
-    return ''
   }
 }

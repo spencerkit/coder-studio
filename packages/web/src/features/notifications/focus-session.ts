@@ -10,8 +10,8 @@
  *                                      via the options bag)
  *
  * Both paths must:
- *   - switch the active workspace (so the right route renders),
- *   - update the URL (browser back-button friendly),
+ *   - switch the active workspace in memory,
+ *   - update the route only at the page level (`/workspace`),
  *   - leave a "pending focus" marker so the target SessionCard can react
  *     once it mounts (the card may not exist yet — e.g. coming from a
  *     backgrounded tab in a different workspace).
@@ -22,8 +22,6 @@
  * disorienting. The card will simply not light up; the user is at least
  * already in the right workspace.
  */
-
-const ACTIVE_WORKSPACE_LS_KEY = 'ui.activeWorkspaceId';
 
 export interface FocusSessionOptions {
   workspaceId: string;
@@ -36,6 +34,11 @@ export interface FocusSessionOptions {
    */
   setPendingFocus: (sessionId: string | null) => void;
   /**
+   * Update the in-memory active workspace intent so read-side consumers can
+   * resolve the target workspace without route ids.
+   */
+  setActiveWorkspaceId: (workspaceId: string | null) => void;
+  /**
    * Optional react-router navigate function. When omitted (system
    * notifications), we fall back to `history.pushState` + a synthetic
    * `popstate`, which the router treats as a normal navigation.
@@ -44,28 +47,29 @@ export interface FocusSessionOptions {
 }
 
 export function focusSession(opts: FocusSessionOptions): void {
-  const { workspaceId, sessionId, setPendingFocus, navigate } = opts;
+  const {
+    workspaceId,
+    sessionId,
+    setPendingFocus,
+    setActiveWorkspaceId,
+    navigate,
+  } = opts;
 
   if (typeof window === 'undefined') return;
 
-  // 1. Persist the active workspace so the workspace-switching atoms pick it
-  //    up on the next render. atomWithStorage reads from localStorage, so
-  //    we mirror its serialisation (JSON.stringify of the value).
-  try {
-    window.localStorage.setItem(ACTIVE_WORKSPACE_LS_KEY, JSON.stringify(workspaceId));
-  } catch {
-    /* storage disabled — atom default will just keep whatever it had */
-  }
+  // 1. Update the in-memory active workspace before navigation so the
+  //    workspace shell can immediately resolve the correct target.
+  setActiveWorkspaceId(workspaceId);
 
   // 2. Hand the pending sessionId to the atom. We do this BEFORE navigation
   //    so that if the target SessionCard is already mounted, it sees the
   //    new value on the next render and reacts immediately.
   setPendingFocus(sessionId);
 
-  // 3. Navigate to the workspace route.
-  const path = `/workspace/${workspaceId}`;
-  const alreadyThere = window.location.pathname === path;
-  if (alreadyThere) return;
+  // 3. Navigate to the workspace page only when we're outside it already.
+  const path = '/workspace';
+  if (window.location.pathname === path) return;
+
   if (navigate) {
     navigate(path);
   } else {

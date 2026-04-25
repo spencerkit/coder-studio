@@ -67,10 +67,10 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
     process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
   // NOTE: use `??` on port so callers can pass 0 to request an
-  // OS-assigned port. `||` would silently fall through to 3000 for port=0.
+  // OS-assigned port. `||` would silently fall through to 4173 for port=0.
   return {
     host: overrides?.host || process.env.HOST || 'localhost',
-    port: overrides?.port ?? parseInt(process.env.PORT || '3000', 10),
+    port: overrides?.port ?? parseInt(process.env.PORT || '4173', 10),
     dataDir,
     runtimeDir: overrides?.runtimeDir || process.env.RUNTIME_DIR || './runtime',
     logLevel: overrides?.logLevel || (process.env.LOG_LEVEL as any) || 'info',

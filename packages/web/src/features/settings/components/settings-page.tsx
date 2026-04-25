@@ -7,20 +7,18 @@
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard, Server } from 'lucide-react';
+import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard } from 'lucide-react';
 import {
   localeAtom,
   themeAtom,
-  activeWorkspaceIdAtom,
   notificationPreferencesAtom,
 } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
-import { McpSettings } from './mcp-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 
-type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts' | 'mcp';
+type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts';
 
 interface ProviderInfo {
   id: string;
@@ -29,13 +27,40 @@ interface ProviderInfo {
   hooksRegistered: boolean;
 }
 
+function parseProviderAdditionalArgs(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function formatProviderAdditionalArgs(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+
+  return value.filter((item): item is string => typeof item === 'string').join('\n');
+}
+
+function loadProviderAdditionalArgs(
+  settings: Record<string, unknown>,
+  providers: ProviderInfo[]
+): Record<string, string> {
+  return Object.fromEntries(
+    providers.map((provider) => [
+      provider.id,
+      formatProviderAdditionalArgs(settings[`providers.${provider.id}.additionalArgs`]),
+    ])
+  );
+}
+
 /**
  * Settings Page
  *
  * PRD §13:
  *   - Two-column layout: sidebar (200px) + content area
  *   - Navigation sections: General, Provider (per provider), Appearance
- *   - General: default provider, notifications
+ *   - General: notifications
  *   - Provider: config fields, hooks injection, command preview
  *   - Appearance: theme, terminal renderer, language
  */
@@ -44,7 +69,6 @@ export function SettingsPage() {
   const settingsLoadFailedUnknown = t('settings.load_failed_unknown');
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
 
   // Provider settings state (would come from server in real implementation)
@@ -52,13 +76,10 @@ export function SettingsPage() {
     { id: 'claude', displayName: 'Claude', capability: 'full', hooksRegistered: false },
     { id: 'codex', displayName: 'Codex', capability: 'limited', hooksRegistered: false },
   ]);
-  const [defaultProvider, setDefaultProvider] = useState('claude');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
-  const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('claude-3-sonnet');
-  const [providerCwd, setProviderCwd] = useState('');
+  const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<Record<string, string>>({});
   const [commandPreview, setCommandPreview] = useState('');
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
@@ -81,9 +102,6 @@ export function SettingsPage() {
       const settings = result.data;
       if (cancelled) return;
       setSettingsLoadError(null);
-      if (typeof settings.defaultProviderId === 'string') {
-        setDefaultProvider(settings.defaultProviderId);
-      }
       if (typeof settings['notifications.enabled'] === 'boolean') {
         setNotificationsEnabled(settings['notifications.enabled']);
       }
@@ -104,15 +122,7 @@ export function SettingsPage() {
       if (settings['appearance.locale'] === 'zh' || settings['appearance.locale'] === 'en') {
         setLocale(settings['appearance.locale']);
       }
-      if (typeof settings['providers.apiKey'] === 'string') {
-        setApiKey(settings['providers.apiKey']);
-      }
-      if (typeof settings['providers.model'] === 'string') {
-        setModel(settings['providers.model']);
-      }
-      if (typeof settings['providers.cwd'] === 'string') {
-        setProviderCwd(settings['providers.cwd']);
-      }
+      setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
       if (Array.isArray(settings.hookRegistrations)) {
         setProviders((prev) => prev.map((provider) => {
           const registration = (settings.hookRegistrations as Array<{ providerId: string; lastStatus?: string }>).find(
@@ -133,11 +143,7 @@ export function SettingsPage() {
   }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
 
   const handleBack = () => {
-    if (activeWorkspaceId) {
-      navigate(`/workspace/${activeWorkspaceId}`);
-    } else {
-      navigate('/');
-    }
+    navigate('/workspace');
   };
 
   // Render content based on active section
@@ -146,9 +152,6 @@ export function SettingsPage() {
       case 'general':
         return (
           <GeneralSettings
-            defaultProvider={defaultProvider}
-            setDefaultProvider={setDefaultProvider}
-            providers={providers}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
             soundEnabled={soundEnabled}
@@ -169,23 +172,16 @@ export function SettingsPage() {
       case 'providers':
         return (
           <ProviderSettings
-            key={`${apiKey}:${model}:${providerCwd}`}
             providers={providers}
             setProviders={setProviders}
-            apiKey={apiKey}
-            setApiKey={setApiKey}
-            model={model}
-            setModel={setModel}
-            providerCwd={providerCwd}
-            setProviderCwd={setProviderCwd}
+            additionalArgsById={providerAdditionalArgsById}
+            setAdditionalArgsById={setProviderAdditionalArgsById}
             commandPreview={commandPreview}
             setCommandPreview={setCommandPreview}
           />
         );
       case 'shortcuts':
         return <ShortcutsSettings />;
-      case 'mcp':
-        return <McpSettings />;
       default:
         return null;
     }
@@ -226,12 +222,6 @@ export function SettingsPage() {
               label={t('settings.shortcuts.title')}
               active={activeSection === 'shortcuts'}
               onClick={() => setActiveSection('shortcuts')}
-            />
-            <SettingsNavItem
-              icon={<Server size={16} />}
-              label={t('settings.mcp.title')}
-              active={activeSection === 'mcp'}
-              onClick={() => setActiveSection('mcp')}
             />
           </nav>
         </aside>
@@ -286,9 +276,6 @@ function SettingsNavItem({ icon, label, active, onClick }: SettingsNavItemProps)
 }
 
 interface GeneralSettingsProps {
-  defaultProvider: string;
-  setDefaultProvider: (id: string) => void;
-  providers: ProviderInfo[];
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
   soundEnabled: boolean;
@@ -296,9 +283,6 @@ interface GeneralSettingsProps {
 }
 
 function GeneralSettings({
-  defaultProvider,
-  setDefaultProvider,
-  providers,
   notificationsEnabled,
   setNotificationsEnabled,
   soundEnabled,
@@ -336,27 +320,6 @@ function GeneralSettings({
   return (
     <div className="settings-section">
       <h2 className="settings-section-title">{t('settings.general')}</h2>
-
-      <div className="settings-group">
-        <h3 className="settings-group-title">{t('settings.provider.title')}</h3>
-        <p className="settings-group-desc">{t('settings.provider.select_hint')}</p>
-
-        <div className="settings-provider-pills">
-          {providers.map((provider) => (
-            <button
-              key={provider.id}
-              className={`settings-pill ${defaultProvider === provider.id ? 'settings-pill-active' : ''}`}
-              onClick={() => {
-                setDefaultProvider(provider.id);
-                void saveSettings({ defaultProviderId: provider.id });
-              }}
-            >
-              {defaultProvider === provider.id && <Check size={12} />}
-              <span>{provider.displayName}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.notifications')}</h3>
@@ -544,12 +507,8 @@ function AppearanceSettings({
 interface ProviderSettingsProps {
   providers: ProviderInfo[];
   setProviders: React.Dispatch<React.SetStateAction<ProviderInfo[]>>;
-  apiKey: string;
-  setApiKey: (value: string) => void;
-  model: string;
-  setModel: (value: string) => void;
-  providerCwd: string;
-  setProviderCwd: (value: string) => void;
+  additionalArgsById: Record<string, string>;
+  setAdditionalArgsById: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   commandPreview: string;
   setCommandPreview: (value: string) => void;
 }
@@ -557,12 +516,8 @@ interface ProviderSettingsProps {
 function ProviderSettings({
   providers,
   setProviders,
-  apiKey,
-  setApiKey,
-  model,
-  setModel,
-  providerCwd,
-  setProviderCwd,
+  additionalArgsById,
+  setAdditionalArgsById,
   commandPreview,
   setCommandPreview,
 }: ProviderSettingsProps) {
@@ -571,6 +526,8 @@ function ProviderSettings({
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const provider = providers.find((p) => p.id === selectedProvider);
+  const additionalArgsText = provider ? additionalArgsById[provider.id] ?? '' : '';
+  const additionalArgs = parseProviderAdditionalArgs(additionalArgsText);
 
   const handleInjectHooks = async () => {
     if (!provider) return;
@@ -590,9 +547,7 @@ function ProviderSettings({
         return;
       }
 
-      const config = provider.id === 'claude'
-        ? { model, additionalArgs: [], envVars: {} }
-        : { cwd: providerCwd || undefined, additionalArgs: [], envVars: {} };
+      const config = { additionalArgs };
 
       const result = await dispatch<{ preview: string }>('settings.previewCommand', {
         providerId: provider.id,
@@ -610,7 +565,7 @@ function ProviderSettings({
     };
 
     void loadPreview();
-  }, [dispatch, provider, model, providerCwd, setCommandPreview]);
+  }, [additionalArgsText, dispatch, provider, setCommandPreview]);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch('settings.update', { settings });
@@ -667,48 +622,38 @@ function ProviderSettings({
 
           <div className="settings-group">
             <h3 className="settings-group-title">{t('settings.provider.config')}</h3>
+            <p className="settings-group-desc">{t('settings.provider.startup_args_hint')}</p>
 
             <div className="settings-config-field">
-              <label className="settings-config-label">{t('settings.provider.api_key')}</label>
-              <input
-                type="password"
-                className="input"
-                placeholder={t('settings.provider.api_key_placeholder')}
-                value={apiKey}
+              <label className="settings-config-label" htmlFor="provider-startup-args">
+                {t('settings.provider.startup_args')}
+              </label>
+              <textarea
+                id="provider-startup-args"
+                className="input settings-provider-args-input"
+                rows={4}
+                placeholder={t('settings.provider.startup_args_placeholder')}
+                value={additionalArgsText}
                 onChange={(e) => {
-                  setApiKey(e.target.value);
-                  void saveSettings({ providers: { apiKey: e.target.value } });
+                  const nextValue = e.target.value;
+                  if (!provider) {
+                    return;
+                  }
+
+                  setAdditionalArgsById((prev) => ({
+                    ...prev,
+                    [provider.id]: nextValue,
+                  }));
+                  void saveSettings({
+                    providers: {
+                      [provider.id]: {
+                        additionalArgs: parseProviderAdditionalArgs(nextValue),
+                      },
+                    },
+                  });
                 }}
               />
             </div>
-
-            {provider.id === 'claude' ? (
-              <div className="settings-config-field">
-                <label className="settings-config-label">{t('settings.provider.model')}</label>
-                <select className="input" value={model} onChange={(e) => {
-                  setModel(e.target.value);
-                  void saveSettings({ providers: { model: e.target.value } });
-                }}>
-                  <option value="claude-3-opus">Claude 3 Opus</option>
-                  <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                  <option value="claude-3-haiku">Claude 3 Haiku</option>
-                </select>
-              </div>
-            ) : (
-              <div className="settings-config-field">
-                <label className="settings-config-label">Working Directory Override</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="/path/to/project"
-                  value={providerCwd}
-                  onChange={(e) => {
-                    setProviderCwd(e.target.value);
-                    void saveSettings({ providers: { cwd: e.target.value } });
-                  }}
-                />
-              </div>
-            )}
           </div>
 
           <div className="settings-group">

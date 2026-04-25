@@ -1,29 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, rmSync } from 'fs';
-import { homedir } from 'os';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
+import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { createServer, type Server } from '../server.js';
 import { getRuntimePath } from '../hooks/runtime-json.js';
 
-const RUNTIME_PATH = getRuntimePath();
-const BRIDGE_DIR = join(homedir(), '.coder-studio', 'hooks');
+function getBridgeDir() {
+  return join(homedir(), '.coder-studio', 'hooks');
+}
 
 function cleanupRuntimeAndBridges() {
+  const runtimePath = getRuntimePath();
+  const bridgeDir = getBridgeDir();
+
   // Only remove files we own. Leave the ~/.coder-studio/ directory alone so
   // we don't delete backups or unrelated state.
-  if (existsSync(RUNTIME_PATH)) {
-    rmSync(RUNTIME_PATH);
+  if (existsSync(runtimePath)) {
+    rmSync(runtimePath);
   }
   for (const bridge of ['claude-bridge.js', 'codex-bridge.js']) {
-    const path = join(BRIDGE_DIR, bridge);
+    const path = join(bridgeDir, bridge);
     if (existsSync(path)) rmSync(path);
   }
 }
 
 describe('createServer runtime handshake', () => {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   let server: Server | undefined;
+  let testHomeDir: string;
 
   beforeEach(() => {
+    testHomeDir = mkdtempSync(join(tmpdir(), 'cs-runtime-home-'));
+    process.env.HOME = testHomeDir;
+    process.env.USERPROFILE = testHomeDir;
     cleanupRuntimeAndBridges();
   });
 
@@ -33,6 +43,22 @@ describe('createServer runtime handshake', () => {
       server = undefined;
     }
     cleanupRuntimeAndBridges();
+
+    if (existsSync(testHomeDir)) {
+      rmSync(testHomeDir, { recursive: true, force: true });
+    }
+
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
+    }
   });
 
   it('does not touch ~/.coder-studio/ by default under vitest', async () => {
@@ -46,7 +72,7 @@ describe('createServer runtime handshake', () => {
       port: 0,
     } as any);
 
-    expect(existsSync(RUNTIME_PATH)).toBe(false);
+    expect(existsSync(getRuntimePath())).toBe(false);
   });
 
   it('writes runtime.json when writeRuntime is explicitly enabled and deletes it on stop', async () => {
@@ -57,9 +83,9 @@ describe('createServer runtime handshake', () => {
       writeRuntime: true,
     } as any);
 
-    expect(existsSync(RUNTIME_PATH)).toBe(true);
+    expect(existsSync(getRuntimePath())).toBe(true);
 
-    const runtime = JSON.parse(readFileSync(RUNTIME_PATH, 'utf-8'));
+    const runtime = JSON.parse(readFileSync(getRuntimePath(), 'utf-8'));
     expect(typeof runtime.port).toBe('number');
     // port=0 was requested; the OS picks a real port >= 1024 (usually).
     // The important invariant is that we persist the resolved port, not the
@@ -73,7 +99,7 @@ describe('createServer runtime handshake', () => {
     await server.stop();
     server = undefined;
 
-    expect(existsSync(RUNTIME_PATH)).toBe(false);
+    expect(existsSync(getRuntimePath())).toBe(false);
   });
 
   it('deploys per-provider bridge scripts on startup when writeRuntime is enabled', async () => {
@@ -88,8 +114,8 @@ describe('createServer runtime handshake', () => {
     // argv would spawn nothing (and Claude's SessionStart hook similarly
     // never runs), so the session state would be stuck in 'starting'
     // forever. This is the regression we're preventing.
-    expect(existsSync(join(BRIDGE_DIR, 'claude-bridge.js'))).toBe(true);
-    expect(existsSync(join(BRIDGE_DIR, 'codex-bridge.js'))).toBe(true);
+    expect(existsSync(join(getBridgeDir(), 'claude-bridge.js'))).toBe(true);
+    expect(existsSync(join(getBridgeDir(), 'codex-bridge.js'))).toBe(true);
   });
 
   it('accepts /internal/hooks/:event only when the per-process token matches', async () => {
@@ -104,7 +130,7 @@ describe('createServer runtime handshake', () => {
       auth: { enabled: false },
     } as any);
 
-    const runtime = JSON.parse(readFileSync(RUNTIME_PATH, 'utf-8'));
+    const runtime = JSON.parse(readFileSync(getRuntimePath(), 'utf-8'));
     const baseUrl = `http://127.0.0.1:${runtime.port}`;
 
     // Missing token -> 403 from the endpoint (not 401 from auth guard).
@@ -148,7 +174,7 @@ describe('createServer runtime handshake', () => {
       auth: { enabled: true, password: 'sekrit' },
     } as any);
 
-    const runtime = JSON.parse(readFileSync(RUNTIME_PATH, 'utf-8'));
+    const runtime = JSON.parse(readFileSync(getRuntimePath(), 'utf-8'));
     const baseUrl = `http://127.0.0.1:${runtime.port}`;
 
     // No cookie header — the auth guard would normally 401 this. Our fix

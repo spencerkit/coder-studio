@@ -61,6 +61,10 @@ describe('SupervisorCard', () => {
     );
 
     expect(screen.getByText('Persistence and hydration are done.')).toBeInTheDocument();
+    expect(screen.queryByText('65%')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.supervisor-progress-track')
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '触发评估' }));
     expect(sendCommand).toHaveBeenCalledWith('supervisor.trigger', { id: 'sup-1' });
   });

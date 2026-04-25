@@ -8,10 +8,9 @@
 import type { FC } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '@coder-studio/core';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { workspacesAtom } from '../../../atoms/workspaces';
+import { workspaceOrderAtom, workspacesAtom } from '../../../atoms/workspaces';
 import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { useTranslation } from '../../../lib/i18n';
 
@@ -32,16 +31,15 @@ interface WorkspaceTabProps {
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
   const t = useTranslation();
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
-  const workspaces = useAtomValue(workspacesAtom);
+  const workspaceOrder = useAtomValue(workspaceOrderAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
+  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const navigate = useNavigate();
   const displayName =
     workspace.name || workspace.path?.split('/').filter(Boolean).pop() || workspace.path || workspace.id;
 
   const handleClick = () => {
     setActiveWorkspace(workspace.id);
-    navigate(`/workspace/${workspace.id}`);
   };
 
   const handleClose = async (e: React.MouseEvent) => {
@@ -56,18 +54,17 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
       return;
     }
 
-    const remainingIds = Object.keys(workspaces).filter((id) => id !== workspace.id);
+    const remainingIds = workspaceOrder.filter((id) => id !== workspace.id);
 
     setWorkspaces((prev) => {
       const next = { ...prev };
       delete next[workspace.id];
       return next;
     });
+    setWorkspaceOrder(remainingIds);
 
     if (isActive) {
-      const nextWorkspaceId = remainingIds[0] ?? null;
-      setActiveWorkspace(nextWorkspaceId);
-      navigate(nextWorkspaceId ? `/workspace/${nextWorkspaceId}` : '/');
+      setActiveWorkspace(remainingIds[0] ?? null);
     }
   };
 

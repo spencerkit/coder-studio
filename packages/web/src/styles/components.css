@@ -370,7 +370,7 @@
 }
 
 .settings-toggle-slider::before {
-  content: '';
+  content: "";
   position: absolute;
   width: 18px;
   height: 18px;
@@ -528,6 +528,7 @@
 
 .settings-config-field {
   margin-bottom: var(--sp-4);
+  width: 100%;
 }
 
 .settings-config-label {
@@ -535,6 +536,14 @@
   font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-bottom: var(--sp-2);
+}
+
+.settings-provider-args-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--bg-input);
 }
 
 .settings-command-preview {
@@ -747,25 +756,25 @@
 .xterm-host {
   width: 100%;
   height: 100%;
-  padding: var(--sp-2);
 }
 
 /* xterm.js overrides for Aurora Mint theme */
-.xterm-host .xterm {
-  height: 100%;
-}
-
 .xterm-host .xterm-viewport {
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .xterm-host .xterm-screen {
   background: var(--bg-terminal);
 }
 
-/* Scrollbar styling for xterm */
+/* Third-party widgets render their own scroll containers, so bridge them back
+ * to the shared scrollbar tokens instead of letting their library defaults
+ * drift away from the rest of the app. */
 .xterm-host .xterm-viewport::-webkit-scrollbar {
   width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
 }
 
 .xterm-host .xterm-viewport::-webkit-scrollbar-track {
@@ -774,11 +783,11 @@
 
 .xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
 }
 
 .xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--border-light);
+  background: var(--border-focus);
 }
 
 .terminal-placeholder {
@@ -892,7 +901,9 @@ body.focus-mode-active .split-divider-h {
   justify-content: center;
 }
 
-.split-divider-v:hover { background: var(--blue); }
+.split-divider-v:hover {
+  background: var(--blue);
+}
 
 .split-divider-h {
   height: 8px;
@@ -901,7 +912,9 @@ body.focus-mode-active .split-divider-h {
   flex-shrink: 0;
 }
 
-.split-divider-h:hover { background: var(--blue); }
+.split-divider-h:hover {
+  background: var(--blue);
+}
 
 /* Disable text selection during resize */
 body.is-resizing-panels {
@@ -965,7 +978,9 @@ body.is-resizing-panels * {
   transition: all 0.1s;
 }
 
-.panel-tab:hover { color: var(--text-sec); }
+.panel-tab:hover {
+  color: var(--text-sec);
+}
 .panel-tab.active {
   background: var(--blue);
   color: var(--bg);
@@ -981,7 +996,8 @@ body.is-resizing-panels * {
 }
 
 .panel-toolbar-btn {
-  width: 22px; height: 22px;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -992,7 +1008,10 @@ body.is-resizing-panels * {
   transition: all 0.06s;
 }
 
-.panel-toolbar-btn:hover { background: var(--bg-hover); color: var(--text-sec); }
+.panel-toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-sec);
+}
 
 /* ========== File Tree ========== */
 .file-tree {
@@ -1013,16 +1032,19 @@ body.is-resizing-panels * {
   white-space: nowrap;
 }
 
-.tree-item:hover { background: rgba(108,182,255,0.06); }
+.tree-item:hover {
+  background: rgba(108, 182, 255, 0.06);
+}
 .tree-item.selected {
-  background: rgba(108,182,255,0.1);
+  background: rgba(108, 182, 255, 0.1);
   color: var(--text);
   border-left: 2px solid var(--blue);
   padding-left: 14px;
 }
 
 .tree-chevron {
-  width: 16px; height: 16px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1032,7 +1054,8 @@ body.is-resizing-panels * {
 }
 
 .tree-icon {
-  width: 16px; height: 16px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1040,15 +1063,30 @@ body.is-resizing-panels * {
   font-size: 13px;
 }
 
-.tree-icon.folder { color: var(--amber); }
-.tree-icon.ts { color: var(--blue); }
-.tree-icon.css { color: var(--green); }
-.tree-icon.json { color: var(--amber); }
-.tree-icon.md { color: var(--text-ter); }
+.tree-icon.folder {
+  color: var(--amber);
+}
+.tree-icon.ts {
+  color: var(--blue);
+}
+.tree-icon.css {
+  color: var(--green);
+}
+.tree-icon.json {
+  color: var(--amber);
+}
+.tree-icon.md {
+  color: var(--text-ter);
+}
 
-.tree-label { overflow: hidden; text-overflow: ellipsis; }
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.tree-children { padding-left: 12px; }
+.tree-children {
+  padding-left: 12px;
+}
 
 /* ========== Center Area ========== */
 .center-area {
@@ -1091,7 +1129,7 @@ body.is-resizing-panels * {
 
 .agent-progress {
   height: 3px;
-  background: rgba(108,182,255,0.15);
+  background: rgba(108, 182, 255, 0.15);
   position: relative;
   min-height: 0;
 }
@@ -1102,7 +1140,9 @@ body.is-resizing-panels * {
   transition: width 60ms;
 }
 
-.agent-progress .fill.error { background: var(--pink); }
+.agent-progress .fill.error {
+  background: var(--pink);
+}
 
 .agent-header {
   display: flex;
@@ -1113,7 +1153,8 @@ body.is-resizing-panels * {
 }
 
 .agent-session-dot {
-  width: 8px; height: 8px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -1122,7 +1163,6 @@ body.is-resizing-panels * {
   background: var(--green);
   animation: pulse 2s infinite;
 }
-
 
 .agent-session-dot.idle {
   background: var(--text-tertiary);
@@ -1150,12 +1190,12 @@ body.is-resizing-panels * {
 }
 
 .agent-status.running {
-  background: rgba(120,215,178,0.15);
+  background: rgba(120, 215, 178, 0.15);
   color: var(--green);
 }
 
 .agent-status.idle {
-  background: rgba(114,132,146,0.15);
+  background: rgba(114, 132, 146, 0.15);
   color: var(--text-ter);
 }
 
@@ -1172,7 +1212,8 @@ body.is-resizing-panels * {
 }
 
 .agent-action-btn {
-  width: 20px; height: 20px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -1183,8 +1224,12 @@ body.is-resizing-panels * {
   transition: all 0.06s;
 }
 
-.agent-action-btn:hover { background: var(--bg-hover); }
-.agent-action-btn.close:hover { color: var(--pink); }
+.agent-action-btn:hover {
+  background: var(--bg-hover);
+}
+.agent-action-btn.close:hover {
+  color: var(--pink);
+}
 
 .agent-terminal {
   flex: 1;
@@ -1198,14 +1243,30 @@ body.is-resizing-panels * {
   min-height: 0;
 }
 
-.term-line { white-space: pre; }
-.term-prompt { color: var(--green); }
-.term-path { color: var(--blue); }
-.term-cmd { color: var(--text); }
-.term-output { color: var(--text-sec); }
-.term-success { color: var(--green); }
-.term-warn { color: var(--amber); }
-.term-error { color: var(--pink); }
+.term-line {
+  white-space: pre;
+}
+.term-prompt {
+  color: var(--green);
+}
+.term-path {
+  color: var(--blue);
+}
+.term-cmd {
+  color: var(--text);
+}
+.term-output {
+  color: var(--text-sec);
+}
+.term-success {
+  color: var(--green);
+}
+.term-warn {
+  color: var(--amber);
+}
+.term-error {
+  color: var(--pink);
+}
 .term-cursor {
   display: inline-block;
   width: 8px;
@@ -1319,7 +1380,9 @@ body.is-resizing-panels * {
   margin-top: var(--sp-2);
 }
 
-.welcome-btn:hover { filter: brightness(1.1); }
+.welcome-btn:hover {
+  filter: brightness(1.1);
+}
 
 .welcome-link {
   display: flex;
@@ -1336,7 +1399,9 @@ body.is-resizing-panels * {
   transition: color var(--duration-fast) var(--ease-out);
 }
 
-.welcome-link:hover { color: var(--text-sec); }
+.welcome-link:hover {
+  color: var(--text-sec);
+}
 
 .welcome-divider {
   width: 48px;
@@ -1594,20 +1659,6 @@ body.is-resizing-panels * {
   background: var(--bg-terminal);
 }
 
-/* Session input */
-.session-input {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border);
-}
-
-.session-input .input {
-  flex: 1;
-}
-
 /* ========== TopBar ========== */
 .app-topbar {
   height: 36px;
@@ -1643,14 +1694,17 @@ body.is-resizing-panels * {
   transition: background 0.06s;
 }
 
-.topbar-tab:hover { background: var(--bg-hover); }
+.topbar-tab:hover {
+  background: var(--bg-hover);
+}
 .topbar-tab.active {
   background: var(--bg-active);
   color: var(--text);
 }
 
 .topbar-dot {
-  width: 8px; height: 8px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -1660,14 +1714,17 @@ body.is-resizing-panels * {
   animation: pulse 2s infinite;
 }
 
-.topbar-dot.idle { background: var(--text-ter); }
+.topbar-dot.idle {
+  background: var(--text-ter);
+}
 
 .topbar-unread {
   background: var(--blue);
   color: var(--bg);
   font-size: 10px;
   font-weight: 600;
-  min-width: 16px; height: 16px;
+  min-width: 16px;
+  height: 16px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -1676,7 +1733,8 @@ body.is-resizing-panels * {
 }
 
 .topbar-close {
-  width: 18px; height: 18px;
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -1688,11 +1746,17 @@ body.is-resizing-panels * {
   transition: all 0.06s;
 }
 
-.topbar-tab:hover .topbar-close { opacity: 1; }
-.topbar-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.topbar-tab:hover .topbar-close {
+  opacity: 1;
+}
+.topbar-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
 
 .topbar-add {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1704,7 +1768,9 @@ body.is-resizing-panels * {
   flex-shrink: 0;
 }
 
-.topbar-add:hover { background: var(--bg-hover); }
+.topbar-add:hover {
+  background: var(--bg-hover);
+}
 
 .topbar-actions {
   display: flex;
@@ -1714,7 +1780,8 @@ body.is-resizing-panels * {
 }
 
 .topbar-btn {
-  width: 32px; height: 32px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1724,7 +1791,9 @@ body.is-resizing-panels * {
   transition: background 0.06s;
 }
 
-.topbar-btn:hover { background: color-mix(in srgb, var(--bg-surface) 72%, var(--blue) 28%); }
+.topbar-btn:hover {
+  background: color-mix(in srgb, var(--bg-surface) 72%, var(--blue) 28%);
+}
 
 /* ========== Connection Status ========== */
 .connection-status {
@@ -2024,8 +2093,7 @@ body.is-resizing-panels * {
  * Layout:
  *   [· Supervisor]  [STATE]            [edit] [pause] [trig] [off]
  *   [objective..................................] [provider-pill]
- *   [========progress 4px========]
- *   [AUTO · 65% · latest result.....]
+ *   [AUTO · latest result.....]
  *   [error banner, if any]
  */
 .supervisor-card {
@@ -2122,8 +2190,15 @@ body.is-resizing-panels * {
 }
 
 @keyframes supervisor-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.85); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
 }
 
 .supervisor-label {
@@ -2265,28 +2340,7 @@ body.is-resizing-panels * {
   text-transform: lowercase;
 }
 
-/* Progress + latest-cycle banner */
-.supervisor-progress-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.supervisor-progress-track {
-  width: 100%;
-  height: var(--progress-height);
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  overflow: hidden;
-}
-
-.supervisor-progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
-  transition: width var(--duration-slow) var(--ease-out);
-}
-
+/* Latest-cycle banner */
 .supervisor-history-list {
   display: flex;
   flex-direction: column;
@@ -2316,16 +2370,9 @@ body.is-resizing-panels * {
   letter-spacing: 0.06em;
 }
 
-.supervisor-history-item[data-trigger='manual'] .supervisor-history-trigger {
+.supervisor-history-item[data-trigger="manual"] .supervisor-history-trigger {
   background: rgba(199, 146, 234, 0.14);
   color: var(--accent-purple);
-}
-
-.supervisor-history-progress {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-medium);
 }
 
 .supervisor-history-result {
@@ -2405,12 +2452,12 @@ body.is-resizing-panels * {
   color: var(--accent-green);
 }
 
-.supervisor-dialog[data-mode='edit'] .supervisor-dialog-header-icon {
+.supervisor-dialog[data-mode="edit"] .supervisor-dialog-header-icon {
   background: rgba(108, 182, 255, 0.12);
   color: var(--accent-blue);
 }
 
-.supervisor-dialog[data-mode='disable'] .supervisor-dialog-header-icon {
+.supervisor-dialog[data-mode="disable"] .supervisor-dialog-header-icon {
   background: rgba(255, 158, 176, 0.12);
   color: var(--accent-pink);
 }
@@ -2430,7 +2477,7 @@ body.is-resizing-panels * {
   min-height: 120px;
 }
 
-.supervisor-dialog .input[type='select'],
+.supervisor-dialog .input[type="select"],
 .supervisor-dialog select.input {
   cursor: pointer;
 }
@@ -2850,106 +2897,6 @@ body.is-resizing-panels * {
   border-top: 1px solid var(--border);
 }
 
-/* ========== MCP Settings (Phase 4) ========== */
-.mcp-provider-tabs {
-  margin-bottom: var(--sp-4);
-}
-
-.mcp-server-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-
-.mcp-server-item {
-  padding: var(--sp-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.mcp-server-disabled {
-  opacity: 0.6;
-}
-
-.mcp-server-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--sp-2);
-}
-
-.mcp-server-name {
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-}
-
-.mcp-server-status {
-  font-size: var(--text-xs);
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--radius-sm);
-}
-
-.mcp-server-status.enabled {
-  background: rgba(120, 215, 178, 0.15);
-  color: var(--accent-green);
-}
-
-.mcp-server-status.disabled {
-  background: var(--bg-hover);
-  color: var(--text-tertiary);
-}
-
-.mcp-server-command {
-  padding: var(--sp-2);
-  background: var(--bg);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  margin-bottom: var(--sp-2);
-}
-
-.mcp-server-desc {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  margin-bottom: var(--sp-2);
-}
-
-.mcp-server-actions {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-.mcp-empty {
-  padding: var(--sp-6);
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-.mcp-server-form {
-  padding: var(--sp-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.mcp-form-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-  margin-bottom: var(--sp-4);
-}
-
-.mcp-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  margin-top: var(--sp-4);
-}
-
 /* ========== Input with Button ========== */
 .input-with-button {
   display: flex;
@@ -3025,12 +2972,6 @@ body.is-resizing-panels * {
   font-family: var(--font-mono);
 }
 
-.launch-target-hint {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  margin-top: var(--sp-1);
-}
-
 .launch-close-btn {
   width: 28px;
   height: 28px;
@@ -3091,34 +3032,6 @@ body.is-resizing-panels * {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   margin-top: var(--sp-1);
-}
-
-.launch-target-row {
-  display: flex;
-  gap: var(--sp-1);
-  margin-bottom: var(--sp-4);
-}
-
-.launch-target-btn {
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.launch-target-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-}
-
-.launch-target-btn.active {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
-  color: var(--text-inverse);
 }
 
 .folder-picker {
@@ -3421,7 +3334,9 @@ body.is-resizing-panels * {
 }
 
 .btn:focus-visible {
-  box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px rgba(108, 182, 255, 0.35);
+  box-shadow:
+    0 0 0 2px var(--bg-page),
+    0 0 0 4px rgba(108, 182, 255, 0.35);
 }
 
 .btn:hover:not(:disabled) {
@@ -3854,14 +3769,12 @@ textarea.input {
 .agent-panes {
   background:
     radial-gradient(circle at top center, rgba(108, 182, 255, 0.05), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 20%),
-    var(--bg-page);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 20%), var(--bg-page);
 }
 
 .agent-draft-launcher {
   background:
-    radial-gradient(circle at center, rgba(108, 182, 255, 0.08), transparent 30%),
-    transparent;
+    radial-gradient(circle at center, rgba(108, 182, 255, 0.08), transparent 30%), transparent;
 }
 
 .agent-draft-content {
@@ -4035,7 +3948,7 @@ textarea.input {
 }
 
 .session-meta span + span::before {
-  content: '';
+  content: "";
   position: absolute;
   left: calc(var(--sp-2) * -1);
   top: 50%;
@@ -4075,30 +3988,6 @@ textarea.input {
 
 .session-terminal {
   background: var(--bg-terminal);
-}
-
-.session-input {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.08);
-  border-top: 1px solid var(--border);
-}
-
-.session-input .input {
-  min-width: 0;
-  flex: 1;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 4px;
-  background: rgba(17, 24, 31, 0.88);
-}
-
-.session-input .btn {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
 }
 
 .bottom-terminal {
@@ -4431,8 +4320,7 @@ textarea.input {
   padding: 14px 16px 16px;
   background:
     radial-gradient(circle at top center, rgba(108, 182, 255, 0.05), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%),
-    var(--bg-page);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%), var(--bg-page);
 }
 
 .workspace-git-editor {
@@ -4458,6 +4346,140 @@ textarea.input {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: rgba(17, 24, 31, 0.92);
+}
+
+/* File editor shares Git Diff's container/header/body chrome; only the
+ * inline save-error ribbon and the Monaco pane need dedicated styling so
+ * they sit naturally inside .workspace-git-editor. */
+.code-file-path .dirty-indicator {
+  margin-left: 4px;
+  color: var(--accent-yellow, #f5c244);
+}
+
+.code-mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.code-mode-btn svg {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+.code-mode-btn svg:last-child {
+  margin-right: 0;
+}
+
+.code-editor-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--accent-red, #d04a4a) 18%, transparent);
+  color: var(--accent-red, #d04a4a);
+  font-size: 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-red, #d04a4a) 32%, transparent);
+}
+
+/* Monaco and ImagePreview each handle their own scrolling; override the
+ * body overflow in those cases so we don't get a double scrollbar. */
+.workspace-git-editor .code-editor-body:has(> .monaco-host),
+.workspace-git-editor .code-editor-body:has(> .image-preview) {
+  overflow: hidden;
+}
+
+.monaco-host {
+  height: 100%;
+  width: 100%;
+}
+
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.vertical {
+  width: var(--scrollbar-width) !important;
+}
+
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.horizontal {
+  height: var(--scrollbar-width) !important;
+}
+
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar {
+  background: var(--scrollbar-track) !important;
+}
+
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider {
+  background: var(--scrollbar-thumb) !important;
+  border-radius: var(--radius-full) !important;
+}
+
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.active > .slider,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.active > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
+  background: var(--border-focus) !important;
+}
+
+/* Image preview lives inside .code-editor-body, so it gets the same scroll
+ * container as diff lines. We center the image and show a small metadata
+ * strip at the bottom. A checker pattern helps PNGs with transparency. */
+.image-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.image-preview-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.18);
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+.image-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+
+.image-preview-meta {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: rgba(17, 24, 31, 0.92);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.image-preview-type {
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
 }
 
 .code-file-path {
@@ -4605,8 +4627,7 @@ textarea.input {
 .workspace-main-area {
   background:
     radial-gradient(circle at top center, rgba(108, 182, 255, 0.05), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%),
-    var(--bg-page);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 18%), var(--bg-page);
 }
 
 .workspace-main-area > .agent-panes {
@@ -4620,7 +4641,7 @@ textarea.input {
 }
 
 .pane-layout-divider::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   margin: 2px;
@@ -4633,8 +4654,7 @@ textarea.input {
 }
 
 .session-card {
-  background:
-    linear-gradient(180deg, rgba(18, 26, 34, 0.94), rgba(11, 18, 24, 0.98));
+  background: linear-gradient(180deg, rgba(18, 26, 34, 0.94), rgba(11, 18, 24, 0.98));
   border: 1px solid color-mix(in srgb, var(--border-light) 66%, var(--accent-blue) 34%);
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
@@ -4668,16 +4688,6 @@ textarea.input {
   border-radius: 6px;
 }
 
-.session-input {
-  background: rgba(8, 12, 16, 0.82);
-  backdrop-filter: blur(10px);
-}
-
-.session-input .input {
-  background: rgba(12, 18, 24, 0.9);
-  border-color: color-mix(in srgb, var(--border-light) 72%, transparent);
-}
-
 .workspace-main-area > .bottom-terminal {
   background: transparent;
   border-top: none;
@@ -4689,8 +4699,7 @@ textarea.input {
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(11, 18, 24, 0.99));
+  background: linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(11, 18, 24, 0.99));
 }
 
 .terminal-toolbar {
@@ -4706,7 +4715,7 @@ textarea.input {
 }
 
 .terminal-toolbar-left::before {
-  content: '';
+  content: "";
   width: 8px;
   height: 8px;
   flex-shrink: 0;
@@ -4806,16 +4815,14 @@ textarea.input {
 }
 
 .launch-modal {
-  background:
-    linear-gradient(180deg, rgba(17, 24, 31, 0.98), rgba(11, 18, 24, 0.98));
+  background: linear-gradient(180deg, rgba(17, 24, 31, 0.98), rgba(11, 18, 24, 0.98));
   border-color: color-mix(in srgb, var(--border-light) 64%, var(--accent-blue) 36%);
   box-shadow: var(--shadow-xl);
 }
 
 .app-topbar {
   padding: 0 10px;
-  background:
-    linear-gradient(180deg, rgba(20, 29, 38, 0.96), rgba(17, 24, 31, 0.98));
+  background: linear-gradient(180deg, rgba(20, 29, 38, 0.96), rgba(17, 24, 31, 0.98));
   border-bottom-color: color-mix(in srgb, var(--border) 70%, var(--accent-blue) 30%);
 }
 
@@ -4835,8 +4842,7 @@ textarea.input {
 }
 
 .topbar-tab.active {
-  background:
-    linear-gradient(180deg, rgba(45, 63, 79, 0.92), rgba(31, 45, 57, 0.96));
+  background: linear-gradient(180deg, rgba(45, 63, 79, 0.92), rgba(31, 45, 57, 0.96));
   border: 1px solid color-mix(in srgb, var(--border-light) 68%, var(--accent-blue) 32%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
@@ -4890,15 +4896,13 @@ textarea.input {
 }
 
 .left-panel {
-  background:
-    linear-gradient(180deg, rgba(14, 20, 26, 0.98), rgba(11, 18, 24, 0.98));
+  background: linear-gradient(180deg, rgba(14, 20, 26, 0.98), rgba(11, 18, 24, 0.98));
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
 }
 
 .panel-header {
   padding: 14px 12px 10px;
-  background:
-    linear-gradient(180deg, rgba(18, 26, 34, 0.8), rgba(14, 21, 28, 0.28));
+  background: linear-gradient(180deg, rgba(18, 26, 34, 0.8), rgba(14, 21, 28, 0.28));
   border-bottom-color: color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
 }
 
@@ -4955,8 +4959,7 @@ textarea.input {
 }
 
 .tree-item.selected {
-  background:
-    linear-gradient(90deg, rgba(108, 182, 255, 0.16), rgba(108, 182, 255, 0.08));
+  background: linear-gradient(90deg, rgba(108, 182, 255, 0.16), rgba(108, 182, 255, 0.08));
   box-shadow:
     inset 2px 0 0 var(--accent-blue),
     inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -5003,8 +5006,7 @@ textarea.input {
 }
 
 .session-terminal {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 24, 0.98), rgba(9, 15, 20, 1));
+  background: linear-gradient(180deg, rgba(11, 18, 24, 0.98), rgba(9, 15, 20, 1));
 }
 
 .workspace-empty-content,
@@ -5024,8 +5026,7 @@ textarea.input {
   width: min(920px, 100%);
   border: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
   border-radius: calc(var(--radius-xl) + var(--sp-1));
-  background:
-    linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(10, 16, 20, 0.98));
+  background: linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(10, 16, 20, 0.98));
   box-shadow: var(--shadow-lg);
 }
 
@@ -5073,8 +5074,7 @@ textarea.input {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 78%, var(--accent-blue) 22%);
   border-radius: calc(var(--radius-xl) + var(--sp-1));
-  background:
-    linear-gradient(180deg, rgba(13, 20, 26, 0.96), rgba(8, 13, 18, 0.98));
+  background: linear-gradient(180deg, rgba(13, 20, 26, 0.96), rgba(8, 13, 18, 0.98));
 }
 
 .workspace-resolving-preview-topbar {
@@ -5084,8 +5084,7 @@ textarea.input {
   height: 36px;
   padding: 0 var(--sp-3);
   border-bottom: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(17, 24, 31, 0.98), rgba(13, 20, 26, 0.92));
+  background: linear-gradient(180deg, rgba(17, 24, 31, 0.98), rgba(13, 20, 26, 0.92));
 }
 
 .workspace-resolving-preview-body {
@@ -5100,8 +5099,7 @@ textarea.input {
   gap: var(--sp-3);
   padding: var(--sp-4);
   border-right: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(13, 20, 26, 0.98), rgba(11, 18, 24, 0.98));
+  background: linear-gradient(180deg, rgba(13, 20, 26, 0.98), rgba(11, 18, 24, 0.98));
 }
 
 .workspace-resolving-preview-main {
@@ -5120,14 +5118,12 @@ textarea.input {
 }
 
 .workspace-resolving-console {
-  background:
-    radial-gradient(circle at top, rgba(108, 182, 255, 0.05), transparent 32%);
+  background: radial-gradient(circle at top, rgba(108, 182, 255, 0.05), transparent 32%);
 }
 
 .workspace-resolving-terminal {
   border-top: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(11, 18, 24, 0.98), rgba(9, 15, 20, 1));
+  background: linear-gradient(180deg, rgba(11, 18, 24, 0.98), rgba(9, 15, 20, 1));
 }
 
 .workspace-resolving-console-status {
@@ -5151,7 +5147,7 @@ textarea.input {
 .workspace-resolving-pill::after,
 .workspace-resolving-line::after,
 .workspace-resolving-console-line::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
@@ -5165,8 +5161,7 @@ textarea.input {
 }
 
 .workspace-resolving-pill-active {
-  background:
-    linear-gradient(90deg, rgba(108, 182, 255, 0.22), rgba(108, 182, 255, 0.1));
+  background: linear-gradient(90deg, rgba(108, 182, 255, 0.22), rgba(108, 182, 255, 0.1));
 }
 
 .workspace-resolving-pill-short {
@@ -5408,20 +5403,20 @@ textarea.input {
   gap: 4px;
 }
 
-.session-header-actions button[aria-label='Start'],
-.session-header-actions button[aria-label='Stop'] {
+.session-header-actions button[aria-label="Start"],
+.session-header-actions button[aria-label="Stop"] {
   order: 0;
 }
 
-.session-header-actions button[aria-label='Split vertical'] {
+.session-header-actions button[aria-label="Split vertical"] {
   order: 1;
 }
 
-.session-header-actions button[aria-label='Split horizontal'] {
+.session-header-actions button[aria-label="Split horizontal"] {
   order: 2;
 }
 
-.session-header-actions button[aria-label='Close'] {
+.session-header-actions button[aria-label="Close"] {
   order: 3;
 }
 
@@ -5429,20 +5424,6 @@ textarea.input {
   width: 20px;
   height: 20px;
   border-radius: 4px;
-}
-
-.session-input {
-  padding: 8px 12px;
-  background: var(--bg-page);
-  border-top: 1px solid var(--border);
-  backdrop-filter: none;
-}
-
-.session-input .input {
-  height: 32px;
-  border-radius: 4px;
-  background: var(--bg-terminal);
-  border-color: var(--border);
 }
 
 .workspace-bottom-panel {
@@ -5485,7 +5466,7 @@ textarea.input {
 .terminal-toolbar-right {
   min-width: 0;
   flex: 1;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .terminal-toolbar-left::before {
@@ -5502,10 +5483,6 @@ textarea.input {
 .terminal-selector {
   margin-right: 0;
   min-width: 0;
-}
-
-.terminal-toolbar-right > .terminal-toolbar-actions:first-of-type {
-  margin-left: auto;
 }
 
 .terminal-kicker {
@@ -5554,8 +5531,7 @@ textarea.input {
 }
 
 .topbar-tab.active {
-  background:
-    linear-gradient(180deg, rgba(43, 60, 75, 0.94), rgba(30, 44, 56, 0.98));
+  background: linear-gradient(180deg, rgba(43, 60, 75, 0.94), rgba(30, 44, 56, 0.98));
   border-color: color-mix(in srgb, var(--border-light) 72%, var(--accent-blue) 28%);
 }
 
@@ -5591,6 +5567,9 @@ textarea.input {
 }
 
 .topbar-quick-actions {
+  width: auto;
+  min-width: max-content;
+  flex-shrink: 0;
   padding: 0 10px;
   gap: 6px;
 }
@@ -5873,15 +5852,31 @@ textarea.input {
   box-shadow: var(--shadow-xl);
 }
 
-.toast--success { border-left: 3px solid var(--color-success); }
-.toast--error   { border-left: 3px solid var(--color-error); }
-.toast--warning { border-left: 3px solid var(--color-warning); }
-.toast--info    { border-left: 3px solid var(--color-info); }
+.toast--success {
+  border-left: 3px solid var(--color-success);
+}
+.toast--error {
+  border-left: 3px solid var(--color-error);
+}
+.toast--warning {
+  border-left: 3px solid var(--color-warning);
+}
+.toast--info {
+  border-left: 3px solid var(--color-info);
+}
 
-.toast--success .toast__icon { color: var(--color-success); }
-.toast--error   .toast__icon { color: var(--color-error); }
-.toast--warning .toast__icon { color: var(--color-warning); }
-.toast--info    .toast__icon { color: var(--color-info); }
+.toast--success .toast__icon {
+  color: var(--color-success);
+}
+.toast--error .toast__icon {
+  color: var(--color-error);
+}
+.toast--warning .toast__icon {
+  color: var(--color-warning);
+}
+.toast--info .toast__icon {
+  color: var(--color-info);
+}
 
 .toast__icon {
   flex-shrink: 0;
@@ -5922,13 +5917,154 @@ textarea.input {
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
-  transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .toast__close:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* ========== Theme-Sensitive Workspace Surfaces ==========
+ * Final overrides for workspace chrome that should follow light/dark tokens.
+ * Earlier alignment passes introduced a few dark-only fills; keep the
+ * polish, but derive it from tokens so light mode stays coherent.
+ */
+.launch-overlay {
+  background: color-mix(in srgb, black 58%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.launch-modal {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 97%, white 3%),
+    color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page) 18%)
+  );
+  border-color: color-mix(in srgb, var(--border-light) 64%, var(--accent-blue) 36%);
+  box-shadow: var(--shadow-xl);
+}
+
+.app-topbar {
+  background: color-mix(in srgb, var(--bg-surface) 95%, var(--accent-blue) 5%);
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, var(--accent-blue) 20%);
+}
+
+.topbar-tab.active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-active) 86%, white 14%),
+    color-mix(in srgb, var(--bg-active) 94%, var(--bg-surface) 6%)
+  );
+  border-color: color-mix(in srgb, var(--border-light) 72%, var(--accent-blue) 28%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
+}
+
+.connection-status {
+  border-color: color-mix(in srgb, var(--border-light) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page) 12%);
+}
+
+.workspace-empty-inner,
+.workspace-resolving-card {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 97%, white 3%),
+    color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page) 18%)
+  );
+  box-shadow: var(--shadow-lg);
+}
+
+.workspace-resolving-preview {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-terminal) 98%, white 2%),
+    color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-page) 12%)
+  );
+}
+
+.workspace-resolving-preview-topbar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 94%, white 6%),
+    color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-surface) 12%)
+  );
+}
+
+.workspace-resolving-preview-sidebar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-terminal) 94%, white 6%),
+    color-mix(in srgb, var(--bg-terminal) 100%, transparent)
+  );
+}
+
+.workspace-resolving-terminal {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-terminal) 96%, white 4%),
+    color-mix(in srgb, var(--bg-terminal) 84%, var(--bg-page) 16%)
+  );
+}
+
+.workspace-git-editor {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 97%, white 3%),
+    color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-page) 12%)
+  );
+  border-color: color-mix(in srgb, var(--border-light) 68%, var(--accent-blue) 32%);
+  box-shadow: var(--shadow-lg);
+}
+
+.code-editor-header {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 97%, white 3%),
+    color-mix(in srgb, var(--bg-surface) 84%, var(--bg-terminal) 16%)
+  );
+}
+
+.code-mode-toggle {
+  background: color-mix(in srgb, var(--bg-hover) 72%, var(--bg-surface) 28%);
+}
+
+.image-preview-canvas {
+  background-color: color-mix(in srgb, var(--bg-terminal) 90%, var(--bg-page) 10%);
+}
+
+.image-preview-meta {
+  background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-terminal) 10%);
+}
+
+.git-diff-line-added {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: color-mix(in srgb, var(--color-success) 78%, var(--text-primary) 22%);
+}
+
+.git-diff-line-removed {
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: color-mix(in srgb, var(--color-error) 78%, var(--text-primary) 22%);
+}
+
+.workspace-resolving-pill,
+.workspace-resolving-line,
+.workspace-resolving-console-line {
+  background: color-mix(in srgb, var(--bg-hover) 74%, var(--bg-surface) 26%);
+}
+
+.workspace-resolving-pill::after,
+.workspace-resolving-line::after,
+.workspace-resolving-console-line::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent-blue) 16%, white 22%),
+    transparent
+  );
 }
 
 /* PRD §18 / Visual Spec: Slide In — translateX 100% → 0 with opacity */

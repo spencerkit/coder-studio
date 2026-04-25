@@ -12,13 +12,56 @@ export interface SessionRow {
   resume_id: string | null;
   capability: 'full' | 'limited' | 'unsupported';
   state: SessionState;
-  started_at: number;
+  started_at: number | null;
   ended_at: number | null;
   last_active_at: number;
   completion_percent: number | null;
   error_reason: string | null;
   archived: number; // SQLite uses 0/1 for boolean
   transcript_path: string | null;
+  title: string | null;
+  draft?: string | null;
+}
+
+export function rowToSession(row: SessionRow): Session {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    terminalId: row.terminal_id,
+    providerId: row.provider_id,
+    state: row.state,
+    resumeId: row.resume_id ?? undefined,
+    capability: row.capability,
+    startedAt: row.started_at ?? row.last_active_at,
+    lastActiveAt: row.last_active_at,
+    endedAt: row.ended_at ?? undefined,
+    completionPercent: row.completion_percent ?? undefined,
+    errorReason: row.error_reason ?? undefined,
+    transcriptPath: row.transcript_path ?? undefined,
+    title: row.title ?? undefined,
+    ...(row.draft != null ? { draft: row.draft } : {}),
+  };
+}
+
+export function sessionToRow(session: Session & { draft?: string }): SessionRow {
+  return {
+    id: session.id,
+    workspace_id: session.workspaceId,
+    terminal_id: session.terminalId,
+    provider_id: session.providerId,
+    state: session.state,
+    resume_id: session.resumeId ?? null,
+    capability: session.capability,
+    started_at: session.startedAt ?? session.lastActiveAt,
+    last_active_at: session.lastActiveAt,
+    ended_at: session.endedAt ?? null,
+    completion_percent: session.completionPercent ?? null,
+    error_reason: session.errorReason ?? null,
+    archived: 0,
+    draft: session.draft ?? null,
+    transcript_path: session.transcriptPath ?? null,
+    title: session.title ?? null,
+  };
 }
 
 /**
@@ -52,7 +95,7 @@ export class SessionRepo {
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC')
       .all(workspaceId) as SessionRow[];
-    return rows.map(row => this.rowToSession(row));
+    return rows.map(rowToSession);
   }
 
   /**
@@ -60,7 +103,7 @@ export class SessionRepo {
    */
   findById(id: string): Session | undefined {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
-    return row ? this.rowToSession(row) : undefined;
+    return row ? rowToSession(row) : undefined;
   }
 
   /**
@@ -68,7 +111,7 @@ export class SessionRepo {
    */
   findByTerminalId(terminalId: string): Session | undefined {
     const row = this.db.prepare('SELECT * FROM sessions WHERE terminal_id = ?').get(terminalId) as SessionRow | undefined;
-    return row ? this.rowToSession(row) : undefined;
+    return row ? rowToSession(row) : undefined;
   }
 
   /**
@@ -78,7 +121,7 @@ export class SessionRepo {
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC')
       .all(workspaceId) as SessionRow[];
-    return rows.map(row => this.rowToSession(row));
+    return rows.map(rowToSession);
   }
 
   /**
@@ -170,26 +213,5 @@ export class SessionRepo {
   delete(id: string): void {
     const stmt = this.db.prepare('DELETE FROM sessions WHERE id = ?');
     stmt.run(id);
-  }
-
-  /**
-   * Converts a database row to a Session domain object
-   */
-  private rowToSession(row: SessionRow): Session {
-    return {
-      id: row.id,
-      workspaceId: row.workspace_id,
-      terminalId: row.terminal_id,
-      providerId: row.provider_id,
-      state: row.state,
-      resumeId: row.resume_id ?? undefined,
-      capability: row.capability,
-      startedAt: row.started_at,
-      lastActiveAt: row.last_active_at,
-      endedAt: row.ended_at ?? undefined,
-      completionPercent: row.completion_percent ?? undefined,
-      errorReason: row.error_reason ?? undefined,
-      transcriptPath: row.transcript_path ?? undefined,
-    };
   }
 }

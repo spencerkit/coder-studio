@@ -17,10 +17,11 @@ function resolveShellCommand(): { argv: string[]; title: string } {
 
   const shellPath = process.env.SHELL || '/bin/bash';
   const shellName = basename(shellPath);
-  // Launch as interactive login shell so the user's rc/profile files load.
-  // Without this, PS1 colors and `ls --color=auto` aliases never get defined
-  // and the xterm pane renders everything in a single foreground color.
-  const argv = shellName === 'cmd.exe' ? [shellPath] : [shellPath, '-il'];
+  // Launch as interactive (non-login) shell so the user's rc files load for
+  // PS1 colors and `ls --color=auto` aliases. Login (-l) is intentionally
+  // omitted: it sources profile scripts whose welcome banners / motd output
+  // produce spurious blank lines in the pane for most users.
+  const argv = shellName === 'cmd.exe' ? [shellPath] : [shellPath, '-i'];
 
   return {
     argv,
@@ -116,8 +117,13 @@ registerCommand(
   }),
   async (args, ctx) => {
     const buffer = Buffer.from(args.bytes, 'base64');
+    const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
+    if (sessionId) {
+      ctx.sessionMgr.sendInput(sessionId, buffer, args.activity);
+      return;
+    }
+
     ctx.terminalMgr.write(args.terminalId, buffer);
-    ctx.sessionMgr.onTerminalInput(args.terminalId, args.activity);
   }
 );
 
@@ -130,6 +136,12 @@ registerCommand(
     rows: z.number().int().positive(),
   }),
   async (args, ctx) => {
+    const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
+    if (sessionId) {
+      ctx.sessionMgr.resize(sessionId, args.cols, args.rows);
+      return;
+    }
+
     ctx.terminalMgr.resize(args.terminalId, args.cols, args.rows);
   }
 );

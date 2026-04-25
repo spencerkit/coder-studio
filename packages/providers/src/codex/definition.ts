@@ -130,7 +130,7 @@ export const codexDefinition: ProviderDefinition = {
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx: LaunchContext) {
-    const cfg = config as CodexConfig;
+    const cfg = codexConfigSchema.parse(config);
     const extraArgs = [...cfg.additionalArgs];
 
     // Inject -c notify=[...] when bridge script is available
@@ -144,7 +144,7 @@ export const codexDefinition: ProviderDefinition = {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
       },
-      cwd: cfg.cwd ?? ctx.workspacePath,
+      cwd: ctx.workspacePath,
     };
   },
 

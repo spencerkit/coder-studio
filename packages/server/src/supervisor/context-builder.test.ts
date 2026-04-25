@@ -19,10 +19,9 @@ describe('SupervisorContextBuilder', () => {
           lastActiveAt: 1,
           transcriptPath: '/tmp/session.jsonl',
         })),
+        getOutputTail: vi.fn(() => Buffer.from('terminal fallback')),
       } as any,
-      terminalMgr: {
-        get: vi.fn(() => ({ ringBuffer: { snapshot: () => Buffer.from('terminal fallback') } })),
-      } as any,
+      terminalMgr: {} as any,
       providerRegistry: [
         {
           id: 'claude',
@@ -71,10 +70,9 @@ describe('SupervisorContextBuilder', () => {
           startedAt: 1,
           lastActiveAt: 1,
         })),
+        getOutputTail: vi.fn(() => Buffer.from('npm test\nPASS')),
       } as any,
-      terminalMgr: {
-        get: vi.fn(() => ({ ringBuffer: { snapshot: () => Buffer.from('npm test\nPASS') } })),
-      } as any,
+      terminalMgr: {} as any,
       providerRegistry: [{ id: 'claude', readTranscriptExcerpt: vi.fn(async () => null) }] as any,
       git: {
         getStatusSummary: vi.fn(async () => ''),

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { claudeConfigSchema } from './config-schema.js';
 
 describe('Claude Config Schema', () => {
-  it('should parse valid config with defaults', () => {
+  it('should parse valid config without injecting a default model', () => {
     const result = claudeConfigSchema.parse({});
 
-    expect(result.model).toBe('claude-sonnet-4-6');
-    expect(result.maxTurns).toBeNull();
-    expect(result.additionalArgs).toEqual([]);
-    expect(result.envVars).toEqual({});
+    expect(result.model).toBeUndefined();
+    expect(result.maxTurns).toBeUndefined();
+    expect(result.additionalArgs).toBeUndefined();
+    expect(result.envVars).toBeUndefined();
   });
 
   it('should parse config with custom values', () => {

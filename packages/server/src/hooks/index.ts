@@ -10,6 +10,7 @@ export {
 export {
   generateBridgeScript,
   deployBridgeScript,
+  getHooksBridgeDir,
   getBridgeScriptPath,
   HOOKS_BRIDGE_DIR,
 } from './bridge';

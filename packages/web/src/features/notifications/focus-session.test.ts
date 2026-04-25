@@ -12,24 +12,28 @@ describe('focusSession', () => {
     window.localStorage.clear();
   });
 
-  it('persists the workspace id, sets the pending-focus marker, and navigates via the supplied router', () => {
+  it('sets the active workspace in memory, sets the pending-focus marker, and navigates via the supplied router', () => {
     const setPendingFocus = vi.fn();
+    const setActiveWorkspaceId = vi.fn();
     const navigate = vi.fn();
 
     focusSession({
       workspaceId: 'ws-7',
       sessionId: 'sess-42',
       setPendingFocus,
+      setActiveWorkspaceId,
       navigate,
     });
 
-    expect(window.localStorage.getItem('ui.activeWorkspaceId')).toBe(JSON.stringify('ws-7'));
+    expect(setActiveWorkspaceId).toHaveBeenCalledWith('ws-7');
     expect(setPendingFocus).toHaveBeenCalledWith('sess-42');
-    expect(navigate).toHaveBeenCalledWith('/workspace/ws-7');
+    expect(navigate).toHaveBeenCalledWith('/workspace');
+    expect(window.localStorage.length).toBe(0);
   });
 
   it('falls back to history.pushState + popstate when no router is supplied (system-notification path)', () => {
     const setPendingFocus = vi.fn();
+    const setActiveWorkspaceId = vi.fn();
     const popstateSpy = vi.fn();
     window.addEventListener('popstate', popstateSpy);
 
@@ -37,16 +41,19 @@ describe('focusSession', () => {
       workspaceId: 'ws-3',
       sessionId: 'sess-9',
       setPendingFocus,
+      setActiveWorkspaceId,
     });
 
-    expect(window.location.pathname).toBe('/workspace/ws-3');
+    expect(setActiveWorkspaceId).toHaveBeenCalledWith('ws-3');
+    expect(window.location.pathname).toBe('/workspace');
     expect(popstateSpy).toHaveBeenCalledTimes(1);
     window.removeEventListener('popstate', popstateSpy);
   });
 
   it('does not navigate (or pushState) when already on the target route, but still updates focus marker', () => {
-    window.history.pushState({}, '', '/workspace/ws-1');
+    window.history.pushState({}, '', '/workspace');
     const setPendingFocus = vi.fn();
+    const setActiveWorkspaceId = vi.fn();
     const navigate = vi.fn();
     const popstateSpy = vi.fn();
     window.addEventListener('popstate', popstateSpy);
@@ -55,30 +62,14 @@ describe('focusSession', () => {
       workspaceId: 'ws-1',
       sessionId: 'sess-11',
       setPendingFocus,
+      setActiveWorkspaceId,
       navigate,
     });
 
     expect(navigate).not.toHaveBeenCalled();
     expect(popstateSpy).not.toHaveBeenCalled();
+    expect(setActiveWorkspaceId).toHaveBeenCalledWith('ws-1');
     expect(setPendingFocus).toHaveBeenCalledWith('sess-11');
     window.removeEventListener('popstate', popstateSpy);
-  });
-
-  it('survives a localStorage write failure without throwing', () => {
-    const setPendingFocus = vi.fn();
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('quota exceeded');
-    });
-
-    expect(() =>
-      focusSession({
-        workspaceId: 'ws-x',
-        sessionId: 'sess-x',
-        setPendingFocus,
-      })
-    ).not.toThrow();
-
-    expect(setPendingFocus).toHaveBeenCalledWith('sess-x');
-    setItemSpy.mockRestore();
   });
 });

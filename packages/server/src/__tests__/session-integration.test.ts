@@ -18,6 +18,7 @@ import { SessionManager } from '../session/manager.js';
 import { TerminalManager } from '../terminal/manager.js';
 import { EventBus } from '../bus/event-bus.js';
 import type { PtyHost, PtyProcess, Broadcaster } from '../terminal/types.js';
+import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 import { providerRegistry } from '@coder-studio/providers';
 import { tmpdir } from 'node:os';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -31,11 +32,12 @@ import '../commands/terminal.js';
 /**
  * Mock PtyHost for testing without spawning real processes
  */
-function createMockPtyHost(): PtyHost {
+function createMockPtyHost(spawnCalls: Array<{ argv: string[]; options: unknown }>): PtyHost {
   const terminals = new Map<string, { onDataCallbacks: Array<(data: string) => void>; onExitCallbacks: Array<(event: { exitCode: number }) => void> }>();
 
   return {
     spawn: (argv: string[], options) => {
+      spawnCalls.push({ argv, options });
       const id = `mock-pty-${Date.now()}`;
 
       const pty: PtyProcess = {
@@ -78,6 +80,12 @@ describe('Session Integration', () => {
   let terminalMgr: TerminalManager;
   let mockPtyHost: PtyHost;
   let broadcastEvents: Array<{ topic: string; payload: unknown }>;
+  let spawnCalls: Array<{ argv: string[]; options: unknown }>;
+  let sessionDb: {
+    insert: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
   let testDir: string;
 
   beforeEach(() => {
@@ -89,7 +97,8 @@ describe('Session Integration', () => {
     eventBus = new EventBus();
 
     // Create mock PTY host
-    mockPtyHost = createMockPtyHost();
+    spawnCalls = [];
+    mockPtyHost = createMockPtyHost(spawnCalls);
 
     // Track broadcast events
     broadcastEvents = [];
@@ -102,7 +111,7 @@ describe('Session Integration', () => {
     // Create terminal manager with mock PTY
     terminalMgr = new TerminalManager({
       ptyHost: mockPtyHost,
-      broadcaster: mockBroadcaster,
+      eventBus,
       db: {
         insert: () => {},
         markEnded: () => {},
@@ -118,17 +127,20 @@ describe('Session Integration', () => {
     mkdirSync(join(testDir, '.git'), { recursive: true });
     writeFileSync(join(testDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
 
+    sessionDb = {
+      insert: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    };
+
     // Create session manager
     sessionMgr = new SessionManager({
       terminalMgr,
       eventBus,
-      db: {
-        insert: () => {},
-        update: () => {},
-        delete: () => {},
-      },
+      db: sessionDb as any,
       broadcaster: mockBroadcaster,
       providerRegistry,
+      providerConfigRepo: new ProviderConfigRepo(db),
     });
 
     // Create context
@@ -262,6 +274,73 @@ describe('Session Integration', () => {
 
       expect(result.ok).toBe(false);
       expect(result.error?.code).toBe('unknown_provider');
+    });
+
+    it('should use saved provider config when creating a session', async () => {
+      db.prepare('INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)')
+        .run('claude', '{"additionalArgs":["--verbose"]}');
+
+      const openResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-provider-config-open',
+          op: 'workspace.open',
+          args: { path: testDir },
+        },
+        ctx
+      );
+
+      const workspaceId = openResult.data!.id;
+
+      const sessionResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-provider-config-create',
+          op: 'session.create',
+          args: {
+            workspaceId,
+            providerId: 'claude',
+          },
+        },
+        ctx
+      );
+
+      expect(sessionResult.ok).toBe(true);
+      expect(spawnCalls.at(-1)?.argv).toContain('--verbose');
+    });
+
+    it('should ignore legacy provider cwd overrides when creating a codex session', async () => {
+      db.prepare('INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)')
+        .run('codex', '{"additionalArgs":["--sandbox"],"cwd":"/tmp/legacy-cwd"}');
+
+      const openResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-provider-config-codex-open',
+          op: 'workspace.open',
+          args: { path: testDir },
+        },
+        ctx
+      );
+
+      const workspaceId = openResult.data!.id;
+
+      const sessionResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'test-provider-config-codex-create',
+          op: 'session.create',
+          args: {
+            workspaceId,
+            providerId: 'codex',
+          },
+        },
+        ctx
+      );
+
+      expect(sessionResult.ok).toBe(true);
+      expect(spawnCalls.at(-1)?.argv).toContain('--sandbox');
+      expect((spawnCalls.at(-1)?.options as { cwd?: string } | undefined)?.cwd).toBe(testDir);
     });
   });
 
@@ -549,11 +628,23 @@ describe('Session Integration', () => {
       expect(session?.state).toBe('idle');
     });
 
+    it('opens Codex-style sessions directly in idle (no SessionStart hook)', () => {
+      // Providers whose HooksDescriptor declares events.sessionStart=false
+      // (currently: codex) never emit a "CLI finished booting" event. The
+      // session manager must recognise that and optimistically promote the
+      // session from `starting` to `idle` the moment spawn succeeds,
+      // otherwise the UI would be pinned to "starting…" until the user
+      // completes an entire turn round-trip.
+      //
+      // The shared beforeEach above creates a codex session, so by the time
+      // we observe it here the optimistic transition should already be done.
+      expect(sessionMgr.get(sessionId)?.state).toBe('idle');
+    });
+
     it('moves a session to idle when a stop hook marks the turn complete', () => {
-      sessionMgr.onHookEvent(sessionId, {
-        kind: 'SessionStart',
-        resumeId: 'resume-1',
-      });
+      // Re-enter `running` first so Stop actually has something to close.
+      const internal = (sessionMgr as any).sessions.get(sessionId);
+      internal.state = 'running';
 
       sessionMgr.onHookEvent(sessionId, {
         kind: 'Stop',
@@ -605,6 +696,131 @@ describe('Session Integration', () => {
 
       expect(result.ok).toBe(true);
       expect(sessionMgr.get(sessionId)?.state).toBe('running');
+    });
+  });
+
+  describe('Session hydration', () => {
+    it('marks persisted resumable sessions as interrupted when hydrating without a live terminal', async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: 'sess-hydrate-1',
+          workspaceId: 'ws-1',
+          terminalId: 'term-stale',
+          providerId: 'claude',
+          state: 'running',
+          resumeId: 'resume-123',
+          capability: 'full',
+          startedAt: 100,
+          lastActiveAt: 200,
+          transcriptPath: '/tmp/session.jsonl',
+          title: 'resume me',
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+
+      expect(sessionMgr.get('sess-hydrate-1')).toEqual(
+        expect.objectContaining({
+          id: 'sess-hydrate-1',
+          terminalId: 'term-stale',
+          state: 'interrupted',
+          resumeId: 'resume-123',
+          transcriptPath: '/tmp/session.jsonl',
+          title: 'resume me',
+        })
+      );
+      expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-1', {
+        state: 'interrupted',
+      });
+    });
+
+    it('preserves persisted error reason when hydrating a stale session', async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: 'sess-hydrate-error',
+          workspaceId: 'ws-1',
+          terminalId: 'term-stale',
+          providerId: 'claude',
+          state: 'running',
+          resumeId: 'resume-error',
+          capability: 'full',
+          startedAt: 100,
+          lastActiveAt: 200,
+          errorReason: 'Orphaned before restart',
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+
+      expect(sessionMgr.get('sess-hydrate-error')).toEqual(
+        expect.objectContaining({
+          id: 'sess-hydrate-error',
+          state: 'interrupted',
+          errorReason: 'Orphaned before restart',
+        })
+      );
+    });
+
+    it('marks persisted non-resumable sessions as unavailable when hydrating without a live terminal', async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: 'sess-hydrate-2',
+          workspaceId: 'ws-1',
+          terminalId: 'term-dead',
+          providerId: 'codex',
+          state: 'idle',
+          capability: 'full',
+          startedAt: 100,
+          lastActiveAt: 200,
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+
+      expect(sessionMgr.get('sess-hydrate-2')).toEqual(
+        expect.objectContaining({
+          id: 'sess-hydrate-2',
+          terminalId: 'term-dead',
+          state: 'unavailable',
+        })
+      );
+      expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-2', {
+        state: 'unavailable',
+      });
+    });
+
+    it('persists the replacement terminal id when a hydrated interrupted session is resumed', async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: 'sess-hydrate-3',
+          workspaceId: 'ws-1',
+          terminalId: 'term-old',
+          providerId: 'claude',
+          state: 'running',
+          resumeId: 'resume-456',
+          capability: 'full',
+          startedAt: 100,
+          lastActiveAt: 200,
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+      sessionDb.update.mockClear();
+
+      const result = await sessionMgr.resume(
+        'sess-hydrate-3',
+        testDir,
+        providerRegistry.find((provider) => provider.id === 'claude')!
+      );
+
+      expect(result.terminalId).not.toBe('term-old');
+      expect(sessionDb.update).toHaveBeenCalledWith(
+        'sess-hydrate-3',
+        expect.objectContaining({
+          terminalId: result.terminalId,
+          state: 'running',
+        })
+      );
     });
   });
 

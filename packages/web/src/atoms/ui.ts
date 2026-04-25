@@ -27,13 +27,10 @@ export const leftPanelWidthAtom = atomWithStorage('ui.leftPanelWidth', 280);
 export const bottomPanelHeightAtom = atomWithStorage('ui.bottomPanelHeight', 200);
 
 /**
- * Active workspace ID (persisted for workspaceByIdAtomFamily)
- * Persisted: ui.activeWorkspaceId
+ * Active workspace ID intent.
+ * In-memory only; resolved workspace selection is derived elsewhere.
  */
-export const activeWorkspaceIdAtom = atomWithStorage<string | null>(
-  'ui.activeWorkspaceId',
-  null
-);
+export const activeWorkspaceIdAtom = atom<string | null>(null);
 
 /**
  * Pane layout by workspace (agent pane splits)

@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { enableSupervisor, launchClaudeSession } from './supervisor.helpers';
+import { enableSupervisor, launchClaudeSession, waitForSessionReady } from './supervisor.helpers';
 
 test.describe('@phase3 supervisor acceptance', () => {
   test('P3S-01 enables, triggers, pauses, resumes, and disables supervisor from the agent pane', async ({
     page,
   }) => {
     await launchClaudeSession(page);
+    await waitForSessionReady(page);
     const supervisorCard = await enableSupervisor(
       page,
       'Keep the implementation focused on persistence and event-driven scheduling',
@@ -27,7 +28,7 @@ test.describe('@phase3 supervisor acceptance', () => {
     await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
 
     await page.getByRole('button', { name: '禁用 Supervisor' }).click();
-    await expect(page.getByText('禁用会停止评估并清空历史')).toBeVisible();
+    await expect(page.getByText('禁用后会停止评估周期')).toBeVisible();
     await page.locator('.modal-card').getByRole('button', { name: '禁用', exact: true }).click();
     await expect(page.getByRole('button', { name: '启用 Supervisor' })).toBeVisible();
   });

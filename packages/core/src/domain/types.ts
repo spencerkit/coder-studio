@@ -49,7 +49,21 @@ export interface Session {
   completionPercent?: number;
   errorReason?: string;
   transcriptPath?: string;
+  /**
+   * Human-friendly title derived from the user's first submitted instruction
+   * (trimmed/truncated to SESSION_TITLE_MAX_LENGTH). Assigned once on first
+   * submit and never overwritten afterwards. Undefined until the user sends
+   * their first message.
+   */
+  title?: string;
 }
+
+/**
+ * Maximum character length for {@link Session.title}. The first submitted
+ * instruction is trimmed and truncated to this length (with an ellipsis when
+ * clipped) before being persisted.
+ */
+export const SESSION_TITLE_MAX_LENGTH = 10;
 
 export type SessionState =
   | 'draft'
@@ -100,4 +114,28 @@ export interface Settings {
 
 export interface ProviderConfig {
   [key: string]: unknown;
+}
+
+/**
+ * Derive a compact session title from a raw input buffer (the bytes a user
+ * just submitted to the agent terminal). Returns undefined when the buffer
+ * contains nothing meaningful after trimming.
+ *
+ * Rules:
+ *   - Collapse all whitespace (including newlines) into single spaces.
+ *   - Trim leading/trailing whitespace.
+ *   - Truncate to SESSION_TITLE_MAX_LENGTH; if clipped, the final character is
+ *     replaced with an ellipsis ("…") so the total length is still at most
+ *     SESSION_TITLE_MAX_LENGTH.
+ */
+export function deriveSessionTitle(raw: string): string | undefined {
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (!normalized) return undefined;
+
+  if (normalized.length <= SESSION_TITLE_MAX_LENGTH) {
+    return normalized;
+  }
+
+  // Reserve the last slot for the ellipsis so we stay within the budget.
+  return normalized.slice(0, SESSION_TITLE_MAX_LENGTH - 1) + '…';
 }
