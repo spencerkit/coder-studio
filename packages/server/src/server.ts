@@ -157,6 +157,30 @@ export async function createServer(
     }
   }
 
+  // Web assets root (for CLI mode)
+  const webRoot = config.webRoot;
+
+  // Transport: Fastify app
+  const app = await buildFastifyApp({
+    wsHub,
+    db,
+    hooksMgr,
+    workspaceMgr,
+    webRoot,
+    config,
+    runtime,
+    logger: {
+      level: 'info',
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          translateTime: 'HH:MM:ss Z',
+          ignore: 'pid,hostname',
+        },
+      },
+    },
+  });
+
   // Supervisor Manager
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
@@ -170,6 +194,7 @@ export async function createServer(
     providerConfigRepo,
     supervisorRepo,
     cycleRepo,
+    logger: app.log,
   });
   await sessionMgr.hydrate();
   await supervisorMgr.hydrate();
@@ -190,20 +215,6 @@ export async function createServer(
 
   // Update wsHub with command context
   (wsHub as any).deps.commandContext = commandContext;
-
-  // Web assets root (for CLI mode)
-  const webRoot = config.webRoot;
-
-  // Transport: Fastify app
-  const app = await buildFastifyApp({
-    wsHub,
-    db,
-    hooksMgr,
-    commandContext,
-    webRoot,
-    config,
-    runtime,
-  });
 
   // Start server
   await app.listen({

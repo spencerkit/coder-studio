@@ -88,6 +88,16 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
   const latestCycle = cycles[0];
 
+  const latestCycleText = latestCycle
+    ? latestCycle.result ??
+      latestCycle.errorReason ??
+      (latestCycle.status === 'completed'
+        ? '本轮无需注入 guidance'
+        : latestCycle.status === 'evaluating'
+          ? '评估中…'
+          : '等待评估结果')
+    : null;
+
   const runAction = useCallback(
     async (op: string, id: string, failureLabel: string) => {
       setActionError(null);
@@ -222,7 +232,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               {latestCycle.trigger === 'manual' ? 'MANUAL' : 'AUTO'}
             </span>
             <span className="supervisor-history-result">
-              {latestCycle.result ?? latestCycle.errorReason ?? '等待评估结果'}
+              {latestCycleText}
             </span>
           </li>
         </ol>

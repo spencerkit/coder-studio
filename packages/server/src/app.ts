@@ -11,7 +11,7 @@ import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
 import type { Database } from 'better-sqlite3';
 import type { HooksManager } from './hooks/manager.js';
-import type { CommandContext } from './ws/dispatch.js';
+import type { WorkspaceManager } from './workspace/manager.js';
 import type { FastifyRequest } from 'fastify';
 import type { ServerConfig } from './config.js';
 import { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './auth/index.js';
@@ -24,7 +24,7 @@ interface AppDeps {
   db: Database;
   hooksMgr: HooksManager;
   webRoot?: string;
-  commandContext: CommandContext;
+  workspaceMgr: WorkspaceManager;
   config: ServerConfig;
   runtime: RuntimeConfig;
   logger?: any;
@@ -92,7 +92,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // Auth is inherited from the global onRequest cookie guard above, so this
   // only needs its own path-safety and allowlist checks.
   registerFileAssetRoutes(app, {
-    workspaceMgr: deps.commandContext.workspaceMgr,
+    workspaceMgr: deps.workspaceMgr,
   });
 
   // Static file serving (for web UI)

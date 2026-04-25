@@ -68,4 +68,64 @@ describe('SupervisorCard', () => {
     fireEvent.click(screen.getByRole('button', { name: '触发评估' }));
     expect(sendCommand).toHaveBeenCalledWith('supervisor.trigger', { id: 'sup-1' });
   });
+
+  it('shows "本轮无需注入 guidance" for a completed cycle with no result and no errorReason', () => {
+    const sendCommand = vi.fn().mockResolvedValue(undefined);
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as any);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          'sess-1',
+          {
+            id: 'sup-1',
+            sessionId: 'sess-1',
+            workspaceId: 'ws-1',
+            state: 'idle',
+            objective: 'Finish the server refactor',
+            evaluatorProviderId: 'codex',
+            cycles: [],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      ])
+    );
+    store.set(
+      supervisorCyclesAtom,
+      new Map([
+        [
+          'sup-1',
+          [
+            {
+              id: 'cycle-1',
+              supervisorId: 'sup-1',
+              sessionId: 'sess-1',
+              status: 'completed',
+              trigger: 'manual',
+              evidenceSource: 'transcript',
+              objective: 'Finish the server refactor',
+              evaluatorProviderId: 'codex',
+              progress: 65,
+              createdAt: 1,
+              completedAt: 2,
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByText('本轮无需注入 guidance')).toBeInTheDocument();
+    expect(screen.queryByText('65%')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.supervisor-progress-track')
+    ).not.toBeInTheDocument();
+  });
 });
