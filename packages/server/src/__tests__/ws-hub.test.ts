@@ -209,6 +209,48 @@ describe('WsHub', () => {
     });
   });
 
+  it('routes terminal.output broadcasts through the stream path', () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createMockSocket();
+      hub.handleConnection(socket, createMockRequest());
+      subscribeToAllTopics(socket);
+      socket.bufferedAmount = 1024 * 1024;
+      socket.send.mockClear();
+
+      eventBus.emit({
+        type: 'terminal.output',
+        workspaceId: 'workspace-42',
+        terminalId: 'term-123',
+        chunk: Buffer.from('hi'),
+        seq: 1,
+      });
+
+      expect(socket.send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('routes non-terminal-output events through the control path regardless of buffer', () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket, createMockRequest());
+    subscribeToAllTopics(socket);
+    socket.bufferedAmount = 8 * 1024 * 1024;
+    socket.send.mockClear();
+
+    eventBus.emit({
+      type: 'session.state.changed',
+      workspaceId: 'workspace-42',
+      sessionId: 'sess-123',
+      from: 'starting',
+      to: 'running',
+    });
+
+    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(socket.send.mock.calls[0]?.[0]).toMatch(/session\.sess-123\.state/);
+  });
+
   it('should translate terminal.exited events to the terminal exit topic and payload', () => {
     const socket = createMockSocket();
     hub.handleConnection(socket, createMockRequest());

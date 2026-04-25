@@ -18,6 +18,7 @@ import { WsClient, ClientId } from './client.js';
 import { dispatch, type CommandContext } from './dispatch.js';
 import type { ServerConfig } from '../config.js';
 import type { FencingManager } from './fencing.js';
+import { isStreamTopic } from './topic-class.js';
 
 interface WsHubDeps {
   eventBus: EventBus;
@@ -27,8 +28,9 @@ interface WsHubDeps {
 }
 
 /**
- * Broadcaster interface for high-frequency streaming data
- * Used by TerminalManager to broadcast PTY output
+ * Broadcaster interface for fan-out of domain events to subscribed clients.
+ * Used by FsWatcher and SupervisorManager; WsHub is the only implementation.
+ * Internally routes via isStreamTopic so callers don't have to classify.
  */
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
@@ -124,11 +126,17 @@ export class WsHub implements Broadcaster {
   }
 
   /**
-   * Broadcast to all subscribed clients
+   * Broadcast to all subscribed clients.
+   * Routes by isStreamTopic: stream topics go through the per-topic queued
+   * path; everything else goes through the control path (never dropped).
    */
   broadcast(topic: string, payload: unknown): void {
+    const stream = isStreamTopic(topic);
     for (const client of this.clients.values()) {
-      if (client.subscribesTo(topic)) {
+      if (!client.subscribesTo(topic)) continue;
+      if (stream) {
+        client.sendEventStream(topic, payload);
+      } else {
         client.sendEvent(topic, payload);
       }
     }
