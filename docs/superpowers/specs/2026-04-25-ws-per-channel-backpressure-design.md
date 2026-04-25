@@ -44,7 +44,7 @@ if (this.socket.bufferedAmount > 1024 * 1024) {
 - **control**：直接 `socket.send()`，不看 `bufferedAmount`，永不丢
 - **stream**：经 `StreamBuffer`（按 topic 分桶 + 公平轮询 + drop oldest），按需启停的定时器在 `socket.bufferedAmount` 落到 LOW 水位时刷出
 
-`WsHub.handleDomainEvent` 是分类的唯一权威：`terminal.output` 走 stream，其他 7 种 DomainEvent 走 control。其他 hub 入口（`broadcast`、`sendToClient`、`takeover`、`handleResync`、命令结果回送）一律走 control（当前没有 stream 流量经这些路径）。
+`WsHub.broadcast(topic, payload)` 是分类的唯一入口：根据 `isStreamTopic(topic)` 决定每个订阅者走 `sendEventStream` 还是 `sendEvent`。`handleDomainEvent` 已经把所有 DomainEvent 都汇到 `broadcast()`，无需改动；其他外部 `Broadcaster` 调用方（`fs/watcher.ts`、`supervisor/manager.ts`）当前只产生控制类 topic，但若将来传入 stream topic 也会被自动正确路由。`sendToClient`、`takeover`、`handleResync`、命令结果回送等单点直发不经 `broadcast()`，一律走 control（当前没有 stream 流量经这些路径，未来要加再单点改）。
 
 ### 容量与水位
 
@@ -75,7 +75,7 @@ export function isStreamTopic(topic: string): boolean {
 ```ts
 interface Frame {
   data: string;   // 已 JSON.stringify 的 ServerToClient
-  size: number;   // data 字节长度
+  size: number;   // Buffer.byteLength(data, 'utf8')，与 wire 实际字节一致
 }
 
 class StreamBuffer {
@@ -117,7 +117,17 @@ private clearFlushTimer(): void
 
 #### `packages/server/src/ws/hub.ts`（改）
 
-`handleDomainEvent` 的 `terminal.output` 分支改用 `client.sendEventStream(topic, data)`；其他保持 `client.sendEvent`。`broadcast()` 内部按 `isStreamTopic(topic)` 二分发送方式。其余路径不动。
+`broadcast(topic, payload)` 内部循环按 `isStreamTopic(topic)` 二分：
+```ts
+const isStream = isStreamTopic(topic);
+for (const client of this.clients.values()) {
+  if (!client.subscribesTo(topic)) continue;
+  if (isStream) client.sendEventStream(topic, payload);
+  else          client.sendEvent(topic, payload);
+}
+```
+
+`handleDomainEvent` 不动（它已经汇到 `broadcast()`）。`Broadcaster` 接口的过期注释（"Used by TerminalManager to broadcast PTY output"）顺手更正——TerminalManager 实际通过 EventBus 发，注释贴现实即可。
 
 ### 数据流
 
@@ -127,7 +137,8 @@ private clearFlushTimer(): void
 PTY onData
   → terminal/manager 写 RingBuffer，分配 seq
   → eventBus.emit('terminal.output', {chunk, seq, ...})
-  → WsHub.handleDomainEvent
+  → WsHub.handleDomainEvent → this.broadcast(topic, data)
+  → broadcast 内 isStreamTopic(topic) === true
   → for each subscriber client：client.sendEventStream(topic, payload)
   → WsClient.sendStream(topic, msg)
       → JSON.stringify → Frame{data, size}
@@ -215,9 +226,9 @@ socket close → flushTimer 清掉 → streamBuffer.destroy() → handleClose �
 
 #### 扩 `ws-hub.test.ts`
 
-- `terminal.output` DomainEvent 调用 `sendEventStream`
-- 其他 7 种 DomainEvent 调用 `sendEvent`（control）
-- 订阅过滤仍生效：未订阅终端的客户端不入桶
+- `broadcast(workspace.X.terminal.Y.output, ...)` → 订阅者收到的是 `sendEventStream` 调用
+- `broadcast(connection.status, ...)` 及其他 7 种 DomainEvent 对应 topic → `sendEvent` 调用
+- 订阅过滤仍生效：未订阅的客户端两条路径都不入桶/不直发
 
 #### 现有测试
 
