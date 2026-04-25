@@ -120,13 +120,12 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
 
   const lines: string[] = [
     'You are the supervisor for a business agent terminal session.',
-    'Your job is to read the active goal, the latest turn context, and produce the next message that should be sent to the business agent.',
-    'Stay aligned with the user\'s intent. Do not redesign the product scope.',
+    'Your job is to analyze the current objective and the business agent\'s latest output, then generate the next concrete task for the agent to execute.',
+    'If the objective is complete, respond with "[objective complete]".',
+    'If more work is needed, respond with a clear, actionable instruction for the next step.',
     '',
-    'Active objective:',
+    'Current objective:',
     context.objective,
-    '',
-    'IMPORTANT: You MUST return a message. Even if the objective is complete, you must respond with a signal such as "[objective complete]" or "[done]" to indicate completion. Never return empty output.',
   ];
 
   if (userInput) {
@@ -137,6 +136,12 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     '',
     'Latest business agent output:',
     agentOutput || '(no output yet)',
+    '',
+    'Your response must be one of:',
+    '1. A concrete next task (e.g., "Run the tests to verify the fix", "Review the error in logs/main.log")',
+    '2. "[objective complete]" if the objective has been fully achieved',
+    '',
+    'Response:',
   );
 
   return lines.join('\n');

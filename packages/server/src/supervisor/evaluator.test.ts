@@ -183,13 +183,13 @@ describe('SupervisorEvaluator', () => {
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
     expect(prompt).toContain('You are the supervisor for a business agent terminal session.');
-    expect(prompt).toContain('produce the next message');
-    expect(prompt).toContain('Active objective:');
+    expect(prompt).toContain('generate the next concrete task');
+    expect(prompt).toContain('Current objective:');
     expect(prompt).toContain('Ship the fix');
     expect(prompt).toContain('Latest business agent output:');
     expect(prompt).toContain('latest output');
-    expect(prompt).toContain('You MUST return a message');
     expect(prompt).toContain('[objective complete]');
+    expect(prompt).toContain('Your response must be one of');
   });
 
   describe('message extraction', () => {
