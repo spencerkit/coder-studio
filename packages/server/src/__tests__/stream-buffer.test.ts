@@ -90,3 +90,66 @@ describe('StreamBuffer LRU eviction', () => {
     expect(sent).toContain('d-data');
   });
 });
+
+describe('StreamBuffer drain', () => {
+  it('round-robins frames across topics in fair order', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('a', frame('a1'));
+    buf.enqueue('a', frame('a2'));
+    buf.enqueue('b', frame('b1'));
+    buf.enqueue('b', frame('b2'));
+
+    const sent: string[] = [];
+    buf.drain(1024, (d) => { sent.push(d); return true; });
+    expect(sent).toEqual(['a1', 'b1', 'a2', 'b2']);
+  });
+
+  it('stops when send returns false and leaves remaining frames in queue', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('t', frame('one'));
+    buf.enqueue('t', frame('two'));
+
+    const sent: string[] = [];
+    let allow = 1;
+    buf.drain(1024, (d) => {
+      if (allow-- <= 0) return false;
+      sent.push(d);
+      return true;
+    });
+    expect(sent).toEqual(['one']);
+    expect(buf.isEmpty()).toBe(false);
+
+    const more: string[] = [];
+    buf.drain(1024, (d) => { more.push(d); return true; });
+    expect(more).toEqual(['two']);
+    expect(buf.isEmpty()).toBe(true);
+  });
+
+  it('stops when cumulative sent bytes reach maxBytes', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('t', frame('aaa'));   // 3
+    buf.enqueue('t', frame('bbb'));   // 3
+    buf.enqueue('t', frame('ccc'));   // 3
+
+    const sent: string[] = [];
+    buf.drain(5, (d) => { sent.push(d); return true; });
+    expect(sent).toEqual(['aaa', 'bbb']);
+    expect(buf.isEmpty()).toBe(false);
+  });
+
+  it('rotates start position across drain calls so no topic is starved', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('a', frame('a1'));
+    buf.enqueue('b', frame('b1'));
+
+    const seen: string[][] = [[], []];
+    buf.drain(1024, (d) => { seen[0]!.push(d); return true; });
+
+    buf.enqueue('a', frame('a2'));
+    buf.enqueue('b', frame('b2'));
+    buf.drain(1024, (d) => { seen[1]!.push(d); return true; });
+
+    expect(seen[0]).toEqual(['a1', 'b1']);
+    expect(seen[1]).toEqual(['b2', 'a2']);
+  });
+});

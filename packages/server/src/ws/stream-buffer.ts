@@ -57,19 +57,30 @@ export class StreamBuffer {
   drain(maxBytes: number, send: (data: string) => boolean): void {
     if (this.destroyed) return;
     let sent = 0;
+    let sentAny = false;
+    const startCursor = this.cursor;
+
     while (sent < maxBytes && this.buckets.size > 0) {
       const topics = [...this.buckets.keys()];
       let drainedThisRound = 0;
+
       for (let i = 0; i < topics.length && sent < maxBytes; i++) {
-        const idx = (this.cursor + i) % topics.length;
+        const idx = (startCursor + i) % topics.length;
         const topic = topics[idx]!;
         const bucket = this.buckets.get(topic);
         if (!bucket || bucket.length === 0) continue;
+
         const next = bucket[0]!;
-        if (!send(next.data)) return;
+        if (!send(next.data)) {
+          if (sentAny) this.cursor = startCursor + 1;
+          return;
+        }
+
         bucket.shift();
         sent += next.size;
+        sentAny = true;
         drainedThisRound++;
+
         const remaining = (this.bucketBytes.get(topic) ?? 0) - next.size;
         if (bucket.length === 0) {
           this.buckets.delete(topic);
@@ -78,9 +89,11 @@ export class StreamBuffer {
           this.bucketBytes.set(topic, remaining);
         }
       }
+
       if (drainedThisRound === 0) break;
-      this.cursor++;
     }
+
+    if (sentAny) this.cursor = startCursor + 1;
   }
 
   isEmpty(): boolean {
