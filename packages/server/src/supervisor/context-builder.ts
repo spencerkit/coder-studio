@@ -12,6 +12,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   fatal: () => {},
   info: () => {},
   level: 'silent',
+  silent: () => {},
   trace: () => {},
   warn: () => {},
 };
@@ -47,6 +48,26 @@ export interface SupervisorEvaluationContext {
   gitDiffStat?: string;
   lastTurnId?: string;
   evidenceSource: 'transcript' | 'terminal_fallback';
+  /** Latest user input from the current turn (for supervisor context) */
+  latestUserInput?: string;
+}
+
+/**
+ * Extract the latest user message from a Claude transcript.
+ * Returns the text of the most recent user (human) message.
+ */
+function extractLatestUserInput(transcriptExcerpt: string): string | undefined {
+  // Transcript format is: "user: ...\n\nassistant: ..." per entry
+  const entries = transcriptExcerpt.split(/\n\n+/);
+  // Iterate in reverse to find the most recent user message
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]!;
+    const match = entry.match(/^user:\s*/i);
+    if (match) {
+      return entry.slice(match[0]!.length).trim() || undefined;
+    }
+  }
+  return undefined;
 }
 
 export class SupervisorContextBuilder {
@@ -127,6 +148,10 @@ export class SupervisorContextBuilder {
         return '';
       });
 
+    const latestUserInput = transcript?.excerpt
+      ? extractLatestUserInput(transcript.excerpt)
+      : undefined;
+
     return {
       objective: supervisor.objective,
       sessionId: session.id,
@@ -141,6 +166,7 @@ export class SupervisorContextBuilder {
       gitDiffStat,
       lastTurnId: transcript?.lastTurnId,
       evidenceSource: transcript?.excerpt ? 'transcript' : 'terminal_fallback',
+      latestUserInput,
     };
   }
 }

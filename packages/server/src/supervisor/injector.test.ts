@@ -34,31 +34,34 @@ const supervisor = {
 };
 
 describe('SupervisorInjector', () => {
-  it('writes guidance through sessionMgr.sendInput using system activity', async () => {
+  it('writes message through sessionMgr.sendInput using system activity', async () => {
     const sendInputSpy = vi.fn();
     const injector = makeInjector(sendInputSpy);
 
     await injector.inject(
       supervisor,
       {
-        summary: 'Tables and repos are finished.',
-        guidance: 'Wire the repos into SupervisorManager next.',
+        message: 'Wire the repos into SupervisorManager next.',
       },
       []
     );
 
     expect(sendInputSpy).toHaveBeenCalledWith('sess-1', expect.any(Buffer), 'system');
+    const buffer = sendInputSpy.mock.calls[0]![1] as Buffer;
+    const payload = buffer.toString('utf8');
+    expect(payload).toContain('[Supervisor] Wire the repos into SupervisorManager next.');
+    expect(payload).not.toContain('Objective:');
+    expect(payload).not.toContain('Assessment:');
   });
 
-  it('flattens multi-line guidance to a single TUI-safe line with bracketed paste + CR', async () => {
+  it('passes multi-line messages with bracketed paste + CR', async () => {
     const sendInputSpy = vi.fn();
     const injector = makeInjector(sendInputSpy);
 
     await injector.inject(
       supervisor,
       {
-        summary: 'Line one.\nLine two.',
-        guidance: 'Do:\n  1. step one\n  2. step two',
+        message: 'Do:\n  1. step one\n  2. step two',
       },
       []
     );
@@ -67,9 +70,6 @@ describe('SupervisorInjector', () => {
     const payload = buffer.toString('utf8');
     expect(payload.startsWith('\x1b[200~')).toBe(true);
     expect(payload.endsWith('\x1b[201~\r')).toBe(true);
-    expect(payload.includes('\n')).toBe(false);
-    expect(payload).toContain('Do: 1. step one 2. step two');
-    expect(payload).toContain('Line one. Line two.');
   });
 
   it('refuses to write into a session that has not finished handshake (state=starting)', async () => {
@@ -79,7 +79,7 @@ describe('SupervisorInjector', () => {
     await expect(
       injector.inject(
         supervisor,
-        { summary: 'ok', guidance: 'go' },
+        { message: 'go' },
         []
       )
     ).rejects.toMatchObject({

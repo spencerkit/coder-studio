@@ -64,16 +64,13 @@ describe('Supervisor integration', () => {
     };
     (ctx.supervisorMgr as any).evaluator = {
       evaluate: async () => ({
-        progress: 30,
-        summary: 'manual trigger works',
-        shouldInject: false,
-        confidence: 0.7,
+        message: '',
       }),
     };
   });
 
   afterEach(async () => {
-    await server.stop();
+    await server?.stop();
   });
 
   it('creates a cycle on manual trigger and persists it into supervisor.get', async () => {
@@ -112,14 +109,22 @@ describe('Supervisor integration', () => {
 
     expect(fetched.ok).toBe(true);
     expect(fetched.data?.supervisor?.cycles).toHaveLength(1);
+    expect(fetched.data?.supervisor?.cycles[0]?.evaluatorProviderId).toBe('claude');
+    expect(fetched.data?.supervisor?.cycles[0]?.evidenceSource).toBe('transcript');
     expect(fetched.data?.supervisor?.cycles[0]).toEqual(
       expect.objectContaining({
         trigger: 'manual',
         status: 'completed',
-        progress: 30,
-        result: 'manual trigger works',
+        result: undefined,
+        errorReason: undefined,
       })
     );
+  });
+
+  it('wires supervisor manager to the shared Fastify logger', () => {
+    const ctx = server.__test__!.commandContext;
+
+    expect((ctx.supervisorMgr as any).logger).toBe(server.app.log);
   });
 });
 

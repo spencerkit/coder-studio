@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { z } from 'zod';
+import type { FastifyBaseLogger } from 'fastify';
 import {
   DEFAULT_SUPERVISOR_CONFIG,
   type ProviderDefinition,
@@ -10,33 +10,29 @@ import type { ProviderConfigRepo } from '../storage/repositories/provider-config
 import type { SupervisorEvaluationContext } from './context-builder.js';
 import { mergeProviderLaunchConfig } from '../provider-config.js';
 
-const EvalResultSchema = z
-  .object({
-    progress: z.number(),
-    summary: z.string().min(1),
-    shouldInject: z.boolean(),
-    guidance: z.string().optional(),
-    confidence: z.number().min(0).max(1).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.shouldInject && !value.guidance) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'guidance is required when shouldInject=true',
-      });
-    }
-  });
+const NOOP_LOGGER: FastifyBaseLogger = {
+  child: () => NOOP_LOGGER,
+  debug: () => {},
+  error: () => {},
+  fatal: () => {},
+  info: () => {},
+  level: 'silent',
+  silent: () => {},
+  trace: () => {},
+  warn: () => {},
+};
 
-export interface EvaluationResult {
-  progress: number;
-  summary: string;
-  guidance?: string;
-  shouldInject: boolean;
-  confidence?: number;
+/**
+ * Result of a supervisor evaluation cycle.
+ * The message is the next instruction to send to the business agent.
+ */
+export interface SupervisorResult {
+  message: string;
 }
 
 export class SupervisorEvaluator {
   private readonly config: SupervisorConfig;
+  private readonly logger: FastifyBaseLogger;
 
   constructor(
     private readonly deps: {
@@ -44,15 +40,17 @@ export class SupervisorEvaluator {
       providerConfigRepo: ProviderConfigRepo;
       timeoutMs?: number;
       config?: SupervisorConfig;
+      logger?: FastifyBaseLogger;
     }
   ) {
     this.config = deps.config ?? DEFAULT_SUPERVISOR_CONFIG;
+    this.logger = deps.logger ?? NOOP_LOGGER;
   }
 
   async evaluate(
     supervisor: Supervisor,
     context: SupervisorEvaluationContext
-  ): Promise<EvaluationResult> {
+  ): Promise<SupervisorResult> {
     const provider = this.deps.providerRegistry.find(
       (item) => item.id === supervisor.evaluatorProviderId
     );
@@ -81,45 +79,67 @@ export class SupervisorEvaluator {
     }
 
     const stdout = await runCommand(command, this.deps.timeoutMs ?? 30_000);
-    const parsed = EvalResultSchema.parse(extractEvalPayload(stdout));
 
-    return {
-      progress: Math.max(0, Math.min(100, Math.round(parsed.progress))),
-      summary: parsed.summary,
-      shouldInject: parsed.shouldInject,
-      guidance: parsed.guidance?.slice(0, this.config.guidanceMaxChars),
-      confidence: parsed.confidence,
-    };
+    let message: string;
+    try {
+      message = extractSupervisorMessage(stdout, provider.id);
+    } catch (error) {
+      const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+      debugCodexUnparseableOutput(
+        this.logger,
+        supervisor,
+        context,
+        command,
+        prompt,
+        stdout,
+        scanCodexStream(lines)
+      );
+      throw error;
+    }
+
+    return { message: message.slice(0, this.config.guidanceMaxChars) };
   }
 }
 
 function buildPrompt(context: SupervisorEvaluationContext): string {
-  return [
-    'You are the supervisor evaluator. Your ONLY output MUST be a single raw JSON object matching the schema below. Do NOT wrap it in markdown code fences. Do NOT add explanations, reasoning, or any text before or after the JSON. The very first character of your reply must be `{` and the very last character must be `}`.',
-    'Your job: estimate how close the coding agent is to the stated objective and (optionally) write a short directive the agent should follow next.',
-    'Rules:',
-    '- progress: integer 0-100. Your best-effort completion percentage toward the objective.',
-    '- summary: one short sentence describing what you see and where the agent stands.',
-    '- shouldInject: set to true whenever you have a clear next step for the agent. Lean toward true if the agent looks stuck, off-track, or is waiting for input. Leaning toward false is fine only when progress is >=95 or the agent is actively working on the correct next thing.',
-    '- guidance: required when shouldInject=true. A single imperative sentence addressed to the agent (e.g. "Run the failing test and fix the TypeError in parser.ts"). Max ~400 chars, no markdown, no line breaks.',
-    '- confidence: your confidence in the assessment, 0.0-1.0.',
-    `Objective: ${context.objective}`,
-    `Session provider: ${context.sessionProviderId}`,
-    `Evaluator provider: ${context.evaluatorProviderId}`,
-    `Session state: ${context.sessionState}`,
-    `Evidence source: ${context.evidenceSource}`,
-    context.lastTurnId ? `Last turn ID: ${context.lastTurnId}` : '',
-    context.transcriptExcerpt
-      ? `Transcript:\n${context.transcriptExcerpt}`
-      : `Terminal:\n${context.terminalExcerpt ?? ''}`,
-    context.gitStatusSummary ? `Git status:\n${context.gitStatusSummary}` : '',
-    context.gitDiffStat ? `Git diff stat:\n${context.gitDiffStat}` : '',
-    'JSON schema (exact keys): {"progress":<int 0-100>,"summary":"<string>","shouldInject":<boolean>,"guidance":"<string, required iff shouldInject=true>","confidence":<number 0-1>}',
-    'Example valid reply: {"progress":42,"summary":"Agent is editing parser.ts but tests still fail.","shouldInject":true,"guidance":"Run pnpm vitest parser and fix the TypeError on line 88.","confidence":0.7}',
-    'Reply now with the JSON object only.',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const agentOutput = context.transcriptExcerpt ?? context.terminalExcerpt ?? '';
+
+  // Extract latest user input from transcript (format: "user: ...\n\nassistant: ...")
+  let userInput = '';
+  if (context.transcriptExcerpt) {
+    const entries = context.transcriptExcerpt.split(/\n\n+/);
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      const match = entry.match(/^user:\s*/i);
+      if (match) {
+        userInput = entry.slice(match[0]!.length).trim();
+        break;
+      }
+    }
+  }
+
+  const lines: string[] = [
+    'You are the supervisor for a business agent terminal session.',
+    'Your job is to read the active goal, the latest turn context, and produce the next message that should be sent to the business agent.',
+    'Stay aligned with the user\'s intent. Do not redesign the product scope.',
+    '',
+    'Active objective:',
+    context.objective,
+  ];
+
+  if (userInput) {
+    lines.push('', 'Latest user input:', userInput);
+  }
+
+  lines.push(
+    '',
+    'Latest business agent output:',
+    agentOutput || '(no output yet)',
+    '',
+    'Return only the next message that should be sent back to the business agent.'
+  );
+
+  return lines.join('\n');
 }
 
 async function runCommand(
@@ -166,118 +186,22 @@ async function runCommand(
   });
 }
 
-const REQUIRED_KEYS = ['progress', 'summary', 'shouldInject'] as const;
-/**
- * Keys on common CLI response envelopes whose value holds the actual model
- * text (either as a string or as a nested object we want to dig into).
- *
- * - `text`: codex `{type:'item.completed', item:{type:'agent_message', text:'...'}}`
- * - `result`: claude `-p --output-format json` → `{type:'result', result:'...'}`
- * - `message`/`content`: some wrappers stash the reply here
- * - `payload`/`data`: generic envelopes
- */
-const ENVELOPE_KEYS = ['text', 'result', 'message', 'content', 'payload', 'data'] as const;
-
-function looksLikeEvalPayload(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  return REQUIRED_KEYS.every((key) => key in (value as Record<string, unknown>));
-}
-
 /**
  * Strip a ```json … ``` (or bare ```…```) markdown fence if present.
- * Models wrapped in fences is the #1 reason a valid payload is unparseable.
  */
 function stripCodeFence(text: string): string {
-  const fenced = text.match(/```(?:json|JSON)?\s*\n([\s\S]*?)\n```/);
+  const fenced = text.match(/```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```/);
   return fenced ? fenced[1]!.trim() : text;
 }
 
-/**
- * Try very hard to turn `candidate` into an eval payload. We accept:
- *   1. The value is already the payload object.
- *   2. The value is a string that parses as the payload JSON
- *      (including when wrapped in a markdown fence).
- *   3. The value is an object carrying the payload under one of
- *      {@link ENVELOPE_KEYS} — recurse into it.
- *
- * Returns `undefined` if no shape matches so callers can keep searching.
- */
-function coerceToPayload(candidate: unknown, depth = 0): unknown {
-  if (depth > 4) {
-    return undefined;
-  }
-
-  if (looksLikeEvalPayload(candidate)) {
-    return candidate;
-  }
-
-  if (typeof candidate === 'string') {
-    const source = stripCodeFence(candidate.trim());
-    if (!source) {
-      return undefined;
-    }
-    // Try a full parse first.
-    try {
-      const parsed = JSON.parse(source);
-      const resolved = coerceToPayload(parsed, depth + 1);
-      if (resolved !== undefined) {
-        return resolved;
-      }
-    } catch {
-      // Strings that contain prose + JSON: grab the last balanced {...}.
-      const sliced = sliceLastJsonObject(source);
-      if (sliced) {
-        try {
-          const parsed = JSON.parse(sliced);
-          const resolved = coerceToPayload(parsed, depth + 1);
-          if (resolved !== undefined) {
-            return resolved;
-          }
-        } catch {
-          // fallthrough
-        }
-      }
-    }
-    return undefined;
-  }
-
-  if (candidate && typeof candidate === 'object') {
-    for (const key of ENVELOPE_KEYS) {
-      const inner = (candidate as Record<string, unknown>)[key];
-      if (inner === undefined) {
-        continue;
-      }
-      const resolved = coerceToPayload(inner, depth + 1);
-      if (resolved !== undefined) {
-        return resolved;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function sliceLastJsonObject(text: string): string | null {
-  const end = text.lastIndexOf('}');
-  const start = text.lastIndexOf('{', end);
-  if (start < 0 || end <= start) {
-    return null;
-  }
-  return text.slice(start, end + 1);
-}
+type CodexCompletedCandidate = {
+  sourceType: 'agent_message' | 'assistant_message' | 'command_execution' | 'reasoning';
+  content: string;
+};
 
 interface CodexStreamScan {
-  /** Text of the final `agent_message` item, if one was emitted. */
-  agentMessage: string | null;
-  /**
-   * Text of the last `reasoning` item. Normally the model's internal
-   * thinking, but on certain upstream Codex proxies/gateways the final
-   * answer leaks into reasoning instead of `agent_message`, so we keep
-   * it as a last-ditch payload source.
-   */
-  reasoningText: string | null;
+  /** Completed items that may contain the final evaluator payload. */
+  completedItemCandidates: CodexCompletedCandidate[];
   /** True if any recognizable codex event was seen (thread/turn/item). */
   isCodexStream: boolean;
   /** True if the stream included a `turn.completed` event. */
@@ -289,13 +213,12 @@ interface CodexStreamScan {
 }
 
 /**
- * Walk a codex `exec --json` JSONL stream and pull out the text of the
- * last `agent_message` item (where the model's final answer lives).
+ * Walk a codex `exec --json` JSONL stream and collect completed-item content
+ * that may contain the model's final answer.
  */
 function scanCodexStream(lines: string[]): CodexStreamScan {
   const scan: CodexStreamScan = {
-    agentMessage: null,
-    reasoningText: null,
+    completedItemCandidates: [],
     isCodexStream: false,
     turnCompleted: false,
     turnFailure: null,
@@ -358,16 +281,24 @@ function scanCodexStream(lines: string[]): CodexStreamScan {
         continue;
       }
       const itemRecord = item as Record<string, unknown>;
-      // Accept both `type` (current) and `item_type` (older codex builds).
       const itemType = itemRecord.type ?? itemRecord.item_type;
-      const text = itemRecord.text;
-      if (typeof text !== 'string') {
+      if (
+        (itemType === 'agent_message' ||
+          itemType === 'assistant_message' ||
+          itemType === 'reasoning') &&
+        typeof itemRecord.text === 'string'
+      ) {
+        scan.completedItemCandidates.push({
+          sourceType: itemType,
+          content: itemRecord.text,
+        });
         continue;
       }
-      if (itemType === 'agent_message' || itemType === 'assistant_message') {
-        scan.agentMessage = text;
-      } else if (itemType === 'reasoning') {
-        scan.reasoningText = text;
+      if (itemType === 'command_execution' && typeof itemRecord.aggregated_output === 'string') {
+        scan.completedItemCandidates.push({
+          sourceType: 'command_execution',
+          content: itemRecord.aggregated_output,
+        });
       }
     }
   }
@@ -375,119 +306,126 @@ function scanCodexStream(lines: string[]): CodexStreamScan {
   return scan;
 }
 
-function extractEvalPayload(output: string): unknown {
+function buildStdoutPreview(output: string, maxChars = 4000): string {
+  return output.length <= maxChars ? output : `${output.slice(0, maxChars)}\n…[truncated ${output.length - maxChars} chars]`;
+}
+
+function debugCodexUnparseableOutput(
+  logger: FastifyBaseLogger,
+  supervisor: Supervisor,
+  context: SupervisorEvaluationContext,
+  command: { argv: string[]; cwd?: string; env?: Record<string, string> },
+  prompt: string,
+  output: string,
+  scan: CodexStreamScan
+): void {
+  logger.warn(
+    {
+      supervisorId: supervisor.id,
+      sessionId: supervisor.sessionId,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      sessionProviderId: context.sessionProviderId,
+      outputTokens: scan.outputTokens,
+      turnCompleted: scan.turnCompleted,
+      turnFailure: scan.turnFailure,
+      completedItemCandidateCount: scan.completedItemCandidates.length,
+      completedItemCandidates: scan.completedItemCandidates.map((candidate, index) => ({
+        index,
+        sourceType: candidate.sourceType,
+        contentPreview: buildStdoutPreview(candidate.content, 500),
+      })),
+      commandArgv: command.argv,
+      commandCwd: command.cwd,
+      prompt,
+      rawStdout: buildStdoutPreview(output),
+    },
+    'Supervisor evaluator debug: codex output was not parseable'
+  );
+}
+
+/**
+ * Extract the supervisor's message from the provider's output.
+ * The supervisor outputs natural language text (not JSON) that should be
+ * sent directly to the business agent.
+ *
+ * For Codex: scans JSONL stream for agent_message/reasoning items.
+ * For Claude: parses the result envelope or plain text.
+ */
+function extractSupervisorMessage(output: string, providerId: string): string {
   const trimmed = output.trim();
   if (!trimmed) {
-    throw new Error('Supervisor evaluator returned empty output');
-  }
-
-  // Fast path: whole stdout is the JSON payload (or a trivially wrapped one).
-  try {
-    const parsed = JSON.parse(trimmed);
-    const resolved = coerceToPayload(parsed);
-    if (resolved !== undefined) {
-      return resolved;
-    }
-  } catch {
-    // fall through to line-by-line and fence-aware strategies
-  }
-
-  // Fenced JSON: ```json {...} ``` anywhere in the output.
-  const unfenced = stripCodeFence(trimmed);
-  if (unfenced !== trimmed) {
-    try {
-      const parsed = JSON.parse(unfenced);
-      const resolved = coerceToPayload(parsed);
-      if (resolved !== undefined) {
-        return resolved;
-      }
-    } catch {
-      // keep trying
-    }
+    throw new Error('Supervisor returned empty output');
   }
 
   const lines = trimmed.split(/\r?\n/).filter(Boolean);
 
-  // Codex `exec --json` path: pull the final agent_message and parse it.
-  const codexScan = scanCodexStream(lines);
-  if (codexScan.agentMessage) {
-    const resolved = coerceToPayload(codexScan.agentMessage);
-    if (resolved !== undefined) {
-      return resolved;
-    }
-  }
-  // Fallback: some proxy/gateway providers drop `agent_message` entirely
-  // and the model's answer leaks into the reasoning item text. Try there
-  // before giving up — a valid JSON payload is a valid JSON payload.
-  if (codexScan.reasoningText) {
-    const resolved = coerceToPayload(codexScan.reasoningText);
-    if (resolved !== undefined) {
-      return resolved;
-    }
-  }
+  if (providerId === 'codex') {
+    const scan = scanCodexStream(lines);
 
-  // NDJSON / event-stream path: find the last line that parses to our shape
-  // (or carries one inside an envelope like Claude's `{result:"..."}`).
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const line = lines[i]!;
-    try {
-      const parsed = JSON.parse(line);
-      const resolved = coerceToPayload(parsed);
-      if (resolved !== undefined) {
-        return resolved;
+    if (scan.turnFailure) {
+      throw new Error(`Supervisor (codex) failed: ${scan.turnFailure}`);
+    }
+
+    // Prefer agent_message, then reasoning, then assistant_message.
+    // Iterate in reverse so the last occurrence wins.
+    for (let i = scan.completedItemCandidates.length - 1; i >= 0; i--) {
+      const candidate = scan.completedItemCandidates[i]!;
+      if (
+        candidate.sourceType === 'agent_message' ||
+        candidate.sourceType === 'reasoning' ||
+        candidate.sourceType === 'assistant_message'
+      ) {
+        const stripped = stripCodeFence(candidate.content).trim();
+        if (stripped) {
+          return stripped;
+        }
       }
-    } catch {
-      // ignore non-JSON lines
     }
-  }
 
-  // Last resort: extract the last balanced {...} substring that matches the shape.
-  const sliced = sliceLastJsonObject(trimmed);
-  if (sliced) {
-    try {
-      const parsed = JSON.parse(sliced);
-      const resolved = coerceToPayload(parsed);
-      if (resolved !== undefined) {
-        return resolved;
+    // Last resort: try to extract plain text from any line
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
+      // Skip obvious JSON/event lines
+      if (line.startsWith('{') || line.startsWith('[')) {
+        continue;
       }
-    } catch {
-      // fallthrough
+      const text = line.trim();
+      if (text && !scan.isCodexStream) {
+        // Not a codex stream — use raw text
+        return stripCodeFence(text);
+      }
     }
-  }
 
-  // Codex-specific diagnostics: if we recognized the stream but still
-  // couldn't pull a usable payload, say *why* instead of the generic error.
-  if (codexScan.isCodexStream) {
-    if (codexScan.turnFailure) {
-      throw new Error(`Supervisor evaluator (codex) failed: ${codexScan.turnFailure}`);
-    }
-    if (codexScan.agentMessage) {
-      throw new Error(
-        'Supervisor evaluator (codex) returned an agent_message, ' +
-          'but its content is not valid JSON matching the evaluator schema. ' +
-          'The model likely wrapped the JSON in prose or markdown — retry, or switch the evaluator provider.'
-      );
-    }
-    if (codexScan.reasoningText) {
-      throw new Error(
-        'Supervisor evaluator (codex) emitted only reasoning (no agent_message), ' +
-          'and the reasoning text does not contain a valid JSON payload. ' +
-          'This usually indicates the Codex model/provider is dropping the final assistant message. ' +
-          'Try a lower reasoning effort (e.g. `-c model_reasoning_effort="low"` in additionalArgs) ' +
-          'or switch the evaluator provider to Claude.'
-      );
-    }
-    const tokenHint =
-      codexScan.outputTokens !== null ? ` (${codexScan.outputTokens} output tokens used)` : '';
+    // Codex stream but no agent_message found
+    const tokenHint = scan.outputTokens !== null ? ` (${scan.outputTokens} output tokens)` : '';
     throw new Error(
-      'Supervisor evaluator (codex) produced no agent_message' +
-        tokenHint +
-        '. The Codex CLI got a turn.completed with no final reply from the model — ' +
-        'this typically means the upstream Codex provider is not returning the assistant ' +
-        "`message` event. Switch the evaluator provider to Claude, or configure codex to use " +
-        'a provider that streams agent messages.'
+      'Supervisor (codex) completed without returning a message' + tokenHint
     );
   }
 
-  throw new Error('Supervisor evaluator did not return a recognizable JSON payload');
+  // Claude path: try result envelope, then plain text
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    try {
+      const parsed = JSON.parse(line);
+      if (typeof parsed === 'object' && parsed !== null && 'result' in parsed) {
+        const result = (parsed as Record<string, unknown>).result;
+        if (typeof result === 'string') {
+          return stripCodeFence(result).trim();
+        }
+      }
+    } catch {
+      // not JSON, continue
+    }
+  }
+
+  // Plain text: use the last non-empty line
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const text = lines[i]!.trim();
+    if (text) {
+      return stripCodeFence(text);
+    }
+  }
+
+  throw new Error('Supervisor did not return a recognizable message');
 }

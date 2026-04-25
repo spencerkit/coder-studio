@@ -129,4 +129,95 @@ describe('SupervisorContextBuilder', () => {
     expect(context.evidenceSource).toBe('terminal_fallback');
     expect(context.terminalExcerpt).toContain('PASS');
   });
+
+  it('extracts latestUserInput from transcript excerpt', async () => {
+    const builder = new SupervisorContextBuilder({
+      workspaceMgr: {
+        get: vi.fn(() => ({ id: 'ws-1', path: '/workspace' })),
+      } as any,
+      sessionMgr: {
+        get: vi.fn(() => ({
+          id: 'sess-1',
+          workspaceId: 'ws-1',
+          providerId: 'claude',
+          terminalId: 'term-1',
+          state: 'running',
+          capability: 'full',
+          startedAt: 1,
+          lastActiveAt: 1,
+          transcriptPath: '/tmp/session.jsonl',
+        })),
+        getOutputTail: vi.fn(() => Buffer.from('terminal fallback')),
+      } as any,
+      terminalMgr: {} as any,
+      providerRegistry: [
+        {
+          id: 'claude',
+          readTranscriptExcerpt: vi.fn(async () => ({
+            excerpt: 'user: run the tests\n\nassistant: tests passed',
+            lastTurnId: 'turn-2',
+          })),
+        },
+      ] as any,
+      git: {
+        getStatusSummary: vi.fn(async () => ''),
+        getDiffStatSummary: vi.fn(async () => ''),
+      },
+    });
+
+    const context = await builder.build({
+      id: 'sup-1',
+      sessionId: 'sess-1',
+      workspaceId: 'ws-1',
+      state: 'idle',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'claude',
+      cycles: [],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(context.latestUserInput).toBe('run the tests');
+  });
+
+  it('does not set latestUserInput when transcript is unavailable', async () => {
+    const builder = new SupervisorContextBuilder({
+      workspaceMgr: {
+        get: vi.fn(() => ({ id: 'ws-1', path: '/workspace' })),
+      } as any,
+      sessionMgr: {
+        get: vi.fn(() => ({
+          id: 'sess-1',
+          workspaceId: 'ws-1',
+          providerId: 'claude',
+          terminalId: 'term-1',
+          state: 'running',
+          capability: 'full',
+          startedAt: 1,
+          lastActiveAt: 1,
+        })),
+        getOutputTail: vi.fn(() => Buffer.from('npm test\nPASS')),
+      } as any,
+      terminalMgr: {} as any,
+      providerRegistry: [{ id: 'claude', readTranscriptExcerpt: vi.fn(async () => null) }] as any,
+      git: {
+        getStatusSummary: vi.fn(async () => ''),
+        getDiffStatSummary: vi.fn(async () => ''),
+      },
+    });
+
+    const context = await builder.build({
+      id: 'sup-1',
+      sessionId: 'sess-1',
+      workspaceId: 'ws-1',
+      state: 'idle',
+      objective: 'Persist supervisors',
+      evaluatorProviderId: 'claude',
+      cycles: [],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(context.latestUserInput).toBeUndefined();
+  });
 });

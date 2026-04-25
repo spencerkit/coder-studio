@@ -65,7 +65,7 @@ function createManagerDeps() {
           argv: [
             'node',
             '-e',
-            `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 50, summary: 'on track', shouldInject: false, confidence: 0.8 }))})`,
+            `process.stdout.write(${JSON.stringify('Run the focused parser test.')})`,
           ],
           cwd: process.cwd(),
           env: {},
@@ -119,7 +119,13 @@ function createManagerDeps() {
           if (index === -1) {
             continue;
           }
-          const updated = { ...cycles[index], ...patch };
+          const normalizedPatch = {
+            ...patch,
+            progress: patch.progress ?? undefined,
+            result: patch.result ?? undefined,
+            injectedGuidance: patch.injectedGuidance ?? undefined,
+          };
+          const updated = { ...cycles[index], ...normalizedPatch };
           const next = [...cycles];
           next[index] = updated;
           cyclesBySupervisor.set(supervisorId, next);
@@ -145,6 +151,12 @@ describe('SupervisorManager cycle triggers', () => {
     await manager.hydrate();
   });
 
+  it('passes the provided logger to context builder and evaluator', () => {
+    expect((manager as any).logger).toBe(deps.logger);
+    expect((manager as any).contextBuilder.logger).toBe(deps.logger);
+    expect((manager as any).evaluator.logger).toBe(deps.logger);
+  });
+
   it('returns an in-flight cycle immediately on manual triggerEvaluation', async () => {
     const supervisor = await manager.create({
       sessionId: 'sess-manual',
@@ -168,8 +180,8 @@ describe('SupervisorManager cycle triggers', () => {
     });
 
     const finished = manager.get(supervisor.id)?.cycles.find((c) => c.id === cycle.id);
-    expect(finished?.status).toBe('completed');
-    expect(finished?.result).toBe('on track');
+    expect(finished?.status).toBe('injected');
+    expect(finished?.result).toBe('[Supervisor] Run the focused parser test.');
   });
 
   it('queues scheduler evaluations with turn_completed trigger', async () => {
@@ -185,7 +197,32 @@ describe('SupervisorManager cycle triggers', () => {
     const updated = manager.get(supervisor.id);
     expect(updated?.cycles).toHaveLength(1);
     expect(updated?.cycles[0]?.trigger).toBe('turn_completed');
-    expect(updated?.cycles[0]?.status).toBe('completed');
+    expect(updated?.cycles[0]?.status).toBe('injected');
+  });
+
+  it('persists duplicate-suppressed guidance as a cycle result without marking it injected', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-dedupe',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    vi.spyOn((manager as any).evaluator, 'evaluate').mockResolvedValueOnce({
+      message: 'Run the focused parser test.',
+    });
+    vi.spyOn((manager as any).injector, 'inject').mockResolvedValueOnce({
+      injected: false,
+      text: '[Supervisor] Run the focused parser test.',
+    });
+
+    const finished = await (manager as any).runEvaluation(supervisor.id);
+
+    expect(finished?.status).toBe('completed');
+    expect(finished?.result).toBe(
+      'Skipped duplicate: [Supervisor] Run the focused parser test.'
+    );
+    expect(finished?.injectedGuidance).toBeUndefined();
   });
 
   it('rejects manual triggerEvaluation when the session is still starting', async () => {

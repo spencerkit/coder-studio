@@ -52,7 +52,7 @@ export class SupervisorInjector {
 
   async inject(
     supervisor: Supervisor,
-    input: { summary: string; guidance: string },
+    input: { message: string },
     recentCycles: SupervisorCycle[]
   ): Promise<{ injected: boolean; text: string }> {
     const session = this.deps.sessionMgr.get(supervisor.sessionId);
@@ -69,16 +69,8 @@ export class SupervisorInjector {
       };
     }
 
-    // Single-line prompt. Claude Code / Codex TUIs treat the Enter key as
-    // CR (\r) — multi-line writes would either leave the guidance sitting
-    // half-typed in the input box or submit only the first line.
-    const guidance = input.guidance.slice(0, this.config.guidanceMaxChars);
-    const text = [
-      '[Supervisor]',
-      `Objective: ${this.flatten(supervisor.objective)}`,
-      `Assessment: ${this.flatten(input.summary)}`,
-      `Next step: ${this.flatten(guidance)}`,
-    ].join(' | ');
+    const message = input.message.slice(0, this.config.guidanceMaxChars);
+    const text = `[Supervisor] ${message}`;
 
     const hash = createHash('sha1').update(text).digest('hex');
     const duplicate = recentCycles
@@ -101,13 +93,5 @@ export class SupervisorInjector {
 
     this.deps.sessionMgr.sendInput(session.id, Buffer.from(payload, 'utf8'), 'system');
     return { injected: true, text };
-  }
-
-  /**
-   * Flatten whitespace so the guidance fits a single TUI prompt line.
-   * Preserves words but collapses newlines/tabs/multiple spaces.
-   */
-  private flatten(value: string): string {
-    return value.replace(/\s+/g, ' ').trim();
   }
 }

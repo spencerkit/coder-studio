@@ -30,7 +30,7 @@ describe('SupervisorManager', () => {
             argv: [
               'node',
               '-e',
-              `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 50, summary: 'on track', shouldInject: false, confidence: 0.8 }))})`,
+              `process.stdout.write(${JSON.stringify('continue with the work')})`,
             ],
             cwd: process.cwd(),
             env: {},

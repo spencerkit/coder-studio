@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import {
   DEFAULT_SUPERVISOR_CONFIG,
   Topics,
@@ -26,8 +27,18 @@ import {
   describeNonInjectableState,
 } from './injector.js';
 import { SupervisorScheduler } from './scheduler.js';
-import type { SupervisorLogger } from './logger.js';
-import { noopLogger } from './logger.js';
+
+const NOOP_LOGGER: FastifyBaseLogger = {
+  child: () => NOOP_LOGGER,
+  debug: () => {},
+  error: () => {},
+  fatal: () => {},
+  info: () => {},
+  level: 'silent',
+  silent: () => {},
+  trace: () => {},
+  warn: () => {},
+};
 
 type SessionLifecycleEvent = Extract<DomainEvent, { type: 'session.lifecycle' }>;
 
@@ -50,7 +61,7 @@ export interface SupervisorManagerDeps {
   providerConfigRepo: ProviderConfigRepo;
   supervisorRepo: SupervisorRepo;
   cycleRepo: SupervisorCycleRepo;
-  logger?: SupervisorLogger;
+  logger?: FastifyBaseLogger;
   config?: SupervisorConfig;
 }
 
@@ -88,17 +99,12 @@ function messageOf(error: unknown, fallback: string): string {
 }
 
 function logFailure(
-  logger: SupervisorLogger,
+  logger: FastifyBaseLogger,
   error: unknown,
   context: Record<string, unknown>,
   message: string
 ): void {
-  const payload = { ...context, err: error };
-  if (logger.error) {
-    logger.error(payload, message);
-    return;
-  }
-  logger.warn(payload, message);
+  logger.error({ ...context, err: error }, message);
 }
 
 export class SupervisorManager {
@@ -110,12 +116,12 @@ export class SupervisorManager {
   private readonly contextBuilder: SupervisorContextBuilder;
   private readonly evaluator: SupervisorEvaluator;
   private readonly injector: SupervisorInjector;
-  private readonly logger: SupervisorLogger;
+  private readonly logger: FastifyBaseLogger;
   private readonly config: SupervisorConfig;
   private lifecycleUnsubscribe: (() => void) | null = null;
 
   constructor(private readonly deps: SupervisorManagerDeps) {
-    this.logger = deps.logger ?? noopLogger;
+    this.logger = deps.logger ?? NOOP_LOGGER;
     this.config = deps.config ?? DEFAULT_SUPERVISOR_CONFIG;
     this.contextBuilder = new SupervisorContextBuilder({
       workspaceMgr: deps.workspaceMgr,
@@ -128,6 +134,7 @@ export class SupervisorManager {
       providerRegistry: deps.providerRegistry,
       providerConfigRepo: deps.providerConfigRepo,
       config: this.config,
+      logger: this.logger,
     });
     this.injector = new SupervisorInjector({
       sessionMgr: deps.sessionMgr,
@@ -514,9 +521,10 @@ export class SupervisorManager {
 
       let injected = false;
       let injectedText: string | undefined;
+      let cycleResult: string | undefined;
       let injectionError: string | undefined;
 
-      if (evaluation.shouldInject && evaluation.guidance) {
+      if (evaluation.message.trim()) {
         const injectingSupervisor = this.attachCycles(
           this.deps.supervisorRepo.update(supervisorId, {
             state: 'injecting',
@@ -541,20 +549,22 @@ export class SupervisorManager {
           const injection = await this.injector.inject(
             injectingSupervisor,
             {
-              summary: evaluation.summary,
-              guidance: evaluation.guidance,
+              message: evaluation.message,
             },
             recentCycles
           );
           injected = injection.injected;
           injectedText = injection.injected ? injection.text : undefined;
+          cycleResult = injection.injected
+            ? injection.text
+            : `Skipped duplicate: ${injection.text}`;
         } catch (error) {
           // Injection failed (e.g. session gone away). Keep the evaluation
           // result but mark the cycle as failed instead of 'injected'.
-          injectionError = messageOf(error, 'Guidance injection failed');
+          injectionError = messageOf(error, 'Injection failed');
           this.logger.warn(
             { err: error, supervisorId, cycleId: activeCycle.id },
-            'Supervisor guidance injection failed'
+            'Supervisor injection failed'
           );
         }
       }
@@ -567,8 +577,7 @@ export class SupervisorManager {
 
       const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
         status: finalStatus,
-        progress: evaluation.progress,
-        result: evaluation.summary,
+        result: cycleResult ?? null,
         injectedGuidance: injectedText,
         errorReason: injectionError ?? null,
         completedAt: Date.now(),

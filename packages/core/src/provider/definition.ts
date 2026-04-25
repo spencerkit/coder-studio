@@ -7,6 +7,7 @@ export interface SupervisorEvalCommandRequest {
   workspacePath: string;
   apiKey?: string;
   model?: string;
+  outputFile?: string;
 }
 
 export interface TranscriptExcerptRequest {
@@ -48,6 +49,7 @@ export interface ProviderDefinition {
     req: SupervisorEvalCommandRequest
   ): {
     argv: string[];
+    outputFile?: string;
     cwd?: string;
     env?: Record<string, string>;
   } | null;

@@ -13,7 +13,7 @@ function nodeEchoCommand(stdout: string) {
   };
 }
 
-function makeEvaluator(stdout: string, providerId = 'codex') {
+function makeEvaluator(stdout: string, providerId = 'codex', config?: { guidanceMaxChars?: number }) {
   return new SupervisorEvaluator({
     providerRegistry: [
       {
@@ -25,6 +25,7 @@ function makeEvaluator(stdout: string, providerId = 'codex') {
       get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
     } as any,
     timeoutMs: 5000,
+    config: config ? { guidanceMaxChars: config.guidanceMaxChars ?? 2000, guidanceDedupeWindow: 2 } : undefined,
   });
 }
 
@@ -67,11 +68,7 @@ describe('SupervisorEvaluator', () => {
         {
           id: 'codex',
           buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: [
-              'node',
-              '-e',
-              `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 60, summary: 'codex evaluator', shouldInject: false, confidence: 0.9 }))})`,
-            ],
+            argv: ['node', '-e', 'process.stdout.write("next step: run tests")'],
             cwd: process.cwd(),
             env: {},
           })),
@@ -108,8 +105,7 @@ describe('SupervisorEvaluator', () => {
       }
     );
 
-    expect(result.summary).toBe('codex evaluator');
-    expect(result.progress).toBe(60);
+    expect(result.message).toBe('next step: run tests');
   });
 
   it('falls back to provider.defaultConfig when evaluator config is missing', async () => {
@@ -119,11 +115,7 @@ describe('SupervisorEvaluator', () => {
           id: 'claude',
           defaultConfig: { model: 'claude-sonnet-4-6', additionalArgs: [], envVars: {} },
           buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: [
-              'node',
-              '-e',
-              `process.stdout.write(${JSON.stringify(JSON.stringify({ progress: 25, summary: 'default config used', shouldInject: false, confidence: 0.4 }))})`,
-            ],
+            argv: ['node', '-e', 'process.stdout.write("proceed with review")'],
             cwd: process.cwd(),
             env: {},
           })),
@@ -158,242 +150,170 @@ describe('SupervisorEvaluator', () => {
       }
     );
 
-    expect(result.summary).toBe('default config used');
-    expect(result.progress).toBe(25);
+    expect(result.message).toBe('proceed with review');
   });
 
-  describe('payload extraction', () => {
-    it('parses a codex exec --json JSONL stream via item.completed agent_message', async () => {
-      const payload = {
-        progress: 72,
-        summary: 'Agent is editing parser.ts',
-        shouldInject: true,
-        guidance: 'Run pnpm vitest parser',
-        confidence: 0.8,
-      };
+  it('builds a natural language prompt matching the develop supervisor pattern', async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() } as any;
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [
+        {
+          id: 'codex',
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: ['node', '-e', 'process.stdout.write("")'],
+            cwd: process.cwd(),
+            env: {},
+          })),
+        },
+      ] as any,
+      providerConfigRepo: {
+        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
+      } as any,
+      timeoutMs: 5000,
+      logger,
+    });
+
+    await expect(
+      evaluator.evaluate(makeSupervisor('codex'), {
+        ...makeContext(),
+        objective: 'Ship the fix',
+        terminalExcerpt: 'latest output',
+      })
+    ).rejects.toThrow();
+
+    const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
+    expect(prompt).toContain('You are the supervisor for a business agent terminal session.');
+    expect(prompt).toContain('produce the next message');
+    expect(prompt).toContain('Active objective:');
+    expect(prompt).toContain('Ship the fix');
+    expect(prompt).toContain('Latest business agent output:');
+    expect(prompt).toContain('latest output');
+    expect(prompt).toContain('Return only the next message');
+  });
+
+  describe('message extraction', () => {
+    it('parses agent_message text from codex JSONL stream', async () => {
       const jsonl = [
         JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
         JSON.stringify({ type: 'turn.started' }),
         JSON.stringify({
           type: 'item.completed',
-          item: { id: 'i0', type: 'reasoning', text: '**thinking**' },
+          item: { id: 'i1', type: 'agent_message', text: 'Run pnpm vitest to verify' },
         }),
-        JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i1', type: 'agent_message', text: JSON.stringify(payload) },
-        }),
-        JSON.stringify({
-          type: 'turn.completed',
-          usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
-        }),
+        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 20 } }),
       ].join('\n');
 
       const evaluator = makeEvaluator(jsonl, 'codex');
       const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
 
-      expect(result.progress).toBe(72);
-      expect(result.summary).toBe('Agent is editing parser.ts');
-      expect(result.shouldInject).toBe(true);
-      expect(result.guidance).toBe('Run pnpm vitest parser');
+      expect(result.message).toBe('Run pnpm vitest to verify');
     });
 
-    it('unwraps a markdown code fence inside the codex agent_message', async () => {
-      const payload = {
-        progress: 30,
-        summary: 'Fenced reply',
-        shouldInject: false,
-        confidence: 0.5,
-      };
-      const fenced = '```json\n' + JSON.stringify(payload) + '\n```';
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.started' }) +
-        '\n' +
+    it('falls back to reasoning text when agent_message is missing', async () => {
+      const jsonl = [
+        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+        JSON.stringify({ type: 'turn.started' }),
         JSON.stringify({
           type: 'item.completed',
-          item: { id: 'i1', type: 'agent_message', text: fenced },
-        }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: {} });
+          item: { id: 'i0', type: 'reasoning', text: 'Continue with the tests' },
+        }),
+        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 50 } }),
+      ].join('\n');
 
       const evaluator = makeEvaluator(jsonl, 'codex');
       const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
 
-      expect(result.summary).toBe('Fenced reply');
-      expect(result.progress).toBe(30);
+      expect(result.message).toBe('Continue with the tests');
     });
 
-    it('parses claude --output-format json envelope (result field holds the JSON)', async () => {
-      const payload = {
-        progress: 48,
-        summary: 'Claude envelope',
-        shouldInject: false,
-        confidence: 0.6,
-      };
+    it('accepts assistant_message (older codex builds)', async () => {
+      const jsonl = [
+        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'i0', item_type: 'assistant_message', text: 'All good' },
+        }),
+        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 40 } }),
+      ].join('\n');
+
+      const evaluator = makeEvaluator(jsonl, 'codex');
+      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+
+      expect(result.message).toBe('All good');
+    });
+
+    it('strips markdown code fence from agent_message text', async () => {
+      const fenced = '```json\nRun the tests\n```';
+      const jsonl = [
+        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: fenced } }),
+        JSON.stringify({ type: 'turn.completed', usage: {} }),
+      ].join('\n');
+
+      const evaluator = makeEvaluator(jsonl, 'codex');
+      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+
+      expect(result.message).toBe('Run the tests');
+    });
+
+    it('parses claude --output-format json envelope (result field)', async () => {
       const claudeEnvelope = JSON.stringify({
         type: 'result',
         subtype: 'success',
         is_error: false,
         duration_ms: 42,
-        result: JSON.stringify(payload),
+        result: 'Proceed to the next step',
         session_id: 'uuid',
       });
 
       const evaluator = makeEvaluator(claudeEnvelope, 'claude');
       const result = await evaluator.evaluate(makeSupervisor('claude'), makeContext());
 
-      expect(result.summary).toBe('Claude envelope');
-      expect(result.progress).toBe(48);
-    });
-
-    it('unwraps fenced JSON returned at the top level', async () => {
-      const payload = {
-        progress: 10,
-        summary: 'fenced top-level',
-        shouldInject: false,
-        confidence: 0.2,
-      };
-      const fenced = 'Here you go:\n```json\n' + JSON.stringify(payload) + '\n```\nthanks!';
-
-      const evaluator = makeEvaluator(fenced);
-      const result = await evaluator.evaluate(makeSupervisor(), makeContext());
-
-      expect(result.summary).toBe('fenced top-level');
-    });
-
-    it('raises an actionable codex-specific error when the stream has no agent_message', async () => {
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.started' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 370 } });
-
-      const evaluator = makeEvaluator(jsonl, 'codex');
-
-      const err = await evaluator
-        .evaluate(makeSupervisor('codex'), makeContext())
-        .catch((e) => e);
-
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toMatch(/no agent_message/);
-      // Output-token count surfaced so users can see tokens were wasted on reasoning.
-      expect((err as Error).message).toContain('370 output tokens');
-      // Actionable hint so the user knows what to do.
-      expect((err as Error).message).toMatch(/claude/i);
-    });
-
-    it('falls back to reasoning text when the proxy drops agent_message', async () => {
-      const payload = {
-        progress: 33,
-        summary: 'reasoning carried the payload',
-        shouldInject: false,
-        confidence: 0.3,
-      };
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.started' }) +
-        '\n' +
-        JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i0', type: 'reasoning', text: JSON.stringify(payload) },
-        }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 50 } });
-
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
-
-      expect(result.progress).toBe(33);
-      expect(result.summary).toBe('reasoning carried the payload');
-    });
-
-    it('reports a distinct error when reasoning is present but not JSON', async () => {
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.started' }) +
-        '\n' +
-        JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i0', type: 'reasoning', text: '**Thinking about the problem...**' },
-        }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 40 } });
-
-      const evaluator = makeEvaluator(jsonl, 'codex');
-
-      await expect(
-        evaluator.evaluate(makeSupervisor('codex'), makeContext())
-      ).rejects.toThrow(/only reasoning.*not contain a valid JSON payload/i);
-    });
-
-    it('accepts assistant_message (older codex builds use item_type too)', async () => {
-      const payload = {
-        progress: 21,
-        summary: 'older codex',
-        shouldInject: false,
-        confidence: 0.5,
-      };
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i0', item_type: 'assistant_message', text: JSON.stringify(payload) },
-        }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 40 } });
-
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
-
-      expect(result.progress).toBe(21);
-      expect(result.summary).toBe('older codex');
+      expect(result.message).toBe('Proceed to the next step');
     });
 
     it('surfaces codex turn.failed error details', async () => {
-      const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({
-          type: 'turn.failed',
-          error: { message: 'context length exceeded' },
-        });
+      const jsonl = JSON.stringify({
+        type: 'turn.failed',
+        error: { message: 'context length exceeded' },
+      });
 
       const evaluator = makeEvaluator(jsonl, 'codex');
 
       await expect(
         evaluator.evaluate(makeSupervisor('codex'), makeContext())
-      ).rejects.toThrow(/context length exceeded/);
+      ).rejects.toThrow('context length exceeded');
     });
 
-    it('falls back to the generic error for unrecognized stdout', async () => {
-      const evaluator = makeEvaluator('just some human banner text with no JSON anywhere');
+    it('raises when codex stream has no agent_message or reasoning', async () => {
+      const jsonl =
+        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
+        '\n' +
+        JSON.stringify({ type: 'turn.started' }) +
+        '\n' +
+        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 191 } });
+
+      const evaluator = makeEvaluator(jsonl, 'codex');
 
       await expect(
-        evaluator.evaluate(makeSupervisor(), makeContext())
-      ).rejects.toThrow(/did not return a recognizable JSON payload/);
+        evaluator.evaluate(makeSupervisor('codex'), makeContext())
+      ).rejects.toThrow(/completed without returning a message/i);
     });
 
-    it('extracts the last balanced {...} when it is inline with prose on one line', async () => {
-      const payload = {
-        progress: 90,
-        summary: 'found it',
-        shouldInject: false,
-        confidence: 0.9,
-      };
-      // No newlines between prose and JSON so the NDJSON scan can't find it —
-      // this forces the final sliceLastJsonObject fallback path.
-      const prose = 'Final answer below: ' + JSON.stringify(payload) + ' (that is all)';
+    it('truncates message to guidanceMaxChars', async () => {
+      const longMessage = 'A'.repeat(500);
+      const jsonl = [
+        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: longMessage } }),
+        JSON.stringify({ type: 'turn.completed', usage: {} }),
+      ].join('\n');
 
-      const evaluator = makeEvaluator(prose);
+      const evaluator = makeEvaluator(jsonl, 'codex', { guidanceMaxChars: 100 });
       const result = await evaluator.evaluate(makeSupervisor(), makeContext());
 
-      expect(result.progress).toBe(90);
-      expect(result.summary).toBe('found it');
+      expect(result.message).toHaveLength(100);
     });
   });
 });
