@@ -64,29 +64,28 @@ export class WsClient {
   }
 
   /**
-   * Send a message to the client
-   * Returns false if send fails (backpressure or closed)
+   * Control-class send: bypasses application-level backpressure.
+   * Stream-class senders go through sendStream() instead.
    */
-  send(msg: ServerToClient): boolean {
+  sendControl(msg: ServerToClient): boolean {
     if (this.socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-
     try {
-      // Check buffer backpressure
-      if (this.socket.bufferedAmount > 1024 * 1024) {
-        // 1 MB threshold
-        console.warn(`Client ${this.id} has high backpressure, dropping message`);
-        return false;
-      }
-
-      const data = JSON.stringify(msg);
-      this.socket.send(data);
+      this.socket.send(JSON.stringify(msg));
       return true;
     } catch (error) {
       console.error(`Failed to send message to client ${this.id}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Backwards-compatible alias for sendControl.
+   * Kept so existing call sites (hub.send, dispatch results, sendToClient) compile unchanged.
+   */
+  send(msg: ServerToClient): boolean {
+    return this.sendControl(msg);
   }
 
   /**

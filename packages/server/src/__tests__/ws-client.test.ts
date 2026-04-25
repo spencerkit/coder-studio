@@ -51,13 +51,34 @@ describe('WsClient', () => {
     expect(mockSocket.send).not.toHaveBeenCalled();
   });
 
-  it('should handle backpressure', () => {
-    mockSocket.bufferedAmount = 2 * 1024 * 1024; // 2 MB > threshold
+  it('sendControl never drops on bufferedAmount (control class is unconditional)', () => {
+    mockSocket.bufferedAmount = 8 * 1024 * 1024; // way above the old 1MiB threshold
 
-    const result = client.send({ kind: 'event', topic: 'test', seq: 1, timestamp: 0, data: {} });
+    const result = client.sendControl({
+      kind: 'event',
+      topic: 'test',
+      seq: 1,
+      timestamp: 0,
+      data: {},
+    });
 
-    expect(result).toBe(false);
-    expect(mockSocket.send).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+    expect(mockSocket.send).toHaveBeenCalled();
+  });
+
+  it('send() is an alias for sendControl()', () => {
+    mockSocket.bufferedAmount = 8 * 1024 * 1024;
+
+    const result = client.send({
+      kind: 'event',
+      topic: 'test',
+      seq: 1,
+      timestamp: 0,
+      data: {},
+    });
+
+    expect(result).toBe(true);
+    expect(mockSocket.send).toHaveBeenCalled();
   });
 
   it('should subscribe to topics', () => {
