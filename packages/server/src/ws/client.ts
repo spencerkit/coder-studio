@@ -9,6 +9,11 @@
 
 import type { ServerToClient, ClientToServer, Event } from '@coder-studio/core';
 import type WebSocket from 'ws';
+import { StreamBuffer, type Frame } from './stream-buffer.js';
+
+const HIGH_WATER = 512 * 1024;
+const LOW_WATER = 128 * 1024;
+const FLUSH_INTERVAL_MS = 30;
 
 export type ClientId = string;
 export type MessageHandler = (msg: ClientToServer) => void;
@@ -17,6 +22,8 @@ export type CloseHandler = () => void;
 export class WsClient {
   readonly id: ClientId;
   private subscriptions = new Set<string>();
+  private readonly streamBuffer = new StreamBuffer();
+  private flushTimer: NodeJS.Timeout | null = null;
   private messageHandler: MessageHandler | null = null;
   private closeHandler: CloseHandler | null = null;
   private isAlive = true;
@@ -41,6 +48,8 @@ export class WsClient {
 
     this.socket.on('close', () => {
       this.isAlive = false;
+      this.clearFlushTimer();
+      this.streamBuffer.destroy();
       this.closeHandler?.();
     });
 
@@ -86,6 +95,88 @@ export class WsClient {
    */
   send(msg: ServerToClient): boolean {
     return this.sendControl(msg);
+  }
+
+  /**
+   * Stream-class send: queued per-topic, drop-oldest on overflow.
+   * Caller-side ordering is preserved within a topic; across topics the
+   * flusher uses fair rotation. Frontend recovers via seq-gap + replay.
+   */
+  sendStream(topic: string, msg: ServerToClient): void {
+    if (this.socket.readyState !== WebSocket.OPEN) return;
+
+    const data = JSON.stringify(msg);
+    const frame: Frame = {
+      data,
+      size: Buffer.byteLength(data, 'utf8'),
+    };
+
+    const buffered = this.socket.bufferedAmount ?? 0;
+    if (buffered < HIGH_WATER && this.streamBuffer.isEmpty()) {
+      try {
+        this.socket.send(data);
+      } catch (error) {
+        console.error(`Failed to send stream frame to client ${this.id}:`, error);
+      }
+      return;
+    }
+
+    this.streamBuffer.enqueue(topic, frame);
+    this.flushStream();
+  }
+
+  /**
+   * Sugar for stream-class events (mirrors sendEvent for control class).
+   */
+  sendEventStream(topic: string, data: unknown, seq: number = 0): void {
+    const event: Event = {
+      kind: 'event',
+      topic,
+      seq,
+      timestamp: Date.now(),
+      data,
+    };
+    this.sendStream(topic, event);
+  }
+
+  private flushStream(): void {
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      this.clearFlushTimer();
+      this.streamBuffer.destroy();
+      return;
+    }
+
+    const buffered = this.socket.bufferedAmount ?? 0;
+    if (buffered < LOW_WATER) {
+      const headroom = HIGH_WATER - buffered;
+      this.streamBuffer.drain(headroom, (data) => {
+        try {
+          this.socket.send(data);
+          return true;
+        } catch (error) {
+          console.error(`Stream send failed for client ${this.id}:`, error);
+          return false;
+        }
+      });
+    }
+
+    if (this.streamBuffer.isEmpty()) {
+      this.clearFlushTimer();
+    } else {
+      this.ensureFlushTimer();
+    }
+  }
+
+  private ensureFlushTimer(): void {
+    if (this.flushTimer) return;
+    this.flushTimer = setInterval(() => this.flushStream(), FLUSH_INTERVAL_MS);
+  }
+
+  private clearFlushTimer(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 
   /**

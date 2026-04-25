@@ -124,4 +124,96 @@ describe('WsClient', () => {
 
     expect(mockSocket.close).toHaveBeenCalledWith(1000, 'normal');
   });
+
+  describe('stream path', () => {
+    const HIGH = 512 * 1024;
+    const LOW  = 128 * 1024;
+    const sample = { kind: 'event', topic: 't', seq: 0, timestamp: 0, data: {} } as const;
+
+    it('sendStream below HIGH water sends directly', () => {
+      mockSocket.bufferedAmount = 0;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+      expect(mockSocket.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('sendStream at or above HIGH water defers to the buffer and starts the flush timer', () => {
+      vi.useFakeTimers();
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+      expect(mockSocket.send).not.toHaveBeenCalled();
+
+      // Drop below LOW and tick the flush timer
+      mockSocket.bufferedAmount = LOW - 1;
+      vi.advanceTimersByTime(40);
+      expect(mockSocket.send).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it('clears the flush timer once the buffer is drained', () => {
+      vi.useFakeTimers();
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+
+      mockSocket.bufferedAmount = 0;
+      vi.advanceTimersByTime(40);
+      expect(mockSocket.send).toHaveBeenCalledTimes(1);
+
+      // Another tick after queue is empty: must not produce more sends
+      mockSocket.send.mockClear();
+      vi.advanceTimersByTime(200);
+      expect(mockSocket.send).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('isolates topics: a noisy topic does not block another topic from sending', () => {
+      vi.useFakeTimers();
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream('workspace.x.terminal.A.output', { ...sample, data: { id: 'A' } });
+      client.sendStream('workspace.x.terminal.B.output', { ...sample, data: { id: 'B' } });
+
+      mockSocket.bufferedAmount = 0;
+      vi.advanceTimersByTime(40);
+
+      const sentTopics = mockSocket.send.mock.calls.map(
+        ([raw]: [string]) => JSON.parse(raw).data.id
+      );
+      expect(sentTopics).toEqual(['A', 'B']);
+      vi.useRealTimers();
+    });
+
+    it('control sends remain unaffected when the stream buffer is busy', () => {
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+      mockSocket.send.mockClear();
+
+      const ok = client.sendControl({
+        kind: 'event',
+        topic: 'workspace.x.session.s1.state',
+        seq: 0,
+        timestamp: 0,
+        data: { state: 'running' },
+      });
+
+      expect(ok).toBe(true);
+      expect(mockSocket.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('close clears the flush timer and destroys the buffer', () => {
+      vi.useFakeTimers();
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+
+      // Simulate ws emitting 'close'
+      const closeHandler = mockSocket.on.mock.calls.find(
+        (call: any[]) => call[0] === 'close'
+      )?.[1];
+      mockSocket.readyState = WebSocket.CLOSED;
+      closeHandler?.();
+
+      mockSocket.send.mockClear();
+      vi.advanceTimersByTime(200);
+      expect(mockSocket.send).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+  });
 });
