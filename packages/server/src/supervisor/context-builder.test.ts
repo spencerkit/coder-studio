@@ -1,5 +1,39 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SupervisorContextBuilder } from './context-builder.js';
+import { SupervisorContextBuilder, stripAnsi } from './context-builder.js';
+
+describe('stripAnsi', () => {
+  it('removes bracketed paste markers', () => {
+    expect(stripAnsi('\x1b[?2004htext\x1b[200~')).toBe('text');
+  });
+
+  it('removes cursor position reports', () => {
+    expect(stripAnsi('\x1b[6n\x1b[?u')).toBe('');
+  });
+
+  it('removes CSI sequences including colors', () => {
+    expect(stripAnsi('\x1b[31mmessage\x1b[0m')).toBe('message');
+  });
+
+  it('removes screen clearing sequences', () => {
+    expect(stripAnsi('\x1b[2Jclear\x1b[H')).toBe('clear');
+  });
+
+  it('removes terminal mode sequences with > prefix', () => {
+    expect(stripAnsi('\x1b[>7utext')).toBe('text');
+  });
+
+  it('strips real terminal excerpt with mixed sequences', () => {
+    const raw =
+      '\x1b[?2004h\x1b[>7u\x1b[?1004h\x1b[6n' +
+      'npm test\nPASS\n' +
+      '\x1b[?u';
+    expect(stripAnsi(raw)).toBe('npm test\nPASS');
+  });
+
+  it('preserves plain text', () => {
+    expect(stripAnsi('hello world\nbuild passes')).toBe('hello world\nbuild passes');
+  });
+});
 
 describe('SupervisorContextBuilder', () => {
   it('prefers transcript excerpts over terminal fallback', async () => {

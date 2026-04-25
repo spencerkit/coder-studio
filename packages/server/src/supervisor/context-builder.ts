@@ -1,16 +1,37 @@
 import type { ProviderDefinition, SessionState, Supervisor } from '@coder-studio/core';
+import type { FastifyBaseLogger } from 'fastify';
 import type { SessionManager } from '../session/manager.js';
 import type { TerminalManager } from '../terminal/manager.js';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import { getGitDiffStatSummary, getGitStatusSummary } from '../git/cli.js';
-import type { SupervisorLogger } from './logger.js';
-import { noopLogger } from './logger.js';
+
+const NOOP_LOGGER: FastifyBaseLogger = {
+  child: () => NOOP_LOGGER,
+  debug: () => {},
+  error: () => {},
+  fatal: () => {},
+  info: () => {},
+  level: 'silent',
+  trace: () => {},
+  warn: () => {},
+};
 
 const TRANSCRIPT_MAX_CHARS = 12_000;
 const TRANSCRIPT_MAX_TURNS = 12;
 const TERMINAL_MAX_LINES = 200;
 const TERMINAL_MAX_CHARS = 12_000;
 const GIT_SUMMARY_MAX_CHARS = 4_000;
+
+export function stripAnsi(text: string): string {
+  return text
+    // CSI 序列: \x1b[ 开头，参数含 0-9;?>，结尾为 final-char
+    .replace(/\x1b\[[0-9;<>?]*[a-zA-Z>=~]/g, '')
+    // OSC 序列: \x1b]...BEL 或 \x1b]...ST(\x1b\\)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    // 孤立的 ESC
+    .replace(/\x1b/g, '')
+    .trim();
+}
 
 export interface SupervisorEvaluationContext {
   objective: string;
@@ -29,7 +50,7 @@ export interface SupervisorEvaluationContext {
 }
 
 export class SupervisorContextBuilder {
-  private readonly logger: SupervisorLogger;
+  private readonly logger: FastifyBaseLogger;
 
   constructor(
     private readonly deps: {
@@ -37,14 +58,14 @@ export class SupervisorContextBuilder {
       sessionMgr: SessionManager;
       terminalMgr: TerminalManager;
       providerRegistry: ProviderDefinition[];
-      logger?: SupervisorLogger;
+      logger?: FastifyBaseLogger;
       git?: {
         getStatusSummary?: typeof getGitStatusSummary;
         getDiffStatSummary?: typeof getGitDiffStatSummary;
       };
     }
   ) {
-    this.logger = deps.logger ?? noopLogger;
+    this.logger = deps.logger ?? NOOP_LOGGER;
   }
 
   async build(supervisor: Supervisor): Promise<SupervisorEvaluationContext> {
@@ -78,7 +99,7 @@ export class SupervisorContextBuilder {
     }
 
     const terminalSnapshot = this.deps.sessionMgr.getOutputTail(session.id, TERMINAL_MAX_CHARS).toString('utf8');
-    const terminalExcerpt = terminalSnapshot
+    const terminalExcerpt = stripAnsi(terminalSnapshot)
       .split('\n')
       .slice(-TERMINAL_MAX_LINES)
       .join('\n')
