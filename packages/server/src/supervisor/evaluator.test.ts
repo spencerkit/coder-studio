@@ -188,7 +188,8 @@ describe('SupervisorEvaluator', () => {
     expect(prompt).toContain('Ship the fix');
     expect(prompt).toContain('Latest business agent output:');
     expect(prompt).toContain('latest output');
-    expect(prompt).toContain('Return only the next message');
+    expect(prompt).toContain('You MUST return a message');
+    expect(prompt).toContain('[objective complete]');
   });
 
   describe('message extraction', () => {

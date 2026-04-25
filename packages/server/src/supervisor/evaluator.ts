@@ -125,6 +125,8 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     '',
     'Active objective:',
     context.objective,
+    '',
+    'IMPORTANT: You MUST return a message. Even if the objective is complete, you must respond with a signal such as "[objective complete]" or "[done]" to indicate completion. Never return empty output.',
   ];
 
   if (userInput) {
@@ -135,8 +137,6 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     '',
     'Latest business agent output:',
     agentOutput || '(no output yet)',
-    '',
-    'Return only the next message that should be sent back to the business agent.'
   );
 
   return lines.join('\n');
