@@ -56,3 +56,37 @@ describe('StreamBuffer enqueue', () => {
     expect(sent).toContain('yyyyyyyy');
   });
 });
+
+describe('StreamBuffer LRU eviction', () => {
+  it('evicts least-recently-written topic when adding past topicLruCap', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 3 });
+    buf.enqueue('a', frame('a-data'));
+    buf.enqueue('b', frame('b-data'));
+    buf.enqueue('c', frame('c-data'));
+    buf.enqueue('d', frame('d-data'));   // should evict 'a'
+
+    const sent: string[] = [];
+    buf.drain(1024, (d) => { sent.push(d); return true; });
+    expect(sent).not.toContain('a-data');
+    expect(sent).toContain('b-data');
+    expect(sent).toContain('c-data');
+    expect(sent).toContain('d-data');
+  });
+
+  it('writing to existing topic refreshes its LRU position', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 3 });
+    buf.enqueue('a', frame('a-old'));
+    buf.enqueue('b', frame('b-data'));
+    buf.enqueue('c', frame('c-data'));
+    buf.enqueue('a', frame('a-new'));   // refresh 'a'
+    buf.enqueue('d', frame('d-data'));   // should evict 'b' (oldest), not 'a'
+
+    const sent: string[] = [];
+    buf.drain(1024, (d) => { sent.push(d); return true; });
+    expect(sent).not.toContain('b-data');
+    expect(sent).toContain('a-old');
+    expect(sent).toContain('a-new');
+    expect(sent).toContain('c-data');
+    expect(sent).toContain('d-data');
+  });
+});

@@ -26,7 +26,12 @@ export class StreamBuffer {
 
     let bucket = this.buckets.get(topic);
     if (!bucket) {
-      // Note: LRU eviction implemented in Task 3
+      while (this.buckets.size >= this.options.topicLruCap) {
+        const oldest = this.buckets.keys().next().value;
+        if (oldest === undefined) break;
+        this.buckets.delete(oldest);
+        this.bucketBytes.delete(oldest);
+      }
       bucket = [];
       this.buckets.set(topic, bucket);
       this.bucketBytes.set(topic, 0);
