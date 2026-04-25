@@ -140,8 +140,6 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     'Your response must be one of:',
     '1. A concrete next task (e.g., "Run the tests to verify the fix", "Review the error in logs/main.log")',
     '2. "[objective complete]" if the objective has been fully achieved',
-    '',
-    'Response:',
   );
 
   return lines.join('\n');
