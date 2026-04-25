@@ -153,3 +153,29 @@ describe('StreamBuffer drain', () => {
     expect(seen[1]).toEqual(['b2', 'a2']);
   });
 });
+
+describe('StreamBuffer destroy', () => {
+  it('clears all buckets and reports empty', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('a', frame('a1'));
+    buf.enqueue('b', frame('b1'));
+    buf.destroy();
+    expect(buf.isEmpty()).toBe(true);
+  });
+
+  it('post-destroy enqueue is a no-op', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.destroy();
+    expect(() => buf.enqueue('a', frame('after'))).not.toThrow();
+    expect(buf.isEmpty()).toBe(true);
+  });
+
+  it('post-destroy drain is a no-op', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    buf.enqueue('a', frame('before'));
+    buf.destroy();
+    const send = vi.fn();
+    buf.drain(1024, send);
+    expect(send).not.toHaveBeenCalled();
+  });
+});
