@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { FileTreePanel } from './file-tree';
 import { wsClientAtom } from '../../../atoms/connection';
@@ -57,5 +57,55 @@ describe('FileTreePanel', () => {
         children: [],
       },
     ]);
+  });
+
+  it('consumes a refresh token only once instead of reloading on every render', async () => {
+    let resolveTree: ((value: { path: string; children: never[] }) => void) | null = null;
+    const sendCommand = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTree = resolve;
+        })
+    );
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'README.md',
+        name: 'README.md',
+        kind: 'file',
+      },
+    ]);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" refreshToken={0} />
+      </Provider>
+    );
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" refreshToken={1} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+      expect(sendCommand).toHaveBeenCalledWith('file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+
+    await act(async () => {
+      resolveTree?.({
+        path: '/workspace',
+        children: [],
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
   });
 });

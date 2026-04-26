@@ -6,7 +6,7 @@
  */
 
 import type { FC } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
@@ -55,6 +55,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [isLoading, setIsLoading] = useState(false);
+  const lastRefreshTokenRef = useRef(refreshToken);
   // Selection is mirrored to the shared activeFilePath atom so the tree
   // highlight stays in sync with the code editor (and disappears when the
   // editor is closed, since closing clears that atom).
@@ -97,9 +98,12 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
   }, [fileTreeStale, isLoading, loadFileTree, setFileTreeStale]);
 
   useEffect(() => {
-    if (refreshToken > 0 && !isLoading) {
-      loadFileTree();
+    if (refreshToken <= lastRefreshTokenRef.current || isLoading) {
+      return;
     }
+
+    lastRefreshTokenRef.current = refreshToken;
+    loadFileTree();
   }, [refreshToken, isLoading, loadFileTree]);
 
   return (
