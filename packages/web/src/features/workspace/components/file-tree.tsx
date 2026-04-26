@@ -51,6 +51,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
+  const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -90,9 +91,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
   // Reload file tree when stale
   useEffect(() => {
     if (fileTreeStale && !isLoading) {
+      setFileTreeStale(false);
       loadFileTree();
     }
-  }, [fileTreeStale, isLoading, loadFileTree]);
+  }, [fileTreeStale, isLoading, loadFileTree, setFileTreeStale]);
 
   useEffect(() => {
     if (refreshToken > 0 && !isLoading) {

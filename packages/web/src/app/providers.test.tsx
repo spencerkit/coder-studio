@@ -7,6 +7,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../atoms/workspaces';
+import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { sessionsAtom } from '../atoms';
 import { sessionOutputTailAtom } from '../features/notifications';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
@@ -123,6 +124,14 @@ describe('routeEventToAtom', () => {
     );
 
     expect(store.get(activeWorkspaceAtom)?.id).toBe('ws-1');
+  });
+
+  it('marks the file tree stale when an fs.dirty event arrives', () => {
+    const store = createStore();
+
+    routeEventToAtom('workspace.ws-1.fs.dirty', { reason: 'fs_change' }, store as any);
+
+    expect(store.get(fileTreeStaleAtomFamily('ws-1'))).toBe(true);
   });
 
   it('appends cleaned utf-8 terminal output bytes to the matching session tail buffer', () => {

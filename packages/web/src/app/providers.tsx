@@ -303,9 +303,9 @@ export function routeEventToAtom(
 
     // workspace.{id}.fs.dirty - filesystem dirty state
     if (subtopic === 'fs.dirty') {
-      const data = payload as { dirty: boolean };
+      // Server sends { reason: 'fs_change' } - any payload means dirty
       const atom = fileTreeStaleAtomFamily(workspaceId);
-      store.set(atom, data.dirty);
+      store.set(atom, true);
       return;
     }
 
