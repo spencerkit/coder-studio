@@ -28,7 +28,7 @@ import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
 import { terminalMetaAtomFamily } from '../atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
-import type { EventListener, ConnectionStatus } from '../ws';
+import type { EventListener, ConnectionStatus, TerminalBinaryPayload } from '../ws';
 import {
   useSessionNotifications,
   appendSessionOutputAtom,
@@ -47,18 +47,13 @@ let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
 
 /**
- * Shared decoder for terminal output chunks. PTY data is a UTF-8 byte stream
- * shipped over WS as base64 strings. Decoding once-per-event is cheap, but
- * keeping the TextDecoder around saves allocations at high stream rates.
+ * Shared decoder for terminal output chunks. PTY data is a UTF-8 byte stream.
+ * Decoding once-per-event is cheap, but keeping the TextDecoder around saves
+ * allocations at high stream rates.
  */
 const sessionOutputDecoder = new TextDecoder('utf-8', { fatal: false });
-function decodeBase64Utf8(chunk: string): string {
-  const binary = atob(chunk);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return sessionOutputDecoder.decode(bytes);
+function decodeTerminalOutputBytes(chunk: Uint8Array): string {
+  return sessionOutputDecoder.decode(chunk);
 }
 
 interface AppProvidersProps {
@@ -424,22 +419,20 @@ export function routeEventToAtom(
         // copy here only when the terminal is bound to a known *agent* session,
         // so the notification engine can include a tail summary in its body.
         // Shell terminals (no session) are ignored to keep the buffer small.
-        const data = payload as { chunk: string; size?: number; seq?: number };
-        if (!data?.chunk) return;
+        const data = payload as TerminalBinaryPayload;
+        const bytes = data?.bytes;
+        if (!bytes || !ArrayBuffer.isView(bytes) || bytes.byteLength === 0) return;
         const sessions = store.get(sessionsAtom);
         const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
         if (!session) return;
-        try {
-          const decoded = decodeBase64Utf8(data.chunk);
-          const cleaned = stripAnsi(decoded);
-          if (cleaned) {
-            store.set(appendSessionOutputAtom, {
-              sessionId: session.id,
-              text: cleaned,
-            });
-          }
-        } catch {
-          // Malformed base64 — drop the chunk silently; xterm path is unaffected.
+
+        const decoded = decodeTerminalOutputBytes(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+        const cleaned = stripAnsi(decoded);
+        if (cleaned) {
+          store.set(appendSessionOutputAtom, {
+            sessionId: session.id,
+            text: cleaned,
+          });
         }
         return;
       }

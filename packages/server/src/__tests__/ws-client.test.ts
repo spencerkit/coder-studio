@@ -23,6 +23,17 @@ describe('WsClient', () => {
     client = new WsClient(mockSocket, 'test-client-id');
   });
 
+  it('passes binary websocket messages through as buffers', () => {
+    const handler = vi.fn();
+    client.onMessage(handler);
+
+    const messageHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'message')?.[1];
+    const payload = Buffer.from([1, 2, 3]);
+    messageHandler?.(payload, true);
+
+    expect(handler).toHaveBeenCalledWith(payload);
+  });
+
   it('should create client with id', () => {
     expect(client.id).toBe('test-client-id');
   });
@@ -134,6 +145,13 @@ describe('WsClient', () => {
       mockSocket.bufferedAmount = 0;
       client.sendStream('workspace.x.terminal.t1.output', sample);
       expect(mockSocket.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('sendStream sends binary buffers as websocket binary frames', () => {
+      const payload = Buffer.from([1, 2, 3]);
+      client.sendStream('workspace.x.terminal.t1.output', payload);
+
+      expect(mockSocket.send).toHaveBeenCalledWith(payload, { binary: true });
     });
 
     it('sendStream at or above HIGH water defers to the buffer and starts the flush timer', () => {

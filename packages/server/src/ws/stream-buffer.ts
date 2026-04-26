@@ -1,5 +1,5 @@
 export interface Frame {
-  data: string;
+  data: string | Buffer;
   size: number;
 }
 
@@ -36,7 +36,6 @@ export class StreamBuffer {
       this.buckets.set(topic, bucket);
       this.bucketBytes.set(topic, 0);
     } else {
-      // Touch: re-insert to mark as recently written (Map preserves insertion order)
       this.buckets.delete(topic);
       this.bucketBytes.delete(topic);
       this.buckets.set(topic, bucket);
@@ -54,7 +53,7 @@ export class StreamBuffer {
     this.bucketBytes.set(topic, bytes);
   }
 
-  drain(maxBytes: number, send: (data: string) => boolean): void {
+  drain(maxBytes: number, send: (data: string | Buffer) => boolean): void {
     if (this.destroyed) return;
     let sent = 0;
     let sentAny = false;

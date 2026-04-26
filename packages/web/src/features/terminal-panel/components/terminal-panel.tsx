@@ -7,7 +7,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAtom, useAtomValue, useStore } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
-import { terminalMetaAtomFamily } from '../../../atoms/terminals';
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../../../atoms/terminals';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { bottomPanelHeightAtom } from '../../../atoms/ui';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
@@ -18,6 +18,7 @@ import { TerminalTab } from './terminal-tab';
 import { TerminalSelectorItem } from './terminal-selector-item';
 import { formatTerminalTitle } from './title-format';
 import type { Terminal as TerminalDto } from '@coder-studio/core';
+import type { TerminalBinaryPayload } from '../../../ws/client';
 
 const EMPTY_TERMINAL_ID = '__terminal_panel_empty__';
 
@@ -143,6 +144,23 @@ export function TerminalPanel() {
             return [...prev, createData.id];
           });
           setActiveTerminalId(createData.id);
+        } else if (event === 'output') {
+          // Cache terminal output for shell terminals.
+          // This ensures xterm-host can replay output even if it hasn't subscribed yet.
+          // Skip if seq hasn't advanced (prevents duplicate caching when xterm-host also subscribes).
+          const outputData = payload as TerminalBinaryPayload;
+          const meta = store.get(terminalMetaAtomFamily(terminalId));
+          if (!meta || meta.kind !== 'shell') return;
+
+          const outputAtom = terminalOutputAtomFamily(terminalId);
+          const prev = store.get(outputAtom);
+          if (_seq <= prev.lastSeq) return;
+
+          store.set(outputAtom, {
+            chunks: [...prev.chunks, outputData.bytes],
+            lastSeq: _seq,
+            lastWritten: prev.lastWritten,
+          });
         }
       }
     );
@@ -163,8 +181,16 @@ export function TerminalPanel() {
     });
 
     if (result.ok && result.data) {
-      const data = result.data as { id: string };
-      const terminalId = data.id;
+      const terminal = result.data as TerminalDto;
+      const terminalId = terminal.id;
+
+      store.set(terminalMetaAtomFamily(terminalId), {
+        id: terminalId,
+        workspaceId: terminal.workspaceId,
+        kind: terminal.kind,
+        alive: terminal.alive,
+        title: terminal.title,
+      });
 
       setTerminalIds((prev) => {
         if (prev.includes(terminalId)) return prev;
@@ -173,7 +199,7 @@ export function TerminalPanel() {
 
       setActiveTerminalId(terminalId);
     }
-  }, [activeWorkspaceId, dispatch]);
+  }, [activeWorkspaceId, dispatch, store]);
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {

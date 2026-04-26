@@ -20,6 +20,7 @@ export interface EventBus {
 export interface WorkspaceManagerDeps {
   db: Database;
   eventBus: EventBus;
+  broadcaster: Broadcaster;
 }
 
 /**
@@ -36,6 +37,7 @@ function generateWorkspaceId(): string {
  */
 export class WorkspaceManager {
   private validator = new WorkspaceValidator();
+  private watchers = new Map<string, WorkspaceWatcher>();
 
   constructor(private deps: WorkspaceManagerDeps) {}
 
@@ -59,6 +61,15 @@ export class WorkspaceManager {
     if (existing) {
       // Update last active timestamp and return existing
       this.touch(existing.id);
+
+      // Start watcher if not already watching (e.g., after server restart)
+      if (!this.watchers.has(existing.id)) {
+        this.watchers.set(
+          existing.id,
+          new WorkspaceWatcher(existing.id, existing.path, this.deps.broadcaster)
+        );
+      }
+
       this.deps.eventBus.emit({
         type: 'workspace.meta.changed',
         workspaceId: existing.id,
@@ -104,6 +115,12 @@ export class WorkspaceManager {
       patch: workspace,
     });
 
+    // Start file system watcher
+    this.watchers.set(
+      workspace.id,
+      new WorkspaceWatcher(workspace.id, workspace.path, this.deps.broadcaster)
+    );
+
     return workspace;
   }
 
@@ -116,6 +133,13 @@ export class WorkspaceManager {
     const workspace = this.get(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    // Stop file system watcher
+    const watcher = this.watchers.get(workspaceId);
+    if (watcher) {
+      await watcher.close();
+      this.watchers.delete(workspaceId);
     }
 
     // Delete from DB (cascade deletes terminals and sessions)
@@ -243,4 +267,10 @@ export class WorkspaceManager {
     const now = Date.now();
     this.deps.db.prepare('UPDATE workspaces SET last_active_at = ? WHERE id = ?').run(now, workspaceId);
   }
+}
+
+import { WorkspaceWatcher } from '../fs/watcher.js';
+
+export interface Broadcaster {
+  broadcast(topic: string, data: unknown): void;
 }

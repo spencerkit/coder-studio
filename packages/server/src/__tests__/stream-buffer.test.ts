@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StreamBuffer, type Frame } from '../ws/stream-buffer.js';
 
-const frame = (data: string): Frame => ({ data, size: Buffer.byteLength(data, 'utf8') });
+const frame = (data: string | Buffer): Frame => ({
+  data,
+  size: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength,
+});
 
 describe('StreamBuffer enqueue', () => {
   it('starts empty', () => {
@@ -35,10 +38,24 @@ describe('StreamBuffer enqueue', () => {
 
     const sent: string[] = [];
     buf.drain(1024, (d) => {
-      sent.push(d);
+      sent.push(d as string);
       return true;
     });
     expect(sent).toEqual(['hugepayload']);
+  });
+
+  it('drains binary frames without changing payload bytes', () => {
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
+    const payload = Buffer.from([1, 2, 3]);
+    buf.enqueue('t', frame(payload));
+
+    const sent: Buffer[] = [];
+    buf.drain(1024, (d) => {
+      sent.push(d as Buffer);
+      return true;
+    });
+
+    expect(sent).toEqual([payload]);
   });
 
   it('isolates topics: cap is per-topic, not global', () => {

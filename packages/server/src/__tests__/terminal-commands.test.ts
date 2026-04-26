@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  decodeTerminalBinaryFrame,
+  TerminalBinaryFrameType,
+  type Terminal,
+} from '@coder-studio/core';
 import { dispatch } from '../ws/dispatch.js';
 import type { CommandContext } from '../ws/dispatch.js';
-import type { Terminal } from '@coder-studio/core';
 
 import '../commands/terminal.js';
+import { registerPendingTerminalInput } from '../commands/terminal.js';
 
 function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
@@ -40,7 +45,13 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
     } as never,
     hooksMgr: {} as never,
     eventBus: {} as never,
-    broadcaster: { broadcast: vi.fn() } as never,
+    broadcaster: {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(),
+      sendBinaryToClient: vi.fn(),
+    } as never,
+    fencingMgr: {} as never,
+    supervisorMgr: {} as never,
     providerRegistry: [],
     ...overrides,
   };
@@ -49,6 +60,91 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
 describe('terminal commands', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('returns binary metadata and sends replay payload to requesting client', async () => {
+    const replayData = Buffer.from('replay payload');
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 9 }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-replay-1',
+        op: 'terminal.replay',
+        args: {
+          terminalId: 'term-1',
+        },
+      },
+      ctx,
+      'client-1'
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      status: 'ok',
+      transport: 'binary',
+      streamId: expect.any(Number),
+      size: replayData.length,
+      seq: 9,
+    });
+    expect(ctx.broadcaster.sendBinaryToClient).toHaveBeenCalledWith('client-1', expect.any(Buffer));
+  });
+
+  it('keeps replay streamId consistent between metadata and binary frame', async () => {
+    const replayData = Buffer.from('replay payload');
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_777_177_555_456);
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 9 }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    try {
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'terminal-replay-stream-id-1',
+          op: 'terminal.replay',
+          args: {
+            terminalId: 'term-1',
+          },
+        },
+        ctx,
+        'client-1'
+      );
+
+      expect(result.ok).toBe(true);
+      expect(ctx.broadcaster.sendBinaryToClient).toHaveBeenCalledWith('client-1', expect.any(Buffer));
+
+      const replayFrame = vi.mocked(ctx.broadcaster.sendBinaryToClient).mock.calls[0]?.[1] as Buffer;
+      const { header, payload } = decodeTerminalBinaryFrame(replayFrame);
+
+      expect(header.type).toBe(TerminalBinaryFrameType.Replay);
+      expect(result.data).toMatchObject({
+        status: 'ok',
+        transport: 'binary',
+        streamId: header.streamId,
+        size: replayData.length,
+        seq: 9,
+      });
+      expect(Buffer.from(payload)).toEqual(replayData);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('uses the current user shell when creating shell terminals', async () => {
@@ -74,6 +170,49 @@ describe('terminal commands', () => {
         title: 'zsh',
       })
     );
+  });
+
+  it('delegates terminal.input binary payload to sessionMgr.sendInput when a session owns the terminal', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+    const bytes = Buffer.from('二进制输入');
+    const streamId = 42;
+
+    registerPendingTerminalInput(
+      {
+        terminalId: 'term-1',
+        transport: 'binary',
+        streamId,
+        size: bytes.length,
+        activity: 'submit',
+      },
+      bytes
+    );
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-binary-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          transport: 'binary',
+          streamId,
+          size: bytes.length,
+          activity: 'submit',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', bytes, 'submit');
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
   it('delegates terminal.input to sessionMgr.sendInput when a session owns the terminal', async () => {

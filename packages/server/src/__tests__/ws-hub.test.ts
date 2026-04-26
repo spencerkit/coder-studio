@@ -3,12 +3,18 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Topics } from '@coder-studio/core';
+import {
+  Topics,
+  TERMINAL_BINARY_PROTOCOL_VERSION,
+  TERMINAL_BINARY_HEADER_SIZE,
+  TerminalBinaryFrameType,
+} from '@coder-studio/core';
 import { WsHub } from '../ws/hub.js';
 import { EventBus } from '../bus/event-bus.js';
 import WebSocket from 'ws';
 import type { FastifyRequest } from 'fastify';
 import type { CommandContext } from '../ws/dispatch.js';
+import '../commands/terminal.js';
 
 describe('WsHub', () => {
   let hub: WsHub;
@@ -41,11 +47,20 @@ describe('WsHub', () => {
   };
 
   const parseSentEvents = (socket: ReturnType<typeof createMockSocket>) =>
-    socket.send.mock.calls.map(([payload]: [string]) => JSON.parse(payload));
+    socket.send.mock.calls
+      .filter(([payload]: [string | Buffer]) => typeof payload === 'string')
+      .map(([payload]: [string]) => JSON.parse(payload));
 
   const getLastSentEvent = (socket: ReturnType<typeof createMockSocket>) => {
     const sentEvents = parseSentEvents(socket);
     return sentEvents[sentEvents.length - 1];
+  };
+
+  const getLastSentBinary = (socket: ReturnType<typeof createMockSocket>) => {
+    const binaryCalls = socket.send.mock.calls.filter(
+      ([payload]: [string | Buffer, unknown]) => Buffer.isBuffer(payload)
+    );
+    return binaryCalls[binaryCalls.length - 1]?.[0] as Buffer | undefined;
   };
 
   beforeEach(() => {
@@ -201,12 +216,22 @@ describe('WsHub', () => {
     expect(getLastSentEvent(socket)).toMatchObject({
       kind: 'event',
       topic: Topics.terminalOutput('workspace-42', 'term-123'),
+      seq: 7,
       data: {
-        chunk: chunk.toString('base64'),
+        transport: 'binary',
+        streamId: expect.any(Number),
         size: chunk.length,
-        seq: 7,
       },
     });
+
+    const binary = getLastSentBinary(socket);
+    expect(binary).toBeDefined();
+    const view = new DataView(binary!.buffer, binary!.byteOffset, binary!.byteLength);
+    expect(view.getUint8(0)).toBe(TERMINAL_BINARY_PROTOCOL_VERSION);
+    expect(view.getUint8(1)).toBe(TerminalBinaryFrameType.Output);
+    expect(view.getUint32(4)).toBe(7);
+    expect(view.getUint32(12)).toBe(chunk.length);
+    expect(binary!.subarray(TERMINAL_BINARY_HEADER_SIZE)).toEqual(chunk);
   });
 
   it('routes terminal.output broadcasts through the stream path', () => {
@@ -302,5 +327,70 @@ describe('WsHub', () => {
 
   it('should return null for writer when no connections', () => {
     expect(hub.getWriter()).toBeNull();
+  });
+
+  it('defers terminal.input dispatch until the matching binary frame arrives', async () => {
+    // Stand up a fresh hub with a writeable terminal manager so the dispatched
+    // terminal.input can be observed. The handler reads the binary payload
+    // from a module-level map populated by the hub once the binary frame is
+    // delivered, so the test must verify both ordering and payload routing.
+    hub.destroy();
+    const write = vi.fn();
+    const findSessionIdByTerminal = vi.fn().mockReturnValue(null);
+    hub = new WsHub({
+      eventBus,
+      commandContext: {
+        ...mockCommandContext,
+        terminalMgr: { write } as any,
+        sessionMgr: { findSessionIdByTerminal } as any,
+      },
+      config: { auth: { enabled: false } } as any,
+      fencingMgr: {} as any,
+    });
+
+    const socket = createMockSocket();
+    hub.handleConnection(socket, createMockRequest());
+    const messageHandler = socket.on.mock.calls.find(
+      (call: any[]) => call[0] === 'message'
+    )?.[1];
+    socket.send.mockClear();
+
+    const streamId = 1_000_001;
+    const jsonCommand = Buffer.from(
+      JSON.stringify({
+        kind: 'command',
+        id: 'cmd-input-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          transport: 'binary',
+          streamId,
+          size: 5,
+          activity: 'typing',
+        },
+      })
+    );
+
+    void messageHandler!(jsonCommand, false);
+
+    // Yield microtasks so the hub gets a chance to await the binary frame.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(write).not.toHaveBeenCalled();
+    const sentBeforeBinary = socket.send.mock.calls.filter(
+      ([payload]: [unknown]) => typeof payload === 'string'
+    );
+    expect(sentBeforeBinary).toHaveLength(0);
+
+    const payload = Buffer.from('hello');
+    void messageHandler!(payload, true);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(write).toHaveBeenCalledWith('term-1', payload);
+    const result = socket.send.mock.calls
+      .filter(([p]: [unknown]) => typeof p === 'string')
+      .map(([p]: [string]) => JSON.parse(p))
+      .find((m: any) => m.kind === 'result' && m.id === 'cmd-input-1');
+    expect(result?.ok).toBe(true);
   });
 });

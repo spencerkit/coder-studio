@@ -5,8 +5,18 @@
  * Independent of React/Jotai - uses callbacks for integration.
  */
 
-import type { ServerToClient, ClientToServer } from '@coder-studio/core';
+import {
+  decodeTerminalBinaryFrame,
+  TerminalBinaryFrameType,
+  type ClientToServer,
+  type ServerToClient,
+  type TerminalBinaryEventData,
+  type TerminalReplayBinaryResult,
+} from '@coder-studio/core';
 import { topicMatches } from './subscription';
+
+export type TerminalBinaryPayload = TerminalBinaryEventData & { bytes: Uint8Array };
+export type TerminalReplayPayload = TerminalReplayBinaryResult & { bytes: Uint8Array };
 
 export type ConnectionStatus =
   | 'connecting'
@@ -22,6 +32,13 @@ interface PendingCommand {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeoutId: NodeJS.Timeout;
+  terminalBinary?: TerminalReplayBinaryResult;
+}
+
+interface PendingTerminalEvent {
+  topic: string;
+  seq: number;
+  metadata: TerminalBinaryEventData;
 }
 
 interface ReconnectConfig {
@@ -48,6 +65,14 @@ export class WsClient {
   private eventListeners = new Map<string, Set<EventListener>>();
   private statusListeners = new Set<StatusListener>();
   private lastSeenSeq = new Map<string, number>();
+  private pendingTerminalEvents = new Map<number, PendingTerminalEvent>();
+  private pendingReplayStreamIds = new Map<number, string>();
+  // Binary frames can arrive ahead of their JSON metadata when the server
+  // emits them in opposite order (e.g. terminal.replay sends the binary
+  // before returning the result). We park orphan payloads here and consume
+  // them once the matching metadata shows up.
+  private orphanBinaryPayloads = new Map<number, Uint8Array>();
+  private nextTerminalInputStreamId = 1;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isManualClose = false;
@@ -72,6 +97,7 @@ export class WsClient {
     return new Promise((resolve, reject) => {
       try {
         this.ws = new WebSocket(this.url);
+        this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
           this.setStatus('connected');
@@ -93,8 +119,18 @@ export class WsClient {
 
         this.ws.onmessage = (event) => {
           try {
-            const msg = JSON.parse(event.data) as ServerToClient;
-            this.handleMessage(msg);
+            if (typeof event.data === 'string') {
+              const msg = JSON.parse(event.data) as ServerToClient;
+              this.handleMessage(msg);
+              return;
+            }
+
+            if (event.data instanceof ArrayBuffer) {
+              this.handleBinaryMessage(new Uint8Array(event.data));
+              return;
+            }
+
+            console.error('Unsupported WebSocket message type:', typeof event.data);
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);
           }
@@ -139,9 +175,6 @@ export class WsClient {
     this.setStatus('disconnected');
   }
 
-  /**
-   * Send a command and wait for response
-   */
   async sendCommand<T>(op: string, args: unknown): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -151,22 +184,61 @@ export class WsClient {
 
       const id = crypto.randomUUID();
 
-      // Set timeout for command response
       const timeoutId = setTimeout(() => {
         this.pendingCommands.delete(id);
         reject(new Error(`Command timeout: ${op}`));
       }, COMMAND_TIMEOUT_MS);
 
-      // Store pending command
       this.pendingCommands.set(id, {
         resolve: resolve as (value: unknown) => void,
         reject,
         timeoutId,
       });
 
-      // Send command
       const msg: ClientToServer = { kind: 'command', id, op, args };
       this.ws.send(JSON.stringify(msg));
+    });
+  }
+
+  async sendTerminalInput(
+    terminalId: string,
+    bytes: Uint8Array,
+    activity?: 'typing' | 'submit' | 'system'
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
+        return;
+      }
+
+      const id = crypto.randomUUID();
+      const streamId = this.allocateTerminalInputStreamId();
+      const timeoutId = setTimeout(() => {
+        this.pendingCommands.delete(id);
+        reject(new Error('Command timeout: terminal.input'));
+      }, COMMAND_TIMEOUT_MS);
+
+      this.pendingCommands.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timeoutId,
+      });
+
+      const msg: ClientToServer = {
+        kind: 'command',
+        id,
+        op: 'terminal.input',
+        args: {
+          terminalId,
+          transport: 'binary',
+          streamId,
+          size: bytes.byteLength,
+          activity,
+        },
+      };
+
+      this.ws.send(JSON.stringify(msg));
+      this.ws.send(bytes);
     });
   }
 
@@ -238,14 +310,27 @@ export class WsClient {
     }
   }
 
-  /**
-   * Handle incoming message
-   */
   private handleMessage(msg: ServerToClient): void {
     if (msg.kind === 'result') {
-      // Handle command result
       const pending = this.pendingCommands.get(msg.id);
       if (pending) {
+        if (msg.ok && this.isTerminalReplayBinaryResult(msg.data)) {
+          const orphan = this.orphanBinaryPayloads.get(msg.data.streamId);
+          if (orphan) {
+            this.orphanBinaryPayloads.delete(msg.data.streamId);
+            clearTimeout(pending.timeoutId);
+            this.pendingCommands.delete(msg.id);
+            pending.resolve({
+              ...msg.data,
+              bytes: orphan,
+            } satisfies TerminalReplayPayload);
+            return;
+          }
+          pending.terminalBinary = msg.data;
+          this.pendingReplayStreamIds.set(msg.data.streamId, msg.id);
+          return;
+        }
+
         clearTimeout(pending.timeoutId);
         this.pendingCommands.delete(msg.id);
 
@@ -256,24 +341,125 @@ export class WsClient {
         }
       }
     } else if (msg.kind === 'event') {
-      // Update last seen seq
       this.lastSeenSeq.set(msg.topic, msg.seq);
 
-      // Dispatch to listeners
-      for (const [pattern, listeners] of this.eventListeners.entries()) {
-        if (!topicMatches(pattern, msg.topic)) {
-          continue;
+      if (this.isTerminalBinaryEventData(msg.data)) {
+        const orphan = this.orphanBinaryPayloads.get(msg.data.streamId);
+        if (orphan) {
+          this.orphanBinaryPayloads.delete(msg.data.streamId);
+          this.notifyEventListeners(
+            msg.topic,
+            {
+              ...msg.data,
+              bytes: orphan,
+            } satisfies TerminalBinaryPayload,
+            msg.seq
+          );
+          return;
         }
+        this.pendingTerminalEvents.set(msg.data.streamId, {
+          topic: msg.topic,
+          seq: msg.seq,
+          metadata: msg.data,
+        });
+        return;
+      }
 
-        for (const listener of listeners) {
-          try {
-            listener(msg.topic, msg.data, msg.seq);
-          } catch (err) {
-            console.error(`Error in event listener for ${msg.topic}:`, err);
-          }
+      this.notifyEventListeners(msg.topic, msg.data, msg.seq);
+    }
+  }
+
+  private handleBinaryMessage(frame: Uint8Array): void {
+    const { header, payload } = decodeTerminalBinaryFrame(frame);
+
+    if (header.type === TerminalBinaryFrameType.Output) {
+      const pending = this.pendingTerminalEvents.get(header.streamId);
+      if (!pending) {
+        // Metadata not here yet — park the payload until the JSON event
+        // shows up. handleMessage will consume it on arrival.
+        this.orphanBinaryPayloads.set(header.streamId, payload);
+        return;
+      }
+      this.pendingTerminalEvents.delete(header.streamId);
+      this.notifyEventListeners(
+        pending.topic,
+        {
+          ...pending.metadata,
+          bytes: payload,
+        } satisfies TerminalBinaryPayload,
+        pending.seq
+      );
+      return;
+    }
+
+    if (header.type === TerminalBinaryFrameType.Replay) {
+      const pendingId = this.pendingReplayStreamIds.get(header.streamId);
+      if (!pendingId) {
+        // Replay binary frames are sent before the command result on the
+        // server side. Park the payload; handleMessage will pick it up when
+        // the result arrives.
+        this.orphanBinaryPayloads.set(header.streamId, payload);
+        return;
+      }
+      this.pendingReplayStreamIds.delete(header.streamId);
+      const pending = this.pendingCommands.get(pendingId);
+      if (!pending?.terminalBinary) {
+        return;
+      }
+
+      clearTimeout(pending.timeoutId);
+      this.pendingCommands.delete(pendingId);
+      pending.resolve({
+        ...pending.terminalBinary,
+        bytes: payload,
+      } satisfies TerminalReplayPayload);
+    }
+  }
+
+  private notifyEventListeners(topic: string, data: unknown, seq: number): void {
+    for (const [pattern, listeners] of this.eventListeners.entries()) {
+      if (!topicMatches(pattern, topic)) {
+        continue;
+      }
+
+      for (const listener of listeners) {
+        try {
+          listener(topic, data, seq);
+        } catch (err) {
+          console.error(`Error in event listener for ${topic}:`, err);
         }
       }
     }
+  }
+
+  private isTerminalBinaryEventData(data: unknown): data is TerminalBinaryEventData {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'transport' in data &&
+      'streamId' in data &&
+      'size' in data &&
+      (data as { transport?: unknown }).transport === 'binary'
+    );
+  }
+
+  private isTerminalReplayBinaryResult(data: unknown): data is TerminalReplayBinaryResult {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'status' in data &&
+      'transport' in data &&
+      'streamId' in data &&
+      'size' in data &&
+      (data as { status?: unknown }).status === 'ok' &&
+      (data as { transport?: unknown }).transport === 'binary'
+    );
+  }
+
+  private allocateTerminalInputStreamId(): number {
+    const id = this.nextTerminalInputStreamId;
+    this.nextTerminalInputStreamId += 1;
+    return id;
   }
 
   /**

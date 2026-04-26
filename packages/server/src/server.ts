@@ -110,6 +110,7 @@ export async function createServer(
   const workspaceMgr = new WorkspaceManager({
     db,
     eventBus,
+    broadcaster: wsHub,
   });
 
   // Hooks Manager

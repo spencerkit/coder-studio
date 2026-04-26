@@ -8,12 +8,25 @@
  * - Topic-based routing
  */
 
-import type { DomainEvent, ServerToClient, ClientToServer, Command } from '@coder-studio/core';
-import { Topics } from '@coder-studio/core';
+import type {
+  DomainEvent,
+  ServerToClient,
+  ClientToServer,
+  Command,
+  TerminalBinaryEventData,
+  TerminalInputBinaryArgs,
+} from '@coder-studio/core';
+import {
+  Topics,
+  TERMINAL_BINARY_PROTOCOL_VERSION,
+  TerminalBinaryFrameType,
+  encodeTerminalBinaryFrame,
+} from '@coder-studio/core';
 import type WebSocket from 'ws';
 import type { FastifyRequest } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { EventBus } from '../bus/event-bus.js';
+import { registerPendingTerminalInput } from '../commands/terminal.js';
 import { WsClient, ClientId } from './client.js';
 import { dispatch, type CommandContext } from './dispatch.js';
 import type { ServerConfig } from '../config.js';
@@ -27,6 +40,23 @@ interface WsHubDeps {
   fencingMgr: FencingManager;
 }
 
+const BINARY_PAYLOAD_TIMEOUT_MS = 5000;
+
+interface BinaryWaiter {
+  resolve: (payload: Buffer) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+}
+
+const isBinaryTerminalInputArgs = (args: unknown): args is TerminalInputBinaryArgs => {
+  return (
+    typeof args === 'object' &&
+    args !== null &&
+    'transport' in args &&
+    (args as { transport?: unknown }).transport === 'binary'
+  );
+};
+
 /**
  * Broadcaster interface for fan-out of domain events to subscribed clients.
  * Used by FsWatcher and SupervisorManager; WsHub is the only implementation.
@@ -34,11 +64,19 @@ interface WsHubDeps {
  */
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
+  sendToClient(clientId: ClientId, msg: ServerToClient): boolean;
+  sendBinaryToClient(clientId: ClientId, data: Buffer): boolean;
 }
 
 export class WsHub implements Broadcaster {
   private clients = new Map<ClientId, WsClient>();
   private eventUnsubscribers: (() => void)[] = [];
+  private nextStreamId = 1;
+  // Per-client queue of waiters for the next inbound binary frame. The
+  // terminal.input protocol sends a JSON command immediately followed by a
+  // binary payload — the JSON is dispatched synchronously, so we have to
+  // await the binary frame here before letting the handler run.
+  private pendingBinaryWaiters = new Map<ClientId, BinaryWaiter[]>();
 
   constructor(private readonly deps: WsHubDeps) {
     this.subscribeToEvents();
@@ -56,6 +94,7 @@ export class WsHub implements Broadcaster {
       status: 'connected',
       clientId: client.id,
       authEnabled: this.deps.config.auth.enabled,
+      binaryTerminalTransport: true,
     });
 
     // Setup handlers
@@ -66,7 +105,12 @@ export class WsHub implements Broadcaster {
   /**
    * Route incoming message from client
    */
-  private async routeMessage(client: WsClient, msg: ClientToServer): Promise<void> {
+  private async routeMessage(client: WsClient, msg: ClientToServer | Buffer): Promise<void> {
+    if (Buffer.isBuffer(msg)) {
+      this.deliverBinaryPayload(client.id, msg);
+      return;
+    }
+
     switch (msg.kind) {
       case 'subscribe':
         client.subscribe(msg.topics);
@@ -76,16 +120,85 @@ export class WsHub implements Broadcaster {
         client.unsubscribe(msg.topics);
         break;
 
-      case 'command':
-        // Dispatch command and send result
+      case 'command': {
+        if (msg.op === 'terminal.input' && isBinaryTerminalInputArgs(msg.args)) {
+          // The JSON command arrives one frame ahead of its binary payload.
+          // Wait for the payload before dispatching so the handler can decode
+          // synchronously by streamId.
+          try {
+            const payload = await this.awaitBinaryPayload(client.id);
+            registerPendingTerminalInput(msg.args, payload);
+          } catch (error) {
+            client.send({
+              kind: 'result',
+              id: msg.id,
+              ok: false,
+              error: {
+                code: 'terminal_input_binary_timeout',
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'Timeout waiting for terminal input binary payload',
+              },
+            });
+            break;
+          }
+        }
         const result = await dispatch(msg as Command, this.deps.commandContext, client.id);
         client.send(result);
         break;
+      }
 
       case 'resync':
-        // Handle resync request
         this.handleResync(client, msg.lastSeen);
         break;
+    }
+  }
+
+  private awaitBinaryPayload(clientId: ClientId): Promise<Buffer> {
+    return new Promise<Buffer>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const waiters = this.pendingBinaryWaiters.get(clientId);
+        if (!waiters) return;
+        const idx = waiters.findIndex((w) => w.timer === timer);
+        if (idx === -1) return;
+        waiters.splice(idx, 1);
+        if (waiters.length === 0) {
+          this.pendingBinaryWaiters.delete(clientId);
+        }
+        reject(new Error('Timeout waiting for terminal input binary payload'));
+      }, BINARY_PAYLOAD_TIMEOUT_MS);
+
+      const waiter: BinaryWaiter = { resolve, reject, timer };
+      const queue = this.pendingBinaryWaiters.get(clientId);
+      if (queue) {
+        queue.push(waiter);
+      } else {
+        this.pendingBinaryWaiters.set(clientId, [waiter]);
+      }
+    });
+  }
+
+  private deliverBinaryPayload(clientId: ClientId, payload: Buffer): void {
+    const queue = this.pendingBinaryWaiters.get(clientId);
+    if (!queue || queue.length === 0) {
+      return;
+    }
+    const waiter = queue.shift()!;
+    if (queue.length === 0) {
+      this.pendingBinaryWaiters.delete(clientId);
+    }
+    clearTimeout(waiter.timer);
+    waiter.resolve(payload);
+  }
+
+  private discardPendingBinaryWaiters(clientId: ClientId): void {
+    const queue = this.pendingBinaryWaiters.get(clientId);
+    if (!queue) return;
+    this.pendingBinaryWaiters.delete(clientId);
+    for (const waiter of queue) {
+      clearTimeout(waiter.timer);
+      waiter.reject(new Error('Client disconnected before binary payload arrived'));
     }
   }
 
@@ -107,6 +220,7 @@ export class WsHub implements Broadcaster {
    */
   private handleClose(client: WsClient): void {
     this.clients.delete(client.id);
+    this.discardPendingBinaryWaiters(client.id);
 
     // Release fencing tokens held by this client
     // FencingManager tracks by clientId internally
@@ -134,7 +248,9 @@ export class WsHub implements Broadcaster {
     const stream = isStreamTopic(topic);
     for (const client of this.clients.values()) {
       if (!client.subscribesTo(topic)) continue;
-      if (stream) {
+      if (stream && Buffer.isBuffer(payload)) {
+        this.sendTerminalStreamToClient(client, topic, payload, 0, TerminalBinaryFrameType.Output);
+      } else if (stream) {
         client.sendEventStream(topic, payload);
       } else {
         client.sendEvent(topic, payload);
@@ -149,6 +265,12 @@ export class WsHub implements Broadcaster {
     const client = this.clients.get(clientId);
     if (!client) return false;
     return client.send(msg);
+  }
+
+  sendBinaryToClient(clientId: ClientId, data: Buffer): boolean {
+    const client = this.clients.get(clientId);
+    if (!client) return false;
+    return client.sendBinary(data);
   }
 
   /**
@@ -207,11 +329,23 @@ export class WsHub implements Broadcaster {
    * Convert domain event to WebSocket event and broadcast
    */
   private handleDomainEvent(event: DomainEvent): void {
+    if (event.type === 'terminal.output') {
+      const topic = Topics.terminalOutput(event.workspaceId, event.terminalId);
+      for (const client of this.clients.values()) {
+        if (!client.subscribesTo(topic)) continue;
+        this.sendTerminalStreamToClient(client, topic, event.chunk, event.seq, TerminalBinaryFrameType.Output);
+      }
+      return;
+    }
+
     let topic: string;
     let data: unknown;
 
     switch (event.type) {
       case 'session.state.changed':
+        if (!event.workspaceId) {
+          return;
+        }
         topic = Topics.sessionState(event.workspaceId, event.sessionId);
         data = (event as any).session ?? {
           state: event.to,
@@ -220,6 +354,9 @@ export class WsHub implements Broadcaster {
         break;
 
       case 'session.lifecycle':
+        if (!event.workspaceId) {
+          return;
+        }
         topic = Topics.sessionLifecycle(event.workspaceId, event.sessionId);
         data = {
           event: event.event,
@@ -252,15 +389,6 @@ export class WsHub implements Broadcaster {
         };
         break;
 
-      case 'terminal.output':
-        topic = Topics.terminalOutput(event.workspaceId, event.terminalId);
-        data = {
-          chunk: event.chunk.toString('base64'),
-          size: event.chunk.length,
-          seq: event.seq,
-        };
-        break;
-
       case 'terminal.exited':
         topic = Topics.terminalExit(event.workspaceId, event.terminalId);
         data = {
@@ -273,6 +401,45 @@ export class WsHub implements Broadcaster {
     }
 
     this.broadcast(topic, data);
+  }
+
+  private sendTerminalStreamToClient(
+    client: WsClient,
+    topic: string,
+    payload: Buffer,
+    seq: number,
+    type: (typeof TerminalBinaryFrameType)[keyof typeof TerminalBinaryFrameType]
+  ): void {
+    const streamId = this.allocateStreamId();
+    const metadata: TerminalBinaryEventData = {
+      transport: 'binary',
+      streamId,
+      size: payload.length,
+    };
+
+    client.sendEventStream(topic, metadata, seq);
+    client.sendStream(
+      topic,
+      Buffer.from(
+        encodeTerminalBinaryFrame(
+          {
+            version: TERMINAL_BINARY_PROTOCOL_VERSION,
+            type,
+            flags: 0,
+            meta: seq,
+            streamId,
+            payloadSize: payload.length,
+          },
+          payload,
+        ),
+      ),
+    );
+  }
+
+  private allocateStreamId(): number {
+    const id = this.nextStreamId;
+    this.nextStreamId += 1;
+    return id;
   }
 
   /**

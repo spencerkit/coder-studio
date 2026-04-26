@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
+import type { TerminalReplayPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost } from '../components/xterm-host';
 import { terminalOutputAtomFamily } from '../../../atoms/terminals';
@@ -55,6 +56,8 @@ describe('XtermHost', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTerminal.options = {};
+    mockTerminal.cols = undefined;
+    mockTerminal.rows = undefined;
   });
 
   afterEach(() => {
@@ -228,7 +231,7 @@ describe('XtermHost', () => {
 
   it('decodes utf-8 terminal output without mojibake', async () => {
     const store = createStore();
-    const chunk = Buffer.from('你好─Codex', 'utf8').toString('base64');
+    const chunk = new TextEncoder().encode('你好─Codex');
 
     store.set(terminalOutputAtomFamily('utf-terminal'), {
       chunks: [chunk],
@@ -249,7 +252,8 @@ describe('XtermHost', () => {
 
   it('does not send terminal input when rendered in read-only mode', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockResolvedValue({ status: 'unknown' });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
     const rafCallbacks: FrameRequestCallback[] = [];
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
@@ -261,7 +265,7 @@ describe('XtermHost', () => {
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendTerminalInput,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -280,26 +284,22 @@ describe('XtermHost', () => {
       const callback = rafCallbacks.shift();
       callback?.(16);
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'readonly-terminal',
-        lastSeq: 0,
-      });
-    });
-    expect(sendCommand).not.toHaveBeenCalledWith('terminal.input', expect.anything());
+    expect(sendTerminalInput).not.toHaveBeenCalled();
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it('encodes Chinese terminal input as UTF-8 base64 before dispatching', async () => {
+  it('encodes Chinese terminal input as UTF-8 bytes before dispatching', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendTerminalInput,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -314,19 +314,19 @@ describe('XtermHost', () => {
 
     await onDataCallback?.('你好，终端');
 
-    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
-      terminalId: 'stdin-terminal',
-      bytes: Buffer.from('你好，终端', 'utf8').toString('base64'),
-      activity: 'typing',
-    });
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'stdin-terminal',
+      new TextEncoder().encode('你好，终端'),
+      'typing'
+    );
   });
 
   it('marks focus reporting bytes as system activity before dispatching', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendTerminalInput,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -341,19 +341,19 @@ describe('XtermHost', () => {
 
     await onDataCallback?.('\x1b[I');
 
-    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
-      terminalId: 'focus-terminal',
-      bytes: Buffer.from('\x1b[I', 'utf8').toString('base64'),
-      activity: 'system',
-    });
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'focus-terminal',
+      new TextEncoder().encode('\x1b[I'),
+      'system'
+    );
   });
 
   it('marks enter key input as submit activity before dispatching', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendTerminalInput,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -368,22 +368,20 @@ describe('XtermHost', () => {
 
     await onDataCallback?.('\r');
 
-    expect(sendCommand).toHaveBeenCalledWith('terminal.input', {
-      terminalId: 'submit-terminal',
-      bytes: Buffer.from('\r', 'utf8').toString('base64'),
-      activity: 'submit',
-    });
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'submit-terminal',
+      new TextEncoder().encode('\r'),
+      'submit'
+    );
   });
 
   it('buffers live output until replay finishes and drops overlapping bytes', async () => {
     const store = createStore();
-    const replayChunk = Buffer.from('replay snapshot\n', 'utf8').toString('base64');
-    const earlyChunk = Buffer.from('early output\n', 'utf8').toString('base64');
-    const lateChunk = Buffer.from('late output\n', 'utf8').toString('base64');
-    const sendCommand = vi.fn();
-    let replayResolve:
-      | ((value: { status: 'ok'; chunk: string; seq: number }) => void)
-      | undefined;
+    const replayChunk = new TextEncoder().encode('replay snapshot\n');
+    const earlyChunk = new TextEncoder().encode('early output\n');
+    const lateChunk = new TextEncoder().encode('late output\n');
+    const dispatchCommand = vi.fn();
+    let replayResolve: ((value: TerminalReplayPayload) => void) | undefined;
     let subscriptionHandler:
       | ((topic: string, payload: unknown, seq: number) => void)
       | undefined;
@@ -391,13 +389,16 @@ describe('XtermHost', () => {
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
 
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
     global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
       rafCallbacks.push(callback);
       return rafCallbacks.length;
     }) as typeof requestAnimationFrame;
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
-    sendCommand.mockImplementation((op: string) => {
+    dispatchCommand.mockImplementation((op: string) => {
       if (op === 'terminal.replay') {
         return new Promise((resolve) => {
           replayResolve = resolve;
@@ -413,7 +414,7 @@ describe('XtermHost', () => {
     });
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendCommand: dispatchCommand,
       subscribe,
     } as never);
 
@@ -435,13 +436,14 @@ describe('XtermHost', () => {
     await act(async () => {
       subscriptionHandler?.(
         Topics.terminalOutput('test-workspace', 'dedup-terminal'),
-        { chunk: earlyChunk, size: 13, seq: 100 },
-        1
+        { transport: 'binary', streamId: 100, size: earlyChunk.byteLength, bytes: earlyChunk },
+        100
       );
+      await Promise.resolve();
     });
 
-    expect(mockTerminal.write).not.toHaveBeenCalledWith('early output\n');
-    expect(sendCommand).not.toHaveBeenCalledWith('terminal.replay', {
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+    expect(dispatchCommand).not.toHaveBeenCalledWith('terminal.replay', {
       terminalId: 'dedup-terminal',
       lastSeq: 0,
     });
@@ -450,10 +452,17 @@ describe('XtermHost', () => {
       const callback = rafCallbacks.shift();
       callback?.(16);
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+      expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
+        terminalId: 'dedup-terminal',
+        cols: 132,
+        rows: 36,
+      });
+      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
         terminalId: 'dedup-terminal',
         lastSeq: 0,
       });
@@ -462,22 +471,26 @@ describe('XtermHost', () => {
     await act(async () => {
       replayResolve?.({
         status: 'ok',
-        chunk: replayChunk,
+        transport: 'binary',
+        streamId: 101,
+        size: replayChunk.byteLength,
         seq: 200,
+        bytes: replayChunk,
       });
+      await Promise.resolve();
       await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith('replay snapshot\n');
+      expect(mockTerminal.write).toHaveBeenNthCalledWith(1, 'replay snapshot\n');
     });
     expect(mockTerminal.write).not.toHaveBeenCalledWith('early output\n');
 
     await act(async () => {
       subscriptionHandler?.(
         Topics.terminalOutput('test-workspace', 'dedup-terminal'),
-        { chunk: lateChunk, size: 12, seq: 250 },
-        2
+        { transport: 'binary', streamId: 102, size: lateChunk.byteLength, bytes: lateChunk },
+        250
       );
     });
 
@@ -491,10 +504,14 @@ describe('XtermHost', () => {
 
   it('waits for the first fit frame before writing replay output', async () => {
     const store = createStore();
-    const replayChunk = Buffer.from('cursor addressed replay\n', 'utf8').toString('base64');
-    const sendCommand = vi.fn().mockImplementation((op: string) => {
+    const replayChunk = new TextEncoder().encode('cursor addressed replay\n');
+    const dispatchCommand = vi.fn().mockImplementation((op: string) => {
       if (op === 'terminal.replay') {
-        return Promise.resolve({ status: 'ok', chunk: replayChunk, seq: 200 });
+        return Promise.resolve({
+          status: 'ok',
+          seq: 200,
+          bytes: replayChunk,
+        });
       }
 
       return Promise.resolve({ status: 'ok' });
@@ -511,7 +528,7 @@ describe('XtermHost', () => {
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendCommand: dispatchCommand,
       subscribe,
     } as never);
 
@@ -532,6 +549,8 @@ describe('XtermHost', () => {
       const callback = rafCallbacks.shift();
       callback?.(16);
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(mockFitAddon.fit).toHaveBeenCalled();
@@ -545,12 +564,12 @@ describe('XtermHost', () => {
 
   it('waits for the initial PTY resize sync before requesting replay', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockImplementation((op: string) => {
+    const dispatchCommand = vi.fn().mockImplementation((op: string) => {
       if (op === 'terminal.replay') {
-        return Promise.resolve({ status: 'ok', seq: 200 });
+        return Promise.resolve({ ok: true, data: { status: 'ok', seq: 200 } });
       }
 
-      return Promise.resolve({ status: 'ok' });
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
     });
     const subscribe = vi.fn(() => vi.fn());
     const rafCallbacks: FrameRequestCallback[] = [];
@@ -567,7 +586,7 @@ describe('XtermHost', () => {
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendCommand: dispatchCommand,
       subscribe,
     } as never);
 
@@ -581,7 +600,7 @@ describe('XtermHost', () => {
       await Promise.resolve();
     });
 
-    expect(sendCommand).not.toHaveBeenCalledWith('terminal.replay', {
+    expect(dispatchCommand).not.toHaveBeenCalledWith('terminal.replay', {
       terminalId: 'initial-resize-terminal',
       lastSeq: 0,
     });
@@ -590,21 +609,23 @@ describe('XtermHost', () => {
       const callback = rafCallbacks.shift();
       callback?.(16);
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.resize', {
+      expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
         terminalId: 'initial-resize-terminal',
         cols: 132,
         rows: 36,
       });
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
         terminalId: 'initial-resize-terminal',
         lastSeq: 0,
       });
     });
 
-    const ops = sendCommand.mock.calls.map(([op]) => op);
+    const ops = dispatchCommand.mock.calls.map(([op]) => op);
     const resizeIndex = ops.indexOf('terminal.resize');
     const replayIndex = ops.indexOf('terminal.replay');
     expect(resizeIndex).toBeGreaterThanOrEqual(0);
@@ -614,12 +635,106 @@ describe('XtermHost', () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it('waits for websocket connection before initial resize sync and replay', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('replay after connect\n');
+    let connectionStatus: 'connecting' | 'connected' = 'connecting';
+    let statusListener: ((status: 'connecting' | 'connected') => void) | undefined;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (connectionStatus !== 'connected') {
+        return Promise.reject(new Error('WebSocket not connected'));
+      }
+
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 401,
+          size: replayChunk.byteLength,
+          seq: 200,
+          bytes: replayChunk,
+        });
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const onStatus = vi.fn((listener: typeof statusListener) => {
+      statusListener = listener;
+      return vi.fn();
+    });
+    const getStatus = vi.fn(() => connectionStatus);
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      onStatus,
+      getStatus,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="connect-gated-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(onStatus).toHaveBeenCalled();
+      expect(typeof statusListener).toBe('function');
+    });
+
+    await act(async () => {
+      connectionStatus = 'connected';
+      statusListener?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.resize', {
+        terminalId: 'connect-gated-terminal',
+        cols: 132,
+        rows: 36,
+      });
+      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+        terminalId: 'connect-gated-terminal',
+        lastSeq: 0,
+      });
+      expect(mockTerminal.write).toHaveBeenCalledWith('replay after connect\n');
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it('ignores delayed replay results after unmount', async () => {
     const store = createStore();
-    const sendCommand = vi.fn();
-    let replayResolve:
-      | ((value: { status: 'ok'; chunk: string; seq: number }) => void)
-      | undefined;
+    const replayChunk = new TextEncoder().encode('late replay after unmount\n');
+    const dispatchCommand = vi.fn();
+    let replayResolve: ((value: TerminalReplayPayload) => void) | undefined;
     const rafCallbacks: FrameRequestCallback[] = [];
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
@@ -630,18 +745,18 @@ describe('XtermHost', () => {
     }) as typeof requestAnimationFrame;
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
-    sendCommand.mockImplementation((op: string) => {
+    dispatchCommand.mockImplementation((op: string) => {
       if (op === 'terminal.replay') {
         return new Promise((resolve) => {
           replayResolve = resolve;
-        });
+        }).then((data) => ({ ok: true, data }));
       }
 
-      return Promise.resolve({ status: 'ok' });
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
     });
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendCommand: dispatchCommand,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -655,10 +770,12 @@ describe('XtermHost', () => {
       const callback = rafCallbacks.shift();
       callback?.(16);
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
         terminalId: 'unmount-terminal',
         lastSeq: 0,
       });
@@ -669,7 +786,10 @@ describe('XtermHost', () => {
     await act(async () => {
       replayResolve?.({
         status: 'ok',
-        chunk: Buffer.from('late replay after unmount\n', 'utf8').toString('base64'),
+        transport: 'binary',
+        streamId: 301,
+        size: replayChunk.byteLength,
+        bytes: replayChunk,
         seq: 10,
       });
       await Promise.resolve();
@@ -683,10 +803,10 @@ describe('XtermHost', () => {
 
   it('syncs xterm resize events back to the server PTY', async () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+    const dispatchCommand = vi.fn().mockResolvedValue({ ok: true, data: { status: 'ok' } });
 
     store.set(wsClientAtom, {
-      sendCommand,
+      sendCommand: dispatchCommand,
       subscribe: vi.fn(() => () => {}),
     } as never);
 
@@ -701,7 +821,7 @@ describe('XtermHost', () => {
 
     await onResizeCallback?.({ cols: 132, rows: 36 });
 
-    expect(sendCommand).toHaveBeenCalledWith('terminal.resize', {
+    expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
       terminalId: 'resize-terminal',
       cols: 132,
       rows: 36,

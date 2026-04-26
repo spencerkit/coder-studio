@@ -18,7 +18,7 @@ import { dispatchCommandAtom } from '../../../atoms/connection';
 import { themeAtom } from '../../../atoms/ui';
 import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../../atoms/terminals';
-import { encodeUtf8ToBase64 } from '../../../lib/base64';
+import type { TerminalBinaryPayload, TerminalReplayPayload } from '../../../ws/client';
 
 type TerminalInputActivity = 'typing' | 'submit' | 'system';
 
@@ -95,11 +95,10 @@ function getTerminalTheme(theme: 'dark' | 'light') {
 }
 
 const terminalOutputDecoder = new TextDecoder();
+const terminalInputEncoder = new TextEncoder();
 
-function decodeTerminalChunk(chunk: string): string {
-  const binary = atob(chunk);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return terminalOutputDecoder.decode(bytes);
+function decodeTerminalChunk(chunk: Uint8Array): string {
+  return terminalOutputDecoder.decode(chunk);
 }
 
 interface XtermHostProps {
@@ -115,8 +114,11 @@ interface XtermHostProps {
 
 interface ReplayPayload {
   status: 'ok' | 'too_old' | 'unknown';
-  chunk?: string;
+  transport?: 'binary';
+  streamId?: number;
+  size?: number;
   seq?: number;
+  bytes?: Uint8Array;
 }
 
 /**
@@ -141,7 +143,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
   // Buffer WS output chunks that arrive before the replay response resolves,
   // so we can reconcile them against the replay snapshot instead of writing
   // the overlapping bytes twice into xterm.
-  const pendingReplayChunksRef = useRef<Array<{ chunk: string; seq: number }>>([]);
+  const pendingReplayChunksRef = useRef<Array<{ bytes: Uint8Array; seq: number }>>([]);
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
@@ -218,17 +220,22 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         return;
       }
 
-      const result = await dispatch('terminal.input', {
-        terminalId,
-        bytes: encodeUtf8ToBase64(data),
-        activity: classifyTerminalInput(data),
-      });
+      if (!wsClient) {
+        console.error('Cannot send terminal input: WebSocket not connected');
+        return;
+      }
 
-      if (!result.ok) {
-        console.error('Failed to send terminal input:', result.error);
+      try {
+        await wsClient.sendTerminalInput(
+          terminalId,
+          terminalInputEncoder.encode(data),
+          classifyTerminalInput(data)
+        );
+      } catch (error) {
+        console.error('Failed to send terminal input:', error);
       }
     },
-    [terminalId, dispatch]
+    [terminalId, wsClient]
   );
 
   const handleResize = useCallback(
@@ -279,6 +286,9 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
   useEffect(() => {
     if (!containerRef.current) return;
 
+    let disposed = false;
+    let unsubscribeStatus: (() => void) | null = null;
+
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
     pendingReplayChunksRef.current = [];
@@ -319,7 +329,36 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     scheduleFit();
     const initialFitReady = waitForNextFit();
 
+    const waitForConnected = async () => {
+      if (!wsClient) {
+        return;
+      }
+
+      if (typeof wsClient.getStatus !== 'function' || typeof wsClient.onStatus !== 'function') {
+        return;
+      }
+
+      if (wsClient.getStatus() === 'connected') {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        unsubscribeStatus = wsClient.onStatus((status) => {
+          if (status === 'connected') {
+            unsubscribeStatus?.();
+            unsubscribeStatus = null;
+            resolve();
+          }
+        });
+      });
+    };
+
     const initialReplayReady = initialFitReady.then(async () => {
+      await waitForConnected();
+      if (disposed || !mountedRef.current) {
+        return;
+      }
+
       const { cols, rows } = terminal;
       await handleResizeRef.current({ cols, rows });
     });
@@ -332,27 +371,25 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         [outputTopic, exitTopic],
         (topic, payload, _seq) => {
           if (topic === outputTopic) {
-            // Server sends { chunk: base64, size, seq }
-            const outputData = payload as { chunk: string; size: number; seq: number };
+            const outputData = payload as TerminalBinaryPayload;
 
             if (!replayCompletedRef.current) {
-              // Replay is still in flight — buffer the chunk until we know
-              // which bytes are already covered by the replay snapshot. This
-              // prevents writing the overlapping prefix twice to xterm, which
-              // otherwise manifests as "extra blank lines" because control
-              // sequences (\r, \x1b[K, cursor moves) re-execute.
               pendingReplayChunksRef.current.push({
-                chunk: outputData.chunk,
-                seq: outputData.seq,
+                bytes: outputData.bytes,
+                seq: _seq,
               });
               return;
             }
 
-            setOutputAtom((prev: OutputBuffer) => ({
-              chunks: [...prev.chunks, outputData.chunk],
-              lastSeq: outputData.seq,
-              lastWritten: prev.lastWritten,
-            }));
+            // Skip if seq hasn't advanced (prevents duplicate writes when terminal-panel already cached this output)
+            setOutputAtom((prev: OutputBuffer) => {
+              if (_seq <= prev.lastSeq) return prev;
+              return {
+                chunks: [...prev.chunks, outputData.bytes],
+                lastSeq: _seq,
+                lastWritten: prev.lastWritten,
+              };
+            });
           } else if (topic === exitTopic) {
             const exitData = payload as { code: number };
             if (terminalRef.current) {
@@ -379,12 +416,8 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         }
 
         let replayedSeq = 0;
-        if (result.ok && result.data?.status === 'ok' && result.data.chunk) {
-          try {
-            terminal.write(decodeTerminalChunk(result.data.chunk));
-          } catch {
-            terminal.write(atob(result.data.chunk));
-          }
+        if (result.ok && result.data?.status === 'ok' && result.data.bytes) {
+          terminal.write(decodeTerminalChunk(result.data.bytes));
           replayedSeq = result.data.seq ?? 0;
         }
 
@@ -397,11 +430,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         pendingReplayChunksRef.current = [];
         for (const entry of pending) {
           if (entry.seq <= replayedSeq) continue;
-          try {
-            terminal.write(decodeTerminalChunk(entry.chunk));
-          } catch {
-            terminal.write(entry.chunk);
-          }
+          terminal.write(decodeTerminalChunk(entry.bytes));
         }
 
       })
@@ -418,15 +447,16 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         replayCompletedRef.current = true;
         replayedSeqRef.current = 0;
         for (const entry of pending) {
-          try {
-            terminal.write(decodeTerminalChunk(entry.chunk));
-          } catch {
-            terminal.write(entry.chunk);
-          }
+          terminal.write(decodeTerminalChunk(entry.bytes));
         }
       });
 
     return () => {
+      disposed = true;
+      if (unsubscribeStatus) {
+        unsubscribeStatus();
+        unsubscribeStatus = null;
+      }
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
@@ -461,13 +491,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       const chunk = chunks[i];
       if (!chunk) continue;
 
-      try {
-        const decoded = decodeTerminalChunk(chunk);
-        terminal.write(decoded);
-      } catch {
-        // If decode fails, write raw
-        terminal.write(chunk);
-      }
+      terminal.write(decodeTerminalChunk(chunk));
     }
 
     // Update lastWritten to prevent atom bloat

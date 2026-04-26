@@ -8,7 +8,7 @@
  */
 
 import type { ServerToClient, ClientToServer, Event } from '@coder-studio/core';
-import type WebSocket from 'ws';
+import WebSocket from 'ws';
 import { StreamBuffer, type Frame } from './stream-buffer.js';
 
 const HIGH_WATER = 512 * 1024;
@@ -16,7 +16,7 @@ const LOW_WATER = 128 * 1024;
 const FLUSH_INTERVAL_MS = 30;
 
 export type ClientId = string;
-export type MessageHandler = (msg: ClientToServer) => void;
+export type MessageHandler = (msg: ClientToServer | Buffer) => void;
 export type CloseHandler = () => void;
 
 export class WsClient {
@@ -37,7 +37,12 @@ export class WsClient {
   }
 
   private setupSocketHandlers(): void {
-    this.socket.on('message', (data: Buffer) => {
+    this.socket.on('message', (data: Buffer, isBinary: boolean) => {
+      if (isBinary) {
+        this.messageHandler?.(data);
+        return;
+      }
+
       try {
         const msg = JSON.parse(data.toString()) as ClientToServer;
         this.messageHandler?.(msg);
@@ -89,6 +94,19 @@ export class WsClient {
     }
   }
 
+  sendBinary(data: Buffer): boolean {
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      this.socket.send(data, { binary: true });
+      return true;
+    } catch (error) {
+      console.error(`Failed to send binary frame to client ${this.id}:`, error);
+      return false;
+    }
+  }
+
   /**
    * Backwards-compatible alias for sendControl.
    * Kept so existing call sites (hub.send, dispatch results, sendToClient) compile unchanged.
@@ -102,21 +120,15 @@ export class WsClient {
    * Caller-side ordering is preserved within a topic; across topics the
    * flusher uses fair rotation. Frontend recovers via seq-gap + replay.
    */
-  sendStream(topic: string, msg: ServerToClient): void {
+  sendStream(topic: string, msg: ServerToClient | Buffer): void {
     if (this.socket.readyState !== WebSocket.OPEN) return;
 
-    const data = JSON.stringify(msg);
-    const frame: Frame = {
-      data,
-      size: Buffer.byteLength(data, 'utf8'),
-    };
+    const frame = this.createFrame(msg);
 
     const buffered = this.socket.bufferedAmount ?? 0;
     if (buffered < HIGH_WATER && this.streamBuffer.isEmpty()) {
-      try {
-        this.socket.send(data);
-      } catch (error) {
-        console.error(`Failed to send stream frame to client ${this.id}:`, error);
+      if (!this.sendFrame(frame.data)) {
+        console.error(`Failed to send stream frame to client ${this.id}`);
       }
       return;
     }
@@ -139,6 +151,34 @@ export class WsClient {
     this.sendStream(topic, event);
   }
 
+  private createFrame(msg: ServerToClient | Buffer): Frame {
+    if (Buffer.isBuffer(msg)) {
+      return {
+        data: msg,
+        size: msg.byteLength,
+      };
+    }
+
+    const data = JSON.stringify(msg);
+    return {
+      data,
+      size: Buffer.byteLength(data, 'utf8'),
+    };
+  }
+
+  private sendFrame(data: string | Buffer): boolean {
+    try {
+      if (Buffer.isBuffer(data)) {
+        this.socket.send(data, { binary: true });
+      } else {
+        this.socket.send(data);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private flushStream(): void {
     if (this.socket.readyState !== WebSocket.OPEN) {
       this.clearFlushTimer();
@@ -151,7 +191,11 @@ export class WsClient {
       const headroom = HIGH_WATER - buffered;
       this.streamBuffer.drain(headroom, (data) => {
         try {
-          this.socket.send(data);
+          if (Buffer.isBuffer(data)) {
+            this.socket.send(data, { binary: true });
+          } else {
+            this.socket.send(data);
+          }
           return true;
         } catch (error) {
           console.error(`Stream send failed for client ${this.id}:`, error);

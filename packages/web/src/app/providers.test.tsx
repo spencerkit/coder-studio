@@ -7,6 +7,8 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../atoms/workspaces';
+import { sessionsAtom } from '../atoms';
+import { sessionOutputTailAtom } from '../features/notifications';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
 import { routeEventToAtom } from './providers';
 
@@ -123,15 +125,51 @@ describe('routeEventToAtom', () => {
     expect(store.get(activeWorkspaceAtom)?.id).toBe('ws-1');
   });
 
-  it('does not append a pathless meta patch for a brand-new workspace', () => {
+  it('appends cleaned utf-8 terminal output bytes to the matching session tail buffer', () => {
     const store = createStore();
+    store.set(sessionsAtom, {
+      'sess-1': {
+        id: 'sess-1',
+        workspaceId: 'ws-1',
+        terminalId: 'term-1',
+        providerId: 'claude',
+        state: 'running',
+        capability: 'full',
+        startedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
 
     routeEventToAtom(
-      'workspace.ws-ghost.meta',
-      { name: 'Ghost workspace' },
+      'workspace.ws-1.terminal.term-1.output',
+      {
+        transport: 'binary',
+        streamId: 7,
+        size: 11,
+        bytes: new TextEncoder().encode('[32mhello[0m\n'),
+      },
       store as any
     );
 
-    expect(store.get(workspaceOrderAtom)).toEqual([]);
+    expect(store.get(sessionOutputTailAtom)).toEqual({
+      'sess-1': 'hello\n',
+    });
+  });
+
+  it('ignores terminal output bytes when no matching session exists', () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      'workspace.ws-1.terminal.term-1.output',
+      {
+        transport: 'binary',
+        streamId: 7,
+        size: 5,
+        bytes: new TextEncoder().encode('hello'),
+      },
+      store as any
+    );
+
+    expect(store.get(sessionOutputTailAtom)).toEqual({});
   });
 });
