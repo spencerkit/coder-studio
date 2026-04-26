@@ -2,7 +2,7 @@
  * File IO operations with conflict detection.
  */
 
-import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, stat } from 'fs/promises';
+import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rm, stat } from 'fs/promises';
 import { resolve, dirname } from 'path';
 import { createHash } from 'crypto';
 import { getImageTypeInfo } from './image.js';
@@ -32,6 +32,48 @@ export type FileReadResult = FileReadTextResult | FileReadImageResult;
 
 export interface FileWriteResult {
   newHash: string;
+}
+
+async function statSafe(path: string) {
+  try {
+    return await stat(path);
+  } catch {
+    return null;
+  }
+}
+
+export async function createFile(rootPath: string, relPath: string): Promise<void> {
+  const abs = resolveSafe(rootPath, relPath);
+  const existing = await statSafe(abs);
+
+  if (existing) {
+    throw { code: 'already_exists', message: 'File already exists' };
+  }
+
+  await mkdir(dirname(abs), { recursive: true });
+  await fsWriteFile(abs, '', 'utf-8');
+}
+
+export async function createDirectory(rootPath: string, relPath: string): Promise<void> {
+  const abs = resolveSafe(rootPath, relPath);
+  const existing = await statSafe(abs);
+
+  if (existing) {
+    throw { code: 'already_exists', message: 'Directory already exists' };
+  }
+
+  await mkdir(abs, { recursive: true });
+}
+
+export async function deleteEntry(rootPath: string, relPath: string): Promise<void> {
+  const abs = resolveSafe(rootPath, relPath);
+  const existing = await statSafe(abs);
+
+  if (!existing) {
+    throw { code: 'not_found', message: 'Target not found' };
+  }
+
+  await rm(abs, { recursive: true });
 }
 
 /**

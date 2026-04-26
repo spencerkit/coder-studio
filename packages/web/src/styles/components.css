@@ -5319,11 +5319,25 @@ textarea.input {
 }
 
 .tree-item {
+  display: flex;
+  align-items: center;
   min-height: 0;
   gap: 4px;
   margin-right: 0;
   padding: 3px 12px 3px 16px;
   border-radius: 0;
+}
+
+.tree-item-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.tree-item:hover .tree-item-actions,
+.tree-item.selected .tree-item-actions {
+  opacity: 1;
 }
 
 .tree-item.selected {

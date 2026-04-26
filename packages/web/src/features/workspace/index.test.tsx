@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { activeWorkspaceIdAtom } from '../../atoms/ui';
@@ -15,6 +15,8 @@ import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { WorkspacePage } from './index';
 
+const fileTreePanelSpy = vi.fn();
+
 vi.mock('../topbar', () => ({
   TopBar: () => <div data-testid="topbar" />,
 }));
@@ -28,7 +30,10 @@ vi.mock('../terminal-panel', () => ({
 }));
 
 vi.mock('./components/file-tree', () => ({
-  FileTreePanel: () => <div data-testid="file-tree-panel" />,
+  FileTreePanel: (props: unknown) => {
+    fileTreePanelSpy(props);
+    return <div data-testid="file-tree-panel" />;
+  },
 }));
 
 vi.mock('./components/git-panel', () => ({
@@ -46,6 +51,7 @@ vi.mock('../code-editor', () => ({
 describe('WorkspacePage', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    fileTreePanelSpy.mockReset();
   });
 
   it('loads git status on mount so the file view shows the active branch', async () => {
@@ -275,15 +281,40 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('keeps the resolving shell visible while the connection is not yet connected', async () => {
-    const sendCommand = vi.fn().mockResolvedValue([]);
+  it('passes toolbar create requests through to the file tree panel', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return {
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
 
     const store = createStore();
-    store.set(connectionStatusAtom, 'connecting');
+    store.set(connectionStatusAtom, 'connected');
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/home/spencer/workspace/coder-studio',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
 
     render(
       <Provider store={store}>
@@ -295,9 +326,33 @@ describe('WorkspacePage', () => {
       </Provider>
     );
 
-    await act(async () => {});
-    expect(sendCommand).not.toHaveBeenCalled();
-    expect(screen.getByTestId('workspace-resolving-shell')).toBeInTheDocument();
-    expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '新建文件' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '新建文件' }));
+
+    await waitFor(() => {
+      expect(fileTreePanelSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          workspaceId: 'ws-test',
+          createRequest: expect.objectContaining({
+            mode: 'file',
+            baseDir: null,
+          }),
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '新建文件夹' }));
+
+    await waitFor(() => {
+      expect(fileTreePanelSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          workspaceId: 'ws-test',
+          createRequest: expect.objectContaining({
+            mode: 'folder',
+            baseDir: null,
+          }),
+        })
+      );
+    });
   });
 });

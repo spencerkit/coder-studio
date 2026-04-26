@@ -3,25 +3,27 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rmdir, writeFile, readFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { readFile as readWorkspaceFile, writeFile as writeWorkspaceFile, resolveSafe } from '../../fs/file-io.js';
+import {
+  createDirectory,
+  createFile,
+  deleteEntry,
+  readFile as readWorkspaceFile,
+  resolveSafe,
+  writeFile as writeWorkspaceFile,
+} from '../../fs/file-io.js';
 
 describe('resolveSafe', () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = join(tmpdir(), `fileio-test-${Date.now()}`);
-    await mkdir(testDir);
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
   });
 
   afterEach(async () => {
-    try {
-      await rmdir(testDir, { recursive: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    await rm(testDir, { recursive: true, force: true });
   });
 
   it('should resolve safe relative path', () => {
@@ -47,16 +49,11 @@ describe('readFile', () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = join(tmpdir(), `fileio-test-${Date.now()}`);
-    await mkdir(testDir);
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
   });
 
   afterEach(async () => {
-    try {
-      await rmdir(testDir, { recursive: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    await rm(testDir, { recursive: true, force: true });
   });
 
   it('should read file content and hash', async () => {
@@ -124,16 +121,11 @@ describe('writeFile', () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = join(tmpdir(), `fileio-test-${Date.now()}`);
-    await mkdir(testDir);
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
   });
 
   afterEach(async () => {
-    try {
-      await rmdir(testDir, { recursive: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    await rm(testDir, { recursive: true, force: true });
   });
 
   it('should write new file without baseHash', async () => {
@@ -168,5 +160,119 @@ describe('writeFile', () => {
 
     // Try to write with outdated baseHash
     await expect(writeWorkspaceFile(testDir, 'test.txt', 'Updated', 'wronghash')).rejects.toThrow();
+  });
+});
+
+describe('createFile', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('creates an empty file', async () => {
+    await createFile(testDir, 'notes/today.md');
+
+    expect(await readFile(join(testDir, 'notes/today.md'), 'utf8')).toBe('');
+  });
+
+  it('creates parent directories automatically', async () => {
+    await createFile(testDir, 'src/demo/new-file.ts');
+
+    const stats = await stat(join(testDir, 'src/demo'));
+    expect(stats.isDirectory()).toBe(true);
+  });
+
+  it('rejects when the target already exists', async () => {
+    await writeFile(join(testDir, 'README.md'), 'hello');
+
+    await expect(createFile(testDir, 'README.md')).rejects.toMatchObject({
+      code: 'already_exists',
+    });
+  });
+
+  it('rejects path escape attempts', async () => {
+    await expect(createFile(testDir, '../outside.txt')).rejects.toMatchObject({
+      code: 'path_escape',
+    });
+  });
+});
+
+describe('createDirectory', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('creates a directory recursively', async () => {
+    await createDirectory(testDir, 'src/demo/new-dir');
+
+    const stats = await stat(join(testDir, 'src/demo/new-dir'));
+    expect(stats.isDirectory()).toBe(true);
+  });
+
+  it('rejects when the target already exists', async () => {
+    await mkdir(join(testDir, 'src/demo'), { recursive: true });
+
+    await expect(createDirectory(testDir, 'src/demo')).rejects.toMatchObject({
+      code: 'already_exists',
+    });
+  });
+
+  it('rejects path escape attempts', async () => {
+    await expect(createDirectory(testDir, '../outside-dir')).rejects.toMatchObject({
+      code: 'path_escape',
+    });
+  });
+});
+
+describe('deleteEntry', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'fileio-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('deletes a file', async () => {
+    await mkdir(join(testDir, 'src/demo'), { recursive: true });
+    await writeFile(join(testDir, 'src/demo/remove-me.ts'), 'export {};');
+
+    await deleteEntry(testDir, 'src/demo/remove-me.ts');
+
+    await expect(readFile(join(testDir, 'src/demo/remove-me.ts'), 'utf8')).rejects.toThrow();
+  });
+
+  it('rejects when the file does not exist', async () => {
+    await expect(deleteEntry(testDir, 'missing.ts')).rejects.toMatchObject({
+      code: 'not_found',
+    });
+  });
+
+  it('deletes a directory recursively', async () => {
+    await mkdir(join(testDir, 'src/demo/nested'), { recursive: true });
+    await writeFile(join(testDir, 'src/demo/nested/file.ts'), 'export {};');
+
+    await deleteEntry(testDir, 'src/demo');
+
+    await expect(stat(join(testDir, 'src/demo'))).rejects.toThrow();
+  });
+
+  it('rejects path escape attempts', async () => {
+    await expect(deleteEntry(testDir, '../outside.txt')).rejects.toMatchObject({
+      code: 'path_escape',
+    });
   });
 });

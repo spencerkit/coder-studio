@@ -110,6 +110,13 @@
     "rename": "Rename",
     "delete": "Delete",
     "delete_confirm": "Are you sure you want to delete \"{name}\"?",
+    "path": "Path",
+    "path_required": "Enter a path",
+    "invalid_file_path": "File paths cannot end with /",
+    "path_helper_file": "Enter a workspace-relative path, for example src/demo/new-file.ts",
+    "path_helper_folder": "Enter a workspace-relative path, for example src/demo/new-folder",
+    "create_failed": "Failed to create item",
+    "delete_failed": "Failed to delete file",
     "conflict": "File has been modified externally",
     "conflict_message": "The file may have been modified outside the editor. Discard local changes and reload?"
   },

@@ -9,34 +9,60 @@ import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   File as FileIcon,
   FileCode2,
   FileImage,
   FileJson2,
+  FilePlus,
   FileText,
   Folder,
   FolderOpen,
+  FolderPlus,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
+  openFilesAtomFamily,
 } from '../../../atoms/fs';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { FileNode } from '@coder-studio/core';
 
+interface CreateRequest {
+  id: number;
+  mode: 'file' | 'folder';
+  baseDir: string | null;
+}
+
 interface FileTreePanelProps {
   workspaceId: string;
   refreshToken?: number;
+  createRequest?: CreateRequest | null;
+  onCreateRequestConsumed?: () => void;
 }
 
 interface ReadTreeResult {
   path: string;
   children: FileNode[];
+}
+
+interface CreateDialogState {
+  mode: 'file' | 'folder';
+  draftPath: string;
+  error: string | null;
+}
+
+interface PendingDeleteState {
+  path: string;
+  name: string;
+  error: string | null;
 }
 
 /**
@@ -46,27 +72,30 @@ interface ReadTreeResult {
  *   - Tree structure with folders/files
  *   - Click to open, expand/collapse
  */
-export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToken = 0 }) => {
+export const FileTreePanel: FC<FileTreePanelProps> = ({
+  workspaceId,
+  refreshToken = 0,
+  createRequest = null,
+  onCreateRequestConsumed,
+}) => {
   const t = useTranslation();
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
+  const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
 
   const [isLoading, setIsLoading] = useState(false);
+  const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
   const lastRefreshTokenRef = useRef(refreshToken);
-  // Selection is mirrored to the shared activeFilePath atom so the tree
-  // highlight stays in sync with the code editor (and disappears when the
-  // editor is closed, since closing clears that atom).
-  const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
-  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const lastCreateRequestRef = useRef(0);
 
-  /**
-   * Load file tree: dispatch file.readTree command
-   */
   const loadFileTree = useCallback(async () => {
-    if (!workspaceId || isLoading) return;
+    if (!workspaceId || isLoading) return false;
 
     setIsLoading(true);
     const result = await dispatch<ReadTreeResult>('file.readTree', {
@@ -75,25 +104,163 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
 
     if (result.ok && result.data) {
       setFileTree(result.data.children);
-    } else if (!result.ok) {
+      setIsLoading(false);
+      return true;
+    }
+
+    if (!result.ok) {
       console.error('Failed to load file tree:', result.error?.message);
     }
 
     setIsLoading(false);
+    return false;
   }, [workspaceId, isLoading, dispatch, setFileTree]);
 
-  // Load file tree on mount
+  const openCreateDialog = useCallback((mode: 'file' | 'folder', baseDir: string | null) => {
+    const normalizedBaseDir = baseDir ? `${baseDir.replace(/\/+$/, '')}/` : '';
+    setCreateDialog({
+      mode,
+      draftPath: normalizedBaseDir,
+      error: null,
+    });
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    setCreateDialog(null);
+  }, []);
+
+  const updateDraftPath = useCallback((draftPath: string) => {
+    setCreateDialog((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        draftPath,
+        error: null,
+      };
+    });
+  }, []);
+
+  const submitCreateDialog = useCallback(async () => {
+    if (!createDialog) {
+      return;
+    }
+
+    const path = createDialog.draftPath.trim();
+    if (!path) {
+      setCreateDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: t('file.path_required'),
+            }
+          : current
+      );
+      return;
+    }
+
+    if (createDialog.mode === 'file' && path.endsWith('/')) {
+      setCreateDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: t('file.invalid_file_path'),
+            }
+          : current
+      );
+      return;
+    }
+
+    const op = createDialog.mode === 'file' ? 'file.create' : 'file.mkdir';
+    const result = await dispatch(op, {
+      workspaceId,
+      path,
+    });
+
+    if (!result.ok) {
+      setCreateDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: result.error?.message ?? t('file.create_failed'),
+            }
+          : current
+      );
+      return;
+    }
+
+    await loadFileTree();
+    closeCreateDialog();
+
+    if (createDialog.mode === 'file') {
+      setActiveFilePath(path);
+    }
+  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, setActiveFilePath, t]);
+
+  const cancelDelete = useCallback(() => {
+    setPendingDelete(null);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) {
+      return;
+    }
+
+    const result = await dispatch('file.delete', {
+      workspaceId,
+      path: pendingDelete.path,
+    });
+
+    if (!result.ok) {
+      setPendingDelete((current) =>
+        current
+          ? {
+              ...current,
+              error: result.error?.message ?? t('file.delete_failed'),
+            }
+          : current
+      );
+      return;
+    }
+
+    if (activeFilePath === pendingDelete.path) {
+      setActiveFilePath(null);
+    }
+
+    setOpenFiles((prev) => {
+      if (!(pendingDelete.path in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[pendingDelete.path];
+      return next;
+    });
+    await loadFileTree();
+    setPendingDelete(null);
+  }, [
+    pendingDelete,
+    dispatch,
+    workspaceId,
+    activeFilePath,
+    setActiveFilePath,
+    setOpenFiles,
+    loadFileTree,
+    t,
+  ]);
+
   useEffect(() => {
     if (!fileTree && !isLoading) {
-      loadFileTree();
+      void loadFileTree();
     }
   }, [fileTree, isLoading, loadFileTree]);
 
-  // Reload file tree when stale
   useEffect(() => {
     if (fileTreeStale && !isLoading) {
       setFileTreeStale(false);
-      loadFileTree();
+      void loadFileTree();
     }
   }, [fileTreeStale, isLoading, loadFileTree, setFileTreeStale]);
 
@@ -103,57 +270,80 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({ workspaceId, refreshToke
     }
 
     lastRefreshTokenRef.current = refreshToken;
-    loadFileTree();
+    void loadFileTree();
   }, [refreshToken, isLoading, loadFileTree]);
 
+  useEffect(() => {
+    if (!createRequest || createRequest.id <= lastCreateRequestRef.current) {
+      return;
+    }
+
+    lastCreateRequestRef.current = createRequest.id;
+    openCreateDialog(createRequest.mode, createRequest.baseDir);
+    onCreateRequestConsumed?.();
+  }, [createRequest, openCreateDialog, onCreateRequestConsumed]);
+
   return (
-    <div className="file-tree">
-      {fileTree && fileTree.length > 0 ? (
-        sortNodes(fileTree).map((node) => (
-          <FileTreeNode
-            key={node.path}
-            node={node}
-            depth={0}
-            workspaceId={workspaceId}
-            selectedPath={activeFilePath}
-            onSelectFile={setActiveFilePath}
-          />
-        ))
-      ) : (
-        <div className="file-tree-empty">
-          <p>{isLoading ? 'Loading...' : t('file.title')}</p>
-        </div>
-      )}
-    </div>
+    <>
+      <div className="file-tree">
+        {fileTree && fileTree.length > 0 ? (
+          sortNodes(fileTree).map((node) => (
+            <FileTreeNode
+              key={node.path}
+              node={node}
+              depth={0}
+              selectedPath={activeFilePath}
+              onRequestCreate={openCreateDialog}
+              onRequestDelete={(path, name) => setPendingDelete({ path, name, error: null })}
+              onSelectFile={setActiveFilePath}
+            />
+          ))
+        ) : (
+          <div className="file-tree-empty">
+            <p>{isLoading ? 'Loading...' : t('file.title')}</p>
+          </div>
+        )}
+      </div>
+
+      <CreatePathModal
+        dialog={createDialog}
+        onCancel={closeCreateDialog}
+        onConfirm={submitCreateDialog}
+        onDraftPathChange={updateDraftPath}
+      />
+
+      <DeleteFileModal
+        pendingDelete={pendingDelete}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+    </>
   );
 };
 
 interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
-  workspaceId: string;
   selectedPath: string | null;
+  onRequestCreate: (mode: 'file' | 'folder', baseDir: string | null) => void;
+  onRequestDelete: (path: string, name: string) => void;
   onSelectFile: (path: string) => void;
 }
 
-/**
- * File Tree Node (recursive)
- */
 const FileTreeNode: FC<FileTreeNodeProps> = ({
   node,
   depth,
-  workspaceId,
   selectedPath,
+  onRequestCreate,
+  onRequestDelete,
   onSelectFile,
 }) => {
+  const t = useTranslation();
   const isFolder = node.kind === 'dir';
   const defaultExpanded =
     isFolder && depth === 0 && ['app', 'packages', 'src'].includes(node.name.toLowerCase());
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  // Selecting a file updates the shared activeFilePath atom. The code editor
-  // watches that atom and lazily fetches the file contents via file.read,
-  // so there's a single source of truth rather than an out-of-band event bus.
   const handleClick = () => {
     if (isFolder) {
       setIsExpanded(!isExpanded);
@@ -183,6 +373,62 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         </span>
 
         <span className="tree-label">{node.name}</span>
+
+        <div className="tree-item-actions">
+          {isFolder ? (
+            <>
+              <button
+                aria-label={`${t('file.new_file')} ${node.path}`}
+                className="git-row-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestCreate('file', node.path);
+                }}
+                title={t('file.new_file')}
+                type="button"
+              >
+                <FilePlus size={12} />
+              </button>
+              <button
+                aria-label={`${t('file.new_folder')} ${node.path}`}
+                className="git-row-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestCreate('folder', node.path);
+                }}
+                title={t('file.new_folder')}
+                type="button"
+              >
+                <FolderPlus size={12} />
+              </button>
+              <button
+                aria-label={`${t('file.delete')} ${node.path}`}
+                className="git-row-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestDelete(node.path, node.name);
+                }}
+                title={t('file.delete')}
+                type="button"
+              >
+                <Trash2 size={12} />
+              </button>
+            </>
+          ) : (
+            <button
+              aria-label={`${t('file.delete')} ${node.path}`}
+              className="git-row-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestDelete(node.path, node.name);
+              }}
+              title={t('file.delete')}
+              type="button"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
       </div>
 
       {isFolder && isExpanded && node.children && (
@@ -192,14 +438,141 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               key={child.path}
               node={child}
               depth={depth + 1}
-              workspaceId={workspaceId}
               selectedPath={selectedPath}
+              onRequestCreate={onRequestCreate}
+              onRequestDelete={onRequestDelete}
               onSelectFile={onSelectFile}
             />
           ))}
         </div>
       )}
     </>
+  );
+};
+
+interface CreatePathModalProps {
+  dialog: CreateDialogState | null;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+  onDraftPathChange: (draftPath: string) => void;
+}
+
+const CreatePathModal: FC<CreatePathModalProps> = ({
+  dialog,
+  onCancel,
+  onConfirm,
+  onDraftPathChange,
+}) => {
+  const t = useTranslation();
+
+  if (!dialog) {
+    return null;
+  }
+
+  const helperText =
+    dialog.mode === 'file' ? t('file.path_helper_file') : t('file.path_helper_folder');
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">
+            {dialog.mode === 'file' ? <FilePlus size={16} /> : <FolderPlus size={16} />}
+            <h3>{dialog.mode === 'file' ? t('file.new_file') : t('file.new_folder')}</h3>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel} aria-label={t('action.close')}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="form-group">
+            <label htmlFor="file-path">{t('file.path')}</label>
+            <input
+              id="file-path"
+              className="input"
+              value={dialog.draftPath}
+              onChange={(event) => onDraftPathChange(event.target.value)}
+              placeholder={dialog.mode === 'file' ? 'src/demo/new-file.ts' : 'src/demo/new-folder'}
+              autoFocus
+            />
+            <span className="dialog-helper">{helperText}</span>
+            {dialog.error ? (
+              <span className="form-error" role="alert">
+                {dialog.error}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancel}>
+            {t('action.cancel')}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              void onConfirm();
+            }}
+          >
+            {t('action.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface DeleteFileModalProps {
+  pendingDelete: PendingDeleteState | null;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, onConfirm }) => {
+  const t = useTranslation();
+
+  if (!pendingDelete) {
+    return null;
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">
+            <AlertTriangle size={16} />
+            <h3>{t('file.delete')}</h3>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel} aria-label={t('action.close')}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <p>{t('file.delete_confirm', { name: pendingDelete.name })}</p>
+          {pendingDelete.error ? (
+            <span className="form-error" role="alert">
+              {pendingDelete.error}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancel}>
+            {t('action.cancel')}
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              void onConfirm();
+            }}
+          >
+            {t('action.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

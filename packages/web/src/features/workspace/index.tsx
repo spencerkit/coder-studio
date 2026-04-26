@@ -13,7 +13,7 @@
 import type { FC } from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
-import { GitBranch, RefreshCw } from 'lucide-react';
+import { FilePlus, FolderPlus, GitBranch, RefreshCw } from 'lucide-react';
 import {
   activeWorkspaceAtom,
   workspaceOrderAtom,
@@ -145,6 +145,11 @@ export const WorkspacePage: FC = () => {
   // Sidebar tab state
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');
   const [panelRefreshToken, setPanelRefreshToken] = useState(0);
+  const [createRequest, setCreateRequest] = useState<{
+    id: number;
+    mode: 'file' | 'folder';
+    baseDir: string | null;
+  } | null>(null);
 
   // Active file path drives the central area: when set (and the Files tab is
   // active) we swap AgentPanes out for the code editor, mirroring how Git Diff
@@ -333,7 +338,36 @@ export const WorkspacePage: FC = () => {
                   <div className="panel-toolbar">
                     <button
                       className="panel-toolbar-btn"
+                      title={t('file.new_file')}
+                      aria-label={t('file.new_file')}
+                      onClick={() =>
+                        setCreateRequest((prev) => ({
+                          id: (prev?.id ?? 0) + 1,
+                          mode: 'file',
+                          baseDir: null,
+                        }))
+                      }
+                    >
+                      <FilePlus size={14} />
+                    </button>
+                    <button
+                      className="panel-toolbar-btn"
+                      title={t('file.new_folder')}
+                      aria-label={t('file.new_folder')}
+                      onClick={() =>
+                        setCreateRequest((prev) => ({
+                          id: (prev?.id ?? 0) + 1,
+                          mode: 'folder',
+                          baseDir: null,
+                        }))
+                      }
+                    >
+                      <FolderPlus size={14} />
+                    </button>
+                    <button
+                      className="panel-toolbar-btn"
                       title={`Refresh ${activeTabLabel}`}
+                      aria-label={`Refresh ${activeTabLabel}`}
                       onClick={() => setPanelRefreshToken((prev) => prev + 1)}
                     >
                       <RefreshCw size={14} />
@@ -343,7 +377,12 @@ export const WorkspacePage: FC = () => {
 
                 <div className="panel-body">
                   {activeTab === 'files' ? (
-                    <FileTreePanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
+                    <FileTreePanel
+                      workspaceId={workspace.id}
+                      refreshToken={panelRefreshToken}
+                      createRequest={createRequest}
+                      onCreateRequestConsumed={() => setCreateRequest(null)}
+                    />
                   ) : (
                     <GitPanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
                   )}

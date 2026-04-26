@@ -110,6 +110,13 @@
     "rename": "重命名",
     "delete": "删除",
     "delete_confirm": "确定要删除 \"{name}\" 吗？",
+    "path": "路径",
+    "path_required": "请输入路径",
+    "invalid_file_path": "文件路径不能以 / 结尾",
+    "path_helper_file": "输入工作区内的相对路径，例如 src/demo/new-file.ts",
+    "path_helper_folder": "输入工作区内的相对路径，例如 src/demo/new-folder",
+    "create_failed": "创建失败",
+    "delete_failed": "删除失败",
     "conflict": "文件已被外部程序修改",
     "conflict_message": "文件可能已被编辑器外部修改。要放弃本地更改并重新加载吗？"
   },

@@ -1,15 +1,31 @@
-import { describe, it, expect, vi } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { FileTreePanel } from './file-tree';
 import { wsClientAtom } from '../../../atoms/connection';
-import { fileTreeAtomFamily, fileTreeStaleAtomFamily } from '../../../atoms/fs';
+import {
+  activeFilePathAtomFamily,
+  fileTreeAtomFamily,
+  fileTreeStaleAtomFamily,
+  openFilesAtomFamily,
+} from '../../../atoms/fs';
 
 vi.mock('../../../lib/i18n', () => ({
-  useTranslation: () => (key: string) => key,
+  useTranslation: () => (key: string, params?: Record<string, string | number>) => {
+    if (key === 'file.delete_confirm') {
+      return `Are you sure you want to delete "${params?.name ?? ''}"?`;
+    }
+    if (key === 'action.cancel') return 'Cancel';
+    if (key === 'action.confirm') return 'Confirm';
+    return key;
+  },
 }));
 
 describe('FileTreePanel', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('clears the stale flag after reloading the file tree for an fs.dirty event', async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       path: '/workspace',
@@ -106,6 +122,383 @@ describe('FileTreePanel', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('reloads the file tree after creating a file from the toolbar', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        path: '/workspace',
+        children: [
+          {
+            path: 'src/demo/new-file.ts',
+            name: 'new-file.ts',
+            kind: 'file',
+          },
+        ],
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), []);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" createRequest={{ id: 1, mode: 'file', baseDir: null }} />
+      </Provider>
+    );
+
+    fireEvent.change(await screen.findByLabelText('file.path'), {
+      target: { value: 'src/demo/new-file.ts' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(1, 'file.create', {
+        workspaceId: 'ws-test',
+        path: 'src/demo/new-file.ts',
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(2, 'file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([
+        {
+          path: 'src/demo/new-file.ts',
+          name: 'new-file.ts',
+          kind: 'file',
+        },
+      ]);
+    });
+
+    expect(store.get(activeFilePathAtomFamily('ws-test'))).toBe('src/demo/new-file.ts');
+  });
+
+  it('reloads the file tree after creating a folder from a directory action', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        path: '/workspace',
+        children: [
+          {
+            path: 'src',
+            name: 'src',
+            kind: 'dir',
+            children: [
+              {
+                path: 'src/demo',
+                name: 'demo',
+                kind: 'dir',
+                children: [],
+              },
+            ],
+          },
+        ],
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+        children: [],
+      },
+    ]);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.new_folder src' }));
+
+    const input = await screen.findByLabelText('file.path');
+    expect(input).toHaveValue('src/');
+
+    fireEvent.change(input, { target: { value: 'src/demo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(1, 'file.mkdir', {
+        workspaceId: 'ws-test',
+        path: 'src/demo',
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(2, 'file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([
+        {
+          path: 'src',
+          name: 'src',
+          kind: 'dir',
+          children: [
+            {
+              path: 'src/demo',
+              name: 'demo',
+              kind: 'dir',
+              children: [],
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
+  it('opens the new file dialog from the toolbar and dispatches file.create', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ path: '/workspace', children: [] })
+      .mockResolvedValueOnce({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), []);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" createRequest={{ id: 1, mode: 'file', baseDir: null }} />
+      </Provider>
+    );
+
+    expect(await screen.findByLabelText('file.path')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('file.path'), {
+      target: { value: 'src/demo/new-file.ts' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('file.create', {
+        workspaceId: 'ws-test',
+        path: 'src/demo/new-file.ts',
+      });
+    });
+
+    expect(store.get(activeFilePathAtomFamily('ws-test'))).toBe('src/demo/new-file.ts');
+  });
+
+  it('opens the new folder dialog from a directory action and pre-fills the directory prefix', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+        children: [],
+      },
+    ]);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.new_folder src' }));
+
+    const input = await screen.findByLabelText('file.path');
+    expect(input).toHaveValue('src/');
+
+    fireEvent.change(input, { target: { value: 'src/demo/new-dir' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('file.mkdir', {
+        workspaceId: 'ws-test',
+        path: 'src/demo/new-dir',
+      });
+    });
+  });
+
+  it('opens the new folder dialog on the first click from a directory action', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+        children: [],
+      },
+    ]);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.new_folder src' }));
+
+    expect(await screen.findByLabelText('file.path')).toBeInTheDocument();
+  });
+
+  it('reloads the file tree after deleting a file', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        path: '/workspace',
+        children: [],
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src/app.tsx',
+        name: 'app.tsx',
+        kind: 'file',
+      },
+    ]);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.delete src/app.tsx' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(1, 'file.delete', {
+        workspaceId: 'ws-test',
+        path: 'src/app.tsx',
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(2, 'file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([]);
+    });
+  });
+
+  it('confirms directory deletion and reloads the file tree', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        path: '/workspace',
+        children: [],
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+        children: [],
+      },
+    ]);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.delete src' }));
+
+    expect(await screen.findByText('Are you sure you want to delete "src"?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(1, 'file.delete', {
+        workspaceId: 'ws-test',
+        path: 'src',
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(2, 'file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([]);
+    });
+  });
+
+  it('confirms file deletion and removes the file from editor state', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), [
+      {
+        path: 'src/app.tsx',
+        name: 'app.tsx',
+        kind: 'file',
+      },
+    ]);
+    store.set(activeFilePathAtomFamily('ws-test'), 'src/app.tsx');
+    store.set(openFilesAtomFamily('ws-test'), {
+      'src/app.tsx': {
+        kind: 'text',
+        path: 'src/app.tsx',
+        content: 'export {}',
+        baseHash: 'hash',
+        isDirty: false,
+      },
+      'src/other.ts': {
+        kind: 'text',
+        path: 'src/other.ts',
+        content: 'export const other = true',
+        baseHash: 'hash-2',
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'file.delete src/app.tsx' }));
+
+    expect(await screen.findByText('Are you sure you want to delete "app.tsx"?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('file.delete', {
+        workspaceId: 'ws-test',
+        path: 'src/app.tsx',
+      });
+    });
+
+    expect(store.get(activeFilePathAtomFamily('ws-test'))).toBeNull();
+    expect(store.get(openFilesAtomFamily('ws-test'))).toEqual({
+      'src/other.ts': {
+        kind: 'text',
+        path: 'src/other.ts',
+        content: 'export const other = true',
+        baseHash: 'hash-2',
+        isDirty: false,
+      },
     });
   });
 });
