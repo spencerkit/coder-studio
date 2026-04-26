@@ -490,12 +490,132 @@ describe('XtermHost', () => {
       subscriptionHandler?.(
         Topics.terminalOutput('test-workspace', 'dedup-terminal'),
         { transport: 'binary', streamId: 102, size: lateChunk.byteLength, bytes: lateChunk },
-        250
+        200 + lateChunk.byteLength
       );
     });
 
     await waitFor(() => {
       expect(mockTerminal.write).toHaveBeenCalledWith('late output\n');
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('requests a replay from the last rendered seq when live output arrives with a seq gap', async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode('snapshot\n');
+    const liveChunk = new TextEncoder().encode('tail\n');
+    const gapReplayChunk = new TextEncoder().encode('missed\ntail\n');
+    const sendCommand = vi.fn();
+    let replayCount = 0;
+    let gapReplayResolve: ((value: TerminalReplayPayload) => void) | undefined;
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        replayCount += 1;
+
+        if (replayCount === 1) {
+          return Promise.resolve({
+            status: 'ok',
+            transport: 'binary',
+            streamId: 501,
+            size: initialReplayChunk.byteLength,
+            seq: 100,
+            bytes: initialReplayChunk,
+          } satisfies TerminalReplayPayload);
+        }
+
+        return new Promise((resolve) => {
+          gapReplayResolve = resolve;
+        });
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="gap-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+        terminalId: 'gap-terminal',
+        lastSeq: 0,
+      });
+      expect(mockTerminal.write).toHaveBeenCalledWith('snapshot\n');
+    });
+
+    mockTerminal.write.mockClear();
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'gap-terminal'),
+        { transport: 'binary', streamId: 502, size: liveChunk.byteLength, bytes: liveChunk },
+        112
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+        terminalId: 'gap-terminal',
+        lastSeq: 100,
+      });
+    });
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      gapReplayResolve?.({
+        status: 'ok',
+        transport: 'binary',
+        streamId: 503,
+        size: gapReplayChunk.byteLength,
+        seq: 112,
+        bytes: gapReplayChunk,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledWith('missed\ntail\n');
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;

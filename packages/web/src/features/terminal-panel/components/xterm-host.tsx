@@ -366,6 +366,80 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     const outputTopic = Topics.terminalOutput(workspaceId, terminalId);
     const exitTopic = Topics.terminalExit(workspaceId, terminalId);
 
+    const flushPendingReplayChunks = (coveredSeq: number) => {
+      const pending = pendingReplayChunksRef.current;
+      pendingReplayChunksRef.current = [];
+
+      let latestCoveredSeq = coveredSeq;
+      for (const entry of pending) {
+        if (entry.seq <= latestCoveredSeq) {
+          continue;
+        }
+
+        terminal.write(decodeTerminalChunk(entry.bytes));
+        latestCoveredSeq = entry.seq;
+      }
+
+      replayedSeqRef.current = latestCoveredSeq;
+    };
+
+    const finishReplay = (result: { ok: boolean; data?: ReplayPayload; error?: unknown } | null) => {
+      if (!mountedRef.current || !terminalRef.current || !result) {
+        return;
+      }
+
+      let coveredSeq = replayedSeqRef.current;
+      if (result.ok && result.data?.status === 'ok') {
+        if (result.data.bytes) {
+          terminal.write(decodeTerminalChunk(result.data.bytes));
+        }
+        coveredSeq = result.data.seq ?? coveredSeq;
+      } else if (!result.ok) {
+        console.error('Failed to replay terminal output:', result.error);
+      }
+
+      setOutputAtom((prev: OutputBuffer) => ({
+        ...prev,
+        chunks: [],
+        lastSeq: Math.max(prev.lastSeq, coveredSeq),
+        lastWritten: 0,
+      }));
+
+      replayedSeqRef.current = coveredSeq;
+      replayCompletedRef.current = true;
+      flushPendingReplayChunks(coveredSeq);
+    };
+
+    const failReplay = (error: unknown) => {
+      console.error('Failed to replay terminal output:', error);
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      setOutputAtom((prev: OutputBuffer) => ({
+        ...prev,
+        chunks: [],
+        lastWritten: 0,
+      }));
+
+      replayCompletedRef.current = true;
+      flushPendingReplayChunks(replayedSeqRef.current);
+    };
+
+    const requestReplay = (lastSeq: number) => {
+      replayCompletedRef.current = false;
+      void dispatch<ReplayPayload>('terminal.replay', {
+        terminalId,
+        lastSeq,
+      })
+        .then((result) => {
+          finishReplay(result);
+        })
+        .catch((error) => {
+          failReplay(error);
+        });
+    };
+
     if (wsClient) {
       unsubscribeRef.current = wsClient.subscribe(
         [outputTopic, exitTopic],
@@ -381,7 +455,25 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
               return;
             }
 
-            // Skip if seq hasn't advanced (prevents duplicate writes when terminal-panel already cached this output)
+            if (_seq <= replayedSeqRef.current) {
+              return;
+            }
+
+            const chunkStartSeq = _seq - outputData.bytes.byteLength;
+            if (chunkStartSeq > replayedSeqRef.current) {
+              pendingReplayChunksRef.current.push({
+                bytes: outputData.bytes,
+                seq: _seq,
+              });
+              setOutputAtom((_prev: OutputBuffer) => ({
+                chunks: [],
+                lastSeq: replayedSeqRef.current,
+                lastWritten: 0,
+              }));
+              requestReplay(replayedSeqRef.current);
+              return;
+            }
+
             setOutputAtom((prev: OutputBuffer) => {
               if (_seq <= prev.lastSeq) return prev;
               return {
@@ -403,53 +495,13 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     (async () => {
       await initialReplayReady;
       if (!mountedRef.current) {
-        return null;
+        return;
       }
-      return dispatch<ReplayPayload>('terminal.replay', {
-        terminalId,
-        lastSeq: 0,
-      });
-    })()
-      .then((result) => {
-        if (!mountedRef.current || !terminalRef.current || !result) {
-          return;
-        }
 
-        let replayedSeq = 0;
-        if (result.ok && result.data?.status === 'ok' && result.data.bytes) {
-          terminal.write(decodeTerminalChunk(result.data.bytes));
-          replayedSeq = result.data.seq ?? 0;
-        }
-
-        replayedSeqRef.current = replayedSeq;
-        replayCompletedRef.current = true;
-
-        // Flush WS chunks that accumulated while the replay was in flight,
-        // skipping any whose seq is already covered by the replay snapshot.
-        const pending = pendingReplayChunksRef.current;
-        pendingReplayChunksRef.current = [];
-        for (const entry of pending) {
-          if (entry.seq <= replayedSeq) continue;
-          terminal.write(decodeTerminalChunk(entry.bytes));
-        }
-
-      })
-      .catch(async (error) => {
-        console.error('Failed to replay terminal output:', error);
-        await initialReplayReady;
-        if (!mountedRef.current || !terminalRef.current) {
-          return;
-        }
-        // On failure we still need to surface any buffered chunks so live
-        // output is not dropped. Treat replayedSeq as 0 (no dedup).
-        const pending = pendingReplayChunksRef.current;
-        pendingReplayChunksRef.current = [];
-        replayCompletedRef.current = true;
-        replayedSeqRef.current = 0;
-        for (const entry of pending) {
-          terminal.write(decodeTerminalChunk(entry.bytes));
-        }
-      });
+      requestReplay(0);
+    })().catch((error) => {
+      failReplay(error);
+    });
 
     return () => {
       disposed = true;
