@@ -32,6 +32,9 @@ const parseCookies = (cookieHeader?: string) => {
     .filter(Boolean)
     .reduce<Record<string, string>>((acc, part) => {
       const [key, ...rest] = part.split('=');
+      if (!key) {
+        return acc;
+      }
       acc[key] = rest.join('=');
       return acc;
     }, {});

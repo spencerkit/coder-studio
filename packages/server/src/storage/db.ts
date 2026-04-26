@@ -4,6 +4,14 @@ import { join } from 'path';
 
 const MIGRATION_PATTERN = /^\d{3}_.+\.sql$/;
 
+interface IntegrityCheckRow {
+  integrity_check: string;
+}
+
+interface MigrationNameRow {
+  name: string;
+}
+
 /**
  * Opens a SQLite database with WAL mode and foreign key constraints enabled.
  * Runs an integrity check on startup.
@@ -21,8 +29,8 @@ export function openDatabase(dbPath: string): Database.Database {
   db.pragma('foreign_keys = ON');
 
   // Run integrity check
-  const integrityResult = db.pragma('integrity_check');
-  if (integrityResult[0].integrity_check !== 'ok') {
+  const integrityResult = db.pragma('integrity_check') as IntegrityCheckRow[];
+  if (integrityResult[0]?.integrity_check !== 'ok') {
     throw new Error(`Database integrity check failed: ${JSON.stringify(integrityResult)}`);
   }
 
@@ -66,9 +74,8 @@ export function runMigrations(db: Database.Database): void {
   const migrationFiles = discoverMigrations();
 
   // Get already applied migrations
-  const appliedMigrations = new Set(
-    db.prepare('SELECT name FROM _migrations').all().map((row: { name: string }) => row.name)
-  );
+  const appliedMigrationRows = db.prepare('SELECT name FROM _migrations').all() as MigrationNameRow[];
+  const appliedMigrations = new Set(appliedMigrationRows.map((row) => row.name));
 
   // Apply each migration that hasn't been applied yet
   const migrationsDir = join(import.meta.dirname, 'migrations');

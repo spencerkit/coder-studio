@@ -73,7 +73,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/auth/login', registerAuthRoutes(deps.config));
 
   // Health check endpoint
-  app.get('/healthz', async (request, reply) => {
+  app.get('/healthz', async () => {
     return { ok: true };
   });
 

@@ -5,7 +5,6 @@
  * Only one tab can be the Controller with write access.
  */
 
-import type { WebSocket } from 'ws';
 import type { FastifyRequest } from 'fastify';
 
 export interface FencingToken {

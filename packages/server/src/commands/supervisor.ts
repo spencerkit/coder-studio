@@ -26,7 +26,7 @@ const sessionIdSchema = z.object({ sessionId: z.string() });
 const supervisorIdSchema = z.object({ id: z.string() });
 
 // supervisor.create
-registerCommand<z.infer<typeof createSupervisorSchema>, { supervisor: unknown }>(
+registerCommand(
   'supervisor.create',
   createSupervisorSchema,
   async (args, ctx) => {
@@ -42,7 +42,7 @@ registerCommand<z.infer<typeof createSupervisorSchema>, { supervisor: unknown }>
 );
 
 // supervisor.get
-registerCommand<z.infer<typeof sessionIdSchema>, { supervisor: unknown | null }>(
+registerCommand(
   'supervisor.get',
   sessionIdSchema,
   async (args, ctx) => {
@@ -51,7 +51,7 @@ registerCommand<z.infer<typeof sessionIdSchema>, { supervisor: unknown | null }>
 );
 
 // supervisor.update
-registerCommand<z.infer<typeof updateSupervisorSchema>, { supervisor: unknown }>(
+registerCommand(
   'supervisor.update',
   updateSupervisorSchema,
   async (args, ctx) => {
@@ -65,7 +65,7 @@ registerCommand<z.infer<typeof updateSupervisorSchema>, { supervisor: unknown }>
 );
 
 // supervisor.delete
-registerCommand<z.infer<typeof supervisorIdSchema>, Record<string, never>>(
+registerCommand(
   'supervisor.delete',
   supervisorIdSchema,
   async (args, ctx) => {
@@ -75,7 +75,7 @@ registerCommand<z.infer<typeof supervisorIdSchema>, Record<string, never>>(
 );
 
 // supervisor.pause
-registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
+registerCommand(
   'supervisor.pause',
   supervisorIdSchema,
   async (args, ctx) => {
@@ -84,7 +84,7 @@ registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
 );
 
 // supervisor.resume
-registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
+registerCommand(
   'supervisor.resume',
   supervisorIdSchema,
   async (args, ctx) => {
@@ -93,7 +93,7 @@ registerCommand<z.infer<typeof supervisorIdSchema>, { supervisor: unknown }>(
 );
 
 // supervisor.trigger
-registerCommand<z.infer<typeof supervisorIdSchema>, { cycle: unknown }>(
+registerCommand(
   'supervisor.trigger',
   supervisorIdSchema,
   async (args, ctx) => {

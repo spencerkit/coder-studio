@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import type { HooksDescriptor, ManagedHooks } from '@coder-studio/core';
 
 /**
@@ -121,8 +121,12 @@ function managedCommandsEqual(a: ManagedHooks, b: ManagedHooks): boolean {
   }
 
   for (let i = 0; i < aKeys.length; i++) {
-    const key = aKeys[i];
-    if (key !== bKeys[i] || a.commands[key] !== b.commands[key]) {
+    const aKey = aKeys[i];
+    const bKey = bKeys[i];
+    if (!aKey || !bKey) {
+      return false;
+    }
+    if (aKey !== bKey || a.commands[aKey] !== b.commands[bKey]) {
       return false;
     }
   }

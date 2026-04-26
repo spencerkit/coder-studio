@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
-import { readTree, type FileNode } from '../fs/tree.js';
+import { readTree } from '../fs/tree.js';
 import { readFile, writeFile } from '../fs/file-io.js';
 
 // file.readTree

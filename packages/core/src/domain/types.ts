@@ -27,6 +27,7 @@ export interface Terminal {
   title: string;
   cwd: string;
   argv: string[];
+  env?: Record<string, string>;
   cols: number;
   rows: number;
   alive: boolean;

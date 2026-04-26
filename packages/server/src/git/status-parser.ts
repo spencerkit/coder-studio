@@ -35,9 +35,11 @@ export function parseStatus(porcelainV2: string): GitStatus {
     // Ahead/behind: # branch.ab +<ahead> -<behind>
     if (line.startsWith('# branch.ab ')) {
       const match = line.match(/# branch\.ab \+(\d+) -(\d+)/);
-      if (match) {
-        ahead = parseInt(match[1], 10);
-        behind = parseInt(match[2], 10);
+      const nextAhead = match?.[1];
+      const nextBehind = match?.[2];
+      if (nextAhead && nextBehind) {
+        ahead = parseInt(nextAhead, 10);
+        behind = parseInt(nextBehind, 10);
       }
     }
 
@@ -76,6 +78,9 @@ function parseChangedEntry(
 ): void {
   const parts = line.split(' ');
   const xy = parts[1]; // XY status codes
+  if (!xy) {
+    return;
+  }
 
   // Extract path (last part for format 1, second-to-last for format 2 renames)
   let path: string;
@@ -84,11 +89,20 @@ function parseChangedEntry(
   if (line.startsWith('2 ')) {
     // Rename entry: 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X> <path> <oldPath>
     const renameParts = line.split(' ');
-    path = renameParts[renameParts.length - 2];
-    oldPath = renameParts[renameParts.length - 1];
+    const nextPath = renameParts[renameParts.length - 2];
+    const nextOldPath = renameParts[renameParts.length - 1];
+    if (!nextPath || !nextOldPath) {
+      return;
+    }
+    path = nextPath;
+    oldPath = nextOldPath;
   } else {
     // Regular entry: 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
-    path = parts[parts.length - 1];
+    const nextPath = parts[parts.length - 1];
+    if (!nextPath) {
+      return;
+    }
+    path = nextPath;
   }
 
   // Parse XY status codes

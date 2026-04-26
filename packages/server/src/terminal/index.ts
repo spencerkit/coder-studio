@@ -8,8 +8,6 @@ export type {
   TerminalSpec,
   PtySpawnOptions,
   ReplayResult,
-  TerminalNotAliveError,
-  TerminalSpawnError,
   PtyProcess,
   PtyHost,
   Broadcaster,

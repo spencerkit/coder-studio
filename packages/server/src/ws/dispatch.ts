@@ -6,6 +6,7 @@
 
 import type { Command, Result, ProviderDefinition } from '@coder-studio/core';
 import type { Database } from 'better-sqlite3';
+import { z } from 'zod';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import type { SessionManager } from '../session/manager.js';
 import type { TerminalManager } from '../terminal/manager.js';
@@ -40,25 +41,27 @@ export type CommandHandler<A = unknown, R = unknown> = (
   clientId?: string
 ) => Promise<R>;
 
+type CommandSchema = z.ZodTypeAny;
+
 /**
  * Registry of all command handlers
  */
-const handlers = new Map<string, CommandHandler<any, any>>();
+const handlers = new Map<string, CommandHandler>();
 
 /**
  * Registry of all command schemas
  */
-const schemas = new Map<string, any>();
+const schemas = new Map<string, CommandSchema>();
 
 /**
  * Register a command handler
  */
-export function registerCommand<A, R>(
+export function registerCommand<S extends CommandSchema, R>(
   op: string,
-  schema: any,
-  handler: CommandHandler<A, R>
+  schema: S,
+  handler: CommandHandler<z.output<S>, R>
 ): void {
-  handlers.set(op, handler);
+  handlers.set(op, handler as CommandHandler);
   schemas.set(op, schema);
 }
 

@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
