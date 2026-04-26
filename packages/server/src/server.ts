@@ -66,6 +66,7 @@ export async function createServer(
   // `token` — but keeps the object truthful everywhere else).
   const runtime: RuntimeConfig = {
     port: config.port,
+    pid: process.pid,
     token: randomBytes(32).toString('hex'),
     serverInstanceId: randomUUID(),
     startedAt: Date.now(),
@@ -223,6 +224,27 @@ export async function createServer(
     port: config.port,
   });
 
+  let stopped = false;
+
+  const stopServer = async () => {
+    if (stopped) return;
+    stopped = true;
+
+    if (config.writeRuntime) {
+      try {
+        deleteRuntimeConfig();
+      } catch {
+      }
+    }
+
+    await app.close();
+    supervisorMgr.stop();
+    terminalMgr.shutdown();
+    wsHub.destroy();
+    eventBus.clear();
+    db.close();
+  };
+
   // Resolve the real port before persisting runtime.json: callers may pass
   // port 0 (tests, dev tooling) to let the OS pick a free port, and bridge
   // scripts need the actual number to POST back.
@@ -243,34 +265,9 @@ export async function createServer(
 
   console.log(`Server listening on http://${config.host}:${actualPort}`);
 
-  let stopped = false;
-
   return {
     app,
-    stop: async () => {
-      if (stopped) return;
-      stopped = true;
-
-      // Clean up the on-disk handshake first so any bridge script that
-      // spawns during shutdown silently no-ops instead of POSTing to a
-      // dying server (or worse, a next server instance with a different
-      // token listening on the same port).
-      if (config.writeRuntime) {
-        try {
-          deleteRuntimeConfig();
-        } catch {
-          // Best-effort cleanup; do not block shutdown on it.
-        }
-      }
-
-      // Graceful shutdown in reverse order
-      await app.close();
-      supervisorMgr.stop();
-      terminalMgr.shutdown();
-      wsHub.destroy();
-      eventBus.clear();
-      db.close();
-    },
+    stop: stopServer,
     // Exposed for integration tests. Not part of the public API.
     __test__: { sessionMgr, hooksMgr, commandContext },
   };

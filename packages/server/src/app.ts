@@ -100,6 +100,14 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     app.register(staticPlugin, {
       root: deps.webRoot,
       prefix: '/',
+      wildcard: false,
+    });
+
+    app.get('/*', async (request, reply) => {
+      if (request.url.startsWith('/api/') || request.url.startsWith('/auth/') || request.url.startsWith('/internal/')) {
+        return reply.callNotFound();
+      }
+      return reply.sendFile('index.html');
     });
   }
 

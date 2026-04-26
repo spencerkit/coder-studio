@@ -55,6 +55,26 @@ const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
 
 const COMMAND_TIMEOUT_MS = 30000;
 
+const createCommandId = (): string => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-');
+};
+
 const normalizeWsUrl = (url: string): string => {
   return url.endsWith('/ws') ? url : `${url.replace(/\/+$/, '')}/ws`;
 };
@@ -182,7 +202,7 @@ export class WsClient {
         return;
       }
 
-      const id = crypto.randomUUID();
+      const id = createCommandId();
 
       const timeoutId = setTimeout(() => {
         this.pendingCommands.delete(id);
@@ -211,7 +231,7 @@ export class WsClient {
         return;
       }
 
-      const id = crypto.randomUUID();
+      const id = createCommandId();
       const streamId = this.allocateTerminalInputStreamId();
       const timeoutId = setTimeout(() => {
         this.pendingCommands.delete(id);

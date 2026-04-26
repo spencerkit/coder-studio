@@ -61,6 +61,7 @@ describe('runtime-json', () => {
     it('should return config when file exists and is valid', () => {
       const config: RuntimeConfig = {
         port: 3000,
+        pid: 12345,
         token: 'test-token-123',
         serverInstanceId: 'server-abc',
         startedAt: Date.now(),
@@ -95,6 +96,7 @@ describe('runtime-json', () => {
     it('should write config to disk', () => {
       const config: RuntimeConfig = {
         port: 3000,
+        pid: 12345,
         token: 'test-token-123',
         serverInstanceId: 'server-abc',
         startedAt: Date.now(),

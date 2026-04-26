@@ -11,6 +11,7 @@ const isPublicPath = (path: string) => {
   // `registerHooksEndpoint`. The endpoint is additionally bound to localhost
   // only, so skipping the cookie guard here does not widen the attack surface.
   return (
+    path === '/' ||
     path === '/healthz' ||
     path === '/ws' ||
     path === '/auth/status' ||

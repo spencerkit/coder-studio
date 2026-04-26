@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { createServer, type Server } from '../server.js';
@@ -87,6 +87,7 @@ describe('createServer runtime handshake', () => {
 
     const runtime = JSON.parse(readFileSync(getRuntimePath(), 'utf-8'));
     expect(typeof runtime.port).toBe('number');
+    expect(typeof runtime.pid).toBe('number');
     // port=0 was requested; the OS picks a real port >= 1024 (usually).
     // The important invariant is that we persist the resolved port, not the
     // placeholder value callers passed in.
@@ -116,6 +117,76 @@ describe('createServer runtime handshake', () => {
     // forever. This is the regression we're preventing.
     expect(existsSync(join(getBridgeDir(), 'claude-bridge.js'))).toBe(true);
     expect(existsSync(join(getBridgeDir(), 'codex-bridge.js'))).toBe(true);
+  });
+
+  it('serves the web root entrypoint without auth cookie when auth is enabled', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>login shell</body></html>', 'utf-8');
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: true, password: 'sekrit' },
+      } as any);
+
+      const address = server.app.server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to resolve server address');
+      }
+      const res = await fetch(`http://127.0.0.1:${address.port}/`);
+      const body = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      expect(body).toContain('login shell');
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('serves the SPA entrypoint for authenticated frontend routes', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-spa-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>spa shell</body></html>', 'utf-8');
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: true, password: 'sekrit' },
+      } as any);
+
+      const address = server.app.server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to resolve server address');
+      }
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+
+      const login = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: 'sekrit' }),
+      });
+      const cookie = login.headers.get('set-cookie');
+      if (!cookie) {
+        throw new Error('Expected auth cookie');
+      }
+
+      const res = await fetch(`${baseUrl}/workspace`, {
+        headers: { cookie },
+      });
+      const body = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      expect(body).toContain('spa shell');
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
   });
 
   it('accepts /internal/hooks/:event only when the per-process token matches', async () => {

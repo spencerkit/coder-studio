@@ -306,6 +306,52 @@ describe('web WsClient', () => {
     );
   });
 
+  it('falls back to a generated UUID when crypto.randomUUID is unavailable', async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        getRandomValues: (array: Uint8Array) => {
+          for (let i = 0; i < array.length; i++) {
+            array[i] = i + 1;
+          }
+          return array;
+        },
+      },
+    });
+
+    try {
+      const client = new WsClient('ws://127.0.0.1:4173/ws');
+      const connectPromise = client.connect();
+      const socket = MockWebSocket.instances[0]!;
+      socket.triggerOpen();
+      await connectPromise;
+
+      const commandPromise = client.sendCommand('workspace.list', {});
+
+      const sentStrings = socket.sent.filter((entry): entry is string => typeof entry === 'string');
+      const command = sentStrings.map((entry) => JSON.parse(entry)).find((entry) => entry.op === 'workspace.list');
+
+      expect(command.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+
+      socket.triggerMessage({
+        kind: 'result',
+        id: command.id,
+        ok: true,
+        data: { ok: true },
+      });
+
+      await expect(commandPromise).resolves.toEqual({ ok: true });
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: originalCrypto,
+      });
+    }
+  });
+
   it('sends terminal input as metadata plus binary payload', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const connectPromise = client.connect();
