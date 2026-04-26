@@ -6,6 +6,14 @@ import { Topics } from '@coder-studio/core';
 import type { FSWatcher } from 'chokidar';
 import chokidar from 'chokidar';
 
+const WATCHER_IGNORED_PATTERNS: RegExp[] = [
+  /\.git\//,
+  /node_modules/,
+  /\.DS_Store/,
+  /Thumbs\.db/,
+  /(^|\/)\.playwright-mcp(\/|$)/,
+];
+
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
 }
@@ -24,7 +32,7 @@ export class WorkspaceWatcher {
     private broadcaster: Broadcaster
   ) {
     this.chokidar = chokidar.watch(path, {
-      ignored: [/\.git\//, /node_modules/, /\.DS_Store/, /Thumbs\.db/],
+      ignored: WATCHER_IGNORED_PATTERNS,
       ignoreInitial: true,
       persistent: true,
     });

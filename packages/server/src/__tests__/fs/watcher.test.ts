@@ -6,28 +6,42 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, rmdir } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { Topics } from '@coder-studio/core';
 import { WorkspaceWatcher } from '../../fs/watcher.js';
 
 describe('WorkspaceWatcher', () => {
   let testDir: string;
   let broadcaster: { broadcast: ReturnType<typeof vi.fn> };
+  let watchSpy: ReturnType<typeof vi.spyOn<typeof chokidar, 'watch'>>;
+  let watcherEvents: Record<string, (() => void) | undefined>;
+  let closeMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    testDir = join(tmpdir(), `watcher-test-${Date.now()}`);
-    await mkdir(testDir);
+    testDir = await mkdtemp(join(tmpdir(), 'watcher-test-'));
 
     broadcaster = {
       broadcast: vi.fn(),
     };
+
+    watcherEvents = {};
+    closeMock = vi.fn().mockResolvedValue(undefined);
+    watchSpy = vi.spyOn(chokidar, 'watch').mockReturnValue({
+      on(event: string, handler: () => void) {
+        watcherEvents[event] = handler;
+        return this;
+      },
+      close: closeMock,
+    } as unknown as FSWatcher);
   });
 
   afterEach(async () => {
+    watchSpy.mockRestore();
     try {
-      await rmdir(testDir, { recursive: true });
+      await rm(testDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }
@@ -49,21 +63,18 @@ describe('WorkspaceWatcher', () => {
     expect(broadcaster.broadcast).toBeDefined();
   });
 
-  it('broadcasts fs dirty updates using the Topics builder', () => {
-    vi.useFakeTimers();
-    try {
-      const watcher = new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+  it('ignores Playwright MCP artifacts so local browser verification does not rebroadcast fs.dirty', () => {
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
 
-      (watcher as any).markDirty();
-      vi.advanceTimersByTime(100);
+    expect(watchSpy).toHaveBeenCalledTimes(1);
+    const options = watchSpy.mock.calls[0]?.[1];
+    const ignored = options?.ignored;
 
-      expect(broadcaster.broadcast).toHaveBeenCalledWith(
-        Topics.workspaceFsDirty('test-workspace-id'),
-        { reason: 'fs_change' }
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(Array.isArray(ignored)).toBe(true);
+    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('.playwright-mcp/page.yml'))).toBe(true);
+    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('workspace-terminal-after-refresh.png'))).toBe(false);
+    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('src/index.ts'))).toBe(false);
   });
+
 });
 
