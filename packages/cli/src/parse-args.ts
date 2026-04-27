@@ -1,4 +1,5 @@
 export interface CliArgs {
+  foreground?: boolean;
   command?: 'serve' | 'config' | 'stop' | 'help' | 'version';
   configHelp?: boolean;
   port?: number;
@@ -86,6 +87,10 @@ export function parseArgs(argv: string[]): CliArgs {
         args.password = passwordValue;
         break;
       }
+
+      case '--foreground':
+        args.foreground = true;
+        break;
 
       case '--no-auth':
         args.noAuth = true;

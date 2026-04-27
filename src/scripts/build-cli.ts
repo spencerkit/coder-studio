@@ -55,14 +55,14 @@ async function buildCli(): Promise<void> {
   info('Building ESM bundle...');
   const esmOptions = await createCliBuildOptions('esm');
   await esbuild.build(esmOptions);
-  success(`ESM bundle: ${esmOptions.outfile}`);
+  success(`ESM bundle: ${resolve(CLI_DIR, 'dist/esm/bin.mjs')}`);
 
   // Create bin.js wrapper (for ESM)
   info('Creating bin.js entry point...');
   const binPath = resolve(CLI_DIR, 'dist/bin.js');
   const binContent = `#!/usr/bin/env node
 // @coder-studio/cli - Entry point wrapper
-import('./esm/index.mjs').catch((err) => {
+import('./esm/bin.mjs').catch((err) => {
   console.error('Failed to start CLI:', err);
   process.exit(1);
 });
@@ -109,7 +109,7 @@ import('./esm/index.mjs').catch((err) => {
 
   log('\n✓ CLI build complete.');
   log(`  Entry:    ${binPath}`);
-  log(`  ESM:      ${esmOptions.outfile}`);
+  log(`  ESM:      ${resolve(CLI_DIR, 'dist/esm/bin.mjs')}`);
   log(`  Web:      ${CLI_WEB_DIR}`);
 }
 

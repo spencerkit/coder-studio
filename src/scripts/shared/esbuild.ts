@@ -49,17 +49,26 @@ export async function createCliBuildOptions(
     (dep) => !dep.startsWith('@coder-studio/')
   );
 
-  const outfile = format === 'esm'
-    ? resolve(CLI_DIR, 'dist/esm/index.mjs')
-    : resolve(CLI_DIR, 'dist/cjs/index.js');
+  // pm2 is conditionally imported and not listed as a dep; externalize it
+  if (!external.includes('pm2')) {
+    external.push('pm2');
+  }
+
+  const outdir = format === 'esm'
+    ? resolve(CLI_DIR, 'dist/esm')
+    : resolve(CLI_DIR, 'dist/cjs');
 
   return {
-    entryPoints: [resolve(CLI_DIR, 'src/bin.ts')],
+    entryPoints: [
+      resolve(CLI_DIR, 'src/bin.ts'),
+      resolve(CLI_DIR, 'src/server-runner.ts'),
+    ],
     bundle: true,
     platform: 'node',
     target: 'node20',
     format,
-    outfile,
+    outdir,
+    outExtension: { '.js': format === 'esm' ? '.mjs' : '.js' },
     external,
     sourcemap: true,
     minify: false,

@@ -1,7 +1,6 @@
 import { mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import pm2 from 'pm2';
 import {
   deleteRuntimeConfig,
   readRuntimeConfig,
@@ -44,8 +43,50 @@ const isMissingManagedServerError = (error: unknown): boolean => {
   return /not found|process or namespace/i.test(error.message);
 };
 
-const connectPm2 = async (): Promise<void> =>
-  new Promise((resolve, reject) => {
+/**
+ * Detects if PM2 is in a broken state (e.g. pointing to an old worktree).
+ */
+const isPm2BrokenStateError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.includes('ProcessContainerFork') ||
+         (error.message.includes('Cannot find module') && error.message.includes('pm2'));
+};
+
+type Pm2Module = {
+  connect: (cb: (err: Error | null) => void) => void;
+  disconnect: () => void;
+  describe: (name: string, cb: (err: Error | null, result: unknown[]) => void) => void;
+  delete: (name: string, cb: (err: Error | null) => void) => void;
+  start: (opts: unknown, cb: (err: Error | null) => void) => void;
+  kill: (cb: (err: Error | null) => void) => void;
+};
+
+let cachedPm2: Pm2Module | null = null;
+
+async function loadPm2(): Promise<Pm2Module> {
+  if (cachedPm2) {
+    return cachedPm2;
+  }
+
+  let pm2Module: Pm2Module;
+  try {
+    const pm2 = await import('pm2');
+    pm2Module = pm2.default as Pm2Module;
+  } catch (error) {
+    throw new Error(
+      'pm2 is not installed. Run `npm install -g pm2` to use background server management.'
+    );
+  }
+
+  cachedPm2 = pm2Module;
+  return pm2Module;
+}
+
+const connectPm2 = async (): Promise<void> => {
+  const pm2 = await loadPm2();
+  return new Promise((resolve, reject) => {
     pm2.connect((error) => {
       if (error) {
         reject(error);
@@ -55,6 +96,7 @@ const connectPm2 = async (): Promise<void> =>
       resolve();
     });
   });
+};
 
 const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -66,22 +108,14 @@ const createStartupError = (reason: string): Error =>
     `Coder Studio failed to start in background: ${reason}. ${STARTUP_FAILURE_GUIDANCE}`
   );
 
-const disconnectPm2 = (): void => {
+const disconnectPm2 = async (): Promise<void> => {
+  const pm2 = await loadPm2();
   pm2.disconnect();
 };
 
-const withPm2Connection = async <T>(operation: () => Promise<T>): Promise<T> => {
-  await connectPm2();
-
-  try {
-    return await operation();
-  } finally {
-    disconnectPm2();
-  }
-};
-
-const describeManagedServer = async (): Promise<Pm2ProcessDescription[]> =>
-  new Promise((resolve, reject) => {
+const describeManagedServer = async (): Promise<Pm2ProcessDescription[]> => {
+  const pm2 = await loadPm2();
+  return new Promise((resolve, reject) => {
     pm2.describe(MANAGED_SERVER_NAME, (error, result) => {
       if (error) {
         reject(error);
@@ -91,9 +125,11 @@ const describeManagedServer = async (): Promise<Pm2ProcessDescription[]> =>
       resolve((result ?? []) as Pm2ProcessDescription[]);
     });
   });
+};
 
-const removeManagedServer = async (): Promise<void> =>
-  new Promise((resolve, reject) => {
+const removeManagedServer = async (): Promise<void> => {
+  const pm2 = await loadPm2();
+  return new Promise((resolve, reject) => {
     pm2.delete(MANAGED_SERVER_NAME, (error) => {
       if (error) {
         reject(error);
@@ -103,6 +139,55 @@ const removeManagedServer = async (): Promise<void> =>
       resolve();
     });
   });
+};
+
+/**
+ * Kill the PM2 daemon to clear stale paths/caches.
+ * Used when the daemon is pointing to a deleted worktree.
+ */
+const killPm2Daemon = async (): Promise<void> => {
+  const pm2 = await loadPm2();
+  return new Promise((resolve) => {
+    pm2.kill(() => {
+      resolve();
+    });
+  });
+};
+
+/**
+ * Try to connect to PM2, and if it's in a broken state (stale worktree path),
+ * kill the daemon and reconnect fresh.
+ */
+const connectWithRecovery = async (): Promise<void> => {
+  try {
+    await connectPm2();
+  } catch (error) {
+    if (isPm2BrokenStateError(error)) {
+      console.warn('PM2 daemon is in a stale state. Killing and reconnecting...');
+      try {
+        await killPm2Daemon();
+      } catch {
+        // ignore kill errors
+      }
+      await sleep(1000);
+      // Clear cached module so next loadPm2 gets a fresh instance
+      cachedPm2 = null;
+      await connectPm2();
+    } else {
+      throw error;
+    }
+  }
+};
+
+const withPm2Connection = async <T>(operation: () => Promise<T>): Promise<T> => {
+  await connectWithRecovery();
+
+  try {
+    return await operation();
+  } finally {
+    await disconnectPm2();
+  }
+};
 
 const waitForRuntimeReady = async (waitMs: number): Promise<void> => {
   const deadline = Date.now() + waitMs;
@@ -176,13 +261,20 @@ export const deleteManagedServer = async (
   });
 
 export const startManagedServer = async ({ script, cwd, waitMs, args }: StartManagedServerOptions): Promise<void> => {
+  // First try to delete any existing managed server
   await deleteManagedServer({ ignoreMissing: true });
+  
+  // Wait for the old process to actually exit
   await withPm2Connection(waitForManagedServerExit);
+  
+  // Clear stale runtime config
   if (readRuntimeConfig()) {
     deleteRuntimeConfig();
   }
+  
   ensureLogDirectory();
   const { outFile, errFile } = getLogPaths();
+  const pm2 = await loadPm2();
 
   await withPm2Connection(async () => {
     await new Promise<void>((resolve, reject) => {

@@ -117,6 +117,7 @@ function resolveManagedScriptPath(): string {
   const currentDir = dirname(currentFile);
   const candidates = [
     join(currentDir, 'server-runner.js'),
+    join(currentDir, 'server-runner.mjs'),
     join(currentDir, '../src/server-runner.ts'),
   ];
 
