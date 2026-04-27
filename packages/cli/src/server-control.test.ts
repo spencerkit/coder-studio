@@ -1,9 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { writeRuntimeConfig } from '../../server/src/hooks/runtime-json.js';
-import { ensureSingleServer, stopRunningServer } from './server-control.js';
+import {
+  readRuntimeConfig,
+  writeRuntimeConfig,
+} from '../../server/src/hooks/runtime-json.js';
+
+const { deleteManagedServer, getManagedServerStatus, getLogPaths } = vi.hoisted(() => ({
+  deleteManagedServer: vi.fn(),
+  getManagedServerStatus: vi.fn(),
+  getLogPaths: vi.fn(),
+}));
+
+vi.mock('./pm2-control.js', () => ({
+  deleteManagedServer,
+  getManagedServerStatus,
+  getLogPaths,
+}));
+
+import {
+  ensureSingleServer,
+  getServerStatus,
+  stopRunningServer,
+} from './server-control.js';
 
 describe('server-control', () => {
   const originalHome = process.env.HOME;
@@ -14,10 +34,22 @@ describe('server-control', () => {
     testHomeDir = mkdtempSync(join(tmpdir(), 'cs-server-control-home-'));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+
+    deleteManagedServer.mockResolvedValue(false);
+    getManagedServerStatus.mockResolvedValue({
+      status: 'stopped',
+      pm2Pid: null,
+      restartCount: 0,
+    });
+    getLogPaths.mockReturnValue({
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
 
     if (originalHome === undefined) {
       delete process.env.HOME;
@@ -31,15 +63,18 @@ describe('server-control', () => {
       process.env.USERPROFILE = originalUserProfile;
     }
 
-    rmSync(testHomeDir, { recursive: true, force: true });
+    if (existsSync(testHomeDir)) {
+      rmSync(testHomeDir, { recursive: true, force: true });
+    }
   });
 
-  it('returns false from stop when no runtime exists', async () => {
+  it('returns false from stop when pm2 app is missing and runtime is absent', async () => {
     await expect(stopRunningServer()).resolves.toBe(false);
+    expect(deleteManagedServer).toHaveBeenCalledWith({ ignoreMissing: true });
   });
 
-  it('kills the running server process from runtime.json', async () => {
-    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+  it('cleans stale runtime after stop removes the pm2 app', async () => {
+    deleteManagedServer.mockResolvedValue(true);
 
     writeRuntimeConfig({
       port: 4187,
@@ -50,27 +85,72 @@ describe('server-control', () => {
     });
 
     await expect(stopRunningServer()).resolves.toBe(true);
-
-    expect(killSpy).toHaveBeenCalledWith(424242, 'SIGTERM');
+    expect(readRuntimeConfig()).toBeNull();
   });
 
-  it('cleans up stale runtime when pid is no longer alive', async () => {
-    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
-      const error = new Error('not found') as NodeJS.ErrnoException;
-      error.code = 'ESRCH';
-      throw error;
+  it('maps runtime details into a running status response', async () => {
+    getManagedServerStatus.mockResolvedValue({
+      status: 'running',
+      pm2Pid: 424242,
+      restartCount: 2,
     });
 
     writeRuntimeConfig({
       port: 4187,
-      pid: 999999,
+      pid: 424242,
       token: 'test-token',
       serverInstanceId: 'server-1',
-      startedAt: Date.now(),
+      startedAt: 1000,
     });
 
-    await expect(stopRunningServer()).resolves.toBe(false);
-    expect(killSpy).toHaveBeenCalledWith(999999, 'SIGTERM');
+    await expect(getServerStatus()).resolves.toEqual({
+      status: 'running',
+      pid: 424242,
+      port: 4187,
+      restartCount: 2,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+  });
+
+  it('reports starting when pm2 is launching before runtime exists', async () => {
+    getManagedServerStatus.mockResolvedValue({
+      status: 'starting',
+      pm2Pid: 424242,
+      restartCount: 0,
+    });
+
+    await expect(getServerStatus()).resolves.toEqual({
+      status: 'starting',
+      pid: 424242,
+      port: null,
+      restartCount: 0,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: null,
+    });
+  });
+
+  it('cleans stale runtime when pm2 reports stopped', async () => {
+    writeRuntimeConfig({
+      port: 4187,
+      pid: 424242,
+      token: 'test-token',
+      serverInstanceId: 'server-1',
+      startedAt: 1000,
+    });
+
+    await expect(getServerStatus()).resolves.toEqual({
+      status: 'stopped',
+      pid: null,
+      port: null,
+      restartCount: 0,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: null,
+    });
+    expect(readRuntimeConfig()).toBeNull();
   });
 
   it('stops an existing instance before continuing serve startup', async () => {

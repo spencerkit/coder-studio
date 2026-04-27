@@ -51,8 +51,10 @@ export function writeCliConfig(config: CliConfig): void {
   const path = getCliConfigPath();
   const dir = join(homedir(), '.coder-studio');
   const normalizedConfig: CliConfig = {
-    ...config,
+    ...(config.host !== undefined ? { host: config.host } : {}),
+    ...(config.port !== undefined && config.port > 0 ? { port: config.port } : {}),
     ...(config.dataDir !== undefined ? { dataDir: normalizeDataDir(config.dataDir) } : {}),
+    ...(config.password !== undefined ? { password: config.password } : {}),
   };
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });

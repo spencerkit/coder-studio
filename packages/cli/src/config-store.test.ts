@@ -64,14 +64,19 @@ describe('config-store', () => {
     expect(normalizeDataDir('/tmp/cs-data/custom.db')).toBe('/tmp/cs-data/custom.db');
   });
 
-  it('writes config under ~/.coder-studio/config.json', () => {
-    writeCliConfig({ host: '127.0.0.1', dataDir: '/tmp/cs-data/coder-studio.db', password: 'sekrit' });
+  it('does not persist ephemeral port zero in config', () => {
+    writeCliConfig({ host: '127.0.0.1', port: 0, dataDir: '/tmp/cs-data/coder-studio.db', password: 'sekrit' });
 
-    expect(getCliConfigPath()).toBe(join(homedir(), '.coder-studio', 'config.json'));
     expect(JSON.parse(readFileSync(getCliConfigPath(), 'utf-8'))).toEqual({
+      host: '127.0.0.1',
+      dataDir: '/tmp/cs-data/coder-studio.db',
+      password: 'sekrit',
+    });
+    expect(readCliConfig()).toEqual({
       host: '127.0.0.1',
       dataDir: '/tmp/cs-data/coder-studio.db',
       password: 'sekrit',
     });
   });
 });
+
