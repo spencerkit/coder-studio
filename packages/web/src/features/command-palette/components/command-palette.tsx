@@ -13,6 +13,7 @@ import {
   focusModeAtom,
   activeWorkspaceIdAtom,
   sidebarCollapsedAtom,
+  terminalPanelVisibleAtom,
   bottomPanelHeightAtom,
 } from '../../../atoms/ui';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
@@ -45,6 +46,7 @@ export function CommandPalette() {
   const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
   const [focusMode, setFocusMode] = useAtom(focusModeAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
+  const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
@@ -61,6 +63,8 @@ export function CommandPalette() {
     setFocusMode,
     sidebarCollapsed,
     setSidebarCollapsed,
+    terminalPanelVisible,
+    setTerminalPanelVisible,
     bottomPanelHeight,
     setBottomPanelHeight,
     activeWorkspaceId,
@@ -160,7 +164,6 @@ export function CommandPalette() {
           <span className="command-palette-kicker">{t('command.palette').toUpperCase()}</span>
           <span className="command-palette-meta">
             {filteredCommands.length} actions
-
           </span>
         </div>
 
@@ -222,6 +225,8 @@ function buildCommands(context: {
   setFocusMode: (v: boolean) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean) => void;
+  terminalPanelVisible: boolean;
+  setTerminalPanelVisible: (v: boolean) => void;
   bottomPanelHeight: number;
   setBottomPanelHeight: (v: number) => void;
   activeWorkspaceId: string | null;
@@ -237,6 +242,8 @@ function buildCommands(context: {
     setFocusMode,
     sidebarCollapsed,
     setSidebarCollapsed,
+    terminalPanelVisible,
+    setTerminalPanelVisible,
     bottomPanelHeight,
     setBottomPanelHeight,
     activeWorkspaceId,
@@ -301,20 +308,30 @@ function buildCommands(context: {
     {
       id: 'toggle-terminal',
       label: t('terminal.title'),
-      description: bottomPanelHeight === 0 ? t('action.open') : t('action.close'),
-      action: () => setBottomPanelHeight(bottomPanelHeight === 0 ? 200 : 0),
+      description: !terminalPanelVisible ? t('action.open') : t('action.close'),
+      action: () => {
+        setTerminalPanelVisible(!terminalPanelVisible);
+        if (!terminalPanelVisible && bottomPanelHeight === 0) {
+          setBottomPanelHeight(200);
+        }
+      },
     },
     {
       id: 'show-terminal',
       label: `${t('action.open')} ${t('terminal.title')}`,
       description: t('command.shortcut.toggle_terminal'),
-      action: () => setBottomPanelHeight(200),
+      action: () => {
+        setTerminalPanelVisible(true);
+        if (bottomPanelHeight === 0) {
+          setBottomPanelHeight(200);
+        }
+      },
     },
     {
       id: 'hide-terminal',
       label: `${t('action.close')} ${t('terminal.title')}`,
       description: t('command.shortcut.toggle_terminal'),
-      action: () => setBottomPanelHeight(0),
+      action: () => setTerminalPanelVisible(false),
     },
   ];
 
