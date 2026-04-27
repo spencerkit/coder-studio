@@ -5,12 +5,12 @@
  */
 
 import { useAtomValue, useAtom } from 'jotai';
-import { Plus, Search, Settings, PanelBottom } from 'lucide-react';
+import { Plus, Search, Settings, PanelBottom, PanelLeft } from 'lucide-react';
 import type { FC } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
-import { commandPaletteOpenAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
+import { commandPaletteOpenAtom, terminalPanelVisibleAtom, sidebarCollapsedAtom } from '../../atoms/ui';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
 import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
@@ -21,7 +21,7 @@ import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-m
  * Height: 36px (from PRD §5.1)
  * Layout:
  *   - Left: Workspace tabs + Add button
- *   - Right: ConnectionStatus, Quick Actions, Terminal toggle, Settings
+ *   - Right: ConnectionStatus, Quick Actions, Terminal toggle, Files toggle, Settings
  */
 export const TopBar: FC = () => {
   const navigate = useNavigate();
@@ -29,6 +29,7 @@ export const TopBar: FC = () => {
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
   const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
+  const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
 
   return (
@@ -75,6 +76,14 @@ export const TopBar: FC = () => {
           title={terminalPanelVisible ? 'Hide Terminal (Ctrl+\`)' : 'Show Terminal (Ctrl+\`)'}
         >
           <PanelBottom size={14} />
+        </button>
+        <button
+          className={`topbar-btn ${sidebarCollapsed ? 'topbar-btn--muted' : ''}`}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          aria-label={sidebarCollapsed ? 'Show Files' : 'Hide Files'}
+          title={sidebarCollapsed ? 'Show Files' : 'Hide Files'}
+        >
+          <PanelLeft size={14} />
         </button>
         <button
           className="topbar-btn"

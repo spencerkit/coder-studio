@@ -21,7 +21,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
-import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
+import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, terminalPanelVisibleAtom, sidebarCollapsedAtom } from '../../atoms/ui';
 import { gitStateAtomFamily } from '../../atoms/git';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { useTranslation } from '../../lib/i18n';
@@ -58,6 +58,7 @@ export const WorkspacePage: FC = () => {
   const gitState = useAtomValue(gitStateAtomFamily(workspace?.id ?? '__workspace_placeholder__'));
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
+  const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const store = useStore();
@@ -223,8 +224,8 @@ export const WorkspacePage: FC = () => {
       <TopBar />
 
       <div className="workspace-body">
-        {/* Left panel - hidden in focus mode */}
-        {!focusMode && (
+        {/* Left panel - hidden in focus mode or collapsed */}
+        {!focusMode && !sidebarCollapsed && (
           <>
             <aside className="left-panel" style={{ width: `${leftPanelWidth}px` }}>
               <div className="nav-panel">
