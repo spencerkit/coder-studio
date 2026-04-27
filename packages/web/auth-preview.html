@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth Preview</title>
+    <link rel="stylesheet" href="http://127.0.0.1:4174/src/styles/base.css" />
+    <link rel="stylesheet" href="http://127.0.0.1:4174/src/styles/tokens.css" />
+    <link rel="stylesheet" href="http://127.0.0.1:4174/src/styles/components.css" />
+  </head>
+  <body>
+    <div class="welcome-container auth-screen">
+      <div class="welcome-card auth-card-shell">
+        <div class="welcome-kicker">CODER STUDIO</div>
+        <h1 class="welcome-title">Coder Studio</h1>
+        <p class="welcome-body auth-card-desc">输入密码后继续进入当前工作区。</p>
+        <div class="auth-status-panel auth-status-panel-error">
+          <div class="auth-status-eyebrow">访问验证</div>
+          <p class="auth-status-detail">暂时无法连接鉴权服务，请稍后重试。</p>
+        </div>
+        <form class="auth-form">
+          <input class="input auth-input" type="password" placeholder="密码" value="" />
+          <button class="btn btn-primary btn-lg auth-submit" type="button">确认</button>
+        </form>
+      </div>
+    </div>
+  </body>
+</html>

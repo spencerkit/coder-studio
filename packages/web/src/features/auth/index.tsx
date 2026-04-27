@@ -34,6 +34,25 @@ export function LoginPage() {
     void checkStatus();
   }, [setAuthenticated]);
 
+  const description = checkingStatus
+    ? t('status.connecting')
+    : statusUnavailable
+      ? t('status.unavailable')
+      : statusNotConfigured
+        ? t('auth.status_not_configured')
+        : t('auth.description');
+
+  const statusDetail = checkingStatus
+    ? t('auth.status_loading')
+    : statusUnavailable
+      ? t('auth.status_unavailable')
+      : statusNotConfigured
+        ? t('auth.status_not_configured')
+        : t('auth.hint');
+
+  const statusPanelClassName = `auth-status-panel${statusUnavailable || error ? ' auth-status-panel-error' : ''}`;
+  const submitLabel = checkingStatus || submitting ? t('status.connecting') : t('action.confirm');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -66,30 +85,25 @@ export function LoginPage() {
   };
 
   return (
-    <div className="auth-layout">
-      <div className="auth-card">
-        <h1 className="auth-card-title">{t('app.name')}</h1>
-        <p className="auth-card-desc">
-          {checkingStatus
-            ? t('status.connecting')
-            : statusUnavailable
-              ? t('status.unavailable')
-              : statusNotConfigured
-                ? 'Authentication is not configured on this deployment.'
-                : t('settings.auth.title')}
-        </p>
-        <form onSubmit={handleSubmit}>
+    <div className="welcome-container auth-screen">
+      <div className="welcome-card auth-card-shell">
+        <div className="welcome-kicker">CODER STUDIO</div>
+        <h1 className="welcome-title">{t('app.name')}</h1>
+        <p className="welcome-body auth-card-desc">{description}</p>
+        <div className={statusPanelClassName}>
+          <div className="auth-status-eyebrow">{t('auth.status_title')}</div>
+          <p className="auth-status-detail">{error ?? statusDetail}</p>
+        </div>
+        <form className="auth-form" onSubmit={handleSubmit}>
           <input
-            className="auth-input"
+            className="input auth-input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t('settings.auth.password')}
           />
-          {statusUnavailable ? <p className="auth-error">{t('status.unavailable')}</p> : null}
-          {error ? <p className="auth-error">{error}</p> : null}
-          <button className="welcome-btn" type="submit" disabled={checkingStatus || submitting || !password.trim()}>
-            {checkingStatus ? t('status.connecting') : submitting ? t('status.connecting') : t('action.confirm')}
+          <button className="btn btn-primary btn-lg auth-submit" type="submit" disabled={checkingStatus || submitting || !password.trim()}>
+            {submitLabel}
           </button>
         </form>
       </div>

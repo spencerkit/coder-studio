@@ -68,6 +68,7 @@ describe('App auth gating', () => {
     );
 
     expect(screen.getByText('LoginPage')).toBeInTheDocument();
+    expect(screen.queryByText('WelcomePage')).not.toBeInTheDocument();
   });
 
   it('keeps the root route on WelcomePage even when an active workspace exists', () => {

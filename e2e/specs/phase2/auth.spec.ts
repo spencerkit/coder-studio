@@ -4,33 +4,26 @@ import { test, expect } from '@playwright/test';
 // These tests are skipped in normal dev mode and run with special config in CI
 test.describe('@phase2 auth acceptance', () => {
   test('P2-01 no-auth mode bypasses login', async ({ page }) => {
-    // In dev mode without AUTH_PASSWORD, auth is disabled
     await page.goto('/');
-    // Should go directly to welcome page without auth screen
     await expect(page.locator('.welcome-container')).toBeVisible();
   });
 
   test('P2-02 auth status endpoint returns correct response', async ({ request }) => {
-    // Check auth status on current dev server
     const response = await request.get('/auth/status');
-    // In some test environments, the API might not be fully available
-    // The important thing is that the frontend works without auth
     if (response.ok()) {
       const body = await response.json();
       expect(body.ok).toBe(true);
       expect(body.authEnabled).toBe(false);
     } else {
-      // If endpoint not available, test passes - covered by other tests
       console.log('Auth status endpoint not available, skipping API test');
     }
   });
 
-  test('P2-03 login page UI components exist', async ({ page }) => {
-    // When auth is disabled, we shouldn't see auth UI
-    // But we can verify the auth component exists in the codebase
-    await page.goto('/');
-    // Welcome container should be visible immediately when no auth
-    await expect(page.locator('.welcome-container')).toBeVisible();
+  test('P2-03 auth preview exposes the login form structure', async ({ page }) => {
+    await page.goto('file:///home/spencer/workspace/coder-studio/packages/web/auth-preview.html');
+    await expect(page.locator('.auth-form')).toBeVisible();
+    await expect(page.locator('.input.auth-input')).toBeVisible();
+    await expect(page.getByRole('button', { name: /确认|Confirm/ })).toBeVisible();
   });
 
   test('P2-04 frontend reaches main app without auth', async ({ page }) => {

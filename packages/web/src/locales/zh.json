@@ -216,6 +216,14 @@
       "reset_hint": "重置为默认"
     }
   },
+  "auth": {
+    "description": "输入密码后继续进入当前工作区。",
+    "hint": "请输入当前部署配置的访问密码。",
+    "status_title": "访问验证",
+    "status_loading": "正在检查当前部署的访问状态。",
+    "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",
+    "status_not_configured": "当前部署未配置鉴权。"
+  },
   "connection": {
     "title": "连接",
     "status": "状态",
