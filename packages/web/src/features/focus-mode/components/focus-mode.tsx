@@ -11,6 +11,7 @@ import {
   leftPanelWidthAtom,
   bottomPanelHeightAtom,
   sidebarCollapsedAtom,
+  terminalPanelVisibleAtom,
 } from '../../../atoms/ui';
 
 /**
@@ -30,6 +31,7 @@ export function FocusMode() {
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
+  const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
 
   // Store pre-focus state to restore later
   const savedState = {
@@ -69,13 +71,26 @@ export function FocusMode() {
         setFocusMode(!focusMode);
       }
 
+      // Ctrl+` toggles terminal panel visibility
+      if (e.key === '`' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (terminalPanelVisible) {
+          setTerminalPanelVisible(false);
+        } else {
+          setTerminalPanelVisible(true);
+          if (bottomPanelHeight === 0) {
+            setBottomPanelHeight(200);
+          }
+        }
+      }
+
       // Escape key exits focus mode
       if (e.key === 'Escape' && focusMode) {
         e.preventDefault();
         setFocusMode(false);
       }
     },
-    [focusMode, setFocusMode]
+    [focusMode, setFocusMode, terminalPanelVisible, setTerminalPanelVisible, bottomPanelHeight, setBottomPanelHeight]
   );
 
   useEffect(() => {

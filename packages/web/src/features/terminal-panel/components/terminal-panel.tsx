@@ -9,7 +9,6 @@ import { useAtom, useAtomValue, useStore } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../../../atoms/terminals';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { bottomPanelHeightAtom } from '../../../atoms/ui';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import { Topics } from '@coder-studio/core';
@@ -49,7 +48,6 @@ function mergeTerminalIds(existing: string[], incoming: string[]): string[] {
 export function TerminalPanel() {
   const t = useTranslation();
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
-  const [bottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const store = useStore();
@@ -145,9 +143,6 @@ export function TerminalPanel() {
           });
           setActiveTerminalId(createData.id);
         } else if (event === 'output') {
-          // Cache terminal output for shell terminals.
-          // This ensures xterm-host can replay output even if it hasn't subscribed yet.
-          // Skip if seq hasn't advanced (prevents duplicate caching when xterm-host also subscribes).
           const outputData = payload as TerminalBinaryPayload;
           const meta = store.get(terminalMetaAtomFamily(terminalId));
           if (!meta || meta.kind !== 'shell') return;
@@ -170,22 +165,21 @@ export function TerminalPanel() {
         unsubscribeRef.current();
       }
     };
-  }, [wsClient, activeWorkspaceId]);
+  }, [wsClient, activeWorkspaceId, store]);
 
-  const handleCreateTerminal = useCallback(async () => {
+  const handleCreateTerminal = async () => {
     if (!activeWorkspaceId) return;
 
-    const result = await dispatch('terminal.create', {
+    const result = await dispatch<TerminalDto>('terminal.create', {
       workspaceId: activeWorkspaceId,
       kind: 'shell',
     });
 
     if (result.ok && result.data) {
-      const terminal = result.data as TerminalDto;
-      const terminalId = terminal.id;
+      const terminal = result.data;
 
-      store.set(terminalMetaAtomFamily(terminalId), {
-        id: terminalId,
+      store.set(terminalMetaAtomFamily(terminal.id), {
+        id: terminal.id,
         workspaceId: terminal.workspaceId,
         kind: terminal.kind,
         alive: terminal.alive,
@@ -193,13 +187,13 @@ export function TerminalPanel() {
       });
 
       setTerminalIds((prev) => {
-        if (prev.includes(terminalId)) return prev;
-        return [...prev, terminalId];
+        if (prev.includes(terminal.id)) return prev;
+        return [...prev, terminal.id];
       });
 
-      setActiveTerminalId(terminalId);
+      setActiveTerminalId(terminal.id);
     }
-  }, [activeWorkspaceId, dispatch, store]);
+  };
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
@@ -220,10 +214,6 @@ export function TerminalPanel() {
   const handleSwitchTerminal = useCallback((terminalId: string) => {
     setActiveTerminalId(terminalId);
   }, []);
-
-  if (bottomPanelHeight === 0) {
-    return null;
-  }
 
   const hasTerminals = terminalIds.length > 0;
 

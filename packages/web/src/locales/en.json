@@ -98,7 +98,9 @@
     "shell": "Shell Terminal",
     "agent": "Agent Terminal",
     "reconnect_hint": "Connection lost, reconnecting...",
-    "no_terminal": "No terminals"
+    "no_terminal": "No terminals",
+    "hide": "Hide Terminal",
+    "show": "Show Terminal"
   },
   "file": {
     "title": "Files",

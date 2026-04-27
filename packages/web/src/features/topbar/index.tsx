@@ -5,12 +5,12 @@
  */
 
 import { useAtomValue, useAtom } from 'jotai';
-import { Plus, Search, Settings } from 'lucide-react';
+import { Plus, Search, Settings, PanelBottom } from 'lucide-react';
 import type { FC } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
-import { commandPaletteOpenAtom } from '../../atoms/ui';
+import { commandPaletteOpenAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
 import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
@@ -21,13 +21,14 @@ import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-m
  * Height: 36px (from PRD §5.1)
  * Layout:
  *   - Left: Workspace tabs + Add button
- *   - Right: ConnectionStatus, Quick Actions icon, Settings icon
+ *   - Right: ConnectionStatus, Quick Actions, Terminal toggle, Settings
  */
 export const TopBar: FC = () => {
   const navigate = useNavigate();
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
+  const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
 
   return (
@@ -66,6 +67,14 @@ export const TopBar: FC = () => {
         >
           <Search size={14} />
           <span className="topbar-btn-label">Quick Actions</span>
+        </button>
+        <button
+          className={`topbar-btn ${terminalPanelVisible ? '' : 'topbar-btn--muted'}`}
+          onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
+          aria-label={terminalPanelVisible ? 'Hide Terminal' : 'Show Terminal'}
+          title={terminalPanelVisible ? 'Hide Terminal (Ctrl+\`)' : 'Show Terminal (Ctrl+\`)'}
+        >
+          <PanelBottom size={14} />
         </button>
         <button
           className="topbar-btn"

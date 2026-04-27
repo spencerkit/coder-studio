@@ -21,7 +21,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
-import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom } from '../../atoms/ui';
+import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
 import { gitStateAtomFamily } from '../../atoms/git';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { useTranslation } from '../../lib/i18n';
@@ -57,6 +57,7 @@ export const WorkspacePage: FC = () => {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspace?.id ?? '__workspace_placeholder__'));
   const focusMode = useAtomValue(focusModeAtom);
+  const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const store = useStore();
@@ -142,175 +143,90 @@ export const WorkspacePage: FC = () => {
     void loadWorkspaces();
   }, [connectionStatus, loadWorkspaces, workspacesLoadState]);
 
-  // Sidebar tab state
+  const leftMouseDown = useRef(false);
+  const leftStartX = useRef(0);
+  const leftStartWidth = useRef(0);
+
+  const handleLeftMouseDown = useCallback((e: React.MouseEvent) => {
+    leftMouseDown.current = true;
+    leftStartX.current = e.clientX;
+    leftStartWidth.current = leftPanelWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!leftMouseDown.current) return;
+      const dx = moveEvent.clientX - leftStartX.current;
+      const nextWidth = Math.min(MAX_LEFT_WIDTH, Math.max(MIN_LEFT_WIDTH, leftStartWidth.current + dx));
+      setLeftPanelWidth(nextWidth);
+    };
+
+    const onMouseUp = () => {
+      leftMouseDown.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [leftPanelWidth, setLeftPanelWidth]);
+
+  const bottomMouseDown = useRef(false);
+  const bottomStartY = useRef(0);
+  const bottomStartHeight = useRef(0);
+
+  const handleBottomMouseDown = useCallback((e: React.MouseEvent) => {
+    bottomMouseDown.current = true;
+    bottomStartY.current = e.clientY;
+    bottomStartHeight.current = bottomPanelHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!bottomMouseDown.current) return;
+      const dy = bottomStartY.current - moveEvent.clientY;
+      const nextHeight = Math.min(
+        MAX_BOTTOM_HEIGHT,
+        Math.max(MIN_BOTTOM_HEIGHT, bottomStartHeight.current + dy)
+      );
+      setBottomPanelHeight(nextHeight);
+    };
+
+    const onMouseUp = () => {
+      bottomMouseDown.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [bottomPanelHeight, setBottomPanelHeight]);
+
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');
-  const [panelRefreshToken, setPanelRefreshToken] = useState(0);
   const [createRequest, setCreateRequest] = useState<{
     id: number;
     mode: 'file' | 'folder';
     baseDir: string | null;
   } | null>(null);
+  const [panelRefreshToken, setPanelRefreshToken] = useState(0);
 
-  // Active file path drives the central area: when set (and the Files tab is
-  // active) we swap AgentPanes out for the code editor, mirroring how Git Diff
-  // swaps in its own viewer when selected.
   const activeFilePath = useAtomValue(
     activeFilePathAtomFamily(workspace?.id ?? '__workspace_placeholder__')
   );
 
-  // Resizer drag state
-  const isDraggingLeft = useRef(false);
-  const isDraggingBottom = useRef(false);
-
-  // Left panel resize handlers
-  const handleLeftMouseDown = useCallback(() => {
-    isDraggingLeft.current = true;
-    document.body.classList.add('is-resizing-panels');
-  }, []);
-
-  const handleLeftMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingLeft.current) return;
-    const newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, e.clientX));
-    setLeftPanelWidth(newWidth);
-  }, [setLeftPanelWidth]);
-
-  const handleLeftMouseUp = useCallback(() => {
-    isDraggingLeft.current = false;
-    document.body.classList.remove('is-resizing-panels');
-  }, []);
-
-  // Bottom panel resize handlers
-  const handleBottomMouseDown = useCallback(() => {
-    isDraggingBottom.current = true;
-    document.body.classList.add('is-resizing-panels');
-  }, []);
-
-  const handleBottomMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingBottom.current) return;
-    const newHeight = Math.max(
-      MIN_BOTTOM_HEIGHT,
-      Math.min(MAX_BOTTOM_HEIGHT, window.innerHeight - TOPBAR_HEIGHT - e.clientY)
-    );
-    setBottomPanelHeight(newHeight);
-  }, [setBottomPanelHeight]);
-
-  const handleBottomMouseUp = useCallback(() => {
-    isDraggingBottom.current = false;
-    document.body.classList.remove('is-resizing-panels');
-  }, []);
-
-  // Setup event listeners for resize
-  useEffect(() => {
-    document.addEventListener('mousemove', handleLeftMouseMove);
-    document.addEventListener('mousemove', handleBottomMouseMove);
-    document.addEventListener('mouseup', handleLeftMouseUp);
-    document.addEventListener('mouseup', handleBottomMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleLeftMouseMove);
-      document.removeEventListener('mousemove', handleBottomMouseMove);
-      document.removeEventListener('mouseup', handleLeftMouseUp);
-      document.removeEventListener('mouseup', handleBottomMouseUp);
-    };
-  }, [handleLeftMouseMove, handleLeftMouseUp, handleBottomMouseMove, handleBottomMouseUp]);
-
-  if (workspacesLoadState === 'idle' || workspacesLoadState === 'loading') {
-    return (
-      <div className="workspace-page">
-        <TopBar />
-        <div className="workspace-resolving-shell" data-testid="workspace-resolving-shell">
-          <div className="workspace-resolving-card">
-            <div className="workspace-resolving-kicker">WORKSPACE INITIALIZING</div>
-            <h1 className="workspace-resolving-title">正在进入工作区...</h1>
-            <p className="workspace-resolving-desc">
-              正在同步 workspace 元数据、会话和文件树，界面准备完成后会自动展开。
-            </p>
-
-            <div className="workspace-resolving-preview" aria-hidden="true">
-              <div className="workspace-resolving-preview-topbar">
-                <span className="workspace-resolving-pill workspace-resolving-pill-active" />
-                <span className="workspace-resolving-pill" />
-                <span className="workspace-resolving-pill workspace-resolving-pill-short" />
-              </div>
-
-              <div className="workspace-resolving-preview-body">
-                <div className="workspace-resolving-preview-sidebar">
-                  <span className="workspace-resolving-line workspace-resolving-line-label" />
-                  <span className="workspace-resolving-line workspace-resolving-line-strong" />
-                  <span className="workspace-resolving-line" />
-                  <span className="workspace-resolving-line workspace-resolving-line-wide" />
-                  <span className="workspace-resolving-line" />
-                </div>
-
-                <div className="workspace-resolving-preview-main">
-                  <div className="workspace-resolving-console">
-                    <span className="workspace-resolving-console-status" />
-                    <span className="workspace-resolving-console-line workspace-resolving-console-line-title" />
-                    <span className="workspace-resolving-console-line" />
-                    <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
-                    <span className="workspace-resolving-console-line workspace-resolving-console-line-short" />
-                  </div>
-
-                  <div className="workspace-resolving-terminal">
-                    <span className="workspace-resolving-line workspace-resolving-line-label" />
-                    <span className="workspace-resolving-console-line workspace-resolving-console-line-wide" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (workspacesLoadState === 'error') {
-    return (
-      <div className="workspace-page">
-        <TopBar />
-        <div className="workspace-empty-content" data-testid="workspace-error-shell">
-          <div className="workspace-empty-inner">
-            <p>{workspacesLoadError ?? 'Failed to fetch workspace list'}</p>
-            <button type="button" onClick={() => void loadWorkspaces()}>
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (!workspace) {
-    return (
-      <div className="workspace-page">
-        <TopBar />
-        <div className="workspace-empty-content">
-          <div className="workspace-empty-inner">
-            <p>{t('workspace.no_workspace') || 'No workspace loaded'}</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="workspace-page workspace-page-empty" />;
   }
 
-  const activeTabLabel = activeTab === 'files' ? 'Files' : 'Git Diff';
-  const panelKicker = activeTab === 'git' ? 'SOURCE CONTROL' : 'REPOSITORY NAVIGATOR';
-  const panelBranch = gitState?.branch ?? 'main';
+  const panelKicker = activeTab === 'files' ? t('file') : t('git');
+  const panelBranch = gitState?.branch ?? '—';
+  const activeTabLabel = activeTab === 'files' ? 'file tree' : 'git diff';
 
   return (
-    <div className={`workspace-page ${focusMode ? 'workspace-page-focus' : ''}`}>
-      {/* TopBar - always visible, full width */}
+    <div className="workspace-page">
       <TopBar />
 
-      {/* Workspace body: flex row containing left panel + main area */}
-      <div className={`workspace-body ${focusMode ? 'workspace-body-focus' : ''}`}>
+      <div className="workspace-body">
         {/* Left panel - hidden in focus mode */}
         {!focusMode && (
           <>
-            <aside
-              className="left-panel"
-              style={{ width: `${leftPanelWidth}px` }}
-            >
+            <aside className="left-panel" style={{ width: `${leftPanelWidth}px` }}>
               <div className="nav-panel">
                 <div className="panel-header">
                   <div className="panel-kicker">{panelKicker}</div>
@@ -403,13 +319,6 @@ export const WorkspacePage: FC = () => {
 
         {/* Central area: agent panes + terminal panel */}
         <div className="workspace-main-area">
-          {/* Central area routing:
-           *   - Git tab  → GitDiffViewer
-           *   - Files tab + a file selected → CodeEditorHost (editable Monaco)
-           *   - Files tab + no file selected → AgentPanes (default)
-           * The editor replaces AgentPanes exactly the way GitDiffViewer does,
-           * so behavior stays symmetrical with the existing Git workflow.
-           */}
           {activeTab === 'git' ? (
             <GitDiffViewer workspaceId={workspace.id} />
           ) : activeFilePath ? (
@@ -420,8 +329,8 @@ export const WorkspacePage: FC = () => {
             </div>
           )}
 
-          {/* Bottom panel resizer - hidden in focus mode */}
-          {!focusMode && (
+          {/* Bottom panel resizer - hidden in focus mode or when terminal hidden */}
+          {!focusMode && terminalPanelVisible && (
             <div
               className="split-divider-h"
               onMouseDown={handleBottomMouseDown}
@@ -431,8 +340,8 @@ export const WorkspacePage: FC = () => {
             />
           )}
 
-          {/* Terminal Panel - hidden in focus mode */}
-          {!focusMode && (
+          {/* Terminal Panel - hidden in focus mode or when toggled off */}
+          {!focusMode && terminalPanelVisible && (
             <div className="workspace-bottom-panel" style={{ height: `${bottomPanelHeight}px` }}>
               <TerminalPanel />
             </div>

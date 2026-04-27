@@ -98,7 +98,9 @@
     "shell": "Shell 终端",
     "agent": "Agent 终端",
     "reconnect_hint": "连接已断开，正在重连...",
-    "no_terminal": "暂无终端"
+    "no_terminal": "暂无终端",
+    "hide": "隐藏终端",
+    "show": "显示终端"
   },
   "file": {
     "title": "文件",

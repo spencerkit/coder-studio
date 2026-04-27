@@ -4859,6 +4859,65 @@ textarea.input {
   opacity: 0.68;
 }
 
+/* ========== Terminal Panel Toggle ========== */
+.terminal-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.terminal-toggle-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.terminal-toggle-btn--hidden {
+  color: var(--text-tertiary);
+}
+
+.terminal-toggle-btn--hidden:hover {
+  color: var(--text-secondary);
+}
+
+/* ========== Collapsed Terminal Panel ========== */
+.bottom-terminal-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.terminal-collapsed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.terminal-collapsed-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
 .terminal-tab-close:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
@@ -6239,4 +6298,13 @@ textarea.input {
     outline: 2px solid var(--color-success, #5ad7a4);
     outline-offset: -2px;
   }
+}
+
+/* ========== Topbar Terminal Toggle ========== */
+.topbar-btn--muted {
+  opacity: 0.5;
+}
+
+.topbar-btn--muted:hover {
+  opacity: 1;
 }

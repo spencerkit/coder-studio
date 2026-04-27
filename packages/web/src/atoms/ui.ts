@@ -123,3 +123,9 @@ export const pendingFocusSessionAtom = atom<string | null>(null);
  * Sidebar collapsed state
  */
 export const sidebarCollapsedAtom = atomWithStorage('ui.sidebarCollapsed', false);
+
+/**
+ * Terminal panel visible state (hides/shows bottom terminal panel)
+ * Persisted: ui.terminalPanelVisible
+ */
+export const terminalPanelVisibleAtom = atomWithStorage('ui.terminalPanelVisible', true);
