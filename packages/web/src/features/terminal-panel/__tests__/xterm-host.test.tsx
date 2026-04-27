@@ -921,6 +921,114 @@ describe('XtermHost', () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it('does not trigger a re-replay for sequential 1-byte live chunks after replay completes', async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode('');
+    const sendCommand = vi.fn();
+    let replayCount = 0;
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        replayCount += 1;
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 700 + replayCount,
+          size: initialReplayChunk.byteLength,
+          seq: 100,
+          bytes: initialReplayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="typing-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
+        terminalId: 'typing-terminal',
+        lastSeq: 0,
+      });
+    });
+
+    expect(replayCount).toBe(1);
+    mockTerminal.write.mockClear();
+
+    // Simulate three sequential 1-byte echoes (e.g. PTY echoing typed
+    // characters), each immediately following the previous in seq.
+    const bytes = ['g', 'i', 't'].map((ch) => new TextEncoder().encode(ch));
+    let seq = 100;
+    for (const chunk of bytes) {
+      seq += chunk.byteLength;
+      const localChunk = chunk;
+      const localSeq = seq;
+      await act(async () => {
+        subscriptionHandler?.(
+          Topics.terminalOutput('test-workspace', 'typing-terminal'),
+          {
+            transport: 'binary',
+            streamId: 800 + localSeq,
+            size: localChunk.byteLength,
+            bytes: localChunk,
+          },
+          localSeq
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledTimes(bytes.length);
+    });
+
+    // No spurious re-replay should have fired - the live chunks were
+    // contiguous with the snapshot's covered seq.
+    expect(replayCount).toBe(1);
+    expect(mockTerminal.write.mock.calls.map(([data]) => data)).toEqual(['g', 'i', 't']);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it('syncs xterm resize events back to the server PTY', async () => {
     const store = createStore();
     const dispatchCommand = vi.fn().mockResolvedValue({ ok: true, data: { status: 'ok' } });

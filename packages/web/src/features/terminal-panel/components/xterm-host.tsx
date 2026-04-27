@@ -482,6 +482,10 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
                 lastWritten: prev.lastWritten,
               };
             });
+            // Advance replayedSeqRef so subsequent contiguous chunks don't
+            // trip the gap-detection branch above and trigger spurious replays
+            // that re-write bytes already painted via the live path.
+            replayedSeqRef.current = _seq;
           } else if (topic === exitTopic) {
             const exitData = payload as { code: number };
             if (terminalRef.current) {
