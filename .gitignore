@@ -36,6 +36,7 @@ temp/
 
 # Worktrees
 .worktrees/
+.claude/
 
 # Acceptance runtime artifacts
 docs/验收报告/**/*.json
