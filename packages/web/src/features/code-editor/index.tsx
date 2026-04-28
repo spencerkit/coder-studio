@@ -57,6 +57,7 @@ export const CodeEditorHost: FC = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [fileLoadError, setFileLoadError] = useState<{ path: string; message: string } | null>(null);
 
   const workspaceId = workspace?.id;
 
@@ -86,13 +87,16 @@ export const CodeEditorHost: FC = () => {
     async (path: string, options?: { forceText?: boolean }) => {
       if (!workspaceId) return;
 
+      setFileLoadError((current) => (current?.path === path ? null : current));
       const result = await dispatch<FileReadPayload>('file.read', {
         workspaceId,
         path,
       });
 
       if (!result.ok || !result.data) {
-        console.error('Failed to open file:', result.error?.message);
+        const message = result.error?.message ?? 'Failed to open file';
+        console.error('Failed to open file:', message);
+        setFileLoadError({ path, message });
         return;
       }
 
@@ -106,7 +110,9 @@ export const CodeEditorHost: FC = () => {
         try {
           const res = await fetch(data.url, { credentials: 'include' });
           if (!res.ok) {
-            console.error('Failed to fetch text-backed image bytes:', res.status);
+            const message = `Failed to fetch text-backed image bytes: ${res.status}`;
+            console.error(message);
+            setFileLoadError({ path, message });
             return;
           }
           const content = await res.text();
@@ -124,8 +130,11 @@ export const CodeEditorHost: FC = () => {
             viewingTextBackedImageAsText: true,
           };
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
+          setFileLoadError((current) => (current?.path === path ? null : current));
         } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to fetch text-backed image bytes';
           console.error('Failed to fetch text-backed image bytes:', err);
+          setFileLoadError({ path, message });
         }
         return;
       }
@@ -149,6 +158,7 @@ export const CodeEditorHost: FC = () => {
             };
 
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
+      setFileLoadError((current) => (current?.path === path ? null : current));
     },
     [workspaceId, dispatch, setOpenFiles]
   );
@@ -277,6 +287,8 @@ export const CodeEditorHost: FC = () => {
 
   const dirtyIndicator =
     isTextFile && currentFile.isDirty ? <span className="dirty-indicator">*</span> : null;
+  const activeLoadError =
+    activeFile && fileLoadError?.path === activeFile ? fileLoadError.message : null;
 
   return (
     // Reuse the Git Diff viewer's container/header/body class names so the
@@ -356,6 +368,11 @@ export const CodeEditorHost: FC = () => {
               sizeBytes={currentFile.size}
               alt={currentFile.path}
             />
+          ) : activeLoadError ? (
+            <div className="git-diff-empty" role="alert">
+              <p className="git-diff-empty-title">Failed to open file</p>
+              <p className="git-diff-empty-body">{activeLoadError}</p>
+            </div>
           ) : activeFile ? (
             <div className="git-diff-empty">
               <p className="git-diff-empty-title">{t('status.connecting')}…</p>

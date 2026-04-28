@@ -55,7 +55,7 @@ jobs:
         run: pnpm lint
 
       - name: Test release scripts
-        run: pnpm exec vitest run src/scripts/publish-cli.test.ts src/scripts/build-cli.test.ts src/scripts/check-release-version.test.ts --environment node
+        run: pnpm exec vitest run scripts/publish-cli.test.ts scripts/build-cli.test.ts scripts/check-release-version.test.ts --environment node
 
       - name: Test core
         run: pnpm --filter @coder-studio/core test

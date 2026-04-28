@@ -99,6 +99,20 @@ describe('CodeEditorHost', () => {
     });
   });
 
+  it('shows an error instead of staying in loading when file.read fails', async () => {
+    const sendCommand = vi.fn().mockRejectedValue(new Error('File not found'));
+    const { store } = setupStore({ activePath: 'src/missing.ts', sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('File not found');
+    expect(screen.queryByText(/connecting/i)).not.toBeInTheDocument();
+  });
+
   it('does not re-fetch a file that is already open', async () => {
     const { store, sendCommand } = setupStore({
       activePath: 'src/b.ts',

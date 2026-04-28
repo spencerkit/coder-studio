@@ -11,9 +11,16 @@ import type { FileNode } from '@coder-studio/core';
 /**
  * File tree by workspace (server state projection)
  * Written by: WS event handler for workspace.*.fs.tree
+ *
+ * Stored as Map<parentPath, FileNode[]> where:
+ *   - '.' maps to root-level children
+ *   - 'src' maps to children of the src/ directory
+ *   - 'src/lib' maps to children of src/lib/
+ *
+ * This avoids O(n) recursive traversal when inserting loaded children.
  */
 export const fileTreeAtomFamily = atomFamily((workspaceId: string) =>
-  atom<FileNode[] | null>(null)
+  atom<Map<string, FileNode[]> | null>(null)
 );
 
 /**
@@ -22,6 +29,15 @@ export const fileTreeAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const fileTreeStaleAtomFamily = atomFamily((workspaceId: string) =>
   atom<boolean>(false)
+);
+
+/**
+ * Loaded directories tracking (UI local state)
+ * Tracks which directories have been expanded and loaded.
+ * Written by: FileTreePanel when user expands a directory.
+ */
+export const loadedDirsAtomFamily = atomFamily((workspaceId: string) =>
+  atom<Set<string>>(new Set())
 );
 
 /**

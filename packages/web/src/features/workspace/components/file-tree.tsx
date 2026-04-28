@@ -29,6 +29,7 @@ import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
+  loadedDirsAtomFamily,
   openFilesAtomFamily,
 } from '../../../atoms/fs';
 import { dispatchCommandAtom } from '../../../atoms/connection';
@@ -87,8 +88,11 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
+  const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
+  const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingDir, setIsLoadingDir] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
   const lastRefreshTokenRef = useRef(refreshToken);
@@ -103,7 +107,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     });
 
     if (result.ok && result.data) {
-      setFileTree(result.data.children);
+      const treeMap = new Map<string, FileNode[]>();
+      treeMap.set('.', result.data.children);
+      setFileTree(treeMap);
+      setLoadedDirs(new Set()); // Clear loaded dirs on full refresh
       setIsLoading(false);
       return true;
     }
@@ -114,7 +121,29 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
 
     setIsLoading(false);
     return false;
-  }, [workspaceId, isLoading, dispatch, setFileTree]);
+  }, [workspaceId, isLoading, dispatch, setFileTree, setLoadedDirs]);
+
+  const loadChildren = useCallback(async (dirPath: string) => {
+    if (!workspaceId || isLoadingDir === dirPath || loadedDirs.has(dirPath)) return;
+
+    setIsLoadingDir(dirPath);
+    const result = await dispatch<ReadTreeResult>('file.readTree', {
+      workspaceId,
+      subPath: dirPath,
+    });
+
+    if (result.ok && result.data) {
+      setFileTree((prev) => {
+        if (!prev) return prev;
+        const next = new Map(prev);
+        next.set(dirPath, result.data!.children);
+        return next;
+      });
+      setLoadedDirs((prev) => new Set(prev).add(dirPath));
+    }
+
+    setIsLoadingDir(null);
+  }, [workspaceId, isLoadingDir, loadedDirs, dispatch, setFileTree, setLoadedDirs]);
 
   const openCreateDialog = useCallback((mode: 'file' | 'folder', baseDir: string | null) => {
     const normalizedBaseDir = baseDir ? `${baseDir.replace(/\/+$/, '')}/` : '';
@@ -286,8 +315,8 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   return (
     <>
       <div className="file-tree">
-        {fileTree && fileTree.length > 0 ? (
-          sortNodes(fileTree).map((node) => (
+        {fileTree && fileTree.size > 0 ? (
+          sortNodes(buildNestedTree(fileTree)).map((node) => (
             <FileTreeNode
               key={node.path}
               node={node}
@@ -296,6 +325,8 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
               onRequestCreate={openCreateDialog}
               onRequestDelete={(path, name) => setPendingDelete({ path, name, error: null })}
               onSelectFile={setActiveFilePath}
+              onLoadChildren={loadChildren}
+              isLoadingDir={isLoadingDir}
             />
           ))
         ) : (
@@ -328,6 +359,8 @@ interface FileTreeNodeProps {
   onRequestCreate: (mode: 'file' | 'folder', baseDir: string | null) => void;
   onRequestDelete: (path: string, name: string) => void;
   onSelectFile: (path: string) => void;
+  onLoadChildren: (dirPath: string) => void;
+  isLoadingDir: string | null;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
@@ -337,15 +370,29 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   onRequestCreate,
   onRequestDelete,
   onSelectFile,
+  onLoadChildren,
+  isLoadingDir,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === 'dir';
   const defaultExpanded =
     isFolder && depth === 0 && ['app', 'packages', 'src'].includes(node.name.toLowerCase());
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const autoLoadRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (isFolder && isExpanded && !node.children && !autoLoadRequestedRef.current) {
+      autoLoadRequestedRef.current = true;
+      onLoadChildren(node.path);
+    }
+  }, [isFolder, isExpanded, node.children, node.path, onLoadChildren]);
 
   const handleClick = () => {
     if (isFolder) {
+      if (!isExpanded) {
+        // Load children on first expand
+        onLoadChildren(node.path);
+      }
       setIsExpanded(!isExpanded);
     } else {
       onSelectFile(node.path);
@@ -354,7 +401,6 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
 
   const paddingLeft = depth * 14 + 12;
   const Icon = getNodeIcon(node, isExpanded);
-  const sortedChildren = node.children ? sortNodes(node.children) : [];
 
   return (
     <>
@@ -433,7 +479,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
 
       {isFolder && isExpanded && node.children && (
         <div className="tree-children">
-          {sortedChildren.map((child) => (
+          {sortNodes(node.children).map((child) => (
             <FileTreeNode
               key={child.path}
               node={child}
@@ -442,9 +488,18 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               onRequestCreate={onRequestCreate}
               onRequestDelete={onRequestDelete}
               onSelectFile={onSelectFile}
+              onLoadChildren={onLoadChildren}
+              isLoadingDir={isLoadingDir}
             />
           ))}
+          {node.children.length === 0 && !isLoadingDir && (
+            <div className="tree-empty-hint">Empty directory</div>
+          )}
         </div>
+      )}
+
+      {isFolder && isExpanded && !node.children && isLoadingDir === node.path && (
+        <div className="tree-loading">Loading...</div>
       )}
     </>
   );
@@ -577,6 +632,25 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
 };
 
 export default FileTreePanel;
+
+/**
+ * Reconstructs a nested tree structure from a flat Map<path, FileNode[]>
+ * for rendering. Only traverses loaded portions of the tree.
+ */
+function buildNestedTree(treeMap: Map<string, FileNode[]>): FileNode[] {
+  const attachChildren = (nodes: FileNode[]): FileNode[] =>
+    nodes.map((node) => {
+      if (node.kind === 'dir' && treeMap.has(node.path)) {
+        return {
+          ...node,
+          children: attachChildren(treeMap.get(node.path)!),
+        };
+      }
+      return node;
+    });
+
+  return attachChildren(treeMap.get('.') ?? []);
+}
 
 function sortNodes(nodes: FileNode[]) {
   return [...nodes].sort((a, b) => {

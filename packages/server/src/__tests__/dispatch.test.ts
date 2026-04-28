@@ -2,7 +2,7 @@
  * Tests for Command Dispatch
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { dispatch, registerCommand, getRegisteredCommands } from '../ws/dispatch.js';
 import type { CommandContext } from '../ws/dispatch.js';
 import { z } from 'zod';
@@ -12,14 +12,18 @@ describe('Command Dispatch', () => {
 
   beforeEach(() => {
     ctx = {
-      workspaceMgr: {} as any,
-      sessionMgr: {} as any,
-      terminalMgr: {} as any,
-      hooksMgr: {} as any,
-      eventBus: {} as any,
-      broadcaster: {} as any,
-      db: {} as any,
-    };
+      workspaceMgr: {},
+      sessionMgr: {},
+      terminalMgr: {},
+      hooksMgr: {},
+      eventBus: {},
+      broadcaster: {},
+      db: {},
+    } as CommandContext;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('registerCommand', () => {
@@ -137,6 +141,50 @@ describe('Command Dispatch', () => {
       expect(result.ok).toBe(false);
       expect(result.error?.code).toBe('custom_error');
       expect(result.error?.message).toBe('Custom error occurred');
+    });
+
+    it('resolves every debounced git.status request with the coalesced result', async () => {
+      vi.useFakeTimers();
+      const handler = vi.fn().mockResolvedValue({ branch: 'main' });
+      registerCommand(
+        'git.status',
+        z.object({ workspaceId: z.string() }),
+        handler
+      );
+
+      const resolvedIds: string[] = [];
+      const first = dispatch(
+        {
+          kind: 'command',
+          id: 'git-status-1',
+          op: 'git.status',
+          args: { workspaceId: 'ws-test' },
+        },
+        ctx
+      ).then((result) => {
+        resolvedIds.push(result.id);
+        return result;
+      });
+      const second = dispatch(
+        {
+          kind: 'command',
+          id: 'git-status-2',
+          op: 'git.status',
+          args: { workspaceId: 'ws-test' },
+        },
+        ctx
+      ).then((result) => {
+        resolvedIds.push(result.id);
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(resolvedIds).toEqual(['git-status-1', 'git-status-2']);
+      await expect(first).resolves.toMatchObject({ ok: true, data: { branch: 'main' } });
+      await expect(second).resolves.toMatchObject({ ok: true, data: { branch: 'main' } });
     });
   });
 });

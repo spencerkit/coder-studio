@@ -6,8 +6,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useAtom, useSetAtom } from 'jotai';
-import { useStore } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import {
   wsClientAtom,
   connectionStatusAtom,

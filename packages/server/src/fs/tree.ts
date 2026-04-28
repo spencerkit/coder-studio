@@ -1,10 +1,12 @@
 /**
  * Lazy file tree builder.
+ * Returns only direct children of a directory (no recursion).
  */
 
 import { readdir, stat } from 'fs/promises';
 import { join, relative } from 'path';
 import type { FileNode } from '@coder-studio/core';
+import { createGitignoreFilter } from './gitignore.js';
 
 export interface ReadTreeResult {
   path: string;
@@ -13,49 +15,34 @@ export interface ReadTreeResult {
 
 /**
  * Builds a file tree for a workspace directory.
- * This is a lazy implementation that reads files on demand.
+ * Only returns direct children of the requested directory (lazy loading).
+ * Directories have `children: undefined` to signal "not loaded yet".
  *
  * @param rootPath - Workspace root path
- * @param subdir - Optional subdirectory to start from
- * @returns File tree structure
+ * @param subdir - Optional subdirectory to read from
+ * @returns File tree structure with only direct children
  */
 export async function readTree(rootPath: string, subdir?: string): Promise<ReadTreeResult> {
   const targetPath = subdir ? join(rootPath, subdir) : rootPath;
-  const children = await buildTree(targetPath, rootPath);
-  return {
-    path: subdir || '.',
-    children,
-  };
-}
+  const filter = createGitignoreFilter(rootPath, targetPath);
 
-/**
- * Recursive tree builder.
- *
- * @param currentPath - Current directory path
- * @param rootPath - Workspace root path for relative calculation
- * @returns Array of file nodes
- */
-async function buildTree(currentPath: string, rootPath: string): Promise<FileNode[]> {
-  const entries = await readdir(currentPath, { withFileTypes: true });
-
+  const entries = await readdir(targetPath, { withFileTypes: true });
   const nodes: FileNode[] = [];
 
   for (const entry of entries) {
-    // Skip hidden files and common ignore patterns
-    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === '.git') {
+    if (!filter(entry.name)) {
       continue;
     }
 
-    const fullPath = join(currentPath, entry.name);
+    const fullPath = join(targetPath, entry.name);
     const relPath = relative(rootPath, fullPath);
 
     if (entry.isDirectory()) {
-      const children = await buildTree(fullPath, rootPath);
       nodes.push({
         name: entry.name,
         path: relPath,
         kind: 'dir',
-        children,
+        children: undefined, // Not loaded yet - client will request on expand
       });
     } else if (entry.isFile()) {
       const stats = await stat(fullPath);
@@ -77,5 +64,8 @@ async function buildTree(currentPath: string, rootPath: string): Promise<FileNod
     return a.name.localeCompare(b.name);
   });
 
-  return nodes;
+  return {
+    path: subdir || '.',
+    children: nodes,
+  };
 }

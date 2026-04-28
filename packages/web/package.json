@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@coder-studio/core": "workspace:*",
-    "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-router": "^1.168.23",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
@@ -19,6 +18,7 @@
     "jotai": "^2.19.1",
     "jotai-family": "^1.0.1",
     "lucide-react": "^1.8.0",
+    "monaco-editor": "^0.55.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2"

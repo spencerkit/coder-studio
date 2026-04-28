@@ -6,10 +6,29 @@
  */
 
 import type { FC } from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
-import Editor, { OnChange } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
+import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { themeAtom } from '../../../atoms/ui';
+
+const monacoGlobal = globalThis as typeof globalThis & {
+  MonacoEnvironment?: monaco.Environment;
+};
+
+monacoGlobal.MonacoEnvironment ??= {
+  getWorker(_workerId: string, label: string) {
+    if (label === 'json') return new jsonWorker();
+    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
+    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker();
+    if (label === 'typescript' || label === 'javascript') return new tsWorker();
+    return new editorWorker();
+  },
+};
 
 interface MonacoHostProps {
   workspaceId: string;
@@ -35,38 +54,65 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   onContentChange,
 }) => {
   const uiTheme = useAtomValue(themeAtom);
-  const editorRef = useRef<unknown>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const onContentChangeRef = useRef(onContentChange);
 
-  const handleEditorDidMount = (editor: unknown) => {
-    editorRef.current = editor;
-  };
-
-  const handleChange: OnChange = (value) => {
-    onContentChange?.(value || '');
-  };
+  useEffect(() => {
+    onContentChangeRef.current = onContentChange;
+  }, [onContentChange]);
 
   const language = detectLanguage(filePath);
   const editorTheme = uiTheme === 'light' ? 'vs' : 'vs-dark';
 
-  return (
-    <div className="monaco-host">
-      <Editor
-        height="100%"
-        language={language}
-        theme={editorTheme}
-        value={content}
-        onChange={handleChange}
-        onMount={handleEditorDidMount}
-        options={{
-          fontSize: 13,
-          fontFamily: 'JetBrains Mono, monospace',
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          padding: { top: 12, bottom: 12 },
-        }}
-      />
-    </div>
-  );
+  useEffect(() => {
+    if (!containerRef.current || editorRef.current) return;
+
+    const editor = monaco.editor.create(containerRef.current, {
+      value: content,
+      language,
+      theme: editorTheme,
+      fontSize: 13,
+      fontFamily: 'JetBrains Mono, monospace',
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      padding: { top: 12, bottom: 12 },
+      automaticLayout: true,
+    });
+    editorRef.current = editor;
+
+    const changeDisposable = editor.onDidChangeModelContent(() => {
+      onContentChangeRef.current?.(editor.getValue());
+    });
+
+    return () => {
+      changeDisposable.dispose();
+      editor.dispose();
+      editorRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const model = editor.getModel();
+    if (model) {
+      monaco.editor.setModelLanguage(model, language);
+    }
+  }, [language]);
+
+  useEffect(() => {
+    monaco.editor.setTheme(editorTheme);
+  }, [editorTheme]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || editor.getValue() === content) return;
+    editor.setValue(content);
+  }, [content]);
+
+  return <div ref={containerRef} className="monaco-host" />;
 };
 
 /**

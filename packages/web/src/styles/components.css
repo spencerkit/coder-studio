@@ -1088,6 +1088,19 @@ body.is-resizing-panels * {
   padding-left: 12px;
 }
 
+.tree-empty-hint {
+  padding-left: 26px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.tree-loading {
+  padding-left: 26px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* ========== Center Area ========== */
 .center-area {
   flex: 1;

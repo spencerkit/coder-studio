@@ -60,6 +60,9 @@ const schemas = new Map<string, CommandSchema>();
 interface DebounceEntry<T> {
   timer: NodeJS.Timeout;
   promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+  op: () => Promise<T>;
 }
 const debounceMap = new Map<string, DebounceEntry<unknown>>();
 
@@ -76,32 +79,39 @@ async function debounce<R>(
   op: () => Promise<R>,
   windowMs: number
 ): Promise<R> {
-  const existing = debounceMap.get(key) as DebounceEntry<R> | undefined;
-  if (existing) {
-    clearTimeout(existing.timer);
+  let entry = debounceMap.get(key) as DebounceEntry<R> | undefined;
+  if (entry) {
+    clearTimeout(entry.timer);
+    entry.op = op;
+  } else {
+    let resolve: (value: R) => void;
+    let reject: (reason: unknown) => void;
+    const promise = new Promise<R>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+
+    entry = {
+      timer: undefined as unknown as NodeJS.Timeout,
+      promise,
+      resolve: resolve!,
+      reject: reject!,
+      op,
+    };
+    debounceMap.set(key, entry as DebounceEntry<unknown>);
   }
-
-  let resolve: (value: R) => void;
-  let reject: (reason: unknown) => void;
-  const promise = new Promise<R>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  const entry = { timer: undefined as unknown as NodeJS.Timeout, promise };
-  debounceMap.set(key, entry as DebounceEntry<unknown>);
 
   entry.timer = setTimeout(async () => {
     debounceMap.delete(key);
     try {
-      const result = await op();
-      resolve(result);
+      const result = await entry.op();
+      entry.resolve(result);
     } catch (err) {
-      reject(err);
+      entry.reject(err);
     }
   }, windowMs);
 
-  return promise;
+  return entry.promise;
 }
 
 /**
@@ -156,7 +166,7 @@ export async function dispatch(
       ok: true,
       data,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Normalize error
     const normalizedError = normalizeError(error);
 
@@ -182,7 +192,7 @@ async function executeWithDebounce(
   const handler = handlers.get(op)!;
 
   if (op === 'git.status') {
-    const workspaceId = (args as any).workspaceId as string | undefined;
+    const workspaceId = getWorkspaceId(args);
     const key = workspaceId ? `git.status:${workspaceId}` : op;
     return debounce(key, () => handler(args, ctx, clientId), DEBOUNCE_GIT_STATUS_MS);
   }
@@ -190,32 +200,49 @@ async function executeWithDebounce(
   return handler(args, ctx, clientId);
 }
 
+function getWorkspaceId(args: unknown): string | undefined {
+  if (typeof args !== 'object' || args === null || !('workspaceId' in args)) {
+    return undefined;
+  }
+
+  const workspaceId = (args as { workspaceId: unknown }).workspaceId;
+  return typeof workspaceId === 'string' ? workspaceId : undefined;
+}
+
 /**
  * Normalize error to protocol format
  */
-function normalizeError(error: any): Result['error'] {
+function normalizeError(error: unknown): Result['error'] {
+  const candidate = error as {
+    name?: string;
+    code?: string;
+    message?: string;
+    details?: unknown;
+    errors?: unknown;
+  };
+
   // Zod validation error
-  if (error.name === 'ZodError') {
+  if (candidate.name === 'ZodError') {
     return {
       code: 'validation_error',
       message: 'Invalid arguments',
-      details: error.errors,
+      details: candidate.errors,
     };
   }
 
   // Custom error with code
-  if (error.code) {
+  if (candidate.code) {
     return {
-      code: error.code,
-      message: error.message,
-      details: error.details,
+      code: candidate.code,
+      message: candidate.message ?? String(candidate.code),
+      details: candidate.details,
     };
   }
 
   // Generic error
   return {
     code: 'internal_error',
-    message: error.message || 'An internal error occurred',
+    message: candidate.message || 'An internal error occurred',
   };
 }
 

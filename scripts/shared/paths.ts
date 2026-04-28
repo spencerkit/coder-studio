@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Root directory
-export const ROOT_DIR = resolve(__dirname, '../../..');
+export const ROOT_DIR = resolve(__dirname, '../..');
 
 // Package directories
 export const PACKAGES_DIR = resolve(ROOT_DIR, 'packages');

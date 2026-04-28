@@ -1,18 +1,12 @@
 /**
  * WorkspaceWatcher - File system watcher with throttled dirty signal.
+ * Uses .gitignore for ignore rules.
  */
 
 import { Topics } from '@coder-studio/core';
 import type { FSWatcher } from 'chokidar';
 import chokidar from 'chokidar';
-
-const WATCHER_IGNORED_PATTERNS: RegExp[] = [
-  /\.git\//,
-  /node_modules/,
-  /\.DS_Store/,
-  /Thumbs\.db/,
-  /(^|\/)\.playwright-mcp(\/|$)/,
-];
+import { createWatcherIgnoreFilter } from './gitignore.js';
 
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
@@ -32,11 +26,13 @@ export class WorkspaceWatcher {
 
   constructor(
     private workspaceId: string,
-    path: string,
+    rootPath: string,
     private broadcaster: Broadcaster
   ) {
-    this.chokidar = chokidar.watch(path, {
-      ignored: WATCHER_IGNORED_PATTERNS,
+    const shouldIgnore = createWatcherIgnoreFilter(rootPath);
+
+    this.chokidar = chokidar.watch(rootPath, {
+      ignored: shouldIgnore,
       ignoreInitial: true,
       persistent: true,
     });
@@ -50,31 +46,27 @@ export class WorkspaceWatcher {
    * continue for over 1s, forces a broadcast anyway.
    */
   private markDirty(): void {
-    if (this.dirtyTimer) {
-      if (this.firstDirtyTime && Date.now() - this.firstDirtyTime >= this.MAX_WAIT_MS) {
-        clearTimeout(this.dirtyTimer);
-        this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-          reason: 'fs_change',
-        });
-        this.dirtyTimer = null;
-        this.firstDirtyTime = null;
-      } else {
-        clearTimeout(this.dirtyTimer);
-        this.dirtyTimer = setTimeout(() => {
-          this.dirtyTimer = null;
-          this.firstDirtyTime = null;
-        }, this.DEBOUNCE_MS);
-      }
-    } else {
-      this.firstDirtyTime = Date.now();
-      this.dirtyTimer = setTimeout(() => {
-        this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-          reason: 'fs_change',
-        });
-        this.dirtyTimer = null;
-        this.firstDirtyTime = null;
-      }, this.DEBOUNCE_MS);
+    const now = Date.now();
+    if (this.firstDirtyTime === null) {
+      this.firstDirtyTime = now;
     }
+
+    const elapsed = now - this.firstDirtyTime;
+    const delay = Math.min(this.DEBOUNCE_MS, Math.max(0, this.MAX_WAIT_MS - elapsed));
+
+    if (this.dirtyTimer) {
+      clearTimeout(this.dirtyTimer);
+    }
+
+    this.dirtyTimer = setTimeout(() => this.flushDirty(), delay);
+  }
+
+  private flushDirty(): void {
+    this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
+      reason: 'fs_change',
+    });
+    this.dirtyTimer = null;
+    this.firstDirtyTime = null;
   }
 
   /**

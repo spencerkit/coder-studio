@@ -16,8 +16,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsx ../../../src/scripts/build-cli.ts",
-    "dev": "tsx ../../../src/scripts/dev-server.ts",
+    "build": "tsx ../../scripts/build-cli.ts",
+    "dev": "tsx ../../scripts/dev-server.ts",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },

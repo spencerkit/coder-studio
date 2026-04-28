@@ -1,5 +1,5 @@
 /**
- * Tests for file tree builder.
+ * Tests for file tree builder (lazy loading version).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -30,7 +30,7 @@ describe('readTree', () => {
     expect(result.children).toEqual([]);
   });
 
-  it('should list files and directories', async () => {
+  it('should list files and directories at root level', async () => {
     await writeFile(join(testDir, 'file.txt'), 'content');
     await mkdirAsync(join(testDir, 'subdir'));
     await writeFile(join(testDir, 'subdir', 'nested.txt'), 'nested');
@@ -42,14 +42,27 @@ describe('readTree', () => {
     const dir = result.children.find((n) => n.name === 'subdir');
     expect(dir).toBeDefined();
     expect(dir?.kind).toBe('dir');
-    expect(dir?.children).toHaveLength(1);
-    expect(dir?.children?.[0]?.name).toBe('nested.txt');
+    expect(dir?.children).toBeUndefined(); // Lazy loading: children undefined
 
     const file = result.children.find((n) => n.name === 'file.txt');
     expect(file).toBeDefined();
     expect(file?.kind).toBe('file');
     expect(file?.size).toBe(7);
     expect(file?.mtime).toBeDefined();
+  });
+
+  it('should return children of subdir when subPath specified', async () => {
+    await mkdirAsync(join(testDir, 'subdir'));
+    await writeFile(join(testDir, 'subdir', 'nested.txt'), 'nested');
+    await writeFile(join(testDir, 'subdir', 'another.txt'), 'another');
+
+    const result = await readTree(testDir, 'subdir');
+
+    expect(result.path).toBe('subdir');
+    expect(result.children).toHaveLength(2);
+    // Paths are relative to root, include subdir prefix
+    expect(result.children[0].path).toBe('subdir/another.txt');
+    expect(result.children[1].path).toBe('subdir/nested.txt');
   });
 
   it('should sort directories before files', async () => {
@@ -106,20 +119,21 @@ describe('readTree', () => {
     const result = await readTree(testDir);
 
     expect(result.children[0].path).toBe('subdir');
-    expect(result.children[0].children?.[0]?.path).toBe('subdir/file.txt');
+    // Subdir children are undefined (lazy loading)
   });
 
-  it('should support subdir parameter', async () => {
-    await mkdirAsync(join(testDir, 'subdir'));
-    await writeFile(join(testDir, 'subdir', 'file.txt'), 'content');
-    await writeFile(join(testDir, 'root.txt'), 'root');
+  it('should respect .gitignore rules', async () => {
+    await writeFile(join(testDir, '.gitignore'), '*.log\ndist/');
+    await writeFile(join(testDir, 'app.log'), 'log content');
+    await writeFile(join(testDir, 'app.txt'), 'text content');
+    await mkdirAsync(join(testDir, 'dist'));
+    await mkdirAsync(join(testDir, 'src'));
 
-    const result = await readTree(testDir, 'subdir');
+    const result = await readTree(testDir);
 
-    expect(result.path).toBe('subdir');
-    expect(result.children).toHaveLength(1);
-    expect(result.children[0].name).toBe('file.txt');
-    // Path is relative to root, so it includes the subdir prefix
-    expect(result.children[0].path).toBe('subdir/file.txt');
+    expect(result.children.some((n) => n.name === 'app.log')).toBe(false);
+    expect(result.children.some((n) => n.name === 'dist')).toBe(false);
+    expect(result.children.some((n) => n.name === 'app.txt')).toBe(true);
+    expect(result.children.some((n) => n.name === 'src')).toBe(true);
   });
 });

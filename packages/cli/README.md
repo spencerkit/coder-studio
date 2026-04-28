@@ -1,11 +1,11 @@
-# @coder-studio/cli
+# @spencer-kit/coder-studio
 
 Coder Studio CLI - Agent-First Development Environment
 
 ## 安装
 
 ```bash
-npm install -g @coder-studio/cli
+npm install -g @spencer-kit/coder-studio
 ```
 
 ## 命令

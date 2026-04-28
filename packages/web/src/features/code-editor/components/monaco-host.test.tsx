@@ -1,21 +1,55 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { themeAtom } from '../../../atoms/ui';
 import { MonacoHost } from './monaco-host';
 
-const mockEditor = vi.fn();
+const {
+  mockCreateEditor,
+  mockSetModelLanguage,
+  mockSetTheme,
+  mockEditorInstance,
+  mockWorker,
+} = vi.hoisted(() => {
+  const mockEditorInstance = {
+    dispose: vi.fn(),
+    getModel: vi.fn(() => ({})),
+    getValue: vi.fn(() => 'export const a = 1;'),
+    onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
+    setValue: vi.fn(),
+  };
 
-vi.mock('@monaco-editor/react', () => ({
-  default: (props: Record<string, unknown>) => {
-    mockEditor(props);
-    return <div data-testid="monaco-editor" />;
+  return {
+    mockCreateEditor: vi.fn(() => mockEditorInstance),
+    mockSetModelLanguage: vi.fn(),
+    mockSetTheme: vi.fn(),
+    mockEditorInstance,
+    mockWorker: class MockWorker {},
+  };
+});
+
+vi.mock('monaco-editor', () => ({
+  editor: {
+    create: mockCreateEditor,
+    setModelLanguage: mockSetModelLanguage,
+    setTheme: mockSetTheme,
   },
 }));
 
+vi.mock('monaco-editor/esm/vs/editor/editor.worker?worker', () => ({ default: mockWorker }));
+vi.mock('monaco-editor/esm/vs/language/css/css.worker?worker', () => ({ default: mockWorker }));
+vi.mock('monaco-editor/esm/vs/language/html/html.worker?worker', () => ({ default: mockWorker }));
+vi.mock('monaco-editor/esm/vs/language/json/json.worker?worker', () => ({ default: mockWorker }));
+vi.mock('monaco-editor/esm/vs/language/typescript/ts.worker?worker', () => ({ default: mockWorker }));
+
 describe('MonacoHost', () => {
   beforeEach(() => {
-    mockEditor.mockClear();
+    mockCreateEditor.mockClear();
+    mockSetModelLanguage.mockClear();
+    mockSetTheme.mockClear();
+    mockEditorInstance.dispose.mockClear();
+    mockEditorInstance.getValue.mockClear();
+    mockEditorInstance.setValue.mockClear();
   });
 
   it('uses a light editor theme when ui theme is light', async () => {
@@ -32,12 +66,13 @@ describe('MonacoHost', () => {
       </Provider>
     );
 
-    expect(screen.getByTestId('monaco-editor')).toBeInTheDocument();
-
     await waitFor(() => {
-      expect(mockEditor).toHaveBeenLastCalledWith(
+      expect(mockCreateEditor).toHaveBeenCalledWith(
+        expect.any(HTMLDivElement),
         expect.objectContaining({
+          language: 'typescript',
           theme: 'vs',
+          value: 'export const a = 1;',
         })
       );
     });
@@ -61,11 +96,7 @@ describe('MonacoHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockEditor).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          theme: 'vs',
-        })
-      );
+      expect(mockSetTheme).toHaveBeenCalledWith('vs');
     });
   });
 });

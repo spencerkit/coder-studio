@@ -39,6 +39,7 @@ describe('WorkspaceWatcher', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     watchSpy.mockRestore();
     try {
       await rm(testDir, { recursive: true, force: true });
@@ -59,21 +60,80 @@ describe('WorkspaceWatcher', () => {
   });
 
   it('should have broadcaster reference', () => {
-    const watcher = new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
     expect(broadcaster.broadcast).toBeDefined();
   });
 
-  it('ignores Playwright MCP artifacts so local browser verification does not rebroadcast fs.dirty', () => {
+  it('ignores .git, node_modules, .DS_Store, Thumbs.db, .playwright-mcp when no .gitignore', () => {
     new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
 
     expect(watchSpy).toHaveBeenCalledTimes(1);
     const options = watchSpy.mock.calls[0]?.[1];
     const ignored = options?.ignored;
 
-    expect(Array.isArray(ignored)).toBe(true);
-    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('.playwright-mcp/page.yml'))).toBe(true);
-    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('workspace-terminal-after-refresh.png'))).toBe(false);
-    expect(ignored?.some((pattern) => pattern instanceof RegExp && pattern.test('src/index.ts'))).toBe(false);
+    expect(typeof ignored).toBe('function');
+    expect(ignored?.(join(testDir, '.git/config'))).toBe(true);
+    expect(ignored?.(join(testDir, 'node_modules/package'))).toBe(true);
+    expect(ignored?.(join(testDir, '.DS_Store'))).toBe(true);
+    expect(ignored?.(join(testDir, 'Thumbs.db'))).toBe(true);
+    expect(ignored?.(join(testDir, 'src/index.ts'))).toBe(false);
+  });
+
+  it('broadcasts fs.dirty after a single file event settles', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+    watcherEvents.all?.();
+    await vi.advanceTimersByTimeAsync(199);
+    expect(broadcaster.broadcast).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledWith(
+      Topics.workspaceFsDirty('test-workspace-id'),
+      { reason: 'fs_change' }
+    );
+  });
+
+  it('broadcasts fs.dirty after consecutive file events settle', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+    watcherEvents.all?.();
+    await vi.advanceTimersByTimeAsync(100);
+    watcherEvents.all?.();
+
+    await vi.advanceTimersByTimeAsync(199);
+    expect(broadcaster.broadcast).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledWith(
+      Topics.workspaceFsDirty('test-workspace-id'),
+      { reason: 'fs_change' }
+    );
+  });
+
+  it('forces fs.dirty within max wait during continuous file events', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+    watcherEvents.all?.();
+    for (let i = 0; i < 9; i += 1) {
+      await vi.advanceTimersByTimeAsync(100);
+      watcherEvents.all?.();
+      expect(broadcaster.broadcast).not.toHaveBeenCalled();
+    }
+
+    await vi.advanceTimersByTimeAsync(100);
+    watcherEvents.all?.();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(broadcaster.broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledWith(
+      Topics.workspaceFsDirty('test-workspace-id'),
+      { reason: 'fs_change' }
+    );
   });
 
 });

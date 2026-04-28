@@ -7,6 +7,7 @@ import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
+  loadedDirsAtomFamily,
   openFilesAtomFamily,
 } from '../../../atoms/fs';
 
@@ -40,13 +41,13 @@ describe('FileTreePanel', () => {
     });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'README.md',
         name: 'README.md',
         kind: 'file',
       },
-    ]);
+    ]]]));
     store.set(fileTreeStaleAtomFamily('ws-test'), true);
 
     render(
@@ -65,14 +66,14 @@ describe('FileTreePanel', () => {
       expect(store.get(fileTreeStaleAtomFamily('ws-test'))).toBe(false);
     });
 
-    expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([
+    expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual(new Map([['.', [
       {
         path: 'src',
         name: 'src',
         kind: 'dir',
         children: [],
       },
-    ]);
+    ]]]));
   });
 
   it('consumes a refresh token only once instead of reloading on every render', async () => {
@@ -85,13 +86,13 @@ describe('FileTreePanel', () => {
     );
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'README.md',
         name: 'README.md',
         kind: 'file',
       },
-    ]);
+    ]]]));
 
     const { rerender } = render(
       <Provider store={store}>
@@ -141,7 +142,7 @@ describe('FileTreePanel', () => {
       });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), []);
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', []]]));
 
     render(
       <Provider store={store}>
@@ -168,13 +169,13 @@ describe('FileTreePanel', () => {
     });
 
     await waitFor(() => {
-      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual(new Map([['.', [
         {
           path: 'src/demo/new-file.ts',
           name: 'new-file.ts',
           kind: 'file',
         },
-      ]);
+      ]]]));
     });
 
     expect(store.get(activeFilePathAtomFamily('ws-test'))).toBe('src/demo/new-file.ts');
@@ -204,14 +205,14 @@ describe('FileTreePanel', () => {
       });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src',
         name: 'src',
         kind: 'dir',
         children: [],
       },
-    ]);
+    ]]]));
 
     render(
       <Provider store={store}>
@@ -241,7 +242,7 @@ describe('FileTreePanel', () => {
     });
 
     await waitFor(() => {
-      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual(new Map([['.', [
         {
           path: 'src',
           name: 'src',
@@ -255,7 +256,7 @@ describe('FileTreePanel', () => {
             },
           ],
         },
-      ]);
+      ]]]));
     });
   });
 
@@ -266,7 +267,7 @@ describe('FileTreePanel', () => {
       .mockResolvedValueOnce({ ok: true });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), []);
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', []]]));
 
     render(
       <Provider store={store}>
@@ -295,14 +296,14 @@ describe('FileTreePanel', () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src',
         name: 'src',
         kind: 'dir',
         children: [],
       },
-    ]);
+    ]]]));
 
     render(
       <Provider store={store}>
@@ -330,14 +331,14 @@ describe('FileTreePanel', () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src',
         name: 'src',
         kind: 'dir',
         children: [],
       },
-    ]);
+    ]]]));
 
     render(
       <Provider store={store}>
@@ -350,6 +351,43 @@ describe('FileTreePanel', () => {
     expect(await screen.findByLabelText('file.path')).toBeInTheDocument();
   });
 
+  it('loads children for default-expanded root directories', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      path: 'src',
+      children: [
+        {
+          path: 'src/index.ts',
+          name: 'index.ts',
+          kind: 'file',
+        },
+      ],
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+      },
+    ]]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('file.readTree', {
+        workspaceId: 'ws-test',
+        subPath: 'src',
+      });
+    });
+
+    expect(await screen.findByText('index.ts')).toBeInTheDocument();
+  });
+
   it('reloads the file tree after deleting a file', async () => {
     const sendCommand = vi
       .fn()
@@ -360,13 +398,13 @@ describe('FileTreePanel', () => {
       });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src/app.tsx',
         name: 'app.tsx',
         kind: 'file',
       },
-    ]);
+    ]]]));
 
     render(
       <Provider store={store}>
@@ -391,7 +429,7 @@ describe('FileTreePanel', () => {
     });
 
     await waitFor(() => {
-      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([]);
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual(new Map([['.', []]]));
     });
   });
 
@@ -405,14 +443,14 @@ describe('FileTreePanel', () => {
       });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src',
         name: 'src',
         kind: 'dir',
         children: [],
       },
-    ]);
+    ]]]));
 
     render(
       <Provider store={store}>
@@ -439,7 +477,7 @@ describe('FileTreePanel', () => {
     });
 
     await waitFor(() => {
-      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual([]);
+      expect(store.get(fileTreeAtomFamily('ws-test'))).toEqual(new Map([['.', []]]));
     });
   });
 
@@ -447,13 +485,13 @@ describe('FileTreePanel', () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(fileTreeAtomFamily('ws-test'), [
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
       {
         path: 'src/app.tsx',
         name: 'app.tsx',
         kind: 'file',
       },
-    ]);
+    ]]]));
     store.set(activeFilePathAtomFamily('ws-test'), 'src/app.tsx');
     store.set(openFilesAtomFamily('ws-test'), {
       'src/app.tsx': {
