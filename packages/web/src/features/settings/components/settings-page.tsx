@@ -17,6 +17,7 @@ import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
+import { ConfigEditor } from './config-editor';
 
 type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts';
 
@@ -669,6 +670,17 @@ function ProviderSettings({
             <div className="settings-config-field">
               <code className="settings-command-preview">{commandPreview}</code>
             </div>
+          </div>
+
+          {/* Config File Editor */}
+          <div className="settings-group">
+            <h3 className="settings-group-title">{t('settings.config_files.title')}</h3>
+            <p className="settings-group-desc">
+              {selectedProvider === 'codex'
+                ? t('settings.config_files.codex_config')
+                : t('settings.config_files.claude_config')}
+            </p>
+            <ConfigEditor configType={selectedProvider as 'codex' | 'claude'} />
           </div>
         </div>
       )}

@@ -6321,3 +6321,94 @@ textarea.input {
 .topbar-btn--muted:hover {
   opacity: 1;
 }
+
+/* ========== Config File Editor ========== */
+
+/* Config editor container */
+.settings-config-container {
+  margin-top: var(--sp-4);
+}
+
+.settings-config-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Path display bar */
+.settings-config-path-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-config-path-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+}
+
+.settings-config-path-value {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* Monaco editor override for config editor */
+.settings-config-editor .monaco-host {
+  height: 500px;
+}
+
+/* Status bar + action buttons */
+.settings-config-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  gap: var(--sp-3);
+}
+
+.settings-config-status {
+  flex: 1;
+}
+
+.settings-config-dirty {
+  font-size: var(--text-sm);
+  color: var(--accent-amber);
+  font-weight: var(--font-medium);
+}
+
+.settings-config-buttons {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* Loading state */
+.settings-config-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: var(--text-tertiary);
+}
+
+/* Error state */
+.settings-config-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  padding: var(--sp-4);
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
+  border-radius: var(--radius-md);
+}
+
+.settings-config-error-message {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}

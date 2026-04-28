@@ -12,6 +12,11 @@ import {
   mergeProviderLaunchConfig,
   sanitizeProviderLaunchConfig,
 } from '../provider-config.js';
+import {
+  readConfigFile,
+  writeConfigFile,
+  type ConfigType,
+} from '../config/config-io.js';
 
 // Settings schema
 const SettingsSchema = z.object({
@@ -193,3 +198,28 @@ function flattenSettings(obj: Record<string, unknown>, prefix = ''): Record<stri
 
   return result;
 }
+
+// settings.readConfigFile — read Codex or Claude config file content
+registerCommand(
+  'settings.readConfigFile',
+  z.object({
+    configType: z.enum(['codex', 'claude']),
+  }),
+  async (args) => {
+    const result = readConfigFile(args.configType as ConfigType);
+    return result;
+  }
+);
+
+// settings.writeConfigFile — write Codex or Claude config file with backup
+registerCommand(
+  'settings.writeConfigFile',
+  z.object({
+    configType: z.enum(['codex', 'claude']),
+    content: z.string(),
+  }),
+  async (args) => {
+    const result = writeConfigFile(args.configType as ConfigType, args.content);
+    return result;
+  }
+);

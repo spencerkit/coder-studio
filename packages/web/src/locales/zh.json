@@ -217,6 +217,19 @@
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
     },
+    "config_files": {
+      "title": "配置文件",
+      "codex_config": "Codex 配置",
+      "claude_config": "Claude 配置",
+      "path_label": "路径",
+      "unsaved_changes": "未保存的更改",
+      "saving": "保存中...",
+      "save_success": "配置保存成功",
+      "backup_created": "备份已保存到 {path}",
+      "save_failed": "配置保存失败",
+      "load_failed": "配置加载失败",
+      "file_not_found": "配置文件不存在，编辑并保存以创建。"
+    },
     "permission_denied_hint": "浏览器设置中已阻止，请在设置中手动开启"
   },
   "auth": {
