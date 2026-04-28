@@ -17,7 +17,7 @@
 ## 安装
 
 ```bash
-npm install @coder-studio/cli
+npm install @spencer-kit/coder-studio
 ```
 
 ## 使用

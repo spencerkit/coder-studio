@@ -376,7 +376,14 @@ function GeneralSettings({
           <span className="settings-info-label">{t('settings.notification_permission')}</span>
           <span className={`settings-info-value settings-permission-${notificationPermission}`}>
             {notificationPermission === 'granted' && t('settings.permission_granted')}
-            {notificationPermission === 'denied' && t('settings.permission_denied')}
+            {notificationPermission === 'denied' && (
+              <>
+                {t('settings.permission_denied')}
+                <span className="settings-deny-hint">
+                  {t('settings.permission_denied_hint')}
+                </span>
+              </>
+            )}
             {notificationPermission === 'default' && (
               <button className="settings-link" onClick={requestNotificationPermission}>
                 {t('settings.permission_request')}
@@ -425,7 +432,7 @@ function AppearanceSettings({
 
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.theme.title')}</h3>
-        <p className="settings-group-desc">{t('settings.theme_hint')}</p>
+        <p className="settings-group-desc">{t('settings.theme.hint')}</p>
 
         <div className="settings-pills">
           <button
@@ -475,7 +482,7 @@ function AppearanceSettings({
 
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.language.title')}</h3>
-        <p className="settings-group-desc">{t('settings.language_hint')}</p>
+        <p className="settings-group-desc">{t('settings.language.hint')}</p>
 
         <div className="settings-pills">
           <button

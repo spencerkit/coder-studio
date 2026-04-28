@@ -133,7 +133,7 @@ export async function assertCliPublishArtifacts(
     exports?: unknown;
   };
 
-  if (pkg.name !== "@coder-studio/cli") {
+  if (pkg.name !== "@spencer-kit/coder-studio") {
     throw new Error(`Unexpected CLI package name in ${packageJsonPath}`);
   }
   if (typeof pkg.version !== "string" || pkg.version.length === 0) {

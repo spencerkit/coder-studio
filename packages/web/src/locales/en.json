@@ -210,7 +210,14 @@
       "password_set": "Set Password",
       "password_change": "Change Password",
       "password_remove": "Remove Password"
-    }
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "reset_all": "Reset All",
+      "capture_hint": "Press new shortcut combination",
+      "reset_hint": "Reset to default"
+    },
+    "permission_denied_hint": "Blocked in browser settings, enable manually"
   },
   "auth": {
     "description": "Enter your password to continue to the current workspace.",

@@ -216,7 +216,8 @@
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
-    }
+    },
+    "permission_denied_hint": "浏览器设置中已阻止，请在设置中手动开启"
   },
   "auth": {
     "description": "输入密码后继续进入当前工作区。",

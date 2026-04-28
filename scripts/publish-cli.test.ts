@@ -95,7 +95,7 @@ describe("publish-cli", () => {
     await writeFile(
       join(cliDir, "package.json"),
       JSON.stringify({
-        name: "@coder-studio/cli",
+        name: "@spencer-kit/coder-studio",
         version: "1.2.3",
         bin: { "coder-studio": "./dist/bin.js" },
         files: ["dist"],
@@ -103,7 +103,7 @@ describe("publish-cli", () => {
     );
 
     await expect(assertCliPublishArtifacts(cliDir)).resolves.toEqual({
-      name: "@coder-studio/cli",
+      name: "@spencer-kit/coder-studio",
       version: "1.2.3",
     });
   });

@@ -45,7 +45,7 @@ function showLogs(status: ServerStatus): void {
 
 function showHelp(): void {
   console.log(`
-@coder-studio/cli - Coder Studio CLI
+@spencer-kit/coder-studio - Coder Studio CLI
 
 USAGE:
   coder-studio [COMMAND]
@@ -80,7 +80,7 @@ EXAMPLES:
 
 function showConfigHelp(): void {
   console.log(`
-@coder-studio/cli - config
+@spencer-kit/coder-studio - config
 
 USAGE:
   coder-studio config [OPTIONS]
@@ -109,7 +109,7 @@ EXAMPLES:
 
 function showVersion(): void {
   const version = '0.0.1';
-  console.log(`@coder-studio/cli v${version}`);
+  console.log(`@spencer-kit/coder-studio v${version}`);
 }
 
 function resolveManagedScriptPath(): string {

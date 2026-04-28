@@ -61,7 +61,7 @@ async function buildCli(): Promise<void> {
   info('Creating bin.js entry point...');
   const binPath = resolve(CLI_DIR, 'dist/bin.js');
   const binContent = `#!/usr/bin/env node
-// @coder-studio/cli - Entry point wrapper
+// @spencer-kit/coder-studio - Entry point wrapper
 import('./esm/bin.mjs').catch((err) => {
   console.error('Failed to start CLI:', err);
   process.exit(1);

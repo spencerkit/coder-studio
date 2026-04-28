@@ -90,7 +90,7 @@ Checks that the release tag matches packages/cli/package.json version.
 if (import.meta.url === `file://${process.argv[1]}`) {
   assertReleaseTagMatchesPackage(parseCheckReleaseVersionArgs(process.argv.slice(2)))
     .then(({ tag, version }) => {
-      success(`Release tag ${tag} matches @coder-studio/cli ${version}.`);
+      success(`Release tag ${tag} matches @spencer-kit/coder-studio ${version}.`);
     })
     .catch((err) => {
       error(err.message);

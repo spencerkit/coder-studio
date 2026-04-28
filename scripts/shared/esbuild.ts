@@ -79,7 +79,7 @@ export async function createCliBuildOptions(
       '@coder-studio/providers': resolve(PROVIDERS_DIR, 'src/index.ts'),
     },
     banner: format === 'esm'
-      ? { js: '// @coder-studio/cli - ESM bundle' }
+      ? { js: '// @spencer-kit/coder-studio - ESM bundle' }
       : undefined,
   };
 }
