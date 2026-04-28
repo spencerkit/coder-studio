@@ -394,6 +394,11 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
           terminal.write(decodeTerminalChunk(result.data.bytes));
         }
         coveredSeq = result.data.seq ?? coveredSeq;
+      } else if (result.data?.status === 'too_old') {
+        // Ring buffer overflow - show a message to the user
+        if (terminalRef.current) {
+          terminalRef.current.writeln('\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m');
+        }
       } else if (!result.ok) {
         console.error('Failed to replay terminal output:', result.error);
       }

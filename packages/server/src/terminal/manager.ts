@@ -71,7 +71,7 @@ export class TerminalManager {
     }
 
     // Create ring buffer (2 MiB)
-    const ringBuffer = new RingBuffer(2 * 1024 * 1024)
+    const ringBuffer = new RingBuffer(16 * 1024 * 1024)
 
     // Create active terminal
     const active = new ActiveTerminal(id, spec, pty, ringBuffer)
