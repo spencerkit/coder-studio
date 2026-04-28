@@ -29,6 +29,7 @@
     "resume_session": "Resume Session",
     "save_file": "Save File",
     "save_all": "Save All",
+    "save": "Save",
     "discard_changes": "Discard Changes",
     "commit": "Commit",
     "push": "Push",

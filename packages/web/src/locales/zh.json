@@ -29,6 +29,7 @@
     "resume_session": "恢复会话",
     "save_file": "保存文件",
     "save_all": "保存全部",
+    "save": "保存",
     "discard_changes": "放弃更改",
     "commit": "提交",
     "push": "推送",

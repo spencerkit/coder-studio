@@ -274,7 +274,7 @@ export function ConfigEditor({ configType }: ConfigEditorProps) {
                   </button>
                 </div>
 
-                <div className="config-actions-center">
+                <div className="config-actions-right">
                   {configType === 'claude' && (
                     <button
                       className="btn btn-secondary btn-sm"
@@ -292,9 +292,6 @@ export function ConfigEditor({ configType }: ConfigEditorProps) {
                   >
                     {t('action.reset')}
                   </button>
-                </div>
-
-                <div className="config-actions-right">
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={handleSave}
