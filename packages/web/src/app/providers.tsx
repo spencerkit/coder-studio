@@ -22,7 +22,9 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
   sessionsAtom,
+  dispatchCommandAtom,
 } from '../atoms';
+import type { DispatchCommand } from '../atoms/connection';
 import { authenticatedAtom } from '../atoms/ui';
 import { gitStateAtomFamily } from '../atoms/git';
 import { fileTreeStaleAtomFamily } from '../atoms/fs';
@@ -79,11 +81,18 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
+  const dispatch = useAtomValue(dispatchCommandAtom);
 
   useSessionNotifications();
 
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);
+  const dispatchRef = useRef<DispatchCommand>(dispatch);
+
+  // Keep dispatchRef in sync
+  useEffect(() => {
+    dispatchRef.current = dispatch;
+  }, [dispatch]);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -134,6 +143,18 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Event handler: route WS events to atoms
     const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
+      // Intercept fs.dirty to trigger git status refresh (debounced server-side)
+      const fsMatch = topic.match(/^workspace\.([^.]+)\.fs\.dirty$/);
+      if (fsMatch) {
+        const wid = fsMatch[1]!;
+        dispatchRef.current<GitStatus>('git.status', { workspaceId: wid }).then((result) => {
+          if (result.ok && result.data) {
+            store.set(gitStateAtomFamily(wid), result.data);
+          }
+        }).catch(() => {
+          // Silently ignore - WS may be disconnected, next fs.dirty will retry
+        });
+      }
       try {
         routeEventToAtom(topic, payload, store);
       } catch (err) {

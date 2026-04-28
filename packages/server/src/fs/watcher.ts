@@ -20,11 +20,15 @@ export interface Broadcaster {
 
 /**
  * Watches a workspace directory for file changes and broadcasts dirty signals.
- * Uses 100ms throttling to avoid excessive broadcasts during rapid file changes.
+ * Uses standard debounce (200ms) with a 1-second max wait to avoid starvation
+ * during continuous file activity.
  */
 export class WorkspaceWatcher {
   private chokidar: FSWatcher;
   private dirtyTimer: NodeJS.Timeout | null = null;
+  private firstDirtyTime: number | null = null;
+  private readonly DEBOUNCE_MS = 200;
+  private readonly MAX_WAIT_MS = 1_000;
 
   constructor(
     private workspaceId: string,
@@ -41,18 +45,36 @@ export class WorkspaceWatcher {
   }
 
   /**
-   * Marks the workspace as dirty with throttling.
-   * Broadcasts dirty signal after 100ms debounce.
+   * Standard debounce with max wait to avoid starvation.
+   * Each file change resets the timer by 200ms. If changes
+   * continue for over 1s, forces a broadcast anyway.
    */
   private markDirty(): void {
-    if (this.dirtyTimer) return; // Already pending
-
-    this.dirtyTimer = setTimeout(() => {
-      this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-        reason: 'fs_change',
-      });
-      this.dirtyTimer = null;
-    }, 100); // 100ms throttle
+    if (this.dirtyTimer) {
+      if (this.firstDirtyTime && Date.now() - this.firstDirtyTime >= this.MAX_WAIT_MS) {
+        clearTimeout(this.dirtyTimer);
+        this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
+          reason: 'fs_change',
+        });
+        this.dirtyTimer = null;
+        this.firstDirtyTime = null;
+      } else {
+        clearTimeout(this.dirtyTimer);
+        this.dirtyTimer = setTimeout(() => {
+          this.dirtyTimer = null;
+          this.firstDirtyTime = null;
+        }, this.DEBOUNCE_MS);
+      }
+    } else {
+      this.firstDirtyTime = Date.now();
+      this.dirtyTimer = setTimeout(() => {
+        this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
+          reason: 'fs_change',
+        });
+        this.dirtyTimer = null;
+        this.firstDirtyTime = null;
+      }, this.DEBOUNCE_MS);
+    }
   }
 
   /**
