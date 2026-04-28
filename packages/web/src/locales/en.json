@@ -228,7 +228,12 @@
       "backup_created": "Backup saved to {path}",
       "save_failed": "Failed to save config",
       "load_failed": "Failed to load config",
-      "file_not_found": "Config file does not exist. Edit and save to create it."
+      "file_not_found": "Config file does not exist. Edit and save to create it.",
+      "status_saved": "Saved",
+      "collapse": "Collapse",
+      "format": "Format",
+      "format_hint": "Format JSON code",
+      "file_not_found_hint": "Edit and save to create the config file."
     },
     "permission_denied_hint": "Blocked in browser settings, enable manually"
   },

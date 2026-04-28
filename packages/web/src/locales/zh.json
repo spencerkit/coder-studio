@@ -228,7 +228,12 @@
       "backup_created": "备份已保存到 {path}",
       "save_failed": "配置保存失败",
       "load_failed": "配置加载失败",
-      "file_not_found": "配置文件不存在，编辑并保存以创建。"
+      "file_not_found": "配置文件不存在，编辑并保存以创建。",
+      "status_saved": "已保存",
+      "collapse": "折叠",
+      "format": "格式化",
+      "format_hint": "格式化 JSON 代码",
+      "file_not_found_hint": "编辑并保存以创建配置文件。"
     },
     "permission_denied_hint": "浏览器设置中已阻止，请在设置中手动开启"
   },

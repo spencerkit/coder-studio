@@ -6322,93 +6322,178 @@ textarea.input {
   opacity: 1;
 }
 
-/* ========== Config File Editor ========== */
 
-/* Config editor container */
-.settings-config-container {
-  margin-top: var(--sp-4);
-}
+/* ========== Config File Editor (Enhanced) ========== */
 
-.settings-config-editor {
+/* Card Container */
+.config-card {
+  margin-top: var(--sp-6);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  background: var(--bg-surface);
   overflow: hidden;
 }
 
-/* Path display bar */
-.settings-config-path-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.settings-config-path-label {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  font-weight: var(--font-medium);
-}
-
-.settings-config-path-value {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-/* Monaco editor override for config editor */
-.settings-config-editor .monaco-host {
-  height: 500px;
-}
-
-/* Status bar + action buttons */
-.settings-config-actions {
+/* Header */
+.config-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--sp-3) var(--sp-4);
   background: var(--bg-surface);
-  border-top: 1px solid var(--border);
-  gap: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
 }
 
-.settings-config-status {
-  flex: 1;
+.config-card-header:hover {
+  background: var(--bg-hover);
 }
 
-.settings-config-dirty {
+.config-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-primary);
+}
+
+.config-card-path {
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
-  color: var(--accent-amber);
   font-weight: var(--font-medium);
 }
 
-.settings-config-buttons {
+.config-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* Status Indicator */
+.config-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.config-status--success {
+  color: var(--color-success);
+}
+
+.config-status--warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+.config-status--info {
+  color: var(--color-info, #3b82f6);
+}
+
+.config-status--error {
+  color: var(--color-error);
+}
+
+/* Body */
+.config-card-body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}
+
+/* Monaco Editor */
+.config-card-body .monaco-host {
+  min-height: 200px;
+  max-height: 600px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Actions */
+.config-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-surface);
+  gap: var(--sp-3);
+}
+
+.config-actions-left,
+.config-actions-center,
+.config-actions-right {
   display: flex;
   gap: var(--sp-2);
 }
 
-/* Loading state */
-.settings-config-loading {
+.config-actions-center {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Empty State */
+.config-empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 400px;
+  padding: var(--sp-8);
+  text-align: center;
+  min-height: 200px;
+}
+
+.config-empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--sp-4);
+  opacity: 0.5;
+}
+
+.config-empty-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.config-empty-desc {
+  font-size: var(--text-sm);
   color: var(--text-tertiary);
 }
 
-/* Error state */
-.settings-config-error {
+/* Loading State */
+.config-card-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 400px;
-  padding: var(--sp-4);
-  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
-  border-radius: var(--radius-md);
+  min-height: 200px;
+  color: var(--text-tertiary);
 }
 
-.settings-config-error-message {
+/* Error State */
+.config-card-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: var(--sp-4);
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
+}
+
+.config-card-error-message {
   color: var(--text-primary);
   font-size: var(--text-sm);
+}
+
+/* Spin Animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
