@@ -147,7 +147,26 @@ export async function unstageFiles(cwd: string, paths: string[]): Promise<void> 
  */
 export async function discardChanges(cwd: string, paths: string[]): Promise<void> {
   if (paths.length === 0) return;
-  await runGit(cwd, ['checkout', '--', ...paths]);
+
+  const trackedPaths: string[] = [];
+  const untrackedPaths: string[] = [];
+
+  for (const path of paths) {
+    try {
+      await runGit(cwd, ['ls-files', '--error-unmatch', '--', path]);
+      trackedPaths.push(path);
+    } catch {
+      untrackedPaths.push(path);
+    }
+  }
+
+  if (trackedPaths.length > 0) {
+    await runGit(cwd, ['restore', '--staged', '--worktree', '--', ...trackedPaths]);
+  }
+
+  if (untrackedPaths.length > 0) {
+    await runGit(cwd, ['clean', '-fd', '--', ...untrackedPaths]);
+  }
 }
 
 /**

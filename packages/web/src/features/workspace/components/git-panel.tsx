@@ -246,8 +246,10 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
 
   const handleDiscardAll = useCallback(() => {
     const paths = [
+      ...(gitState?.staged.map((file) => file.path) ?? []),
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
+      ...(gitState?.untracked.map((file) => file.path) ?? []),
     ];
 
     if (!paths.length) {
@@ -567,19 +569,17 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
           {type === 'staged' ? <Minus size={12} /> : <Plus size={12} />}
         </button>
 
-        {type !== 'staged' ? (
-          <button
-            className="git-row-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRequestDiscard(change.path);
-            }}
-            title="Discard"
-            type="button"
-          >
-            <RotateCcw size={12} />
-          </button>
-        ) : null}
+        <button
+          className="git-row-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestDiscard(change.path);
+          }}
+          title="Discard"
+          type="button"
+        >
+          <RotateCcw size={12} />
+        </button>
       </div>
     </div>
   );

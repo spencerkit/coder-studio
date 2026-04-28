@@ -221,14 +221,49 @@ describe('GitPanel', () => {
     fireEvent.click(await screen.findByTitle('Discard All'));
 
     expect(screen.getByText('放弃所有更改')).toBeInTheDocument();
-    expect(screen.getByText('确定要放弃 2 个文件的更改吗？')).toBeInTheDocument();
+    expect(screen.getByText('确定要放弃 4 个文件的更改吗？')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '放弃' }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('git.discard', {
         workspaceId: 'ws-test',
-        paths: ['src/app/AppController.tsx', 'src/legacy/deprecated.ts'],
+        paths: [
+          'src/auth/AuthGate.tsx',
+          'src/app/AppController.tsx',
+          'src/legacy/deprecated.ts',
+          'tests/supervisor.test.ts',
+        ],
+      });
+    });
+  });
+
+  it('allows discarding a staged file after confirmation', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return status;
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const row = (await screen.findByText('AuthGate.tsx')).closest('.git-row');
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByTitle('Discard'));
+    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('git.discard', {
+        workspaceId: 'ws-test',
+        paths: ['src/auth/AuthGate.tsx'],
       });
     });
   });

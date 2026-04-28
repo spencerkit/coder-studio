@@ -388,6 +388,66 @@ describe('FileTreePanel', () => {
     expect(await screen.findByText('index.ts')).toBeInTheDocument();
   });
 
+  it('keeps expanded directories populated after refreshing the file tree', async () => {
+    let libReadCount = 0;
+    const sendCommand = vi.fn().mockImplementation(async (_op: string, args: { subPath?: string }) => {
+      if (args.subPath === 'lib') {
+        libReadCount += 1;
+        return {
+          path: 'lib',
+          children: [
+            {
+              path: libReadCount === 1 ? 'lib/old.ts' : 'lib/new.ts',
+              name: libReadCount === 1 ? 'old.ts' : 'new.ts',
+              kind: 'file',
+            },
+          ],
+        };
+      }
+
+      return {
+        path: '.',
+        children: [
+          {
+            path: 'lib',
+            name: 'lib',
+            kind: 'dir',
+          },
+        ],
+      };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
+      {
+        path: 'lib',
+        name: 'lib',
+        kind: 'dir',
+      },
+    ]]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText('lib'));
+    expect(await screen.findByText('old.ts')).toBeInTheDocument();
+
+    act(() => {
+      store.set(fileTreeStaleAtomFamily('ws-test'), true);
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('file.readTree', {
+        workspaceId: 'ws-test',
+      });
+    });
+    expect(await screen.findByText('new.ts')).toBeInTheDocument();
+    expect(screen.queryByText('old.ts')).not.toBeInTheDocument();
+  });
+
   it('reloads the file tree after deleting a file', async () => {
     const sendCommand = vi
       .fn()

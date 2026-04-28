@@ -49,15 +49,15 @@ describe('Git Commands', () => {
     ctx = {
       db,
       workspaceMgr,
-      sessionMgr: {} as any,
-      terminalMgr: {} as any,
-      hooksMgr: {} as any,
+      sessionMgr: {},
+      terminalMgr: {},
+      hooksMgr: {},
       eventBus,
-      broadcaster: { broadcast: () => {} } as any,
+      broadcaster: { broadcast: () => {} },
       providerRegistry: [],
-      fencingMgr: {} as any,
-      supervisorMgr: {} as any,
-    };
+      fencingMgr: {},
+      supervisorMgr: {},
+    } as CommandContext;
   });
 
   afterEach(async () => {
@@ -85,5 +85,45 @@ describe('Git Commands', () => {
       })
     );
     expect((result.data as { diff: string }).diff).toContain('+export const value = 2;');
+  });
+
+  it('discards modified tracked files', async () => {
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'git-discard-modified',
+        op: 'git.discard',
+        args: {
+          workspaceId,
+          paths: ['sample.ts'],
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    const { stdout } = await execFileAsync('git', ['status', '--short'], { cwd: testDir });
+    expect(stdout.trim()).toBe('');
+  });
+
+  it('discards untracked files', async () => {
+    await writeFile(join(testDir, 'scratch.txt'), 'temporary\n');
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'git-discard-untracked',
+        op: 'git.discard',
+        args: {
+          workspaceId,
+          paths: ['scratch.txt'],
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    const { stdout } = await execFileAsync('git', ['status', '--short'], { cwd: testDir });
+    expect(stdout).not.toContain('scratch.txt');
   });
 });

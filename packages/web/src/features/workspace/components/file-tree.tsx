@@ -381,6 +381,12 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   const autoLoadRequestedRef = useRef(false);
 
   useEffect(() => {
+    if (node.children) {
+      autoLoadRequestedRef.current = false;
+    }
+  }, [node.children]);
+
+  useEffect(() => {
     if (isFolder && isExpanded && !node.children && !autoLoadRequestedRef.current) {
       autoLoadRequestedRef.current = true;
       onLoadChildren(node.path);
