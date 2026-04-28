@@ -137,6 +137,13 @@ export const AgentPanes: FC = () => {
       });
   }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
 
+  // 如果已经有 sessions 数据，直接标记为已加载（避免切换页面时重新 loading）
+  useEffect(() => {
+    if (sessions.length > 0 && !hasLoadedInitialSessions) {
+      setHasLoadedInitialSessions(true);
+    }
+  }, [sessions.length, hasLoadedInitialSessions]);
+
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {
       const detail = (event as CustomEvent<PanelSplitDetail>).detail;
