@@ -3,6 +3,23 @@
     "name": "Coder Studio",
     "description": "Agent-First Development Environment"
   },
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "warning": "警告",
+    "info": "信息",
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "view": "查看",
+    "close": "关闭",
+    "yes": "是",
+    "no": "否",
+    "ok": "确定"
+  },
   "action": {
     "open": "打开",
     "open_workspace": "打开工作区",
