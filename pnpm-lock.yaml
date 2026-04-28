@@ -56,6 +56,9 @@ importers:
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.5
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0

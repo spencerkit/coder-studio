@@ -59,4 +59,7 @@ e2e/run-session-tests.*
 /superpowers/
 /.coder-studio/
 /.codex
-tsconfig.tsbuildinfo    
+tsconfig.tsbuildinfo
+
+# Stitch design files
+.stitch/
