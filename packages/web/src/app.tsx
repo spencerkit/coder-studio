@@ -6,10 +6,12 @@
  * - UI layout with connection status banner
  */
 
+import { useEffect } from 'react';
 import { useAtomValue } from 'jotai';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { connectionStatusAtom, authEnabledAtom } from './atoms';
 import { authenticatedAtom } from './atoms/ui';
+import { orderedWorkspacesAtom } from './atoms/workspaces';
 import { WelcomePage } from './features/welcome';
 import { SettingsPage } from './features/settings';
 import { WorkspacePage } from './features/workspace';
@@ -19,11 +21,32 @@ import { ConfigDriftBanner } from './features/config-drift-banner';
 import { ToastContainer } from './features/notifications';
 
 /**
+ * Hook to auto-navigate to workspace if authenticated and has workspaces
+ */
+function useAutoWorkspace() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const workspaces = useAtomValue(orderedWorkspacesAtom);
+  const authenticated = useAtomValue(authenticatedAtom);
+  const authEnabled = useAtomValue(authEnabledAtom);
+
+  useEffect(() => {
+    if (location.pathname !== '/') return;
+    if (authEnabled === true && !authenticated) return;
+    if (authEnabled === null) return;
+    if (workspaces.length > 0) {
+      navigate('/workspace', { replace: true });
+    }
+  }, [location.pathname, authenticated, authEnabled, workspaces.length, navigate]);
+}
+
+/**
  * Root Route Component
  *
  * Shows the Welcome page.
  */
 function RootRoute() {
+  useAutoWorkspace();
   return <WelcomePage />;
 }
 
