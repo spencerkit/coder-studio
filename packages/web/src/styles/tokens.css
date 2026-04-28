@@ -62,8 +62,9 @@
   --radius-full: 9999px;
 
   /* ========== Typography ========== */
-  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Sarasa Mono SC', 'PingFang SC', monospace;
+  --font-sans: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Sarasa Mono SC', 'PingFang SC', monospace;
+
 
 
   /* Font Sizes */

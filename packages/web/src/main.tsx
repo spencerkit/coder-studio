@@ -10,6 +10,9 @@ import App from './app';
 
 import '@xterm/xterm/css/xterm.css';
 
+// Import fonts
+import './styles/fonts.css';
+
 // Import styles
 import './styles/tokens.css';
 import './styles/base.css';
