@@ -3,14 +3,29 @@ export interface Frame {
   size: number;
 }
 
+export interface StreamBufferDropOldestEvent {
+  topic: string;
+  frameSize: number;
+  bucketBytes: number;
+  bucketLength: number;
+}
+
+export interface StreamBufferEvictTopicEvent {
+  topic: string;
+  frames: number;
+  bytes: number;
+}
+
 export interface StreamBufferOptions {
   topicCap: number;
   topicLruCap: number;
+  onDropOldest?: (event: StreamBufferDropOldestEvent) => void;
+  onEvictTopic?: (event: StreamBufferEvictTopicEvent) => void;
 }
 
 export const STREAM_BUFFER_DEFAULTS: StreamBufferOptions = {
-  topicCap: 256 * 1024,
-  topicLruCap: 16,
+  topicCap: 512 * 1024,
+  topicLruCap: 8,
 };
 
 export class StreamBuffer {
@@ -29,6 +44,13 @@ export class StreamBuffer {
       while (this.buckets.size >= this.options.topicLruCap) {
         const oldest = this.buckets.keys().next().value;
         if (oldest === undefined) break;
+        const oldestBucket = this.buckets.get(oldest);
+        const oldestBytes = this.bucketBytes.get(oldest) ?? 0;
+        this.options.onEvictTopic?.({
+          topic: oldest,
+          frames: oldestBucket?.length ?? 0,
+          bytes: oldestBytes,
+        });
         this.buckets.delete(oldest);
         this.bucketBytes.delete(oldest);
       }
@@ -36,10 +58,11 @@ export class StreamBuffer {
       this.buckets.set(topic, bucket);
       this.bucketBytes.set(topic, 0);
     } else {
+      const bytes = this.bucketBytes.get(topic) ?? 0;
       this.buckets.delete(topic);
-      this.bucketBytes.delete(topic);
       this.buckets.set(topic, bucket);
-      this.bucketBytes.set(topic, this.bucketSize(bucket));
+      this.bucketBytes.delete(topic);
+      this.bucketBytes.set(topic, bytes);
     }
 
     bucket.push(frame);
@@ -48,6 +71,12 @@ export class StreamBuffer {
     while (bytes > this.options.topicCap && bucket.length > 1) {
       const dropped = bucket.shift()!;
       bytes -= dropped.size;
+      this.options.onDropOldest?.({
+        topic,
+        frameSize: dropped.size,
+        bucketBytes: bytes,
+        bucketLength: bucket.length,
+      });
     }
 
     this.bucketBytes.set(topic, bytes);
@@ -103,11 +132,5 @@ export class StreamBuffer {
     this.destroyed = true;
     this.buckets.clear();
     this.bucketBytes.clear();
-  }
-
-  private bucketSize(bucket: Frame[]): number {
-    let total = 0;
-    for (const f of bucket) total += f.size;
-    return total;
   }
 }

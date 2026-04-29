@@ -21,6 +21,14 @@ export interface HookRouteDeps {
   sessionDb: { findByResumeId(resumeId: string): { id: string } | null | undefined };
 }
 
+export interface HooksLogger {
+  warn(context: Record<string, unknown>, message: string): void;
+}
+
+const NOOP_LOGGER: HooksLogger = {
+  warn: () => {},
+};
+
 /**
  * Hooks Manager
  * Responsible for:
@@ -31,12 +39,20 @@ export interface HookRouteDeps {
  */
 export class HooksManager {
   private readonly backupDir = join(homedir(), '.coder-studio', 'backups');
+  private logger: HooksLogger;
 
   constructor(
     private readonly hookRegistrationRepo: HookRegistrationRepo,
     _runtime: RuntimeConfig,
-    private readonly routeDeps?: HookRouteDeps
-  ) {}
+    private readonly routeDeps?: HookRouteDeps,
+    logger?: HooksLogger
+  ) {
+    this.logger = logger ?? NOOP_LOGGER;
+  }
+
+  setLogger(logger: HooksLogger): void {
+    this.logger = logger;
+  }
 
   /**
    * Deploys bridge scripts for all registered providers.
@@ -160,7 +176,7 @@ export class HooksManager {
    */
   handleHookEvent(event: string, payload: unknown, ctx: HookEventContext = {}): void {
     if (!this.routeDeps) {
-      console.warn('Hook event received before router wiring:', event);
+      this.logger.warn({ event }, 'Hook event received before router wiring');
       return;
     }
 

@@ -18,6 +18,7 @@ describe('manager', () => {
   let db: Database.Database;
   let testDbPath: string;
   let testHomeDir: string;
+  let logger: { warn: ReturnType<typeof vi.fn> };
 
   const mockProvider: ProviderDefinition = {
     id: 'test-provider',
@@ -80,6 +81,7 @@ describe('manager', () => {
     `);
     hookRegistrationRepo = new HookRegistrationRepo(db);
     runtime = { port: 3000, token: 'test-token', serverInstanceId: 'server-abc', startedAt: Date.now() };
+    logger = { warn: vi.fn() };
     manager = new HooksManager(hookRegistrationRepo, runtime);
   });
 
@@ -144,6 +146,17 @@ describe('manager', () => {
   });
 
   describe('handleHookEvent', () => {
+    it('warns through the structured logger when route deps are not wired', () => {
+      manager = new HooksManager(hookRegistrationRepo, runtime, undefined, logger);
+
+      manager.handleHookEvent('SessionStart', {}, {});
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        { event: 'SessionStart' },
+        'Hook event received before router wiring'
+      );
+    });
+
     it('routes Codex agent-turn-complete to SessionManager via query sessionId', () => {
       const sessionMgr = { onHookEvent: vi.fn() };
       const providerRegistry = [

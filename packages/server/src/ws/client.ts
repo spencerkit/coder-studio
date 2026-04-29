@@ -9,30 +9,58 @@
 
 import type { ServerToClient, ClientToServer, Event } from '@coder-studio/core';
 import WebSocket from 'ws';
-import { StreamBuffer, type Frame } from './stream-buffer.js';
+import {
+  StreamBuffer,
+  STREAM_BUFFER_DEFAULTS,
+  type Frame,
+  type StreamBufferDropOldestEvent,
+  type StreamBufferEvictTopicEvent,
+} from './stream-buffer.js';
 
-const HIGH_WATER = 512 * 1024;
-const LOW_WATER = 128 * 1024;
+const HIGH_WATER = 1024 * 1024;
+const LOW_WATER = 256 * 1024;
 const FLUSH_INTERVAL_MS = 30;
+const STREAM_BUFFER_WARN_INTERVAL_MS = 5000;
 
 export type ClientId = string;
 export type MessageHandler = (msg: ClientToServer | Buffer) => void;
 export type CloseHandler = () => void;
+export interface WsClientLogger {
+  warn(context: Record<string, unknown>, message: string): void;
+}
+
+const NOOP_LOGGER: WsClientLogger = {
+  warn: () => {},
+};
 
 export class WsClient {
   readonly id: ClientId;
   private subscriptions = new Set<string>();
-  private readonly streamBuffer = new StreamBuffer();
+  private readonly streamBuffer: StreamBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private messageHandler: MessageHandler | null = null;
   private closeHandler: CloseHandler | null = null;
   private isAlive = true;
+  private droppedFramesSinceLastWarn = 0;
+  private droppedBytesSinceLastWarn = 0;
+  private evictedTopicsSinceLastWarn = 0;
+  private evictedFramesSinceLastWarn = 0;
+  private evictedBytesSinceLastWarn = 0;
+  private lastStreamBufferWarnAt = 0;
+  private readonly logger: WsClientLogger;
 
   constructor(
     private readonly socket: WebSocket,
-    id: ClientId
+    id: ClientId,
+    logger?: WsClientLogger
   ) {
     this.id = id;
+    this.logger = logger ?? NOOP_LOGGER;
+    this.streamBuffer = new StreamBuffer({
+      ...STREAM_BUFFER_DEFAULTS,
+      onDropOldest: (event) => this.handleStreamBufferDrop(event),
+      onEvictTopic: (event) => this.handleStreamBufferEviction(event),
+    });
     this.setupSocketHandlers();
   }
 
@@ -221,6 +249,45 @@ export class WsClient {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+  }
+
+  private handleStreamBufferDrop(event: StreamBufferDropOldestEvent): void {
+    this.droppedFramesSinceLastWarn += 1;
+    this.droppedBytesSinceLastWarn += event.frameSize;
+    this.warnStreamBufferPressure('topic-cap', event.topic);
+  }
+
+  private handleStreamBufferEviction(event: StreamBufferEvictTopicEvent): void {
+    this.evictedTopicsSinceLastWarn += 1;
+    this.evictedFramesSinceLastWarn += event.frames;
+    this.evictedBytesSinceLastWarn += event.bytes;
+    this.warnStreamBufferPressure('topic-lru', event.topic);
+  }
+
+  private warnStreamBufferPressure(reason: 'topic-cap' | 'topic-lru', topic: string): void {
+    const now = Date.now();
+    if (now - this.lastStreamBufferWarnAt < STREAM_BUFFER_WARN_INTERVAL_MS) {
+      return;
+    }
+
+    this.logger.warn({
+      reason,
+      clientId: this.id,
+      topic,
+      bufferedAmount: this.socket.bufferedAmount ?? 0,
+      droppedFrames: this.droppedFramesSinceLastWarn,
+      droppedBytes: this.droppedBytesSinceLastWarn,
+      evictedTopics: this.evictedTopicsSinceLastWarn,
+      evictedFrames: this.evictedFramesSinceLastWarn,
+      evictedBytes: this.evictedBytesSinceLastWarn,
+    }, 'Stream buffer pressure');
+
+    this.lastStreamBufferWarnAt = now;
+    this.droppedFramesSinceLastWarn = 0;
+    this.droppedBytesSinceLastWarn = 0;
+    this.evictedTopicsSinceLastWarn = 0;
+    this.evictedFramesSinceLastWarn = 0;
+    this.evictedBytesSinceLastWarn = 0;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { StreamBuffer, type Frame } from '../ws/stream-buffer.js';
+import { StreamBuffer, STREAM_BUFFER_DEFAULTS, type Frame } from '../ws/stream-buffer.js';
 
 const frame = (data: string | Buffer): Frame => ({
   data,
@@ -7,6 +7,13 @@ const frame = (data: string | Buffer): Frame => ({
 });
 
 describe('StreamBuffer enqueue', () => {
+  it('uses tuned defaults for per-topic capacity and active topics', () => {
+    expect(STREAM_BUFFER_DEFAULTS).toEqual({
+      topicCap: 512 * 1024,
+      topicLruCap: 8,
+    });
+  });
+
   it('starts empty', () => {
     const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 8 });
     expect(buf.isEmpty()).toBe(true);
@@ -72,6 +79,23 @@ describe('StreamBuffer enqueue', () => {
     expect(sent).toContain('xxxxxxxx');
     expect(sent).toContain('yyyyyyyy');
   });
+
+  it('emits drop-oldest events when a topic exceeds its cap', () => {
+    const onDropOldest = vi.fn();
+    const buf = new StreamBuffer({ topicCap: 10, topicLruCap: 8, onDropOldest });
+
+    buf.enqueue('t', frame('aaaa'));
+    buf.enqueue('t', frame('bbbb'));
+    buf.enqueue('t', frame('cccc'));
+
+    expect(onDropOldest).toHaveBeenCalledTimes(1);
+    expect(onDropOldest).toHaveBeenCalledWith({
+      topic: 't',
+      frameSize: 4,
+      bucketBytes: 8,
+      bucketLength: 2,
+    });
+  });
 });
 
 describe('StreamBuffer LRU eviction', () => {
@@ -88,6 +112,22 @@ describe('StreamBuffer LRU eviction', () => {
     expect(sent).toContain('b-data');
     expect(sent).toContain('c-data');
     expect(sent).toContain('d-data');
+  });
+
+  it('emits eviction events when the active topic cap is exceeded', () => {
+    const onEvictTopic = vi.fn();
+    const buf = new StreamBuffer({ topicCap: 1024, topicLruCap: 2, onEvictTopic });
+
+    buf.enqueue('a', frame('a-data'));
+    buf.enqueue('b', frame('b-data'));
+    buf.enqueue('c', frame('c-data'));
+
+    expect(onEvictTopic).toHaveBeenCalledTimes(1);
+    expect(onEvictTopic).toHaveBeenCalledWith({
+      topic: 'a',
+      frames: 1,
+      bytes: 6,
+    });
   });
 
   it('writing to existing topic refreshes its LRU position', () => {

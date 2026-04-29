@@ -29,6 +29,7 @@ import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-rep
 import { SupervisorRepo } from './storage/repositories/supervisor-repo.js';
 import { rowToSession, type SessionRow } from './storage/repositories/session-repo.js';
 import { providerRegistry } from '@coder-studio/providers';
+import type { ProviderDefinition } from '@coder-studio/core';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
 import { NodePtyHost } from './terminal/pty-host.js';
@@ -40,6 +41,60 @@ export interface Server {
   app: FastifyInstance;
   stop: () => Promise<void>;
   __test__?: { sessionMgr: any; hooksMgr: any; commandContext: any };
+}
+
+export interface ServerWarnLogger {
+  warn(context: Record<string, unknown>, message: string): void;
+}
+
+export interface RuntimeSetupHooks {
+  deployBridgeScripts(providers: ProviderDefinition[]): Promise<void>;
+  auditExternalConfigs(): {
+    codex: {
+      configPath: string;
+      findings: Array<{ startLine: number; message: string }>;
+    };
+  };
+}
+
+export async function runOptionalRuntimeSetup(
+  hooksMgr: RuntimeSetupHooks,
+  providers: ProviderDefinition[],
+  logger: ServerWarnLogger
+): Promise<void> {
+  try {
+    await hooksMgr.deployBridgeScripts(providers);
+  } catch (err) {
+    logger.warn({ err }, 'Failed to deploy provider bridge scripts — hooks may not fire');
+  }
+
+  try {
+    const audit = hooksMgr.auditExternalConfigs();
+    for (const finding of audit.codex.findings) {
+      logger.warn(
+        {
+          configPath: audit.codex.configPath,
+          startLine: finding.startLine,
+          findingMessage: finding.message,
+        },
+        'Codex config finding'
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Codex config audit failed (non-fatal)');
+  }
+}
+
+export function writeRuntimeConfigWithWarning(
+  runtime: RuntimeConfig,
+  logger: ServerWarnLogger,
+  write: (runtime: RuntimeConfig) => void = writeRuntimeConfig
+): void {
+  try {
+    write(runtime);
+  } catch (err) {
+    logger.warn({ err }, 'Failed to write runtime.json — provider hooks will not reach the server');
+  }
 }
 
 /**
@@ -127,38 +182,6 @@ export async function createServer(
     }
   );
 
-  // Deploy per-provider bridge scripts and merge managed hook entries into
-  // each provider's global config. Without this, Claude's SessionStart hook
-  // never runs and Codex's `-c notify=[...]` points at a non-existent
-  // script — both providers' sessions would then be stuck in 'starting'.
-  //
-  // In tests we skip this (see ServerConfig.writeRuntime) to keep runs from
-  // racing on the shared `~/.claude/settings.json` + `~/.coder-studio/hooks`
-  // files. Tests that need the hook chain exercise HooksManager directly.
-  if (config.writeRuntime) {
-    try {
-      await hooksMgr.deployBridgeScripts(providerRegistry);
-    } catch (err) {
-      console.warn('Failed to deploy provider bridge scripts — hooks may not fire:', err);
-    }
-
-    // Warn (but don't modify) if the user's Codex config.toml has settings
-    // that would interfere with our `-c notify=` argv injection. The actual
-    // remediation is user-initiated via the `settings.cleanupCodexConfig`
-    // WS command — we never touch their TOML without consent.
-    try {
-      const audit = hooksMgr.auditExternalConfigs();
-      for (const finding of audit.codex.findings) {
-        console.warn(
-          `[codex-config] ${audit.codex.configPath}:${finding.startLine} ${finding.message}`
-        );
-      }
-    } catch (err) {
-      // Strictly best-effort: a broken audit must never block startup.
-      console.warn('Codex config audit failed (non-fatal):', err);
-    }
-  }
-
   // Web assets root (for CLI mode)
   const webRoot = config.webRoot;
 
@@ -182,6 +205,20 @@ export async function createServer(
       },
     },
   });
+
+  wsHub.setLogger(app.log);
+  hooksMgr.setLogger(app.log);
+
+  // Deploy per-provider bridge scripts and audit external config via the app
+  // logger so these best-effort startup warnings land in the same structured
+  // log sink as the rest of the server.
+  //
+  // In tests we skip this (see ServerConfig.writeRuntime) to keep runs from
+  // racing on the shared `~/.claude/settings.json` + `~/.coder-studio/hooks`
+  // files. Tests that need the hook chain exercise HooksManager directly.
+  if (config.writeRuntime) {
+    await runOptionalRuntimeSetup(hooksMgr, providerRegistry, app.log);
+  }
 
   // Supervisor Manager
   const supervisorRepo = new SupervisorRepo(db);
@@ -252,15 +289,7 @@ export async function createServer(
   runtime.port = actualPort;
 
   if (config.writeRuntime) {
-    try {
-      writeRuntimeConfig(runtime);
-    } catch (err) {
-      // Non-fatal: server itself is up and the WS API keeps working. Hooks
-      // (SessionStart, agent-turn-complete) will silently no-op until the
-      // user resolves the disk issue, but that's strictly better than
-      // refusing to boot.
-      console.warn('Failed to write runtime.json — provider hooks will not reach the server:', err);
-    }
+    writeRuntimeConfigWithWarning(runtime, app.log);
   }
 
   console.log(`Server listening on http://${config.host}:${actualPort}`);

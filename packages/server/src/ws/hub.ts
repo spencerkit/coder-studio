@@ -23,7 +23,7 @@ import {
   encodeTerminalBinaryFrame,
 } from '@coder-studio/core';
 import type WebSocket from 'ws';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyRequest, FastifyBaseLogger } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { EventBus } from '../bus/event-bus.js';
 import { registerPendingTerminalInput } from '../commands/terminal.js';
@@ -38,6 +38,7 @@ interface WsHubDeps {
   commandContext: CommandContext;
   config: ServerConfig;
   fencingMgr: FencingManager;
+  logger?: FastifyBaseLogger;
 }
 
 const BINARY_PAYLOAD_TIMEOUT_MS = 5000;
@@ -82,11 +83,15 @@ export class WsHub implements Broadcaster {
     this.subscribeToEvents();
   }
 
+  setLogger(logger: FastifyBaseLogger): void {
+    this.deps.logger = logger;
+  }
+
   /**
    * Handle a new WebSocket connection
    */
   handleConnection(socket: WebSocket, _req: FastifyRequest): void {
-    const client = new WsClient(socket, uuidv4());
+    const client = new WsClient(socket, uuidv4(), this.deps.logger);
     this.clients.set(client.id, client);
 
     // Send connection ready (controller status determined later by fencing.request command)

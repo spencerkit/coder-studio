@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 describe('WsClient', () => {
   let mockSocket: any;
   let client: WsClient;
+  let logger: { warn: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockSocket = {
@@ -20,7 +21,11 @@ describe('WsClient', () => {
       bufferedAmount: 0,
     };
 
-    client = new WsClient(mockSocket, 'test-client-id');
+    logger = {
+      warn: vi.fn(),
+    };
+
+    client = new WsClient(mockSocket, 'test-client-id', logger);
   });
 
   it('passes binary websocket messages through as buffers', () => {
@@ -137,12 +142,18 @@ describe('WsClient', () => {
   });
 
   describe('stream path', () => {
-    const HIGH = 512 * 1024;
-    const LOW  = 128 * 1024;
+    const HIGH = 1024 * 1024;
+    const LOW  = 256 * 1024;
     const sample = { kind: 'event', topic: 't', seq: 0, timestamp: 0, data: {} } as const;
 
     it('sendStream below HIGH water sends directly', () => {
       mockSocket.bufferedAmount = 0;
+      client.sendStream('workspace.x.terminal.t1.output', sample);
+      expect(mockSocket.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('sendStream keeps sending directly below the tuned 1MiB HIGH water mark', () => {
+      mockSocket.bufferedAmount = 768 * 1024;
       client.sendStream('workspace.x.terminal.t1.output', sample);
       expect(mockSocket.send).toHaveBeenCalledTimes(1);
     });
@@ -232,6 +243,26 @@ describe('WsClient', () => {
       vi.advanceTimersByTime(200);
       expect(mockSocket.send).not.toHaveBeenCalled();
       vi.useRealTimers();
+    });
+
+    it('warns when stream frames are dropped due to buffer pressure', () => {
+      mockSocket.bufferedAmount = HIGH;
+
+      const payload = Buffer.alloc(400 * 1024, 1);
+      client.sendStream('workspace.x.terminal.t1.output', payload);
+      client.sendStream('workspace.x.terminal.t1.output', payload);
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'topic-cap',
+          clientId: 'test-client-id',
+          topic: 'workspace.x.terminal.t1.output',
+          droppedFrames: 1,
+          evictedTopics: 0,
+        }),
+        'Stream buffer pressure'
+      );
     });
   });
 });
