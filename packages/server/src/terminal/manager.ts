@@ -13,6 +13,9 @@ import type { EventBus } from '../bus/event-bus'
 import { ActiveTerminal } from './active-terminal'
 import { RingBuffer } from './ring-buffer'
 
+// 64 MiB per terminal — freed when the terminal exits
+const RING_BUFFER_SIZE = 64 * 1024 * 1024
+
 /**
  * Generate unique terminal ID
  */
@@ -25,7 +28,6 @@ function generateId(): string {
  */
 export class TerminalManager {
   private terminals = new Map<TerminalId, ActiveTerminal>()
-  private archivedReplayBuffers = new Map<TerminalId, RingBuffer>()
 
   constructor(
     private readonly deps: {
@@ -70,8 +72,7 @@ export class TerminalManager {
       throw new Error(`Terminal spawn failed: ${error.message}`)
     }
 
-    // Create ring buffer (2 MiB)
-    const ringBuffer = new RingBuffer(16 * 1024 * 1024)
+    const ringBuffer = new RingBuffer(RING_BUFFER_SIZE)
 
     // Create active terminal
     const active = new ActiveTerminal(id, spec, pty, ringBuffer)
@@ -123,7 +124,6 @@ export class TerminalManager {
     pty.onExit(({ exitCode }: { exitCode: number }) => {
       active.alive = false
       active.exitCode = exitCode
-      this.archivedReplayBuffers.set(id, ringBuffer)
 
       // Emit terminal.exited DomainEvent
       const event: DomainEvent = {
@@ -198,26 +198,16 @@ export class TerminalManager {
       return terminal.ringBuffer.replayFrom(lastSeq)
     }
 
-    const archivedRingBuffer = this.archivedReplayBuffers.get(terminalId)
-    if (archivedRingBuffer) {
-      return archivedRingBuffer.replayFrom(lastSeq)
-    }
-
     return { status: 'unknown' }
   }
 
   /**
-   * Read the last N bytes of terminal output from the active or archived ring buffer.
+   * Read the last N bytes of terminal output from the active ring buffer.
    */
   getRingBufferTail(terminalId: TerminalId, bytes: number): Buffer {
     const terminal = this.terminals.get(terminalId)
     if (terminal) {
       return terminal.ringBuffer.tail(bytes)
-    }
-
-    const archivedRingBuffer = this.archivedReplayBuffers.get(terminalId)
-    if (archivedRingBuffer) {
-      return archivedRingBuffer.tail(bytes)
     }
 
     return Buffer.alloc(0)
@@ -240,6 +230,5 @@ export class TerminalManager {
       }
     }
     this.terminals.clear()
-    this.archivedReplayBuffers.clear()
   }
 }

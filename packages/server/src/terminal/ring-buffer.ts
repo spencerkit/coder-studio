@@ -1,8 +1,8 @@
 // Ring buffer implementation for terminal output (spec §4.5)
 
 /**
- * Ring buffer for storing terminal output
- * Fixed 2 MiB size with circular overwrite
+ * Circular overwrite ring buffer for terminal output.
+ * Buffer size is configurable at construction time.
  */
 export class RingBuffer {
   private buffer: Buffer

@@ -10,7 +10,7 @@ import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
-import { XtermHost } from '../components/xterm-host';
+import { XtermHost, trimWrittenChunks } from '../components/xterm-host';
 import { terminalOutputAtomFamily } from '../../../atoms/terminals';
 import { wsClientAtom } from '../../../atoms/connection';
 import { themeAtom } from '../../../atoms/ui';
@@ -30,6 +30,8 @@ const mockTerminal = {
 const mockFitAddon = {
   fit: vi.fn(),
 };
+
+const textEncoder = new TextEncoder();
 
 // Mock xterm.js modules
 vi.mock('@xterm/xterm', () => {
@@ -58,6 +60,8 @@ describe('XtermHost', () => {
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
+    mockTerminal.write.mockImplementation(() => {});
+    mockTerminal.writeln.mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -229,9 +233,9 @@ describe('XtermHost', () => {
     );
   });
 
-  it('decodes utf-8 terminal output without mojibake', async () => {
+  it('forwards utf-8 terminal output bytes to xterm without pre-decoding', async () => {
     const store = createStore();
-    const chunk = new TextEncoder().encode('你好─Codex');
+    const chunk = textEncoder.encode('你好─Codex');
 
     store.set(terminalOutputAtomFamily('utf-terminal'), {
       chunks: [chunk],
@@ -246,7 +250,53 @@ describe('XtermHost', () => {
     );
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith('你好─Codex');
+      expect(mockTerminal.write).toHaveBeenCalledWith(chunk);
+    });
+  });
+
+  it('forwards split utf-8 chunks to xterm without corrupting partial code points', async () => {
+    const store = createStore();
+    const fullChunk = textEncoder.encode('┌─审批确认─┐');
+    const firstChunk = fullChunk.slice(0, 1);
+    const secondChunk = fullChunk.slice(1);
+
+    store.set(terminalOutputAtomFamily('utf-split-terminal'), {
+      chunks: [firstChunk, secondChunk],
+      lastSeq: fullChunk.byteLength,
+      lastWritten: 0,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="utf-split-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockTerminal.write.mock.calls[0]?.[0]).toEqual(firstChunk);
+    expect(mockTerminal.write.mock.calls[1]?.[0]).toEqual(secondChunk);
+  });
+
+  it('trims only the written chunk prefix and preserves concurrently appended chunks', () => {
+    const firstChunk = textEncoder.encode('first\n');
+    const secondChunk = textEncoder.encode('second\n');
+
+    expect(
+      trimWrittenChunks(
+        {
+          chunks: [firstChunk, secondChunk],
+          lastSeq: firstChunk.byteLength + secondChunk.byteLength,
+          lastWritten: 0,
+        },
+        1
+      )
+    ).toEqual({
+      chunks: [secondChunk],
+      lastSeq: firstChunk.byteLength + secondChunk.byteLength,
+      lastWritten: 0,
     });
   });
 
@@ -482,9 +532,9 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenNthCalledWith(1, 'replay snapshot\n');
+      expect(mockTerminal.write).toHaveBeenNthCalledWith(1, replayChunk);
     });
-    expect(mockTerminal.write).not.toHaveBeenCalledWith('early output\n');
+    expect(mockTerminal.write).not.toHaveBeenCalledWith(earlyChunk);
 
     await act(async () => {
       subscriptionHandler?.(
@@ -495,7 +545,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith('late output\n');
+      expect(mockTerminal.write).toHaveBeenCalledWith(lateChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -578,7 +628,7 @@ describe('XtermHost', () => {
         terminalId: 'gap-terminal',
         lastSeq: 0,
       });
-      expect(mockTerminal.write).toHaveBeenCalledWith('snapshot\n');
+      expect(mockTerminal.write).toHaveBeenCalledWith(initialReplayChunk);
     });
 
     mockTerminal.write.mockClear();
@@ -615,7 +665,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith('missed\ntail\n');
+      expect(mockTerminal.write).toHaveBeenCalledWith(gapReplayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -663,7 +713,7 @@ describe('XtermHost', () => {
     });
 
     expect(mockFitAddon.fit).not.toHaveBeenCalled();
-    expect(mockTerminal.write).not.toHaveBeenCalledWith('cursor addressed replay\n');
+    expect(mockTerminal.write).not.toHaveBeenCalledWith(replayChunk);
 
     await act(async () => {
       const callback = rafCallbacks.shift();
@@ -675,7 +725,7 @@ describe('XtermHost', () => {
 
     expect(mockFitAddon.fit).toHaveBeenCalled();
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith('cursor addressed replay\n');
+      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -843,7 +893,7 @@ describe('XtermHost', () => {
         terminalId: 'connect-gated-terminal',
         lastSeq: 0,
       });
-      expect(mockTerminal.write).toHaveBeenCalledWith('replay after connect\n');
+      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -1023,7 +1073,7 @@ describe('XtermHost', () => {
     // No spurious re-replay should have fired - the live chunks were
     // contiguous with the snapshot's covered seq.
     expect(replayCount).toBe(1);
-    expect(mockTerminal.write.mock.calls.map(([data]) => data)).toEqual(['g', 'i', 't']);
+    expect(mockTerminal.write.mock.calls.map(([data]) => data)).toEqual(bytes);
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

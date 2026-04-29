@@ -94,11 +94,19 @@ function getTerminalTheme(theme: 'dark' | 'light') {
   return AURORA_MINT_THEMES[theme];
 }
 
-const terminalOutputDecoder = new TextDecoder();
 const terminalInputEncoder = new TextEncoder();
 
-function decodeTerminalChunk(chunk: Uint8Array): string {
-  return terminalOutputDecoder.decode(chunk);
+export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: number): OutputBuffer {
+  const removeCount = Math.min(writtenChunkCount, buffer.chunks.length);
+  if (removeCount === 0) {
+    return buffer;
+  }
+
+  return {
+    ...buffer,
+    chunks: buffer.chunks.slice(removeCount),
+    lastWritten: 0,
+  };
 }
 
 interface XtermHostProps {
@@ -376,7 +384,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
           continue;
         }
 
-        terminal.write(decodeTerminalChunk(entry.bytes));
+        terminal.write(entry.bytes);
         latestCoveredSeq = entry.seq;
       }
 
@@ -391,7 +399,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       let coveredSeq = replayedSeqRef.current;
       if (result.ok && result.data?.status === 'ok') {
         if (result.data.bytes) {
-          terminal.write(decodeTerminalChunk(result.data.bytes));
+          terminal.write(result.data.bytes);
         }
         coveredSeq = result.data.seq ?? coveredSeq;
       } else if (result.data?.status === 'too_old') {
@@ -546,22 +554,19 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     if (!terminal) return;
 
     const { chunks, lastWritten } = outputAtom;
+    const writtenChunkCount = chunks.length - lastWritten;
 
     // Write any unwritten chunks
     for (let i = lastWritten; i < chunks.length; i++) {
       const chunk = chunks[i];
       if (!chunk) continue;
 
-      terminal.write(decodeTerminalChunk(chunk));
+      terminal.write(chunk);
     }
 
     // Update lastWritten to prevent atom bloat
-    if (chunks.length > lastWritten) {
-      setOutputAtom((prev: OutputBuffer) => ({
-        ...prev,
-        chunks: [], // Clear chunks after writing
-        lastWritten: 0,
-      }));
+    if (writtenChunkCount > 0) {
+      setOutputAtom((prev: OutputBuffer) => trimWrittenChunks(prev, writtenChunkCount));
     }
   }, [outputAtom, setOutputAtom]);
 

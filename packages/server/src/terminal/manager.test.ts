@@ -417,7 +417,7 @@ describe('TerminalManager', () => {
       expect(result.status).toBe('unknown')
     })
 
-    it('keeps replay history available after terminal exit cleanup', async () => {
+    it('returns unknown after terminal exit cleanup', async () => {
       const spec: TerminalSpec = {
         workspaceId: 'ws-123',
         kind: 'agent',
@@ -435,11 +435,7 @@ describe('TerminalManager', () => {
       await new Promise((resolve) => setTimeout(resolve, 1100))
 
       const result = manager.replay(terminal.id, 0)
-
-      expect(result.status).toBe('ok')
-      if (result.status === 'ok') {
-        expect(result.data.toString()).toBe('session output')
-      }
+      expect(result.status).toBe('unknown')
     })
   })
 
