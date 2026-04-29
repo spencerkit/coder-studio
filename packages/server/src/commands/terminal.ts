@@ -119,7 +119,15 @@ registerCommand(
     lastSeq: z.number().int().nonnegative().optional(),
   }),
   async (args, ctx, clientId) => {
+    const requestStart = Date.now();
+    console.log(`[PERF] [${args.terminalId}] Server replay request received at`, requestStart, 'ms, lastSeq:', args.lastSeq ?? 0);
+
+    const replayStart = Date.now();
     const replay = ctx.terminalMgr.replay(args.terminalId, args.lastSeq ?? 0);
+    const replayEnd = Date.now();
+
+    console.log(`[PERF] [${args.terminalId}] Server replay data retrieved in`, (replayEnd - replayStart), 'ms, status:', replay.status,
+      replay.status === 'ok' ? `size: ${replay.data.length} bytes, seq: ${replay.seq}` : '');
 
     if (replay.status !== 'ok') {
       return replay;
@@ -127,6 +135,7 @@ registerCommand(
 
     const streamId = Date.now() >>> 0;
     if (clientId) {
+      const sendStart = Date.now();
       ctx.broadcaster.sendBinaryToClient(
         clientId,
         Buffer.from(
@@ -143,7 +152,12 @@ registerCommand(
           ),
         ),
       );
+      const sendEnd = Date.now();
+      console.log(`[PERF] [${args.terminalId}] Server binary frame sent in`, (sendEnd - sendStart), 'ms');
     }
+
+    const requestEnd = Date.now();
+    console.log(`[PERF] [${args.terminalId}] Server replay total time:`, (requestEnd - requestStart), 'ms');
 
     return {
       status: 'ok' as const,
@@ -173,6 +187,13 @@ registerCommand(
   async (args, ctx) => {
     const buffer = decodeTerminalInput(args);
     const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
+    console.log('[DEBUG] terminal.input command:', {
+      terminalId: args.terminalId,
+      sessionId,
+      activity: args.activity,
+      bufferSize: buffer.length,
+      bufferPreview: buffer.toString('utf-8').substring(0, 50),
+    });
     if (sessionId) {
       ctx.sessionMgr.sendInput(sessionId, buffer, args.activity);
       return;
