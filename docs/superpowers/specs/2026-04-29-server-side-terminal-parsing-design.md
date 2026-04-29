@@ -377,7 +377,162 @@ export class ActiveTerminal {
 }
 ```
 
-#### 1.4 WebSocket协议
+#### 1.4 Master Grid 尺寸策略
+
+**问题：服务端master_grid应该使用什么尺寸？**
+
+现代终端尺寸分布（PC场景）：
+- **小屏笔记本**：80-100列（1280px宽）
+- **常规显示器**：120-150列（1920px - 1080p）
+- **大屏显示器**：160-200列（2560px - 1440p）
+- **4K显示器**：240+列（3840px）
+
+如果默认尺寸太小（如80列），会导致频繁resize；如果太大，内存浪费。
+
+**解决方案：中等尺寸 + 动态扩展（只增不减）**
+
+```typescript
+// packages/server/src/config/terminal.ts
+
+export const TERMINAL_MASTER_GRID_DEFAULTS = {
+  defaultCols: 120,      // 覆盖主流1080p显示器
+  defaultRows: 40,       // 覆盖大部分高度
+  scrollback: 10000,     // 历史行数（内存平衡点）
+  maxCols: 300,          // 防止异常尺寸
+  maxRows: 100,
+} as const;
+```
+
+**实现细节：**
+
+```typescript
+// packages/server/src/terminal/active-terminal.ts
+
+export class ActiveTerminal {
+  private grid?: TerminalGrid;
+  private gridCols: number = TERMINAL_MASTER_GRID_DEFAULTS.defaultCols;
+  private gridRows: number = TERMINAL_MASTER_GRID_DEFAULTS.defaultRows;
+  private gridScrollback: number = TERMINAL_MASTER_GRID_DEFAULTS.scrollback;
+
+  constructor(
+    public readonly id: string,
+    public readonly spec: TerminalSpec,
+    // ...
+  ) {
+    // 可从spec覆盖默认配置
+    if (spec.masterGridCols) {
+      this.gridCols = Math.min(spec.masterGridCols, TERMINAL_MASTER_GRID_DEFAULTS.maxCols);
+    }
+    if (spec.masterGridRows) {
+      this.gridRows = Math.min(spec.masterGridRows, TERMINAL_MASTER_GRID_DEFAULTS.maxRows);
+    }
+  }
+
+  // 客户端连接时检查尺寸
+  handleClientConnect(clientCols: number, clientRows: number): void {
+    // 初始化Grid（如果未初始化）
+    this.initializeGrid();
+
+    // 如果新客户端尺寸更大，需要扩展master_grid
+    if (clientCols > this.gridCols || clientRows > this.gridRows) {
+      const newCols = Math.min(clientCols, TERMINAL_MASTER_GRID_DEFAULTS.maxCols);
+      const newRows = Math.min(clientRows, TERMINAL_MASTER_GRID_DEFAULTS.maxRows);
+
+      console.log(
+        `[${this.id}] Master grid expanding: ${this.gridCols}x${this.gridRows} → ${newCols}x${newRows}`
+      );
+
+      this.grid?.resize(newCols, newRows);
+      this.gridCols = newCols;
+      this.gridRows = newRows;
+    }
+
+    // 如果客户端尺寸更小，无需调整
+    // 前端通过CoordinateMapper处理reflow（见第二章）
+  }
+
+  // sendData时携带master尺寸信息
+  sendDiff(): TerminalDiffMessage | null {
+    const diff = this.grid?.getDiff();
+    if (!diff) return null;
+
+    return {
+      type: TerminalMessageType.Diff,
+      terminalId: this.id,
+      seq: this.ringBuffer.getSeq(),
+      masterCols: this.gridCols,  // 前端需要这个信息
+      masterRows: this.gridRows,
+      cells: diff.cells,
+    };
+  }
+
+  sendSnapshot(): TerminalSnapshotMessage | null {
+    const snapshot = this.grid?.getSnapshot();
+    if (!snapshot) return null;
+
+    return {
+      type: TerminalMessageType.Snapshot,
+      terminalId: this.id,
+      seq: this.ringBuffer.getSeq(),
+      cols: this.gridCols,
+      rows: this.gridRows,
+      cells: snapshot.cells,
+    };
+  }
+}
+```
+
+**内存占用分析：**
+
+| 配置 | scrollback | 格式 | 网络传输 | 存储空间 |
+|------|-----------|------|----------|---------|
+| 单Cell大小 | - | 约14字节 | - | - |
+| 120x40 Grid | 10000行 | Binary | 约6.7MB | 约48MB |
+| 160x50 Grid | 10000行 | Binary | 约11MB | 约80MB |
+| 120x40 Grid | 50000行 | Binary | 约33MB | 约240MB |
+
+**默认配置（推荐）：**
+- 尺寸：120列 × 40行
+- scrollback：10000行
+- 内存：约48MB（单终端）
+- 10个终端：约480MB（可接受）
+
+**配置覆盖支持：**
+
+用户可以在workspace配置中覆盖默认值：
+
+```yaml
+# ~/.config/coder-studio/workspace.yml
+terminal:
+  masterGrid:
+    defaultCols: 160    # 大屏用户可调大
+    defaultRows: 50
+    scrollback: 20000   # 需要更多历史
+```
+
+**动态扩展策略：**
+
+```
+时间线示例：
+[00:00] 终端创建 → master_grid初始化为120x40
+[00:05] 手机(40x20)连接 → 无需调整，前端reflow
+[00:10] 笔记本(80x24)连接 → 无需调整，前端reflow
+[00:15] 外接显示器(160x50)连接 → 扩展到160x50（一次性成本，约100-200ms）
+[00:20] 所有客户端断开 → 保持160x50（内存不释放）
+[00:30] 新客户端(100x30)连接 → 无需调整（master已大于100x30）
+```
+
+**核心原则：只增不减**
+- master_grid尺寸永远不会缩小，避免重新排版历史内容
+- 所有小尺寸客户端通过前端reflow适配
+- 大尺寸客户端触发一次性扩展
+
+**性能影响：**
+- 60%场景（≤120x40）：无resize成本
+- 30%场景（120x40 < size ≤ 160x50）：resize约100-200ms
+- 10%场景（>160x50）：resize约200-300ms
+
+#### 1.5 WebSocket协议
 
 **二进制协议设计：**
 
