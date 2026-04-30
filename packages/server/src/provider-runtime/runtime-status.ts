@@ -113,19 +113,21 @@ export async function buildProviderRuntimeStatus(
       missingPrerequisites,
       availableCommands,
     );
+    const available = missingCommands.length === 0;
 
     result.providers[provider.id] = {
       providerId: provider.id,
-      available: missingCommands.length === 0,
+      available,
       missingCommands,
       missingPrerequisites,
       autoInstallSupported,
-      installReadiness:
-        missingPrerequisites.length === 0
-          ? 'ready'
-          : autoInstallSupported
-            ? 'missing_prerequisite'
-            : 'unsupported_platform',
+      installReadiness: available
+        ? 'ready'
+        : autoInstallSupported
+          ? missingPrerequisites.length === 0
+            ? 'ready'
+            : 'missing_prerequisite'
+          : 'unsupported_platform',
       manualGuideKeys: provider.install.manualGuideKeys,
       docUrls: provider.install.docUrls,
     };

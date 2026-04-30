@@ -35,3 +35,20 @@ it('reports unsupported auto-install when the installer command is missing on ma
     installReadiness: 'unsupported_platform',
   });
 });
+
+it('reports unsupported platform when the provider command is missing and no install strategy exists', async () => {
+  const commandExists = vi.fn(async (command: string) => command === 'npm');
+
+  const result = await buildProviderRuntimeStatus(providerRegistry, {
+    platform: 'aix',
+    commandExists,
+  });
+
+  expect(result.providers.codex).toMatchObject({
+    available: false,
+    missingCommands: ['codex'],
+    missingPrerequisites: [],
+    autoInstallSupported: false,
+    installReadiness: 'unsupported_platform',
+  });
+});
