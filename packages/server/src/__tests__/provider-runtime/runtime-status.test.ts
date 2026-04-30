@@ -14,8 +14,8 @@ it('separates missing provider commands from missing prerequisites', async () =>
     available: false,
     missingCommands: ['codex'],
     missingPrerequisites: ['npm'],
-    autoInstallSupported: false,
-    installReadiness: 'unsupported_platform',
+    autoInstallSupported: true,
+    installReadiness: 'missing_prerequisite',
   });
 });
 

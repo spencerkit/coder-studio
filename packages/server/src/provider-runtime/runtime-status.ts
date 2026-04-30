@@ -69,6 +69,14 @@ export async function buildProviderRuntimeStatus(
   const result: ProviderRuntimeStatusResponse = { providers: {} };
 
   for (const provider of providers) {
+    const strategies = provider.install.strategies[platform] ?? [];
+    const strategyDependencyCommands = new Set<string>();
+    for (const strategy of strategies) {
+      for (const command of strategy.requiresCommands) {
+        strategyDependencyCommands.add(command);
+      }
+    }
+
     const missingCommands: string[] = [];
     const availableCommands = new Set<string>();
     for (const command of provider.requiredCommands) {
@@ -85,6 +93,16 @@ export async function buildProviderRuntimeStatus(
         availableCommands.add(command);
       } else {
         missingPrerequisites.push(command);
+      }
+    }
+
+    for (const command of strategyDependencyCommands) {
+      if (availableCommands.has(command)) {
+        continue;
+      }
+
+      if (await commandExists(command)) {
+        availableCommands.add(command);
       }
     }
 
