@@ -25,6 +25,10 @@ export class ProviderInstallManager {
   private readonly providers = new Map<string, ProviderDefinition>();
   private readonly jobs = new Map<string, ProviderInstallJobSnapshot>();
   private readonly activeJobIdsByProviderId = new Map<string, string>();
+  private readonly inFlightStartsByProviderId = new Map<
+    string,
+    Promise<ProviderInstallJobSnapshot>
+  >();
   private readonly deps: InstallManagerDeps;
 
   constructor(providers: ProviderDefinition[], deps: InstallManagerDeps = {}) {
@@ -35,15 +39,34 @@ export class ProviderInstallManager {
   }
 
   async start(providerId: string): Promise<ProviderInstallJobSnapshot> {
-    const activeJobId = this.activeJobIdsByProviderId.get(providerId);
-    if (activeJobId) {
-      const activeJob = this.jobs.get(activeJobId);
-      if (activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')) {
-        return activeJob;
-      }
-      this.activeJobIdsByProviderId.delete(providerId);
+    const activeJob = this.getActiveJob(providerId);
+    if (activeJob) {
+      return cloneJobSnapshot(activeJob);
     }
 
+    const inFlightStart = this.inFlightStartsByProviderId.get(providerId);
+    if (inFlightStart) {
+      return cloneJobSnapshot(await inFlightStart);
+    }
+
+    const startPromise = this.prepareAndStart(providerId);
+    this.inFlightStartsByProviderId.set(providerId, startPromise);
+
+    try {
+      return cloneJobSnapshot(await startPromise);
+    } finally {
+      if (this.inFlightStartsByProviderId.get(providerId) === startPromise) {
+        this.inFlightStartsByProviderId.delete(providerId);
+      }
+    }
+  }
+
+  get(jobId: string): ProviderInstallJobSnapshot | undefined {
+    const job = this.jobs.get(jobId);
+    return job ? cloneJobSnapshot(job) : undefined;
+  }
+
+  private async prepareAndStart(providerId: string): Promise<ProviderInstallJobSnapshot> {
     const provider = this.providers.get(providerId);
     if (!provider) {
       throw { code: 'unknown_provider', message: `Provider not found: ${providerId}` };
@@ -58,10 +81,6 @@ export class ProviderInstallManager {
     }
 
     return job;
-  }
-
-  get(jobId: string): ProviderInstallJobSnapshot | undefined {
-    return this.jobs.get(jobId);
   }
 
   private async prepare(provider: ProviderDefinition): Promise<ProviderInstallJobSnapshot> {
@@ -387,6 +406,21 @@ export class ProviderInstallManager {
       this.activeJobIdsByProviderId.delete(providerId);
     }
   }
+
+  private getActiveJob(providerId: string): ProviderInstallJobSnapshot | undefined {
+    const activeJobId = this.activeJobIdsByProviderId.get(providerId);
+    if (!activeJobId) {
+      return undefined;
+    }
+
+    const activeJob = this.jobs.get(activeJobId);
+    if (activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')) {
+      return activeJob;
+    }
+
+    this.activeJobIdsByProviderId.delete(providerId);
+    return undefined;
+  }
 }
 
 function getErrorDetails(error: unknown): {
@@ -435,4 +469,52 @@ function excerpt(value: string | undefined): string | undefined {
     return undefined;
   }
   return value.slice(0, EXCERPT_LIMIT);
+}
+
+function cloneJobSnapshot(job: ProviderInstallJobSnapshot): ProviderInstallJobSnapshot {
+  return {
+    jobId: job.jobId,
+    providerId: job.providerId,
+    strategyIds: [...job.strategyIds],
+    status: job.status,
+    currentStepId: job.currentStepId,
+    steps: job.steps.map(cloneStepSnapshot),
+    failure: job.failure ? cloneFailure(job.failure) : undefined,
+  };
+}
+
+function cloneStepSnapshot(step: ProviderInstallStepSnapshot): ProviderInstallStepSnapshot {
+  return {
+    id: step.id,
+    titleKey: step.titleKey,
+    kind: step.kind,
+    command: step.command,
+    args: [...step.args],
+    status: step.status,
+    startedAt: step.startedAt,
+    finishedAt: step.finishedAt,
+    exitCode: step.exitCode,
+    stdoutExcerpt: step.stdoutExcerpt,
+    stderrExcerpt: step.stderrExcerpt,
+  };
+}
+
+function cloneFailure(failure: ProviderInstallFailure): ProviderInstallFailure {
+  return {
+    code: failure.code,
+    providerId: failure.providerId,
+    failedStepId: failure.failedStepId,
+    message: failure.message,
+    command: failure.command,
+    args: [...failure.args],
+    exitCode: failure.exitCode,
+    stdoutExcerpt: failure.stdoutExcerpt,
+    stderrExcerpt: failure.stderrExcerpt,
+    missingCommands: [...failure.missingCommands],
+    manualGuideKeys: [...failure.manualGuideKeys],
+    docUrls: {
+      provider: failure.docUrls.provider,
+      prerequisites: { ...failure.docUrls.prerequisites },
+    },
+  };
 }

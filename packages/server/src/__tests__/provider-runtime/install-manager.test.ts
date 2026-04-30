@@ -51,4 +51,71 @@ describe('ProviderInstallManager', () => {
 
     expect(second.jobId).toBe(first.jobId);
   });
+
+  it('reuses the same job for concurrent starts while preparation is still in flight', async () => {
+    let releaseLookup: (() => void) | undefined;
+    const lookupGate = new Promise<void>((resolve) => {
+      releaseLookup = resolve;
+    });
+    const commandExists = vi.fn(async (command: string) => {
+      if (command === 'codex') {
+        await lookupGate;
+        return false;
+      }
+
+      return command === 'npm';
+    });
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: 'linux',
+      commandExists,
+      execFile: vi.fn(async () => ({ stdout: '', stderr: '' })),
+    });
+
+    const firstPromise = manager.start('codex');
+    const secondPromise = manager.start('codex');
+
+    releaseLookup?.();
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+
+    expect(second.jobId).toBe(first.jobId);
+    expect(commandExists).toHaveBeenCalledWith('codex');
+  });
+
+  it('classifies install-step ENOENT failures as command_not_found and returns snapshots defensively', async () => {
+    const installError = Object.assign(new Error('spawn npm ENOENT'), {
+      code: 'ENOENT',
+      stderr: 'npm: command not found',
+      stdout: 'attempted install output',
+    });
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: 'linux',
+      commandExists: vi.fn(async (command: string) => command === 'npm'),
+      execFile: vi.fn(async () => {
+        throw installError;
+      }),
+    });
+
+    const started = await manager.start('codex');
+
+    started.status = 'succeeded';
+    started.steps[0]!.status = 'succeeded';
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe('failed');
+    });
+
+    const stored = manager.get(started.jobId);
+
+    expect(stored).toMatchObject({
+      status: 'failed',
+      failure: {
+        code: 'command_not_found',
+        command: 'npm',
+        stdoutExcerpt: 'attempted install output',
+        stderrExcerpt: 'npm: command not found',
+      },
+    });
+    expect(stored?.steps[0]?.status).toBe('failed');
+  });
 });
