@@ -487,6 +487,38 @@ describe('XtermHost', () => {
     );
   });
 
+  it('ignores OSC control sequences while buffering submitted text', async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="osc-submit-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('f');
+    await onDataCallback?.('i');
+    await onDataCallback?.('x');
+    await onDataCallback?.('\x1b]10;rgb:e5/e5/e5\x07');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'osc-submit-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'fix'
+    );
+  });
+
   it('buffers live output until replay finishes and drops overlapping bytes', async () => {
     const store = createStore();
     const replayChunk = new TextEncoder().encode('replay snapshot\n');

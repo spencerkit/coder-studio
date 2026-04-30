@@ -56,7 +56,9 @@ function consumeTerminalInputDraft(
 
     if (char === '\x1b') {
       const remaining = data.slice(index);
-      const escapeMatch = remaining.match(/^\x1b(?:\[[0-9;?]*[ -/]*[@-~]|O.|.)/);
+      const escapeMatch = remaining.match(
+        /^\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|[@-_])/
+      );
       if (escapeMatch) {
         index += escapeMatch[0].length - 1;
         continue;
