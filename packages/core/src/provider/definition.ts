@@ -1,5 +1,9 @@
 import type { ZodSchema } from 'zod';
-import type { ProviderConfig, Session } from '../domain/types';
+import type {
+  ProviderConfig,
+  ProviderInstallDocUrls,
+  Session,
+} from '../domain/types';
 
 export interface ProviderInstallStrategy {
   id: string;
@@ -13,10 +17,7 @@ export interface ProviderInstallStrategy {
 export interface ProviderInstallMetadata {
   prerequisites: string[];
   manualGuideKeys: string[];
-  docUrls: {
-    provider: string;
-    prerequisites: Partial<Record<string, string>>;
-  };
+  docUrls: ProviderInstallDocUrls;
   strategies: Partial<Record<NodeJS.Platform, ProviderInstallStrategy[]>>;
 }
 

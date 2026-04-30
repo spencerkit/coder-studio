@@ -18,6 +18,75 @@ import { resolveCodexTranscriptPath } from './resolve-transcript.js';
 import { buildCodexSupervisorEvalCommand } from './supervisor-eval.js';
 import { readCodexTranscriptExcerpt } from './transcript-excerpt.js';
 
+export const codexInstallMetadata = {
+  prerequisites: ['npm'],
+  manualGuideKeys: [
+    'provider.install.nodejs.manual',
+    'provider.install.codex.manual',
+  ],
+  docUrls: {
+    provider:
+      'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+    prerequisites: {
+      npm: 'https://nodejs.org/en/download',
+    },
+  },
+  strategies: {
+    win32: [
+      {
+        id: 'winget-nodejs-lts',
+        kind: 'prerequisite',
+        targetCommand: 'npm',
+        requiresCommands: ['winget'],
+        command: 'winget',
+        args: [
+          'install',
+          '--id',
+          'OpenJS.NodeJS.LTS',
+          '--exact',
+          '--silent',
+        ],
+      },
+      {
+        id: 'npm-install-codex',
+        kind: 'provider',
+        targetCommand: 'codex',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@openai/codex'],
+      },
+    ],
+    darwin: [
+      {
+        id: 'brew-node',
+        kind: 'prerequisite',
+        targetCommand: 'npm',
+        requiresCommands: ['brew'],
+        command: 'brew',
+        args: ['install', 'node'],
+      },
+      {
+        id: 'npm-install-codex',
+        kind: 'provider',
+        targetCommand: 'codex',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@openai/codex'],
+      },
+    ],
+    linux: [
+      {
+        id: 'npm-install-codex',
+        kind: 'provider',
+        targetCommand: 'codex',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@openai/codex'],
+      },
+    ],
+  },
+} satisfies ProviderDefinition['install'];
+
 /**
  * Codex hooks descriptor for full-capability mode.
  * Parses `agent-turn-complete` events from the notify hook.
@@ -127,74 +196,7 @@ export const codexDefinition: ProviderDefinition = {
   displayName: 'Codex',
   badge: 'Codex',
   capability: 'full',
-  install: {
-    prerequisites: ['npm'],
-    manualGuideKeys: [
-      'provider.install.nodejs.manual',
-      'provider.install.codex.manual',
-    ],
-    docUrls: {
-      provider:
-        'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-      prerequisites: {
-        npm: 'https://nodejs.org/en/download',
-      },
-    },
-    strategies: {
-      win32: [
-        {
-          id: 'winget-nodejs-lts',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['winget'],
-          command: 'winget',
-          args: [
-            'install',
-            '--id',
-            'OpenJS.NodeJS.LTS',
-            '--exact',
-            '--silent',
-          ],
-        },
-        {
-          id: 'npm-install-codex',
-          kind: 'provider',
-          targetCommand: 'codex',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@openai/codex'],
-        },
-      ],
-      darwin: [
-        {
-          id: 'brew-node',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['brew'],
-          command: 'brew',
-          args: ['install', 'node'],
-        },
-        {
-          id: 'npm-install-codex',
-          kind: 'provider',
-          targetCommand: 'codex',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@openai/codex'],
-        },
-      ],
-      linux: [
-        {
-          id: 'npm-install-codex',
-          kind: 'provider',
-          targetCommand: 'codex',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@openai/codex'],
-        },
-      ],
-    },
-  },
+  install: codexInstallMetadata,
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx: LaunchContext) {

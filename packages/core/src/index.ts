@@ -4,6 +4,7 @@ export * from './protocol/topics';
 
 // Domain
 export * from './domain/types';
+export * from './domain/provider-install';
 export * from './domain/events';
 export * from './domain/supervisor';
 export * from './domain/mcp';

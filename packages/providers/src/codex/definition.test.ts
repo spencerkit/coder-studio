@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codexDefinition } from './definition.js';
+import { codexDefinition, codexInstallMetadata } from './definition.js';
 import type { ProviderConfig } from '@coder-studio/core';
 
 describe('Codex Provider Definition', () => {
@@ -19,74 +19,71 @@ describe('Codex Provider Definition', () => {
     });
 
     it('should expose install metadata', () => {
-      expect(codexDefinition.install).toEqual({
-        prerequisites: ['npm'],
-        manualGuideKeys: [
-          'provider.install.nodejs.manual',
-          'provider.install.codex.manual',
-        ],
-        docUrls: {
-          provider:
-            'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-          prerequisites: {
-            npm: 'https://nodejs.org/en/download',
-          },
-        },
-        strategies: {
-          win32: [
-            {
-              id: 'winget-nodejs-lts',
-              kind: 'prerequisite',
-              targetCommand: 'npm',
-              requiresCommands: ['winget'],
-              command: 'winget',
-              args: [
-                'install',
-                '--id',
-                'OpenJS.NodeJS.LTS',
-                '--exact',
-                '--silent',
-              ],
-            },
-            {
-              id: 'npm-install-codex',
-              kind: 'provider',
-              targetCommand: 'codex',
-              requiresCommands: ['npm'],
-              command: 'npm',
-              args: ['install', '-g', '@openai/codex'],
-            },
-          ],
-          darwin: [
-            {
-              id: 'brew-node',
-              kind: 'prerequisite',
-              targetCommand: 'npm',
-              requiresCommands: ['brew'],
-              command: 'brew',
-              args: ['install', 'node'],
-            },
-            {
-              id: 'npm-install-codex',
-              kind: 'provider',
-              targetCommand: 'codex',
-              requiresCommands: ['npm'],
-              command: 'npm',
-              args: ['install', '-g', '@openai/codex'],
-            },
-          ],
-          linux: [
-            {
-              id: 'npm-install-codex',
-              kind: 'provider',
-              targetCommand: 'codex',
-              requiresCommands: ['npm'],
-              command: 'npm',
-              args: ['install', '-g', '@openai/codex'],
-            },
-          ],
+      expect(codexDefinition.install).toBe(codexInstallMetadata);
+      expect(codexInstallMetadata.prerequisites).toEqual(['npm']);
+      expect(codexInstallMetadata.manualGuideKeys).toEqual([
+        'provider.install.nodejs.manual',
+        'provider.install.codex.manual',
+      ]);
+      expect(codexInstallMetadata.docUrls).toEqual({
+        provider:
+          'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+        prerequisites: {
+          npm: 'https://nodejs.org/en/download',
         },
       });
+      expect(codexInstallMetadata.strategies.win32).toEqual([
+        {
+          id: 'winget-nodejs-lts',
+          kind: 'prerequisite',
+          targetCommand: 'npm',
+          requiresCommands: ['winget'],
+          command: 'winget',
+          args: [
+            'install',
+            '--id',
+            'OpenJS.NodeJS.LTS',
+            '--exact',
+            '--silent',
+          ],
+        },
+        {
+          id: 'npm-install-codex',
+          kind: 'provider',
+          targetCommand: 'codex',
+          requiresCommands: ['npm'],
+          command: 'npm',
+          args: ['install', '-g', '@openai/codex'],
+        },
+      ]);
+      expect(codexInstallMetadata.strategies.darwin).toEqual([
+        {
+          id: 'brew-node',
+          kind: 'prerequisite',
+          targetCommand: 'npm',
+          requiresCommands: ['brew'],
+          command: 'brew',
+          args: ['install', 'node'],
+        },
+        {
+          id: 'npm-install-codex',
+          kind: 'provider',
+          targetCommand: 'codex',
+          requiresCommands: ['npm'],
+          command: 'npm',
+          args: ['install', '-g', '@openai/codex'],
+        },
+      ]);
+      expect(codexInstallMetadata.strategies.linux).toEqual([
+        {
+          id: 'npm-install-codex',
+          kind: 'provider',
+          targetCommand: 'codex',
+          requiresCommands: ['npm'],
+          command: 'npm',
+          args: ['install', '-g', '@openai/codex'],
+        },
+      ]);
     });
   });
 

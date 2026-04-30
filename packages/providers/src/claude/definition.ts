@@ -9,6 +9,75 @@ import { claudeHooksDescriptor } from './hooks-template.js';
 import { buildClaudeSupervisorEvalCommand } from './supervisor-eval.js';
 import { readClaudeTranscriptExcerpt } from './transcript-excerpt.js';
 
+export const claudeInstallMetadata = {
+  prerequisites: ['npm'],
+  manualGuideKeys: [
+    'provider.install.nodejs.manual',
+    'provider.install.claude.manual',
+  ],
+  docUrls: {
+    provider:
+      'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+    prerequisites: {
+      npm: 'https://nodejs.org/en/download',
+    },
+  },
+  strategies: {
+    win32: [
+      {
+        id: 'winget-nodejs-lts',
+        kind: 'prerequisite',
+        targetCommand: 'npm',
+        requiresCommands: ['winget'],
+        command: 'winget',
+        args: [
+          'install',
+          '--id',
+          'OpenJS.NodeJS.LTS',
+          '--exact',
+          '--silent',
+        ],
+      },
+      {
+        id: 'npm-install-claude',
+        kind: 'provider',
+        targetCommand: 'claude',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@anthropic-ai/claude-code'],
+      },
+    ],
+    darwin: [
+      {
+        id: 'brew-node',
+        kind: 'prerequisite',
+        targetCommand: 'npm',
+        requiresCommands: ['brew'],
+        command: 'brew',
+        args: ['install', 'node'],
+      },
+      {
+        id: 'npm-install-claude',
+        kind: 'provider',
+        targetCommand: 'claude',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@anthropic-ai/claude-code'],
+      },
+    ],
+    linux: [
+      {
+        id: 'npm-install-claude',
+        kind: 'provider',
+        targetCommand: 'claude',
+        requiresCommands: ['npm'],
+        command: 'npm',
+        args: ['install', '-g', '@anthropic-ai/claude-code'],
+      },
+    ],
+  },
+} satisfies ProviderDefinition['install'];
+
 /**
  * Claude Code provider definition
  * Full capability provider with hooks support
@@ -19,74 +88,7 @@ export const claudeDefinition: ProviderDefinition = {
   displayName: 'Claude Code',
   badge: 'Claude',
   capability: 'full',
-  install: {
-    prerequisites: ['npm'],
-    manualGuideKeys: [
-      'provider.install.nodejs.manual',
-      'provider.install.claude.manual',
-    ],
-    docUrls: {
-      provider:
-        'https://docs.anthropic.com/en/docs/claude-code/getting-started',
-      prerequisites: {
-        npm: 'https://nodejs.org/en/download',
-      },
-    },
-    strategies: {
-      win32: [
-        {
-          id: 'winget-nodejs-lts',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['winget'],
-          command: 'winget',
-          args: [
-            'install',
-            '--id',
-            'OpenJS.NodeJS.LTS',
-            '--exact',
-            '--silent',
-          ],
-        },
-        {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
-        },
-      ],
-      darwin: [
-        {
-          id: 'brew-node',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['brew'],
-          command: 'brew',
-          args: ['install', 'node'],
-        },
-        {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
-        },
-      ],
-      linux: [
-        {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
-        },
-      ],
-    },
-  },
+  install: claudeInstallMetadata,
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx: LaunchContext) {
