@@ -205,13 +205,14 @@ describe('terminal commands', () => {
           streamId,
           size: bytes.length,
           activity: 'submit',
+          submittedText: '你好，世界',
         },
       },
       ctx
     );
 
     expect(result.ok).toBe(true);
-    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', bytes, 'submit');
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', bytes, 'submit', '你好，世界');
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
@@ -234,6 +235,7 @@ describe('terminal commands', () => {
           terminalId: 'term-1',
           bytes,
           activity: 'submit',
+          submittedText: 'hi there',
         },
       },
       ctx
@@ -241,7 +243,7 @@ describe('terminal commands', () => {
 
     expect(result.ok).toBe(true);
     expect(ctx.sessionMgr.findSessionIdByTerminal).toHaveBeenCalledWith('term-1');
-    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('hi'), 'submit');
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('hi'), 'submit', 'hi there');
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 

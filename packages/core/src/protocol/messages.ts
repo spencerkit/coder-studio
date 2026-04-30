@@ -38,6 +38,7 @@ export interface TerminalReplayBinaryResult {
 export interface TerminalInputBinaryArgs {
   terminalId: string;
   activity?: 'typing' | 'submit' | 'system';
+  submittedText?: string;
   transport: 'binary';
   streamId: number;
   size: number;
@@ -47,6 +48,7 @@ export interface TerminalInputBase64Args {
   terminalId: string;
   bytes: string;
   activity?: 'typing' | 'submit' | 'system';
+  submittedText?: string;
 }
 
 export const encodeTerminalBinaryFrame = (

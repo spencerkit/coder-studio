@@ -470,73 +470,14 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    console.log('[DEBUG] onTerminalInput:', {
-      terminalId,
-      sessionId,
-      activity,
-      text,
-      currentTitle: session.title,
-    });
-
     if (activity !== 'submit') return;
 
-    // Extract user input from terminal output buffer
-    // The frontend sends only the Enter keystroke ('\r'), not the full user input.
-    // We need to parse the terminal output to find the last user input line.
-    const outputTail = this.getOutputTail(sessionId, 4096);
-    const outputText = outputTail.toString('utf-8');
-
-    // Convert ANSI cursor movement commands to spaces before stripping
-    // The terminal uses \x1B[1C (cursor forward 1) to render spaces between words
-    // We need to preserve these as actual space characters
-    const withSpaces = outputText.replace(/\x1B\[(\d+)C/g, (match, count) => {
-      const spaceCount = parseInt(count, 10);
-      return ' '.repeat(spaceCount);
-    });
-
-    // Now strip remaining ANSI escape codes to get clean text
-    const cleanOutput = withSpaces.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-
-    // Find the last non-empty line that looks like user input
-    const lines = cleanOutput.split('\n');
-    let lastUserInput = '';
-
-    // Search backwards for the most recent input line
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-
-      // Skip empty lines or lines that are too short
-      if (line.length < 3) continue;
-
-      // Skip lines that look like command output (contain typical output patterns)
-      if (line.match(/^(error|warning|info|debug|failed|success)/i)) continue;
-
-      // Skip lines that are purely numeric or special characters
-      if (!line.match(/[a-zA-Z]{3,}/)) continue;
-
-      // If the line contains a prompt symbol, extract text after it
-      const promptMatch = line.match(/[❯>$#]\s*(.+)$/);
-      if (promptMatch && promptMatch[1]) {
-        lastUserInput = promptMatch[1].trim();
-        break;
-      }
-
-      // Otherwise, take the line as potential user input if it looks reasonable
-      if (line.length > 3 && line.length < 200 && line.match(/^[a-zA-Z0-9\s\-_.]+$/)) {
-        lastUserInput = line;
-        break;
-      }
-    }
-
-    console.log('[DEBUG] Extracted user input from terminal output:', {
-      outputTailPreview: outputText.substring(outputText.length - 200),
-      lastUserInput,
-    });
+    const submittedText = text;
 
     // Title capture runs independently of state transitions: a session that
     // is still 'starting' or 'running' when the user types won't flip state
     // here, but we still want to record the first instruction as the title.
-    const titleChanged = this.maybeAssignTitle(session, lastUserInput);
+    const titleChanged = this.maybeAssignTitle(session, submittedText);
 
     const prev = session.state;
     const shouldResume = session.state === 'idle' || session.state === 'interrupted';
@@ -565,7 +506,8 @@ export class SessionManager {
   sendInput(
     sessionId: string,
     bytes: Buffer,
-    activity: 'typing' | 'submit' | 'system' = 'typing'
+    activity: 'typing' | 'submit' | 'system' = 'typing',
+    submittedText?: string
   ): void {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -573,14 +515,7 @@ export class SessionManager {
     }
 
     this.deps.terminalMgr.write(session.terminalId, bytes);
-    const text = activity === 'submit' ? bytes.toString('utf-8') : undefined;
-    console.log('[DEBUG] sendInput:', {
-      sessionId,
-      terminalId: session.terminalId,
-      activity,
-      text,
-      bytesPreview: bytes.toString('utf-8').substring(0, 50),
-    });
+    const text = activity === 'submit' ? (submittedText ?? bytes.toString('utf-8')) : undefined;
     this.onTerminalInput(session.terminalId, activity, text);
   }
 
@@ -620,22 +555,10 @@ export class SessionManager {
    * one hasn't been assigned yet. Returns true when a new title was persisted.
    */
   private maybeAssignTitle(session: ActiveSession, text: string | undefined): boolean {
-    console.log('[DEBUG] maybeAssignTitle called:', {
-      sessionId: session.id,
-      currentTitle: session.title,
-      text,
-      hasTitle: !!session.title,
-      hasText: !!text,
-    });
-
     if (session.title) return false;
     if (!text) return false;
 
     const title = deriveSessionTitle(text);
-    console.log('[DEBUG] deriveSessionTitle result:', {
-      inputText: text,
-      derivedTitle: title,
-    });
 
     if (!title) return false;
 

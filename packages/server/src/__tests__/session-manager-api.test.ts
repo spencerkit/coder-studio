@@ -98,6 +98,14 @@ describe('SessionManager session-level API', () => {
     expect(sessionMgr.get(session.id)?.state).toBe('running');
   });
 
+  it('prefers explicit submitted text over raw terminal bytes for submit activity', async () => {
+    const session = await createSession();
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', 'fix the build');
+
+    expect(sessionMgr.get(session.id)?.title).toBe('fix the b…');
+  });
+
   it('resize forwards to the underlying PTY', async () => {
     const session = await createSession();
 

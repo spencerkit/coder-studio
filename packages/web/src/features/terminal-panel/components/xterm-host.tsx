@@ -22,6 +22,11 @@ import type { TerminalBinaryPayload, TerminalReplayPayload } from '../../../ws/c
 
 type TerminalInputActivity = 'typing' | 'submit' | 'system';
 
+interface TerminalInputDraftState {
+  nextDraft: string;
+  submittedText?: string;
+}
+
 function classifyTerminalInput(data: string): TerminalInputActivity {
   if (data === '\x1b[I' || data === '\x1b[O') {
     return 'system';
@@ -32,6 +37,54 @@ function classifyTerminalInput(data: string): TerminalInputActivity {
   }
 
   return 'typing';
+}
+
+function consumeTerminalInputDraft(
+  draft: string,
+  data: string,
+  activity: TerminalInputActivity
+): TerminalInputDraftState {
+  if (activity === 'system') {
+    return { nextDraft: draft };
+  }
+
+  let nextDraft = draft;
+  let submittedText: string | undefined;
+
+  for (let index = 0; index < data.length; index += 1) {
+    const char = data[index]!;
+
+    if (char === '\x1b') {
+      const remaining = data.slice(index);
+      const escapeMatch = remaining.match(/^\x1b(?:\[[0-9;?]*[ -/]*[@-~]|O.|.)/);
+      if (escapeMatch) {
+        index += escapeMatch[0].length - 1;
+        continue;
+      }
+    }
+
+    if (char === '\u007f' || char === '\b') {
+      nextDraft = nextDraft.slice(0, -1);
+      continue;
+    }
+
+    if (char === '\u0015') {
+      nextDraft = '';
+      continue;
+    }
+
+    if (char === '\r' || char === '\n') {
+      submittedText = nextDraft.length > 0 ? nextDraft : submittedText;
+      nextDraft = '';
+      continue;
+    }
+
+    if (char >= ' ') {
+      nextDraft += char;
+    }
+  }
+
+  return { nextDraft, submittedText };
 }
 
 /**
@@ -155,6 +208,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
+  const inputDraftRef = useRef('');
 
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -234,10 +288,19 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       }
 
       try {
+        const activity = classifyTerminalInput(data);
+        const { nextDraft, submittedText } = consumeTerminalInputDraft(
+          inputDraftRef.current,
+          data,
+          activity
+        );
+        inputDraftRef.current = nextDraft;
+
         await wsClient.sendTerminalInput(
           terminalId,
           terminalInputEncoder.encode(data),
-          classifyTerminalInput(data)
+          activity,
+          submittedText
         );
       } catch (error) {
         console.error('Failed to send terminal input:', error);
@@ -556,16 +619,16 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     const { chunks, lastWritten } = outputAtom;
     const writtenChunkCount = chunks.length - lastWritten;
 
-    // Write any unwritten chunks
-    for (let i = lastWritten; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      if (!chunk) continue;
-
-      terminal.write(chunk);
-    }
-
-    // Update lastWritten to prevent atom bloat
     if (writtenChunkCount > 0) {
+      // Write any unwritten chunks
+      for (let i = lastWritten; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        if (!chunk) continue;
+
+        terminal.write(chunk);
+      }
+
+      // Update lastWritten to prevent atom bloat
       setOutputAtom((prev: OutputBuffer) => trimWrittenChunks(prev, writtenChunkCount));
     }
   }, [outputAtom, setOutputAtom]);

@@ -223,7 +223,8 @@ export class WsClient {
   async sendTerminalInput(
     terminalId: string,
     bytes: Uint8Array,
-    activity?: 'typing' | 'submit' | 'system'
+    activity?: 'typing' | 'submit' | 'system',
+    submittedText?: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -254,6 +255,7 @@ export class WsClient {
           streamId,
           size: bytes.byteLength,
           activity,
+          submittedText,
         },
       };
 

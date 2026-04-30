@@ -367,7 +367,8 @@ describe('XtermHost', () => {
     expect(sendTerminalInput).toHaveBeenCalledWith(
       'stdin-terminal',
       new TextEncoder().encode('你好，终端'),
-      'typing'
+      'typing',
+      undefined
     );
   });
 
@@ -394,7 +395,8 @@ describe('XtermHost', () => {
     expect(sendTerminalInput).toHaveBeenCalledWith(
       'focus-terminal',
       new TextEncoder().encode('\x1b[I'),
-      'system'
+      'system',
+      undefined
     );
   });
 
@@ -421,7 +423,67 @@ describe('XtermHost', () => {
     expect(sendTerminalInput).toHaveBeenCalledWith(
       'submit-terminal',
       new TextEncoder().encode('\r'),
-      'submit'
+      'submit',
+      undefined
+    );
+  });
+
+  it('includes submitted text metadata when submit input carries content', async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="submit-text-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('fix the build\r');
+
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'submit-text-terminal',
+      new TextEncoder().encode('fix the build\r'),
+      'submit',
+      'fix the build'
+    );
+  });
+
+  it('tracks typed input across keystrokes and sends the buffered line on Enter', async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="buffered-submit-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await onDataCallback?.('f');
+    await onDataCallback?.('i');
+    await onDataCallback?.('x');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'buffered-submit-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'fix'
     );
   });
 

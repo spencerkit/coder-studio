@@ -153,6 +153,15 @@ describe('SessionManager title derivation', () => {
     }
   });
 
+  it('derives the title from submitted text instead of terminal buffer state', async () => {
+    const session = await createSession();
+
+    sessionMgr.onTerminalInput('terminal-1', 'submit', 'new prompt\n');
+
+    expect(sessionMgr.get(session.id)?.title).toBe('new prompt');
+    expect(mockDb.update).toHaveBeenCalledWith(session.id, { title: 'new prompt' });
+  });
+
   it('broadcasts state.changed so clients pick up the new title', async () => {
     const session = await createSession();
 
