@@ -111,18 +111,41 @@ export class RingBuffer {
 
   /**
    * Read the last N bytes currently retained in the buffer.
+   * Reads directly from the circular buffer — O(N), not O(size).
    */
   tail(bytes: number): Buffer {
     if (bytes <= 0) {
       return Buffer.alloc(0)
     }
 
-    const snapshot = this.snapshot()
-    if (snapshot.length <= bytes) {
-      return snapshot
+    const validBytes = Math.min(this.totalBytes, this.size)
+    const bytesToRead = Math.min(bytes, validBytes)
+
+    if (bytesToRead === 0) {
+      return Buffer.alloc(0)
     }
 
-    return snapshot.subarray(snapshot.length - bytes)
+    let readPos = this.writePos - bytesToRead
+    if (readPos < 0) {
+      readPos += this.size
+    }
+
+    const result = Buffer.allocUnsafe(bytesToRead)
+    let remaining = bytesToRead
+    let offset = 0
+
+    while (remaining > 0) {
+      const availableBytes = this.size - readPos
+      const readLength = Math.min(remaining, availableBytes)
+
+      this.buffer.copy(result, offset, readPos, readPos + readLength)
+
+      readPos = (readPos + readLength) % this.size
+      offset += readLength
+      remaining -= readLength
+    }
+
+    return result
   }
 
   /**
