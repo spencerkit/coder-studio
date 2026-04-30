@@ -11,8 +11,9 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react';
-import type { GitFileChange, GitStatus } from '@coder-studio/core';
+import type { GitBranch, GitFileChange, GitStatus } from '@coder-studio/core';
 import {
+  gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type GitDiffPreview,
@@ -84,6 +85,8 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
 
+  console.log('[GitPanel] Render - gitState:', gitState ? `${gitState.staged.length} staged, ${gitState.modified.length} modified` : 'null', 'diffPreview:', diffPreview?.path ?? 'null', 'refreshToken:', refreshToken);
+
   const [commitMessage, setCommitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
@@ -92,6 +95,22 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
   const setGitState = useCallback(
     (status: GitStatus | null) => {
       store.set(gitStateAtomFamily(workspaceId), status);
+    },
+    [store, workspaceId]
+  );
+
+  const setBranchList = useCallback(
+    (
+      branchList: {
+        current: string;
+        branches: GitBranch[];
+      } | null
+    ) => {
+      store.set(gitBranchListAtomFamily(workspaceId), {
+        current: branchList?.current ?? '',
+        branches: branchList?.branches ?? [],
+        loading: false,
+      });
     },
     [store, workspaceId]
   );
@@ -133,11 +152,41 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
     [dispatch, setDiffPreview, workspaceId]
   );
 
-  const loadGitStatus = useCallback(async () => {
-    if (!workspaceId || isLoadingRef.current) {
+  const loadBranchList = useCallback(async () => {
+    if (!workspaceId) {
       return;
     }
 
+    store.set(gitBranchListAtomFamily(workspaceId), (prev) => ({
+      ...prev,
+      loading: true,
+      error: undefined,
+    }));
+
+    const result = await dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+      workspaceId,
+    });
+
+    if (!result.ok || !result.data) {
+      store.set(gitBranchListAtomFamily(workspaceId), (prev) => ({
+        ...prev,
+        loading: false,
+        error: result.error?.message ?? 'Failed to load branches',
+      }));
+      console.error('Failed to load git branches:', result.error?.message);
+      return;
+    }
+
+    setBranchList(result.data);
+  }, [dispatch, setBranchList, store, workspaceId]);
+
+  const loadGitStatus = useCallback(async () => {
+    if (!workspaceId || isLoadingRef.current) {
+      console.log('[GitPanel] loadGitStatus skipped - workspaceId:', workspaceId, 'isLoading:', isLoadingRef.current);
+      return;
+    }
+
+    console.log('[GitPanel] loadGitStatus starting...');
     isLoadingRef.current = true;
     setIsLoading(true);
 
@@ -147,10 +196,11 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
       });
 
       if (!result.ok || !result.data) {
-        console.error('Failed to load git status:', result.error?.message);
+        console.error('[GitPanel] Failed to load git status:', result.error?.message);
         return;
       }
 
+      console.log('[GitPanel] git.status succeeded, setting gitState with', result.data.staged.length, 'staged,', result.data.modified.length, 'modified');
       setGitState(result.data);
 
       const nextPreviewTarget =
@@ -182,17 +232,38 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
   }, [gitState, loadGitStatus]);
 
   useEffect(() => {
-    if (!gitState || diffPreview) {
+    void loadBranchList();
+  }, [loadBranchList]);
+
+  useEffect(() => {
+    // When gitState changes (e.g., from fs.dirty event), update diffPreview if needed
+    if (!gitState) {
       return;
     }
 
+    console.log('[GitPanel] gitState changed, checking if diffPreview needs update...');
+
+    // If currently previewing a file that still exists, keep it
+    if (diffPreview) {
+      const currentChange = getChangeByPath(gitState, diffPreview.path);
+      if (currentChange && Boolean(diffPreview.staged) === (currentChange.type === 'staged')) {
+        console.log('[GitPanel] Current diffPreview still valid, keeping it');
+        return;
+      }
+      console.log('[GitPanel] Current diffPreview no longer valid, selecting new file');
+    }
+
+    // Select first available change
     const firstChange = getFirstChange(gitState);
     if (!firstChange) {
+      console.log('[GitPanel] No changes available, clearing diffPreview');
+      setDiffPreview(null);
       return;
     }
 
+    console.log('[GitPanel] Selecting first change for diff:', firstChange.change.path);
     void requestDiff(firstChange.change, firstChange.type);
-  }, [gitState, diffPreview, requestDiff]);
+  }, [gitState, diffPreview, requestDiff, setDiffPreview]);
 
   useEffect(() => {
     if (refreshToken > 0 && !isLoadingRef.current) {

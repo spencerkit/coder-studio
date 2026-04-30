@@ -22,7 +22,7 @@ import {
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
 import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, terminalPanelVisibleAtom, sidebarCollapsedAtom } from '../../atoms/ui';
-import { gitStateAtomFamily } from '../../atoms/git';
+import { gitStateAtomFamily, branchQuickPickAtom } from '../../atoms/git';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { useTranslation } from '../../lib/i18n';
 import { TopBar } from '../topbar';
@@ -70,6 +70,7 @@ export const WorkspacePage: FC = () => {
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
+  const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
 
   useEffect(() => {
     if (leftPanelWidth === 200 || leftPanelWidth === 220 || leftPanelWidth === 264) {
@@ -211,8 +212,57 @@ export const WorkspacePage: FC = () => {
     activeFilePathAtomFamily(workspace?.id ?? '__workspace_placeholder__')
   );
 
+  const handleOpenBranchSwitcher = useCallback(() => {
+    if (!workspace) {
+      return;
+    }
+
+    setActiveTab('git');
+    setBranchQuickPick({
+      visible: true,
+      workspaceId: workspace.id,
+      inputValue: '',
+    });
+  }, [setBranchQuickPick, workspace]);
+
   if (!workspace) {
-    return <div className="workspace-page workspace-page-empty" />;
+    if (workspacesLoadState === 'error') {
+      return (
+        <div className="workspace-resolving-shell">
+          <div className="workspace-resolving-card">
+            <div className="workspace-resolving-kicker">Workspace</div>
+            <div className="workspace-resolving-title">Failed to load workspaces</div>
+            <div className="workspace-resolving-desc">
+              {workspacesLoadError ?? 'Failed to fetch workspace list'}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (workspacesLoadState === 'idle' || workspacesLoadState === 'loading') {
+      return (
+        <div className="workspace-resolving-shell" data-testid="workspace-resolving-shell">
+          <div className="workspace-resolving-card">
+            <div className="workspace-resolving-kicker">Workspace</div>
+            <div className="workspace-resolving-title">Loading workspaces</div>
+            <div className="workspace-resolving-desc">
+              Preparing your workspace list and restoring the last active session.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="workspace-page workspace-page-empty">
+        <div className="workspace-empty-content">
+          <div className="workspace-empty-inner">
+            <p>{t('workspace.no_workspace')}</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const panelKicker = activeTab === 'files' ? t('file') : t('git');
@@ -231,10 +281,15 @@ export const WorkspacePage: FC = () => {
               <div className="nav-panel">
                 <div className="panel-header">
                   <div className="panel-kicker">{panelKicker}</div>
-                  <div className="panel-branch">
+                  <button
+                    className="panel-branch panel-branch-button"
+                    onClick={handleOpenBranchSwitcher}
+                    aria-label={`Open branch switcher for ${panelBranch}`}
+                    type="button"
+                  >
                     <GitBranch size={12} />
                     <span>{panelBranch}</span>
-                  </div>
+                  </button>
                   <div className="panel-tabs">
                     <button
                       className={`panel-tab ${activeTab === 'files' ? 'active' : ''}`}

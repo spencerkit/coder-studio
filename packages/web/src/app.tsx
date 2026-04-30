@@ -16,6 +16,7 @@ import { WelcomePage } from './features/welcome';
 import { SettingsPage } from './features/settings';
 import { WorkspacePage } from './features/workspace';
 import { CommandPalette } from './features/command-palette';
+import { BranchQuickPick } from './features/workspace/components/branch-quick-pick';
 import { LoginPage } from './features/auth';
 import { ConfigDriftBanner } from './features/config-drift-banner';
 import { ToastContainer } from './features/notifications';
@@ -112,6 +113,7 @@ function AppShell() {
 
       {/* Command Palette (global overlay) */}
       <CommandPalette />
+      <BranchQuickPick />
       <ToastContainer />
     </div>
   );

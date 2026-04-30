@@ -3,7 +3,8 @@
  */
 
 import { execFile } from 'child_process';
-import type { GitStatus, GitFileChange } from '@coder-studio/core';
+import type { GitStatus, GitFileChange, GitBranch } from '@coder-studio/core';
+import { GIT_COMMON_REMOTES } from '../constants/git.js';
 
 export interface GitCommandResult {
   stdout: string;
@@ -264,21 +265,60 @@ export async function runGitCheckout(
 ): Promise<{ success: boolean; message: string; branch?: string }> {
   const args = ['checkout'];
 
-  if (options?.createBranch) {
-    args.push('-b');
+  // Detect remote branch refs by querying actual configured remotes
+  let isRemoteRef = false;
+  try {
+    const { stdout: remoteList } = await runGit(cwd, ['remote']);
+    const remotes = remoteList.trim().split('\n').filter(Boolean);
+    // Check if ref starts with any configured remote (e.g., 'origin/main')
+    isRemoteRef = remotes.some(remote => ref.startsWith(`${remote}/`));
+  } catch {
+    // Fall back to common remotes if git remote fails
+    isRemoteRef = GIT_COMMON_REMOTES.some(remote => ref.startsWith(remote));
   }
 
-  args.push(ref);
+  // If remote branch ref, auto-create tracking branch
+  if (isRemoteRef && !options?.createBranch) {
+    const remoteSeparatorIndex = ref.indexOf('/');
+    const branchName = remoteSeparatorIndex >= 0 ? ref.slice(remoteSeparatorIndex + 1) : ref;
+    args.push('-b', branchName, ref);
 
-  const { stdout, stderr } = await runGit(cwd, args);
+    try {
+      const { stdout, stderr } = await runGit(cwd, args);
+      const message = stdout || stderr || `Checkout to ${ref} completed`;
 
-  // Extract branch name from output
-  const branchMatch = stdout.match(/Switched to (?:a new branch|branch) '([^']+)'/);
-  const branch = branchMatch?.[1] ?? ref;
+      // For remote branch checkout, we know the branch name from the ref
+      return { success: true, message, branch: branchName };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to checkout remote branch '${ref}'`
+      };
+    }
+  } else {
+    // Original logic for local branches and createBranch flag
+    if (options?.createBranch) {
+      args.push('-b');
+    }
+    args.push(ref);
 
-  const message = stdout || stderr || `Checkout to ${ref} completed`;
+    try {
+      const { stdout, stderr } = await runGit(cwd, args);
 
-  return { success: true, message, branch };
+      // Extract branch name from output
+      const branchMatch = stdout.match(/Switched to (?:a new branch|branch) '([^']+)'/);
+      const branch = branchMatch?.[1] ?? ref;
+
+      const message = stdout || stderr || `Checkout to ${ref} completed`;
+
+      return { success: true, message, branch };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to checkout '${ref}'`
+      };
+    }
+  }
 }
 
 /**
@@ -303,22 +343,66 @@ export async function runGitCreateBranch(
 }
 
 /**
- * List all branches.
+ * List all branches (local and remote) with metadata.
+ *
+ * @param cwd - Working directory of the git repository
+ * @returns Object with branches array and current branch name
+ *            - branches: Array of GitBranch objects with metadata
+ *            - current: Current branch name (empty string if detached HEAD or no commits)
+ * @throws {GitError} If git commands fail (e.g., not a git repository)
  */
-export async function runGitListBranches(cwd: string): Promise<{ branches: string[]; current: string }> {
-  const { stdout } = await runGit(cwd, ['branch', '--list']);
+export async function runGitListBranches(cwd: string): Promise<{
+  branches: GitBranch[];
+  current: string;
+}> {
+  // Get local branches
+  const { stdout: localOutput } = await runGit(cwd, ['branch', '--list']);
 
-  const branches: string[] = [];
+  // Get remote branches
+  const { stdout: remoteOutput } = await runGit(cwd, ['branch', '-r']);
+
+  const branches: GitBranch[] = [];
   let current = '';
 
-  const lines = stdout.split('\n').filter(line => line.trim());
-  for (const line of lines) {
+  // Parse local branches
+  const localLines = localOutput.split('\n').filter(line => line.trim());
+  for (const line of localLines) {
     const isCurrent = line.startsWith('*');
     const name = line.replace(/^\*?\s+/, '').trim();
-    branches.push(name);
+
+    // Skip detached HEAD indicator
+    if (name.startsWith('(HEAD detached')) {
+      if (isCurrent) {
+        current = '';  // Empty string indicates detached state
+      }
+      continue;  // Don't add to branches array
+    }
+
+    branches.push({
+      name,
+      isRemote: false,
+      isCurrent,
+    });
     if (isCurrent) {
       current = name;
     }
+  }
+
+  // Parse remote branches
+  const remoteLines = remoteOutput.split('\n').filter(line => line.trim());
+  for (const line of remoteLines) {
+    const fullName = line.trim();
+    if (fullName.includes(' -> ')) {
+      continue;
+    }
+
+    const [remote] = fullName.split('/');
+    branches.push({
+      name: fullName,  // Show full name "origin/main"
+      isRemote: true,
+      isCurrent: false,
+      remote,
+    });
   }
 
   return { branches, current };

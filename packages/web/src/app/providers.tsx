@@ -146,14 +146,20 @@ export function AppProviders({ children }: AppProvidersProps) {
       const fsMatch = topic.match(/^workspace\.([^.]+)\.fs\.dirty$/);
       if (fsMatch) {
         const wid = fsMatch[1]!;
+        console.log('[Git Status] fs.dirty event received for workspace:', wid, 'at', new Date().toISOString());
         dispatchRef.current<GitStatus>('git.status', { workspaceId: wid }).then((result) => {
           if (result.ok && result.data) {
+            console.log('[Git Status] git.status command succeeded at', new Date().toISOString(), ', updating atom with', result.data.staged.length, 'staged,', result.data.modified.length, 'modified,', result.data.untracked.length, 'untracked files');
             store.set(gitStateAtomFamily(wid), result.data);
+          } else {
+            console.error('[Git Status] git.status command failed:', result.error?.message);
           }
-        }).catch(() => {
+        }).catch((error) => {
+          console.error('[Git Status] git.status command threw error:', error);
           // Silently ignore - WS may be disconnected, next fs.dirty will retry
         });
       }
+
       try {
         routeEventToAtom(topic, payload, store);
       } catch (err) {

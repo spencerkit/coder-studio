@@ -3731,6 +3731,26 @@ textarea.input {
   margin-bottom: 8px;
 }
 
+.panel-branch-button {
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.panel-branch-button:hover {
+  background: color-mix(in srgb, var(--bg-hover) 72%, var(--accent-blue) 28%);
+  color: var(--text-primary);
+}
+
+.panel-branch-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 40%, transparent);
+}
+
 .panel-tabs {
   display: flex;
   gap: 4px;
@@ -5443,6 +5463,27 @@ textarea.input {
   color: var(--text-secondary);
 }
 
+.panel-branch-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.panel-branch-button:hover {
+  background: color-mix(in srgb, var(--bg-hover) 72%, var(--accent-blue) 28%);
+  color: var(--text-primary);
+}
+
+.panel-branch-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 40%, transparent);
+}
+
 .panel-tabs {
   margin-top: 8px;
   gap: 4px;
@@ -6496,4 +6537,122 @@ textarea.input {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+/* ========== Branch Quick Pick ========== */
+.branch-quick-pick-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--sp-16);
+  z-index: var(--z-modal-backdrop);
+  animation: fadeIn var(--duration-fast) var(--ease-out);
+}
+
+.branch-quick-pick {
+  width: 100%;
+  max-width: 540px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: slideInUp var(--duration-normal) var(--ease-out);
+}
+
+.branch-quick-pick-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.branch-quick-pick-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.branch-quick-pick-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.branch-quick-pick-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.branch-quick-pick-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.branch-quick-pick-item:hover,
+.branch-quick-pick-item-selected {
+  background: var(--bg-hover);
+}
+
+.branch-quick-pick-check {
+  flex-shrink: 0;
+  color: var(--accent-green);
+}
+
+.branch-quick-pick-name {
+  flex: 1;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.branch-quick-pick-badge {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+}
+
+.branch-quick-pick-create-icon {
+  flex-shrink: 0;
+  color: var(--accent-blue);
+}
+
+.branch-quick-pick-create-label {
+  flex: 1;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.branch-quick-pick-empty {
+  padding: var(--sp-8);
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.branch-quick-pick-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border);
+}
+
+.branch-quick-pick-hint span {
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
 }

@@ -90,6 +90,13 @@ export interface GitFileChange {
   oldPath?: string; // for renames
 }
 
+export interface GitBranch {
+  name: string;        // Branch name (e.g., "main", "origin/feature")
+  isRemote: boolean;   // Whether it's a remote branch
+  isCurrent: boolean;  // Whether it's the current branch
+  remote?: string;     // Remote name (e.g., "origin")
+}
+
 export interface FileNode {
   name: string;
   path: string;

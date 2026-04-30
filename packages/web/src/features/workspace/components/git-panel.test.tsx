@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
 import { GitPanel } from './git-panel';
 import { wsClientAtom } from '../../../atoms/connection';
-import { gitStateAtomFamily } from '../../../atoms/git';
+import { gitBranchListAtomFamily, gitStateAtomFamily } from '../../../atoms/git';
 
 describe('GitPanel', () => {
   const status: GitStatus = {
@@ -53,6 +53,46 @@ describe('GitPanel', () => {
     expect(screen.getByText('AppController.tsx')).toBeInTheDocument();
     expect(screen.getByText('supervisor.test.ts')).toBeInTheDocument();
     expect(screen.getByText('deprecated.ts')).toBeInTheDocument();
+  });
+
+  it('loads branch list on mount', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, _args: unknown) => {
+      if (op === 'git.status') {
+        return status;
+      }
+
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [
+            { name: 'feature/ai-agent', isCurrent: true, isRemote: false },
+            { name: 'main', isCurrent: false, isRemote: false },
+          ],
+        };
+      }
+
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('git.branches', { workspaceId: 'ws-test' });
+    });
+
+    expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('feature/ai-agent');
   });
 
   it('requests a diff and emits a workspace diff event when a row is clicked', async () => {

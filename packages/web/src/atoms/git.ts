@@ -6,7 +6,27 @@
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
-import type { GitStatus } from '@coder-studio/core';
+import type { GitBranch, GitStatus } from '@coder-studio/core';
+
+/**
+ * Git branch list state per workspace
+ */
+export interface GitBranchList {
+  current: string;
+  branches: GitBranch[];
+  loading: boolean;
+  error?: string;
+}
+
+/**
+ * Quick Pick UI state for branch switching
+ */
+export interface BranchQuickPickState {
+  visible: boolean;
+  workspaceId?: string;
+  inputValue: string;
+  selectedBranch?: string;
+}
 
 /**
  * Git state by workspace (server state projection)
@@ -61,3 +81,23 @@ export const gitChangeCountAtomFamily = atomFamily((workspaceId: string) =>
     };
   })
 );
+
+/**
+ * Git branch list per workspace.
+ * Loaded on demand by branch-related UI commands.
+ */
+export const gitBranchListAtomFamily = atomFamily((workspaceId: string) =>
+  atom<GitBranchList>({
+    current: '',
+    branches: [],
+    loading: false,
+  })
+);
+
+/**
+ * Quick Pick UI state for branch switching (global)
+ */
+export const branchQuickPickAtom = atom<BranchQuickPickState>({
+  visible: false,
+  inputValue: '',
+});

@@ -12,6 +12,7 @@ import {
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
+import { branchQuickPickAtom } from '../../atoms/git';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { WorkspacePage } from './index';
 
@@ -106,6 +107,64 @@ describe('WorkspacePage', () => {
     });
 
     expect(await screen.findByText('feature/refactor-ts')).toBeInTheDocument();
+  });
+
+  it('opens branch quick pick from the existing branch pill and switches to git tab', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return {
+          branch: 'feature/refactor-ts',
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/home/spencer/workspace/coder-studio',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspacePage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const branchButton = await screen.findByRole('button', {
+      name: 'Open branch switcher for feature/refactor-ts',
+    });
+    fireEvent.click(branchButton);
+
+    expect(screen.getByRole('button', { name: 'Git Diff' })).toHaveClass('active');
+    expect(store.get(branchQuickPickAtom)).toEqual({
+      visible: true,
+      workspaceId: 'ws-test',
+      inputValue: '',
+    });
   });
 
   it('selects the first workspace returned by workspace.list on refresh', async () => {

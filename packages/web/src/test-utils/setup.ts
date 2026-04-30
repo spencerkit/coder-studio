@@ -55,3 +55,8 @@ class WebSocketMock {
 }
 
 global.WebSocket = WebSocketMock as unknown as typeof WebSocket;
+
+// DOM API mocks for jsdom
+Element.prototype.scrollIntoView = () => {};
+HTMLElement.prototype.focus = () => {};
+document.queryCommandSupported = () => false;
