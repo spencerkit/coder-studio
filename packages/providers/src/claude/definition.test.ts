@@ -49,7 +49,7 @@ describe('Claude Provider Definition', () => {
               ],
             },
             {
-              id: 'npm-install-claude-code',
+              id: 'npm-install-claude',
               kind: 'provider',
               targetCommand: 'claude',
               requiresCommands: ['npm'],
@@ -67,7 +67,7 @@ describe('Claude Provider Definition', () => {
               args: ['install', 'node'],
             },
             {
-              id: 'npm-install-claude-code',
+              id: 'npm-install-claude',
               kind: 'provider',
               targetCommand: 'claude',
               requiresCommands: ['npm'],
@@ -77,7 +77,7 @@ describe('Claude Provider Definition', () => {
           ],
           linux: [
             {
-              id: 'npm-install-claude-code',
+              id: 'npm-install-claude',
               kind: 'provider',
               targetCommand: 'claude',
               requiresCommands: ['npm'],

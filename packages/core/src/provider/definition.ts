@@ -15,7 +15,7 @@ export interface ProviderInstallMetadata {
   manualGuideKeys: string[];
   docUrls: {
     provider: string;
-    prerequisites: Record<string, string>;
+    prerequisites: Partial<Record<string, string>>;
   };
   strategies: Partial<Record<NodeJS.Platform, ProviderInstallStrategy[]>>;
 }

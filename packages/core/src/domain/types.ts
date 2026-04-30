@@ -125,47 +125,70 @@ export interface ProviderConfig {
 }
 
 export interface ProviderRuntimeStatusEntry {
-  command: string;
-  installed: boolean;
-  version?: string;
-  path?: string;
-  error?: string;
+  providerId: string;
+  available: boolean;
+  missingCommands: string[];
+  missingPrerequisites: string[];
+  autoInstallSupported: boolean;
+  installReadiness: 'ready' | 'missing_prerequisite' | 'unsupported_platform';
+  manualGuideKeys: string[];
+  docUrls: {
+    provider: string;
+    prerequisites: Partial<Record<string, string>>;
+  };
 }
 
 export interface ProviderRuntimeStatusResponse {
-  providerId: string;
-  entries: ProviderRuntimeStatusEntry[];
+  providers: Record<string, ProviderRuntimeStatusEntry>;
 }
 
 export interface ProviderInstallStepSnapshot {
   id: string;
-  kind: 'prerequisite' | 'provider';
-  targetCommand: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  titleKey: string;
+  kind: 'check' | 'install' | 'verify';
   command: string;
   args: string[];
-  requiresCommands: string[];
+  status: 'pending' | 'running' | 'succeeded' | 'failed';
   startedAt?: number;
-  completedAt?: number;
+  finishedAt?: number;
   exitCode?: number;
-  error?: string;
+  stdoutExcerpt?: string;
+  stderrExcerpt?: string;
 }
 
 export interface ProviderInstallFailure {
-  stepId: string;
+  code:
+    | 'missing_prerequisite'
+    | 'unsupported_platform'
+    | 'permission_denied'
+    | 'command_not_found'
+    | 'command_failed'
+    | 'verification_failed'
+    | 'unknown_failure';
+  providerId: string;
+  failedStepId: string;
   message: string;
-  code?: string;
-  retryable?: boolean;
+  command: string;
+  args: string[];
+  exitCode?: number;
+  stdoutExcerpt?: string;
+  stderrExcerpt?: string;
+  missingCommands: string[];
+  manualGuideKeys: string[];
+  docUrls: {
+    provider: string;
+    prerequisites: Partial<Record<string, string>>;
+  };
 }
 
 export interface ProviderInstallJobSnapshot {
+  jobId: string;
   providerId: string;
-  platform: NodeJS.Platform;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  strategyIds: string[];
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  currentStepId?: string;
   steps: ProviderInstallStepSnapshot[];
   failure?: ProviderInstallFailure;
-  startedAt?: number;
-  completedAt?: number;
 }
 
 /**

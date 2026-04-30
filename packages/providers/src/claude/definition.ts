@@ -49,7 +49,7 @@ export const claudeDefinition: ProviderDefinition = {
           ],
         },
         {
-          id: 'npm-install-claude-code',
+          id: 'npm-install-claude',
           kind: 'provider',
           targetCommand: 'claude',
           requiresCommands: ['npm'],
@@ -67,7 +67,7 @@ export const claudeDefinition: ProviderDefinition = {
           args: ['install', 'node'],
         },
         {
-          id: 'npm-install-claude-code',
+          id: 'npm-install-claude',
           kind: 'provider',
           targetCommand: 'claude',
           requiresCommands: ['npm'],
@@ -77,7 +77,7 @@ export const claudeDefinition: ProviderDefinition = {
       ],
       linux: [
         {
-          id: 'npm-install-claude-code',
+          id: 'npm-install-claude',
           kind: 'provider',
           targetCommand: 'claude',
           requiresCommands: ['npm'],
