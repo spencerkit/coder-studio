@@ -1,26 +1,30 @@
-/**
- * Tests for runtime checks.
- */
-
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runtimeCheck, RuntimeCheckFailedError } from '../../workspace/runtime-check.js';
 
 describe('runtimeCheck', () => {
-  it('should return ok=true when git and node are available', async () => {
-    // Mock environment where git and node are available
-    const result = await runtimeCheck('/tmp', 'native');
+  it('reports missing wsl through the shared command helper', async () => {
+    const execFile = vi.fn(async (file: string) => ({
+      stdout: file === 'git' ? 'git version 2.48.0\n' : 'v22.15.0\n',
+      stderr: '',
+    }));
 
-    // In a real dev environment, git and node should be available
-    expect(result.ok).toBeDefined();
-    expect(Array.isArray(result.missing)).toBe(true);
+    const result = await runtimeCheck('/tmp', 'wsl', {
+      commandExists: async (command) => command !== 'wsl',
+      execFile,
+    });
+
+    expect(result).toEqual({ ok: false, missing: ['wsl'] });
   });
 
-  it('should check for wsl when targetRuntime is wsl', async () => {
-    const result = await runtimeCheck('/tmp', 'wsl');
+  it('reports missing git and node from the version checks deterministically', async () => {
+    const result = await runtimeCheck('/tmp', 'native', {
+      commandExists: async () => true,
+      execFile: vi.fn(async (file: string) => {
+        throw new Error(`${file} unavailable`);
+      }),
+    });
 
-    // Result depends on whether wsl command is available
-    expect(result.ok).toBeDefined();
-    expect(Array.isArray(result.missing)).toBe(true);
+    expect(result).toEqual({ ok: false, missing: ['git', 'node'] });
   });
 });
 

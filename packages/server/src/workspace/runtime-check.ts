@@ -1,9 +1,9 @@
-/**
- * Runtime environment checks for git, node, and provider CLI availability.
- */
-
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import {
+  checkCommandAvailable,
+  type CommandAvailabilityCheck,
+} from '../provider-runtime/command-check.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,36 +14,33 @@ export interface RuntimeCheckResult {
 
 export type TargetRuntime = 'native' | 'wsl';
 
-/**
- * Checks if a command is available in PATH.
- */
-async function isCommandAvailable(command: string): Promise<boolean> {
-  try {
-    await execFileAsync('which', [command]);
-    return true;
-  } catch {
-    return false;
-  }
+export interface RuntimeCheckDeps {
+  commandExists?: CommandAvailabilityCheck;
+  execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 }
 
-/**
- * Checks if git is available and validates basic functionality.
- */
-async function checkGit(): Promise<boolean> {
+async function checkGit(
+  execRunner: RuntimeCheckDeps['execFile'],
+): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync('git', ['--version']);
+    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))(
+      'git',
+      ['--version'],
+    );
     return stdout.includes('git version');
   } catch {
     return false;
   }
 }
 
-/**
- * Checks if node is available.
- */
-async function checkNode(): Promise<boolean> {
+async function checkNode(
+  execRunner: RuntimeCheckDeps['execFile'],
+): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync('node', ['--version']);
+    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))(
+      'node',
+      ['--version'],
+    );
     return stdout.startsWith('v');
   } catch {
     return false;
@@ -59,25 +56,25 @@ async function checkNode(): Promise<boolean> {
  */
 export async function runtimeCheck(
   _path: string,
-  targetRuntime: TargetRuntime
+  targetRuntime: TargetRuntime,
+  deps: RuntimeCheckDeps = {},
 ): Promise<RuntimeCheckResult> {
   const missing: string[] = [];
+  const commandExists =
+    deps.commandExists ?? ((command: string) => checkCommandAvailable(command));
 
-  // Check git availability (required for all runtimes)
-  const gitAvailable = await checkGit();
+  const gitAvailable = await checkGit(deps.execFile);
   if (!gitAvailable) {
     missing.push('git');
   }
 
-  // Check node availability (required for all runtimes)
-  const nodeAvailable = await checkNode();
+  const nodeAvailable = await checkNode(deps.execFile);
   if (!nodeAvailable) {
     missing.push('node');
   }
 
-  // WSL-specific checks
   if (targetRuntime === 'wsl') {
-    const wslAvailable = await isCommandAvailable('wsl');
+    const wslAvailable = await commandExists('wsl');
     if (!wslAvailable) {
       missing.push('wsl');
     }
