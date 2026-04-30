@@ -29,6 +29,10 @@ function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, la
   );
 }
 
+function expectTerminalWriteData(data: Uint8Array | string) {
+  expect(mockTerminal.write.mock.calls.some(([written]) => written === data)).toBe(true);
+}
+
 const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
@@ -74,7 +78,9 @@ describe('XtermHost', () => {
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
-    mockTerminal.write.mockImplementation(() => {});
+    mockTerminal.write.mockImplementation((_data: Uint8Array | string, callback?: () => void) => {
+      callback?.();
+    });
     mockTerminal.writeln.mockImplementation(() => {});
   });
 
@@ -796,7 +802,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenNthCalledWith(1, replayChunk);
+      expect(mockTerminal.write.mock.calls[0]?.[0]).toBe(replayChunk);
     });
     expect(mockTerminal.write).not.toHaveBeenCalledWith(earlyChunk);
 
@@ -810,6 +816,258 @@ describe('XtermHost', () => {
 
     await waitFor(() => {
       expect(mockTerminal.write).toHaveBeenCalledWith(lateChunk);
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('does not send xterm query responses produced while writing replay output back to the PTY', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('historical output\x1b[6n');
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 700,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let onDataCallback: ((data: string) => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+    mockTerminal.onData.mockImplementation((callback: (data: string) => void) => {
+      onDataCallback = callback;
+      return vi.fn();
+    });
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === replayChunk) {
+        onDataCallback?.('\x1b[12;3R');
+      }
+      callback?.();
+    });
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      sendTerminalInput,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="replay-query-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk, expect.any(Function));
+    });
+    expect(sendTerminalInput).not.toHaveBeenCalled();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('does not send async xterm query responses produced before replay write completion back to the PTY', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('historical output\x1b[6n');
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 701,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let onDataCallback: ((data: string) => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+    mockTerminal.onData.mockImplementation((callback: (data: string) => void) => {
+      onDataCallback = callback;
+      return vi.fn();
+    });
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === replayChunk) {
+        void Promise.resolve().then(() => {
+          onDataCallback?.('\x1b[12;3R');
+          callback?.();
+        });
+        return;
+      }
+
+      callback?.();
+    });
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      sendTerminalInput,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="async-replay-query-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk, expect.any(Function));
+    });
+    expect(sendTerminalInput).not.toHaveBeenCalled();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('still sends xterm query responses produced by live output back to the PTY', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('snapshot\n');
+    const liveChunk = new TextEncoder().encode('live query\x1b[6n');
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 710,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let onDataCallback: ((data: string) => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+    mockTerminal.onData.mockImplementation((callback: (data: string) => void) => {
+      onDataCallback = callback;
+      return vi.fn();
+    });
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === liveChunk) {
+        onDataCallback?.('\x1b[12;3R');
+      }
+      callback?.();
+    });
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      sendTerminalInput,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="live-query-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectTerminalWriteData(replayChunk);
+    });
+    sendTerminalInput.mockClear();
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'live-query-terminal'),
+        { transport: 'binary', streamId: 711, size: liveChunk.byteLength, bytes: liveChunk },
+        replayChunk.byteLength + liveChunk.byteLength
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenCalledWith(
+        'live-query-terminal',
+        new TextEncoder().encode('\x1b[12;3R'),
+        'typing',
+        undefined
+      );
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -889,7 +1147,7 @@ describe('XtermHost', () => {
 
     await waitFor(() => {
       expectReplayCall(sendCommand, 'gap-terminal', 0);
-      expect(mockTerminal.write).toHaveBeenCalledWith(initialReplayChunk);
+      expectTerminalWriteData(initialReplayChunk);
     });
 
     mockTerminal.write.mockClear();
@@ -923,7 +1181,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith(gapReplayChunk);
+      expectTerminalWriteData(gapReplayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -971,7 +1229,7 @@ describe('XtermHost', () => {
     });
 
     expect(mockFitAddon.fit).not.toHaveBeenCalled();
-    expect(mockTerminal.write).not.toHaveBeenCalledWith(replayChunk);
+    expect(mockTerminal.write.mock.calls.some(([written]) => written === replayChunk)).toBe(false);
 
     await act(async () => {
       const callback = rafCallbacks.shift();
@@ -983,7 +1241,7 @@ describe('XtermHost', () => {
 
     expect(mockFitAddon.fit).toHaveBeenCalled();
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk);
+      expectTerminalWriteData(replayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -1145,7 +1403,7 @@ describe('XtermHost', () => {
         rows: 36,
       });
       expectReplayCall(sendCommand, 'connect-gated-terminal', 0);
-      expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk);
+      expectTerminalWriteData(replayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;

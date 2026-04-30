@@ -262,6 +262,11 @@ export function XtermHost({
   const fitFrameRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   const fitResolversRef = useRef<Array<() => void>>([]);
+  // Debounce ResizeObserver → scheduleFit so that rapid layout changes
+  // (e.g. toggling the bottom terminal panel) coalesce into a single
+  // fit + resize dispatch instead of firing multiple pty.resize() calls
+  // that each trigger a SIGWINCH → full TUI redraw on the server side.
+  const resizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interactiveRef = useRef(true);
   const lastReportedSizeRef = useRef<{ cols: number; rows: number } | null>(null);
   // Buffer WS output chunks that arrive before the replay response resolves,
@@ -270,6 +275,11 @@ export function XtermHost({
   const pendingReplayChunksRef = useRef<Array<{ bytes: Uint8Array; seq: number }>>([]);
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
+  // Tracks whether xterm is currently processing replay data. While > 0,
+  // handleInput suppresses all terminal.onData callbacks — this prevents
+  // xterm.js auto-responses (e.g. DSR `\x1b[6n` → `\x1b[row;colR`) from
+  // being forwarded to the server PTY as spurious input during replay.
+  const replayWriteDepthRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
@@ -349,6 +359,13 @@ export function XtermHost({
    */
   const handleInput = useCallback(
     async (data: string) => {
+      if (replayWriteDepthRef.current > 0) {
+        traceTerminal(terminalId, 'input.suppressed-replay-response', {
+          summary: summarizeTerminalData(data),
+        });
+        return;
+      }
+
       if (!interactiveRef.current) {
         return;
       }
@@ -544,6 +561,27 @@ export function XtermHost({
       replayedSeqRef.current = latestCoveredSeq;
     };
 
+    // Wraps terminal.write with a depth guard so handleInput can tell
+    // whether an onData callback originated from replay processing.
+    const writeReplayBytes = (bytes: Uint8Array) => {
+      replayWriteDepthRef.current += 1;
+      let completed = false;
+      const complete = () => {
+        if (completed) {
+          return;
+        }
+        completed = true;
+        replayWriteDepthRef.current = Math.max(0, replayWriteDepthRef.current - 1);
+      };
+
+      try {
+        terminal.write(bytes, complete);
+      } catch (error) {
+        complete();
+        throw error;
+      }
+    };
+
     const finishReplay = (result: ReplayCommandResult | null) => {
       if (!mountedRef.current || !terminalRef.current || !result) {
         return;
@@ -557,7 +595,7 @@ export function XtermHost({
             size: result.data.bytes.byteLength,
             summary: summarizeTerminalData(result.data.bytes),
           });
-          terminal.write(result.data.bytes);
+          writeReplayBytes(result.data.bytes);
         }
         coveredSeq = result.data.seq ?? coveredSeq;
         setReplayUiState({ kind: 'ready' });
@@ -772,13 +810,23 @@ export function XtermHost({
         clientWidth: container.clientWidth,
         clientHeight: container.clientHeight,
       });
-      scheduleFit();
+      if (resizeDebounceRef.current !== null) {
+        clearTimeout(resizeDebounceRef.current);
+      }
+      resizeDebounceRef.current = setTimeout(() => {
+        resizeDebounceRef.current = null;
+        scheduleFit();
+      }, 150);
     });
 
     resizeObserver.observe(container);
 
     return () => {
       resizeObserver.disconnect();
+      if (resizeDebounceRef.current !== null) {
+        clearTimeout(resizeDebounceRef.current);
+        resizeDebounceRef.current = null;
+      }
     };
   }, [scheduleFit, terminalId]);
 

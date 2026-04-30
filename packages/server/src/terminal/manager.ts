@@ -207,16 +207,35 @@ export class TerminalManager {
   }
 
   /**
-   * Resize terminal
+   * Resize terminal.
+   *
+   * Skips the syscall when cols/rows haven't changed. Every pty.resize()
+   * delivers SIGWINCH to the child, and TUI apps (codex, claude) respond
+   * with a full clear-screen + repaint. That redraw data floods the
+   * StreamBuffer; under back-pressure the oldest frames (the clear-screen)
+   * are dropped while the repaint frames survive, causing the frontend to
+   * render repaint content without a preceding clear — visible as
+   * duplicate content blocks.
    */
   resize(terminalId: TerminalId, cols: number, rows: number): void {
     const terminal = this.terminals.get(terminalId)
     if (!terminal || !terminal.alive) {
-      // Resize fails silently if terminal not alive
       return
     }
 
-    traceTerminal(terminalId, 'pty.resize', { cols, rows })
+    if (terminal.currentCols === cols && terminal.currentRows === rows) {
+      traceTerminal(terminalId, 'pty.resize.skip', { cols, rows })
+      return
+    }
+
+    traceTerminal(terminalId, 'pty.resize', {
+      prevCols: terminal.currentCols,
+      prevRows: terminal.currentRows,
+      cols,
+      rows,
+    })
+    terminal.currentCols = cols
+    terminal.currentRows = rows
     terminal.pty.resize(cols, rows)
   }
 

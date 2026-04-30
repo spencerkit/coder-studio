@@ -10,6 +10,14 @@ import { RingBuffer } from './ring-buffer'
 export class ActiveTerminal {
   public alive = true
   public exitCode?: number
+  // Track current PTY dimensions so TerminalManager.resize() can skip
+  // redundant pty.resize() calls. Each unnecessary pty.resize() sends
+  // SIGWINCH to the child process (e.g. codex), which triggers a full
+  // clear-screen + repaint cycle. Under WebSocket back-pressure the
+  // StreamBuffer may drop the clear-screen frame while delivering the
+  // repaint frame, causing duplicate content on the frontend.
+  public currentCols: number
+  public currentRows: number
 
   constructor(
     public readonly id: string,
@@ -17,7 +25,10 @@ export class ActiveTerminal {
     public readonly pty: PtyProcess,
     public readonly ringBuffer: RingBuffer,
     public readonly createdAt: number = Date.now()
-  ) {}
+  ) {
+    this.currentCols = spec.cols ?? 120
+    this.currentRows = spec.rows ?? 30
+  }
 
   /**
    * Convert to DTO (Data Transfer Object) for external use
