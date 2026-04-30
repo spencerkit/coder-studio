@@ -124,6 +124,50 @@ export interface ProviderConfig {
   [key: string]: unknown;
 }
 
+export interface ProviderRuntimeStatusEntry {
+  command: string;
+  installed: boolean;
+  version?: string;
+  path?: string;
+  error?: string;
+}
+
+export interface ProviderRuntimeStatusResponse {
+  providerId: string;
+  entries: ProviderRuntimeStatusEntry[];
+}
+
+export interface ProviderInstallStepSnapshot {
+  id: string;
+  kind: 'prerequisite' | 'provider';
+  targetCommand: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  command: string;
+  args: string[];
+  requiresCommands: string[];
+  startedAt?: number;
+  completedAt?: number;
+  exitCode?: number;
+  error?: string;
+}
+
+export interface ProviderInstallFailure {
+  stepId: string;
+  message: string;
+  code?: string;
+  retryable?: boolean;
+}
+
+export interface ProviderInstallJobSnapshot {
+  providerId: string;
+  platform: NodeJS.Platform;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  steps: ProviderInstallStepSnapshot[];
+  failure?: ProviderInstallFailure;
+  startedAt?: number;
+  completedAt?: number;
+}
+
 /**
  * Derive a compact session title from a raw input buffer (the bytes a user
  * just submitted to the agent terminal). Returns undefined when the buffer

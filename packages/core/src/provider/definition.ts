@@ -1,6 +1,25 @@
 import type { ZodSchema } from 'zod';
 import type { ProviderConfig, Session } from '../domain/types';
 
+export interface ProviderInstallStrategy {
+  id: string;
+  kind: 'prerequisite' | 'provider';
+  targetCommand: string;
+  requiresCommands: string[];
+  command: string;
+  args: string[];
+}
+
+export interface ProviderInstallMetadata {
+  prerequisites: string[];
+  manualGuideKeys: string[];
+  docUrls: {
+    provider: string;
+    prerequisites: Record<string, string>;
+  };
+  strategies: Partial<Record<NodeJS.Platform, ProviderInstallStrategy[]>>;
+}
+
 export interface SupervisorEvalCommandRequest {
   prompt: string;
   sessionId: string;
@@ -26,6 +45,7 @@ export interface ProviderDefinition {
    * Runtime behavior must read hooks/events directly.
    */
   capability: 'full' | 'limited' | 'unsupported';
+  install: ProviderInstallMetadata;
 
   // Command construction
   buildCommand(config: ProviderConfig, ctx: LaunchContext): {

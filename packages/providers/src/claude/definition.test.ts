@@ -17,6 +17,77 @@ describe('Claude Provider Definition', () => {
     it('should require claude command', () => {
       expect(claudeDefinition.requiredCommands).toEqual(['claude']);
     });
+
+    it('should expose install metadata', () => {
+      expect(claudeDefinition.install).toEqual({
+        prerequisites: ['npm'],
+        manualGuideKeys: [
+          'provider.install.nodejs.manual',
+          'provider.install.claude.manual',
+        ],
+        docUrls: {
+          provider:
+            'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+          prerequisites: {
+            npm: 'https://nodejs.org/en/download',
+          },
+        },
+        strategies: {
+          win32: [
+            {
+              id: 'winget-nodejs-lts',
+              kind: 'prerequisite',
+              targetCommand: 'npm',
+              requiresCommands: ['winget'],
+              command: 'winget',
+              args: [
+                'install',
+                '--id',
+                'OpenJS.NodeJS.LTS',
+                '--exact',
+                '--silent',
+              ],
+            },
+            {
+              id: 'npm-install-claude-code',
+              kind: 'provider',
+              targetCommand: 'claude',
+              requiresCommands: ['npm'],
+              command: 'npm',
+              args: ['install', '-g', '@anthropic-ai/claude-code'],
+            },
+          ],
+          darwin: [
+            {
+              id: 'brew-node',
+              kind: 'prerequisite',
+              targetCommand: 'npm',
+              requiresCommands: ['brew'],
+              command: 'brew',
+              args: ['install', 'node'],
+            },
+            {
+              id: 'npm-install-claude-code',
+              kind: 'provider',
+              targetCommand: 'claude',
+              requiresCommands: ['npm'],
+              command: 'npm',
+              args: ['install', '-g', '@anthropic-ai/claude-code'],
+            },
+          ],
+          linux: [
+            {
+              id: 'npm-install-claude-code',
+              kind: 'provider',
+              targetCommand: 'claude',
+              requiresCommands: ['npm'],
+              command: 'npm',
+              args: ['install', '-g', '@anthropic-ai/claude-code'],
+            },
+          ],
+        },
+      });
+    });
   });
 
   describe('buildCommand', () => {
