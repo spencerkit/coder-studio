@@ -13,15 +13,9 @@ import type {
   ServerToClient,
   ClientToServer,
   Command,
-  TerminalBinaryEventData,
   TerminalInputBinaryArgs,
 } from '@coder-studio/core';
-import {
-  Topics,
-  TERMINAL_BINARY_PROTOCOL_VERSION,
-  TerminalBinaryFrameType,
-  encodeTerminalBinaryFrame,
-} from '@coder-studio/core';
+import { Topics, encodeTerminalOutputFrame } from '@coder-studio/core';
 import type WebSocket from 'ws';
 import type { FastifyRequest, FastifyBaseLogger } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
@@ -211,9 +205,23 @@ export class WsHub implements Broadcaster {
    * Handle resync request
    */
   private handleResync(client: WsClient, lastSeen: Record<string, number>): void {
-    // Phase 1: Basic implementation
-    // For each topic in lastSeen, send missed events
-    // This will be enhanced in Phase 2 with proper event replay
+    const workspaces = this.deps.commandContext.workspaceMgr.list();
+    for (const workspace of workspaces) {
+      const workspaceTopic = Topics.workspaceMeta(workspace.id);
+      if (client.subscribesTo(workspaceTopic)) {
+        client.sendEvent(workspaceTopic, workspace);
+      }
+
+      const sessions = this.deps.commandContext.sessionMgr.getForWorkspace(workspace.id);
+      for (const session of sessions) {
+        const sessionTopic = Topics.sessionState(workspace.id, session.id);
+        if (!client.subscribesTo(sessionTopic)) {
+          continue;
+        }
+        client.sendEvent(sessionTopic, session);
+      }
+    }
+
     client.sendEvent('connection.status', {
       status: 'resynced',
       topics: Object.keys(lastSeen),
@@ -254,7 +262,7 @@ export class WsHub implements Broadcaster {
     for (const client of this.clients.values()) {
       if (!client.subscribesTo(topic)) continue;
       if (stream && Buffer.isBuffer(payload)) {
-        this.sendTerminalStreamToClient(client, topic, payload, 0, TerminalBinaryFrameType.Output);
+        this.sendTerminalStreamToClient(client, topic, payload, 0);
       } else if (stream) {
         client.sendEventStream(topic, payload);
       } else {
@@ -338,7 +346,7 @@ export class WsHub implements Broadcaster {
       const topic = Topics.terminalOutput(event.workspaceId, event.terminalId);
       for (const client of this.clients.values()) {
         if (!client.subscribesTo(topic)) continue;
-        this.sendTerminalStreamToClient(client, topic, event.chunk, event.seq, TerminalBinaryFrameType.Output);
+        this.sendTerminalStreamToClient(client, topic, event.chunk, event.seq);
       }
       return;
     }
@@ -413,28 +421,13 @@ export class WsHub implements Broadcaster {
     topic: string,
     payload: Buffer,
     seq: number,
-    type: (typeof TerminalBinaryFrameType)[keyof typeof TerminalBinaryFrameType]
   ): void {
     const streamId = this.allocateStreamId();
-    const metadata: TerminalBinaryEventData = {
-      transport: 'binary',
-      streamId,
-      size: payload.length,
-    };
-
-    client.sendEventStream(topic, metadata, seq);
     client.sendStream(
       topic,
       Buffer.from(
-        encodeTerminalBinaryFrame(
-          {
-            version: TERMINAL_BINARY_PROTOCOL_VERSION,
-            type,
-            flags: 0,
-            meta: seq,
-            streamId,
-            payloadSize: payload.length,
-          },
+        encodeTerminalOutputFrame(
+          { topic, seq, streamId, payloadSize: payload.length },
           payload,
         ),
       ),

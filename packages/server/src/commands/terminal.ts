@@ -31,6 +31,7 @@ const TerminalInputSchema = z.union([
 ]);
 
 const pendingTerminalInput = new Map<number, { args: TerminalInputBinaryArgs; payload: Buffer }>();
+let nextReplayStreamId = 0;
 
 function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinaryArgs): Buffer {
   if ('bytes' in args) {
@@ -127,7 +128,8 @@ registerCommand(
       return replay;
     }
 
-    const streamId = Date.now() >>> 0;
+    nextReplayStreamId = (nextReplayStreamId + 1) >>> 0;
+    const streamId = nextReplayStreamId;
     if (clientId) {
       ctx.broadcaster.sendBinaryToClient(
         clientId,

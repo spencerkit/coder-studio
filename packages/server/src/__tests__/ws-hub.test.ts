@@ -5,9 +5,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Topics,
-  TERMINAL_BINARY_PROTOCOL_VERSION,
+  decodeTerminalOutputFrame,
   TERMINAL_BINARY_HEADER_SIZE,
-  TerminalBinaryFrameType,
+  TERMINAL_BINARY_OUTPUT_VERSION,
 } from '@coder-studio/core';
 import { WsHub } from '../ws/hub.js';
 import { EventBus } from '../bus/event-bus.js';
@@ -199,10 +199,11 @@ describe('WsHub', () => {
     });
   });
 
-  it('should translate terminal.output events to the terminal output topic and payload', () => {
+  it('should translate terminal.output events to a single v2 binary frame', () => {
     const socket = createMockSocket();
     hub.handleConnection(socket, createMockRequest());
     subscribeToAllTopics(socket);
+    socket.send.mockClear();
 
     const chunk = Buffer.from('hello terminal');
     eventBus.emit({
@@ -213,25 +214,20 @@ describe('WsHub', () => {
       seq: 7,
     });
 
-    expect(getLastSentEvent(socket)).toMatchObject({
-      kind: 'event',
-      topic: Topics.terminalOutput('workspace-42', 'term-123'),
-      seq: 7,
-      data: {
-        transport: 'binary',
-        streamId: expect.any(Number),
-        size: chunk.length,
-      },
-    });
+    const sentEvents = parseSentEvents(socket);
+    expect(sentEvents).toHaveLength(0);
 
     const binary = getLastSentBinary(socket);
     expect(binary).toBeDefined();
-    const view = new DataView(binary!.buffer, binary!.byteOffset, binary!.byteLength);
-    expect(view.getUint8(0)).toBe(TERMINAL_BINARY_PROTOCOL_VERSION);
-    expect(view.getUint8(1)).toBe(TerminalBinaryFrameType.Output);
-    expect(view.getUint32(4)).toBe(7);
-    expect(view.getUint32(12)).toBe(chunk.length);
-    expect(binary!.subarray(TERMINAL_BINARY_HEADER_SIZE)).toEqual(chunk);
+    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(binary![0]).toBe(TERMINAL_BINARY_OUTPUT_VERSION);
+
+    const decoded = decodeTerminalOutputFrame(binary!);
+    expect(decoded.topic).toBe(Topics.terminalOutput('workspace-42', 'term-123'));
+    expect(decoded.seq).toBe(7);
+    expect(decoded.streamId).toEqual(expect.any(Number));
+    expect(decoded.payload).toEqual(chunk);
+    expect(binary!.subarray(TERMINAL_BINARY_HEADER_SIZE + decoded.topic.length)).toEqual(chunk);
   });
 
   it('routes terminal.output broadcasts through the stream path', () => {
@@ -295,6 +291,66 @@ describe('WsHub', () => {
         code: 137,
       },
     });
+  });
+
+  it('re-emits current workspace meta and session state on resync for subscribed topics', () => {
+    hub.destroy();
+    const workspace = { id: 'ws1', path: '/tmp/ws1' };
+    const session = { id: 's1', workspaceId: 'ws1', state: 'idle' };
+    hub = new WsHub({
+      eventBus,
+      commandContext: {
+        ...mockCommandContext,
+        workspaceMgr: { list: vi.fn().mockReturnValue([workspace]) } as any,
+        sessionMgr: { getForWorkspace: vi.fn().mockReturnValue([session]) } as any,
+      },
+      config: { auth: { enabled: false } } as any,
+      fencingMgr: {} as any,
+    });
+
+    const socket = createMockSocket();
+    hub.handleConnection(socket, createMockRequest());
+    const messageHandler = socket.on.mock.calls.find(
+      (call: any[]) => call[0] === 'message'
+    )?.[1];
+    socket.send.mockClear();
+
+    messageHandler?.(
+      Buffer.from(
+        JSON.stringify({
+          kind: 'subscribe',
+          topics: ['workspace.ws1.meta', 'workspace.ws1.session.s1.state'],
+        })
+      )
+    );
+    messageHandler?.(
+      Buffer.from(
+        JSON.stringify({
+          kind: 'resync',
+          lastSeen: {
+            'workspace.ws1.meta': 3,
+            'workspace.ws1.session.s1.state': 4,
+          },
+        })
+      )
+    );
+
+    const sentEvents = parseSentEvents(socket);
+    expect(sentEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'event', topic: 'workspace.ws1.meta', data: workspace }),
+        expect.objectContaining({
+          kind: 'event',
+          topic: 'workspace.ws1.session.s1.state',
+          data: session,
+        }),
+        expect.objectContaining({
+          kind: 'event',
+          topic: 'connection.status',
+          data: { status: 'resynced', topics: ['workspace.ws1.meta', 'workspace.ws1.session.s1.state'] },
+        }),
+      ])
+    );
   });
 
   it('should close all connections on destroy', () => {

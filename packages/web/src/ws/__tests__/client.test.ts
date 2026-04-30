@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
+  encodeTerminalBinaryFrame,
+  encodeTerminalOutputFrame,
   TERMINAL_BINARY_PROTOCOL_VERSION,
   TerminalBinaryFrameType,
-  encodeTerminalBinaryFrame,
 } from '@coder-studio/core';
 import { WsClient, resolveWsUrl } from '../client';
 
@@ -76,54 +77,35 @@ describe('web WsClient', () => {
     await connectPromise;
   });
 
-  it('reassembles terminal output binary frames before notifying listeners', async () => {
+  it('handles v2 output frame: routes directly to topic without waiting for JSON event', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const handler = vi.fn();
 
-    client.subscribe(['workspace.*'], handler);
+    client.subscribe(['workspace.w1.terminal.t1.output'], handler);
     const connectPromise = client.connect();
     const socket = MockWebSocket.instances[0]!;
     socket.triggerOpen();
     await connectPromise;
 
-    socket.triggerMessage({
-      kind: 'event',
-      topic: 'workspace.ws_1.terminal.term_1.output',
-      seq: 7,
-      timestamp: Date.now(),
-      data: {
-        transport: 'binary',
-        streamId: 11,
-        size: 5,
-      },
-    });
-
-    socket.triggerBinaryMessage(
-      encodeTerminalBinaryFrame(
-        {
-          version: TERMINAL_BINARY_PROTOCOL_VERSION,
-          type: TerminalBinaryFrameType.Output,
-          flags: 0,
-          meta: 7,
-          streamId: 11,
-          payloadSize: 5,
-        },
-        new TextEncoder().encode('hello')
-      )
+    const payloadBytes = new Uint8Array([65, 66, 67]);
+    const frame = encodeTerminalOutputFrame(
+      { topic: 'workspace.w1.terminal.t1.output', seq: 99, streamId: 5, payloadSize: 3 },
+      payloadBytes,
     );
+    socket.triggerBinaryMessage(frame);
 
     expect(handler).toHaveBeenCalledWith(
-      'workspace.ws_1.terminal.term_1.output',
+      'workspace.w1.terminal.t1.output',
       expect.objectContaining({
         transport: 'binary',
-        streamId: 11,
-        size: 5,
+        streamId: 5,
+        size: 3,
         bytes: expect.any(Uint8Array),
       }),
-      7
+      99,
     );
     expect((handler.mock.calls[0] as [string, { bytes: Uint8Array }, number])[1].bytes).toEqual(
-      new Uint8Array(new TextEncoder().encode('hello'))
+      payloadBytes,
     );
   });
 
@@ -187,6 +169,50 @@ describe('web WsClient', () => {
       });
       expect(result.bytes).toEqual(new Uint8Array(new TextEncoder().encode('replay')));
     });
+  });
+
+  it('allows terminal.replay to use a longer custom timeout without changing the default command timeout', async () => {
+    vi.useFakeTimers();
+
+    const client = new WsClient('ws://localhost:3000/ws');
+    const connectPromise = client.connect();
+    const socket = MockWebSocket.instances[0]!;
+    socket.triggerOpen();
+    await connectPromise;
+
+    const replayPromise = client.sendCommand('terminal.replay', { terminalId: 'term_1' }, { timeoutMs: 120_000 });
+    const handledReplayPromise = replayPromise.catch((error) => error);
+
+    await vi.advanceTimersByTimeAsync(30_001);
+
+    let settled = false;
+    handledReplayPromise.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(89_997);
+
+    settled = false;
+    handledReplayPromise.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(replayPromise).rejects.toThrow('Command timeout: terminal.replay');
+    await handledReplayPromise;
+
+    vi.useRealTimers();
   });
 
   it('reassembles terminal replay when the binary frame arrives before the result', async () => {
@@ -253,57 +279,23 @@ describe('web WsClient', () => {
     });
   });
 
-  it('reassembles terminal output when the binary frame arrives before the metadata event', async () => {
+  it('v2 output frame does not require a prior JSON event', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const handler = vi.fn();
 
-    client.subscribe(['workspace.*'], handler);
+    client.subscribe(['workspace.w1.terminal.t1.output'], handler);
     const connectPromise = client.connect();
     const socket = MockWebSocket.instances[0]!;
     socket.triggerOpen();
     await connectPromise;
 
-    socket.triggerBinaryMessage(
-      encodeTerminalBinaryFrame(
-        {
-          version: TERMINAL_BINARY_PROTOCOL_VERSION,
-          type: TerminalBinaryFrameType.Output,
-          flags: 0,
-          meta: 8,
-          streamId: 41,
-          payloadSize: 5,
-        },
-        new TextEncoder().encode('hello')
-      )
+    const frame = encodeTerminalOutputFrame(
+      { topic: 'workspace.w1.terminal.t1.output', seq: 1, streamId: 1, payloadSize: 1 },
+      new Uint8Array([42]),
     );
+    socket.triggerBinaryMessage(frame);
 
-    expect(handler).not.toHaveBeenCalled();
-
-    socket.triggerMessage({
-      kind: 'event',
-      topic: 'workspace.ws_1.terminal.term_1.output',
-      seq: 8,
-      timestamp: Date.now(),
-      data: {
-        transport: 'binary',
-        streamId: 41,
-        size: 5,
-      },
-    });
-
-    expect(handler).toHaveBeenCalledWith(
-      'workspace.ws_1.terminal.term_1.output',
-      expect.objectContaining({
-        transport: 'binary',
-        streamId: 41,
-        size: 5,
-        bytes: expect.any(Uint8Array),
-      }),
-      8
-    );
-    expect((handler.mock.calls[0] as [string, { bytes: Uint8Array }, number])[1].bytes).toEqual(
-      new Uint8Array(new TextEncoder().encode('hello'))
-    );
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to a generated UUID when crypto.randomUUID is unavailable', async () => {

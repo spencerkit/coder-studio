@@ -753,9 +753,67 @@
   background: var(--bg-terminal);
 }
 
+.xterm-host-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .xterm-host {
   width: 100%;
   height: 100%;
+}
+
+.xterm-replay-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-terminal) 88%, transparent), color-mix(in srgb, var(--bg-terminal) 96%, transparent));
+  pointer-events: none;
+}
+
+.xterm-replay-overlay__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 32rem;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--accent-blue) 22%);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.xterm-replay-overlay--degraded .xterm-replay-overlay__card {
+  border-color: color-mix(in srgb, var(--border) 68%, var(--color-warning) 32%);
+}
+
+.xterm-replay-overlay__spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--accent-blue) 24%, transparent);
+  border-top-color: var(--accent-blue);
+  animation: spin 0.8s linear infinite;
+}
+
+.xterm-replay-overlay__title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.xterm-replay-overlay__body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
 }
 
 /* xterm.js overrides for Aurora Mint theme */

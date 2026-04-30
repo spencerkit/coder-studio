@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { activeWorkspaceIdAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import {
   resolvedActiveWorkspaceIdAtom,
@@ -413,5 +413,62 @@ describe('WorkspacePage', () => {
         })
       );
     });
+  });
+
+  it('keeps agent panes mounted when the bottom terminal panel is hidden', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return {
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(terminalPanelVisibleAtom, true);
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/home/spencer/workspace/coder-studio',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspacePage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByTestId('agent-panes')).toBeInTheDocument();
+    expect(screen.getByTestId('terminal-panel')).toBeInTheDocument();
+
+    act(() => {
+      store.set(terminalPanelVisibleAtom, false);
+    });
+
+    expect(screen.getByTestId('agent-panes')).toBeInTheDocument();
+    expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
   });
 });

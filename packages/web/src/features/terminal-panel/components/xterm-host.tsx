@@ -8,7 +8,7 @@
  * - Aurora Mint theme that follows the current UI mode
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAtomValue, useAtom } from 'jotai';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -16,9 +16,15 @@ import { wsClientAtom } from '../../../atoms/connection';
 import { terminalOutputAtomFamily, terminalMetaAtomFamily } from '../../../atoms/terminals';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { themeAtom } from '../../../atoms/ui';
+import { useTranslation } from '../../../lib/i18n';
 import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../../atoms/terminals';
-import type { TerminalBinaryPayload, TerminalReplayPayload } from '../../../ws/client';
+import type { TerminalBinaryPayload } from '../../../ws/client';
+import {
+  classifyReplayFailure,
+  TERMINAL_REPLAY_TIMEOUT_MS,
+  type TerminalReplayUiState,
+} from '../replay-state';
 
 type TerminalInputActivity = 'typing' | 'submit' | 'system';
 
@@ -150,6 +156,51 @@ function getTerminalTheme(theme: 'dark' | 'light') {
 }
 
 const terminalInputEncoder = new TextEncoder();
+const terminalTraceDecoder = new TextDecoder('utf-8', { fatal: false });
+const TERMINAL_TRACE_STORAGE_KEY = 'coderStudio.terminalTrace';
+
+function isTerminalTraceEnabled() {
+  try {
+    return globalThis.localStorage?.getItem(TERMINAL_TRACE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function countOccurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
+function summarizeTerminalData(data: Uint8Array | string) {
+  const text = typeof data === 'string' ? data : terminalTraceDecoder.decode(data);
+  return {
+    length: typeof data === 'string' ? data.length : data.byteLength,
+    syncStart: countOccurrences(text, '\x1b[?2026h'),
+    syncEnd: countOccurrences(text, '\x1b[?2026l'),
+    clearToEnd: countOccurrences(text, '\x1b[J'),
+    clearScreen: countOccurrences(text, '\x1b[2J'),
+    eraseLine: countOccurrences(text, '\x1b[K'),
+    cursorHome: countOccurrences(text, '\x1b[1;1H'),
+    dsr: countOccurrences(text, '\x1b[6n'),
+    da: countOccurrences(text, '\x1b[c'),
+    reverseIndex: countOccurrences(text, '\x1bM'),
+    cursorMoves: text.match(/\x1b\[[0-9;]*[Hf]/g)?.length ?? 0,
+    scrollRegions: text.match(/\x1b\[[0-9;]*r/g)?.slice(0, 6) ?? [],
+  };
+}
+
+function traceTerminal(terminalId: string, event: string, details: Record<string, unknown> = {}) {
+  if (!isTerminalTraceEnabled()) {
+    return;
+  }
+
+  console.debug('[terminal-trace]', {
+    at: Math.round(performance.now() * 100) / 100,
+    terminalId,
+    event,
+    ...details,
+  });
+}
 
 export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: number): OutputBuffer {
   const removeCount = Math.min(writtenChunkCount, buffer.chunks.length);
@@ -160,7 +211,6 @@ export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: numbe
   return {
     ...buffer,
     chunks: buffer.chunks.slice(removeCount),
-    lastWritten: 0,
   };
 }
 
@@ -184,6 +234,12 @@ interface ReplayPayload {
   bytes?: Uint8Array;
 }
 
+interface ReplayCommandResult {
+  ok: boolean;
+  data?: ReplayPayload;
+  error?: unknown;
+}
+
 /**
  * XtermHost renders an xterm.js terminal instance
  *
@@ -192,7 +248,12 @@ interface ReplayPayload {
  * 2. Update: write new output chunks from atom, fit on resize
  * 3. Unmount: dispose Terminal, unsubscribe from events
  */
-export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHostProps) {
+export function XtermHost({
+  terminalId,
+  workspaceId,
+  readOnly = false,
+}: XtermHostProps) {
+  const t = useTranslation();
   const uiTheme = useAtomValue(themeAtom);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -211,6 +272,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
   const replayedSeqRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
+  const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
 
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -256,7 +318,14 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       fitFrameRef.current = null;
 
       try {
+        const before = terminalRef.current
+          ? { cols: terminalRef.current.cols, rows: terminalRef.current.rows }
+          : null;
         fitAddonRef.current?.fit();
+        const after = terminalRef.current
+          ? { cols: terminalRef.current.cols, rows: terminalRef.current.rows }
+          : null;
+        traceTerminal(terminalId, 'fit', { before, after });
       } catch (error) {
         console.error('Failed to fit xterm instance:', error);
       } finally {
@@ -267,7 +336,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         }
       }
     });
-  }, []);
+  }, [terminalId]);
 
   const waitForNextFit = useCallback(() => {
     return new Promise<void>((resolve) => {
@@ -291,6 +360,10 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
 
       try {
         const activity = classifyTerminalInput(data);
+        traceTerminal(terminalId, 'input', {
+          activity,
+          summary: summarizeTerminalData(data),
+        });
         const { nextDraft, submittedText } = consumeTerminalInputDraft(
           inputDraftRef.current,
           data,
@@ -323,6 +396,10 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       }
 
       lastReportedSizeRef.current = { cols, rows };
+      traceTerminal(terminalId, 'resize.dispatch', {
+        previousSize,
+        nextSize: { cols, rows },
+      });
 
       const result = await dispatch('terminal.resize', {
         terminalId,
@@ -333,6 +410,11 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       if (!result.ok) {
         console.error('Failed to sync terminal size:', result.error);
       }
+      traceTerminal(terminalId, 'resize.result', {
+        nextSize: { cols, rows },
+        ok: result.ok,
+        error: result.ok ? undefined : result.error,
+      });
     },
     [terminalId, dispatch]
   );
@@ -366,6 +448,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     replayedSeqRef.current = 0;
     pendingReplayChunksRef.current = [];
     lastReportedSizeRef.current = null;
+    setReplayUiState({ kind: 'loading' });
 
     // Create Terminal instance.
     // lineHeight is left at xterm.js default (1.0) so that box-drawing
@@ -393,6 +476,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     });
 
     terminal.open(containerRef.current);
+    traceTerminal(terminalId, 'mount.open');
     // Defer the first fit to the next frame so flex layout has settled;
     // calling fit() synchronously right after open() sometimes runs against a
     // zero- or partial-height container and produces an off-by-one row count
@@ -450,13 +534,17 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         }
 
         terminal.write(entry.bytes);
+        traceTerminal(terminalId, 'write.pending-replay-chunk', {
+          seq: entry.seq,
+          summary: summarizeTerminalData(entry.bytes),
+        });
         latestCoveredSeq = entry.seq;
       }
 
       replayedSeqRef.current = latestCoveredSeq;
     };
 
-    const finishReplay = (result: { ok: boolean; data?: ReplayPayload; error?: unknown } | null) => {
+    const finishReplay = (result: ReplayCommandResult | null) => {
       if (!mountedRef.current || !terminalRef.current || !result) {
         return;
       }
@@ -464,23 +552,32 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
       let coveredSeq = replayedSeqRef.current;
       if (result.ok && result.data?.status === 'ok') {
         if (result.data.bytes) {
+          traceTerminal(terminalId, 'write.replay', {
+            seq: result.data.seq,
+            size: result.data.bytes.byteLength,
+            summary: summarizeTerminalData(result.data.bytes),
+          });
           terminal.write(result.data.bytes);
         }
         coveredSeq = result.data.seq ?? coveredSeq;
+        setReplayUiState({ kind: 'ready' });
       } else if (result.data?.status === 'too_old') {
         // Ring buffer overflow - show a message to the user
         if (terminalRef.current) {
           terminalRef.current.writeln('\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m');
         }
+        setReplayUiState({ kind: 'degraded', reason: 'truncated' });
+      } else if (result.data?.status === 'unknown') {
+        setReplayUiState({ kind: 'degraded', reason: 'closed' });
       } else if (!result.ok) {
         console.error('Failed to replay terminal output:', result.error);
+        setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(result.error) });
       }
 
       setOutputAtom((prev: OutputBuffer) => ({
         ...prev,
         chunks: [],
         lastSeq: Math.max(prev.lastSeq, coveredSeq),
-        lastWritten: 0,
       }));
 
       replayedSeqRef.current = coveredSeq;
@@ -494,10 +591,11 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         return;
       }
 
+      setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(error) });
+
       setOutputAtom((prev: OutputBuffer) => ({
         ...prev,
         chunks: [],
-        lastWritten: 0,
       }));
 
       replayCompletedRef.current = true;
@@ -506,10 +604,18 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
 
     const requestReplay = (lastSeq: number) => {
       replayCompletedRef.current = false;
-      void dispatch<ReplayPayload>('terminal.replay', {
-        terminalId,
-        lastSeq,
-      })
+      if (lastSeq === 0) {
+        setReplayUiState({ kind: 'loading' });
+      }
+      traceTerminal(terminalId, 'replay.request', { lastSeq });
+
+      const replayPromise: Promise<ReplayCommandResult> = wsClient
+        ? wsClient
+            .sendCommand<ReplayPayload>('terminal.replay', { terminalId, lastSeq }, { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS })
+            .then((data) => ({ ok: true as const, data }))
+        : dispatch<ReplayPayload>('terminal.replay', { terminalId, lastSeq });
+
+      void replayPromise
         .then((result) => {
           finishReplay(result);
         })
@@ -524,6 +630,13 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
         (topic, payload, _seq) => {
           if (topic === outputTopic) {
             const outputData = payload as TerminalBinaryPayload;
+            traceTerminal(terminalId, 'live.output', {
+              seq: _seq,
+              replayCompleted: replayCompletedRef.current,
+              replayedSeq: replayedSeqRef.current,
+              size: outputData.bytes.byteLength,
+              summary: summarizeTerminalData(outputData.bytes),
+            });
 
             if (!replayCompletedRef.current) {
               pendingReplayChunksRef.current.push({
@@ -534,11 +647,20 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
             }
 
             if (_seq <= replayedSeqRef.current) {
+              traceTerminal(terminalId, 'live.drop-covered', {
+                seq: _seq,
+                replayedSeq: replayedSeqRef.current,
+              });
               return;
             }
 
             const chunkStartSeq = _seq - outputData.bytes.byteLength;
             if (chunkStartSeq > replayedSeqRef.current) {
+              traceTerminal(terminalId, 'live.gap', {
+                seq: _seq,
+                chunkStartSeq,
+                replayedSeq: replayedSeqRef.current,
+              });
               pendingReplayChunksRef.current.push({
                 bytes: outputData.bytes,
                 seq: _seq,
@@ -546,7 +668,6 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
               setOutputAtom((_prev: OutputBuffer) => ({
                 chunks: [],
                 lastSeq: replayedSeqRef.current,
-                lastWritten: 0,
               }));
               requestReplay(replayedSeqRef.current);
               return;
@@ -557,7 +678,6 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
               return {
                 chunks: [...prev.chunks, outputData.bytes],
                 lastSeq: _seq,
-                lastWritten: prev.lastWritten,
               };
             });
             // Advance replayedSeqRef so subsequent contiguous chunks don't
@@ -618,22 +738,25 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     const terminal = terminalRef.current;
     if (!terminal) return;
 
-    const { chunks, lastWritten } = outputAtom;
-    const writtenChunkCount = chunks.length - lastWritten;
+    const { chunks } = outputAtom;
+    const writtenChunkCount = chunks.length;
 
     if (writtenChunkCount > 0) {
-      // Write any unwritten chunks
-      for (let i = lastWritten; i < chunks.length; i++) {
+      for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         if (!chunk) continue;
 
+        traceTerminal(terminalId, 'write.live-buffer', {
+          index: i,
+          lastSeq: outputAtom.lastSeq,
+          summary: summarizeTerminalData(chunk),
+        });
         terminal.write(chunk);
       }
 
-      // Update lastWritten to prevent atom bloat
       setOutputAtom((prev: OutputBuffer) => trimWrittenChunks(prev, writtenChunkCount));
     }
-  }, [outputAtom, setOutputAtom]);
+  }, [outputAtom, setOutputAtom, terminalId]);
 
   /**
    * Fit terminal on container resize
@@ -645,6 +768,10 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     if (!container || !fitAddon) return;
 
     const resizeObserver = new ResizeObserver(() => {
+      traceTerminal(terminalId, 'resize-observer', {
+        clientWidth: container.clientWidth,
+        clientHeight: container.clientHeight,
+      });
       scheduleFit();
     });
 
@@ -653,7 +780,7 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     return () => {
       resizeObserver.disconnect();
     };
-  }, [scheduleFit]);
+  }, [scheduleFit, terminalId]);
 
   /**
    * Focus terminal when it becomes active
@@ -664,16 +791,52 @@ export function XtermHost({ terminalId, workspaceId, readOnly = false }: XtermHo
     }
   }, [meta?.alive]);
 
+  const showReplayOverlay = replayUiState.kind !== 'ready';
+
+  let replayTitle = '';
+  let replayBody = '';
+  let replayClassName = 'xterm-replay-overlay';
+
+  if (replayUiState.kind === 'loading') {
+    replayTitle = t('terminal.replay.loading_title');
+    replayBody = t('terminal.replay.loading_body');
+  } else {
+    replayClassName += ' xterm-replay-overlay--degraded';
+    replayTitle =
+      replayUiState.reason === 'truncated'
+        ? t('terminal.replay.truncated_title')
+        : replayUiState.reason === 'closed'
+          ? t('terminal.replay.closed_title')
+        : t('terminal.replay.failed_title');
+    replayBody =
+      replayUiState.reason === 'truncated'
+        ? t('terminal.replay.truncated_body')
+        : replayUiState.reason === 'closed'
+          ? t('terminal.replay.closed_body')
+        : t('terminal.replay.failed_body');
+  }
+
   return (
-    <div
-      ref={containerRef}
-      className="xterm-host"
-      style={{
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-      }}
-    />
+    <div className="xterm-host-shell">
+      <div
+        ref={containerRef}
+        className="xterm-host"
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      />
+      {showReplayOverlay ? (
+        <div className={replayClassName} role="status" aria-live="polite">
+          <div className="xterm-replay-overlay__card">
+            {replayUiState.kind === 'loading' ? <div className="xterm-replay-overlay__spinner" aria-hidden="true" /> : null}
+            <div className="xterm-replay-overlay__title">{replayTitle}</div>
+            {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

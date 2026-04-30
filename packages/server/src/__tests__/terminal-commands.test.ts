@@ -147,6 +147,54 @@ describe('terminal commands', () => {
     }
   });
 
+  it('assigns unique streamIds to concurrent replay requests', async () => {
+    const replayData = Buffer.alloc(0);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_777_177_555_456);
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 0 }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    try {
+      const first = await dispatch(
+        {
+          kind: 'command',
+          id: 'terminal-replay-unique-1',
+          op: 'terminal.replay',
+          args: { terminalId: 'term-1', lastSeq: 0 },
+        },
+        ctx,
+        'client-a',
+      );
+      const second = await dispatch(
+        {
+          kind: 'command',
+          id: 'terminal-replay-unique-2',
+          op: 'terminal.replay',
+          args: { terminalId: 'term-1', lastSeq: 0 },
+        },
+        ctx,
+        'client-b',
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      expect(first.data).toMatchObject({ status: 'ok', transport: 'binary', streamId: expect.any(Number) });
+      expect(second.data).toMatchObject({ status: 'ok', transport: 'binary', streamId: expect.any(Number) });
+      expect((first.data as { streamId: number }).streamId).not.toBe(
+        (second.data as { streamId: number }).streamId,
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('uses the current user shell when creating shell terminals', async () => {
     vi.stubEnv('SHELL', '/bin/zsh');
     const ctx = createContext();

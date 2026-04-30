@@ -118,7 +118,16 @@
     "reconnect_hint": "Connection lost, reconnecting...",
     "no_terminal": "No terminals",
     "hide": "Hide Terminal",
-    "show": "Show Terminal"
+    "show": "Show Terminal",
+    "replay": {
+      "loading_title": "Restoring terminal output...",
+      "failed_title": "Terminal history could not be restored",
+      "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
+      "closed_title": "This session has been closed",
+      "closed_body": "Start a new session to continue.",
+      "truncated_title": "Terminal history is partial",
+      "truncated_body": "Older output has already fallen out of the replay buffer, but new output will continue to stream."
+    }
   },
   "file": {
     "title": "Files",

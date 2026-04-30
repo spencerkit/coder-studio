@@ -7,6 +7,8 @@
 
 import {
   decodeTerminalBinaryFrame,
+  decodeTerminalOutputFrame,
+  TERMINAL_BINARY_OUTPUT_VERSION,
   TerminalBinaryFrameType,
   type ClientToServer,
   type ServerToClient,
@@ -35,10 +37,8 @@ interface PendingCommand {
   terminalBinary?: TerminalReplayBinaryResult;
 }
 
-interface PendingTerminalEvent {
-  topic: string;
-  seq: number;
-  metadata: TerminalBinaryEventData;
+interface SendCommandOptions {
+  timeoutMs?: number;
 }
 
 interface ReconnectConfig {
@@ -85,7 +85,6 @@ export class WsClient {
   private eventListeners = new Map<string, Set<EventListener>>();
   private statusListeners = new Set<StatusListener>();
   private lastSeenSeq = new Map<string, number>();
-  private pendingTerminalEvents = new Map<number, PendingTerminalEvent>();
   private pendingReplayStreamIds = new Map<number, string>();
   // Binary frames can arrive ahead of their JSON metadata when the server
   // emits them in opposite order (e.g. terminal.replay sends the binary
@@ -195,7 +194,7 @@ export class WsClient {
     this.setStatus('disconnected');
   }
 
-  async sendCommand<T>(op: string, args: unknown): Promise<T> {
+  async sendCommand<T>(op: string, args: unknown, options: SendCommandOptions = {}): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket not connected'));
@@ -203,11 +202,12 @@ export class WsClient {
       }
 
       const id = createCommandId();
+      const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
 
       const timeoutId = setTimeout(() => {
         this.pendingCommands.delete(id);
         reject(new Error(`Command timeout: ${op}`));
-      }, COMMAND_TIMEOUT_MS);
+      }, timeoutMs);
 
       this.pendingCommands.set(id, {
         resolve: resolve as (value: unknown) => void,
@@ -364,62 +364,33 @@ export class WsClient {
       }
     } else if (msg.kind === 'event') {
       this.lastSeenSeq.set(msg.topic, msg.seq);
-
-      if (this.isTerminalBinaryEventData(msg.data)) {
-        const orphan = this.orphanBinaryPayloads.get(msg.data.streamId);
-        if (orphan) {
-          this.orphanBinaryPayloads.delete(msg.data.streamId);
-          this.notifyEventListeners(
-            msg.topic,
-            {
-              ...msg.data,
-              bytes: orphan,
-            } satisfies TerminalBinaryPayload,
-            msg.seq
-          );
-          return;
-        }
-        this.pendingTerminalEvents.set(msg.data.streamId, {
-          topic: msg.topic,
-          seq: msg.seq,
-          metadata: msg.data,
-        });
-        return;
-      }
-
       this.notifyEventListeners(msg.topic, msg.data, msg.seq);
     }
   }
 
   private handleBinaryMessage(frame: Uint8Array): void {
-    const { header, payload } = decodeTerminalBinaryFrame(frame);
+    if (frame.length === 0) return;
 
-    if (header.type === TerminalBinaryFrameType.Output) {
-      const pending = this.pendingTerminalEvents.get(header.streamId);
-      if (!pending) {
-        // Metadata not here yet — park the payload until the JSON event
-        // shows up. handleMessage will consume it on arrival.
-        this.orphanBinaryPayloads.set(header.streamId, payload);
-        return;
-      }
-      this.pendingTerminalEvents.delete(header.streamId);
+    if (frame[0] === TERMINAL_BINARY_OUTPUT_VERSION) {
+      const decoded = decodeTerminalOutputFrame(frame);
       this.notifyEventListeners(
-        pending.topic,
+        decoded.topic,
         {
-          ...pending.metadata,
-          bytes: payload,
+          transport: 'binary' as const,
+          streamId: decoded.streamId,
+          size: decoded.payload.byteLength,
+          bytes: decoded.payload,
         } satisfies TerminalBinaryPayload,
-        pending.seq
+        decoded.seq,
       );
       return;
     }
 
+    const { header, payload } = decodeTerminalBinaryFrame(frame);
+
     if (header.type === TerminalBinaryFrameType.Replay) {
       const pendingId = this.pendingReplayStreamIds.get(header.streamId);
       if (!pendingId) {
-        // Replay binary frames are sent before the command result on the
-        // server side. Park the payload; handleMessage will pick it up when
-        // the result arrives.
         this.orphanBinaryPayloads.set(header.streamId, payload);
         return;
       }
@@ -452,17 +423,6 @@ export class WsClient {
         }
       }
     }
-  }
-
-  private isTerminalBinaryEventData(data: unknown): data is TerminalBinaryEventData {
-    return (
-      typeof data === 'object' &&
-      data !== null &&
-      'transport' in data &&
-      'streamId' in data &&
-      'size' in data &&
-      (data as { transport?: unknown }).transport === 'binary'
-    );
   }
 
   private isTerminalReplayBinaryResult(data: unknown): data is TerminalReplayBinaryResult {

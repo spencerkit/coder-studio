@@ -118,7 +118,16 @@
     "reconnect_hint": "连接已断开，正在重连...",
     "no_terminal": "暂无终端",
     "hide": "隐藏终端",
-    "show": "显示终端"
+    "show": "显示终端",
+    "replay": {
+      "loading_title": "正在恢复终端内容…",
+      "failed_title": "历史内容恢复失败",
+      "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
+      "closed_title": "该会话已被关闭",
+      "closed_body": "请重新开启新会话。",
+      "truncated_title": "历史内容不完整",
+      "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
+    }
   },
   "file": {
     "title": "文件",

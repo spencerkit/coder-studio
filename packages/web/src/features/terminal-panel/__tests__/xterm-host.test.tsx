@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
@@ -13,7 +13,21 @@ import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost, trimWrittenChunks } from '../components/xterm-host';
 import { terminalOutputAtomFamily } from '../../../atoms/terminals';
 import { wsClientAtom } from '../../../atoms/connection';
-import { themeAtom } from '../../../atoms/ui';
+import { localeAtom, themeAtom } from '../../../atoms/ui';
+import { TERMINAL_REPLAY_TIMEOUT_MS } from '../replay-state';
+
+function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, lastSeq: number) {
+  expect(mock).toHaveBeenCalledWith(
+    'terminal.replay',
+    {
+      terminalId,
+      lastSeq,
+    },
+    {
+      timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+    }
+  );
+}
 
 const mockTerminal = {
   open: vi.fn(),
@@ -97,6 +111,169 @@ describe('XtermHost', () => {
     // Check that the xterm-host container is rendered
     const hostContainer = container.querySelector('.xterm-host');
     expect(hostContainer).toBeTruthy();
+  });
+
+  it('shows a restoring overlay while the initial replay is in flight', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return new Promise(() => {});
+      }
+
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, 'zh');
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="loading-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText('正在恢复终端内容…')).toBeInTheDocument();
+    expect(
+      screen.queryByText('你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。')
+    ).not.toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('shows a degraded overlay message when replay fails so the terminal remains usable', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return Promise.reject(new Error('Command timeout: terminal.replay'));
+      }
+
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, 'zh');
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="failed-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('历史内容恢复失败')).toBeInTheDocument();
+    });
+    expect(screen.getByText('新输出仍会继续显示；如果需要完整历史，再手动刷新页面。')).toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('shows a degraded overlay when replay returns unknown so unavailable terminals do not stay loading', async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return Promise.resolve({ status: 'unknown' });
+      }
+
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, 'zh');
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="unavailable-terminal" workspaceId="test-workspace" readOnly />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('该会话已被关闭')).toBeInTheDocument();
+    });
+    expect(screen.getByText('请重新开启新会话。')).toBeInTheDocument();
+    expect(screen.queryByText('正在恢复终端内容…')).not.toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
   it('creates xterm instance on mount with correct theme', async () => {
@@ -240,7 +417,6 @@ describe('XtermHost', () => {
     store.set(terminalOutputAtomFamily('utf-terminal'), {
       chunks: [chunk],
       lastSeq: 1,
-      lastWritten: 0,
     });
 
     render(
@@ -263,7 +439,6 @@ describe('XtermHost', () => {
     store.set(terminalOutputAtomFamily('utf-split-terminal'), {
       chunks: [firstChunk, secondChunk],
       lastSeq: fullChunk.byteLength,
-      lastWritten: 0,
     });
 
     render(
@@ -289,14 +464,12 @@ describe('XtermHost', () => {
         {
           chunks: [firstChunk, secondChunk],
           lastSeq: firstChunk.byteLength + secondChunk.byteLength,
-          lastWritten: 0,
         },
         1
       )
     ).toEqual({
       chunks: [secondChunk],
       lastSeq: firstChunk.byteLength + secondChunk.byteLength,
-      lastWritten: 0,
     });
   });
 
@@ -606,10 +779,7 @@ describe('XtermHost', () => {
         cols: 132,
         rows: 36,
       });
-      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'dedup-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(dispatchCommand, 'dedup-terminal', 0);
     });
 
     await act(async () => {
@@ -718,10 +888,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'gap-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(sendCommand, 'gap-terminal', 0);
       expect(mockTerminal.write).toHaveBeenCalledWith(initialReplayChunk);
     });
 
@@ -738,10 +905,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'gap-terminal',
-        lastSeq: 100,
-      });
+      expectReplayCall(sendCommand, 'gap-terminal', 100);
     });
     expect(mockTerminal.write).not.toHaveBeenCalled();
 
@@ -883,10 +1047,7 @@ describe('XtermHost', () => {
         cols: 132,
         rows: 36,
       });
-      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'initial-resize-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(dispatchCommand, 'initial-resize-terminal', 0);
     });
 
     const ops = dispatchCommand.mock.calls.map(([op]) => op);
@@ -983,10 +1144,7 @@ describe('XtermHost', () => {
         cols: 132,
         rows: 36,
       });
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'connect-gated-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(sendCommand, 'connect-gated-terminal', 0);
       expect(mockTerminal.write).toHaveBeenCalledWith(replayChunk);
     });
 
@@ -1039,10 +1197,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(dispatchCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'unmount-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(dispatchCommand, 'unmount-terminal', 0);
     });
 
     unmount();
@@ -1127,10 +1282,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.replay', {
-        terminalId: 'typing-terminal',
-        lastSeq: 0,
-      });
+      expectReplayCall(sendCommand, 'typing-terminal', 0);
     });
 
     expect(replayCount).toBe(1);
@@ -1199,4 +1351,5 @@ describe('XtermHost', () => {
       rows: 36,
     });
   });
+
 });

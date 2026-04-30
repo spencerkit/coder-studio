@@ -100,6 +100,79 @@ export const decodeTerminalBinaryFrame = (
   return { header, payload };
 };
 
+export const TERMINAL_BINARY_OUTPUT_VERSION = 2;
+
+export interface TerminalOutputFrameHeader {
+  topic: string;
+  seq: number;
+  streamId: number;
+  payloadSize: number;
+}
+
+export interface DecodedTerminalOutputFrame {
+  topic: string;
+  seq: number;
+  streamId: number;
+  payload: Uint8Array;
+}
+
+export const encodeTerminalOutputFrame = (
+  header: TerminalOutputFrameHeader,
+  payload: Uint8Array,
+): Uint8Array => {
+  if (payload.byteLength !== header.payloadSize) {
+    throw new Error('Terminal output payload size does not match header');
+  }
+
+  const topicBytes = new TextEncoder().encode(header.topic);
+  const frame = new Uint8Array(TERMINAL_BINARY_HEADER_SIZE + topicBytes.length + payload.byteLength);
+  const view = new DataView(frame.buffer);
+  view.setUint8(0, TERMINAL_BINARY_OUTPUT_VERSION);
+  view.setUint8(1, TerminalBinaryFrameType.Output);
+  view.setUint16(2, topicBytes.length, false);
+  view.setUint32(4, header.seq, false);
+  view.setUint32(8, header.streamId, false);
+  view.setUint32(12, payload.byteLength, false);
+  frame.set(topicBytes, TERMINAL_BINARY_HEADER_SIZE);
+  frame.set(payload, TERMINAL_BINARY_HEADER_SIZE + topicBytes.length);
+  return frame;
+};
+
+export const decodeTerminalOutputFrame = (
+  frame: ArrayBuffer | Uint8Array,
+): DecodedTerminalOutputFrame => {
+  const bytes = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
+  if (bytes.byteLength < TERMINAL_BINARY_HEADER_SIZE) {
+    throw new Error('Terminal output frame is too short');
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = view.getUint8(0);
+  if (version !== TERMINAL_BINARY_OUTPUT_VERSION) {
+    throw new Error(
+      `Expected output frame version ${TERMINAL_BINARY_OUTPUT_VERSION}, got ${version}`,
+    );
+  }
+
+  const topicLength = view.getUint16(2, false);
+  const seq = view.getUint32(4, false);
+  const streamId = view.getUint32(8, false);
+  const payloadSize = view.getUint32(12, false);
+  if (bytes.byteLength < TERMINAL_BINARY_HEADER_SIZE + topicLength) {
+    throw new Error('Terminal output frame topic is truncated');
+  }
+
+  const topic = new TextDecoder().decode(
+    bytes.subarray(TERMINAL_BINARY_HEADER_SIZE, TERMINAL_BINARY_HEADER_SIZE + topicLength),
+  );
+  const payload = bytes.subarray(TERMINAL_BINARY_HEADER_SIZE + topicLength);
+  if (payload.byteLength !== payloadSize) {
+    throw new Error('Terminal output frame payload length mismatch');
+  }
+
+  return { topic, seq, streamId, payload };
+};
+
 // Command: client → server, expects Result
 export const CommandMessage = z.object({
   kind: z.literal('command'),

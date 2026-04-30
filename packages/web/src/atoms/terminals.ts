@@ -12,12 +12,10 @@ import { atomFamily } from 'jotai-family';
  * Output buffer structure
  * - chunks: terminal output bytes
  * - lastSeq: last received sequence number
- * - lastWritten: tracks how many chunks have been written to xterm (to prevent atom bloat)
  */
 export interface OutputBuffer {
   chunks: Uint8Array[];
   lastSeq: number;
-  lastWritten: number;
 }
 
 /**
@@ -31,7 +29,6 @@ export const terminalOutputAtomFamily = atomFamily((_terminalId: string) =>
   atom<OutputBuffer>({
     chunks: [],
     lastSeq: 0,
-    lastWritten: 0,
   })
 );
 

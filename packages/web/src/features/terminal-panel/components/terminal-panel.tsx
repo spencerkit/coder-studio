@@ -154,7 +154,6 @@ export function TerminalPanel() {
           store.set(outputAtom, {
             chunks: [...prev.chunks, outputData.bytes],
             lastSeq: _seq,
-            lastWritten: prev.lastWritten,
           });
         }
       }

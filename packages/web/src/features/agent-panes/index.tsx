@@ -6,7 +6,7 @@
  */
 
 import type { FC } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { ArrowRight, Bot, Sparkles, FlipHorizontal, FlipVertical, X } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
@@ -54,29 +54,20 @@ export const AgentPanes: FC = () => {
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
   const store = useStore();
-  const initializedWorkspaceRef = useRef<string | null>(null);
-  const pendingSessionIdsRef = useRef<Set<string>>(new Set());
-  const [hasLoadedInitialSessions, setHasLoadedInitialSessions] = useState(false);
 
   useEffect(() => {
     if (!workspace) {
-      initializedWorkspaceRef.current = null;
-      pendingSessionIdsRef.current.clear();
-      setHasLoadedInitialSessions(false);
       return;
-    }
-
-    if (initializedWorkspaceRef.current !== workspace.id) {
-      setHasLoadedInitialSessions(false);
     }
 
     if (connectionStatus !== 'connected') {
       return;
     }
 
+    let cancelled = false;
     dispatch<Session[]>('session.list', { workspaceId: workspace.id })
       .then((result) => {
-        if (!result.ok || !result.data) {
+        if (cancelled || !result.ok || !result.data) {
           console.error('Failed to fetch sessions:', result.error?.message);
           return;
         }
@@ -109,8 +100,6 @@ export const AgentPanes: FC = () => {
         const sanitized = sanitizePaneLayout(currentLayout, liveSessionIds);
         if (sanitized !== currentLayout) {
           setPaneLayout(sanitized);
-          initializedWorkspaceRef.current = workspace.id;
-          setHasLoadedInitialSessions(true);
           return;
         }
 
@@ -128,21 +117,17 @@ export const AgentPanes: FC = () => {
             });
           }
         }
-
-        initializedWorkspaceRef.current = workspace.id;
-        setHasLoadedInitialSessions(true);
       })
       .catch((error) => {
-        console.error('Failed to fetch sessions:', error);
+        if (!cancelled) {
+          console.error('Failed to fetch sessions:', error);
+        }
       });
-  }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
 
-  // 如果已经有 sessions 数据，直接标记为已加载（避免切换页面时重新 loading）
-  useEffect(() => {
-    if (sessions.length > 0 && !hasLoadedInitialSessions) {
-      setHasLoadedInitialSessions(true);
-    }
-  }, [sessions.length, hasLoadedInitialSessions]);
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
 
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {
@@ -174,17 +159,6 @@ export const AgentPanes: FC = () => {
     };
   }, [setPaneLayout]);
 
-  // Allow child DraftLaunchers to register newly created sessions so
-  // the session.list refetch doesn't clobber splits.
-  const handleSessionCreated = (sessionId: string) => {
-    pendingSessionIdsRef.current.add(sessionId);
-    setTimeout(() => pendingSessionIdsRef.current.delete(sessionId), 8000);
-  };
-
-  const isLoadingInitialSessions = Boolean(
-    workspace && (!hasLoadedInitialSessions || connectionStatus !== 'connected') && sessions.length === 0
-  );
-
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
@@ -193,26 +167,15 @@ export const AgentPanes: FC = () => {
     );
   }
 
-  if (isLoadingInitialSessions) {
-    return (
-      <div className="agent-panes-loading" data-testid="agent-panes-loading-shell">
-        <div className="agent-panes-loading-card">
-          <div className="agent-panes-loading-kicker">SESSION SYNC</div>
-          <p className="agent-panes-loading-desc">正在恢复当前 workspace 的会话与面板布局...</p>
-        </div>
-      </div>
-    );
-  }
-
   // If no sessions, show draft launcher
   if (sessions.length === 0) {
-    return <DraftLauncher workspaceId={workspaceId} onSessionCreated={handleSessionCreated} />;
+    return <DraftLauncher workspaceId={workspaceId} />;
   }
 
   // Render pane tree recursively
   return (
     <div className="agent-panes">
-      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} onSessionCreated={handleSessionCreated} />
+      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} />
     </div>
   );
 };
@@ -220,19 +183,18 @@ export const AgentPanes: FC = () => {
 interface PaneNodeRendererProps {
   node: PaneNode;
   workspaceId: string;
-  onSessionCreated?: (sessionId: string) => void;
 }
 
 /**
  * Recursively render pane tree
  */
-const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId, onSessionCreated }) => {
+const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
   if (node.type === 'leaf') {
     // Render session card or draft launcher
     if (node.sessionId) {
       return <SessionCard sessionId={node.sessionId} />;
     } else {
-      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} onSessionCreated={onSessionCreated} />;
+      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} />;
     }
   }
 
@@ -240,7 +202,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId, onSess
   return (
     <PaneLayout direction={node.direction || 'horizontal'} ratio={node.ratio || 0.5}>
       {node.children?.map((child) => (
-        <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} onSessionCreated={onSessionCreated} />
+        <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} />
       ))}
     </PaneLayout>
   );
@@ -249,7 +211,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId, onSess
 interface DraftLauncherProps {
   workspaceId: string;
   paneId?: string;
-  onSessionCreated?: (sessionId: string) => void;
 }
 
 /**
@@ -259,40 +220,47 @@ interface DraftLauncherProps {
  *   - Provider selection buttons (Claude, Codex)
  *   - Click to start new session
  */
-const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId, onSessionCreated }) => {
+const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
+  const [creatingProvider, setCreatingProvider] = useState<'claude' | 'codex' | null>(null);
 
   const handleSelectProvider = async (provider: 'claude' | 'codex') => {
-    const result = await dispatch<Session>('session.create', {
-      workspaceId,
-      providerId: provider,
-    });
+    if (creatingProvider) {
+      return;
+    }
 
-    if (result.ok && result.data) {
-      const session = result.data;
-      setSessions((prev) => ({
-        ...prev,
-        [session.id]: session,
-      }));
+    setCreatingProvider(provider);
+    try {
+      const result = await dispatch<Session>('session.create', {
+        workspaceId,
+        providerId: provider,
+      });
 
-      // Register so session.list refetch doesn't clobber split layout
-      onSessionCreated?.(session.id);
+      if (result.ok && result.data) {
+        const session = result.data;
+        setSessions((prev) => ({
+          ...prev,
+          [session.id]: session,
+        }));
 
-      // Update pane layout to show the new session
-      setPaneLayout((current) =>
-        paneId
-          ? assignSessionToPane(current, paneId, session.id)
-          : {
-              id: 'root',
-              type: 'leaf',
-              sessionId: session.id,
-            }
-      );
-    } else {
-      console.error('Failed to create session:', result.error?.message);
+        // Update pane layout to show the new session
+        setPaneLayout((current) =>
+          paneId
+            ? assignSessionToPane(current, paneId, session.id)
+            : {
+                id: 'root',
+                type: 'leaf',
+                sessionId: session.id,
+              }
+        );
+      } else {
+        console.error('Failed to create session:', result.error?.message);
+      }
+    } finally {
+      setCreatingProvider(null);
     }
   };
 
@@ -377,6 +345,7 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId, onSessionC
           <div className="agent-draft-providers">
             <button
               className="btn btn-secondary agent-provider-card agent-provider-card-claude"
+              disabled={creatingProvider !== null}
               onClick={() => handleSelectProvider('claude')}
             >
               <span className="agent-provider-card-icon">
@@ -395,6 +364,7 @@ const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId, onSessionC
             </button>
             <button
               className="btn btn-secondary agent-provider-card agent-provider-card-codex"
+              disabled={creatingProvider !== null}
               onClick={() => handleSelectProvider('codex')}
             >
               <span className="agent-provider-card-icon">

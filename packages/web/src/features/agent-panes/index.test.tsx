@@ -218,6 +218,7 @@ describe('AgentPanes', () => {
   it('waits for the websocket connection before requesting session.list', async () => {
     const sendCommand = vi.fn().mockResolvedValue([]);
     const { store } = createAgentPaneStore(undefined, sendCommand, 'connecting');
+    store.set(sessionsAtom, {});
 
     render(
       <Provider store={store}>
@@ -227,11 +228,52 @@ describe('AgentPanes', () => {
 
     await act(async () => {});
     expect(sendCommand).not.toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
-    expect(screen.queryByText('SESSION LAUNCHER')).not.toBeInTheDocument();
 
     act(() => {
       store.set(connectionStatusAtom, 'connected');
     });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+  });
+
+  it('re-requests session.list after remount when the pane tree mounts again', async () => {
+    const sendCommand = vi.fn().mockResolvedValue([
+      {
+        id: 'sess_1',
+        workspaceId: 'ws-1',
+        terminalId: 'term-1',
+        providerId: 'claude',
+        state: 'running',
+        capability: 'full',
+        startedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now() - 1_000,
+      },
+    ]);
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+
+    const { unmount } = render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+
+    unmount();
+    sendCommand.mockClear();
+    mockSessionCard.mockClear();
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
@@ -390,6 +432,65 @@ describe('AgentPanes', () => {
       id: 'root',
       type: 'leaf',
       sessionId: 'sess_1',
+    });
+  });
+
+  it('disables provider buttons while session.create is in flight to prevent re-entry', async () => {
+    let resolveCreate: ((value: unknown) => void) | undefined;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'session.create') {
+        return new Promise((resolve) => {
+          resolveCreate = resolve;
+        });
+      }
+      if (op === 'session.list') {
+        return [];
+      }
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    const claudeButton = await screen.findByRole('button', { name: /Claude/i });
+    const codexButton = screen.getByRole('button', { name: /Codex/i });
+
+    fireEvent.click(claudeButton);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.create', {
+        workspaceId: 'ws-1',
+        providerId: 'claude',
+      });
+    });
+
+    expect(claudeButton).toBeDisabled();
+    expect(codexButton).toBeDisabled();
+
+    fireEvent.click(claudeButton);
+    fireEvent.click(codexButton);
+
+    expect(sendCommand).toHaveBeenCalledTimes(2);
+
+    resolveCreate?.({
+      id: 'sess_new',
+      workspaceId: 'ws-1',
+      terminalId: 'term-new',
+      providerId: 'claude',
+      state: 'starting',
+      capability: 'full',
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+    });
+
+    await waitFor(() => {
+      expect(store.get(sessionsAtom)).toHaveProperty('sess_new');
     });
   });
 });

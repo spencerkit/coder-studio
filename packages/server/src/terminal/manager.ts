@@ -16,6 +16,45 @@ import { RingBuffer } from './ring-buffer'
 // 64 MiB per terminal — freed when the terminal exits
 const RING_BUFFER_SIZE = 64 * 1024 * 1024
 
+function isTerminalTraceEnabled(): boolean {
+  return process.env.CODER_STUDIO_TERMINAL_TRACE === '1'
+}
+
+function countOccurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1
+}
+
+function summarizeTerminalData(data: string | Buffer) {
+  const text = typeof data === 'string' ? data : data.toString('utf8')
+  return {
+    length: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength,
+    syncStart: countOccurrences(text, '\x1b[?2026h'),
+    syncEnd: countOccurrences(text, '\x1b[?2026l'),
+    clearToEnd: countOccurrences(text, '\x1b[J'),
+    clearScreen: countOccurrences(text, '\x1b[2J'),
+    eraseLine: countOccurrences(text, '\x1b[K'),
+    cursorHome: countOccurrences(text, '\x1b[1;1H'),
+    dsr: countOccurrences(text, '\x1b[6n'),
+    da: countOccurrences(text, '\x1b[c'),
+    reverseIndex: countOccurrences(text, '\x1bM'),
+    cursorMoves: text.match(/\x1b\[[0-9;]*[Hf]/g)?.length ?? 0,
+    scrollRegions: text.match(/\x1b\[[0-9;]*r/g)?.slice(0, 6) ?? [],
+  }
+}
+
+function traceTerminal(terminalId: TerminalId, event: string, details: Record<string, unknown> = {}) {
+  if (!isTerminalTraceEnabled()) {
+    return
+  }
+
+  console.debug('[terminal-trace]', {
+    at: Date.now(),
+    terminalId,
+    event,
+    ...details,
+  })
+}
+
 /**
  * Generate unique terminal ID
  */
@@ -108,6 +147,11 @@ export class TerminalManager {
     pty.onData((data: string) => {
       const buffer = Buffer.from(data, 'utf-8')
       const { seq } = ringBuffer.append(buffer)
+      traceTerminal(id, 'pty.output', {
+        workspaceId: spec.workspaceId,
+        seq,
+        summary: summarizeTerminalData(buffer),
+      })
 
       // Emit terminal.output DomainEvent
       const event: DomainEvent = {
@@ -156,6 +200,9 @@ export class TerminalManager {
       throw new Error('Terminal is not alive')
     }
 
+    traceTerminal(terminalId, 'pty.write', {
+      summary: summarizeTerminalData(bytes),
+    })
     terminal.pty.write(bytes)
   }
 
@@ -169,6 +216,7 @@ export class TerminalManager {
       return
     }
 
+    traceTerminal(terminalId, 'pty.resize', { cols, rows })
     terminal.pty.resize(cols, rows)
   }
 
@@ -195,7 +243,15 @@ export class TerminalManager {
   replay(terminalId: TerminalId, lastSeq: number): ReplayResult {
     const terminal = this.terminals.get(terminalId)
     if (terminal) {
-      return terminal.ringBuffer.replayFrom(lastSeq)
+      const result = terminal.ringBuffer.replayFrom(lastSeq)
+      traceTerminal(terminalId, 'replay', {
+        lastSeq,
+        status: result.status,
+        seq: result.status === 'ok' ? result.seq : undefined,
+        size: result.status === 'ok' ? result.data.byteLength : undefined,
+        summary: result.status === 'ok' ? summarizeTerminalData(result.data) : undefined,
+      })
+      return result
     }
 
     return { status: 'unknown' }
