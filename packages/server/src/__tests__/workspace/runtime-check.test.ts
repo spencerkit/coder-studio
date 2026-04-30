@@ -2,18 +2,30 @@ import { describe, expect, it, vi } from 'vitest';
 import { runtimeCheck, RuntimeCheckFailedError } from '../../workspace/runtime-check.js';
 
 describe('runtimeCheck', () => {
-  it('reports missing wsl through the shared command helper', async () => {
-    const execFile = vi.fn(async (file: string) => ({
-      stdout: file === 'git' ? 'git version 2.48.0\n' : 'v22.15.0\n',
-      stderr: '',
-    }));
+  it('reports missing wsl through the shared command helper fallback', async () => {
+    const execFile = vi.fn(async (file: string, args: string[]) => {
+      if (file === 'git') {
+        return { stdout: 'git version 2.48.0\n', stderr: '' };
+      }
+
+      if (file === 'node') {
+        return { stdout: 'v22.15.0\n', stderr: '' };
+      }
+
+      if (file === 'where' && args[0] === 'wsl') {
+        throw new Error('wsl unavailable');
+      }
+
+      return { stdout: '', stderr: '' };
+    });
 
     const result = await runtimeCheck('/tmp', 'wsl', {
-      commandExists: async (command) => command !== 'wsl',
+      platform: 'win32',
       execFile,
     });
 
     expect(result).toEqual({ ok: false, missing: ['wsl'] });
+    expect(execFile).toHaveBeenCalledWith('where', ['wsl']);
   });
 
   it('reports missing git and node from the version checks deterministically', async () => {

@@ -17,19 +17,20 @@ function canAutoInstall(
   platform: NodeJS.Platform,
   missingCommands: string[],
   missingPrerequisites: string[],
+  availableCommands: Set<string>,
 ): boolean {
   const strategies = provider.install.strategies[platform] ?? [];
   const remainingCommands = new Set(missingCommands);
   const remainingPrerequisites = new Set(missingPrerequisites);
+  const reachableCommands = new Set(availableCommands);
   let progressed = true;
 
   while (progressed) {
     progressed = false;
 
     for (const strategy of strategies) {
-      const requiresMet = strategy.requiresCommands.every(
-        (command) =>
-          !remainingPrerequisites.has(command) && !remainingCommands.has(command),
+      const requiresMet = strategy.requiresCommands.every((command) =>
+        reachableCommands.has(command),
       );
 
       if (
@@ -38,6 +39,7 @@ function canAutoInstall(
         requiresMet
       ) {
         remainingPrerequisites.delete(strategy.targetCommand);
+        reachableCommands.add(strategy.targetCommand);
         progressed = true;
         continue;
       }
@@ -48,6 +50,7 @@ function canAutoInstall(
         requiresMet
       ) {
         remainingCommands.delete(strategy.targetCommand);
+        reachableCommands.add(strategy.targetCommand);
         progressed = true;
       }
     }
@@ -67,15 +70,20 @@ export async function buildProviderRuntimeStatus(
 
   for (const provider of providers) {
     const missingCommands: string[] = [];
+    const availableCommands = new Set<string>();
     for (const command of provider.requiredCommands) {
-      if (!(await commandExists(command))) {
+      if (await commandExists(command)) {
+        availableCommands.add(command);
+      } else {
         missingCommands.push(command);
       }
     }
 
     const missingPrerequisites: string[] = [];
     for (const command of provider.install.prerequisites) {
-      if (!(await commandExists(command))) {
+      if (await commandExists(command)) {
+        availableCommands.add(command);
+      } else {
         missingPrerequisites.push(command);
       }
     }
@@ -85,6 +93,7 @@ export async function buildProviderRuntimeStatus(
       platform,
       missingCommands,
       missingPrerequisites,
+      availableCommands,
     );
 
     result.providers[provider.id] = {

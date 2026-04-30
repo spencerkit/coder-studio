@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import {
   checkCommandAvailable,
   type CommandAvailabilityCheck,
+  type CommandCheckDeps,
 } from '../provider-runtime/command-check.js';
 
 const execFileAsync = promisify(execFile);
@@ -14,9 +15,8 @@ export interface RuntimeCheckResult {
 
 export type TargetRuntime = 'native' | 'wsl';
 
-export interface RuntimeCheckDeps {
+export interface RuntimeCheckDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
-  execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 }
 
 async function checkGit(
@@ -61,7 +61,7 @@ export async function runtimeCheck(
 ): Promise<RuntimeCheckResult> {
   const missing: string[] = [];
   const commandExists =
-    deps.commandExists ?? ((command: string) => checkCommandAvailable(command));
+    deps.commandExists ?? ((command: string) => checkCommandAvailable(command, deps));
 
   const gitAvailable = await checkGit(deps.execFile);
   if (!gitAvailable) {

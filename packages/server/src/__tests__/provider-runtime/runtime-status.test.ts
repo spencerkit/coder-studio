@@ -14,7 +14,24 @@ it('separates missing provider commands from missing prerequisites', async () =>
     available: false,
     missingCommands: ['codex'],
     missingPrerequisites: ['npm'],
-    autoInstallSupported: true,
-    installReadiness: 'missing_prerequisite',
+    autoInstallSupported: false,
+    installReadiness: 'unsupported_platform',
+  });
+});
+
+it('reports unsupported auto-install when the installer command is missing on macOS', async () => {
+  const commandExists = vi.fn(async () => false);
+
+  const result = await buildProviderRuntimeStatus(providerRegistry, {
+    platform: 'darwin',
+    commandExists,
+  });
+
+  expect(result.providers.claude).toMatchObject({
+    available: false,
+    missingCommands: ['claude'],
+    missingPrerequisites: ['npm'],
+    autoInstallSupported: false,
+    installReadiness: 'unsupported_platform',
   });
 });
