@@ -57,6 +57,30 @@
     "status": "状态",
     "progress": "进度"
   },
+  "provider": {
+    "install": {
+      "cta": {
+        "start": "启动会话",
+        "install_and_start": "安装并启动",
+        "installing": "安装中...",
+        "manual": "查看安装步骤"
+      },
+      "status": {
+        "installing": "正在安装 Provider CLI...",
+        "failed": "自动安装失败"
+      },
+      "open_docs": "打开官方文档",
+      "nodejs": {
+        "manual": "请先从 Node.js 官方下载页安装 Node.js。"
+      },
+      "claude": {
+        "manual": "然后执行 npm install -g @anthropic-ai/claude-code。"
+      },
+      "codex": {
+        "manual": "然后执行 npm install -g @openai/codex。"
+      }
+    }
+  },
   "status": {
     "starting": "启动中",
     "running": "运行中",

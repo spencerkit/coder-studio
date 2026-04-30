@@ -10,6 +10,7 @@ import './terminal.js';
 import './file.js';
 import './git.js';
 import './settings.js';
+import './provider.js';
 import './supervisor.js';
 import './worktree.js';
 import './fencing.js';

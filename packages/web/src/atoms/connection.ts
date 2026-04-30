@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import type { WsClient } from '../ws/client';
+import { CommandResultError, type WsClient } from '../ws/client';
 
 /**
  * Connection status enum
@@ -112,6 +112,17 @@ export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
       const data = await client.sendCommand<T>(op, args);
       return { ok: true, data };
     } catch (error) {
+      if (error instanceof CommandResultError) {
+        return {
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          },
+        };
+      }
+
       const message = error instanceof Error ? error.message : 'Unknown error';
       return {
         ok: false,

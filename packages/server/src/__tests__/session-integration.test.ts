@@ -23,11 +23,13 @@ import { providerRegistry } from '@coder-studio/providers';
 import { tmpdir } from 'node:os';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ProviderInstallManager } from '../provider-runtime/install-manager.js';
 
 // Import command handlers to register them
 import '../commands/workspace.js';
 import '../commands/session.js';
 import '../commands/terminal.js';
+import '../commands/provider.js';
 
 /**
  * Mock PtyHost for testing without spawning real processes
@@ -153,6 +155,11 @@ describe('Session Integration', () => {
       eventBus,
       broadcaster: mockBroadcaster,
       providerRegistry,
+      fencingMgr: {} as any,
+      supervisorMgr: {} as any,
+      providerRuntimeDeps: {
+        commandExists: async () => true,
+      },
     };
   });
 
@@ -163,6 +170,56 @@ describe('Session Integration', () => {
     } catch {
       // Ignore cleanup errors
     }
+  });
+
+  it('exposes provider.runtimeStatus and provider.install.get via dispatch', async () => {
+    ctx.providerRuntimeDeps = {
+      commandExists: async (command: string) => command === 'winget',
+    };
+    ctx.providerInstallMgr = new ProviderInstallManager(providerRegistry, {
+      platform: 'win32',
+      commandExists: async (command: string) => command === 'winget',
+      execFile: async () => ({ stdout: '', stderr: '' }),
+    });
+
+    const status = await dispatch(
+      {
+        kind: 'command',
+        id: 'provider-status',
+        op: 'provider.runtimeStatus',
+        args: {},
+      },
+      ctx
+    );
+
+    expect(status.ok).toBe(true);
+    expect(status.data).toHaveProperty('providers');
+
+    const start = await dispatch(
+      {
+        kind: 'command',
+        id: 'install-start',
+        op: 'provider.install.start',
+        args: { providerId: 'codex' },
+      },
+      ctx
+    );
+
+    expect(start.ok).toBe(true);
+    expect(start.data?.providerId).toBe('codex');
+
+    const get = await dispatch(
+      {
+        kind: 'command',
+        id: 'install-get',
+        op: 'provider.install.get',
+        args: { jobId: (start.data as { jobId: string }).jobId },
+      },
+      ctx
+    );
+
+    expect(get.ok).toBe(true);
+    expect(get.data?.jobId).toBe((start.data as { jobId: string }).jobId);
   });
 
   describe('Complete workflow: workspace.open -> session.create', () => {

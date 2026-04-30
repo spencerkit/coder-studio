@@ -19,6 +19,7 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@coder-studio/core": "workspace:*",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5",

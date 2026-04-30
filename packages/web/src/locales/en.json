@@ -57,6 +57,30 @@
     "status": "Status",
     "progress": "Progress"
   },
+  "provider": {
+    "install": {
+      "cta": {
+        "start": "Start Session",
+        "install_and_start": "Install & Start",
+        "installing": "Installing...",
+        "manual": "View Install Steps"
+      },
+      "status": {
+        "installing": "Installing provider CLI...",
+        "failed": "Automatic install failed"
+      },
+      "open_docs": "Open official docs",
+      "nodejs": {
+        "manual": "Install Node.js from the official download page."
+      },
+      "claude": {
+        "manual": "Then run npm install -g @anthropic-ai/claude-code."
+      },
+      "codex": {
+        "manual": "Then run npm install -g @openai/codex."
+      }
+    }
+  },
   "status": {
     "starting": "Starting",
     "running": "Running",

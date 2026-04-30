@@ -12,6 +12,57 @@ function directoryRow(page: Page, name: string): Locator {
   }).first();
 }
 
+async function waitForWorkspaceEntry(page: Page): Promise<void> {
+  await page.goto('/workspace');
+  await page.waitForFunction(
+    () => {
+      const loading = document.querySelector('.app-loading-shell, [data-testid="workspace-resolving-shell"]');
+      const welcome = document.querySelector('.welcome-btn');
+      const workspace = document.querySelector(
+        '.workspace-page, .agent-draft-launcher, .session-card.agent-pane[data-session-id]',
+      );
+
+      return !loading && Boolean(welcome || workspace);
+    },
+    { timeout: 20000 },
+  );
+}
+
+async function ensureWorkspaceLaunchModal(page: Page): Promise<void> {
+  await waitForWorkspaceEntry(page);
+
+  if (
+    (await page.locator('.agent-draft-launcher, .session-card.agent-pane[data-session-id]').first()
+      .isVisible()
+      .catch(() => false))
+  ) {
+    return;
+  }
+
+  const welcomeButton = page.getByRole('button', { name: 'Open Workspace' });
+  if (await welcomeButton.isVisible().catch(() => false)) {
+    await welcomeButton.click();
+  } else {
+    await page.getByRole('button', { name: 'New workspace' }).click();
+  }
+
+  await expect(page.locator('.launch-modal')).toBeVisible({ timeout: 10000 });
+}
+
+async function openRepoDirectory(page: Page): Promise<void> {
+  const homeChip = page.locator('.fp-chip').filter({ hasText: '/home/spencer' }).first();
+  if (await homeChip.isVisible().catch(() => false)) {
+    await homeChip.click();
+    await expect(page.locator('.fp-dir-list .directory-loading')).toHaveCount(0);
+  }
+
+  await enterDirectory(page, 'workspace');
+
+  const repoRow = directoryRow(page, 'coder-studio');
+  await expect(repoRow).toBeVisible({ timeout: 10000 });
+  await repoRow.click();
+}
+
 export async function enterDirectory(page: Page, name: string): Promise<void> {
   const row = directoryRow(page, name);
   await expect(row).toBeVisible({ timeout: 10000 });
@@ -26,16 +77,18 @@ export async function enterDirectory(page: Page, name: string): Promise<void> {
 }
 
 export async function openWorkspace(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Open Workspace' }).click();
-  await expect(page.locator('.launch-modal')).toBeVisible({ timeout: 10000 });
+  await ensureWorkspaceLaunchModal(page);
+  if (
+    (await page.locator('.agent-provider-card-claude, .session-card.agent-pane[data-session-id]').first()
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await expect(page).toHaveURL(/\/workspace$/, { timeout: 15000 });
+    return;
+  }
+
   await expect(page.locator('.fp-dir-list .fp-dir').first()).toBeVisible({ timeout: 10000 });
-
-  await enterDirectory(page, 'workspace');
-
-  const repoRow = directoryRow(page, 'coder-studio');
-  await expect(repoRow).toBeVisible({ timeout: 10000 });
-  await repoRow.click();
+  await openRepoDirectory(page);
 
   const startButton = page.getByRole('button', { name: 'Start Workspace' });
   await expect(startButton).toBeEnabled();

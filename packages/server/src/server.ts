@@ -33,6 +33,10 @@ import type { ProviderDefinition } from '@coder-studio/core';
 import { FencingManager } from './ws/fencing.js';
 import { SupervisorManager } from './supervisor/manager.js';
 import { NodePtyHost } from './terminal/pty-host.js';
+import { execFile as nodeExecFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { ProviderInstallManager } from './provider-runtime/install-manager.js';
+import type { RuntimeStatusDeps } from './provider-runtime/runtime-status.js';
 
 // Import command handlers to register them
 import './commands/index.js';
@@ -103,6 +107,7 @@ export function writeRuntimeConfigWithWarning(
 export async function createServer(
   configOverrides?: Partial<ServerConfig>
 ): Promise<Server> {
+  const execFileAsync = promisify(nodeExecFile);
   const config = parseServerConfig(configOverrides);
 
   // Ensure data directory exists (production only)
@@ -238,6 +243,12 @@ export async function createServer(
   await sessionMgr.hydrate();
   await supervisorMgr.hydrate();
 
+  const providerRuntimeDeps: RuntimeStatusDeps = {};
+  const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
+    ...providerRuntimeDeps,
+    execFile: (file, args) => execFileAsync(file, args),
+  });
+
   // Command context with all managers
   const commandContext: CommandContext = {
     workspaceMgr,
@@ -250,6 +261,8 @@ export async function createServer(
     providerRegistry,
     fencingMgr,
     supervisorMgr,
+    providerRuntimeDeps,
+    providerInstallMgr,
   };
 
   // Update wsHub with command context

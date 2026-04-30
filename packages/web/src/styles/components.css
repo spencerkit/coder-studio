@@ -4001,6 +4001,11 @@ textarea.input {
   white-space: normal;
 }
 
+.agent-provider-card[disabled] {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .agent-provider-card-claude {
   background: rgba(241, 184, 106, 0.08);
   border-color: rgba(241, 184, 106, 0.18);
@@ -4058,6 +4063,41 @@ textarea.input {
 .agent-provider-card-desc {
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+.agent-provider-card-cta {
+  margin-top: var(--sp-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.agent-provider-card-status {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-tertiary);
+}
+
+.agent-provider-card-guide {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.agent-provider-card-guide a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.agent-provider-card-guide a:hover {
+  color: color-mix(in srgb, var(--accent-blue), white 20%);
+  text-decoration: underline;
 }
 
 .agent-provider-card-arrow {

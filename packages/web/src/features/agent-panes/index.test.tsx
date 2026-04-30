@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { AgentPanes } from './index';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { activeWorkspaceIdAtom, paneLayoutAtomFamily } from '../../atoms/ui';
+import { activeWorkspaceIdAtom, localeAtom, paneLayoutAtomFamily } from '../../atoms/ui';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
 const mockSessionCard = vi.fn(({ sessionId }: { sessionId: string }) => (
@@ -99,6 +99,10 @@ function createAgentPaneStore(
 describe('AgentPanes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('splits the active session pane when panel-split is dispatched', async () => {
@@ -476,7 +480,7 @@ describe('AgentPanes', () => {
     fireEvent.click(claudeButton);
     fireEvent.click(codexButton);
 
-    expect(sendCommand).toHaveBeenCalledTimes(2);
+    expect(sendCommand.mock.calls.filter(([op]) => op === 'session.create')).toHaveLength(1);
 
     resolveCreate?.({
       id: 'sess_new',
@@ -492,5 +496,253 @@ describe('AgentPanes', () => {
     await waitFor(() => {
       expect(store.get(sessionsAtom)).toHaveProperty('sess_new');
     });
+  });
+
+  it('shows install and start CTA when the provider is missing but auto-install is supported', async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') return [];
+      if (op === 'provider.runtimeStatus') {
+        return {
+          providers: {
+            claude: {
+              providerId: 'claude',
+              available: false,
+              missingCommands: ['claude'],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: 'ready',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              docUrls: {
+                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+            codex: {
+              providerId: 'codex',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: 'ready',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              docUrls: {
+                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+          },
+        };
+      }
+      return undefined;
+    });
+
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+    store.set(localeAtom, 'en');
+    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    expect(await screen.findByText('Install & Start')).toBeInTheDocument();
+  });
+
+  it('runs install polling and creates the session after install succeeds', async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') return [];
+      if (op === 'provider.runtimeStatus') {
+        return {
+          providers: {
+            codex: {
+              providerId: 'codex',
+              available: false,
+              missingCommands: ['codex'],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: 'ready',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              docUrls: {
+                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+            claude: {
+              providerId: 'claude',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: 'ready',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              docUrls: {
+                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+          },
+        };
+      }
+      if (op === 'provider.install.start') {
+        return {
+          jobId: 'job-1',
+          providerId: 'codex',
+          strategyIds: ['npm-install-codex'],
+          status: 'running',
+          currentStepId: 'install-provider-codex',
+          steps: [],
+        };
+      }
+      if (op === 'provider.install.get') {
+        return {
+          jobId: 'job-1',
+          providerId: 'codex',
+          strategyIds: ['npm-install-codex'],
+          status: 'succeeded',
+          steps: [],
+        };
+      }
+      if (op === 'session.create') {
+        return {
+          id: 'sess_new',
+          workspaceId: 'ws-1',
+          terminalId: 'term-new',
+          providerId: 'codex',
+          state: 'starting',
+          capability: 'full',
+          startedAt: Date.now(),
+          lastActiveAt: Date.now(),
+        };
+      }
+      return undefined;
+    });
+
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+    store.set(localeAtom, 'en');
+    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    const installCta = await screen.findByText('Install & Start');
+    vi.useFakeTimers();
+
+    fireEvent.click(installCta.closest('button')!);
+
+    expect(sendCommand).toHaveBeenCalledWith('provider.install.start', { providerId: 'codex' });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith('provider.install.get', { jobId: 'job-1' });
+    expect(sendCommand).toHaveBeenCalledWith('session.create', {
+      workspaceId: 'ws-1',
+      providerId: 'codex',
+    });
+  });
+
+  it('shows install failure details and docs link when automatic install fails', async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') return [];
+      if (op === 'provider.runtimeStatus') {
+        return {
+          providers: {
+            claude: {
+              providerId: 'claude',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: 'ready',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              docUrls: {
+                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+            codex: {
+              providerId: 'codex',
+              available: false,
+              missingCommands: ['codex'],
+              missingPrerequisites: ['npm'],
+              autoInstallSupported: true,
+              installReadiness: 'missing_prerequisite',
+              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              docUrls: {
+                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+                prerequisites: { npm: 'https://nodejs.org/en/download' },
+              },
+            },
+          },
+        };
+      }
+      if (op === 'provider.install.start') {
+        return {
+          jobId: 'job-failed',
+          providerId: 'codex',
+          strategyIds: ['winget-nodejs-lts'],
+          status: 'running',
+          currentStepId: 'install-prerequisite-npm',
+          steps: [],
+        };
+      }
+      if (op === 'provider.install.get') {
+        return {
+          jobId: 'job-failed',
+          providerId: 'codex',
+          strategyIds: ['winget-nodejs-lts'],
+          status: 'failed',
+          steps: [],
+          failure: {
+            code: 'missing_prerequisite',
+            providerId: 'codex',
+            failedStepId: 'install-prerequisite-npm',
+            message: 'Missing prerequisite commands: npm',
+            command: '',
+            args: [],
+            missingCommands: ['npm'],
+            manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+            docUrls: {
+              provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+              prerequisites: { npm: 'https://nodejs.org/en/download' },
+            },
+          },
+        };
+      }
+      return undefined;
+    });
+
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+    store.set(localeAtom, 'en');
+    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    const installCta = await screen.findByText('Install & Start');
+    vi.useFakeTimers();
+
+    fireEvent.click(installCta.closest('button')!);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(screen.getByText('Missing prerequisite commands: npm')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open official docs' })).toHaveAttribute(
+      'href',
+      'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+    );
   });
 });

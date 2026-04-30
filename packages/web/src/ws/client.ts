@@ -30,6 +30,18 @@ export type ConnectionStatus =
 export type EventListener = (topic: string, payload: unknown, seq: number) => void;
 export type StatusListener = (status: ConnectionStatus) => void;
 
+export class CommandResultError extends Error {
+  code: string;
+  details?: unknown;
+
+  constructor(error: { code: string; message: string; details?: unknown }) {
+    super(error.message);
+    this.name = 'CommandResultError';
+    this.code = error.code;
+    this.details = error.details;
+  }
+}
+
 interface PendingCommand {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -359,7 +371,13 @@ export class WsClient {
         if (msg.ok) {
           pending.resolve(msg.data);
         } else {
-          pending.reject(new Error(msg.error?.message || 'Command failed'));
+          pending.reject(
+            new CommandResultError({
+              code: msg.error?.code ?? 'command_failed',
+              message: msg.error?.message ?? 'Command failed',
+              details: msg.error?.details,
+            }),
+          );
         }
       }
     } else if (msg.kind === 'event') {

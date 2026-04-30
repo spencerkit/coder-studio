@@ -15,6 +15,8 @@ import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from './hub.js';
 import type { FencingManager } from './fencing.js';
 import type { SupervisorManager } from '../supervisor/manager.js';
+import type { RuntimeStatusDeps } from '../provider-runtime/runtime-status.js';
+import type { ProviderInstallManager } from '../provider-runtime/install-manager.js';
 
 /**
  * Command context - injected dependencies for handlers
@@ -30,6 +32,8 @@ export interface CommandContext {
   providerRegistry: ProviderDefinition[];
   fencingMgr: FencingManager;
   supervisorMgr: SupervisorManager;
+  providerRuntimeDeps?: RuntimeStatusDeps;
+  providerInstallMgr?: ProviderInstallManager;
 }
 
 /**

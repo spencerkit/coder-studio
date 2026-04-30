@@ -129,8 +129,16 @@ test.describe('agent conversation workflow', () => {
   });
 
   test('AC-07 websocket connection established', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('.welcome-container')).toBeVisible();
+    await page.goto('/workspace');
+    await page.waitForFunction(
+      () => {
+        const loading = document.querySelector('.app-loading-shell, [data-testid="workspace-resolving-shell"]');
+        const welcome = document.querySelector('.welcome-container');
+        const workspace = document.querySelector('.workspace-page, .agent-draft-launcher, .session-card.agent-pane');
+        return !loading && Boolean(welcome || workspace);
+      },
+      { timeout: 15000 },
+    );
     await page.waitForTimeout(1000);
 
     const connectionError = page.locator('.connection-error, .offline-indicator');

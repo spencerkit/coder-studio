@@ -472,6 +472,44 @@ describe('web WsClient', () => {
     expect(resolveWsUrl()).toBe('ws://127.0.0.1:43173/ws');
   });
 
+  it('preserves command error code and details when the server rejects a command', async () => {
+    const client = new WsClient('ws://127.0.0.1:4173/ws');
+    const connectPromise = client.connect();
+    const socket = MockWebSocket.instances[0]!;
+    socket.triggerOpen();
+    await connectPromise;
+
+    const promise = client.sendCommand('provider.install.start', { providerId: 'codex' });
+    const command = socket.sent
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => JSON.parse(entry))
+      .find((entry) => entry.kind === 'command' && entry.op === 'provider.install.start');
+
+    expect(command).toBeTruthy();
+
+    socket.triggerMessage({
+      kind: 'result',
+      id: command.id,
+      ok: false,
+      error: {
+        code: 'provider_cli_missing',
+        message: 'Provider CLI is not installed',
+        details: {
+          providerId: 'codex',
+          missingCommands: ['codex'],
+        },
+      },
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      code: 'provider_cli_missing',
+      details: {
+        providerId: 'codex',
+        missingCommands: ['codex'],
+      },
+    });
+  });
+
   it('appends the WebSocket path when the configured development URL is host-only', () => {
     vi.stubEnv('VITE_BACKEND_WS_URL', 'ws://127.0.0.1:43173');
 

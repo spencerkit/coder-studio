@@ -2,9 +2,17 @@
  * Session Commands
  */
 
+import type { ProviderDefinition } from '@coder-studio/core';
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
-import { getProviderById } from '@coder-studio/providers';
+import { buildProviderRuntimeStatus } from '../provider-runtime/runtime-status.js';
+
+function getProviderFromRegistry(
+  providerId: string,
+  registry: ProviderDefinition[],
+): ProviderDefinition | undefined {
+  return registry.find((provider) => provider.id === providerId);
+}
 
 // session.list
 registerCommand(
@@ -32,10 +40,23 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    // Get provider from registry
-    const provider = getProviderById(args.providerId);
+    const provider = getProviderFromRegistry(args.providerId, ctx.providerRegistry);
     if (!provider) {
       throw { code: 'unknown_provider', message: `Provider not found: ${args.providerId}` };
+    }
+
+    const runtimeStatus = await buildProviderRuntimeStatus([provider], ctx.providerRuntimeDeps);
+    const providerStatus = runtimeStatus.providers[provider.id];
+
+    if (!providerStatus?.available) {
+      throw {
+        code: 'provider_cli_missing',
+        message: 'Provider CLI is not installed',
+        details: {
+          providerId: provider.id,
+          missingCommands: providerStatus?.missingCommands ?? provider.requiredCommands,
+        },
+      };
     }
 
     return ctx.sessionMgr.create({
@@ -97,8 +118,7 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${session.workspaceId}` };
     }
 
-    // Get provider from registry
-    const provider = getProviderById(session.providerId);
+    const provider = getProviderFromRegistry(session.providerId, ctx.providerRegistry);
     if (!provider) {
       throw { code: 'unknown_provider', message: `Provider not found: ${session.providerId}` };
     }
