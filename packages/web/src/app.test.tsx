@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import App from './app';
-import { activeWorkspaceIdAtom } from './atoms';
-import { authEnabledAtom, connectionStatusAtom } from './atoms/connection';
+import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from './atoms/connection';
 import { authenticatedAtom } from './atoms/ui';
+import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from './atoms/workspaces';
 
 vi.mock('./features/welcome', () => ({
   WelcomePage: () => <div>WelcomePage</div>,
@@ -31,12 +31,23 @@ vi.mock('./features/config-drift-banner', () => ({
 }));
 
 vi.mock('./features/notifications', () => ({
+  useSessionNotifications: () => {},
+  appendSessionOutputAtom: null,
+  clearSessionOutputAtom: null,
   ToastContainer: () => null,
 }));
+
+const originalFetch = globalThis.fetch;
 
 describe('App auth gating', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
   it('shows a loading shell while auth status is still unknown', () => {
@@ -71,23 +82,6 @@ describe('App auth gating', () => {
     expect(screen.queryByText('WelcomePage')).not.toBeInTheDocument();
   });
 
-  it('keeps the root route on WelcomePage even when an active workspace exists', () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(authEnabledAtom, false);
-    store.set(authenticatedAtom, true);
-    store.set(activeWorkspaceIdAtom, 'ws-123');
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByText('WelcomePage')).toBeInTheDocument();
-    expect(screen.queryByText('WorkspacePage')).not.toBeInTheDocument();
-  });
-
   it('renders WorkspacePage on /workspace', () => {
     window.history.replaceState({}, '', '/workspace');
 
@@ -103,5 +97,108 @@ describe('App auth gating', () => {
     );
 
     expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
+  });
+
+  it('renders the explicit /auth route when auth is enabled and user is unauthenticated', () => {
+    window.history.replaceState({}, '', '/auth');
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    expect(screen.getByText('LoginPage')).toBeInTheDocument();
+  });
+
+  it('redirects / to /workspace after auth resolves and workspace.list is non-empty', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'workspace.list') {
+        return [{ id: 'ws-1', path: '/tmp/ws-1', targetRuntime: 'native' }];
+      }
+      return [];
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'idle');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/workspace');
+    });
+  });
+
+  it('keeps / on WelcomePage after auth resolves and workspace.list is empty', async () => {
+    const sendCommand = vi.fn().mockResolvedValue([]);
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'idle');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects /workspace back to / when auth resolves and workspace.list is empty', async () => {
+    window.history.replaceState({}, '', '/workspace');
+    const sendCommand = vi.fn().mockResolvedValue([]);
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'idle');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
   });
 });

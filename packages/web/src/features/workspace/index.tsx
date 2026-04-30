@@ -16,8 +16,6 @@ import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { FilePlus, FolderPlus, GitBranch, RefreshCw } from 'lucide-react';
 import {
   activeWorkspaceAtom,
-  workspaceOrderAtom,
-  workspacesAtom,
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
@@ -32,8 +30,8 @@ import { FileTreePanel } from './components/file-tree';
 import { GitPanel } from './components/git-panel';
 import { GitDiffViewer } from './components/git-diff-viewer';
 import { CodeEditorHost } from '../code-editor';
-import { dispatchCommandAtom, connectionStatusAtom } from '../../atoms/connection';
-import type { GitStatus, Workspace } from '@coder-studio/core';
+import { dispatchCommandAtom } from '../../atoms/connection';
+import type { GitStatus } from '@coder-studio/core';
 
 /** Minimum panel sizes in pixels */
 const TOPBAR_HEIGHT = 36;
@@ -65,11 +63,6 @@ export const WorkspacePage: FC = () => {
   const workspacesLoadState = useAtomValue(workspacesLoadStateAtom);
   const workspacesLoadError = useAtomValue(workspacesLoadErrorAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const connectionStatus = useAtomValue(connectionStatusAtom);
-  const setWorkspaces = useSetAtom(workspacesAtom);
-  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
-  const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
-  const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
 
   useEffect(() => {
@@ -103,47 +96,6 @@ export const WorkspacePage: FC = () => {
       cancelled = true;
     };
   }, [workspace, gitState, dispatch, store]);
-
-  const loadWorkspaces = useCallback(async () => {
-    setWorkspacesLoadState('loading');
-    setWorkspacesLoadError(null);
-
-    const result = await dispatch<Workspace[]>('workspace.list', {});
-
-    if (!result.ok) {
-      const message = result.error?.message ?? 'Failed to fetch workspace list';
-      console.error('Failed to fetch workspace list:', message);
-      setWorkspacesLoadState('error');
-      setWorkspacesLoadError(message);
-      return;
-    }
-
-    const nextWorkspaces = Array.isArray(result.data) ? result.data : [];
-    const wsMap: Record<string, Workspace> = {};
-
-    for (const nextWorkspace of nextWorkspaces) {
-      wsMap[nextWorkspace.id] = nextWorkspace;
-    }
-
-    setWorkspaces(wsMap);
-    setWorkspaceOrder(nextWorkspaces.map((nextWorkspace) => nextWorkspace.id));
-    setWorkspacesLoadState('ready');
-    setWorkspacesLoadError(null);
-  }, [
-    dispatch,
-    setWorkspaceOrder,
-    setWorkspaces,
-    setWorkspacesLoadError,
-    setWorkspacesLoadState,
-  ]);
-
-  useEffect(() => {
-    if (connectionStatus !== 'connected' || workspacesLoadState !== 'idle') {
-      return;
-    }
-
-    void loadWorkspaces();
-  }, [connectionStatus, loadWorkspaces, workspacesLoadState]);
 
   const leftMouseDown = useRef(false);
   const leftStartX = useRef(0);

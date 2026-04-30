@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import { authenticatedAtom } from '../../atoms/ui';
+import { authEnabledAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
+import { useAtomValue } from 'jotai';
 
 export function LoginPage() {
   const t = useTranslation();
   const [, setAuthenticated] = useAtom(authenticatedAtom);
+  const authEnabled = useAtomValue(authEnabledAtom);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(true);
+  const [checkingStatus, setCheckingStatus] = useState(authEnabled === null);
   const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [statusNotConfigured, setStatusNotConfigured] = useState(false);
 
   useEffect(() => {
+    if (authEnabled !== null) {
+      setCheckingStatus(false);
+      setStatusUnavailable(false);
+      setStatusNotConfigured(authEnabled === false);
+      if (authEnabled === false) {
+        setAuthenticated(true);
+      }
+      return;
+    }
+
     const checkStatus = async () => {
       try {
         const response = await fetch('/auth/status');
@@ -32,7 +45,7 @@ export function LoginPage() {
     };
 
     void checkStatus();
-  }, [setAuthenticated]);
+  }, [authEnabled, setAuthenticated]);
 
   const description = checkingStatus
     ? t('status.connecting')

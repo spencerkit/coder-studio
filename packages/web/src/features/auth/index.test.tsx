@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { LoginPage } from './index';
 import { authenticatedAtom } from '../../atoms/ui';
+import { authEnabledAtom } from '../../atoms/connection';
 
 const originalFetch = globalThis.fetch;
 
@@ -90,15 +90,11 @@ describe('LoginPage', () => {
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ authEnabled: true }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
         json: async () => ({ ok: true }),
       }) as unknown as typeof fetch;
 
-    const user = userEvent.setup();
     const store = createStore();
+    store.set(authEnabledAtom, true);
 
     render(
       <Provider store={store}>
@@ -107,12 +103,14 @@ describe('LoginPage', () => {
     );
 
     const input = await screen.findByPlaceholderText('密码');
-    await user.type(input, 'sekrit');
-    await user.click(screen.getByRole('button', { name: '确认' }));
+    fireEvent.change(input, { target: { value: 'sekrit' } });
+    expect(input).toHaveValue('sekrit');
+    expect(screen.getByRole('button', { name: '确认' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
 
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenNthCalledWith(
-        2,
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/auth/login',
         expect.objectContaining({
           method: 'POST',
@@ -127,27 +125,27 @@ describe('LoginPage', () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ authEnabled: true }),
-      })
-      .mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: 'Wrong password' }),
       }) as unknown as typeof fetch;
 
-    const user = userEvent.setup();
+    const store = createStore();
+    store.set(authEnabledAtom, true);
 
     render(
-      <Provider>
+      <Provider store={store}>
         <LoginPage />
       </Provider>
     );
 
     const input = await screen.findByPlaceholderText('密码');
-    await user.type(input, 'bad');
-    await user.click(screen.getByRole('button', { name: '确认' }));
+    fireEvent.change(input, { target: { value: 'bad' } });
+    expect(input).toHaveValue('bad');
+    expect(screen.getByRole('button', { name: '确认' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
 
     await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
       expect(screen.getByText('Wrong password')).toBeInTheDocument();
       expect(document.querySelector('.auth-status-panel.auth-status-panel-error')).toBeTruthy();
     });

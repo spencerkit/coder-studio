@@ -189,6 +189,35 @@ describe('createServer runtime handshake', () => {
     }
   });
 
+  it('serves the auth route entrypoint without auth cookie when auth is enabled', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-auth-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>auth shell</body></html>', 'utf-8');
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: true, password: 'sekrit' },
+      } as any);
+
+      const address = server.app.server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to resolve server address');
+      }
+
+      const res = await fetch(`http://127.0.0.1:${address.port}/auth`);
+      const body = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      expect(body).toContain('auth shell');
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
   it('accepts /internal/hooks/:event only when the per-process token matches', async () => {
     server = await createServer({
       dataDir: ':memory:',

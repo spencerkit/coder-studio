@@ -13,6 +13,13 @@ import { useTranslation } from '../../../lib/i18n';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { activeWorkspaceIdAtom } from '../../../atoms/ui';
+import {
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadErrorAtom,
+  workspacesLoadStateAtom,
+} from '../../../atoms/workspaces';
+import type { Workspace } from '@coder-studio/core';
 
 interface DirectoryInfo {
   name: string;
@@ -39,6 +46,10 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const setWorkspaces = useSetAtom(workspacesAtom);
+  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
+  const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
+  const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
 
   const [currentPath, setCurrentPath] = useState('');
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
@@ -110,12 +121,24 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     setError(null);
 
     try {
-      const result = await dispatch<{ id: string }>('workspace.open', {
+      const result = await dispatch<Workspace>('workspace.open', {
         path: selectedPath,
       });
 
       if (result.ok && result.data?.id) {
         setActiveWorkspaceId(result.data.id);
+        setWorkspaces((prev) => ({
+          ...prev,
+          [result.data!.id]: result.data!,
+        }));
+        setWorkspaceOrder((prev) => {
+          if (prev.includes(result.data!.id)) {
+            return prev;
+          }
+          return [result.data!.id, ...prev];
+        });
+        setWorkspacesLoadState('ready');
+        setWorkspacesLoadError(null);
         if (location.pathname !== '/workspace') {
           navigate('/workspace');
         }
@@ -128,7 +151,19 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     } finally {
       setLoading(false);
     }
-  }, [selectedPath, dispatch, location.pathname, navigate, setActiveWorkspaceId, onClose, t]);
+  }, [
+    selectedPath,
+    dispatch,
+    location.pathname,
+    navigate,
+    onClose,
+    setActiveWorkspaceId,
+    setWorkspaceOrder,
+    setWorkspaces,
+    setWorkspacesLoadError,
+    setWorkspacesLoadState,
+    t,
+  ]);
 
   const getShortPath = (path: string) => {
     if (path === '~') return '~';

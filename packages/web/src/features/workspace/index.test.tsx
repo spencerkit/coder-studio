@@ -167,44 +167,13 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('selects the first workspace returned by workspace.list on refresh', async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === 'workspace.list') {
-        return [
-          {
-            id: 'ws-first',
-            path: '/tmp/ws-first',
-            targetRuntime: 'native',
-          },
-          {
-            id: 'ws-second',
-            path: '/tmp/ws-second',
-            targetRuntime: 'native',
-          },
-        ];
-      }
-
-      if (op === 'git.status') {
-        return {
-          branch: 'main',
-          ahead: 0,
-          behind: 0,
-          staged: [],
-          modified: [],
-          deleted: [],
-          untracked: [],
-        };
-      }
-
-      return [];
-    });
-
+  it('shows a resolving shell while workspace bootstrap is still loading', async () => {
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
-    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
+    store.set(workspacesLoadStateAtom, 'loading');
 
     render(
       <Provider store={store}>
@@ -215,75 +184,19 @@ describe('WorkspacePage', () => {
         </MemoryRouter>
       </Provider>
     );
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.status', {
-        workspaceId: 'ws-first',
-      });
-    });
-
-    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
-    expect(store.get(resolvedActiveWorkspaceIdAtom)).toBe('ws-first');
-    expect(store.get(workspaceOrderAtom)).toEqual(['ws-first', 'ws-second']);
-    expect(store.get(workspacesLoadStateAtom)).toBe('ready');
-    expect(store.get(workspacesLoadErrorAtom)).toBeNull();
-  });
-
-  it('shows a resolving shell while workspace.list is still loading', async () => {
-    const pendingList = new Promise(() => {});
-
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === 'workspace.list') {
-        return pendingList;
-      }
-
-      return [];
-    });
-
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(wsClientAtom, { sendCommand } as never);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/workspace']}>
-          <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
 
     expect(screen.getByTestId('workspace-resolving-shell')).toBeInTheDocument();
     expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
   });
 
-  it('shows an error shell instead of the empty state when workspace.list fails', async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === 'workspace.list') {
-        throw new Error('Workspace listing failed');
-      }
-
-      return [];
-    });
-
+  it('shows an error shell instead of the empty state when workspace bootstrap fails', async () => {
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
-    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
+    store.set(workspacesLoadStateAtom, 'error');
+    store.set(workspacesLoadErrorAtom, 'Workspace listing failed');
 
     render(
       <Provider store={store}>
@@ -295,23 +208,15 @@ describe('WorkspacePage', () => {
       </Provider>
     );
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
-
     expect(await screen.findByText('Workspace listing failed')).toBeInTheDocument();
     expect(screen.queryByTestId('workspace-resolving-shell')).not.toBeInTheDocument();
     expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
-    expect(store.get(workspacesLoadStateAtom)).toBe('error');
-    expect(store.get(workspacesLoadErrorAtom)).toBe('Workspace listing failed');
   });
 
-  it('waits for the websocket connection before requesting workspace.list on refresh', async () => {
-    const sendCommand = vi.fn().mockResolvedValue([]);
-
+  it('shows a resolving shell before workspace bootstrap starts', async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'connecting');
-    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(connectionStatusAtom, 'connected');
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
     store.set(workspacesLoadStateAtom, 'idle');
@@ -327,17 +232,8 @@ describe('WorkspacePage', () => {
     );
 
     await act(async () => {});
-    expect(sendCommand).not.toHaveBeenCalledWith('workspace.list', {});
     expect(screen.getByTestId('workspace-resolving-shell')).toBeInTheDocument();
     expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
-
-    act(() => {
-      store.set(connectionStatusAtom, 'connected');
-    });
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
   });
 
   it('passes toolbar create requests through to the file tree panel', async () => {

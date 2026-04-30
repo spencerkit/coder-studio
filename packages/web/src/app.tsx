@@ -6,12 +6,18 @@
  * - UI layout with connection status banner
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
-import { connectionStatusAtom, authEnabledAtom } from './atoms';
+import { connectionStatusAtom, authEnabledAtom, dispatchCommandAtom } from './atoms';
 import { authenticatedAtom } from './atoms/ui';
-import { orderedWorkspacesAtom } from './atoms/workspaces';
+import {
+  orderedWorkspacesAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadErrorAtom,
+  workspacesLoadStateAtom,
+} from './atoms/workspaces';
 import { WelcomePage } from './features/welcome';
 import { SettingsPage } from './features/settings';
 import { WorkspacePage } from './features/workspace';
@@ -20,45 +26,127 @@ import { BranchQuickPick } from './features/workspace/components/branch-quick-pi
 import { LoginPage } from './features/auth';
 import { ConfigDriftBanner } from './features/config-drift-banner';
 import { ToastContainer } from './features/notifications';
+import { useSetAtom } from 'jotai';
+import type { Workspace } from '@coder-studio/core';
 
-/**
- * Hook to auto-navigate to workspace if authenticated and has workspaces
- */
-function useAutoWorkspace() {
+function useWorkspaceBootstrap() {
+  const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const connectionStatus = useAtomValue(connectionStatusAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
+  const workspacesLoadState = useAtomValue(workspacesLoadStateAtom);
+  const setWorkspaces = useSetAtom(workspacesAtom);
+  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
+  const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
+  const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
 
   useEffect(() => {
-    if (location.pathname !== '/') return;
-    if (authEnabled === true && !authenticated) return;
-    if (authEnabled === null) return;
-    if (workspaces.length > 0) {
-      navigate('/workspace', { replace: true });
+    if (authEnabled === null) {
+      return;
     }
-  }, [location.pathname, authenticated, authEnabled, workspaces.length, navigate]);
-}
 
-/**
- * Root Route Component
- *
- * Shows the Welcome page.
- */
-function RootRoute() {
-  useAutoWorkspace();
-  return <WelcomePage />;
+    const authRequired = authEnabled === true;
+    if (authRequired && !authenticated) {
+      if (location.pathname !== '/auth') {
+        navigate('/auth', { replace: true });
+      }
+      return;
+    }
+
+    if (location.pathname === '/auth') {
+      navigate('/', { replace: true });
+      return;
+    }
+
+    if (location.pathname !== '/' && location.pathname !== '/workspace') {
+      return;
+    }
+
+    if (connectionStatus !== 'connected') {
+      return;
+    }
+
+    if (workspacesLoadState === 'idle') {
+      const requestId = bootstrapRequestIdRef.current + 1;
+      bootstrapRequestIdRef.current = requestId;
+
+      setWorkspacesLoadState('loading');
+      setWorkspacesLoadError(null);
+
+      dispatch<Workspace[]>('workspace.list', {})
+        .then((result) => {
+          if (bootstrapRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          if (!result.ok) {
+            setWorkspacesLoadState('error');
+            setWorkspacesLoadError(result.error?.message ?? 'Failed to fetch workspace list');
+            return;
+          }
+
+          const nextWorkspaces = Array.isArray(result.data) ? result.data : [];
+          const wsMap: Record<string, Workspace> = {};
+          for (const workspace of nextWorkspaces) {
+            wsMap[workspace.id] = workspace;
+          }
+
+          setWorkspaces(wsMap);
+          setWorkspaceOrder(nextWorkspaces.map((workspace) => workspace.id));
+          setWorkspacesLoadState('ready');
+          setWorkspacesLoadError(null);
+        })
+        .catch((error) => {
+          if (bootstrapRequestIdRef.current !== requestId) {
+            return;
+          }
+          setWorkspacesLoadState('error');
+          setWorkspacesLoadError(error instanceof Error ? error.message : 'Failed to fetch workspace list');
+        });
+      return;
+    }
+
+    if (workspacesLoadState !== 'ready') {
+      return;
+    }
+
+    if (location.pathname === '/' && workspaces.length > 0) {
+      navigate('/workspace', { replace: true });
+      return;
+    }
+
+    if (location.pathname === '/workspace' && workspaces.length === 0) {
+      navigate('/', { replace: true });
+    }
+  }, [
+    authEnabled,
+    authenticated,
+    connectionStatus,
+    dispatch,
+    location.pathname,
+    navigate,
+    setWorkspaceOrder,
+    setWorkspaces,
+    setWorkspacesLoadError,
+    setWorkspacesLoadState,
+    workspaces.length,
+    workspacesLoadState,
+  ]);
 }
 
 function AppShell() {
+  useWorkspaceBootstrap();
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
   const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
-  const shouldShowLogin = authRequired && !authenticated;
+  const shouldShowLogin = authRequired && !authenticated && location.pathname === '/auth';
   const shouldShowGlobalConfigDriftBanner =
     !shouldShowLogin && !authUnknown && !location.pathname.startsWith('/settings');
 
@@ -96,17 +184,10 @@ function AppShell() {
           </div>
         ) : (
           <Routes>
-            {shouldShowLogin ? (
-              <>
-                <Route path="*" element={<LoginPage />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<RootRoute />} />
-                <Route path="/workspace" element={<WorkspacePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </>
-            )}
+            <Route path="/" element={<WelcomePage />} />
+            <Route path="/auth" element={<LoginPage />} />
+            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         )}
       </main>

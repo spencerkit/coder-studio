@@ -12,6 +12,7 @@ const isPublicPath = (path: string) => {
   // only, so skipping the cookie guard here does not widen the attack surface.
   return (
     path === '/' ||
+    path === '/auth' ||
     path === '/healthz' ||
     path === '/ws' ||
     path === '/auth/status' ||
