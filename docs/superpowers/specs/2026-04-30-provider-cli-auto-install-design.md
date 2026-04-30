@@ -277,7 +277,7 @@
       titleKey: 'provider.codex.install.step.install_codex',
       kind: 'install',
       command: 'npm',
-      args: ['install', '-g', '...'],
+      args: ['install', '-g', '<provider-package-from-strategy>'],
       onFailure: 'stop',
     },
     {
@@ -304,6 +304,7 @@
 这意味着：
 
 - `codex` 缺失且 `npm` 缺失时，不应直接运行 `npm install -g ...`
+- `codex` 缺失且 `npm` 缺失时，不应直接运行 provider 安装命令，而应先处理 `npm` 缺失
 - 系统必须先解释并处理 `npm` 不存在这件事
 
 ---
@@ -409,13 +410,13 @@
   failedStepId: 'install-provider-codex',
   message: 'npm command not found',
   command: 'npm',
-  args: ['install', '-g', '...'],
+  args: ['install', '-g', '<provider-package-from-strategy>'],
   exitCode: 127,
   stdoutExcerpt: '',
   stderrExcerpt: 'npm: command not found',
   missingCommands: ['npm'],
   manualGuideKey: 'provider.codex.manual_install',
-  docUrl: 'https://...'
+  docUrl: 'provider-specific-doc-url'
 }
 ```
 
