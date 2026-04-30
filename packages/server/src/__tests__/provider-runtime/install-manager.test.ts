@@ -36,6 +36,27 @@ describe('ProviderInstallManager', () => {
       code: 'missing_prerequisite',
       missingCommands: ['npm'],
     });
+    expect(job.steps.map((step) => step.id)).toContain('install-prerequisite-npm');
+    expect(job.failure?.failedStepId).toBe('install-prerequisite-npm');
+    expect(job.steps.some((step) => step.id === job.failure?.failedStepId)).toBe(true);
+  });
+
+  it('returns a failed job with unsupported_platform and a real failed check step', async () => {
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: 'aix',
+      commandExists: vi.fn(async (command: string) => command === 'npm'),
+      execFile: vi.fn(async () => ({ stdout: '', stderr: '' })),
+    });
+
+    const job = await manager.start('codex');
+
+    expect(job.status).toBe('failed');
+    expect(job.failure).toMatchObject({
+      code: 'unsupported_platform',
+      failedStepId: 'install-provider-codex',
+    });
+    expect(job.steps.map((step) => step.id)).toContain('install-provider-codex');
+    expect(job.steps.some((step) => step.id === job.failure?.failedStepId)).toBe(true);
   });
 
   it('reuses the active job when the same provider is clicked twice', async () => {

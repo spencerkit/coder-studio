@@ -169,22 +169,20 @@ export class ProviderInstallManager {
 
     const jobId = randomUUID();
     if (remainingPrerequisites.size > 0) {
+      const failedStep = this.createCheckStep(
+        'prerequisite',
+        [...remainingPrerequisites][0] ?? '',
+        'provider.install.step.prerequisite.missing',
+      );
       return {
         jobId,
         providerId: provider.id,
         strategyIds: [...selectedStrategyIds],
         status: 'failed',
-        steps: selectedSteps,
+        steps: [...selectedSteps, failedStep],
         failure: this.createFailure(
           provider,
-          {
-            id: `install-prerequisite-${[...remainingPrerequisites][0]}`,
-            titleKey: 'provider.install.step.prerequisite.missing',
-            kind: 'check',
-            command: [...remainingPrerequisites][0] ?? '',
-            args: [],
-            status: 'failed',
-          },
+          failedStep,
           'missing_prerequisite',
           `Missing prerequisite commands: ${[...remainingPrerequisites].join(', ')}`,
           [...remainingPrerequisites],
@@ -193,22 +191,20 @@ export class ProviderInstallManager {
     }
 
     if (remainingProviderCommands.size > 0) {
+      const failedStep = this.createCheckStep(
+        'provider',
+        [...remainingProviderCommands][0] ?? '',
+        'provider.install.step.provider.unsupported',
+      );
       return {
         jobId,
         providerId: provider.id,
         strategyIds: [...selectedStrategyIds],
         status: 'failed',
-        steps: selectedSteps,
+        steps: [...selectedSteps, failedStep],
         failure: this.createFailure(
           provider,
-          {
-            id: `install-provider-${[...remainingProviderCommands][0]}`,
-            titleKey: 'provider.install.step.provider.unsupported',
-            kind: 'check',
-            command: [...remainingProviderCommands][0] ?? '',
-            args: [],
-            status: 'failed',
-          },
+          failedStep,
           'unsupported_platform',
           `No supported install strategy for commands: ${[...remainingProviderCommands].join(', ')}`,
           [...remainingProviderCommands],
@@ -398,6 +394,21 @@ export class ProviderInstallManager {
       command: strategy.command,
       args: strategy.args,
       status: 'pending',
+    };
+  }
+
+  private createCheckStep(
+    kind: 'prerequisite' | 'provider',
+    targetCommand: string,
+    titleKey: string,
+  ): ProviderInstallStepSnapshot {
+    return {
+      id: `install-${kind}-${targetCommand}`,
+      titleKey,
+      kind: 'check',
+      command: targetCommand,
+      args: [],
+      status: 'failed',
     };
   }
 
