@@ -55,13 +55,14 @@ describe('WorktreeModal', () => {
       </Provider>
     );
 
-    expect(document.querySelector('.modal-overlay')).toBeTruthy();
-
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
         worktreePath: '/tmp/coder-studio-feature',
       });
     });
+
+    expect(document.querySelector('.modal-overlay')).toBeTruthy();
+    expect(document.querySelector('.mobile-sheet')).toBeNull();
   });
 
   it('renders inside MobileSheet on mobile and still loads data when tabs change', async () => {
@@ -111,14 +112,14 @@ describe('WorktreeModal', () => {
       </Provider>
     );
 
-    expect(document.querySelector('.mobile-sheet')).toBeTruthy();
-    expect(document.querySelector('.modal-overlay')).toBeNull();
-
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
         worktreePath: '/tmp/coder-studio-feature',
       });
     });
+
+    expect(document.querySelector('.mobile-sheet')).toBeTruthy();
+    expect(document.querySelector('.modal-overlay')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Diff' }));
 

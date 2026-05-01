@@ -221,10 +221,12 @@ describe('WorkspaceLaunchModal', () => {
       </Provider>
     );
 
+    await screen.findByText('workspace');
+
     expect(document.querySelector('.mobile-sheet')).toBeTruthy();
     expect(document.querySelector('.launch-overlay')).toBeNull();
 
-    const folderName = await screen.findByText('workspace');
+    const folderName = screen.getByText('workspace');
     fireEvent.click(folderName);
     fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
 
