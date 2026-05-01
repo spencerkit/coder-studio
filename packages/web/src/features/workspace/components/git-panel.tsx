@@ -24,6 +24,7 @@ import { useTranslation } from '../../../lib/i18n';
 interface GitPanelProps {
   workspaceId: string;
   refreshToken?: number;
+  onPreviewChange?: (preview: GitDiffPreview) => void;
 }
 
 type GitChangeType = 'staged' | 'modified' | 'untracked' | 'deleted';
@@ -78,7 +79,11 @@ function getChangeByPath(
   return null;
 }
 
-export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) => {
+export const GitPanel: FC<GitPanelProps> = ({
+  workspaceId,
+  refreshToken = 0,
+  onPreviewChange,
+}) => {
   const t = useTranslation();
   const store = useStore();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
@@ -142,6 +147,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
       };
 
       setDiffPreview(preview);
+      onPreviewChange?.(preview);
 
       window.dispatchEvent(
         new CustomEvent('coder-studio:show-diff', {
@@ -149,7 +155,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0 }) =
         })
       );
     },
-    [dispatch, setDiffPreview, workspaceId]
+    [dispatch, onPreviewChange, setDiffPreview, workspaceId]
   );
 
   const loadBranchList = useCallback(async () => {

@@ -26,6 +26,9 @@ import { XtermHost } from '../../terminal-panel/components/xterm-host';
 
 interface SessionCardProps {
   sessionId: string;
+  showHeaderActions?: boolean;
+  showSupervisorInline?: boolean;
+  terminalReadOnlyOverride?: boolean;
 }
 
 /**
@@ -36,7 +39,12 @@ interface SessionCardProps {
  *   - Header: status dot, title, provider badge, status label, actions
  *   - Terminal area (xterm.js)
  */
-export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
+export const SessionCard: FC<SessionCardProps> = ({
+  sessionId,
+  showHeaderActions = true,
+  showSupervisorInline = true,
+  terminalReadOnlyOverride,
+}) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
@@ -129,6 +137,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
   const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state);
+  const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
 
   return (
     <div
@@ -157,44 +166,47 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
           </div>
         </div>
 
-        <div className="session-header-actions">
-          {session.state === 'idle' || session.state === 'interrupted' ? (
-            <button className="session-action-btn" onClick={handleStart} title="Start" aria-label="Start">
-              <Play size={13} />
+        {showHeaderActions ? (
+          <div className="session-header-actions">
+            {session.state === 'idle' || session.state === 'interrupted' ? (
+              <button className="session-action-btn" onClick={handleStart} title="Start" aria-label="Start">
+                <Play size={13} />
+              </button>
+            ) : session.state === 'running' ? (
+              <button className="session-action-btn" onClick={handleStop} title="Stop" aria-label="Stop">
+                <Square size={13} />
+              </button>
+            ) : null}
+            <button
+              className="session-action-btn"
+              onClick={handleSplitHorizontal}
+              title="Split horizontal"
+              aria-label="Split horizontal"
+            >
+              <FlipHorizontal size={13} />
             </button>
-          ) : session.state === 'running' ? (
-            <button className="session-action-btn" onClick={handleStop} title="Stop" aria-label="Stop">
-              <Square size={13} />
+            <button
+              className="session-action-btn"
+              onClick={handleSplitVertical}
+              title="Split vertical"
+              aria-label="Split vertical"
+            >
+              <FlipVertical size={13} />
             </button>
-          ) : null}
-          <button
-            className="session-action-btn"
-            onClick={handleSplitHorizontal}
-            title="Split horizontal"
-            aria-label="Split horizontal"
-          >
-            <FlipHorizontal size={13} />
-          </button>
-          <button
-            className="session-action-btn"
-            onClick={handleSplitVertical}
-            title="Split vertical"
-            aria-label="Split vertical"
-          >
-            <FlipVertical size={13} />
-          </button>
-          <button
-            className="session-action-btn session-action-btn-close"
-            onClick={handleClose}
-            title="Close"
-            aria-label="Close"
-          >
-            <X size={14} />
-          </button>
-        </div>
+            <button
+              className="session-action-btn session-action-btn-close"
+              onClick={handleClose}
+              title="Close"
+              aria-label="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      {session.capability === 'full' &&
+      {showSupervisorInline &&
+      session.capability === 'full' &&
       session.state !== 'draft' &&
       session.state !== 'ended' &&
       session.state !== 'unavailable' ? (
@@ -208,7 +220,7 @@ export const SessionCard: FC<SessionCardProps> = ({ sessionId }) => {
         <XtermHost
           terminalId={session.terminalId}
           workspaceId={session.workspaceId}
-          readOnly={!isSessionInteractive(session.state)}
+          readOnly={terminalReadOnly}
         />
       </div>
     </div>

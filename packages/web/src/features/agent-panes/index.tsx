@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { ArrowRight, Bot, Sparkles, FlipHorizontal, FlipVertical, X } from 'lucide-react';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
+import { sessionsAtom } from '../../atoms/sessions';
 import { paneLayoutAtomFamily, type PaneNode } from '../../atoms/ui';
 import { dispatchCommandAtom, connectionStatusAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
@@ -18,12 +18,11 @@ import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
 import type { Session } from '@coder-studio/core';
 import type { ProviderId } from './use-provider-launcher';
+import { useWorkspaceSessions } from './use-workspace-sessions';
 import {
   assignSessionToPane,
   closePaneBySessionId,
   splitPaneBySessionId,
-  sanitizePaneLayout,
-  collectSessionIds,
 } from './pane-layout-tree';
 import { useProviderLauncher } from './use-provider-launcher';
 
@@ -48,88 +47,7 @@ interface PanelCloseDetail {
 export const AgentPanes: FC = () => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
-  const workspaceId = workspace?.id ?? '__workspace_empty__';
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const connectionStatus = useAtomValue(connectionStatusAtom);
-  const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
-  const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
-  const setSessions = useSetAtom(sessionsAtom);
-  const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
-  const store = useStore();
-
-  useEffect(() => {
-    if (!workspace) {
-      return;
-    }
-
-    if (connectionStatus !== 'connected') {
-      return;
-    }
-
-    let cancelled = false;
-    dispatch<Session[]>('session.list', { workspaceId: workspace.id })
-      .then((result) => {
-        if (cancelled || !result.ok || !result.data) {
-          console.error('Failed to fetch sessions:', result.error?.message);
-          return;
-        }
-
-        const nextSessions = result.data;
-
-        setSessions((prev) => {
-          const next = Object.fromEntries(
-            Object.entries(prev).filter(([, session]) => session.workspaceId !== workspace.id)
-          );
-
-          for (const session of nextSessions) {
-            next[session.id] = session;
-          }
-
-          return next;
-        });
-
-        // Read layout from store to ensure we have the latest value
-        const currentLayout = store.get(paneLayoutAtomFamily(workspaceId));
-
-        // Always sanitize: replace ended/removed session references with draft leaves
-        // while preserving the full split structure.
-        const liveSessionIds = new Set(
-          nextSessions
-            .filter((s) => s.state !== 'ended')
-            .map((s) => s.id)
-        );
-
-        const sanitized = sanitizePaneLayout(currentLayout, liveSessionIds);
-        if (sanitized !== currentLayout) {
-          setPaneLayout(sanitized);
-          return;
-        }
-
-        // Only auto-assign first live session if layout has no sessions at all
-        const hasAnySessionInLayout = collectSessionIds(currentLayout).length > 0;
-        if (!hasAnySessionInLayout) {
-          const liveSessions = nextSessions.filter(
-            (s) => s.state !== 'ended'
-          );
-          if (liveSessions.length > 0) {
-            setPaneLayout({
-              id: 'root',
-              type: 'leaf',
-              sessionId: liveSessions[0]!.id,
-            });
-          }
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error('Failed to fetch sessions:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
+  const { workspaceId, sessions, paneLayout, setPaneLayout } = useWorkspaceSessions(workspace);
 
   useEffect(() => {
     const handlePanelSplit = (event: Event) => {

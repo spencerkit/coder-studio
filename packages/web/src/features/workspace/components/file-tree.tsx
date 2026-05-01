@@ -47,6 +47,7 @@ interface FileTreePanelProps {
   refreshToken?: number;
   createRequest?: CreateRequest | null;
   onCreateRequestConsumed?: () => void;
+  onSelectFile?: (path: string) => void;
 }
 
 interface ReadTreeResult {
@@ -78,6 +79,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   refreshToken = 0,
   createRequest = null,
   onCreateRequestConsumed,
+  onSelectFile,
 }) => {
   const t = useTranslation();
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
@@ -312,6 +314,14 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     onCreateRequestConsumed?.();
   }, [createRequest, openCreateDialog, onCreateRequestConsumed]);
 
+  const handleSelectFile = useCallback(
+    (path: string) => {
+      setActiveFilePath(path);
+      onSelectFile?.(path);
+    },
+    [onSelectFile, setActiveFilePath]
+  );
+
   return (
     <>
       <div className="file-tree">
@@ -324,7 +334,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
               selectedPath={activeFilePath}
               onRequestCreate={openCreateDialog}
               onRequestDelete={(path, name) => setPendingDelete({ path, name, error: null })}
-              onSelectFile={setActiveFilePath}
+              onSelectFile={handleSelectFile}
               onLoadChildren={loadChildren}
               isLoadingDir={isLoadingDir}
             />

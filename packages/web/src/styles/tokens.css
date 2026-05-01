@@ -159,6 +159,14 @@
   --scrollbar-width: 8px;
   --scrollbar-thumb: var(--border-light);
   --scrollbar-track: transparent;
+
+  /* ========== Touch / Pointer (Mobile-Friendly Phase 0) ========== */
+  /* Desktop defaults - overridden below for narrow viewport or coarse pointer. */
+  --touch-target-min: 32px;
+  --touch-target-comfortable: 40px;
+  --touch-target-large: 44px;
+  --touch-spacing-min: 8px;
+  --touch-hit-slop: 0px;
 }
 
 /* ========== Phase 4: Light Theme ========== */
@@ -208,4 +216,16 @@
 
   /* Scrollbar */
   --scrollbar-thumb: #d0d7de;
+}
+
+/* ========== Mobile / Touch Override (Phase 0) ========== */
+/* Triggered by narrow viewport OR coarse pointer (touch input). */
+@media (max-width: 899px), (pointer: coarse) {
+  :root {
+    --touch-target-min: 44px;
+    --touch-target-comfortable: 48px;
+    --touch-target-large: 56px;
+    --touch-spacing-min: 12px;
+    --touch-hit-slop: 8px;
+  }
 }

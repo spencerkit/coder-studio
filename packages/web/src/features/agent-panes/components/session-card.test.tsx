@@ -89,6 +89,44 @@ describe('SessionCard', () => {
     );
   });
 
+  it('hides header actions when showHeaderActions is false', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'running',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" showHeaderActions={false} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+  });
+
+  it('forces the terminal read-only when terminalReadOnlyOverride is true', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'running',
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" terminalReadOnlyOverride />
+      </Provider>
+    );
+
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term-live',
+        readOnly: true,
+      })
+    );
+  });
+
   it('hydrates supervisor state for full-capability sessions and renders the card above the terminal', async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'supervisor.get') {

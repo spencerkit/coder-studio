@@ -1,90 +1,42 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import App from './app';
-import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from './atoms/connection';
+import { authEnabledAtom, connectionStatusAtom } from './atoms/connection';
 import { authenticatedAtom } from './atoms/ui';
-import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from './atoms/workspaces';
 
-vi.mock('./features/welcome', () => ({
-  WelcomePage: () => <div>WelcomePage</div>,
+vi.mock('./shells/desktop-shell', () => ({
+  DesktopShell: () => <div data-testid="desktop-shell">DesktopShell</div>,
 }));
 
-vi.mock('./features/settings', () => ({
-  SettingsPage: () => <div>SettingsPage</div>,
+vi.mock('./shells/mobile-shell', () => ({
+  MobileShell: () => <div data-testid="mobile-shell">MobileShell</div>,
 }));
 
-vi.mock('./features/workspace', () => ({
-  WorkspacePage: () => <div>WorkspacePage</div>,
-}));
+function setMatchMediaMock(predicate: (query: string) => boolean) {
+  const matchMedia = vi.fn((query: string) => ({
+    addEventListener: vi.fn(),
+    matches: predicate(query),
+    media: query,
+    removeEventListener: vi.fn(),
+  }));
+  window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
+}
 
-vi.mock('./features/command-palette', () => ({
-  CommandPalette: () => null,
-}));
+describe('App shell selection', () => {
+  let originalMatchMedia: typeof window.matchMedia;
 
-vi.mock('./features/auth', () => ({
-  LoginPage: () => <div>LoginPage</div>,
-}));
-
-vi.mock('./features/config-drift-banner', () => ({
-  ConfigDriftBanner: () => null,
-}));
-
-vi.mock('./features/notifications', () => ({
-  useSessionNotifications: () => {},
-  appendSessionOutputAtom: null,
-  clearSessionOutputAtom: null,
-  ToastContainer: () => null,
-}));
-
-const originalFetch = globalThis.fetch;
-
-describe('App auth gating', () => {
   beforeEach(() => {
+    originalMatchMedia = window.matchMedia;
     window.history.replaceState({}, '', '/');
-    window.localStorage.clear();
-    vi.restoreAllMocks();
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    window.matchMedia = originalMatchMedia;
   });
 
-  it('shows a loading shell while auth status is still unknown', () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(authEnabledAtom, null);
-    store.set(authenticatedAtom, false);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByText('正在连接工作区...')).toBeInTheDocument();
-    expect(screen.queryByText('LoginPage')).not.toBeInTheDocument();
-  });
-
-  it('shows login only when auth is enabled and user is unauthenticated', () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(authEnabledAtom, true);
-    store.set(authenticatedAtom, false);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByText('LoginPage')).toBeInTheDocument();
-    expect(screen.queryByText('WelcomePage')).not.toBeInTheDocument();
-  });
-
-  it('renders WorkspacePage on /workspace', () => {
-    window.history.replaceState({}, '', '/workspace');
-
+  it('renders DesktopShell on a wide viewport with fine pointer', () => {
+    setMatchMediaMock(() => false);
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
@@ -96,41 +48,16 @@ describe('App auth gating', () => {
       </Provider>
     );
 
-    expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
+    expect(screen.getByTestId('desktop-shell')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
   });
 
-  it('renders the explicit /auth route when auth is enabled and user is unauthenticated', () => {
-    window.history.replaceState({}, '', '/auth');
-
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(authEnabledAtom, true);
-    store.set(authenticatedAtom, false);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByText('LoginPage')).toBeInTheDocument();
-  });
-
-  it('redirects / to /workspace after auth resolves and workspace.list is non-empty', async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === 'workspace.list') {
-        return [{ id: 'ws-1', path: '/tmp/ws-1', targetRuntime: 'native' }];
-      }
-      return [];
-    });
+  it('renders MobileShell when viewport is narrow', () => {
+    setMatchMediaMock((query) => query.includes('max-width: 899px'));
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
-    store.set(wsClientAtom, { sendCommand } as never);
 
     render(
       <Provider store={store}>
@@ -138,25 +65,16 @@ describe('App auth gating', () => {
       </Provider>
     );
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/workspace');
-    });
+    expect(screen.getByTestId('mobile-shell')).toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-shell')).not.toBeInTheDocument();
   });
 
-  it('keeps / on WelcomePage after auth resolves and workspace.list is empty', async () => {
-    const sendCommand = vi.fn().mockResolvedValue([]);
+  it('renders MobileShell when pointer is coarse', () => {
+    setMatchMediaMock((query) => query.includes('pointer: coarse'));
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
-    store.set(wsClientAtom, { sendCommand } as never);
 
     render(
       <Provider store={store}>
@@ -164,41 +82,6 @@ describe('App auth gating', () => {
       </Provider>
     );
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/');
-      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
-    });
-  });
-
-  it('redirects /workspace back to / when auth resolves and workspace.list is empty', async () => {
-    window.history.replaceState({}, '', '/workspace');
-    const sendCommand = vi.fn().mockResolvedValue([]);
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(authEnabledAtom, false);
-    store.set(authenticatedAtom, true);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
-    store.set(wsClientAtom, { sendCommand } as never);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
-    });
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/');
-      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('mobile-shell')).toBeInTheDocument();
   });
 });
