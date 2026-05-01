@@ -6,6 +6,14 @@ import { ToastContainer } from './toast-container';
 import { toastsAtom, type Toast } from './atoms';
 import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
 
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
+
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -17,6 +25,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('ToastContainer', () => {
   beforeEach(() => {
+    viewportMocks.viewport = 'desktop';
     navigate.mockReset();
     window.localStorage.clear();
     window.history.pushState({}, '', '/');
@@ -69,5 +78,18 @@ describe('ToastContainer', () => {
     expect(navigate).toHaveBeenCalledWith('/workspace');
     expect(store.get(activeWorkspaceIdAtom)).toBe('ws-3');
     expect(store.get(pendingFocusSessionAtom)).toBeNull();
+  });
+
+  it('uses the mobile toast container variant on mobile while preserving the rendered toast', () => {
+    viewportMocks.viewport = 'mobile';
+
+    renderWithToast({
+      kind: 'success',
+      title: 'Session done',
+      body: 'Claude · demo · 1m',
+    });
+
+    expect(document.querySelector('.toast-container--mobile')).toBeTruthy();
+    expect(screen.getByText('Session done')).toBeInTheDocument();
   });
 });
