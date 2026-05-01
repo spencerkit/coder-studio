@@ -49,7 +49,18 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // WebSocket plugin - routes must be registered within this scope
   await app.register(async function (fastify) {
-    await fastify.register(websocket);
+    await fastify.register(websocket, {
+      options: {
+        // permessage-deflate: terminal ANSI streams (repeated escape codes,
+        // whitespace, color sequences) typically compress 5-10x. Cross-message
+        // context takeover is left enabled (default) so the zlib dictionary
+        // persists across frames for highest ratio on continuous streams.
+        perMessageDeflate: {
+          threshold: 1024,
+          zlibDeflateOptions: { level: 6 },
+        },
+      },
+    });
 
     // WebSocket endpoint - connection is the WebSocket directly in v11+
     fastify.get('/ws', { websocket: true }, (connection: WebSocket, req: FastifyRequest) => {
