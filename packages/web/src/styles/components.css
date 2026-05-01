@@ -6008,12 +6008,20 @@ textarea.input {
   border-color: color-mix(in srgb, var(--color-error) 35%, transparent);
 }
 
+.config-drift-banner--mobile-compact {
+  border-bottom-color: color-mix(in srgb, var(--accent-amber) 28%, transparent);
+}
+
 .config-drift-banner__row {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-4);
   flex-wrap: wrap;
+}
+
+.config-drift-banner__row--compact {
+  flex-wrap: nowrap;
 }
 
 .config-drift-banner__icon {
@@ -6061,6 +6069,26 @@ textarea.input {
   font-size: var(--text-sm);
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out);
+}
+
+.config-drift-banner__summary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-amber) 18%, transparent);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.config-drift-banner__summary-action:hover {
+  background: color-mix(in srgb, var(--accent-amber) 26%, transparent);
 }
 
 .config-drift-banner__toggle {
@@ -6179,6 +6207,16 @@ textarea.input {
   pointer-events: none;
   max-width: 420px;
   width: 100%;
+}
+
+.toast-container--mobile {
+  top: calc(env(safe-area-inset-top, 0px) + var(--sp-3));
+  right: 50%;
+  bottom: auto;
+  left: 50%;
+  width: min(calc(100vw - var(--sp-6)), 420px);
+  max-width: min(calc(100vw - var(--sp-6)), 420px);
+  transform: translateX(-50%);
 }
 
 .toast {
@@ -6440,6 +6478,45 @@ textarea.input {
     right: var(--sp-3);
     bottom: var(--sp-3);
     max-width: none;
+  }
+
+  .toast-container--mobile {
+    top: calc(env(safe-area-inset-top, 0px) + var(--sp-3));
+    right: 50%;
+    bottom: auto;
+    left: 50%;
+    width: min(calc(100vw - var(--sp-6)), 480px);
+    transform: translateX(-50%);
+  }
+
+  .config-drift-banner--mobile-compact {
+    background: color-mix(in srgb, var(--accent-amber) 14%, var(--bg-surface));
+    backdrop-filter: blur(18px);
+  }
+
+  .config-drift-banner__row--compact {
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .config-drift-banner__row--compact .config-drift-banner__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-sm);
+  }
+
+  .config-drift-banner__summary-action {
+    min-height: var(--touch-target-min);
+    padding-inline: var(--sp-3);
+    font-size: var(--text-xs);
+  }
+
+  .config-drift-banner__row--compact .config-drift-banner__dismiss {
+    width: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+    height: var(--touch-target-min);
   }
 }
 
