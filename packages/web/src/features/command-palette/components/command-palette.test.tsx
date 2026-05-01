@@ -6,6 +6,14 @@ import { localeAtom, commandPaletteOpenAtom, activeWorkspaceIdAtom } from '../..
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
 import { CommandPalette } from './command-palette';
 
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
+
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   location: { pathname: '/settings' },
@@ -21,7 +29,13 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../../workspace/components/workspace-launch-modal', () => ({
-  WorkspaceLaunchModal: () => null,
+  WorkspaceLaunchModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="workspace-launch-modal-mock">
+      <button type="button" onClick={onClose}>
+        close-launch-modal
+      </button>
+    </div>
+  ),
 }));
 
 function createWorkspace(id: string, path: string): Workspace {
@@ -41,6 +55,7 @@ function createWorkspace(id: string, path: string): Workspace {
 
 describe('CommandPalette', () => {
   beforeEach(() => {
+    viewportMocks.viewport = 'desktop';
     routerMocks.navigate.mockReset();
     routerMocks.location.pathname = '/settings';
   });
@@ -66,5 +81,93 @@ describe('CommandPalette', () => {
 
     expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
     expect(routerMocks.navigate).toHaveBeenCalledWith('/workspace');
+  });
+
+  it('renders inside MobileSheet on mobile and still filters commands', () => {
+    viewportMocks.viewport = 'mobile';
+
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': createWorkspace('ws-1', '/tmp/one'),
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    expect(document.querySelector('.mobile-sheet')).toBeTruthy();
+    expect(document.querySelector('.command-palette-overlay')).toBeNull();
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'settings' },
+    });
+
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.queryByText('Workspace: one')).toBeNull();
+  });
+
+  it('closes the mobile palette before opening the workspace launcher', () => {
+    viewportMocks.viewport = 'mobile';
+
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    const launchDescription = screen.getByText(
+      'Click the button below to open a project directory'
+    );
+    const launchItem = launchDescription.closest('.command-palette-item');
+
+    expect(launchItem).toBeTruthy();
+    fireEvent.click(launchItem!);
+
+    expect(screen.getByTestId('workspace-launch-modal-mock')).toBeInTheDocument();
+    expect(document.querySelector('.command-palette-overlay')).toBeNull();
+    expect(document.querySelector('.mobile-sheet')).toBeNull();
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
+  });
+
+  it('executes the selected command with Enter on desktop', () => {
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': createWorkspace('ws-1', '/tmp/one'),
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    const palette = document.querySelector('.command-palette');
+    expect(palette).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'settings' },
+    });
+
+    fireEvent.keyDown(palette!, { key: 'Enter' });
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith('/settings');
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
 });
