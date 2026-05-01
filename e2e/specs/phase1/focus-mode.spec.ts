@@ -10,6 +10,6 @@ test.describe('@phase1 focus mode acceptance', () => {
   test('F1-28 exit focus', async ({ page }) => {
     await page.goto('/');
     // Check kicker text
-    await expect(page.locator('.welcome-kicker')).toHaveText('Get Started');
+    await expect(page.locator('.welcome-kicker')).toHaveText('GET STARTED');
   });
 });

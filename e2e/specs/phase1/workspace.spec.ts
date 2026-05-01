@@ -3,12 +3,12 @@ import { test, expect } from '@playwright/test';
 test.describe('@phase1 workspace acceptance', () => {
   test('F1-01 open workspace', async ({ page }) => {
     await page.goto('/');
-    // Click open workspace button to open command palette
+    // Click open workspace button to open the workspace launch modal.
     const openBtn = page.locator('.welcome-btn');
     await expect(openBtn).toBeVisible();
     await openBtn.click();
-    // Command palette should open
-    await expect(page.locator('.command-palette-overlay')).toBeVisible();
+    await expect(page.locator('.launch-overlay')).toBeVisible();
+    await expect(page.locator('.launch-title')).toHaveText('Local Folder');
   });
 
   test('F1-02 browse file tree', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('@phase1 workspace acceptance', () => {
     await page.goto('/');
     // Welcome page should have kicker
     const kicker = page.locator('.welcome-kicker');
-    await expect(kicker).toHaveText('Get Started');
+    await expect(kicker).toHaveText('GET STARTED');
   });
 
   test('F1-05 delete file', async ({ page }) => {

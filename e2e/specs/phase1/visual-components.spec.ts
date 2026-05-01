@@ -17,7 +17,7 @@ test.describe('@phase1 visual acceptance', () => {
   test('V1-05 workspace panel baseline', async ({ page }) => {
     await page.goto('/');
     // Welcome kicker should be present
-    await expect(page.locator('.welcome-kicker')).toHaveText('Get Started');
+    await expect(page.locator('.welcome-kicker')).toHaveText('GET STARTED');
   });
 
   test('V1-06 agent pane baseline', async ({ page }) => {
@@ -40,8 +40,8 @@ test.describe('@phase1 visual acceptance', () => {
 
   test('V1-09 command palette baseline', async ({ page }) => {
     await page.goto('/');
-    // Click to open command palette
-    await page.locator('.welcome-btn').click();
+    // Open the command palette via its keyboard shortcut.
+    await page.locator('body').press('Control+k');
     await expect(page.locator('.command-palette')).toBeVisible();
   });
 

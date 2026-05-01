@@ -5,7 +5,7 @@ test.describe('@phase1 agent session acceptance', () => {
     await page.goto('/');
     // Welcome page should render correctly
     await expect(page.locator('.welcome-container')).toBeVisible();
-    await expect(page.locator('.welcome-kicker')).toHaveText('Get Started');
+    await expect(page.locator('.welcome-kicker')).toHaveText('GET STARTED');
     await expect(page.locator('.welcome-title')).toBeVisible();
   });
 
@@ -14,7 +14,7 @@ test.describe('@phase1 agent session acceptance', () => {
     // Check welcome page elements
     const openBtn = page.locator('.welcome-btn');
     await expect(openBtn).toBeVisible();
-    await expect(openBtn.locator('span')).toContainText('打开工作区');
+    await expect(openBtn.locator('span')).toContainText('Open Workspace');
   });
 
   test('F1-08 receive response', async ({ page }) => {

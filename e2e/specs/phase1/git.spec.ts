@@ -10,7 +10,7 @@ test.describe('@phase1 git acceptance', () => {
   test('F1-17 view diff', async ({ page }) => {
     await page.goto('/');
     // Check welcome elements
-    await expect(page.locator('.welcome-kicker')).toHaveText('Get Started');
+    await expect(page.locator('.welcome-kicker')).toHaveText('GET STARTED');
   });
 
   test('F1-18 commit', async ({ page }) => {

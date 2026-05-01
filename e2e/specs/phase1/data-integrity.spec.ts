@@ -10,7 +10,7 @@ test.describe('@phase1 data integrity acceptance', () => {
   test('F1-38 session persistence', async ({ page }) => {
     await page.goto('/');
     // Check kicker
-    await expect(page.locator('.welcome-kicker')).toHaveText('Get Started');
+    await expect(page.locator('.welcome-kicker')).toHaveText('GET STARTED');
   });
 
   test('F1-39 terminal replay', async ({ page }) => {

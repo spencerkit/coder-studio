@@ -11,7 +11,7 @@ test.describe('@phase1 editor acceptance', () => {
     await page.goto('/');
     // Check welcome body text
     const body = page.locator('.welcome-body');
-    await expect(body).toContainText('Agent-First Development Environment');
+    await expect(body).toContainText('A local-first AI coding workbench.');
   });
 
   test('F1-13 save file', async ({ page }) => {

@@ -15,8 +15,8 @@ test.describe('@phase1 visual acceptance', () => {
 
   test('V1-17 tab switch animation baseline', async ({ page }) => {
     await page.goto('/');
-    // Click button and verify animation works
-    await page.locator('.welcome-btn').click();
+    // Open the command palette via its keyboard shortcut.
+    await page.locator('body').press('Control+k');
     await expect(page.locator('.command-palette')).toBeVisible();
   });
 });
