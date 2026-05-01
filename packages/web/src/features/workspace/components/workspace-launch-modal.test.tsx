@@ -5,6 +5,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { wsClientAtom } from '../../../atoms/connection';
 import { WorkspaceLaunchModal } from './workspace-launch-modal';
 
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
+
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   location: { pathname: '/' },
@@ -21,6 +29,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('WorkspaceLaunchModal', () => {
   afterEach(() => {
+    viewportMocks.viewport = 'desktop';
     routerMocks.navigate.mockReset();
     routerMocks.location.pathname = '/';
     vi.restoreAllMocks();
@@ -175,6 +184,58 @@ describe('WorkspaceLaunchModal', () => {
 
     await waitFor(() => {
       expect(routerMocks.navigate).toHaveBeenCalledWith('/workspace');
+    });
+  });
+
+  it('renders inside MobileSheet on mobile while preserving browse and open behavior', async () => {
+    viewportMocks.viewport = 'mobile';
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === 'workspace.browse') {
+        return {
+          currentPath: '/home/spencer',
+          parentPath: '/home',
+          directories: [
+            { name: 'workspace', path: '/home/spencer/workspace' },
+          ],
+        };
+      }
+
+      if (op === 'workspace.open') {
+        return {
+          id: 'ws-1',
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(document.querySelector('.mobile-sheet')).toBeTruthy();
+    expect(document.querySelector('.launch-overlay')).toBeNull();
+
+    const folderName = await screen.findByText('workspace');
+    fireEvent.click(folderName);
+    fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.open', {
+        path: '/home/spencer/workspace',
+      });
+    });
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
     });
   });
 });
