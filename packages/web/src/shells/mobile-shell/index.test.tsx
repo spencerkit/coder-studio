@@ -529,6 +529,37 @@ describe('MobileShell Phase 2 workspace', () => {
     restoreMatchMedia();
   });
 
+  it('marks the shell as reduced-motion when the browser prefers reduced motion', async () => {
+    const restoreMatchMedia = installMatchMediaMock((query) => {
+      if (query.includes('prefers-reduced-motion: reduce')) {
+        return true;
+      }
+
+      return false;
+    });
+
+    renderMobileShell();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-shell')).toHaveAttribute('data-motion-mode', 'reduced');
+    });
+
+    restoreMatchMedia();
+  });
+
+  it('keeps the shell in default motion mode when reduced motion is not requested', async () => {
+    const restoreMatchMedia = installMatchMediaMock(() => false);
+
+    renderMobileShell();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-shell')).toHaveAttribute('data-layout-mode', 'default');
+      expect(screen.getByTestId('mobile-shell')).toHaveAttribute('data-motion-mode', 'default');
+    });
+
+    restoreMatchMedia();
+  });
+
   it('opens the files sheet and navigates from file list into the editor view', async () => {
     const user = userEvent.setup();
     renderMobileShell();

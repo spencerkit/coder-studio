@@ -31,6 +31,7 @@ import { MobileTopBar } from './mobile-topbar';
 import { MobileWorkspaceDrawer } from './mobile-workspace-drawer';
 import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
 import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
+import { useMobileMotionMode } from './hooks/use-mobile-motion-mode';
 import { collectSessionIds } from '../../features/agent-panes/pane-layout-tree';
 
 type MobileSheetKind = 'files' | 'terminal' | 'supervisor' | null;
@@ -49,6 +50,7 @@ function MobileWorkspaceScaffold() {
   const [filesRoute, setFilesRoute] = useState<MobileFilesRoute>({ kind: 'root' });
   const keyboardInset = useVisualViewportInset();
   const layoutMode = useMobileLayoutMode();
+  const motionMode = useMobileMotionMode();
   const flattenedSessionIds = useMemo(() => {
     const sessionMap = new Map(sessions.map((session) => [session.id, session]));
 
@@ -101,9 +103,10 @@ function MobileWorkspaceScaffold() {
 
   return (
     <div
-      className={`mobile-shell mobile-shell--${layoutMode}`}
+      className={`mobile-shell mobile-shell--${layoutMode} mobile-shell--motion-${motionMode}`}
       data-testid="mobile-shell"
       data-layout-mode={layoutMode}
+      data-motion-mode={motionMode}
     >
       <MobileTopBar
         activeWorkspace={activeWorkspace}
