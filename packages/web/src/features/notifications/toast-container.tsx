@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { toastsAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
 import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
+import { useViewport } from '../../hooks/use-viewport';
 import { focusSession } from './focus-session';
 
 const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: string }> = {
@@ -84,11 +85,19 @@ function ToastItem({ toast }: { toast: Toast }) {
 
 export function ToastContainer() {
   const toasts = useAtomValue(toastsAtom);
+  const isMobile = useViewport() === 'mobile';
 
   if (toasts.length === 0) return null;
 
+  const containerClassName = [
+    'toast-container',
+    isMobile ? 'toast-container--mobile' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="toast-container" aria-live="polite">
+    <div className={containerClassName} aria-live="polite">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} />
       ))}

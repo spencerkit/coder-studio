@@ -17,7 +17,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { AlertTriangle, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
+import { useViewport } from '../../hooks/use-viewport';
 import { useTranslation } from '../../lib/i18n';
 
 type FindingId = 'toml_notify' | 'toml_codex_hooks';
@@ -59,6 +61,8 @@ export function ConfigDriftBanner({
   showLoadError = true,
 }: ConfigDriftBannerProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
+  const isMobile = useViewport() === 'mobile';
   const auditLoadFailedUnknown = t('codex_audit.load_failed_unknown');
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -101,9 +105,11 @@ export function ConfigDriftBanner({
   }, [auditLoadFailedUnknown, connectionStatus, dispatch, refreshKey]);
 
   const hasFindings = !!audit && audit.findings.length > 0;
+  const isCompactMobileGlobal = isMobile && variant === 'global';
   const rootClassName = [
     'config-drift-banner',
     variant === 'embedded' ? 'config-drift-banner--embedded' : '',
+    isCompactMobileGlobal ? 'config-drift-banner--mobile-compact' : '',
     loadError ? 'config-drift-banner--error' : '',
   ]
     .filter(Boolean)
@@ -159,6 +165,32 @@ export function ConfigDriftBanner({
   }, [cleaning, selected.size, t]);
 
   if (dismissed) return null;
+  if (loadError && showLoadError && isCompactMobileGlobal) {
+    return (
+      <div className={rootClassName} role="alert">
+        <div className="config-drift-banner__row config-drift-banner__row--compact">
+          <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
+          <span className="config-drift-banner__title">{t('codex_audit.load_failed_title')}</span>
+          <div className="config-drift-banner__spacer" />
+          <button
+            type="button"
+            className="config-drift-banner__summary-action"
+            onClick={() => setRefreshKey((value) => value + 1)}
+          >
+            {t('action.refresh')}
+          </button>
+          <button
+            type="button"
+            className="config-drift-banner__dismiss"
+            onClick={() => setDismissed(true)}
+            aria-label={t('action.close')}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (loadError && showLoadError) {
     return (
       <div className={rootClassName} role="alert">
@@ -188,6 +220,37 @@ export function ConfigDriftBanner({
   }
   if (loadError) return null;
   if (!hasFindings) return null;
+
+  if (isCompactMobileGlobal) {
+    return (
+      <div className={rootClassName} role="alert">
+        <div className="config-drift-banner__row config-drift-banner__row--compact">
+          <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
+          <span className="config-drift-banner__title">
+            {t('codex_audit.title', {
+              count: String(audit!.findings.length),
+            })}
+          </span>
+          <div className="config-drift-banner__spacer" />
+          <button
+            type="button"
+            className="config-drift-banner__summary-action"
+            onClick={() => navigate('/settings')}
+          >
+            {t('settings.title')}
+          </button>
+          <button
+            type="button"
+            className="config-drift-banner__dismiss"
+            onClick={() => setDismissed(true)}
+            aria-label={t('action.close')}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={rootClassName} role="alert">
