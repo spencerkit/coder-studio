@@ -10,7 +10,7 @@ import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
-import { XtermHost, trimWrittenChunks } from '../components/xterm-host';
+import { XtermHost, trimWrittenChunks } from '../views/shared/xterm-host';
 import { terminalOutputAtomFamily } from '../atoms/terminals';
 import { wsClientAtom } from '../../../atoms/connection';
 import { localeAtom, themeAtom } from '../../../atoms/app-ui';

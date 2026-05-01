@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { TerminalPanel } from '../components/terminal-panel';
+import { TerminalPanel } from '../views/shared/terminal-panel';
 import { wsClientAtom } from '../../../atoms/connection';
 import { bottomPanelHeightAtom } from '../../workspace/atoms/layout';
 import {
@@ -12,7 +12,7 @@ import {
 import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
 
-vi.mock('../components/xterm-host', () => ({
+vi.mock('../views/shared/xterm-host', () => ({
   XtermHost: ({ terminalId }: { terminalId: string }) => (
     <div data-testid="xterm-host">{terminalId}</div>
   ),
