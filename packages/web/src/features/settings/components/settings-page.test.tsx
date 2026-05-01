@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { MemoryRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
 import { SettingsPage } from './settings-page';
@@ -25,16 +25,40 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+function createConnectedStore(sendCommand: ReturnType<typeof vi.fn>) {
+  const store = createStore();
+
+  store.set(connectionStatusAtom, 'connected');
+  store.set(
+    wsClientAtom,
+    {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never
+  );
+
+  return store;
+}
+
+function renderSettingsPage(store = createConnectedStore(vi.fn().mockResolvedValue({}))) {
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={['/settings']}>
+        <SettingsPage />
+      </MemoryRouter>
+    </Provider>
+  );
+}
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
     viewportMocks.viewport = 'desktop';
-    window.history.replaceState({}, '', '/settings');
+    window.history.replaceState({ idx: 0 }, '', '/settings');
   });
 
   it('shows the config drift banner inside settings when codex findings exist', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'settings.get') {
         return {
@@ -59,23 +83,9 @@ describe('SettingsPage', () => {
       }
       return {};
     });
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     await waitFor(() => {
       expect(screen.getByText('Codex 配置冲突（1 项）')).toBeInTheDocument();
@@ -83,25 +93,10 @@ describe('SettingsPage', () => {
   });
 
   it('shows an explicit error when settings loading fails', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockRejectedValue(new Error('settings exploded'));
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     await waitFor(() => {
       expect(screen.getByText('设置加载失败')).toBeInTheDocument();
@@ -111,7 +106,6 @@ describe('SettingsPage', () => {
   });
 
   it('does not render default Agent Provider selection in general settings', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'settings.get') {
         return {
@@ -120,23 +114,9 @@ describe('SettingsPage', () => {
       }
       return {};
     });
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
@@ -148,30 +128,15 @@ describe('SettingsPage', () => {
   });
 
   it('does not render the MCP Servers settings section', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'settings.get') {
         return {};
       }
       return {};
     });
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
@@ -181,7 +146,6 @@ describe('SettingsPage', () => {
   });
 
   it('uses provider-specific startup command args without working directory override', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'settings.get') {
         return {
@@ -197,23 +161,9 @@ describe('SettingsPage', () => {
       }
       return {};
     });
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
 
@@ -284,25 +234,10 @@ describe('SettingsPage', () => {
   });
 
   it('returns to /workspace from settings', async () => {
-    const store = createStore();
     const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
@@ -311,7 +246,6 @@ describe('SettingsPage', () => {
 
   it('renders a mobile category list and returns from detail content to the settings root', async () => {
     viewportMocks.viewport = 'mobile';
-    const store = createStore();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'settings.get') {
         return {
@@ -326,26 +260,12 @@ describe('SettingsPage', () => {
       }
       return {};
     });
+    const store = createConnectedStore(sendCommand);
 
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsPage />
-        </MemoryRouter>
-      </Provider>
-    );
+    renderSettingsPage(store);
 
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
-    expect(document.querySelector('.settings-sidebar')).toBeNull();
+    expect(screen.queryByText('通知')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
@@ -362,25 +282,17 @@ describe('SettingsPage', () => {
 
   it('prefers browser history when leaving the mobile settings root', async () => {
     viewportMocks.viewport = 'mobile';
+    window.history.replaceState({ idx: 0 }, '', '/workspace');
     window.history.pushState({ idx: 1 }, '', '/settings');
 
-    const store = createStore();
     const sendCommand = vi.fn().mockResolvedValue({});
-
-    store.set(connectionStatusAtom, 'connected');
-    store.set(
-      wsClientAtom,
-      {
-        sendCommand,
-        subscribe: vi.fn(() => () => {}),
-      } as never
-    );
+    const store = createConnectedStore(sendCommand);
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={['/settings']}>
+        <BrowserRouter>
           <SettingsPage />
-        </MemoryRouter>
+        </BrowserRouter>
       </Provider>
     );
 
