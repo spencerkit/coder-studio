@@ -16,15 +16,15 @@ vi.mock('../features/settings', () => ({
   SettingsPage: () => <div>SettingsPage</div>,
 }));
 
-vi.mock('../features/workspace', () => ({
-  WorkspacePage: () => <div>WorkspacePage</div>,
+vi.mock('../features/workspace/views/desktop/workspace-desktop-view', () => ({
+  WorkspaceDesktopView: () => <div>WorkspacePage</div>,
 }));
 
 vi.mock('../features/command-palette', () => ({
   CommandPalette: () => null,
 }));
 
-vi.mock('../features/workspace/components/branch-quick-pick', () => ({
+vi.mock('../features/workspace/views/shared/branch-quick-pick', () => ({
   BranchQuickPick: () => null,
 }));
 

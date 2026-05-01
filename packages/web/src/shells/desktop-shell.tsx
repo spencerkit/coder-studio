@@ -15,8 +15,8 @@ import { ConfigDriftBanner } from '../features/config-drift-banner';
 import { ToastContainer } from '../features/notifications';
 import { SettingsPage } from '../features/settings';
 import { WelcomePage } from '../features/welcome';
-import { WorkspacePage } from '../features/workspace';
-import { BranchQuickPick } from '../features/workspace/components/branch-quick-pick';
+import { WorkspaceDesktopView } from '../features/workspace/views/desktop/workspace-desktop-view';
+import { BranchQuickPick } from '../features/workspace/views/shared/branch-quick-pick';
 import { WorkspaceRouteGate } from '../features/workspace/views/shared/workspace-route-gate';
 import { useWorkspaceBootstrap } from '../features/workspace/actions/use-workspace-bootstrap';
 import { ConnectionStatusBanner } from './shared/connection-status-banner';
@@ -55,7 +55,7 @@ export function DesktopShell() {
               path="/workspace"
               element={(
                 <WorkspaceRouteGate>
-                  <WorkspacePage />
+                  <WorkspaceDesktopView />
                 </WorkspaceRouteGate>
               )}
             />

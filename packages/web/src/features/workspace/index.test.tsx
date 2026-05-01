@@ -13,7 +13,7 @@ import {
 import { activeFilePathAtomFamily } from './atoms/files';
 import { branchQuickPickAtom } from './atoms/git';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
-import { WorkspacePage } from './index';
+import { WorkspaceDesktopView } from './views/desktop/workspace-desktop-view';
 
 const fileTreePanelSpy = vi.fn();
 
@@ -29,22 +29,22 @@ vi.mock('../terminal-panel', () => ({
   TerminalPanel: () => <div data-testid="terminal-panel" />,
 }));
 
-vi.mock('./components/file-tree', () => ({
+vi.mock('./views/shared/file-tree-panel', () => ({
   FileTreePanel: (props: unknown) => {
     fileTreePanelSpy(props);
     return <div data-testid="file-tree-panel" />;
   },
 }));
 
-vi.mock('./components/git-panel', () => ({
+vi.mock('./views/shared/git-panel', () => ({
   GitPanel: () => <div data-testid="git-panel" />,
 }));
 
-vi.mock('./components/git-diff-viewer', () => ({
+vi.mock('./views/shared/git-diff-viewer', () => ({
   GitDiffViewer: () => <div data-testid="git-diff-viewer" />,
 }));
 
-vi.mock('../code-editor', () => ({
+vi.mock('../code-editor/views/shared/code-editor-host', () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
@@ -93,7 +93,7 @@ describe('WorkspacePage', () => {
       <Provider store={store}>
         <MemoryRouter initialEntries={['/workspace']}>
           <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -147,7 +147,7 @@ describe('WorkspacePage', () => {
       <Provider store={store}>
         <MemoryRouter initialEntries={['/workspace']}>
           <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -177,7 +177,7 @@ describe('WorkspacePage', () => {
       <Provider store={store}>
         <MemoryRouter initialEntries={['/workspace']}>
           <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -225,7 +225,7 @@ describe('WorkspacePage', () => {
       <Provider store={store}>
         <MemoryRouter initialEntries={['/workspace']}>
           <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -301,7 +301,7 @@ describe('WorkspacePage', () => {
       <Provider store={store}>
         <MemoryRouter initialEntries={['/workspace']}>
           <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
           </Routes>
         </MemoryRouter>
       </Provider>
