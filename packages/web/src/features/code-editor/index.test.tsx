@@ -9,7 +9,7 @@ import {
   type OpenFile,
 } from '../workspace/atoms/files';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
-import { CodeEditorHost } from './index';
+import { CodeEditorHost } from './views/shared/code-editor-host';
 
 // Monaco is not happy in jsdom; stub it so we only assert our own chrome.
 vi.mock('./components/monaco-host', () => ({
