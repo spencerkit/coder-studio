@@ -9,7 +9,7 @@
 import { BrowserRouter } from 'react-router-dom';
 import { DesktopShell } from './shells/desktop-shell';
 import { MobileShell } from './shells/mobile-shell';
-import { useViewport } from './shells/mobile-shell/hooks/use-viewport';
+import { useViewport } from './hooks/use-viewport';
 
 function ShellSwitch() {
   const viewport = useViewport();

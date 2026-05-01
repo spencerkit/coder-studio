@@ -7,19 +7,24 @@
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Palette, Globe, Check, ChevronRight, ArrowLeft, Keyboard } from 'lucide-react';
+import { Check, ChevronRight, ArrowLeft } from 'lucide-react';
 import {
   localeAtom,
   themeAtom,
   notificationPreferencesAtom,
 } from '../../../atoms/ui';
+import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
+import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ConfigEditor } from './config-editor';
-
-type SettingsSection = 'general' | 'appearance' | 'providers' | 'shortcuts';
+import { resolveSettingsExitTarget } from './settings-navigation';
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+} from './settings-sections';
 
 interface ProviderInfo {
   id: string;
@@ -69,8 +74,12 @@ export function SettingsPage() {
   const t = useTranslation();
   const settingsLoadFailedUnknown = t('settings.load_failed_unknown');
   const navigate = useNavigate();
+  const viewport = useViewport();
+  const isMobile = viewport === 'mobile';
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+  const [mobileRoute, setMobileRoute] = useState<'root' | SettingsSection>('root');
 
   // Provider settings state (would come from server in real implementation)
   const [providers, setProviders] = useState<ProviderInfo[]>([
@@ -87,6 +96,8 @@ export function SettingsPage() {
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const activeSectionMeta =
+    SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -143,8 +154,34 @@ export function SettingsPage() {
     };
   }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
 
+  const handlePageExit = () => {
+    const historyState = window.history.state as { idx?: number } | null;
+    const target = resolveSettingsExitTarget({
+      historyIndex: historyState?.idx ?? null,
+      historyLength: window.history.length,
+      hasActiveWorkspace: Boolean(activeWorkspaceId),
+    });
+
+    if (target === 'history') {
+      navigate(-1);
+      return;
+    }
+
+    navigate(target);
+  };
+
   const handleBack = () => {
-    navigate('/workspace');
+    if (isMobile && mobileRoute !== 'root') {
+      setMobileRoute('root');
+      return;
+    }
+
+    if (!isMobile) {
+      navigate('/workspace');
+      return;
+    }
+
+    handlePageExit();
   };
 
   // Render content based on active section
@@ -188,67 +225,89 @@ export function SettingsPage() {
     }
   };
 
+  const renderMobileRoot = () => (
+    <main className="settings-content settings-content--mobile-root">
+      <div className="settings-mobile-list">
+        {SETTINGS_SECTIONS.map(({ id, labelKey, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className="settings-mobile-item"
+            onClick={() => {
+              setActiveSection(id);
+              setMobileRoute(id);
+            }}
+          >
+            <span className="settings-mobile-item__icon">
+              <Icon size={18} />
+            </span>
+            <span className="settings-mobile-item__label">{t(labelKey)}</span>
+            <ChevronRight size={16} className="settings-mobile-item__arrow" />
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+
+  const shouldShowMobileRoot = isMobile && mobileRoute === 'root';
+
   return (
-    <div className="settings-page">
+    <div className={`settings-page ${isMobile ? 'settings-page--mobile' : ''}`}>
       <header className="settings-header">
         <button className="settings-back-btn" onClick={handleBack}>
           <ArrowLeft size={16} />
           <span>{t('action.back')}</span>
         </button>
+        {isMobile ? (
+          <div className="settings-header__title">
+            {t(shouldShowMobileRoot ? 'settings.title' : activeSectionMeta.labelKey)}
+          </div>
+        ) : null}
       </header>
 
-      <div className="settings-body">
-        <aside className="settings-sidebar">
-          <nav className="settings-nav">
-            <SettingsNavItem
-              icon={<Settings size={16} />}
-              label={t('settings.general')}
-              active={activeSection === 'general'}
-              onClick={() => setActiveSection('general')}
-            />
-            <SettingsNavItem
-              icon={<Globe size={16} />}
-              label={t('settings.providers')}
-              active={activeSection === 'providers'}
-              onClick={() => setActiveSection('providers')}
-            />
-            <SettingsNavItem
-              icon={<Palette size={16} />}
-              label={t('settings.appearance')}
-              active={activeSection === 'appearance'}
-              onClick={() => setActiveSection('appearance')}
-            />
-            <SettingsNavItem
-              icon={<Keyboard size={16} />}
-              label={t('settings.shortcuts.title')}
-              active={activeSection === 'shortcuts'}
-              onClick={() => setActiveSection('shortcuts')}
-            />
-          </nav>
-        </aside>
-
-        <main className="settings-content">
-          {settingsLoadError && (
-            <div className="settings-page__notice settings-page__notice--error" role="alert">
-              <div className="settings-page__notice-copy">
-                <span className="settings-page__notice-title">{t('settings.load_failed')}</span>
-                <span className="settings-page__notice-message">{settingsLoadError}</span>
-              </div>
-              <button
-                type="button"
-                className="settings-link"
-                onClick={() => setSettingsRefreshKey((value) => value + 1)}
-              >
-                {t('action.refresh')}
-              </button>
-            </div>
+      {shouldShowMobileRoot ? (
+        renderMobileRoot()
+      ) : (
+        <div className={`settings-body ${isMobile ? 'settings-body--mobile' : ''}`}>
+          {isMobile ? null : (
+            <aside className="settings-sidebar">
+              <nav className="settings-nav">
+                {SETTINGS_SECTIONS.map(({ id, labelKey, Icon }) => (
+                  <SettingsNavItem
+                    key={id}
+                    icon={<Icon size={16} />}
+                    label={t(labelKey)}
+                    active={activeSection === id}
+                    onClick={() => setActiveSection(id)}
+                  />
+                ))}
+              </nav>
+            </aside>
           )}
-          <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
-          {renderContent()}
-        </main>
-      </div>
 
-      <footer className="settings-footer">
+          <main className={`settings-content ${isMobile ? 'settings-content--mobile' : ''}`}>
+            {settingsLoadError && (
+              <div className="settings-page__notice settings-page__notice--error" role="alert">
+                <div className="settings-page__notice-copy">
+                  <span className="settings-page__notice-title">{t('settings.load_failed')}</span>
+                  <span className="settings-page__notice-message">{settingsLoadError}</span>
+                </div>
+                <button
+                  type="button"
+                  className="settings-link"
+                  onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                >
+                  {t('action.refresh')}
+                </button>
+              </div>
+            )}
+            <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
+            {renderContent()}
+          </main>
+        </div>
+      )}
+
+      <footer className={`settings-footer ${isMobile ? 'settings-footer--mobile' : ''}`}>
         <span className="settings-autosave">{t('settings.autosave_hint')}</span>
         <span className="settings-version">v0.2.6</span>
       </footer>
