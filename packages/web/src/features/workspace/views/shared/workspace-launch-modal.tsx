@@ -1,6 +1,6 @@
 import { Home, ArrowUp, Folder, Loader2, X } from 'lucide-react';
 import { useViewport } from '../../../../hooks/use-viewport';
-import { MobileSheet } from '../../../../shells/mobile-shell/mobile-sheet';
+import { MobileSheet } from '../mobile/mobile-sheet';
 import { useWorkspaceLaunchActions } from '../../actions/use-workspace-launch-actions';
 
 interface WorkspaceLaunchModalProps {

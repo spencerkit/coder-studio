@@ -1,6 +1,6 @@
 import type { WorktreeInfo } from '@coder-studio/core';
 import { useViewport } from '../../../../hooks/use-viewport';
-import { MobileSheet } from '../../../../shells/mobile-shell/mobile-sheet';
+import { MobileSheet } from '../mobile/mobile-sheet';
 import { useWorktreeActions } from '../../actions/use-workspace-launch-actions';
 
 type TabType = 'status' | 'diff' | 'tree';

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { wsClientAtom } from '../../atoms/connection';
-import { supervisorDialogAtom, supervisorsAtom } from '../../features/supervisor/atoms';
+import { wsClientAtom } from '../../../../atoms/connection';
+import { supervisorDialogAtom, supervisorsAtom } from '../../atoms';
 import { MobileSupervisorSheet } from './mobile-supervisor-sheet';
 
 describe('MobileSupervisorSheet', () => {

@@ -27,15 +27,11 @@ vi.mock('../../features/settings', () => ({
   SettingsPage: () => <div>SettingsPage</div>,
 }));
 
-vi.mock('../../features/workspace', () => ({
-  WorkspacePage: () => <div>WorkspacePage</div>,
-}));
-
 vi.mock('../../features/command-palette', () => ({
   CommandPalette: () => null,
 }));
 
-vi.mock('../../features/workspace/components/branch-quick-pick', () => ({
+vi.mock('../../features/workspace/views/shared/branch-quick-pick', () => ({
   BranchQuickPick: () => null,
 }));
 
@@ -51,7 +47,7 @@ vi.mock('../../features/agent-panes', () => ({
   AgentPanes: () => <div data-testid="agent-panes-empty-mock">AgentPanes</div>,
 }));
 
-vi.mock('../../features/agent-panes/components/session-card', () => ({
+vi.mock('../../features/agent-panes/views/shared/session-card', () => ({
   SessionCard: ({
     sessionId,
     showHeaderActions,
@@ -74,7 +70,7 @@ vi.mock('../../features/agent-panes/components/session-card', () => ({
   ),
 }));
 
-vi.mock('../../features/workspace/components/file-tree', () => ({
+vi.mock('../../features/workspace/views/shared/file-tree-panel', () => ({
   FileTreePanel: ({ onSelectFile }: { onSelectFile?: (path: string) => void }) => (
     <button type="button" onClick={() => onSelectFile?.('src/app.tsx')}>
       mock-file-tree
@@ -82,7 +78,7 @@ vi.mock('../../features/workspace/components/file-tree', () => ({
   ),
 }));
 
-vi.mock('../../features/workspace/components/git-panel', () => ({
+vi.mock('../../features/workspace/views/shared/git-panel', () => ({
   GitPanel: ({
     onPreviewChange,
   }: {
@@ -103,11 +99,11 @@ vi.mock('../../features/workspace/components/git-panel', () => ({
   ),
 }));
 
-vi.mock('../../features/workspace/components/git-diff-viewer', () => ({
+vi.mock('../../features/workspace/views/shared/git-diff-viewer', () => ({
   GitDiffViewer: () => <div data-testid="mobile-git-diff-viewer">GitDiffViewer</div>,
 }));
 
-vi.mock('../../features/code-editor', () => ({
+vi.mock('../../features/code-editor/views/shared/code-editor-host', () => ({
   CodeEditorHost: () => <div data-testid="mobile-code-editor">CodeEditorHost</div>,
 }));
 

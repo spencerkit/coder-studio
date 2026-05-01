@@ -18,7 +18,7 @@ import {
 } from '../../workspace/atoms/layout';
 import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
-import { MobileSheet } from '../../../shells/mobile-shell/mobile-sheet';
+import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
 import { WorkspaceLaunchModal } from '../../workspace/components/workspace-launch-modal';
 import type { Workspace } from '@coder-studio/core';
 
