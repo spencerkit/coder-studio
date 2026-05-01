@@ -3,8 +3,12 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { Provider, createStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
 import { GitPanel } from './git-panel';
-import { wsClientAtom } from '../../../atoms/connection';
-import { gitBranchListAtomFamily, gitStateAtomFamily } from '../atoms/git';
+import { wsClientAtom } from '../../../../atoms/connection';
+import {
+  gitBranchListAtomFamily,
+  gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
+} from '../../atoms/git';
 
 describe('GitPanel', () => {
   const status: GitStatus = {
@@ -95,7 +99,7 @@ describe('GitPanel', () => {
     expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('feature/ai-agent');
   });
 
-  it('requests a diff and emits a workspace diff event when a row is clicked', async () => {
+  it('requests a diff, updates preview state, and does not emit a workspace diff event when a row is clicked', async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'git.status') {
         return status;
@@ -109,13 +113,14 @@ describe('GitPanel', () => {
 
       return {};
     });
+    const onPreviewChange = vi.fn();
     const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
       <Provider store={store}>
-        <GitPanel workspaceId="ws-test" />
+        <GitPanel workspaceId="ws-test" onPreviewChange={onPreviewChange} />
       </Provider>
     );
 
@@ -130,17 +135,22 @@ describe('GitPanel', () => {
       });
     });
 
-    expect(dispatchEventSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'coder-studio:show-diff',
-        detail: expect.objectContaining({
-          path: 'src/auth/AuthGate.tsx',
-        }),
-      })
-    );
+    expect(store.get(gitStateAtomFamily('ws-test'))).toEqual(status);
+    expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('');
+    expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toEqual({
+      path: 'src/auth/AuthGate.tsx',
+      diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
+      staged: true,
+    });
+    expect(onPreviewChange).toHaveBeenCalledWith({
+      path: 'src/auth/AuthGate.tsx',
+      diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
+      staged: true,
+    });
+    expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
 
-  it('auto-selects the first change when git state is already hydrated', async () => {
+  it('auto-selects the first change from hydrated state without emitting a workspace diff event', async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'git.diff') {
         return {
@@ -170,14 +180,12 @@ describe('GitPanel', () => {
       });
     });
 
-    expect(dispatchEventSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'coder-studio:show-diff',
-        detail: expect.objectContaining({
-          path: 'src/auth/AuthGate.tsx',
-        }),
-      })
-    );
+    expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toEqual({
+      path: 'src/auth/AuthGate.tsx',
+      diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
+      staged: true,
+    });
+    expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
 
   it('requires confirmation before discarding a single file', async () => {

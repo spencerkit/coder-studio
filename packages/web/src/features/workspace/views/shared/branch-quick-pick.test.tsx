@@ -6,8 +6,8 @@ import { BranchQuickPick } from './branch-quick-pick';
 import {
   branchQuickPickAtom,
   gitBranchListAtomFamily,
-} from '../atoms/git';
-import { wsClientAtom } from '../../../atoms/connection';
+} from '../../atoms/git';
+import { wsClientAtom } from '../../../../atoms/connection';
 
 describe('BranchQuickPick', () => {
   let store: ReturnType<typeof createStore>;
