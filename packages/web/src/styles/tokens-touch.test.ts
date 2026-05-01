@@ -30,11 +30,11 @@ describe('tokens.css touch tokens', () => {
     expect(root).toContain('--touch-hit-slop: 0px');
   });
 
-  it('overrides touch tokens on narrow viewport OR coarse pointer', () => {
+  it('overrides touch tokens on narrow viewport only', () => {
     const mediaMatch =
-      /@media\s*\(max-width:\s*899px\)\s*,\s*\(pointer:\s*coarse\)\s*\{([\s\S]*?)\}\s*\}/m.exec(stylesheet);
+      /@media\s*\(max-width:\s*899px\)\s*\{([\s\S]*?)\}\s*\}/m.exec(stylesheet);
 
-    expect(mediaMatch, 'expected @media (max-width: 899px), (pointer: coarse) block').not.toBeNull();
+    expect(mediaMatch, 'expected @media (max-width: 899px) block').not.toBeNull();
 
     const body = mediaMatch![1];
 

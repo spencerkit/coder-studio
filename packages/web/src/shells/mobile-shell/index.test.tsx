@@ -11,8 +11,15 @@ import {
   wsClientAtom,
 } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { activeWorkspaceIdAtom, authenticatedAtom, commandPaletteOpenAtom, paneLayoutAtomFamily } from '../../atoms/ui';
+import {
+  activeWorkspaceIdAtom,
+  authenticatedAtom,
+  commandPaletteOpenAtom,
+  paneLayoutAtomFamily,
+  pendingFocusSessionAtom,
+} from '../../atoms/ui';
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
+import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import type { Session } from '@coder-studio/core';
 
@@ -444,6 +451,101 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(screen.queryByRole('button', { name: 'Switch workspace' })).not.toBeInTheDocument();
   });
 
+  it('shows a loading workspace gate instead of the mobile scaffold while workspaces are still loading', () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesLoadStateAtom, 'loading');
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText('Loading workspaces')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
+  });
+
+  it('shows a workspace load error gate instead of the mobile scaffold when bootstrap fails', () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesLoadStateAtom, 'error');
+    store.set(workspacesLoadErrorAtom, 'Failed to fetch workspace list');
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText('Failed to load workspaces')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
+  });
+
+  it('does not render the mobile scaffold before redirecting home when /workspace resolves to an empty workspace list', async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
+    expect(screen.queryByText('No active workspace')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects /workspace home on mobile when the workspace list is ready but empty while reconnecting', async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'reconnecting');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.queryByText('Loading workspaces')).not.toBeInTheDocument();
+    expect(screen.queryByText('No active workspace')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
+  });
+
+  it('shows the global reconnecting banner on non-workspace mobile routes', () => {
+    renderMobileShell({
+      initialEntry: '/settings',
+      connectionStatus: 'reconnecting',
+      withWorkspaces: false,
+    });
+
+    expect(screen.getByText('正在重新连接...')).toBeInTheDocument();
+  });
+
   it('switches the active session when a chip is tapped', async () => {
     const user = userEvent.setup();
     renderMobileShell();
@@ -451,6 +553,18 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(await screen.findByRole('button', { name: 'Switch to agent Claude' }));
 
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+  });
+
+  it('switches to the target session when a pending focus marker points at a non-active mobile session', async () => {
+    const { store } = renderMobileShell({ initialEntry: '/workspace' });
+
+    expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_2');
+
+    store.set(pendingFocusSessionAtom, 'sess_1');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+    });
   });
 
   it('submits composer text through sendTerminalInput', async () => {
@@ -604,13 +718,12 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
   });
 
-  it('renders a mobile recovery strip while reconnecting and shows attempt count', async () => {
+  it('renders a reconnecting banner inside the mobile workspace scaffold', async () => {
     renderMobileShell({
       connectionStatus: 'reconnecting',
       reconnectAttempts: 2,
     });
 
-    expect(await screen.findByText('正在恢复连接')).toBeInTheDocument();
-    expect(screen.getByText('已尝试 2 次')).toBeInTheDocument();
+    expect(await screen.findByText('正在重新连接...')).toBeInTheDocument();
   });
 });

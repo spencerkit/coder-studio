@@ -8,8 +8,6 @@ import {
   resolvedActiveWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
-  workspacesLoadErrorAtom,
-  workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
 import { branchQuickPickAtom } from '../../atoms/git';
@@ -167,13 +165,12 @@ describe('WorkspacePage', () => {
     });
   });
 
-  it('shows a resolving shell while workspace bootstrap is still loading', async () => {
+  it('shows the empty state when rendered without an active workspace', async () => {
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'loading');
 
     render(
       <Provider store={store}>
@@ -185,55 +182,7 @@ describe('WorkspacePage', () => {
       </Provider>
     );
 
-    expect(screen.getByTestId('workspace-resolving-shell')).toBeInTheDocument();
-    expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
-  });
-
-  it('shows an error shell instead of the empty state when workspace bootstrap fails', async () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'error');
-    store.set(workspacesLoadErrorAtom, 'Workspace listing failed');
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/workspace']}>
-          <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
-
-    expect(await screen.findByText('Workspace listing failed')).toBeInTheDocument();
-    expect(screen.queryByTestId('workspace-resolving-shell')).not.toBeInTheDocument();
-    expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
-  });
-
-  it('shows a resolving shell before workspace bootstrap starts', async () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(workspacesAtom, {});
-    store.set(workspaceOrderAtom, []);
-    store.set(workspacesLoadStateAtom, 'idle');
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/workspace']}>
-          <Routes>
-            <Route path="/workspace" element={<WorkspacePage />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
-
-    await act(async () => {});
-    expect(screen.getByTestId('workspace-resolving-shell')).toBeInTheDocument();
-    expect(screen.queryByText('未打开工作区')).not.toBeInTheDocument();
+    expect(screen.getByText('未打开工作区')).toBeInTheDocument();
   });
 
   it('passes toolbar create requests through to the file tree panel', async () => {

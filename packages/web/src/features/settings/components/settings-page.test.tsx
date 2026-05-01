@@ -3,6 +3,7 @@ import { Provider, createStore } from 'jotai';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
+import { activeWorkspaceIdAtom } from '../../../atoms/ui';
 import { SettingsPage } from './settings-page';
 
 const viewportMocks = vi.hoisted(() => ({
@@ -273,7 +274,10 @@ describe('SettingsPage', () => {
     expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();
   });
 
-  it('returns to /workspace from settings', async () => {
+  it('uses shared history-aware exit behavior on desktop', async () => {
+    window.history.replaceState({ idx: 0 }, '', '/');
+    window.history.pushState({ idx: 1 }, '', '/settings');
+
     const sendCommand = vi.fn().mockResolvedValue({});
     const store = createConnectedStore(sendCommand);
 
@@ -281,7 +285,21 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
-    expect(routerMocks.navigate).toHaveBeenCalledWith('/workspace');
+    expect(routerMocks.navigate).toHaveBeenCalledWith(-1);
+  });
+
+  it('falls back to / when desktop settings is opened directly without an active workspace', async () => {
+    window.history.replaceState({ idx: 0 }, '', '/settings');
+
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+    store.set(activeWorkspaceIdAtom, null);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith('/');
   });
 
   it('renders a mobile category list and returns from detail content to the settings root', async () => {

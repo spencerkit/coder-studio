@@ -2,7 +2,12 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { Workspace } from '@coder-studio/core';
-import { localeAtom, commandPaletteOpenAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
+import {
+  localeAtom,
+  commandPaletteOpenAtom,
+  activeWorkspaceIdAtom,
+  terminalPanelVisibleAtom,
+} from '../../../atoms/ui';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
 import { CommandPalette } from './command-palette';
 
@@ -112,6 +117,56 @@ describe('CommandPalette', () => {
       screen.getByText('Settings', { selector: '.command-palette-item-label' })
     ).toBeInTheDocument();
     expect(screen.queryByText('Workspace: one')).toBeNull();
+  });
+
+  it('hides desktop-only layout commands on mobile', () => {
+    viewportMocks.viewport = 'mobile';
+
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': createWorkspace('ws-1', '/tmp/one'),
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    expect(screen.queryAllByText('Focus Mode: Hide sidebar and bottom panel')).toHaveLength(0);
+    expect(screen.queryByText('Open Focus Mode')).toBeNull();
+    expect(screen.queryByText('Close Focus Mode')).toBeNull();
+    expect(screen.queryByText('Toggle Sidebar')).toBeNull();
+    expect(screen.queryByText('Terminal')).toBeNull();
+    expect(screen.getByText('Settings', { selector: '.command-palette-item-label' })).toBeInTheDocument();
+  });
+
+  it('keeps desktop-only layout commands available on desktop and executes them', () => {
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': createWorkspace('ws-1', '/tmp/one'),
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(terminalPanelVisibleAtom, false);
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    expect(screen.getByText('Terminal')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Terminal'));
+
+    expect(store.get(terminalPanelVisibleAtom)).toBe(true);
   });
 
   it('closes the mobile palette before opening the workspace launcher', () => {

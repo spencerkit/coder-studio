@@ -49,11 +49,11 @@ export function useWorkspaceBootstrap() {
       return;
     }
 
-    if (connectionStatus !== 'connected') {
-      return;
-    }
-
     if (workspacesLoadState === 'idle') {
+      if (connectionStatus !== 'connected') {
+        return;
+      }
+
       const requestId = bootstrapRequestIdRef.current + 1;
       bootstrapRequestIdRef.current = requestId;
 

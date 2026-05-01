@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
 import { DesktopShell } from './desktop-shell';
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from '../atoms/connection';
-import { authenticatedAtom } from '../atoms/ui';
+import { activeWorkspaceIdAtom, authenticatedAtom } from '../atoms/ui';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../atoms/workspaces';
 
 vi.mock('../features/welcome', () => ({
@@ -96,10 +96,60 @@ describe('DesktopShell auth gating', () => {
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': {
+        id: 'ws-1',
+        path: '/tmp/ws-1',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(workspacesLoadStateAtom, 'ready');
 
     renderShell(store);
 
     expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
+  });
+
+  it('shows the shared workspace gate on desktop while /workspace is unresolved', () => {
+    window.history.replaceState({}, '', '/workspace');
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'loading');
+
+    renderShell(store);
+
+    expect(screen.getByText('Loading workspaces')).toBeInTheDocument();
+    expect(screen.queryByText('WorkspacePage')).not.toBeInTheDocument();
+  });
+
+  it('redirects /workspace to / on desktop when the workspace list is ready but empty while reconnecting', async () => {
+    window.history.replaceState({}, '', '/workspace');
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'reconnecting');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    renderShell(store);
+
+    expect(screen.queryByText('Loading workspaces')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
   });
 
   it('renders the explicit /auth route when auth is enabled and user is unauthenticated', () => {
@@ -113,6 +163,17 @@ describe('DesktopShell auth gating', () => {
     renderShell(store);
 
     expect(screen.getByText('LoginPage')).toBeInTheDocument();
+  });
+
+  it('shows the reconnecting banner on desktop', () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'reconnecting');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    renderShell(store);
+
+    expect(screen.getByText('正在重新连接...')).toBeInTheDocument();
   });
 
   it('redirects / to /workspace after auth resolves and workspace.list is non-empty', async () => {
@@ -139,6 +200,31 @@ describe('DesktopShell auth gating', () => {
 
     await waitFor(() => {
       expect(window.location.pathname).toBe('/workspace');
+    });
+  });
+
+  it('redirects / to /workspace on desktop when the workspace list is already ready while reconnecting', async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'reconnecting');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {
+      'ws-1': {
+        id: 'ws-1',
+        path: '/tmp/ws-1',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
+    store.set(workspaceOrderAtom, ['ws-1']);
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/workspace');
+      expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
     });
   });
 

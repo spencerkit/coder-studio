@@ -2,7 +2,7 @@
  * Application root.
  *
  * Provides BrowserRouter and picks a shell based on viewport:
- * - mobile (< 900px or pointer: coarse) -> MobileShell
+ * - mobile (< 900px) -> MobileShell
  * - desktop -> DesktopShell
  */
 

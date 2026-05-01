@@ -104,4 +104,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(monacoSlider).toContain("var(--radius-full)");
     expect(monacoSliderHover).toContain("var(--border-focus)");
   });
+
+  it("scopes disabled provider card styling to the draft launcher", () => {
+    expect(stylesheet).toContain(".agent-draft-launcher .agent-provider-card[disabled]");
+    expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
+  });
 });

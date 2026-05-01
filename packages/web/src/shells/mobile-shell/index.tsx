@@ -2,11 +2,7 @@ import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TerminalPanel } from '../../features/terminal-panel';
-import {
-  authEnabledAtom,
-  connectionStatusAtom,
-  reconnectAttemptCountAtom,
-} from '../../atoms/connection';
+import { authEnabledAtom } from '../../atoms/connection';
 import { activeWorkspaceAtom, orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
 import { LoginPage } from '../../features/auth';
 import { AgentPanes } from '../../features/agent-panes';
@@ -19,7 +15,9 @@ import { SettingsPage } from '../../features/settings';
 import { WelcomePage } from '../../features/welcome';
 import { WorkspaceLaunchModal } from '../../features/workspace/components/workspace-launch-modal';
 import { BranchQuickPick } from '../../features/workspace/components/branch-quick-pick';
+import { ConnectionStatusBanner } from '../shared/connection-status-banner';
 import { useWorkspaceBootstrap } from '../shared/use-workspace-bootstrap';
+import { WorkspaceRouteGate } from '../shared/workspace-route-gate';
 import { MobileDock } from './mobile-dock';
 import { MobileAgentStrip } from './mobile-agent-strip';
 import { MobileComposer } from './mobile-composer';
@@ -33,6 +31,7 @@ import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
 import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
 import { useMobileMotionMode } from './hooks/use-mobile-motion-mode';
 import { collectSessionIds } from '../../features/agent-panes/pane-layout-tree';
+import { pendingFocusSessionAtom } from '../../atoms/ui';
 
 type MobileSheetKind = 'files' | 'terminal' | 'supervisor' | null;
 
@@ -41,8 +40,7 @@ function MobileWorkspaceScaffold() {
   const activeWorkspace = useAtomValue(activeWorkspaceAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
-  const connectionStatus = useAtomValue(connectionStatusAtom);
-  const reconnectAttemptCount = useAtomValue(reconnectAttemptCountAtom);
+  const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
   const { sessions, paneLayout } = useWorkspaceSessions(activeWorkspace);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
@@ -62,6 +60,7 @@ function MobileWorkspaceScaffold() {
       .map((sessionId) => sessionMap.get(sessionId))
       .filter((session): session is NonNullable<typeof session> => Boolean(session));
   }, [flattenedSessionIds, sessions]);
+  const preferredSessionId = activeWorkspace?.uiState?.activeSessionId ?? null;
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,9 +68,28 @@ function MobileWorkspaceScaffold() {
       return;
     }
 
+    if (preferredSessionId && orderedSessions.some((session) => session.id === preferredSessionId)) {
+      setActiveSessionId(preferredSessionId);
+      return;
+    }
+
     const mostRecentSession = [...orderedSessions].sort((left, right) => right.lastActiveAt - left.lastActiveAt)[0];
     setActiveSessionId(mostRecentSession?.id ?? orderedSessions[0]?.id ?? null);
-  }, [activeSessionId, orderedSessions]);
+  }, [activeSessionId, orderedSessions, preferredSessionId]);
+
+  useEffect(() => {
+    if (!pendingFocusSessionId) {
+      return;
+    }
+
+    if (pendingFocusSessionId === activeSessionId) {
+      return;
+    }
+
+    if (orderedSessions.some((session) => session.id === pendingFocusSessionId)) {
+      setActiveSessionId(pendingFocusSessionId);
+    }
+  }, [activeSessionId, orderedSessions, pendingFocusSessionId]);
 
   const activeSession = orderedSessions.find((session) => session.id === activeSessionId) ?? null;
 
@@ -113,29 +131,6 @@ function MobileWorkspaceScaffold() {
         drawerOpen={drawerOpen}
         onToggleDrawer={() => setDrawerOpen((value) => !value)}
       />
-
-      {connectionStatus !== 'connected' && connectionStatus !== 'connecting' ? (
-        <div
-          className={`mobile-shell__recovery-strip mobile-shell__recovery-strip--${connectionStatus}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="mobile-shell__recovery-title">
-            {connectionStatus === 'reconnecting'
-              ? '正在恢复连接'
-              : connectionStatus === 'rejected'
-                ? '当前标签页未激活'
-                : '连接已断开'}
-          </span>
-          <span className="mobile-shell__recovery-body">
-            {connectionStatus === 'reconnecting'
-              ? `已尝试 ${Math.max(reconnectAttemptCount, 1)} 次`
-              : connectionStatus === 'rejected'
-                ? '请回到正在运行的标签页'
-                : '回到前台或恢复网络后继续'}
-          </span>
-        </div>
-      ) : null}
 
       <ConfigDriftBanner />
 
@@ -232,17 +227,12 @@ function MobileWorkspaceScaffold() {
 
 export function MobileShell() {
   useWorkspaceBootstrap();
-  const connectionStatus = useAtomValue(connectionStatusAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authUnknown = authEnabled === null;
 
   return (
     <div className="app">
-      {connectionStatus === 'rejected' && (
-        <div className="connection-banner connection-banner--error">
-          <span>另一个标签页已激活</span>
-        </div>
-      )}
+      <ConnectionStatusBanner />
 
       <main className="main-content">
         {authUnknown ? (
@@ -257,7 +247,14 @@ export function MobileShell() {
           <Routes>
             <Route path="/" element={<WelcomePage />} />
             <Route path="/auth" element={<LoginPage />} />
-            <Route path="/workspace" element={<MobileWorkspaceScaffold />} />
+            <Route
+              path="/workspace"
+              element={(
+                <WorkspaceRouteGate>
+                  <MobileWorkspaceScaffold />
+                </WorkspaceRouteGate>
+              )}
+            />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         )}

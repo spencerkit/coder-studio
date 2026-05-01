@@ -14,11 +14,7 @@ import type { FC } from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { FilePlus, FolderPlus, GitBranch, RefreshCw } from 'lucide-react';
-import {
-  activeWorkspaceAtom,
-  workspacesLoadErrorAtom,
-  workspacesLoadStateAtom,
-} from '../../atoms/workspaces';
+import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { focusModeAtom, leftPanelWidthAtom, bottomPanelHeightAtom, terminalPanelVisibleAtom, sidebarCollapsedAtom } from '../../atoms/ui';
 import { gitStateAtomFamily, branchQuickPickAtom } from '../../atoms/git';
 import { activeFilePathAtomFamily } from '../../atoms/fs';
@@ -60,8 +56,6 @@ export const WorkspacePage: FC = () => {
   const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const store = useStore();
-  const workspacesLoadState = useAtomValue(workspacesLoadStateAtom);
-  const workspacesLoadError = useAtomValue(workspacesLoadErrorAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
 
@@ -178,34 +172,6 @@ export const WorkspacePage: FC = () => {
   }, [setBranchQuickPick, workspace]);
 
   if (!workspace) {
-    if (workspacesLoadState === 'error') {
-      return (
-        <div className="workspace-resolving-shell">
-          <div className="workspace-resolving-card">
-            <div className="workspace-resolving-kicker">Workspace</div>
-            <div className="workspace-resolving-title">Failed to load workspaces</div>
-            <div className="workspace-resolving-desc">
-              {workspacesLoadError ?? 'Failed to fetch workspace list'}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (workspacesLoadState === 'idle' || workspacesLoadState === 'loading') {
-      return (
-        <div className="workspace-resolving-shell" data-testid="workspace-resolving-shell">
-          <div className="workspace-resolving-card">
-            <div className="workspace-resolving-kicker">Workspace</div>
-            <div className="workspace-resolving-title">Loading workspaces</div>
-            <div className="workspace-resolving-desc">
-              Preparing your workspace list and restoring the last active session.
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="workspace-page workspace-page-empty">
         <div className="workspace-empty-content">

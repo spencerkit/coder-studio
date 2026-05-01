@@ -204,11 +204,6 @@ export function SettingsPage() {
       return;
     }
 
-    if (!isMobile) {
-      navigate('/workspace');
-      return;
-    }
-
     handlePageExit();
   };
 

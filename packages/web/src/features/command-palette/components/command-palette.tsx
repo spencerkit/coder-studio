@@ -31,6 +31,8 @@ interface Command {
   action: () => void;
 }
 
+type ShellKind = 'desktop' | 'mobile';
+
 /**
  * Command Palette
  *
@@ -62,6 +64,7 @@ export function CommandPalette() {
 
   // Build command list
   const commands = buildCommands({
+    shellKind: isMobile ? 'mobile' : 'desktop',
     focusMode,
     setFocusMode,
     sidebarCollapsed,
@@ -261,6 +264,7 @@ export function CommandPalette() {
  * Build available commands based on current state
  */
 function buildCommands(context: {
+  shellKind: ShellKind;
   focusMode: boolean;
   setFocusMode: (v: boolean) => void;
   sidebarCollapsed: boolean;
@@ -278,6 +282,7 @@ function buildCommands(context: {
   setShowWorkspaceLaunch: (v: boolean) => void;
 }): Command[] {
   const {
+    shellKind,
     focusMode,
     setFocusMode,
     sidebarCollapsed,
@@ -320,60 +325,65 @@ function buildCommands(context: {
         navigate('/settings');
       },
     },
-    {
-      id: 'toggle-focus-mode',
-      label: t('tooltip.focus_mode'),
-      description: focusMode ? t('action.close') : t('action.open'),
-      shortcut: 'F',
-      action: () => setFocusMode(!focusMode),
-    },
-    {
-      id: 'enable-focus-mode',
-      label: `${t('action.open')} Focus Mode`,
-      description: t('tooltip.focus_mode'),
-      action: () => setFocusMode(true),
-    },
-    {
-      id: 'disable-focus-mode',
-      label: `${t('action.close')} Focus Mode`,
-      description: t('tooltip.focus_mode'),
-      action: () => setFocusMode(false),
-    },
-    {
-      id: 'toggle-sidebar',
-      label: t('command.shortcut.toggle_sidebar'),
-      description: sidebarCollapsed ? t('action.open') : t('action.close'),
-      action: () => setSidebarCollapsed(!sidebarCollapsed),
-    },
-    {
-      id: 'toggle-terminal',
-      label: t('terminal.title'),
-      description: !terminalPanelVisible ? t('action.open') : t('action.close'),
-      action: () => {
-        setTerminalPanelVisible(!terminalPanelVisible);
-        if (!terminalPanelVisible && bottomPanelHeight === 0) {
-          setBottomPanelHeight(200);
-        }
-      },
-    },
-    {
-      id: 'show-terminal',
-      label: `${t('action.open')} ${t('terminal.title')}`,
-      description: t('command.shortcut.toggle_terminal'),
-      action: () => {
-        setTerminalPanelVisible(true);
-        if (bottomPanelHeight === 0) {
-          setBottomPanelHeight(200);
-        }
-      },
-    },
-    {
-      id: 'hide-terminal',
-      label: `${t('action.close')} ${t('terminal.title')}`,
-      description: t('command.shortcut.toggle_terminal'),
-      action: () => setTerminalPanelVisible(false),
-    },
   ];
+
+  if (shellKind === 'desktop') {
+    commands.push(
+      {
+        id: 'toggle-focus-mode',
+        label: t('tooltip.focus_mode'),
+        description: focusMode ? t('action.close') : t('action.open'),
+        shortcut: 'F',
+        action: () => setFocusMode(!focusMode),
+      },
+      {
+        id: 'enable-focus-mode',
+        label: `${t('action.open')} Focus Mode`,
+        description: t('tooltip.focus_mode'),
+        action: () => setFocusMode(true),
+      },
+      {
+        id: 'disable-focus-mode',
+        label: `${t('action.close')} Focus Mode`,
+        description: t('tooltip.focus_mode'),
+        action: () => setFocusMode(false),
+      },
+      {
+        id: 'toggle-sidebar',
+        label: t('command.shortcut.toggle_sidebar'),
+        description: sidebarCollapsed ? t('action.open') : t('action.close'),
+        action: () => setSidebarCollapsed(!sidebarCollapsed),
+      },
+      {
+        id: 'toggle-terminal',
+        label: t('terminal.title'),
+        description: !terminalPanelVisible ? t('action.open') : t('action.close'),
+        action: () => {
+          setTerminalPanelVisible(!terminalPanelVisible);
+          if (!terminalPanelVisible && bottomPanelHeight === 0) {
+            setBottomPanelHeight(200);
+          }
+        },
+      },
+      {
+        id: 'show-terminal',
+        label: `${t('action.open')} ${t('terminal.title')}`,
+        description: t('command.shortcut.toggle_terminal'),
+        action: () => {
+          setTerminalPanelVisible(true);
+          if (bottomPanelHeight === 0) {
+            setBottomPanelHeight(200);
+          }
+        },
+      },
+      {
+        id: 'hide-terminal',
+        label: `${t('action.close')} ${t('terminal.title')}`,
+        description: t('command.shortcut.toggle_terminal'),
+        action: () => setTerminalPanelVisible(false),
+      }
+    );
+  }
 
   // Add workspace switch commands
   workspaces.forEach((ws) => {

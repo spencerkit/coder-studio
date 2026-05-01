@@ -219,8 +219,7 @@
 }
 
 /* ========== Mobile / Touch Override (Phase 0) ========== */
-/* Triggered by narrow viewport OR coarse pointer (touch input). */
-@media (max-width: 899px), (pointer: coarse) {
+@media (max-width: 899px) {
   :root {
     --touch-target-min: 44px;
     --touch-target-comfortable: 48px;

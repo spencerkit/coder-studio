@@ -2,19 +2,14 @@ import { useEffect, useState } from 'react';
 
 export type Viewport = 'mobile' | 'desktop';
 
-// Treat coarse-pointer devices as mobile even above 899px to keep shell selection aligned with touch-first layouts.
 const WIDTH_QUERY = '(max-width: 899px)';
-const POINTER_QUERY = '(pointer: coarse)';
 
 function computeViewport(): Viewport {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return 'desktop';
   }
 
-  const narrow = window.matchMedia(WIDTH_QUERY).matches;
-  const coarse = window.matchMedia(POINTER_QUERY).matches;
-
-  return narrow || coarse ? 'mobile' : 'desktop';
+  return window.matchMedia(WIDTH_QUERY).matches ? 'mobile' : 'desktop';
 }
 
 export function useViewport(): Viewport {
@@ -26,18 +21,15 @@ export function useViewport(): Viewport {
     }
 
     const widthList = window.matchMedia(WIDTH_QUERY);
-    const pointerList = window.matchMedia(POINTER_QUERY);
     const handleChange = () => {
       setViewport(computeViewport());
     };
 
     widthList.addEventListener('change', handleChange);
-    pointerList.addEventListener('change', handleChange);
     handleChange();
 
     return () => {
       widthList.removeEventListener('change', handleChange);
-      pointerList.removeEventListener('change', handleChange);
     };
   }, []);
 

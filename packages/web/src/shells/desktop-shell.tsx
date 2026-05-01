@@ -17,11 +17,12 @@ import { SettingsPage } from '../features/settings';
 import { WelcomePage } from '../features/welcome';
 import { WorkspacePage } from '../features/workspace';
 import { BranchQuickPick } from '../features/workspace/components/branch-quick-pick';
+import { ConnectionStatusBanner } from './shared/connection-status-banner';
+import { WorkspaceRouteGate } from './shared/workspace-route-gate';
 import { useWorkspaceBootstrap } from './shared/use-workspace-bootstrap';
 
 export function DesktopShell() {
   useWorkspaceBootstrap();
-  const connectionStatus = useAtomValue(connectionStatusAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
@@ -33,16 +34,7 @@ export function DesktopShell() {
 
   return (
     <div className="app">
-      {connectionStatus === 'reconnecting' && (
-        <div className="connection-banner">
-          <span>正在重新连接...</span>
-        </div>
-      )}
-      {connectionStatus === 'rejected' && (
-        <div className="connection-banner connection-banner--error">
-          <span>另一个标签页已激活</span>
-        </div>
-      )}
+      <ConnectionStatusBanner />
 
       {shouldShowGlobalConfigDriftBanner && <ConfigDriftBanner />}
 
@@ -59,7 +51,14 @@ export function DesktopShell() {
           <Routes>
             <Route path="/" element={<WelcomePage />} />
             <Route path="/auth" element={<LoginPage />} />
-            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route
+              path="/workspace"
+              element={(
+                <WorkspaceRouteGate>
+                  <WorkspacePage />
+                </WorkspaceRouteGate>
+              )}
+            />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         )}

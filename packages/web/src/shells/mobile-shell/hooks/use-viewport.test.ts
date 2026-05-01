@@ -70,13 +70,13 @@ describe('useViewport', () => {
     expect(result.current).toBe('mobile');
   });
 
-  it('returns "mobile" when pointer is coarse even on wide viewport', () => {
+  it('returns "desktop" when pointer is coarse but viewport is wide', () => {
     const { matchMedia } = createMatchMediaMock((query) => query.includes('pointer: coarse'));
     window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 
     const { result } = renderHook(() => useViewport());
 
-    expect(result.current).toBe('mobile');
+    expect(result.current).toBe('desktop');
   });
 
   it('updates reactively when the viewport query changes', () => {
@@ -100,13 +100,10 @@ describe('useViewport', () => {
 
     const { unmount } = renderHook(() => useViewport());
     const widthList = lists.get('(max-width: 899px)')!;
-    const pointerList = lists.get('(pointer: coarse)')!;
     const widthRemove = vi.spyOn(widthList, 'removeEventListener');
-    const pointerRemove = vi.spyOn(pointerList, 'removeEventListener');
 
     unmount();
 
     expect(widthRemove).toHaveBeenCalledWith('change', expect.any(Function));
-    expect(pointerRemove).toHaveBeenCalledWith('change', expect.any(Function));
   });
 });
