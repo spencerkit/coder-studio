@@ -17,9 +17,9 @@ import { SettingsPage } from '../features/settings';
 import { WelcomePage } from '../features/welcome';
 import { WorkspacePage } from '../features/workspace';
 import { BranchQuickPick } from '../features/workspace/components/branch-quick-pick';
+import { WorkspaceRouteGate } from '../features/workspace/views/shared/workspace-route-gate';
+import { useWorkspaceBootstrap } from '../features/workspace/actions/use-workspace-bootstrap';
 import { ConnectionStatusBanner } from './shared/connection-status-banner';
-import { WorkspaceRouteGate } from './shared/workspace-route-gate';
-import { useWorkspaceBootstrap } from './shared/use-workspace-bootstrap';
 
 export function DesktopShell() {
   useWorkspaceBootstrap();
