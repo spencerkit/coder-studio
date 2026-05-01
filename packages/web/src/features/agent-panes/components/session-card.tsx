@@ -16,7 +16,6 @@ import {
   Square,
 } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
-import { dispatchCommandAtom } from '../../../atoms/connection';
 import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
 import type { SessionState } from '@coder-studio/core';
 import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
@@ -24,11 +23,18 @@ import { SupervisorCard } from '../../supervisor/components/supervisor-card';
 import { useSupervisor } from '../../supervisor/hooks/use-supervisor';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
 
+type SessionCardAction = () => void | Promise<void>;
+
 interface SessionCardProps {
   sessionId: string;
   showHeaderActions?: boolean;
   showSupervisorInline?: boolean;
   terminalReadOnlyOverride?: boolean;
+  onClose?: SessionCardAction;
+  onSplitHorizontal?: SessionCardAction;
+  onSplitVertical?: SessionCardAction;
+  onStart?: SessionCardAction;
+  onStop?: SessionCardAction;
 }
 
 /**
@@ -44,9 +50,13 @@ export const SessionCard: FC<SessionCardProps> = ({
   showHeaderActions = true,
   showSupervisorInline = true,
   terminalReadOnlyOverride,
+  onClose,
+  onSplitHorizontal,
+  onSplitVertical,
+  onStart,
+  onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
-  const dispatch = useAtomValue(dispatchCommandAtom);
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
 
@@ -75,62 +85,31 @@ export const SessionCard: FC<SessionCardProps> = ({
   }
 
   const handleStart = async () => {
-    const result = await dispatch<{ sessionId: string }>('session.resume', {
-      sessionId,
-    });
-
-    if (!result.ok) {
-      console.error('Failed to resume session:', result.error?.message);
-    }
+    await onStart?.();
   };
 
   const handleStop = async () => {
-    const result = await dispatch<void>('session.stop', {
-      sessionId,
-    });
-
-    if (!result.ok) {
-      console.error('Failed to stop session:', result.error?.message);
-    }
+    await onStop?.();
   };
 
   /**
-   * Close stops the session and removes it from the pane layout.
-   * The session is NOT removed from the server - it remains with state='ended'
-   * so that the layout sanitizer can properly replace it with a draft leaf
-   * while preserving the split structure.
+   * Close is fully owned by the parent action layer so desktop/mobile can
+   * reuse the same session card without embedding feature side effects here.
    */
   const handleClose = async () => {
-    // Remove from pane layout immediately (don't wait for stop to avoid UI flicker)
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-close', {
-        detail: { sessionId },
-      })
-    );
-
-    // Stop the session process
-    await dispatch<void>('session.stop', { sessionId }).catch(() => {});
+    await onClose?.();
   };
 
   /**
-   * Split fires a custom event that the AgentPanes container
-   * handles by updating the pane layout tree. It does NOT
-   * stop or restart the session.
+   * Split is also routed through explicit callbacks so the view stays
+   * decoupled from pane state wiring.
    */
   const handleSplitHorizontal = () => {
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-split', {
-        detail: { sessionId, direction: 'horizontal' },
-      })
-    );
+    onSplitHorizontal?.();
   };
 
   const handleSplitVertical = () => {
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-split', {
-        detail: { sessionId, direction: 'vertical' },
-      })
-    );
+    onSplitVertical?.();
   };
 
   const progressWidth = getProgressWidth(session.state);

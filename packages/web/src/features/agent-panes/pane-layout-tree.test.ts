@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PaneNode } from './atoms/pane-layout';
-import { assignSessionToPane, closePaneBySessionId, splitPaneBySessionId } from './pane-layout-tree';
+import {
+  assignSessionToPane,
+  closeDraftPaneById,
+  closePaneBySessionId,
+  splitPaneByPaneId,
+  splitPaneBySessionId,
+} from './pane-layout-tree';
 
 describe('pane-layout-tree', () => {
   it('splits a session leaf into the original session and a draft pane', () => {
@@ -72,6 +78,58 @@ describe('pane-layout-tree', () => {
         { id: 'left', type: 'leaf', sessionId: 'sess_1' },
         { id: 'right', type: 'leaf', sessionId: 'sess_3' },
       ],
+    });
+  });
+
+  it('splits a draft pane by pane id without relying on a session id marker', () => {
+    const layout: PaneNode = {
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+        { id: 'right', type: 'leaf' },
+      ],
+    };
+
+    expect(splitPaneByPaneId(layout, 'right', 'vertical')).toEqual({
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+        {
+          id: expect.stringMatching(/^split-right-vertical-/),
+          type: 'split',
+          direction: 'vertical',
+          ratio: 0.5,
+          children: [
+            { id: 'right', type: 'leaf' },
+            expect.objectContaining({ type: 'leaf' }),
+          ],
+        },
+      ],
+    });
+  });
+
+  it('closes a draft pane by pane id and collapses the split when only one sibling remains', () => {
+    const layout: PaneNode = {
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+        { id: 'right', type: 'leaf' },
+      ],
+    };
+
+    expect(closeDraftPaneById(layout, 'right')).toEqual({
+      id: 'left',
+      type: 'leaf',
+      sessionId: 'sess_1',
     });
   });
 

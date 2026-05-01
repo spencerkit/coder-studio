@@ -9,12 +9,45 @@ import { localeAtom } from '../../atoms/app-ui';
 import { paneLayoutAtomFamily } from '../agent-panes/atoms/pane-layout';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
-const mockSessionCard = vi.fn(({ sessionId }: { sessionId: string }) => (
-  <div data-testid="session-card">{sessionId}</div>
-));
+const mockSessionCard = vi.fn(
+  ({
+    sessionId,
+    onSplitHorizontal,
+    onSplitVertical,
+    onStart,
+    onStop,
+    onClose,
+  }: {
+    sessionId: string;
+    onSplitHorizontal?: () => void;
+    onSplitVertical?: () => void;
+    onStart?: () => void;
+    onStop?: () => void;
+    onClose?: () => void;
+  }) => (
+    <div data-testid="session-card">
+      <span>{sessionId}</span>
+      <button type="button" onClick={onSplitHorizontal}>
+        split-{sessionId}
+      </button>
+      <button type="button" onClick={onSplitVertical}>
+        split-vertical-{sessionId}
+      </button>
+      <button type="button" onClick={onStart}>
+        start-{sessionId}
+      </button>
+      <button type="button" onClick={onStop}>
+        stop-{sessionId}
+      </button>
+      <button type="button" onClick={onClose}>
+        close-{sessionId}
+      </button>
+    </div>
+  )
+);
 
 vi.mock('./components/session-card', () => ({
-  SessionCard: (props: { sessionId: string }) => mockSessionCard(props),
+  SessionCard: (props: Record<string, unknown>) => mockSessionCard(props),
 }));
 
 vi.mock('./components/pane-layout', () => ({
@@ -107,7 +140,7 @@ describe('AgentPanes', () => {
     vi.useRealTimers();
   });
 
-  it('splits the active session pane when panel-split is dispatched', async () => {
+  it('splits the active session pane when session-card requests a split', async () => {
     const { store } = createAgentPaneStore();
 
     render(
@@ -116,13 +149,7 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent('coder-studio:panel-split', {
-          detail: { sessionId: 'sess_1', direction: 'horizontal' },
-        })
-      );
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'split-sess_1' }));
 
     await waitFor(() => {
       expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(
@@ -156,13 +183,7 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent('coder-studio:panel-close', {
-          detail: { sessionId: 'sess_1' },
-        })
-      );
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'close-sess_1' }));
 
     await waitFor(() => {
       expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
@@ -177,7 +198,7 @@ describe('AgentPanes', () => {
       });
     });
 
-    expect(sendCommand).not.toHaveBeenCalledWith('session.stop', expect.anything());
+    expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_1' });
   });
 
   it('keeps the remaining draft pane visible after closing the last session pane', async () => {
@@ -198,13 +219,7 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent('coder-studio:panel-close', {
-          detail: { sessionId: 'sess_1' },
-        })
-      );
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'close-sess_1' }));
 
     // After close, both panes become draft leaves, split structure is preserved
     await waitFor(() => {
@@ -341,8 +356,12 @@ describe('AgentPanes', () => {
       type: 'leaf',
       sessionId: 'sess_1',
     });
-    expect(mockSessionCard).toHaveBeenCalledWith({ sessionId: 'sess_1' });
-    expect(mockSessionCard).not.toHaveBeenCalledWith({ sessionId: 'sess_2' });
+    expect(mockSessionCard).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'sess_1' })
+    );
+    expect(mockSessionCard).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'sess_2' })
+    );
   });
 
   it('keeps interrupted sessions mounted in the pane layout after session.list hydration', async () => {
@@ -391,7 +410,9 @@ describe('AgentPanes', () => {
       type: 'leaf',
       sessionId: 'sess_1',
     });
-    expect(mockSessionCard).toHaveBeenCalledWith({ sessionId: 'sess_1' });
+    expect(mockSessionCard).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'sess_1' })
+    );
   });
 
   it('keeps unavailable sessions mounted in the pane layout after session.list hydration', async () => {

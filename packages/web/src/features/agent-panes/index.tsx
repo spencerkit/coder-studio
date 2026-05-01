@@ -6,35 +6,17 @@
  */
 
 import type { FC } from 'react';
-import { useEffect } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { ArrowRight, Bot, Sparkles, FlipHorizontal, FlipVertical, X } from 'lucide-react';
+import { useAtomValue } from 'jotai';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import { sessionsAtom } from '../../atoms/sessions';
-import { paneLayoutAtomFamily } from '../agent-panes/atoms/pane-layout';
 import type { PaneNode } from '../agent-panes/atoms/pane-layout';
-import { dispatchCommandAtom, connectionStatusAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { PaneLayout } from './components/pane-layout';
 import { SessionCard } from './components/session-card';
-import type { Session } from '@coder-studio/core';
-import type { ProviderId } from './use-provider-launcher';
-import { useWorkspaceSessions } from './use-workspace-sessions';
-import {
-  assignSessionToPane,
-  closePaneBySessionId,
-  splitPaneBySessionId,
-} from './pane-layout-tree';
-import { useProviderLauncher } from './use-provider-launcher';
-
-interface PanelSplitDetail {
-  sessionId?: string;
-  direction?: 'horizontal' | 'vertical';
-}
-
-interface PanelCloseDetail {
-  sessionId?: string;
-}
+import { DraftLauncher } from './views/shared/draft-launcher';
+import { useWorkspaceSessions } from './actions/use-workspace-sessions';
+import { usePaneActions } from './actions/use-pane-actions';
+import { useSessionActions } from './actions/use-session-actions';
+import { collectSessionIds } from './pane-layout-tree';
 
 /**
  * Agent Panes Container
@@ -48,37 +30,13 @@ interface PanelCloseDetail {
 export const AgentPanes: FC = () => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
-  const { workspaceId, sessions, paneLayout, setPaneLayout } = useWorkspaceSessions(workspace);
-
-  useEffect(() => {
-    const handlePanelSplit = (event: Event) => {
-      const detail = (event as CustomEvent<PanelSplitDetail>).detail;
-
-      if (!detail?.sessionId || !detail.direction) {
-        return;
-      }
-
-      setPaneLayout((current) => splitPaneBySessionId(current, detail.sessionId!, detail.direction!));
-    };
-
-    const handlePanelClose = (event: Event) => {
-      const detail = (event as CustomEvent<PanelCloseDetail>).detail;
-
-      if (!detail?.sessionId) {
-        return;
-      }
-
-      setPaneLayout((current) => closePaneBySessionId(current, detail.sessionId!));
-    };
-
-    window.addEventListener('coder-studio:panel-split', handlePanelSplit as EventListener);
-    window.addEventListener('coder-studio:panel-close', handlePanelClose as EventListener);
-
-    return () => {
-      window.removeEventListener('coder-studio:panel-split', handlePanelSplit as EventListener);
-      window.removeEventListener('coder-studio:panel-close', handlePanelClose as EventListener);
-    };
-  }, [setPaneLayout]);
+  const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace);
+  const paneActions = usePaneActions(workspaceId);
+  const sessionActions = useSessionActions();
+  const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
+  const shouldShowStandaloneDraftLauncher =
+    sessions.length === 0 &&
+    (hasLayoutSessions || (paneLayout.type === 'leaf' && !paneLayout.sessionId && paneLayout.id === 'root'));
 
   if (!workspace) {
     return (
@@ -88,15 +46,31 @@ export const AgentPanes: FC = () => {
     );
   }
 
-  // If no sessions, show draft launcher
-  if (sessions.length === 0) {
-    return <DraftLauncher workspaceId={workspaceId} />;
+  if (shouldShowStandaloneDraftLauncher) {
+    return (
+      <DraftLauncher
+        workspaceId={workspaceId}
+        onReplaceWithSession={paneActions.replaceWithSession}
+      />
+    );
   }
 
   // Render pane tree recursively
   return (
     <div className="agent-panes">
-      <PaneNodeRenderer node={paneLayout} workspaceId={workspaceId} />
+      <PaneNodeRenderer
+        node={paneLayout}
+        workspaceId={workspaceId}
+        onCloseSession={paneActions.closeSessionPane}
+        onSplitDraftPane={paneActions.splitDraftPane}
+        onSplitSession={paneActions.splitSessionPane}
+        onCloseDraftPane={paneActions.closeDraftPane}
+        onAssignSession={paneActions.assignSession}
+        onReplaceWithSession={paneActions.replaceWithSession}
+        onCloseSessionCommand={sessionActions.closeSession}
+        onResumeSession={sessionActions.resumeSession}
+        onStopSession={sessionActions.stopSession}
+      />
     </div>
   );
 };
@@ -104,18 +78,60 @@ export const AgentPanes: FC = () => {
 interface PaneNodeRendererProps {
   node: PaneNode;
   workspaceId: string;
+  onAssignSession: (paneId: string, sessionId: string) => void;
+  onCloseDraftPane: (paneId: string) => void;
+  onCloseSession: (sessionId: string) => void;
+  onCloseSessionCommand: (sessionId: string) => Promise<void>;
+  onReplaceWithSession: (sessionId: string) => void;
+  onResumeSession: (sessionId: string) => Promise<void>;
+  onSplitDraftPane: (paneId: string, direction: 'horizontal' | 'vertical') => void;
+  onSplitSession: (sessionId: string, direction: 'horizontal' | 'vertical') => void;
+  onStopSession: (sessionId: string) => Promise<void>;
 }
 
 /**
  * Recursively render pane tree
  */
-const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
+const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
+  node,
+  workspaceId,
+  onAssignSession,
+  onCloseDraftPane,
+  onCloseSession,
+  onCloseSessionCommand,
+  onReplaceWithSession,
+  onResumeSession,
+  onSplitDraftPane,
+  onSplitSession,
+  onStopSession,
+}) => {
   if (node.type === 'leaf') {
     // Render session card or draft launcher
     if (node.sessionId) {
-      return <SessionCard sessionId={node.sessionId} />;
+      return (
+        <SessionCard
+          sessionId={node.sessionId}
+          onClose={async () => {
+            onCloseSession(node.sessionId!);
+            await onCloseSessionCommand(node.sessionId!);
+          }}
+          onSplitHorizontal={() => onSplitSession(node.sessionId!, 'horizontal')}
+          onSplitVertical={() => onSplitSession(node.sessionId!, 'vertical')}
+          onStart={() => onResumeSession(node.sessionId!)}
+          onStop={() => onStopSession(node.sessionId!)}
+        />
+      );
     } else {
-      return <DraftLauncher workspaceId={workspaceId} paneId={node.id} />;
+      return (
+        <DraftLauncher
+          workspaceId={workspaceId}
+          paneId={node.id}
+          onAssignSession={onAssignSession}
+          onClosePane={onCloseDraftPane}
+          onReplaceWithSession={onReplaceWithSession}
+          onSplitPane={onSplitDraftPane}
+        />
+      );
     }
   }
 
@@ -123,246 +139,22 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({ node, workspaceId }) => {
   return (
     <PaneLayout direction={node.direction || 'horizontal'} ratio={node.ratio || 0.5}>
       {node.children?.map((child) => (
-        <PaneNodeRenderer key={child.id} node={child} workspaceId={workspaceId} />
+        <PaneNodeRenderer
+          key={child.id}
+          node={child}
+          workspaceId={workspaceId}
+          onAssignSession={onAssignSession}
+          onCloseDraftPane={onCloseDraftPane}
+          onCloseSession={onCloseSession}
+          onCloseSessionCommand={onCloseSessionCommand}
+          onReplaceWithSession={onReplaceWithSession}
+          onResumeSession={onResumeSession}
+          onSplitDraftPane={onSplitDraftPane}
+          onSplitSession={onSplitSession}
+          onStopSession={onStopSession}
+        />
       ))}
     </PaneLayout>
-  );
-};
-
-interface DraftLauncherProps {
-  workspaceId: string;
-  paneId?: string;
-}
-
-/**
- * Draft Session Launcher
- *
- * PRD §8.4:
- *   - Provider selection buttons (Claude, Codex)
- *   - Click to start new session
- */
-const DraftLauncher: FC<DraftLauncherProps> = ({ workspaceId, paneId }) => {
-  const t = useTranslation();
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const setSessions = useSetAtom(sessionsAtom);
-  const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
-  const { states, launch } = useProviderLauncher(
-    dispatch,
-    workspaceId,
-    (session: Session, _providerId: ProviderId) => {
-      setSessions((prev) => ({
-        ...prev,
-        [session.id]: session,
-      }));
-
-      setPaneLayout((current) =>
-        paneId
-          ? assignSessionToPane(current, paneId, session.id)
-          : {
-              id: 'root',
-              type: 'leaf',
-              sessionId: session.id,
-            }
-      );
-    },
-  );
-
-  const getProviderCta = (providerId: ProviderId): string => {
-    const state = states[providerId];
-    if (state.loading || state.installJob?.status === 'queued' || state.installJob?.status === 'running') {
-      return t('provider.install.cta.installing');
-    }
-    if (state.runtime?.available) {
-      return t('provider.install.cta.start');
-    }
-    if (state.runtime?.autoInstallSupported) {
-      return t('provider.install.cta.install_and_start');
-    }
-    return t('provider.install.cta.manual');
-  };
-
-  const getProviderGuide = (providerId: ProviderId): { message?: string; docUrl?: string } => {
-    const state = states[providerId];
-    const failure = state.installJob?.failure;
-
-    if (failure) {
-      return {
-        message: failure.message,
-        docUrl: failure.docUrls.provider,
-      };
-    }
-
-    if (state.inlineError && state.inlineError !== 'manual') {
-      return {
-        message: state.inlineError,
-        docUrl: state.runtime?.docUrls.provider,
-      };
-    }
-
-    if (state.inlineError === 'manual' || state.runtime?.autoInstallSupported === false) {
-      return {
-        message: state.runtime?.manualGuideKeys.map((key) => t(key)).join(' '),
-        docUrl: state.runtime?.docUrls.provider,
-      };
-    }
-
-    return {
-      docUrl: state.runtime?.docUrls.provider,
-    };
-  };
-
-  const isAnyProviderBusy = (Object.values(states) as Array<(typeof states)[ProviderId]>).some(
-    (state) =>
-      state.loading ||
-      state.installJob?.status === 'queued' ||
-      state.installJob?.status === 'running',
-  );
-
-  /**
-   * Split handlers for draft pane
-   */
-  const handleSplitHorizontal = () => {
-    if (!paneId) return;
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-split', {
-        detail: { sessionId: undefined, direction: 'horizontal' as const },
-      })
-    );
-  };
-
-  const handleSplitVertical = () => {
-    if (!paneId) return;
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-split', {
-        detail: { sessionId: undefined, direction: 'vertical' as const },
-      })
-    );
-  };
-
-  const handleClosePane = () => {
-    if (!paneId) return;
-    // Dispatch close with a special marker so the layout handler can find the draft pane
-    window.dispatchEvent(
-      new CustomEvent('coder-studio:panel-close', {
-        detail: { sessionId: `__draft__${paneId}` },
-      })
-    );
-  };
-
-  return (
-    <div className="session-card agent-pane">
-      <div className="session-header">
-        <div className="session-header-left">
-          <span className="session-dot session-dot-idle" />
-          <div className="session-header-copy">
-            <div className="session-title-row">
-              <span className="session-title">{t('session.provider_select') || 'New Session'}</span>
-              <span className="session-state-badge badge badge-gray">DRAFT</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="session-header-actions">
-          <button
-            className="session-action-btn"
-            onClick={handleSplitHorizontal}
-            title="Split horizontal"
-            aria-label="Split horizontal"
-          >
-            <FlipHorizontal size={13} />
-          </button>
-          <button
-            className="session-action-btn"
-            onClick={handleSplitVertical}
-            title="Split vertical"
-            aria-label="Split vertical"
-          >
-            <FlipVertical size={13} />
-          </button>
-          <button
-            className="session-action-btn session-action-btn-close"
-            onClick={handleClosePane}
-            title="Close"
-            aria-label="Close"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="agent-draft-launcher">
-        <div className="agent-draft-content">
-          <span className="agent-draft-kicker">SESSION LAUNCHER</span>
-          <p className="agent-draft-description">
-            选择一个 AI 会话，在当前 workspace 里继续查看文件、运行命令和推进代码修改。
-          </p>
-          <div className="agent-draft-providers">
-            {([
-              {
-                id: 'claude',
-                title: 'Claude',
-                meta: 'analysis',
-                icon: <Sparkles size={18} />,
-                description: '更适合长上下文梳理、方案分析和代码审查。',
-                className: 'agent-provider-card-claude',
-              },
-              {
-                id: 'codex',
-                title: 'Codex',
-                meta: 'workspace',
-                icon: <Bot size={18} />,
-                description: '更适合终端操作、直接改文件和逐步修复问题。',
-                className: 'agent-provider-card-codex',
-              },
-            ] as const).map((provider) => {
-              const state = states[provider.id];
-              const guide = getProviderGuide(provider.id);
-              const isBusy =
-                state.loading ||
-                state.installJob?.status === 'queued' ||
-                state.installJob?.status === 'running';
-
-              return (
-                <button
-                  key={provider.id}
-                  className={`btn btn-secondary agent-provider-card ${provider.className}`}
-                  disabled={isAnyProviderBusy}
-                  onClick={() => {
-                    void launch(provider.id);
-                  }}
-                >
-                  <span className="agent-provider-card-icon">{provider.icon}</span>
-                  <span className="agent-provider-card-body">
-                    <span className="agent-provider-card-title-row">
-                      <span className="agent-provider-card-title">{provider.title}</span>
-                      <span className="agent-provider-card-meta">{provider.meta}</span>
-                    </span>
-                    <span className="agent-provider-card-desc">{provider.description}</span>
-                    <span className="agent-provider-card-cta">{getProviderCta(provider.id)}</span>
-                    {isBusy ? (
-                      <span className="agent-provider-card-status">
-                        {t('provider.install.status.installing')}
-                      </span>
-                    ) : null}
-                    {guide.message ? (
-                      <span className="agent-provider-card-guide">
-                        <span>{guide.message}</span>
-                        {guide.docUrl ? (
-                          <a href={guide.docUrl} target="_blank" rel="noreferrer">
-                            {t('provider.install.open_docs')}
-                          </a>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </span>
-                  <ArrowRight size={16} className="agent-provider-card-arrow" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 };
 

@@ -297,36 +297,49 @@ describe('SessionCard', () => {
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
   });
 
-  it('stops the session and closes the pane when close is clicked', async () => {
+  it('routes close through the explicit callback', async () => {
     const { store, sendCommand } = createSessionStore({
       terminalId: 'term-live',
       state: 'running',
       endedAt: undefined,
     });
-    const closeEvents: CustomEvent[] = [];
-    const handleCloseEvent = (event: Event) => {
-      closeEvents.push(event as CustomEvent);
-    };
-
-    window.addEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
+    const onClose = vi.fn();
 
     render(
       <Provider store={store}>
-        <SessionCard sessionId="sess_123456" />
+        <SessionCard sessionId="sess_123456" onClose={onClose} />
       </Provider>
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
-    await waitFor(() => {
-      // Should stop the session (sets state to ended)
-      expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_123456' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(sendCommand).not.toHaveBeenCalledWith('session.stop', { sessionId: 'sess_123456' });
+  });
+
+  it('routes split buttons through explicit callbacks', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'running',
+      endedAt: undefined,
     });
+    const onSplitHorizontal = vi.fn();
+    const onSplitVertical = vi.fn();
 
-    // Then close the pane
-    expect(closeEvents).toHaveLength(1);
-    expect(closeEvents[0]?.detail).toEqual({ sessionId: 'sess_123456' });
+    render(
+      <Provider store={store}>
+        <SessionCard
+          sessionId="sess_123456"
+          onSplitHorizontal={onSplitHorizontal}
+          onSplitVertical={onSplitVertical}
+        />
+      </Provider>
+    );
 
-    window.removeEventListener('coder-studio:panel-close', handleCloseEvent as EventListener);
+    fireEvent.click(screen.getByRole('button', { name: 'Split horizontal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Split vertical' }));
+
+    expect(onSplitHorizontal).toHaveBeenCalledTimes(1);
+    expect(onSplitVertical).toHaveBeenCalledTimes(1);
   });
 });

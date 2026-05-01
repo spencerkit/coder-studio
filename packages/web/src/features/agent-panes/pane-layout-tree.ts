@@ -9,6 +9,49 @@ function createDraftLeaf(id: string): PaneNode {
   };
 }
 
+export function splitPaneByPaneId(
+  node: PaneNode,
+  paneId: string,
+  direction: PaneDirection
+): PaneNode {
+  if (node.type === 'leaf') {
+    if (node.id !== paneId) {
+      return node;
+    }
+
+    const splitId = `split-${node.id}-${direction}-${Date.now()}`;
+    return {
+      id: splitId,
+      type: 'split',
+      direction,
+      ratio: 0.5,
+      children: [
+        { ...node },
+        createDraftLeaf(`${splitId}-draft`),
+      ],
+    };
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = splitPaneByPaneId(child, paneId, direction);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  if (!changed) {
+    return node;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
 export function splitPaneBySessionId(
   node: PaneNode,
   sessionId: string,
@@ -88,7 +131,7 @@ export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNod
   // Handle draft pane closure: __draft__<paneId>
   if (sessionId.startsWith('__draft__')) {
     const paneId = sessionId.replace('__draft__', '');
-    return closeDraftPane(node, paneId) ?? { id: node.id, type: 'leaf' };
+    return closeDraftPaneById(node, paneId);
   }
   return replaceSessionWithDraft(node, sessionId);
 }
@@ -133,6 +176,10 @@ function closeDraftPane(node: PaneNode, paneId: string): PaneNode | null {
     ...node,
     children: nextChildren,
   };
+}
+
+export function closeDraftPaneById(node: PaneNode, paneId: string): PaneNode {
+  return closeDraftPane(node, paneId) ?? { id: node.id, type: 'leaf' };
 }
 
 /**
