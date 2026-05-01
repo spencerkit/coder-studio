@@ -107,6 +107,7 @@ export class WsClient {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isManualClose = false;
+  private status: ConnectionStatus = 'disconnected';
   private url: string;
   private reconnectConfig: ReconnectConfig;
 
@@ -204,6 +205,24 @@ export class WsClient {
     }
 
     this.setStatus('disconnected');
+  }
+
+  recoverConnection(trigger: 'visibility_resume' | 'network_online' | 'manual_retry' = 'manual_retry'): void {
+    const status = this.getStatus();
+    if (status === 'connected' || status === 'connecting' || status === 'rejected') {
+      return;
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    this.reconnectAttempts = 0;
+    console.log(`[WsClient] Recovering connection after ${trigger}`);
+    void this.connect().catch((err) => {
+      console.error('Recovery connect failed:', err);
+    });
   }
 
   async sendCommand<T>(op: string, args: unknown, options: SendCommandOptions = {}): Promise<T> {
@@ -330,18 +349,7 @@ export class WsClient {
    * Get current status
    */
   getStatus(): ConnectionStatus {
-    if (!this.ws) return 'disconnected';
-    switch (this.ws.readyState) {
-      case WebSocket.CONNECTING:
-        return 'connecting';
-      case WebSocket.OPEN:
-        return 'connected';
-      case WebSocket.CLOSING:
-      case WebSocket.CLOSED:
-        return 'disconnected';
-      default:
-        return 'disconnected';
-    }
+    return this.status;
   }
 
   private handleMessage(msg: ServerToClient): void {
@@ -501,6 +509,7 @@ export class WsClient {
     this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.connect().catch((err) => {
         console.error('Reconnect failed:', err);
       });
@@ -525,6 +534,7 @@ export class WsClient {
    * Update status and notify listeners
    */
   private setStatus(status: ConnectionStatus): void {
+    this.status = status;
     for (const listener of this.statusListeners) {
       try {
         listener(status);

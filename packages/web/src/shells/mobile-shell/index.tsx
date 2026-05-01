@@ -2,7 +2,11 @@ import { useAtomValue } from 'jotai';
 import { useEffect, useMemo, useState } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TerminalPanel } from '../../features/terminal-panel';
-import { authEnabledAtom, connectionStatusAtom } from '../../atoms/connection';
+import {
+  authEnabledAtom,
+  connectionStatusAtom,
+  reconnectAttemptCountAtom,
+} from '../../atoms/connection';
 import { activeWorkspaceAtom, orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
 import { LoginPage } from '../../features/auth';
 import { AgentPanes } from '../../features/agent-panes';
@@ -35,6 +39,8 @@ function MobileWorkspaceScaffold() {
   const activeWorkspace = useAtomValue(activeWorkspaceAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
+  const reconnectAttemptCount = useAtomValue(reconnectAttemptCountAtom);
   const { sessions, paneLayout } = useWorkspaceSessions(activeWorkspace);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
@@ -98,6 +104,29 @@ function MobileWorkspaceScaffold() {
         drawerOpen={drawerOpen}
         onToggleDrawer={() => setDrawerOpen((value) => !value)}
       />
+
+      {connectionStatus !== 'connected' && connectionStatus !== 'connecting' ? (
+        <div
+          className={`mobile-shell__recovery-strip mobile-shell__recovery-strip--${connectionStatus}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="mobile-shell__recovery-title">
+            {connectionStatus === 'reconnecting'
+              ? '正在恢复连接'
+              : connectionStatus === 'rejected'
+                ? '当前标签页未激活'
+                : '连接已断开'}
+          </span>
+          <span className="mobile-shell__recovery-body">
+            {connectionStatus === 'reconnecting'
+              ? `已尝试 ${Math.max(reconnectAttemptCount, 1)} 次`
+              : connectionStatus === 'rejected'
+                ? '请回到正在运行的标签页'
+                : '回到前台或恢复网络后继续'}
+          </span>
+        </div>
+      ) : null}
 
       <ConfigDriftBanner />
 
@@ -200,11 +229,6 @@ export function MobileShell() {
 
   return (
     <div className="app">
-      {connectionStatus === 'reconnecting' && (
-        <div className="connection-banner">
-          <span>正在重新连接...</span>
-        </div>
-      )}
       {connectionStatus === 'rejected' && (
         <div className="connection-banner connection-banner--error">
           <span>另一个标签页已激活</span>

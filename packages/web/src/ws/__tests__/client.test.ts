@@ -50,6 +50,11 @@ class MockWebSocket {
     const slice = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
     this.onmessage?.({ data: slice });
   }
+
+  triggerClose(code = 1000, reason = '') {
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.({ code, reason });
+  }
 }
 
 describe('web WsClient', () => {
@@ -438,6 +443,47 @@ describe('web WsClient', () => {
         topics: ['workspace.*', 'connection.*'],
       })
     );
+  });
+
+  it('tracks reconnecting as the current client status after an unexpected close', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient('ws://127.0.0.1:4173/ws');
+      const connectPromise = client.connect();
+      const socket = MockWebSocket.instances[0]!;
+      socket.triggerOpen();
+      await connectPromise;
+
+      socket.triggerClose(1006, 'network_lost');
+
+      expect(client.getStatus()).toBe('reconnecting');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('can bypass reconnect backoff and reconnect immediately when recovery is requested', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient('ws://127.0.0.1:4173/ws');
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      firstSocket.triggerClose(1006, 'network_lost');
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      client.recoverConnection('visibility_resume');
+
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(client.getStatus()).toBe('connecting');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('dispatches wildcard subscriptions for nested workspace events', async () => {

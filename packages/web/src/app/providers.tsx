@@ -47,6 +47,14 @@ import type { Workspace, Session, GitStatus } from '@coder-studio/core';
 let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
 
+export function resetAppProvidersSingletonsForTests() {
+  if (pendingDisconnectTimer) {
+    clearTimeout(pendingDisconnectTimer);
+    pendingDisconnectTimer = null;
+  }
+  globalWsClient = null;
+}
+
 /**
  * Shared decoder for terminal output chunks. PTY data is a UTF-8 byte stream.
  * Decoding once-per-event is cheap, but keeping the TextDecoder around saves
@@ -183,12 +191,28 @@ export function AppProviders({ children }: AppProvidersProps) {
     if (globalWsClient) {
       wsClientRef.current = globalWsClient;
       setWsClient(globalWsClient);
+      setConnectionStatus(globalWsClient.getStatus());
 
       // Re-establish subscriptions for this mount
       const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
       const unsubscribeEvents = globalWsClient.subscribe(topics, handleEvent);
 
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          wsClientRef.current?.recoverConnection('visibility_resume');
+        }
+      };
+
+      const handleOnline = () => {
+        wsClientRef.current?.recoverConnection('network_online');
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('online', handleOnline);
+
       return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('online', handleOnline);
         unsubscribeStatus();
         unsubscribeEvents();
         wsClientRef.current = null;
@@ -223,8 +247,23 @@ export function AppProviders({ children }: AppProvidersProps) {
       setConnectionError(err.message || 'Connection failed');
     });
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        wsClientRef.current?.recoverConnection('visibility_resume');
+      }
+    };
+
+    const handleOnline = () => {
+      wsClientRef.current?.recoverConnection('network_online');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
     // Cleanup on unmount
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
       unsubscribeStatus();
       unsubscribeEvents();
       wsClientRef.current = null;

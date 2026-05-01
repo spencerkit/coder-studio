@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
 import { MobileShell } from './index';
-import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
+import {
+  authEnabledAtom,
+  connectionStatusAtom,
+  reconnectAttemptCountAtom,
+  wsClientAtom,
+} from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
 import { activeWorkspaceIdAtom, authenticatedAtom, commandPaletteOpenAtom, paneLayoutAtomFamily } from '../../atoms/ui';
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
@@ -169,6 +174,8 @@ function installVisualViewport(height: number, offsetTop = 0) {
 function renderMobileShell({
   initialEntry = '/workspace',
   withWorkspaces = true,
+  connectionStatus = 'connected' as 'connected' | 'connecting' | 'reconnecting' | 'disconnected' | 'rejected',
+  reconnectAttempts = 0,
   sessions = [
     createSession({
       id: 'sess_1',
@@ -243,7 +250,8 @@ function renderMobileShell({
   sendTerminalInput?: ReturnType<typeof vi.fn>;
 } = {}) {
   const store = createStore();
-  store.set(connectionStatusAtom, 'connected');
+  store.set(connectionStatusAtom, connectionStatus);
+  store.set(reconnectAttemptCountAtom, reconnectAttempts);
   store.set(authEnabledAtom, false);
   store.set(authenticatedAtom, true);
   store.set(wsClientAtom, {
@@ -513,5 +521,15 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Supervisor sheet' }));
 
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
+  });
+
+  it('renders a mobile recovery strip while reconnecting and shows attempt count', async () => {
+    renderMobileShell({
+      connectionStatus: 'reconnecting',
+      reconnectAttempts: 2,
+    });
+
+    expect(await screen.findByText('正在恢复连接')).toBeInTheDocument();
+    expect(screen.getByText('已尝试 2 次')).toBeInTheDocument();
   });
 });
