@@ -6,10 +6,18 @@ import { authenticatedAtom } from '../../atoms/ui';
 import { authEnabledAtom } from '../../atoms/connection';
 
 const originalFetch = globalThis.fetch;
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
 
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    viewportMocks.viewport = 'desktop';
   });
 
   afterEach(() => {
@@ -149,5 +157,25 @@ describe('LoginPage', () => {
       expect(screen.getByText('Wrong password')).toBeInTheDocument();
       expect(document.querySelector('.auth-status-panel.auth-status-panel-error')).toBeTruthy();
     });
+  });
+
+  it('adds the mobile auth page variant classes on mobile viewports', async () => {
+    viewportMocks.viewport = 'mobile';
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ authEnabled: true }),
+    }) as unknown as typeof fetch;
+
+    render(
+      <Provider>
+        <LoginPage />
+      </Provider>
+    );
+
+    await screen.findByPlaceholderText('密码');
+
+    expect(document.querySelector('.welcome-container--mobile')).toBeTruthy();
+    expect(document.querySelector('.auth-screen--mobile')).toBeTruthy();
+    expect(document.querySelector('.auth-card-shell--mobile')).toBeTruthy();
   });
 });

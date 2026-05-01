@@ -20,7 +20,7 @@ import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ConfigEditor } from './config-editor';
-import { resolveSettingsExitTargetFromHistory } from './settings-navigation';
+import { resolveSettingsExitTargetFromBrowserHistory } from './settings-navigation';
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -32,6 +32,18 @@ interface ProviderInfo {
   capability: 'full' | 'limited' | 'unsupported';
   hooksRegistered: boolean;
 }
+
+type SettingsNavigationState =
+  | {
+      kind: 'root';
+      lastSection: SettingsSection;
+    }
+  | {
+      kind: 'detail';
+      section: SettingsSection;
+    };
+
+const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 
 function parseProviderAdditionalArgs(value: string): string[] {
   return value
@@ -78,8 +90,11 @@ export function SettingsPage() {
   const isMobile = viewport === 'mobile';
   const dispatch = useAtomValue(dispatchCommandAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
-  const [activeSection, setActiveSection] = useState<SettingsSection>('general');
-  const [mobileSection, setMobileSection] = useState<SettingsSection | null>(null);
+  const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
+    isMobile
+      ? { kind: 'root', lastSection: DEFAULT_SETTINGS_SECTION }
+      : { kind: 'detail', section: DEFAULT_SETTINGS_SECTION }
+  );
 
   // Provider settings state (would come from server in real implementation)
   const [providers, setProviders] = useState<ProviderInfo[]>([
@@ -96,9 +111,26 @@ export function SettingsPage() {
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
-  const detailSection = isMobile ? (mobileSection ?? activeSection) : activeSection;
+  const detailSection =
+    navigationState.kind === 'detail'
+      ? navigationState.section
+      : navigationState.lastSection;
   const activeSectionMeta =
     SETTINGS_SECTIONS.find((section) => section.id === detailSection) ?? SETTINGS_SECTIONS[0];
+
+  useEffect(() => {
+    setNavigationState((state) => {
+      if (isMobile) {
+        return state.kind === 'root'
+          ? state
+          : { kind: 'root', lastSection: state.section };
+      }
+
+      return state.kind === 'detail'
+        ? state
+        : { kind: 'detail', section: state.lastSection };
+    });
+  }, [isMobile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,10 +188,7 @@ export function SettingsPage() {
   }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
 
   const handlePageExit = () => {
-    const target = resolveSettingsExitTargetFromHistory(
-      window.history,
-      Boolean(activeWorkspaceId)
-    );
+    const target = resolveSettingsExitTargetFromBrowserHistory(Boolean(activeWorkspaceId));
 
     if (target === 'history') {
       navigate(-1);
@@ -170,8 +199,8 @@ export function SettingsPage() {
   };
 
   const handleBack = () => {
-    if (isMobile && mobileSection !== null) {
-      setMobileSection(null);
+    if (isMobile && navigationState.kind === 'detail') {
+      setNavigationState({ kind: 'root', lastSection: navigationState.section });
       return;
     }
 
@@ -232,10 +261,7 @@ export function SettingsPage() {
             key={id}
             type="button"
             className="settings-mobile-item"
-            onClick={() => {
-              setActiveSection(id);
-              setMobileSection(id);
-            }}
+            onClick={() => setNavigationState({ kind: 'detail', section: id })}
           >
             <span className="settings-mobile-item__icon">
               <Icon size={18} />
@@ -248,7 +274,7 @@ export function SettingsPage() {
     </main>
   );
 
-  const shouldShowMobileRoot = isMobile && mobileSection === null;
+  const shouldShowMobileRoot = isMobile && navigationState.kind === 'root';
 
   return (
     <div className={`settings-page ${isMobile ? 'settings-page--mobile' : ''}`}>
@@ -276,8 +302,8 @@ export function SettingsPage() {
                     key={id}
                     icon={<Icon size={16} />}
                     label={t(labelKey)}
-                    active={activeSection === id}
-                    onClick={() => setActiveSection(id)}
+                    active={detailSection === id}
+                    onClick={() => setNavigationState({ kind: 'detail', section: id })}
                   />
                 ))}
               </nav>

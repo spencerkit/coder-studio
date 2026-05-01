@@ -9,6 +9,7 @@ import type { FC } from 'react';
 import { Plus, Settings, Terminal, Zap, GitBranch } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useViewport } from '../../hooks/use-viewport';
 import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
 
 interface FeatureItem {
@@ -47,6 +48,7 @@ const features: FeatureItem[] = [
 export const WelcomePage: FC = () => {
   const navigate = useNavigate();
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
+  const isMobile = useViewport() === 'mobile';
 
   const handleOpenWorkspace = () => {
     setWorkspaceLaunchOpen(true);
@@ -58,8 +60,8 @@ export const WelcomePage: FC = () => {
 
   return (
     <>
-      <div className="welcome-container">
-        <div className="welcome-card">
+      <div className={`welcome-container ${isMobile ? 'welcome-container--mobile' : ''}`}>
+        <div className={`welcome-card ${isMobile ? 'welcome-card--mobile' : ''}`}>
           <div className="welcome-kicker">GET STARTED</div>
           <h1 className="welcome-title">Welcome to Coder Studio</h1>
           <p className="welcome-body">

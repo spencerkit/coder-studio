@@ -25,14 +25,26 @@ export function resolveSettingsExitTarget({
 }
 
 export function resolveSettingsExitTargetFromHistory(
-  history: HistoryLike,
-  hasActiveWorkspace: boolean
+  options: {
+    history: HistoryLike;
+    hasActiveWorkspace: boolean;
+  }
 ): 'history' | '/workspace' | '/' {
+  const { history, hasActiveWorkspace } = options;
   const historyState = history.state as { idx?: number } | null;
 
   return resolveSettingsExitTarget({
     historyIndex: historyState?.idx ?? null,
     historyLength: history.length,
+    hasActiveWorkspace,
+  });
+}
+
+export function resolveSettingsExitTargetFromBrowserHistory(
+  hasActiveWorkspace: boolean
+): 'history' | '/workspace' | '/' {
+  return resolveSettingsExitTargetFromHistory({
+    history: typeof window !== 'undefined' ? window.history : { state: null, length: 1 },
     hasActiveWorkspace,
   });
 }

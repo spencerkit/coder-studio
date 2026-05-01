@@ -7435,4 +7435,108 @@ textarea.input {
     background: var(--bg-surface);
     color: var(--text-primary);
   }
+
+  .welcome-container--mobile {
+    align-items: stretch;
+    justify-content: flex-start;
+    min-height: 100dvh;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + var(--sp-6))
+      var(--sp-4)
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+  }
+
+  .welcome-card--mobile {
+    width: 100%;
+    max-width: none;
+    padding: var(--sp-8) var(--sp-5);
+    gap: var(--sp-4);
+  }
+
+  .welcome-card--mobile .welcome-title {
+    font-size: var(--text-2xl);
+  }
+
+  .welcome-card--mobile .welcome-body {
+    max-width: none;
+    font-size: var(--text-base);
+  }
+
+  .welcome-card--mobile .welcome-features {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-screen--mobile {
+    padding:
+      calc(env(safe-area-inset-top, 0px) + var(--sp-6))
+      var(--sp-4)
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+  }
+
+  .auth-card-shell--mobile {
+    width: 100%;
+    padding: var(--sp-8) var(--sp-5);
+  }
+
+  .settings-page--mobile {
+    min-height: 100dvh;
+  }
+
+  .settings-body--mobile {
+    display: block;
+  }
+
+  .settings-content--mobile,
+  .settings-content--mobile-root {
+    padding:
+      var(--sp-4)
+      var(--sp-4)
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+  }
+
+  .settings-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .settings-mobile-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-height: 52px;
+    padding: var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    text-align: left;
+  }
+
+  .settings-mobile-item__icon {
+    display: inline-flex;
+    color: var(--text-secondary);
+  }
+
+  .settings-mobile-item__label {
+    flex: 1;
+    font-size: var(--text-base);
+    color: var(--text-primary);
+  }
+
+  .settings-mobile-item__arrow {
+    color: var(--text-tertiary);
+  }
+
+  .settings-header__title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .settings-footer--mobile {
+    padding:
+      var(--sp-3)
+      var(--sp-4)
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-4));
+  }
 }

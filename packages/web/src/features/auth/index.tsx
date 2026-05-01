@@ -4,11 +4,13 @@ import { authenticatedAtom } from '../../atoms/ui';
 import { authEnabledAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { useAtomValue } from 'jotai';
+import { useViewport } from '../../hooks/use-viewport';
 
 export function LoginPage() {
   const t = useTranslation();
   const [, setAuthenticated] = useAtom(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
+  const isMobile = useViewport() === 'mobile';
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -98,8 +100,20 @@ export function LoginPage() {
   };
 
   return (
-    <div className="welcome-container auth-screen">
-      <div className="welcome-card auth-card-shell">
+    <div
+      className={[
+        'welcome-container',
+        'auth-screen',
+        isMobile ? 'welcome-container--mobile auth-screen--mobile' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <div
+        className={[
+          'welcome-card',
+          'auth-card-shell',
+          isMobile ? 'welcome-card--mobile auth-card-shell--mobile' : '',
+        ].filter(Boolean).join(' ')}
+      >
         <div className="welcome-kicker">CODER STUDIO</div>
         <h1 className="welcome-title">{t('app.name')}</h1>
         <p className="welcome-body auth-card-desc">{description}</p>

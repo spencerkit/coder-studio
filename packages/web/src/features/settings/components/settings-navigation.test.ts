@@ -37,12 +37,27 @@ describe('resolveSettingsExitTarget', () => {
 });
 
 describe('resolveSettingsExitTargetFromHistory', () => {
-  it('derives the exit target from a history-like object', () => {
+  it('prefers history when the browser state reports a prior router entry', () => {
     expect(
       resolveSettingsExitTargetFromHistory({
-        state: { idx: 1 },
-        length: 2,
-      } as History, true)
+        history: {
+          state: { idx: 1 },
+          length: 1,
+        },
+        hasActiveWorkspace: false,
+      })
+    ).toBe('history');
+  });
+
+  it('falls back to history length when the router state does not expose an index', () => {
+    expect(
+      resolveSettingsExitTargetFromHistory({
+        history: {
+          state: null,
+          length: 2,
+        },
+        hasActiveWorkspace: false,
+      })
     ).toBe('history');
   });
 });
