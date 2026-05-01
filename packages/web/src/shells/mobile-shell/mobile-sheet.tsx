@@ -17,7 +17,7 @@ export function MobileSheet({
   title,
   body,
   onClose,
-  kicker,
+  kicker = 'Phase 1',
   onBack,
   footer,
   bodyClassName,
