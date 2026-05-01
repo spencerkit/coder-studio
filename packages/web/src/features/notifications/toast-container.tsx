@@ -11,7 +11,8 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { toastsAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
-import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import { pendingFocusSessionAtom } from '../../atoms/app-ui';
 import { useViewport } from '../../hooks/use-viewport';
 import { focusSession } from './focus-session';
 

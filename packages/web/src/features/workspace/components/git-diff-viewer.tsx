@@ -2,7 +2,7 @@ import type { FC, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { gitDiffPreviewAtomFamily } from '../../../atoms/git';
+import { gitDiffPreviewAtomFamily } from '../atoms/git';
 
 interface GitDiffViewerProps {
   workspaceId: string;

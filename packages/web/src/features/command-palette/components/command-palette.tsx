@@ -8,15 +8,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
+import { commandPaletteOpenAtom } from '../../../atoms/app-ui';
+import { activeWorkspaceIdAtom, orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import {
-  commandPaletteOpenAtom,
   focusModeAtom,
-  activeWorkspaceIdAtom,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
   bottomPanelHeightAtom,
-} from '../../../atoms/ui';
-import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
+} from '../../workspace/atoms/layout';
 import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
 import { MobileSheet } from '../../../shells/mobile-shell/mobile-sheet';

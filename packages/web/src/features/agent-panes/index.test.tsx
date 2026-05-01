@@ -4,7 +4,9 @@ import { Provider, createStore } from 'jotai';
 import { AgentPanes } from './index';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { activeWorkspaceIdAtom, localeAtom, paneLayoutAtomFamily } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import { localeAtom } from '../../atoms/app-ui';
+import { paneLayoutAtomFamily } from '../agent-panes/atoms/pane-layout';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
 const mockSessionCard = vi.fn(({ sessionId }: { sessionId: string }) => (

@@ -1,7 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { themeAtom } from '../../../atoms/ui';
+import { themeAtom } from '../../../atoms/app-ui';
 import { MonacoHost } from './monaco-host';
 
 const {

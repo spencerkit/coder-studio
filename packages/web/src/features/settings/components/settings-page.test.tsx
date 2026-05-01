@@ -3,7 +3,7 @@ import { Provider, createStore } from 'jotai';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
-import { activeWorkspaceIdAtom } from '../../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { SettingsPage } from './settings-page';
 
 const viewportMocks = vi.hoisted(() => ({

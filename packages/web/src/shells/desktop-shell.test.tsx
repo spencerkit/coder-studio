@@ -4,7 +4,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
 import { DesktopShell } from './desktop-shell';
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from '../atoms/connection';
-import { activeWorkspaceIdAtom, authenticatedAtom } from '../atoms/ui';
+import { activeWorkspaceIdAtom } from '../atoms/workspaces';
+import { authenticatedAtom } from '../atoms/app-ui';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../atoms/workspaces';
 
 vi.mock('../features/welcome', () => ({

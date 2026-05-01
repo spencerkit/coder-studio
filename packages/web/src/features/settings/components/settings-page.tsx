@@ -8,15 +8,12 @@ import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, ArrowLeft } from 'lucide-react';
-import {
-  localeAtom,
-  themeAtom,
-  notificationPreferencesAtom,
-} from '../../../atoms/ui';
+import { localeAtom, themeAtom } from '../../../atoms/app-ui';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
 import { dispatchCommandAtom } from '../../../atoms/connection';
+import { notificationPreferencesAtom } from '../../notifications/atoms';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ConfigEditor } from './config-editor';

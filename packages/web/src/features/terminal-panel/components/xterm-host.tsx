@@ -13,12 +13,12 @@ import { useAtomValue, useAtom } from 'jotai';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { wsClientAtom } from '../../../atoms/connection';
-import { terminalOutputAtomFamily, terminalMetaAtomFamily } from '../../../atoms/terminals';
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms/terminals';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { themeAtom } from '../../../atoms/ui';
+import { themeAtom } from '../../../atoms/app-ui';
 import { useTranslation } from '../../../lib/i18n';
 import { Topics } from '@coder-studio/core';
-import type { OutputBuffer } from '../../../atoms/terminals';
+import type { OutputBuffer } from '../atoms/terminals';
 import type { TerminalBinaryPayload } from '../../../ws/client';
 import {
   classifyReplayFailure,

@@ -1,6 +1,6 @@
 import { useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { activeWorkspaceIdAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import type { Workspace } from '@coder-studio/core';
 
 interface MobileWorkspaceDrawerProps {

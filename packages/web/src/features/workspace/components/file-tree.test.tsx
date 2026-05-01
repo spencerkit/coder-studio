@@ -9,7 +9,7 @@ import {
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   openFilesAtomFamily,
-} from '../../../atoms/fs';
+} from '../atoms/files';
 
 vi.mock('../../../lib/i18n', () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {

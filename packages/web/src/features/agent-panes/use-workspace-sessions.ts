@@ -4,7 +4,7 @@ import type { Session, Workspace } from '@coder-studio/core';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../atoms/sessions';
-import { paneLayoutAtomFamily } from '../../atoms/ui';
+import { paneLayoutAtomFamily } from '../agent-panes/atoms/pane-layout';
 import { collectSessionIds, sanitizePaneLayout } from './pane-layout-tree';
 
 export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {

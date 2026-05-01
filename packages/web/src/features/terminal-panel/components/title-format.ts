@@ -1,4 +1,4 @@
-import type { TerminalMeta } from '../../../atoms/terminals';
+import type { TerminalMeta } from '../atoms/terminals';
 
 export function formatTerminalTitle(meta: TerminalMeta | null | undefined, index: number, fallback: string) {
   const rawTitle = meta?.title?.trim();

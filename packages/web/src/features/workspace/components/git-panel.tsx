@@ -17,7 +17,7 @@ import {
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type GitDiffPreview,
-} from '../../../atoms/git';
+} from '../atoms/git';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 

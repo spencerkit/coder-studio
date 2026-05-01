@@ -8,4 +8,5 @@ export * from './terminals';
 export * from './git';
 export * from './fs';
 export * from './ui';
+export * from './fencing';
 export * from './connection';

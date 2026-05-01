@@ -1,7 +1,7 @@
 import { createStore } from 'jotai';
 import { describe, expect, it } from 'vitest';
 import type { Workspace } from '@coder-studio/core';
-import { activeWorkspaceIdAtom } from './ui';
+import { activeWorkspaceIdAtom } from './workspaces';
 import {
   activeWorkspaceAtom,
   resolvedActiveWorkspaceIdAtom,

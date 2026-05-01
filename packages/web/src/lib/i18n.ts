@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import { localeAtom } from '../atoms/ui';
+import { localeAtom } from '../atoms/app-ui';
 
 // Import locale files
 import zh from '../locales/zh.json';

@@ -3,7 +3,7 @@ import { MoreHorizontal, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { connectionStatusAtom, type ConnectionStatus } from '../../atoms/connection';
-import { commandPaletteOpenAtom } from '../../atoms/ui';
+import { commandPaletteOpenAtom } from '../../atoms/app-ui';
 import type { Workspace } from '@coder-studio/core';
 
 interface MobileTopBarProps {

@@ -11,7 +11,7 @@ import { X } from 'lucide-react';
 import type { Workspace } from '@coder-studio/core';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { workspaceOrderAtom, workspacesAtom } from '../../../atoms/workspaces';
-import { activeWorkspaceIdAtom } from '../../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useTranslation } from '../../../lib/i18n';
 
 interface WorkspaceTabProps {

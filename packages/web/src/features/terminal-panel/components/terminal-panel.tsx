@@ -7,7 +7,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAtom, useAtomValue, useStore } from 'jotai';
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../../../atoms/terminals';
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms/terminals';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';

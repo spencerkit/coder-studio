@@ -7,9 +7,14 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
 import type { Workspace } from '@coder-studio/core';
-import { activeWorkspaceIdAtom } from './ui';
 
 export type WorkspaceLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+/**
+ * Active workspace ID intent.
+ * In-memory only; resolved workspace selection is derived elsewhere.
+ */
+export const activeWorkspaceIdAtom = atom<string | null>(null);
 
 /**
  * All workspaces (server state projection)

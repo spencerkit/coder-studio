@@ -12,7 +12,7 @@ import { X, Home, ArrowUp, Folder, Loader2 } from 'lucide-react';
 import { useTranslation } from '../../../lib/i18n';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { activeWorkspaceIdAtom } from '../../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useViewport } from '../../../hooks/use-viewport';
 import { MobileSheet } from '../../../shells/mobile-shell/mobile-sheet';
 import {

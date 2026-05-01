@@ -12,7 +12,7 @@ import {
   bottomPanelHeightAtom,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
-} from '../../../atoms/ui';
+} from '../../workspace/atoms/layout';
 
 /**
  * Focus Mode

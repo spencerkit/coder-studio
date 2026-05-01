@@ -2,13 +2,9 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { Workspace } from '@coder-studio/core';
-import {
-  localeAtom,
-  commandPaletteOpenAtom,
-  activeWorkspaceIdAtom,
-  terminalPanelVisibleAtom,
-} from '../../../atoms/ui';
-import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
+import { commandPaletteOpenAtom, localeAtom } from '../../../atoms/app-ui';
+import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
+import { terminalPanelVisibleAtom } from '../../workspace/atoms/layout';
 import { CommandPalette } from './command-palette';
 
 const viewportMocks = vi.hoisted(() => ({

@@ -8,7 +8,7 @@
 import { useAtomValue } from 'jotai';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { authEnabledAtom, connectionStatusAtom } from '../atoms';
-import { authenticatedAtom } from '../atoms/ui';
+import { authenticatedAtom } from '../atoms/app-ui';
 import { LoginPage } from '../features/auth';
 import { CommandPalette } from '../features/command-palette';
 import { ConfigDriftBanner } from '../features/config-drift-banner';

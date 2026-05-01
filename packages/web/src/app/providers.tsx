@@ -24,10 +24,10 @@ import {
   dispatchCommandAtom,
 } from '../atoms';
 import type { DispatchCommand } from '../atoms/connection';
-import { authenticatedAtom } from '../atoms/ui';
-import { gitStateAtomFamily } from '../atoms/git';
-import { fileTreeStaleAtomFamily } from '../atoms/fs';
-import { terminalMetaAtomFamily } from '../atoms/terminals';
+import { authenticatedAtom } from '../atoms/app-ui';
+import { gitStateAtomFamily } from '../features/workspace/atoms/git';
+import { fileTreeStaleAtomFamily } from '../features/workspace/atoms/files';
+import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms/terminals';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus, TerminalBinaryPayload } from '../ws';
 import {

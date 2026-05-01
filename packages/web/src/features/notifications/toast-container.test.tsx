@@ -4,7 +4,8 @@ import { Provider, createStore } from 'jotai';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastContainer } from './toast-container';
 import { toastsAtom, type Toast } from './atoms';
-import { activeWorkspaceIdAtom, pendingFocusSessionAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import { pendingFocusSessionAtom } from '../../atoms/app-ui';
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: 'desktop' as 'desktop' | 'mobile',

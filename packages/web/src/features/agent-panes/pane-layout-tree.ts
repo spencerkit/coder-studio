@@ -1,4 +1,4 @@
-import type { PaneNode } from '../../atoms/ui';
+import type { PaneNode } from './atoms/pane-layout';
 
 type PaneDirection = NonNullable<PaneNode['direction']>;
 

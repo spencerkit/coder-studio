@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { GitDiffPreview } from '../../atoms/git';
+import type { GitDiffPreview } from '../../features/workspace/atoms/git';
 import { FileTreePanel } from '../../features/workspace/components/file-tree';
 import { GitPanel } from '../../features/workspace/components/git-panel';
 import { GitDiffViewer } from '../../features/workspace/components/git-diff-viewer';

@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
 import { GitPanel } from './git-panel';
 import { wsClientAtom } from '../../../atoms/connection';
-import { gitBranchListAtomFamily, gitStateAtomFamily } from '../../../atoms/git';
+import { gitBranchListAtomFamily, gitStateAtomFamily } from '../atoms/git';
 
 describe('GitPanel', () => {
   const status: GitStatus = {

@@ -38,13 +38,17 @@ import { useEffect, useRef } from 'react';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { resolvedActiveWorkspaceIdAtom, workspacesAtom } from '../../atoms/workspaces';
 import {
   activeWorkspaceIdAtom,
+  resolvedActiveWorkspaceIdAtom,
+  workspacesAtom,
+} from '../../atoms/workspaces';
+import { pendingFocusSessionAtom } from '../../atoms/app-ui';
+import {
   notificationPreferencesAtom,
-  pendingFocusSessionAtom,
-} from '../../atoms/ui';
-import { pushToastAtom, sessionOutputTailAtom } from './atoms';
+  pushToastAtom,
+  sessionOutputTailAtom,
+} from './atoms';
 import {
   formatDuration,
   formatProviderLabel,

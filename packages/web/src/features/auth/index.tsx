@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
-import { authenticatedAtom } from '../../atoms/ui';
+import { authenticatedAtom } from '../../atoms/app-ui';
 import { authEnabledAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { useAtomValue } from 'jotai';

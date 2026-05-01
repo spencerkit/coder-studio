@@ -4,17 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
 import {
+  activeWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
-import {
-  activeWorkspaceIdAtom,
-  notificationPreferencesAtom,
-  pendingFocusSessionAtom,
-} from '../../atoms/ui';
+import { pendingFocusSessionAtom } from '../../atoms/app-ui';
 import type { SessionState, Workspace } from '@coder-studio/core';
-import { sessionOutputTailAtom, toastsAtom } from './atoms';
+import {
+  notificationPreferencesAtom,
+  sessionOutputTailAtom,
+  toastsAtom,
+} from './atoms';
 import { useSessionNotifications } from './use-session-notifications';
 
 const NotificationMock = vi.fn().mockImplementation(function () {

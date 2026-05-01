@@ -7,6 +7,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
 import type { Session, SessionState } from '@coder-studio/core';
+import { activeWorkspaceIdAtom } from './workspaces';
 
 /**
  * All sessions (server state projection)
@@ -33,19 +34,13 @@ export const sessionByIdAtomFamily = atomFamily((id: string) =>
 
 /**
  * Active session in active workspace (derived)
- * Note: activeWorkspaceIdAtom is defined in ui.ts but accessed through a getter
- * to avoid circular dependency issues
  */
-let _getActiveWorkspaceId: (() => string | null) | null = null;
-
-export function setActiveWorkspaceIdGetter(getter: () => string | null): void {
-  _getActiveWorkspaceId = getter;
+export function setActiveWorkspaceIdGetter(_getter: () => string | null): void {
+  // Deprecated compatibility hook retained during atom migration.
 }
 
 export const activeSessionAtom = atom((get) => {
-  // activeWorkspaceIdAtom is defined in ui.ts
-  // We use a deferred import to avoid circular dependencies
-  const wsId = _getActiveWorkspaceId?.() ?? null;
+  const wsId = get(activeWorkspaceIdAtom);
   if (!wsId) return null;
   const sessions = get(sessionsByWorkspaceAtomFamily(wsId));
   return sessions.find((s) => s.state === 'running' || s.state === 'idle') ?? null;

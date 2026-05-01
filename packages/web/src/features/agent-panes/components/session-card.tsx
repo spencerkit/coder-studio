@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { pendingFocusSessionAtom } from '../../../atoms/ui';
+import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
 import type { SessionState } from '@coder-studio/core';
 import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
 import { SupervisorCard } from '../../supervisor/components/supervisor-card';

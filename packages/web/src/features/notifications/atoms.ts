@@ -6,8 +6,22 @@
  */
 
 import { atom } from 'jotai';
+import { atomWithStorage } from 'jotai/utils';
 
 export type ToastKind = 'success' | 'error' | 'warning' | 'info';
+
+export interface NotificationPreferences {
+  enabled: boolean;
+  soundEnabled: boolean;
+}
+
+export const notificationPreferencesAtom = atomWithStorage<NotificationPreferences>(
+  'ui.notificationPreferences',
+  {
+    enabled: true,
+    soundEnabled: true,
+  }
+);
 
 export interface Toast {
   id: string;

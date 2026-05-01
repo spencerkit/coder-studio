@@ -11,9 +11,9 @@ import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost, trimWrittenChunks } from '../components/xterm-host';
-import { terminalOutputAtomFamily } from '../../../atoms/terminals';
+import { terminalOutputAtomFamily } from '../atoms/terminals';
 import { wsClientAtom } from '../../../atoms/connection';
-import { localeAtom, themeAtom } from '../../../atoms/ui';
+import { localeAtom, themeAtom } from '../../../atoms/app-ui';
 import { TERMINAL_REPLAY_TIMEOUT_MS } from '../replay-state';
 
 function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, lastSeq: number) {

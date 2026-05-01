@@ -31,7 +31,7 @@ import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
 import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
 import { useMobileMotionMode } from './hooks/use-mobile-motion-mode';
 import { collectSessionIds } from '../../features/agent-panes/pane-layout-tree';
-import { pendingFocusSessionAtom } from '../../atoms/ui';
+import { pendingFocusSessionAtom } from '../../atoms/app-ui';
 
 type MobileSheetKind = 'files' | 'terminal' | 'supervisor' | null;
 

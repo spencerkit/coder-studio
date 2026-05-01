@@ -11,13 +11,9 @@ import {
   wsClientAtom,
 } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import {
-  activeWorkspaceIdAtom,
-  authenticatedAtom,
-  commandPaletteOpenAtom,
-  paneLayoutAtomFamily,
-  pendingFocusSessionAtom,
-} from '../../atoms/ui';
+import { authenticatedAtom, commandPaletteOpenAtom, pendingFocusSessionAtom } from '../../atoms/app-ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import { paneLayoutAtomFamily } from '../../features/agent-panes/atoms/pane-layout';
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
 import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';

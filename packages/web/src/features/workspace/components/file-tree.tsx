@@ -31,7 +31,7 @@ import {
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   openFilesAtomFamily,
-} from '../../../atoms/fs';
+} from '../atoms/files';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import { useTranslation } from '../../../lib/i18n';
 import type { FileNode } from '@coder-studio/core';

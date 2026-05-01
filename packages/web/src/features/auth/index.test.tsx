@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { LoginPage } from './index';
-import { authenticatedAtom } from '../../atoms/ui';
+import { authenticatedAtom } from '../../atoms/app-ui';
 import { authEnabledAtom } from '../../atoms/connection';
 
 const originalFetch = globalThis.fetch;

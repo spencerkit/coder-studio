@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import App from './app';
 import { authEnabledAtom, connectionStatusAtom } from './atoms/connection';
-import { authenticatedAtom } from './atoms/ui';
+import { authenticatedAtom } from './atoms/app-ui';
 
 vi.mock('./shells/desktop-shell', () => ({
   DesktopShell: () => <div data-testid="desktop-shell">DesktopShell</div>,

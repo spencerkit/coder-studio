@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { Workspace } from '@coder-studio/core';
 import { wsClientAtom } from '../../../atoms/connection';
-import { localeAtom, activeWorkspaceIdAtom } from '../../../atoms/ui';
+import { localeAtom } from '../../../atoms/app-ui';
+import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { workspaceOrderAtom, workspacesAtom } from '../../../atoms/workspaces';
 import { WorkspaceTab } from './tab';
 

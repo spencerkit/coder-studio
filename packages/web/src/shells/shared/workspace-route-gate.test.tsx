@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { describe, expect, it } from 'vitest';
-import { activeWorkspaceIdAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { WorkspaceRouteGate } from './workspace-route-gate';
 

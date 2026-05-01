@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createStore } from 'jotai';
-import { activeWorkspaceIdAtom } from '../atoms/ui';
+import { activeWorkspaceIdAtom } from '../atoms/workspaces';
 import {
   activeWorkspaceAtom,
   workspaceOrderAtom,
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../atoms/workspaces';
-import { fileTreeStaleAtomFamily } from '../atoms/fs';
+import { fileTreeStaleAtomFamily } from '../features/workspace/atoms/files';
 import { sessionsAtom } from '../atoms';
 import { sessionOutputTailAtom } from '../features/notifications';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';

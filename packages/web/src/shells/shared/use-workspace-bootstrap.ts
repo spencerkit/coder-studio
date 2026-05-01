@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from '../../atoms';
-import { authenticatedAtom } from '../../atoms/ui';
+import { authenticatedAtom } from '../../atoms/app-ui';
 import {
   orderedWorkspacesAtom,
   workspaceOrderAtom,

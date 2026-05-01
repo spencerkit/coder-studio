@@ -11,7 +11,7 @@ import {
   branchQuickPickAtom,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
-} from '../../../atoms/git';
+} from '../atoms/git';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import type { GitBranch, GitStatus } from '@coder-studio/core';
 

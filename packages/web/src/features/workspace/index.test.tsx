@@ -2,15 +2,16 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { activeWorkspaceIdAtom, terminalPanelVisibleAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import { terminalPanelVisibleAtom } from './atoms/layout';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import {
   resolvedActiveWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
 } from '../../atoms/workspaces';
-import { activeFilePathAtomFamily } from '../../atoms/fs';
-import { branchQuickPickAtom } from '../../atoms/git';
+import { activeFilePathAtomFamily } from './atoms/files';
+import { branchQuickPickAtom } from './atoms/git';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { WorkspacePage } from './index';
 

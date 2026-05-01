@@ -22,7 +22,7 @@ import {
   openFilesAtomFamily,
   activeFilePathAtomFamily,
   type OpenFile,
-} from '../../atoms/fs';
+} from '../workspace/atoms/files';
 import { dispatchCommandAtom } from '../../atoms/connection';
 import { useTranslation } from '../../lib/i18n';
 import { MonacoHost } from './components/monaco-host';

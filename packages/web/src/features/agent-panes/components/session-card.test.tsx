@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { SessionCard } from './session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
 import { wsClientAtom } from '../../../atoms/connection';
-import { pendingFocusSessionAtom } from '../../../atoms/ui';
+import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />

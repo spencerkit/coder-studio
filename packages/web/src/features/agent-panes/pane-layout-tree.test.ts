@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PaneNode } from '../../atoms/ui';
+import type { PaneNode } from './atoms/pane-layout';
 import { assignSessionToPane, closePaneBySessionId, splitPaneBySessionId } from './pane-layout-tree';
 
 describe('pane-layout-tree', () => {

@@ -2,12 +2,12 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { wsClientAtom } from '../../atoms/connection';
-import { activeWorkspaceIdAtom } from '../../atoms/ui';
+import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import {
   activeFilePathAtomFamily,
   openFilesAtomFamily,
   type OpenFile,
-} from '../../atoms/fs';
+} from '../workspace/atoms/files';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { CodeEditorHost } from './index';
 

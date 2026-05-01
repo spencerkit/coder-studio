@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { GitDiffViewer } from './git-diff-viewer';
 import { wsClientAtom } from '../../../atoms/connection';
-import { gitDiffPreviewAtomFamily } from '../../../atoms/git';
+import { gitDiffPreviewAtomFamily } from '../atoms/git';
 
 describe('GitDiffViewer', () => {
   afterEach(() => {
