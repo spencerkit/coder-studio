@@ -17,7 +17,9 @@ import {
   bottomPanelHeightAtom,
 } from '../../../atoms/ui';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
+import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
+import { MobileSheet } from '../../../shells/mobile-shell/mobile-sheet';
 import { WorkspaceLaunchModal } from '../../workspace/components/workspace-launch-modal';
 import type { Workspace } from '@coder-studio/core';
 
@@ -43,6 +45,7 @@ export function CommandPalette() {
   const t = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useViewport() === 'mobile';
   const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
   const [focusMode, setFocusMode] = useAtom(focusModeAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
@@ -73,7 +76,12 @@ export function CommandPalette() {
     locationPathname: location.pathname,
     navigate,
     t,
-    setShowWorkspaceLaunch,
+    setShowWorkspaceLaunch: (nextValue) => {
+      if (nextValue) {
+        setIsOpen(false);
+      }
+      setShowWorkspaceLaunch(nextValue);
+    },
   });
 
   // Filter commands by search
@@ -144,6 +152,50 @@ export function CommandPalette() {
     setIsOpen(false);
   };
 
+  const paletteSearchField = (
+    <div className="command-palette-search">
+      <Search size={16} className="command-palette-search-icon" />
+      <input
+        ref={inputRef}
+        type="text"
+        className="command-palette-input"
+        placeholder={t('placeholder.command')}
+        value={searchQuery}
+        onChange={(e) => {
+          setSearchQuery(e.target.value);
+          setSelectedIndex(0);
+        }}
+      />
+    </div>
+  );
+
+  const paletteList = (
+    <div className="command-palette-list">
+      {filteredCommands.length > 0 ? (
+        filteredCommands.map((cmd, index) => (
+          <div
+            key={cmd.id}
+            className={`command-palette-item ${
+              index === selectedIndex ? 'command-palette-item-selected' : ''
+            }`}
+            onClick={() => handleCommandClick(cmd)}
+            onMouseEnter={() => setSelectedIndex(index)}
+          >
+            <div className="command-palette-item-content">
+              <span className="command-palette-item-label">{cmd.label}</span>
+              <span className="command-palette-item-desc">{cmd.description}</span>
+            </div>
+            {cmd.shortcut ? (
+              <span className="command-palette-item-shortcut">{cmd.shortcut}</span>
+            ) : null}
+          </div>
+        ))
+      ) : (
+        <div className="command-palette-empty">{t('command.no_results')}</div>
+      )}
+    </div>
+  );
+
   // Show workspace launch modal if triggered
   if (showWorkspaceLaunch) {
     return <WorkspaceLaunchModal onClose={() => setShowWorkspaceLaunch(false)} />;
@@ -151,6 +203,34 @@ export function CommandPalette() {
 
   if (!isOpen) {
     return null;
+  }
+
+  if (isMobile) {
+    return (
+      <MobileSheet
+        title="Quick Actions"
+        kicker={t('command.palette').toUpperCase()}
+        onClose={() => setIsOpen(false)}
+        bodyClassName="mobile-sheet__body--flush"
+        contentClassName="command-palette-sheet-layer"
+        body={
+          <div className="command-palette-sheet-shell" onKeyDown={handleKeyDown}>
+            <div className="command-palette-sheet">
+              <div className="command-palette-sheet__search">
+                {paletteSearchField}
+                <div className="command-palette-sheet__meta">
+                  <span className="command-palette-hint">{t('placeholder.command')}</span>
+                  <span className="command-palette-meta">
+                    {filteredCommands.length} actions
+                  </span>
+                </div>
+              </div>
+              {paletteList}
+            </div>
+          </div>
+        }
+      />
+    );
   }
 
   return (
@@ -166,52 +246,12 @@ export function CommandPalette() {
             {filteredCommands.length} actions
           </span>
         </div>
-
-        <div className="command-palette-search">
-          <Search size={16} className="command-palette-search-icon" />
-          <input
-            ref={inputRef}
-            type="text"
-            className="command-palette-input"
-            placeholder={t('placeholder.command')}
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setSelectedIndex(0);
-            }}
-          />
-        </div>
+        {paletteSearchField}
 
         <div className="command-palette-hint">
           {t('placeholder.command')}
         </div>
-
-        <div className="command-palette-list">
-          {filteredCommands.length > 0 ? (
-            filteredCommands.map((cmd, index) => (
-              <div
-                key={cmd.id}
-                className={`command-palette-item ${
-                  index === selectedIndex ? 'command-palette-item-selected' : ''
-                }`}
-                onClick={() => handleCommandClick(cmd)}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                <div className="command-palette-item-content">
-                  <span className="command-palette-item-label">{cmd.label}</span>
-                  <span className="command-palette-item-desc">{cmd.description}</span>
-                </div>
-                {cmd.shortcut && (
-                  <span className="command-palette-item-shortcut">{cmd.shortcut}</span>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="command-palette-empty">
-              {t('command.no_results')}
-            </div>
-          )}
-        </div>
+        {paletteList}
       </div>
     </div>
   );

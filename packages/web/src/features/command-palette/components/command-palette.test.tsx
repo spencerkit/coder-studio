@@ -108,7 +108,9 @@ describe('CommandPalette', () => {
       target: { value: 'settings' },
     });
 
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(
+      screen.getByText('Settings', { selector: '.command-palette-item-label' })
+    ).toBeInTheDocument();
     expect(screen.queryByText('Workspace: one')).toBeNull();
   });
 
