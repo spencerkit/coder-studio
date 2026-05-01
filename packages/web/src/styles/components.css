@@ -132,6 +132,41 @@
   color: var(--text-tertiary);
 }
 
+.command-palette-sheet {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.command-palette-sheet__search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+.command-palette-sheet__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.command-palette-sheet-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  outline: none;
+}
+
+.command-palette-sheet-layer {
+  min-height: min(82dvh, 700px);
+}
+
 /* ========== Settings Page ========== */
 .settings-page {
   display: flex;
@@ -7336,6 +7371,34 @@ textarea.input {
   .mobile-worktree-sheet__content .modal-body {
     flex: 1;
     min-height: 0;
+  }
+
+  .command-palette-sheet-layer {
+    gap: 0;
+  }
+
+  .command-palette-sheet__meta {
+    padding-inline: var(--sp-4);
+  }
+
+  .command-palette-list {
+    flex: 1;
+    max-height: none;
+  }
+
+  .command-palette-item {
+    align-items: flex-start;
+    gap: var(--sp-3);
+  }
+
+  .command-palette-item-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .command-palette-item-shortcut {
+    flex-shrink: 0;
+    margin-top: 2px;
   }
 
   .mobile-files-sheet,
