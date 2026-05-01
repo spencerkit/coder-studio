@@ -7456,6 +7456,9 @@ textarea.input {
   }
 
   .mobile-sheet__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     flex: 1;
     overflow-y: auto;
   }
@@ -7497,6 +7500,17 @@ textarea.input {
   }
 
   .mobile-sheet__body {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    flex-direction: column;
+  }
+
+  .mobile-sheet__body > * {
+    flex: 1;
+    min-width: 0;
     min-height: 0;
   }
 

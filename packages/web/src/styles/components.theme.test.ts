@@ -109,4 +109,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).toContain(".agent-draft-launcher .agent-provider-card[disabled]");
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
   });
+
+  it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {
+    const sheetBody = getLastRuleBlock(".mobile-sheet__body");
+    const sheetBodyChildren = getLastRuleBlock(".mobile-sheet__body > *");
+
+    expect(sheetBody).toContain("display: flex");
+    expect(sheetBody).toContain("flex-direction: column");
+    expect(sheetBodyChildren).toContain("flex: 1");
+    expect(sheetBodyChildren).toContain("min-height: 0");
+  });
 });
