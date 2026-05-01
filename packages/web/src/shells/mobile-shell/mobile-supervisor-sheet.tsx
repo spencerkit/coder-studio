@@ -6,13 +6,13 @@ import {
 import {
   ObjectiveDialogContent,
   ObjectiveDialogModeIcon,
-} from '../../features/supervisor/components/objective-dialog-content';
-import { SupervisorCard } from '../../features/supervisor/components/supervisor-card';
+} from '../../features/supervisor/views/shared/objective-dialog-content';
+import { SupervisorCard } from '../../features/supervisor/views/shared/supervisor-card';
 import {
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
-} from '../../features/supervisor/hooks/use-objective-dialog-state';
+} from '../../features/supervisor/actions/use-objective-dialog-state';
 import { MobileSheet } from './mobile-sheet';
 
 interface MobileSupervisorSheetProps {

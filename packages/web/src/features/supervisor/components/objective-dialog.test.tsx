@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { ObjectiveDialog } from './objective-dialog';
+import { ObjectiveDialog } from '../views/shared/objective-dialog';
 import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
 

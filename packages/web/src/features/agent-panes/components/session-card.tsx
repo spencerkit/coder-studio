@@ -18,9 +18,9 @@ import {
 import { sessionByIdAtomFamily } from '../../../atoms/sessions';
 import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
 import type { SessionState } from '@coder-studio/core';
-import { ObjectiveDialog } from '../../supervisor/components/objective-dialog';
-import { SupervisorCard } from '../../supervisor/components/supervisor-card';
-import { useSupervisor } from '../../supervisor/hooks/use-supervisor';
+import { ObjectiveDialog } from '../../supervisor/views/shared/objective-dialog';
+import { SupervisorCard } from '../../supervisor/views/shared/supervisor-card';
+import { useSupervisor } from '../../supervisor/actions/use-supervisor';
 import { XtermHost } from '../../terminal-panel/components/xterm-host';
 
 type SessionCardAction = () => void | Promise<void>;

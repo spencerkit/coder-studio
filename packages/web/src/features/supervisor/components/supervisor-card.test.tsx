@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { SupervisorCard } from './supervisor-card';
+import { SupervisorCard } from '../views/shared/supervisor-card';
 import { supervisorsAtom, supervisorCyclesAtom } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
 

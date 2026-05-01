@@ -2,8 +2,8 @@
  * Supervisor module exports (Phase 3)
  */
 
-export { SupervisorCard } from './components/supervisor-card';
-export { ObjectiveDialog } from './components/objective-dialog';
+export { SupervisorCard } from './views/shared/supervisor-card';
+export { ObjectiveDialog } from './views/shared/objective-dialog';
 export {
   supervisorsAtom,
   supervisorCyclesAtom,
