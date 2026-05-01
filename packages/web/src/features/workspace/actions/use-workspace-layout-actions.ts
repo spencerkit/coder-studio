@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useAtom } from 'jotai';
-import { bottomPanelHeightAtom, leftPanelWidthAtom } from '../atoms/layout';
+import { bottomPanelHeightAtom, leftPanelWidthAtom } from '../atoms';
 
 const DEFAULT_LEFT_WIDTH = 280;
 const MIN_LEFT_WIDTH = 220;

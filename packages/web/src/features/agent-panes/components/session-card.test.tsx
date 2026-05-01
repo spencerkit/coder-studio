@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { SessionCard } from './session-card';
+import { SessionCard } from '../views/shared/session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
 import { wsClientAtom } from '../../../atoms/connection';
 import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
@@ -10,7 +10,7 @@ const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
 
-vi.mock('../../terminal-panel/components/xterm-host', () => ({
+vi.mock('../../terminal-panel/views/shared/xterm-host', () => ({
   XtermHost: (props: Record<string, unknown>) => mockXtermHost(props),
 }));
 

@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowUp, File, Minus, Plus, RefreshCw, RotateCcw, X } fr
 import type { GitFileChange } from '@coder-studio/core';
 import { useTranslation } from '../../../../lib/i18n';
 import { useGitPanelActions, type GitChangeType } from '../../actions/use-git-actions';
-import type { GitDiffPreview } from '../../atoms/git';
+import type { GitDiffPreview } from '../../atoms';
 
 interface GitPanelProps {
   workspaceId: string;

@@ -25,9 +25,8 @@ import {
 } from '../atoms';
 import type { DispatchCommand } from '../atoms/connection';
 import { authenticatedAtom } from '../atoms/app-ui';
-import { gitStateAtomFamily } from '../features/workspace/atoms/git';
-import { fileTreeStaleAtomFamily } from '../features/workspace/atoms/files';
-import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms/terminals';
+import { fileTreeStaleAtomFamily, gitStateAtomFamily } from '../features/workspace/atoms';
+import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus, TerminalBinaryPayload } from '../ws';
 import {

@@ -3,7 +3,7 @@ import { useAtomValue, useStore } from 'jotai';
 import { Topics, type Terminal as TerminalDto } from '@coder-studio/core';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms/terminals';
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms';
 import type { TerminalBinaryPayload } from '../../../ws/client';
 
 const EMPTY_TERMINAL_ID = '__terminal_panel_empty__';

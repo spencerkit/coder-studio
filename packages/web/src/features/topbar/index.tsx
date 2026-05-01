@@ -11,10 +11,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
 import { commandPaletteOpenAtom } from '../../atoms/app-ui';
-import { terminalPanelVisibleAtom, sidebarCollapsedAtom } from '../workspace/atoms/layout';
+import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from '../workspace/atoms';
 import { WorkspaceTab } from './components/tab';
 import { ConnectionStatus } from './components/connection-status';
-import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
+import { WorkspaceLaunchModal } from '../workspace/views/shared/workspace-launch-modal';
 
 /**
  * TopBar Component

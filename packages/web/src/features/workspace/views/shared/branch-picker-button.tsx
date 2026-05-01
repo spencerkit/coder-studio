@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { GitBranch } from 'lucide-react';
-import { branchQuickPickAtom, gitBranchListAtomFamily } from '../../atoms/git';
+import { branchQuickPickAtom, gitBranchListAtomFamily } from '../../atoms';
 
 interface BranchPickerButtonProps {
   workspaceId: string;

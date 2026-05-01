@@ -8,7 +8,7 @@ import {
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type GitDiffPreview,
-} from '../atoms/git';
+} from '../atoms';
 import { useTranslation } from '../../../lib/i18n';
 
 export type GitChangeType = 'staged' | 'modified' | 'untracked' | 'deleted';

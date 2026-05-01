@@ -3,12 +3,12 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { TerminalPanel } from '../views/shared/terminal-panel';
 import { wsClientAtom } from '../../../atoms/connection';
-import { bottomPanelHeightAtom } from '../../workspace/atoms/layout';
+import { bottomPanelHeightAtom } from '../../workspace/atoms';
 import {
   terminalMetaAtomFamily,
   terminalOutputAtomFamily,
   type TerminalMeta,
-} from '../atoms/terminals';
+} from '../atoms';
 import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
 

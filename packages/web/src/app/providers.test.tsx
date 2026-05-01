@@ -7,7 +7,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from '../atoms/workspaces';
-import { fileTreeStaleAtomFamily } from '../features/workspace/atoms/files';
+import { fileTreeStaleAtomFamily } from '../features/workspace/atoms';
 import { sessionsAtom } from '../atoms';
 import { sessionOutputTailAtom } from '../features/notifications';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';

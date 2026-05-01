@@ -6,7 +6,7 @@ import { BranchQuickPick } from './branch-quick-pick';
 import {
   branchQuickPickAtom,
   gitBranchListAtomFamily,
-} from '../../atoms/git';
+} from '../../atoms';
 import { wsClientAtom } from '../../../../atoms/connection';
 
 describe('BranchQuickPick', () => {

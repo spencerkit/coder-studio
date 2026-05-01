@@ -6,7 +6,7 @@ import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import { localeAtom } from '../../atoms/app-ui';
-import { paneLayoutAtomFamily } from '../agent-panes/atoms/pane-layout';
+import { paneLayoutAtomFamily } from './atoms/pane-layout';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
 const mockSessionCard = vi.fn(
@@ -46,11 +46,11 @@ const mockSessionCard = vi.fn(
   )
 );
 
-vi.mock('./components/session-card', () => ({
+vi.mock('./views/shared/session-card', () => ({
   SessionCard: (props: Record<string, unknown>) => mockSessionCard(props),
 }));
 
-vi.mock('./components/pane-layout', () => ({
+vi.mock('./views/shared/pane-layout', () => ({
   PaneLayout: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="pane-layout">{children}</div>
   ),

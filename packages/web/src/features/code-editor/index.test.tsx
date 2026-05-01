@@ -7,7 +7,7 @@ import {
   activeFilePathAtomFamily,
   openFilesAtomFamily,
   type OpenFile,
-} from '../workspace/atoms/files';
+} from '../workspace/atoms';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { CodeEditorHost } from './views/shared/code-editor-host';
 

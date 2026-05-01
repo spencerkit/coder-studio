@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import type { Workspace } from '@coder-studio/core';
 import { commandPaletteOpenAtom, localeAtom } from '../../../atoms/app-ui';
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
-import { terminalPanelVisibleAtom } from '../../workspace/atoms/layout';
+import { terminalPanelVisibleAtom } from '../../workspace/atoms';
 import { CommandPalette } from './command-palette';
 
 const viewportMocks = vi.hoisted(() => ({
@@ -29,7 +29,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('../../workspace/components/workspace-launch-modal', () => ({
+vi.mock('../../workspace/views/shared/workspace-launch-modal', () => ({
   WorkspaceLaunchModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="workspace-launch-modal-mock">
       <button type="button" onClick={onClose}>

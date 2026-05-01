@@ -8,7 +8,7 @@ import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
-} from '../../atoms/git';
+} from '../../atoms';
 
 describe('GitPanel', () => {
   const status: GitStatus = {

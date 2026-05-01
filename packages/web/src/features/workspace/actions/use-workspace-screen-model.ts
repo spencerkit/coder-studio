@@ -7,13 +7,15 @@ import { sessionsByWorkspaceAtomFamily } from '../../../atoms/sessions';
 import { activeWorkspaceAtom } from '../../../atoms/workspaces';
 import { paneLayoutAtomFamily } from '../../agent-panes/atoms/pane-layout';
 import { collectSessionIds } from '../../agent-panes/pane-layout-tree';
-import { activeFilePathAtomFamily } from '../atoms/files';
-import { branchQuickPickAtom, gitDiffPreviewAtomFamily, gitStateAtomFamily } from '../atoms/git';
 import {
+  activeFilePathAtomFamily,
+  branchQuickPickAtom,
   focusModeAtom,
+  gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
-} from '../atoms/layout';
+} from '../atoms';
 import { useWorkspaceLayoutActions } from './use-workspace-layout-actions';
 
 export type WorkspaceSidebarTab = 'files' | 'git';

@@ -3,15 +3,17 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
-import { terminalPanelVisibleAtom } from './atoms/layout';
 import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
+import {
+  activeFilePathAtomFamily,
+  branchQuickPickAtom,
+  terminalPanelVisibleAtom,
+} from './atoms';
 import {
   resolvedActiveWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
 } from '../../atoms/workspaces';
-import { activeFilePathAtomFamily } from './atoms/files';
-import { branchQuickPickAtom } from './atoms/git';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import { WorkspaceDesktopView } from './views/desktop/workspace-desktop-view';
 

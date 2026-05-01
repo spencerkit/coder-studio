@@ -6,7 +6,7 @@
 
 import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
-import { terminalMetaAtomFamily } from '../../atoms/terminals';
+import { terminalMetaAtomFamily } from '../../atoms';
 import { useTranslation } from '../../../../lib/i18n';
 import { formatTerminalTitle } from '../../components/title-format';
 

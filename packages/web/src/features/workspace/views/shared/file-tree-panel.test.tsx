@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
-import { FileTreePanel } from './file-tree';
-import { wsClientAtom } from '../../../atoms/connection';
+import { FileTreePanel } from './file-tree-panel';
+import { wsClientAtom } from '../../../../atoms/connection';
 import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   openFilesAtomFamily,
-} from '../atoms/files';
+} from '../../atoms';
 
-vi.mock('../../../lib/i18n', () => ({
+vi.mock('../../../../lib/i18n', () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {
     if (key === 'file.delete_confirm') {
       return `Are you sure you want to delete "${params?.name ?? ''}"?`;

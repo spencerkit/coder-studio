@@ -8,11 +8,11 @@
 import type { FC } from 'react';
 import { useAtomValue } from 'jotai';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import type { PaneNode } from '../agent-panes/atoms/pane-layout';
+import type { PaneNode } from './atoms/pane-layout';
 import { useTranslation } from '../../lib/i18n';
-import { PaneLayout } from './components/pane-layout';
-import { SessionCard } from './components/session-card';
 import { DraftLauncher } from './views/shared/draft-launcher';
+import { PaneLayout } from './views/shared/pane-layout';
+import { SessionCard } from './views/shared/session-card';
 import { useWorkspaceSessions } from './actions/use-workspace-sessions';
 import { usePaneActions } from './actions/use-pane-actions';
 import { useSessionActions } from './actions/use-session-actions';

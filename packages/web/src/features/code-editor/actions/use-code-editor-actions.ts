@@ -6,8 +6,8 @@ import {
   activeFilePathAtomFamily,
   openFilesAtomFamily,
   type OpenFile,
-} from '../../workspace/atoms/files';
-import { gitDiffPreviewAtomFamily } from '../../workspace/atoms/git';
+  gitDiffPreviewAtomFamily,
+} from '../../workspace/atoms';
 
 type FileReadTextPayload = {
   kind: 'text';

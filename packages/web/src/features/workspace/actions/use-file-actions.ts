@@ -8,7 +8,7 @@ import {
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   openFilesAtomFamily,
-} from '../atoms/files';
+} from '../atoms';
 import { useTranslation } from '../../../lib/i18n';
 
 export interface CreateRequest {

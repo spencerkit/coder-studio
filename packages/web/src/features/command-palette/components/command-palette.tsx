@@ -15,11 +15,11 @@ import {
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
   bottomPanelHeightAtom,
-} from '../../workspace/atoms/layout';
+} from '../../workspace/atoms';
 import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
 import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
-import { WorkspaceLaunchModal } from '../../workspace/components/workspace-launch-modal';
+import { WorkspaceLaunchModal } from '../../workspace/views/shared/workspace-launch-modal';
 import type { Workspace } from '@coder-studio/core';
 
 interface Command {

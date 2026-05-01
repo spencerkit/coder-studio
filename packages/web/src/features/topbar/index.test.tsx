@@ -21,7 +21,7 @@ vi.mock('./components/connection-status', () => ({
   ConnectionStatus: () => <div data-testid="connection-status" />,
 }));
 
-vi.mock('../workspace/components/workspace-launch-modal', () => ({
+vi.mock('../workspace/views/shared/workspace-launch-modal', () => ({
   WorkspaceLaunchModal: () => null,
 }));
 

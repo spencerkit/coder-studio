@@ -10,7 +10,7 @@ import { Plus, Settings, Terminal, Zap, GitBranch } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useViewport } from '../../hooks/use-viewport';
-import { WorkspaceLaunchModal } from '../workspace/components/workspace-launch-modal';
+import { WorkspaceLaunchModal } from '../workspace/views/shared/workspace-launch-modal';
 
 interface FeatureItem {
   icon: React.ReactNode;

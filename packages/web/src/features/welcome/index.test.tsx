@@ -12,7 +12,7 @@ vi.mock('../../hooks/use-viewport', () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 
-vi.mock('../workspace/components/workspace-launch-modal', () => ({
+vi.mock('../workspace/views/shared/workspace-launch-modal', () => ({
   WorkspaceLaunchModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="workspace-launch-modal">
       <button type="button" onClick={onClose}>

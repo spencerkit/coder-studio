@@ -11,7 +11,7 @@ import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost, trimWrittenChunks } from '../views/shared/xterm-host';
-import { terminalOutputAtomFamily } from '../atoms/terminals';
+import { terminalOutputAtomFamily } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
 import { localeAtom, themeAtom } from '../../../atoms/app-ui';
 import { TERMINAL_REPLAY_TIMEOUT_MS } from '../replay-state';
