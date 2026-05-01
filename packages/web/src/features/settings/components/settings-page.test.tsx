@@ -5,8 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
 import { SettingsPage } from './settings-page';
 
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+}));
+
+vi.mock('../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -21,6 +29,8 @@ describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
+    viewportMocks.viewport = 'desktop';
+    window.history.replaceState({}, '', '/settings');
   });
 
   it('shows the config drift banner inside settings when codex findings exist', async () => {
@@ -297,5 +307,85 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith('/workspace');
+  });
+
+  it('renders a mobile category list and returns from detail content to the settings root', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === 'settings.get') {
+        return {
+          'providers.claude.additionalArgs': ['--verbose'],
+        };
+      }
+      if (op === 'settings.previewCommand') {
+        const previewArgs = args as { config: { additionalArgs?: string[] } };
+        return {
+          preview: ['preview', ...(previewArgs.config.additionalArgs ?? [])].join(' '),
+        };
+      }
+      return {};
+    });
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
+    expect(document.querySelector('.settings-sidebar')).toBeNull();
+    expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+
+    expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+  });
+
+  it('prefers browser history when leaving the mobile settings root', async () => {
+    viewportMocks.viewport = 'mobile';
+    window.history.pushState({ idx: 1 }, '', '/settings');
+
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({});
+
+    store.set(connectionStatusAtom, 'connected');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsPage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith(-1);
   });
 });
