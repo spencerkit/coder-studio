@@ -1,5 +1,5 @@
 import { useAtomValue } from 'jotai';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { TerminalPanel } from '../../features/terminal-panel';
 import {
@@ -30,6 +30,7 @@ import { MobileSupervisorSheet } from './mobile-supervisor-sheet';
 import { MobileTopBar } from './mobile-topbar';
 import { MobileWorkspaceDrawer } from './mobile-workspace-drawer';
 import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
+import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
 import { collectSessionIds } from '../../features/agent-panes/pane-layout-tree';
 
 type MobileSheetKind = 'files' | 'terminal' | 'supervisor' | null;
@@ -47,6 +48,7 @@ function MobileWorkspaceScaffold() {
   const [sheet, setSheet] = useState<MobileSheetKind>(null);
   const [filesRoute, setFilesRoute] = useState<MobileFilesRoute>({ kind: 'root' });
   const keyboardInset = useVisualViewportInset();
+  const layoutMode = useMobileLayoutMode();
   const flattenedSessionIds = useMemo(() => {
     const sessionMap = new Map(sessions.map((session) => [session.id, session]));
 
@@ -98,7 +100,11 @@ function MobileWorkspaceScaffold() {
         : null;
 
   return (
-    <div className="mobile-shell" data-testid="mobile-shell">
+    <div
+      className={`mobile-shell mobile-shell--${layoutMode}`}
+      data-testid="mobile-shell"
+      data-layout-mode={layoutMode}
+    >
       <MobileTopBar
         activeWorkspace={activeWorkspace}
         drawerOpen={drawerOpen}
@@ -174,7 +180,7 @@ function MobileWorkspaceScaffold() {
       <div
         className="mobile-shell__bottom-stack"
         data-testid="mobile-bottom-stack"
-        style={{ paddingBottom: `${keyboardInset}px` }}
+        style={{ '--mobile-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
       >
         <MobileComposer activeSession={activeSession} />
         <MobileDock

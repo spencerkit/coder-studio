@@ -6870,6 +6870,11 @@ textarea.input {
 /* ========== Mobile Shell ========== */
 @media (max-width: 899px), (pointer: coarse) {
   .mobile-shell {
+    --mobile-safe-top: env(safe-area-inset-top, 0px);
+    --mobile-safe-right: env(safe-area-inset-right, 0px);
+    --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --mobile-safe-left: env(safe-area-inset-left, 0px);
+    --mobile-keyboard-inset: 0px;
     display: flex;
     flex-direction: column;
     min-height: 100dvh;
@@ -6886,7 +6891,11 @@ textarea.input {
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: var(--sp-3);
-    padding: var(--sp-3) var(--sp-4);
+    padding:
+      calc(var(--mobile-safe-top) + var(--sp-3))
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      var(--sp-3)
+      calc(var(--mobile-safe-left) + var(--sp-4));
     background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
     backdrop-filter: blur(20px);
@@ -6976,7 +6985,11 @@ textarea.input {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    margin: var(--sp-3) var(--sp-4) 0;
+    margin:
+      var(--sp-3)
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      0
+      calc(var(--mobile-safe-left) + var(--sp-4));
     padding: var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--accent-amber) 36%, var(--border));
     border-radius: var(--radius-xl);
@@ -7039,7 +7052,11 @@ textarea.input {
   .mobile-shell__viewport {
     flex: 1;
     min-height: 0;
-    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+    padding:
+      var(--sp-3)
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      var(--sp-4)
+      calc(var(--mobile-safe-left) + var(--sp-4));
   }
 
   .mobile-shell__content {
@@ -7122,7 +7139,11 @@ textarea.input {
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
-    padding: 0 var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+    padding:
+      0
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      calc(var(--sp-3) + var(--mobile-safe-bottom) + var(--mobile-keyboard-inset))
+      calc(var(--mobile-safe-left) + var(--sp-4));
     background:
       linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg-page) 58%, transparent) 18%, color-mix(in srgb, var(--bg-surface) 92%, transparent) 100%);
     backdrop-filter: blur(20px);
@@ -7329,7 +7350,11 @@ textarea.input {
     flex-direction: column;
     gap: var(--sp-4);
     min-height: min(72dvh, 560px);
-    padding: var(--sp-3) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    padding:
+      var(--sp-3)
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      calc(var(--sp-5) + var(--mobile-safe-bottom))
+      calc(var(--mobile-safe-left) + var(--sp-4));
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
     background: var(--bg-surface);
@@ -7677,7 +7702,11 @@ textarea.input {
     flex-direction: column;
     gap: var(--sp-4);
     width: min(86vw, 360px);
-    padding: var(--sp-5) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    padding:
+      calc(var(--mobile-safe-top) + var(--sp-5))
+      calc(var(--mobile-safe-right) + var(--sp-4))
+      calc(var(--sp-5) + var(--mobile-safe-bottom))
+      calc(var(--mobile-safe-left) + var(--sp-4));
     background: var(--bg-sidebar);
     box-shadow: var(--shadow-xl);
   }
@@ -7762,8 +7791,9 @@ textarea.input {
     min-height: 100dvh;
     padding:
       calc(env(safe-area-inset-top, 0px) + var(--sp-6))
-      var(--sp-4)
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+      calc(env(safe-area-inset-right, 0px) + var(--sp-4))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6))
+      calc(env(safe-area-inset-left, 0px) + var(--sp-4));
   }
 
   .welcome-card--mobile {
@@ -7789,8 +7819,9 @@ textarea.input {
   .auth-screen--mobile {
     padding:
       calc(env(safe-area-inset-top, 0px) + var(--sp-6))
-      var(--sp-4)
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+      calc(env(safe-area-inset-right, 0px) + var(--sp-4))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6))
+      calc(env(safe-area-inset-left, 0px) + var(--sp-4));
   }
 
   .auth-card-shell--mobile {
@@ -7810,8 +7841,9 @@ textarea.input {
   .settings-content--mobile-root {
     padding:
       var(--sp-4)
-      var(--sp-4)
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6));
+      calc(env(safe-area-inset-right, 0px) + var(--sp-4))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6))
+      calc(env(safe-area-inset-left, 0px) + var(--sp-4));
   }
 
   .settings-mobile-list {
@@ -7856,7 +7888,70 @@ textarea.input {
   .settings-footer--mobile {
     padding:
       var(--sp-3)
-      var(--sp-4)
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-4));
+      calc(env(safe-area-inset-right, 0px) + var(--sp-4))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-4))
+      calc(env(safe-area-inset-left, 0px) + var(--sp-4));
+  }
+
+  .mobile-shell--landscape-compact .mobile-topbar {
+    gap: var(--sp-2);
+    padding-top: calc(var(--mobile-safe-top) + var(--sp-2));
+    padding-bottom: var(--sp-2);
+  }
+
+  .mobile-shell--landscape-compact .mobile-shell__recovery-strip {
+    margin-top: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .mobile-shell--landscape-compact .mobile-shell__viewport {
+    padding-top: var(--sp-2);
+    padding-bottom: var(--sp-2);
+  }
+
+  .mobile-shell--landscape-compact .mobile-shell__content {
+    gap: var(--sp-2);
+  }
+
+  .mobile-shell--landscape-compact .mobile-shell__agent-stage,
+  .mobile-shell--landscape-compact .mobile-shell__agent-empty {
+    padding: var(--sp-2);
+    border-radius: 22px;
+  }
+
+  .mobile-shell--landscape-compact .mobile-composer {
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: 18px;
+  }
+
+  .mobile-shell--landscape-compact .mobile-composer__icon-button,
+  .mobile-shell--landscape-compact .mobile-composer__send,
+  .mobile-shell--landscape-compact .mobile-dock__item {
+    min-height: 48px;
+  }
+
+  .mobile-shell--landscape-compact .mobile-dock {
+    gap: var(--sp-2);
+    padding-top: var(--sp-2);
+  }
+
+  .mobile-shell--landscape-compact .mobile-dock__item {
+    flex-direction: row;
+    gap: var(--sp-2);
+    justify-content: center;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .mobile-shell--landscape-compact .mobile-dock__label {
+    font-size: 11px;
+  }
+
+  .mobile-shell--landscape-compact .mobile-sheet {
+    min-height: min(84dvh, 420px);
+    max-height: calc(100dvh - var(--sp-2));
+  }
+
+  .mobile-shell--landscape-compact .mobile-workspace-drawer {
+    width: min(74vw, 320px);
   }
 }

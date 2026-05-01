@@ -171,6 +171,33 @@ function installVisualViewport(height: number, offsetTop = 0) {
   return visualViewport;
 }
 
+function installMatchMediaMock(predicate: (query: string) => boolean) {
+  const originalMatchMedia = window.matchMedia;
+  const listeners = new Map<string, Set<(event: MediaQueryListEvent) => void>>();
+
+  window.matchMedia = vi.fn((query: string) => ({
+    matches: predicate(query),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn((type: string, listener: (event: MediaQueryListEvent) => void) => {
+      const key = `${query}:${type}`;
+      const bucket = listeners.get(key) ?? new Set<(event: MediaQueryListEvent) => void>();
+      bucket.add(listener);
+      listeners.set(key, bucket);
+    }),
+    removeEventListener: vi.fn((type: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.get(`${query}:${type}`)?.delete(listener);
+    }),
+    dispatchEvent: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+
+  return () => {
+    window.matchMedia = originalMatchMedia;
+  };
+}
+
 function renderMobileShell({
   initialEntry = '/workspace',
   withWorkspaces = true,
@@ -356,6 +383,7 @@ afterEach(() => {
     configurable: true,
     value: undefined,
   });
+  vi.unstubAllGlobals();
 });
 
 describe('MobileShell Phase 2 workspace', () => {
@@ -475,8 +503,30 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell();
 
     await waitFor(() => {
-      expect(screen.getByTestId('mobile-bottom-stack')).toHaveStyle({ paddingBottom: '240px' });
+      expect(screen.getByTestId('mobile-bottom-stack')).toHaveStyle({ '--mobile-keyboard-inset': '240px' });
     });
+  });
+
+  it('switches the workspace shell into landscape compact mode on short landscape viewports', async () => {
+    const restoreMatchMedia = installMatchMediaMock((query) => {
+      if (query.includes('orientation: landscape')) {
+        return true;
+      }
+
+      if (query.includes('max-height: 540px')) {
+        return true;
+      }
+
+      return false;
+    });
+
+    renderMobileShell();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-shell')).toHaveAttribute('data-layout-mode', 'landscape-compact');
+    });
+
+    restoreMatchMedia();
   });
 
   it('opens the files sheet and navigates from file list into the editor view', async () => {
