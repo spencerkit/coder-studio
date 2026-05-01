@@ -1,6 +1,11 @@
+type CliCommand = 'serve' | 'config' | 'stop' | 'status' | 'logs' | 'help' | 'version';
+
+export const RUNTIME_CONFIG_ERROR =
+  'Host, port, data-dir, password, and auth settings must be configured via the config command';
+
 export interface CliArgs {
   foreground?: boolean;
-  command?: 'serve' | 'config' | 'stop' | 'help' | 'version';
+  command?: CliCommand;
   configHelp?: boolean;
   port?: number;
   host?: string;
@@ -9,107 +14,154 @@ export interface CliArgs {
   noAuth?: boolean;
 }
 
+function getActiveCommand(args: CliArgs): CliCommand {
+  return args.command ?? 'serve';
+}
+
+function clearConfigArgs(args: CliArgs): void {
+  delete args.configHelp;
+  delete args.port;
+  delete args.host;
+  delete args.dataDir;
+  delete args.password;
+  delete args.noAuth;
+}
+
+function setCommand(args: CliArgs, command: CliCommand): void {
+  if (command !== 'config') {
+    clearConfigArgs(args);
+  }
+
+  if (command !== 'serve') {
+    delete args.foreground;
+  }
+
+  args.command = command;
+}
+
+function throwUnknownOption(option: string): never {
+  throw new Error(`Unknown option: ${option}`);
+}
+
+function throwUnknownArgument(argument: string): never {
+  throw new Error(`Unknown argument: ${argument}`);
+}
+
+function ensureConfigContext(args: CliArgs, option: string): void {
+  const command = getActiveCommand(args);
+
+  if (command === 'config') {
+    return;
+  }
+
+  if (command === 'serve') {
+    throw new Error(RUNTIME_CONFIG_ERROR);
+  }
+
+  throwUnknownOption(option);
+}
+
+function readOptionValue(argv: string[], index: number, label: string): string {
+  const value = argv[index];
+
+  if (value === undefined) {
+    throw new Error(`Missing ${label} value`);
+  }
+
+  return value;
+}
+
 export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {};
-  let sawServeCommand = false;
-  let sawConfigCommand = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
 
     switch (arg) {
       case 'serve':
-        args.command = 'serve';
-        sawServeCommand = true;
-        break;
-
       case 'config':
-        args.command = 'config';
-        sawConfigCommand = true;
-        break;
-
       case 'stop':
-        args.command = 'stop';
+      case 'status':
+      case 'logs':
+        setCommand(args, arg);
         break;
 
       case 'help':
-        if (sawConfigCommand) {
-          args.configHelp = true;
-          break;
-        }
-        args.command = 'help';
-        break;
-
-      case '--port':
-      case '-p': {
-        if (sawServeCommand) {
-          throw new Error('Host and port must be configured via the config command');
-        }
-        const portValue = argv[++i];
-        if (!portValue) {
-          throw new Error('Missing port value');
-        }
-        const port = parseInt(portValue, 10);
-        if (isNaN(port)) {
-          throw new Error('Invalid port number');
-        }
-        args.port = port;
-        break;
-      }
-
-      case '--host': {
-        if (sawServeCommand) {
-          throw new Error('Host and port must be configured via the config command');
-        }
-        const hostValue = argv[++i];
-        if (!hostValue) {
-          throw new Error('Missing host value');
-        }
-        args.host = hostValue;
-        break;
-      }
-
-      case '--data-dir':
-      case '-d': {
-        const dataDirValue = argv[++i];
-        if (!dataDirValue) {
-          throw new Error('Missing data-dir value');
-        }
-        args.dataDir = dataDirValue;
-        break;
-      }
-
-      case '--password': {
-        const passwordValue = argv[++i];
-        if (!passwordValue) {
-          throw new Error('Missing password value');
-        }
-        args.password = passwordValue;
-        break;
-      }
-
-      case '--foreground':
-        args.foreground = true;
-        break;
-
-      case '--no-auth':
-        args.noAuth = true;
-        break;
-
       case '--help':
       case '-h':
-        if (sawConfigCommand) {
+        if (args.command === 'config') {
           args.configHelp = true;
           break;
         }
-        args.command = 'help';
+
+        setCommand(args, 'help');
         break;
 
       case '--version':
       case '-v':
-        args.command = 'version';
+        setCommand(args, 'version');
         break;
+
+      case '--foreground':
+        if (getActiveCommand(args) !== 'serve') {
+          throwUnknownOption(arg);
+        }
+
+        args.foreground = true;
+        break;
+
+      case '--port':
+      case '-p': {
+        ensureConfigContext(args, arg);
+        const portValue = readOptionValue(argv, i + 1, 'port');
+        const port = Number.parseInt(portValue, 10);
+
+        if (Number.isNaN(port)) {
+          throw new Error('Invalid port number');
+        }
+
+        args.port = port;
+        i += 1;
+        break;
+      }
+
+      case '--host':
+        ensureConfigContext(args, arg);
+        args.host = readOptionValue(argv, i + 1, 'host');
+        i += 1;
+        break;
+
+      case '--data-dir':
+      case '-d':
+        ensureConfigContext(args, arg);
+        args.dataDir = readOptionValue(argv, i + 1, 'data-dir');
+        i += 1;
+        break;
+
+      case '--password':
+        ensureConfigContext(args, arg);
+        args.password = readOptionValue(argv, i + 1, 'password');
+        i += 1;
+        break;
+
+      case '--no-auth':
+        if (getActiveCommand(args) === 'serve') {
+          throw new Error(RUNTIME_CONFIG_ERROR);
+        }
+
+        throwUnknownOption(arg);
+
+      default:
+        if (arg.startsWith('-')) {
+          throwUnknownOption(arg);
+        }
+
+        throwUnknownArgument(arg);
     }
+  }
+
+  if (args.command === undefined) {
+    args.command = 'serve';
   }
 
   return args;
