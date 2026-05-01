@@ -7237,6 +7237,107 @@ textarea.input {
     overflow-y: auto;
   }
 
+  .mobile-sheet {
+    gap: 0;
+    min-height: min(78dvh, 640px);
+    max-height: calc(100dvh - var(--sp-4));
+  }
+
+  .mobile-sheet__header {
+    flex-shrink: 0;
+    padding-bottom: var(--sp-4);
+  }
+
+  .mobile-sheet__header-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--sp-1);
+  }
+
+  .mobile-sheet__header-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+
+  .mobile-sheet__back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    min-height: var(--touch-target-min);
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  .mobile-sheet__body {
+    min-height: 0;
+  }
+
+  .mobile-sheet__body--flush {
+    padding: 0;
+  }
+
+  .mobile-sheet__footer {
+    flex-shrink: 0;
+    padding-top: var(--sp-3);
+    border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  }
+
+  .mobile-launch-sheet {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+
+  .mobile-launch-sheet .launch-choice-row {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-launch-sheet .folder-picker,
+  .mobile-launch-sheet .fp-dir-list {
+    min-height: 0;
+  }
+
+  .mobile-launch-sheet__footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .mobile-worktree-sheet {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .mobile-worktree-sheet__summary {
+    padding: 0 0 var(--sp-3);
+  }
+
+  .mobile-worktree-sheet__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-surface);
+  }
+
+  .mobile-worktree-sheet__content {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .mobile-worktree-sheet__content .modal-body {
+    flex: 1;
+    min-height: 0;
+  }
+
   .mobile-files-sheet,
   .mobile-terminal-sheet,
   .mobile-supervisor-sheet {
