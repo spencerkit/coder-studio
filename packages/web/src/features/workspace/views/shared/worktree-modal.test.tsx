@@ -2,14 +2,14 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { WorktreeInfo } from '@coder-studio/core';
-import { wsClientAtom } from '../../../atoms/connection';
+import { wsClientAtom } from '../../../../atoms/connection';
 import { WorktreeModal } from './worktree-modal';
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: 'desktop' as 'desktop' | 'mobile',
 }));
 
-vi.mock('../../../hooks/use-viewport', () => ({
+vi.mock('../../../../hooks/use-viewport', () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 

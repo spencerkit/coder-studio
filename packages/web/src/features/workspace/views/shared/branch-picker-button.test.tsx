@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { BranchPickerButton } from './branch-picker-button';
-import { gitBranchListAtomFamily, branchQuickPickAtom } from '../atoms/git';
+import { gitBranchListAtomFamily, branchQuickPickAtom } from '../../atoms/git';
 
 describe('BranchPickerButton', () => {
   it('displays current branch name', () => {
