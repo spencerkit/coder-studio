@@ -20,7 +20,7 @@ import { dispatchCommandAtom } from '../../../atoms/connection';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ConfigEditor } from './config-editor';
-import { resolveSettingsExitTarget } from './settings-navigation';
+import { resolveSettingsExitTargetFromHistory } from './settings-navigation';
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -79,7 +79,7 @@ export function SettingsPage() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
-  const [mobileRoute, setMobileRoute] = useState<'root' | SettingsSection>('root');
+  const [mobileSection, setMobileSection] = useState<SettingsSection | null>(null);
 
   // Provider settings state (would come from server in real implementation)
   const [providers, setProviders] = useState<ProviderInfo[]>([
@@ -96,8 +96,9 @@ export function SettingsPage() {
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const detailSection = isMobile ? (mobileSection ?? activeSection) : activeSection;
   const activeSectionMeta =
-    SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
+    SETTINGS_SECTIONS.find((section) => section.id === detailSection) ?? SETTINGS_SECTIONS[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -155,12 +156,10 @@ export function SettingsPage() {
   }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
 
   const handlePageExit = () => {
-    const historyState = window.history.state as { idx?: number } | null;
-    const target = resolveSettingsExitTarget({
-      historyIndex: historyState?.idx ?? null,
-      historyLength: window.history.length,
-      hasActiveWorkspace: Boolean(activeWorkspaceId),
-    });
+    const target = resolveSettingsExitTargetFromHistory(
+      window.history,
+      Boolean(activeWorkspaceId)
+    );
 
     if (target === 'history') {
       navigate(-1);
@@ -171,8 +170,8 @@ export function SettingsPage() {
   };
 
   const handleBack = () => {
-    if (isMobile && mobileRoute !== 'root') {
-      setMobileRoute('root');
+    if (isMobile && mobileSection !== null) {
+      setMobileSection(null);
       return;
     }
 
@@ -186,7 +185,7 @@ export function SettingsPage() {
 
   // Render content based on active section
   const renderContent = () => {
-    switch (activeSection) {
+    switch (detailSection) {
       case 'general':
         return (
           <GeneralSettings
@@ -235,7 +234,7 @@ export function SettingsPage() {
             className="settings-mobile-item"
             onClick={() => {
               setActiveSection(id);
-              setMobileRoute(id);
+              setMobileSection(id);
             }}
           >
             <span className="settings-mobile-item__icon">
@@ -249,7 +248,7 @@ export function SettingsPage() {
     </main>
   );
 
-  const shouldShowMobileRoot = isMobile && mobileRoute === 'root';
+  const shouldShowMobileRoot = isMobile && mobileSection === null;
 
   return (
     <div className={`settings-page ${isMobile ? 'settings-page--mobile' : ''}`}>

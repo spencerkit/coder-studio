@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSettingsExitTarget } from './settings-navigation';
+import {
+  resolveSettingsExitTarget,
+  resolveSettingsExitTargetFromHistory,
+} from './settings-navigation';
 
 describe('resolveSettingsExitTarget', () => {
   it('returns history when the router history index is greater than zero', () => {
@@ -30,5 +33,16 @@ describe('resolveSettingsExitTarget', () => {
         hasActiveWorkspace: false,
       })
     ).toBe('/');
+  });
+});
+
+describe('resolveSettingsExitTargetFromHistory', () => {
+  it('derives the exit target from a history-like object', () => {
+    expect(
+      resolveSettingsExitTargetFromHistory({
+        state: { idx: 1 },
+        length: 2,
+      } as History, true)
+    ).toBe('history');
   });
 });

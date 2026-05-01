@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 export type Viewport = 'mobile' | 'desktop';
 
+// Treat coarse-pointer devices as mobile even above 899px to keep shell selection aligned with touch-first layouts.
 const WIDTH_QUERY = '(max-width: 899px)';
 const POINTER_QUERY = '(pointer: coarse)';
 

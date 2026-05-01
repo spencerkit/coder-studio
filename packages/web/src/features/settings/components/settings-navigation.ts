@@ -4,6 +4,11 @@ export interface ResolveSettingsExitTargetOptions {
   hasActiveWorkspace: boolean;
 }
 
+interface HistoryLike {
+  state: unknown;
+  length: number;
+}
+
 export function resolveSettingsExitTarget({
   historyIndex,
   historyLength,
@@ -17,4 +22,17 @@ export function resolveSettingsExitTarget({
   }
 
   return hasActiveWorkspace ? '/workspace' : '/';
+}
+
+export function resolveSettingsExitTargetFromHistory(
+  history: HistoryLike,
+  hasActiveWorkspace: boolean
+): 'history' | '/workspace' | '/' {
+  const historyState = history.state as { idx?: number } | null;
+
+  return resolveSettingsExitTarget({
+    historyIndex: historyState?.idx ?? null,
+    historyLength: history.length,
+    hasActiveWorkspace,
+  });
 }
