@@ -89,17 +89,6 @@ function MobileWorkspaceScaffold() {
               </div>
             ),
           }
-        : sheet === 'supervisor'
-          ? {
-              title: 'Supervisor',
-              body:
-                activeSession ? (
-                  <MobileSupervisorSheet
-                    sessionId={activeSession.id}
-                    workspaceId={activeSession.workspaceId}
-                  />
-                ) : null,
-            }
         : null;
 
   return (
@@ -169,6 +158,14 @@ function MobileWorkspaceScaffold() {
           }}
         />
       </div>
+
+      {sheet === 'supervisor' && activeSession ? (
+        <MobileSupervisorSheet
+          sessionId={activeSession.id}
+          workspaceId={activeSession.workspaceId}
+          onClose={() => setSheet(null)}
+        />
+      ) : null}
 
       {sheetBody ? (
         <MobileSheet

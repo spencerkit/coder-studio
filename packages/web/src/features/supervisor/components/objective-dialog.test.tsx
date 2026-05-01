@@ -21,7 +21,7 @@ describe('ObjectiveDialog', () => {
   it('submits evaluatorProviderId during enable', async () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as any);
+    store.set(wsClientAtom, { sendCommand } as never);
     store.set(supervisorDialogAtom, {
       open: true,
       sessionId: 'sess-1',
@@ -54,7 +54,7 @@ describe('ObjectiveDialog', () => {
 
   it('renders disable confirmation mode', () => {
     const store = createStore();
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as any);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,
       sessionId: 'sess-1',
@@ -94,7 +94,7 @@ describe('ObjectiveDialog', () => {
 
   it('keeps the centered modal shell on desktop viewports', () => {
     const store = createStore();
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as any);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,
       sessionId: 'sess-1',
@@ -116,7 +116,7 @@ describe('ObjectiveDialog', () => {
   it('renders nothing on mobile because mobile supervisor detail owns the flow', () => {
     viewportMocks.viewport = 'mobile';
     const store = createStore();
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as any);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,
       sessionId: 'sess-1',
