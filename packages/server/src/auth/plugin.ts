@@ -1,5 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { randomBytes } from 'node:crypto';
 import type { ServerConfig } from '../config.js';
+import type { AuthSessionRepo } from '../storage/repositories/auth-session-repo.js';
 
 const AUTH_COOKIE_NAME = 'coder_studio_auth';
 
@@ -14,7 +16,6 @@ const isPublicPath = (path: string) => {
     path === '/' ||
     path === '/auth' ||
     path === '/healthz' ||
-    path === '/ws' ||
     path === '/auth/status' ||
     path.startsWith('/assets/') ||
     path.startsWith('/@') ||
@@ -48,23 +49,37 @@ const decodeAuthCookieValue = (value: string): string => {
   try {
     return decodeURIComponent(value);
   } catch {
-    // Keep accepting legacy/plain cookie values instead of failing auth
-    // hard on malformed encodings.
     return value;
   }
 };
 
-export const createAuthGuard = (config: ServerConfig) => {
+interface AuthDeps {
+  config: ServerConfig;
+  authSessionRepo: AuthSessionRepo;
+}
+
+const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
+  if (!deps.config.auth.enabled) {
+    return true;
+  }
+
+  const cookies = parseCookies(request.headers.cookie);
+  const authCookie = cookies[AUTH_COOKIE_NAME];
+  if (!authCookie) {
+    return false;
+  }
+
+  const token = decodeAuthCookieValue(authCookie);
+  return deps.authSessionRepo.touch(token, Date.now());
+};
+
+export const createAuthGuard = (deps: AuthDeps) => {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!config.auth.enabled || isPublicPath(request.url) || request.url === '/auth/login') {
+    if (!deps.config.auth.enabled || isPublicPath(request.url) || request.url === '/auth/login' || request.url === '/auth/logout') {
       return;
     }
 
-    const cookies = parseCookies(request.headers.cookie);
-    const authCookie = cookies[AUTH_COOKIE_NAME];
-    const decodedAuthCookie = authCookie ? decodeAuthCookieValue(authCookie) : null;
-
-    if (decodedAuthCookie && config.auth.password && decodedAuthCookie === config.auth.password) {
+    if (isAuthenticatedRequest(request, deps)) {
       return;
     }
 
@@ -75,29 +90,55 @@ export const createAuthGuard = (config: ServerConfig) => {
   };
 };
 
-export const registerAuthStatusRoute = (config: ServerConfig) => {
-  return async (_request: FastifyRequest, reply: FastifyReply) => {
+export const registerAuthStatusRoute = (deps: AuthDeps) => {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.send({
       ok: true,
-      authEnabled: config.auth.enabled,
+      authEnabled: deps.config.auth.enabled,
+      authenticated: isAuthenticatedRequest(request, deps),
     });
   };
 };
 
-export const registerAuthRoutes = (config: ServerConfig) => {
+export const registerAuthRoutes = (deps: AuthDeps) => {
   return async (request: FastifyRequest<{ Body: { password?: string } }>, reply: FastifyReply) => {
-    if (!config.auth.enabled || !config.auth.password) {
-      return reply.send({ ok: true, authEnabled: false });
+    if (!deps.config.auth.enabled || !deps.config.auth.password) {
+      return reply.send({ ok: true, authEnabled: false, authenticated: true });
     }
 
-    if (request.body?.password !== config.auth.password) {
+    if (request.body?.password !== deps.config.auth.password) {
       return reply.status(401).send({ ok: false, error: 'Invalid password' });
+    }
+
+    const token = randomBytes(32).toString('hex');
+    deps.authSessionRepo.create(token, Date.now());
+
+    reply.header(
+      'Set-Cookie',
+      `${AUTH_COOKIE_NAME}=${encodeAuthCookieValue(token)}; HttpOnly; Path=/; SameSite=Lax`
+    );
+    return reply.send({ ok: true, authEnabled: true, authenticated: true });
+  };
+};
+
+export const registerAuthLogoutRoute = (deps: AuthDeps) => {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const cookies = parseCookies(request.headers.cookie);
+    const authCookie = cookies[AUTH_COOKIE_NAME];
+
+    if (authCookie) {
+      deps.authSessionRepo.delete(decodeAuthCookieValue(authCookie));
     }
 
     reply.header(
       'Set-Cookie',
-      `${AUTH_COOKIE_NAME}=${encodeAuthCookieValue(config.auth.password)}; HttpOnly; Path=/; SameSite=Lax`
+      `${AUTH_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`
     );
-    return reply.send({ ok: true, authEnabled: true });
+
+    return reply.send({
+      ok: true,
+      authEnabled: deps.config.auth.enabled,
+      authenticated: false,
+    });
   };
 };

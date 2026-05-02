@@ -35,8 +35,10 @@ export function LoginPage() {
         const data = await response.json();
         setStatusUnavailable(false);
         setStatusNotConfigured(data.authEnabled === false);
-        if (data.authEnabled === false) {
+        if (data.authEnabled === false || data.authenticated === true) {
           setAuthenticated(true);
+        } else {
+          setAuthenticated(false);
         }
       } catch {
         setStatusUnavailable(true);

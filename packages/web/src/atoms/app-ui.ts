@@ -21,9 +21,9 @@ export const localeAtom = atomWithStorage<string>('ui.locale', 'zh');
 
 /**
  * Auth state
- * Persisted: ui.authenticated
+ * Derived from server session status, not persisted locally.
  */
-export const authenticatedAtom = atomWithStorage<boolean>('ui.authenticated', false);
+export const authenticatedAtom = atom<boolean>(false);
 
 /**
  * Command palette open state

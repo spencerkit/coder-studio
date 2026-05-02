@@ -121,11 +121,9 @@ export function AppProviders({ children }: AppProvidersProps) {
         const response = await fetch('/auth/status');
         const data = await response.json();
         setAuthEnabled(Boolean(data.authEnabled));
-        if (data.authEnabled === false) {
-          store.set(authenticatedAtom, true);
-        }
+        store.set(authenticatedAtom, Boolean(data.authenticated) || data.authEnabled === false);
       } catch {
-        setAuthEnabled(false);
+        store.set(authenticatedAtom, false);
       }
     };
 

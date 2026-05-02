@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { authEnabledAtom } from '../atoms/connection';
+import { authenticatedAtom } from '../atoms/app-ui';
 import { AppProviders, resetAppProvidersSingletonsForTests } from './providers';
 
 const wsState = vi.hoisted(() => ({
@@ -27,16 +29,16 @@ vi.mock('../features/notifications', () => ({
   clearSessionOutputAtom: null,
 }));
 
-function renderProviders() {
-  const store = createStore();
-
-  return render(
+function renderProviders(store = createStore()) {
+  const rendered = render(
     <Provider store={store}>
       <AppProviders>
         <div>child</div>
       </AppProviders>
     </Provider>
   );
+
+  return { store, ...rendered };
 }
 
 describe('AppProviders lifecycle recovery', () => {
@@ -89,5 +91,34 @@ describe('AppProviders lifecycle recovery', () => {
     window.dispatchEvent(new Event('online'));
 
     expect(wsState.client?.recoverConnection).toHaveBeenCalledWith('network_online');
+  });
+
+  it('hydrates authEnabled and authenticated from /auth/status instead of trusting stale local state', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ authEnabled: true, authenticated: false }),
+    }) as unknown as typeof fetch;
+
+    const store = createStore();
+    store.set(authenticatedAtom, true);
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(true);
+      expect(store.get(authenticatedAtom)).toBe(false);
+    });
+  });
+
+  it('marks the session authenticated when /auth/status confirms an existing server session', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ authEnabled: true, authenticated: true }),
+    }) as unknown as typeof fetch;
+
+    const { store } = renderProviders();
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(true);
+      expect(store.get(authenticatedAtom)).toBe(true);
+    });
   });
 });

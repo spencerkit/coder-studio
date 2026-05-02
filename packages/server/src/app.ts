@@ -14,10 +14,16 @@ import type { HooksManager } from './hooks/manager.js';
 import type { WorkspaceManager } from './workspace/manager.js';
 import type { FastifyRequest } from 'fastify';
 import type { ServerConfig } from './config.js';
-import { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './auth/index.js';
+import {
+  createAuthGuard,
+  registerAuthLogoutRoute,
+  registerAuthRoutes,
+  registerAuthStatusRoute,
+} from './auth/index.js';
 import { registerHooksEndpoint } from './hooks/endpoint.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
 import type { RuntimeConfig } from './hooks/runtime-json.js';
+import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
 
 interface AppDeps {
   wsHub: WsHub;
@@ -27,6 +33,7 @@ interface AppDeps {
   workspaceMgr: WorkspaceManager;
   config: ServerConfig;
   runtime: RuntimeConfig;
+  authSessionRepo: AuthSessionRepo;
   logger?: any;
 }
 
@@ -69,7 +76,10 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Phase 2: Configurable auth middleware
-  app.addHook('onRequest', createAuthGuard(deps.config));
+  app.addHook('onRequest', createAuthGuard({
+    config: deps.config,
+    authSessionRepo: deps.authSessionRepo,
+  }));
 
   // CORS configuration (development mode)
   await app.register(cors, {
@@ -80,8 +90,18 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Auth endpoints
-  app.get('/auth/status', registerAuthStatusRoute(deps.config));
-  app.post('/auth/login', registerAuthRoutes(deps.config));
+  app.get('/auth/status', registerAuthStatusRoute({
+    config: deps.config,
+    authSessionRepo: deps.authSessionRepo,
+  }));
+  app.post('/auth/login', registerAuthRoutes({
+    config: deps.config,
+    authSessionRepo: deps.authSessionRepo,
+  }));
+  app.post('/auth/logout', registerAuthLogoutRoute({
+    config: deps.config,
+    authSessionRepo: deps.authSessionRepo,
+  }));
 
   // Health check endpoint
   app.get('/healthz', async () => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
+import WebSocket from 'ws';
 import { createServer, type Server } from '../server.js';
 import { getRuntimePath } from '../hooks/runtime-json.js';
 
@@ -22,6 +23,85 @@ function cleanupRuntimeAndBridges() {
     const path = join(bridgeDir, bridge);
     if (existsSync(path)) rmSync(path);
   }
+}
+
+function getBaseUrl(server: Server): string {
+  const address = server.app.server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Failed to resolve server address');
+  }
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function openWebSocket(url: string, cookie?: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, {
+      headers: cookie ? { cookie } : undefined,
+    });
+
+    const handleOpen = () => {
+      cleanup();
+      resolve(socket);
+    };
+    const handleError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const handleUnexpectedResponse = (_request: unknown, response: { statusCode?: number }) => {
+      cleanup();
+      reject(new Error(`unexpected-response:${response.statusCode ?? 'unknown'}`));
+    };
+    const cleanup = () => {
+      socket.off('open', handleOpen);
+      socket.off('error', handleError);
+      socket.off('unexpected-response', handleUnexpectedResponse);
+    };
+
+    socket.on('open', handleOpen);
+    socket.on('error', handleError);
+    socket.on('unexpected-response', handleUnexpectedResponse);
+  });
+}
+
+async function expectWebSocketHandshakeStatus(url: string, expectedStatus: number, cookie?: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const socket = new WebSocket(url, {
+      headers: cookie ? { cookie } : undefined,
+    });
+
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+    const cleanup = () => {
+      socket.removeAllListeners();
+    };
+
+    socket.on('open', () => {
+      finish(() => {
+        socket.close();
+        reject(new Error(`Expected websocket handshake to fail with ${expectedStatus}`));
+      });
+    });
+    socket.on('unexpected-response', (_request, response) => {
+      response.resume();
+      finish(() => {
+        if (response.statusCode === expectedStatus) {
+          resolve();
+          return;
+        }
+        reject(new Error(`Expected websocket handshake status ${expectedStatus}, got ${response.statusCode ?? 'unknown'}`));
+      });
+    });
+    socket.on('error', (error) => {
+      if (!settled) {
+        finish(() => reject(error));
+      }
+    });
+  });
 }
 
 describe('createServer runtime handshake', () => {
@@ -189,6 +269,47 @@ describe('createServer runtime handshake', () => {
     }
   });
 
+  it('reports authenticated false before login and true after login with a session cookie', async () => {
+    server = await createServer({
+      dataDir: ':memory:',
+      host: '127.0.0.1',
+      port: 0,
+      auth: { enabled: true, password: 'sekrit' },
+    } as any);
+
+    const baseUrl = getBaseUrl(server);
+
+    const beforeLogin = await fetch(`${baseUrl}/auth/status`);
+    expect(beforeLogin.status).toBe(200);
+    await expect(beforeLogin.json()).resolves.toEqual({
+      ok: true,
+      authEnabled: true,
+      authenticated: false,
+    });
+
+    const login = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'sekrit' }),
+    });
+    const cookie = login.headers.get('set-cookie');
+    if (!cookie) {
+      throw new Error('Expected auth cookie');
+    }
+
+    expect(cookie).not.toContain('sekrit');
+
+    const afterLogin = await fetch(`${baseUrl}/auth/status`, {
+      headers: { cookie },
+    });
+    expect(afterLogin.status).toBe(200);
+    await expect(afterLogin.json()).resolves.toEqual({
+      ok: true,
+      authEnabled: true,
+      authenticated: true,
+    });
+  });
+
   it('serves the SPA entrypoint for authenticated frontend routes when the auth password contains cookie-sensitive characters', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-spa-special-auth-'));
     writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>spa shell</body></html>', 'utf-8');
@@ -228,6 +349,62 @@ describe('createServer runtime handshake', () => {
       expect(body).toContain('spa shell');
     } finally {
       rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects websocket connections without an auth session cookie when auth is enabled', async () => {
+    server = await createServer({
+      dataDir: ':memory:',
+      host: '127.0.0.1',
+      port: 0,
+      auth: { enabled: true, password: 'sekrit' },
+    } as any);
+
+    const baseUrl = getBaseUrl(server);
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
+
+    await expectWebSocketHandshakeStatus(wsUrl, 401);
+  });
+
+  it('accepts websocket connections with a valid auth session cookie when auth is enabled', async () => {
+    server = await createServer({
+      dataDir: ':memory:',
+      host: '127.0.0.1',
+      port: 0,
+      auth: { enabled: true, password: 'sekrit' },
+    } as any);
+
+    const baseUrl = getBaseUrl(server);
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
+
+    const login = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'sekrit' }),
+    });
+    const cookie = login.headers.get('set-cookie');
+    if (!cookie) {
+      throw new Error('Expected auth cookie');
+    }
+
+    const socket = await openWebSocket(wsUrl, cookie);
+
+    try {
+      const firstMessage = await new Promise<string>((resolve, reject) => {
+        socket.once('message', (payload) => resolve(payload.toString()));
+        socket.once('error', reject);
+      });
+
+      expect(JSON.parse(firstMessage)).toMatchObject({
+        kind: 'event',
+        topic: 'connection.status',
+        data: {
+          status: 'connected',
+          authEnabled: true,
+        },
+      });
+    } finally {
+      socket.close();
     }
   });
 

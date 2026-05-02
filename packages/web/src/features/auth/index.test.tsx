@@ -44,7 +44,7 @@ describe('LoginPage', () => {
   it('renders the password field with a dedicated hint when auth is available', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ authEnabled: true }),
+      json: async () => ({ authEnabled: true, authenticated: false }),
     }) as unknown as typeof fetch;
 
     render(
@@ -62,7 +62,7 @@ describe('LoginPage', () => {
   it('marks the user authenticated when auth is disabled on the server', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ authEnabled: false }),
+      json: async () => ({ authEnabled: false, authenticated: true }),
     }) as unknown as typeof fetch;
 
     const store = createStore();
@@ -163,7 +163,7 @@ describe('LoginPage', () => {
     viewportMocks.viewport = 'mobile';
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ authEnabled: true }),
+      json: async () => ({ authEnabled: true, authenticated: false }),
     }) as unknown as typeof fetch;
 
     render(
@@ -177,5 +177,24 @@ describe('LoginPage', () => {
     expect(document.querySelector('.welcome-container--mobile')).toBeTruthy();
     expect(document.querySelector('.auth-screen--mobile')).toBeTruthy();
     expect(document.querySelector('.auth-card-shell--mobile')).toBeTruthy();
+  });
+
+  it('marks the user authenticated when the server already has a valid session cookie', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ authEnabled: true, authenticated: true }),
+    }) as unknown as typeof fetch;
+
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <LoginPage />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(authenticatedAtom)).toBe(true);
+    });
   });
 });

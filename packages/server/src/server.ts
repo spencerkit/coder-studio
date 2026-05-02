@@ -23,6 +23,7 @@ import {
   type RuntimeConfig,
 } from './hooks/runtime-json.js';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
 import { HookRegistrationRepo } from './storage/repositories/hook-registration-repo.js';
 import { ProviderConfigRepo } from './storage/repositories/provider-config-repo.js';
 import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-repo.js';
@@ -176,6 +177,7 @@ export async function createServer(
 
   // Hooks Manager
   const hookRegistrationRepo = new HookRegistrationRepo(db);
+  const authSessionRepo = new AuthSessionRepo(db);
 
   const hooksMgr = new HooksManager(
     hookRegistrationRepo,
@@ -199,6 +201,7 @@ export async function createServer(
     webRoot,
     config,
     runtime,
+    authSessionRepo,
     logger: {
       level: 'info',
       transport: {

@@ -1,1 +1,6 @@
-export { createAuthGuard, registerAuthRoutes, registerAuthStatusRoute } from './plugin.js';
+export {
+  createAuthGuard,
+  registerAuthLogoutRoute,
+  registerAuthRoutes,
+  registerAuthStatusRoute,
+} from './plugin.js';
