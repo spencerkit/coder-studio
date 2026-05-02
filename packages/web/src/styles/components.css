@@ -4763,28 +4763,6 @@ textarea.input {
   color: var(--text-secondary);
 }
 
-.code-mode-toggle {
-  display: flex;
-  gap: 2px;
-  margin-left: auto;
-}
-
-.code-mode-btn {
-  height: 22px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.code-mode-btn.active {
-  background: var(--accent-blue);
-  color: var(--text-inverse);
-}
-
 .code-editor-body {
   flex: 1;
   min-height: 0;
@@ -4820,35 +4798,6 @@ textarea.input {
 
 .git-diff-line-text {
   flex: 1;
-}
-
-.git-preview-line .git-diff-line-text {
-  color: var(--text-primary);
-}
-
-.code-keyword {
-  color: #c678dd;
-}
-
-.code-string {
-  color: #98c379;
-}
-
-.code-comment {
-  color: #5c6370;
-  font-style: italic;
-}
-
-.code-function {
-  color: #61afef;
-}
-
-.code-type {
-  color: #e5c07b;
-}
-
-.code-operator {
-  color: #56b6c2;
 }
 
 .git-diff-line-meta {
@@ -5665,7 +5614,44 @@ textarea.input {
   border-radius: 4px;
 }
 
+.file-tree-shell {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.file-tree-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.file-tree-search-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.file-tree-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.file-tree-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
 .file-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   padding: 4px 0;
 }
 
@@ -5701,6 +5687,21 @@ textarea.input {
 .tree-label {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.tree-search-labels {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.tree-search-path {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-item.selected .tree-label {

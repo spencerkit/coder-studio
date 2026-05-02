@@ -401,64 +401,9 @@ export function useGitPanelActions({
 
 export function useGitDiffViewerActions(workspaceId: string) {
   const preview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const [viewMode, setViewMode] = useState<'preview' | 'diff'>('preview');
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-
-  useEffect(() => {
-    setViewMode('preview');
-  }, [preview?.path]);
-
-  useEffect(() => {
-    if (!preview?.path) {
-      setPreviewContent(null);
-      setPreviewError(null);
-      setIsLoadingPreview(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadPreview = async () => {
-      setIsLoadingPreview(true);
-      setPreviewError(null);
-
-      const result = await dispatch<{ content: string }>('file.read', {
-        workspaceId,
-        path: preview.path,
-      });
-
-      if (cancelled) {
-        return;
-      }
-
-      if (!result.ok || !result.data) {
-        setPreviewContent(null);
-        setPreviewError(result.error?.message ?? 'Preview is unavailable for this change.');
-        setIsLoadingPreview(false);
-        return;
-      }
-
-      setPreviewContent(result.data.content);
-      setIsLoadingPreview(false);
-    };
-
-    void loadPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatch, preview?.path, workspaceId]);
 
   return {
-    isLoadingPreview,
     preview,
-    previewContent,
-    previewError,
-    setViewMode,
-    viewMode,
   };
 }
 
