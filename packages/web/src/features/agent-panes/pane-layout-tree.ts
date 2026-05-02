@@ -263,7 +263,8 @@ export function collectSessionIds(node: PaneNode): string[] {
 export function appendSessionToLayout(
   node: PaneNode,
   sessionId: string,
-  anchorSessionId?: string | null
+  anchorSessionId?: string | null,
+  direction: PaneDirection = 'horizontal'
 ): PaneNode {
   const draftFilled = assignFirstDraftPane(node, sessionId);
   if (draftFilled) {
@@ -271,13 +272,13 @@ export function appendSessionToLayout(
   }
 
   if (anchorSessionId) {
-    const anchoredSplit = splitLeafForNewSession(node, sessionId, anchorSessionId);
+    const anchoredSplit = splitLeafForNewSession(node, sessionId, direction, anchorSessionId);
     if (anchoredSplit) {
       return anchoredSplit;
     }
   }
 
-  const fallbackSplit = splitLeafForNewSession(node, sessionId);
+  const fallbackSplit = splitLeafForNewSession(node, sessionId, direction);
   if (fallbackSplit) {
     return fallbackSplit;
   }
@@ -293,6 +294,28 @@ export function appendSessionToLayout(
     id: 'root',
     type: 'leaf',
     sessionId,
+  };
+}
+
+export function createFallbackPaneLayout(sessionIds: string[]): PaneNode {
+  if (sessionIds.length === 0) {
+    return { id: 'root', type: 'leaf' };
+  }
+
+  if (sessionIds.length === 1) {
+    return { id: 'fallback-leaf-1', type: 'leaf', sessionId: sessionIds[0]! };
+  }
+
+  const [firstId, ...rest] = sessionIds;
+  return {
+    id: 'split-fallback-1',
+    type: 'split',
+    direction: 'horizontal',
+    ratio: 0.5,
+    children: [
+      { id: 'fallback-leaf-1', type: 'leaf', sessionId: firstId! },
+      createFallbackPaneLayoutBranch(rest, 2),
+    ],
   };
 }
 
@@ -373,6 +396,7 @@ function assignFirstDraftPane(node: PaneNode, sessionId: string): PaneNode | nul
 function splitLeafForNewSession(
   node: PaneNode,
   sessionId: string,
+  direction: PaneDirection,
   preferredSessionId?: string
 ): PaneNode | null {
   if (node.type === 'leaf') {
@@ -384,11 +408,11 @@ function splitLeafForNewSession(
       return null;
     }
 
-    const splitId = `split-${node.id}-horizontal-${Date.now()}`;
+    const splitId = `split-${node.id}-${direction}-${Date.now()}`;
     return {
       id: splitId,
       type: 'split',
-      direction: 'horizontal',
+      direction,
       ratio: 0.5,
       children: [
         { ...node },
@@ -400,7 +424,7 @@ function splitLeafForNewSession(
   const children = node.children ?? [];
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index]!;
-    const nextChild = splitLeafForNewSession(child, sessionId, preferredSessionId);
+    const nextChild = splitLeafForNewSession(child, sessionId, direction, preferredSessionId);
     if (!nextChild) {
       continue;
     }
@@ -414,4 +438,30 @@ function splitLeafForNewSession(
   }
 
   return null;
+}
+
+function createFallbackPaneLayoutBranch(sessionIds: string[], startIndex: number): PaneNode {
+  if (sessionIds.length === 1) {
+    return {
+      id: `fallback-leaf-${startIndex}`,
+      type: 'leaf',
+      sessionId: sessionIds[0]!,
+    };
+  }
+
+  const [firstId, ...rest] = sessionIds;
+  return {
+    id: `split-fallback-${startIndex}`,
+    type: 'split',
+    direction: 'horizontal',
+    ratio: 0.5,
+    children: [
+      {
+        id: `fallback-leaf-${startIndex}`,
+        type: 'leaf',
+        sessionId: firstId!,
+      },
+      createFallbackPaneLayoutBranch(rest, startIndex + 1),
+    ],
+  };
 }

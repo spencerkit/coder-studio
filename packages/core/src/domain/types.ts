@@ -22,11 +22,20 @@ export interface Workspace {
   uiState: UiState;
 }
 
+export interface WorkspacePaneNode {
+  id: string;
+  type: 'leaf' | 'split';
+  sessionId?: string;
+  direction?: 'horizontal' | 'vertical';
+  children?: WorkspacePaneNode[];
+}
+
 export interface UiState {
   leftPanelWidth: number;
   bottomPanelHeight: number;
   focusMode: boolean;
   activeSessionId?: string;
+  paneLayout?: WorkspacePaneNode;
 }
 
 export interface Terminal {

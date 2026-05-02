@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PaneNode } from './atoms/pane-layout';
 import {
+  appendSessionToLayout,
   assignSessionToPane,
   closeDraftPaneById,
   closePaneBySessionId,
+  createFallbackPaneLayout,
   splitPaneByPaneId,
   splitPaneBySessionId,
 } from './pane-layout-tree';
@@ -143,6 +145,47 @@ describe('pane-layout-tree', () => {
     expect(closePaneBySessionId(layout, 'sess_1')).toEqual({
       id: 'root',
       type: 'leaf',
+    });
+  });
+
+  it('appends a new session with a vertical split when requested', () => {
+    const layout: PaneNode = {
+      id: 'root',
+      type: 'leaf',
+      sessionId: 'sess_1',
+    };
+
+    expect(appendSessionToLayout(layout, 'sess_2', 'sess_1', 'vertical')).toEqual({
+      id: expect.stringMatching(/^split-root-vertical-/),
+      type: 'split',
+      direction: 'vertical',
+      ratio: 0.5,
+      children: [
+        { id: 'root', type: 'leaf', sessionId: 'sess_1' },
+        expect.objectContaining({ type: 'leaf', sessionId: 'sess_2' }),
+      ],
+    });
+  });
+
+  it('creates a fallback pane layout that includes all live sessions', () => {
+    expect(createFallbackPaneLayout(['sess_1', 'sess_2', 'sess_3'])).toEqual({
+      id: 'split-fallback-1',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'fallback-leaf-1', type: 'leaf', sessionId: 'sess_1' },
+        {
+          id: 'split-fallback-2',
+          type: 'split',
+          direction: 'horizontal',
+          ratio: 0.5,
+          children: [
+            { id: 'fallback-leaf-2', type: 'leaf', sessionId: 'sess_2' },
+            { id: 'fallback-leaf-3', type: 'leaf', sessionId: 'sess_3' },
+          ],
+        },
+      ],
     });
   });
 });

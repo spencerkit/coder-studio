@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { dispatch } from '../ws/dispatch.js';
 import type { CommandContext } from '../ws/dispatch.js';
 import { openDatabase, runMigrations } from '../storage/db.js';
@@ -89,6 +92,65 @@ describe('Workspace Commands', () => {
 
       expect(result.ok).toBe(false);
       expect(result.error?.code).toBe('internal_error');
+    });
+  });
+
+  describe('workspace.uiState.set', () => {
+    it('persists pane layout into workspace ui state', async () => {
+      const dir = join(tmpdir(), `workspace-command-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: 'command',
+          id: 'open-workspace',
+          op: 'workspace.open',
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+
+      const workspaceId = (openResult.data as { id: string }).id;
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'set-ui-state',
+          op: 'workspace.uiState.set',
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: 'root',
+                type: 'split',
+                direction: 'horizontal',
+                children: [
+                  { id: 'left', type: 'leaf', sessionId: 'sess-left' },
+                  { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+                ],
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { uiState: { paneLayout: unknown } }).uiState.paneLayout).toEqual({
+        id: 'root',
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { id: 'left', type: 'leaf', sessionId: 'sess-left' },
+          { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+        ],
+      });
     });
   });
 });

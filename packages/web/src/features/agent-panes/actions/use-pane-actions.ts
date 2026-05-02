@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useSetAtom } from 'jotai';
+import { useSetAtom, useStore } from 'jotai';
 import { paneLayoutAtomFamily } from '../atoms/pane-layout';
 import {
   appendSessionToLayout,
@@ -9,61 +9,80 @@ import {
   splitPaneByPaneId,
   splitPaneBySessionId,
 } from '../pane-layout-tree';
+import { useWorkspaceUiStatePersistence } from '../../workspace/actions/use-workspace-ui-state-persistence';
+import type { PaneNode } from '../atoms/pane-layout';
 
 export function usePaneActions(workspaceId: string) {
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
+  const store = useStore();
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
+
+  const applyLayout = useCallback(
+    (update: PaneNode | ((current: PaneNode) => PaneNode)) => {
+      const current = store.get(paneLayoutAtomFamily(workspaceId));
+      const next = typeof update === 'function' ? update(current) : update;
+      setPaneLayout(next);
+      void persistUiState({ paneLayout: next });
+      return next;
+    },
+    [persistUiState, setPaneLayout, store, workspaceId]
+  );
 
   const splitSessionPane = useCallback(
     (sessionId: string, direction: 'horizontal' | 'vertical') => {
-      setPaneLayout((current) => splitPaneBySessionId(current, sessionId, direction));
+      applyLayout((current) => splitPaneBySessionId(current, sessionId, direction));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const splitDraftPane = useCallback(
     (paneId: string, direction: 'horizontal' | 'vertical') => {
-      setPaneLayout((current) => splitPaneByPaneId(current, paneId, direction));
+      applyLayout((current) => splitPaneByPaneId(current, paneId, direction));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const closeSessionPane = useCallback(
     (sessionId: string) => {
-      setPaneLayout((current) => closePaneBySessionId(current, sessionId));
+      applyLayout((current) => closePaneBySessionId(current, sessionId));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const closeDraftPane = useCallback(
     (paneId: string) => {
-      setPaneLayout((current) => closeDraftPaneById(current, paneId));
+      applyLayout((current) => closeDraftPaneById(current, paneId));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const assignSession = useCallback(
     (paneId: string, sessionId: string) => {
-      setPaneLayout((current) => assignSessionToPane(current, paneId, sessionId));
+      applyLayout((current) => assignSessionToPane(current, paneId, sessionId));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const replaceWithSession = useCallback(
     (sessionId: string) => {
-      setPaneLayout({
+      applyLayout({
         id: 'root',
         type: 'leaf',
         sessionId,
       });
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   const appendSession = useCallback(
-    (sessionId: string, anchorSessionId?: string | null) => {
-      setPaneLayout((current) => appendSessionToLayout(current, sessionId, anchorSessionId));
+    (
+      sessionId: string,
+      anchorSessionId?: string | null,
+      direction: 'horizontal' | 'vertical' = 'horizontal'
+    ) => {
+      applyLayout((current) => appendSessionToLayout(current, sessionId, anchorSessionId, direction));
     },
-    [setPaneLayout]
+    [applyLayout]
   );
 
   return {

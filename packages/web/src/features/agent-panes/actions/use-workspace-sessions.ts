@@ -4,13 +4,27 @@ import type { Session, Workspace } from '@coder-studio/core';
 import { activeWorkspaceAtom } from '../../../atoms/workspaces';
 import { connectionStatusAtom, dispatchCommandAtom } from '../../../atoms/connection';
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../../atoms/sessions';
-import { paneLayoutAtomFamily } from '../atoms/pane-layout';
-import { collectSessionIds, sanitizePaneLayout } from '../pane-layout-tree';
+import { useWorkspaceUiStatePersistence } from '../../workspace/actions/use-workspace-ui-state-persistence';
+import {
+  LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX,
+  defaultPaneLayout,
+  paneLayoutAtomFamily,
+  type PaneNode,
+} from '../atoms/pane-layout';
+import { collectSessionIds, createFallbackPaneLayout, sanitizePaneLayout } from '../pane-layout-tree';
 
-export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {
+interface UseWorkspaceSessionsOptions {
+  disabled?: boolean;
+}
+
+export function useWorkspaceSessions(
+  workspaceOverride?: Workspace | null,
+  options?: UseWorkspaceSessionsOptions
+) {
   const workspaceFromAtom = useAtomValue(activeWorkspaceAtom);
   const workspace = workspaceOverride === undefined ? workspaceFromAtom : workspaceOverride;
   const workspaceId = workspace?.id ?? '__workspace_empty__';
+  const disabled = options?.disabled ?? false;
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
@@ -18,8 +32,13 @@ export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {
   const setSessions = useSetAtom(sessionsAtom);
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
   const store = useStore();
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   useEffect(() => {
+    if (disabled) {
+      return;
+    }
+
     if (!workspace) {
       return;
     }
@@ -52,27 +71,35 @@ export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {
         });
 
         const currentLayout = store.get(paneLayoutAtomFamily(workspaceId));
+        const workspacePaneLayout = normalizePaneLayout(workspace?.uiState.paneLayout);
+        const legacyPaneLayout = workspacePaneLayout ? null : readLegacyPaneLayout(workspace.id);
+        const baseLayout = workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
         const liveSessionIds = new Set(
           nextSessions
             .filter((session) => session.state !== 'ended')
             .map((session) => session.id)
         );
 
-        const sanitized = sanitizePaneLayout(currentLayout, liveSessionIds);
+        const liveSessions = nextSessions.filter((session) => session.state !== 'ended');
+        const sanitized = sanitizePaneLayout(baseLayout, liveSessionIds);
+        let nextLayout = sanitized;
         if (sanitized !== currentLayout) {
           setPaneLayout(sanitized);
-          return;
         }
 
-        const hasAnySessionInLayout = collectSessionIds(currentLayout).length > 0;
+        const hasAnySessionInLayout = collectSessionIds(sanitized).length > 0;
         if (!hasAnySessionInLayout) {
-          const liveSessions = nextSessions.filter((session) => session.state !== 'ended');
           if (liveSessions.length > 0) {
-            setPaneLayout({
-              id: 'root',
-              type: 'leaf',
-              sessionId: liveSessions[0]!.id,
-            });
+            nextLayout = createFallbackPaneLayout(liveSessions.map((session) => session.id));
+            setPaneLayout(nextLayout);
+          }
+        }
+
+        if (!workspacePaneLayout) {
+          const shouldPersistLayout =
+            legacyPaneLayout !== null || collectSessionIds(nextLayout).length > 0;
+          if (shouldPersistLayout) {
+            void persistUiState({ paneLayout: nextLayout });
           }
         }
       })
@@ -85,7 +112,17 @@ export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {
     return () => {
       cancelled = true;
     };
-  }, [workspace, workspaceId, connectionStatus, dispatch, setSessions, setPaneLayout, store]);
+  }, [
+    connectionStatus,
+    disabled,
+    dispatch,
+    persistUiState,
+    setPaneLayout,
+    setSessions,
+    store,
+    workspace?.id,
+    workspaceId,
+  ]);
 
   return {
     workspace,
@@ -94,4 +131,32 @@ export function useWorkspaceSessions(workspaceOverride?: Workspace | null) {
     paneLayout,
     setPaneLayout,
   };
+}
+
+function normalizePaneLayout(layout: Workspace['uiState']['paneLayout']): PaneNode | null {
+  if (!layout) {
+    return null;
+  }
+
+  return {
+    ...layout,
+    children: layout.children?.map((child) => normalizePaneLayout(child) ?? defaultPaneLayout),
+  };
+}
+
+function readLegacyPaneLayout(workspaceId: string): PaneNode | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}${workspaceId}`);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as PaneNode;
+  } catch {
+    return null;
+  }
 }

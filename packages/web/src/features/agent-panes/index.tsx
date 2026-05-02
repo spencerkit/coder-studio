@@ -8,12 +8,12 @@
 import type { FC } from 'react';
 import { useAtomValue } from 'jotai';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
+import { useWorkspaceSessions } from './actions/use-workspace-sessions';
 import type { PaneNode } from './atoms/pane-layout';
 import { useTranslation } from '../../lib/i18n';
 import { DraftLauncher } from './views/shared/draft-launcher';
 import { PaneLayout } from './views/shared/pane-layout';
 import { SessionCard } from './views/shared/session-card';
-import { useWorkspaceSessions } from './actions/use-workspace-sessions';
 import { usePaneActions } from './actions/use-pane-actions';
 import { useSessionActions } from './actions/use-session-actions';
 import { collectSessionIds } from './pane-layout-tree';
@@ -27,10 +27,16 @@ import { collectSessionIds } from './pane-layout-tree';
  *   - Each panel: terminal + session card
  *   - Draft launcher for new sessions
  */
-export const AgentPanes: FC = () => {
+interface AgentPanesProps {
+  hydrateSessions?: boolean;
+}
+
+export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
-  const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace);
+  const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace, {
+    disabled: !hydrateSessions,
+  });
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;

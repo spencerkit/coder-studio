@@ -41,6 +41,23 @@ export class WorkspaceManager {
 
   constructor(private deps: WorkspaceManagerDeps) {}
 
+  updateUiState(workspaceId: string, uiState: Workspace['uiState']): void {
+    const workspace = this.get(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    this.deps.db
+      .prepare('UPDATE workspaces SET ui_state = ? WHERE id = ?')
+      .run(JSON.stringify(uiState), workspaceId);
+
+    this.deps.eventBus.emit({
+      type: 'workspace.meta.changed',
+      workspaceId,
+      patch: { uiState },
+    });
+  }
+
   /**
    * Opens a new workspace.
    *
@@ -90,6 +107,10 @@ export class WorkspaceManager {
         leftPanelWidth: 250,
         bottomPanelHeight: 200,
         focusMode: false,
+        paneLayout: {
+          id: 'root',
+          type: 'leaf',
+        },
       },
     };
 

@@ -376,6 +376,7 @@ function renderMobileShell({
           bottomPanelHeight: 200,
           focusMode: false,
           activeSessionId: 'sess_2',
+          paneLayout: paneLayout as never,
         },
       },
       'ws-2': {
@@ -733,9 +734,18 @@ describe('MobileShell Phase 2 workspace', () => {
 
   it('creates a new agent from the mobile session sheet', async () => {
     const user = userEvent.setup();
+    const hydratedSessions = [
+      createSession({
+        id: 'sess_2',
+        terminalId: 'term-2',
+        providerId: 'codex',
+        state: 'idle',
+        title: 'Codex',
+      }),
+    ];
     const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
       if (op === 'session.list') {
-        return [];
+        return hydratedSessions;
       }
 
       if (op === 'provider.runtimeStatus') {
@@ -775,10 +785,30 @@ describe('MobileShell Phase 2 workspace', () => {
         });
       }
 
+      if (op === 'workspace.uiState.set') {
+        return {
+          id: 'ws-1',
+          name: 'Alpha',
+          path: '/tmp/alpha',
+          targetRuntime: 'native',
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
       return undefined;
     });
 
-    renderMobileShell({ sendCommand });
+    renderMobileShell({
+      sendCommand,
+      sessions: [],
+      paneLayout: {
+        id: 'root',
+        type: 'leaf',
+        sessionId: 'sess_2',
+      },
+    });
 
     await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
     await user.click(screen.getByRole('button', { name: 'Create Session' }));
@@ -791,13 +821,45 @@ describe('MobileShell Phase 2 workspace', () => {
       workspaceId: 'ws-1',
       providerId: 'codex',
     });
+    expect(sendCommand).toHaveBeenCalledWith(
+      'workspace.uiState.set',
+      expect.objectContaining({
+        workspaceId: 'ws-1',
+        uiState: expect.objectContaining({
+          activeSessionId: 'sess_3',
+          paneLayout: expect.objectContaining({
+            type: 'split',
+            direction: 'vertical',
+            children: [
+              expect.objectContaining({ sessionId: 'sess_2' }),
+              expect.objectContaining({ sessionId: 'sess_3' }),
+            ],
+          }),
+        }),
+      })
+    );
   });
 
   it('closes the active agent from the mobile session sheet', async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
-        return [];
+        return [
+          createSession({
+            id: 'sess_1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'idle',
+            title: 'Claude',
+          }),
+          createSession({
+            id: 'sess_2',
+            terminalId: 'term-2',
+            providerId: 'codex',
+            state: 'running',
+            title: 'Codex',
+          }),
+        ];
       }
 
       return undefined;
@@ -823,6 +885,44 @@ describe('MobileShell Phase 2 workspace', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+    });
+  });
+
+  it('restores mobile sessions from session.list and workspace pane layout after reload', async () => {
+    const sessions = [
+      createSession({
+        id: 'sess_reload_1',
+        terminalId: 'term-reload-1',
+        providerId: 'claude',
+        state: 'idle',
+        lastActiveAt: Date.now() - 1000,
+        title: 'Reloaded Claude',
+      }),
+    ];
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return sessions;
+      }
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: '/workspace',
+      sessions: [],
+      paneLayout: {
+        id: 'root',
+        type: 'leaf',
+        sessionId: 'sess_reload_1',
+      },
+      sendCommand,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_reload_1');
     });
   });
 

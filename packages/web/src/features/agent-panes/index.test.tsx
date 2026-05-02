@@ -6,7 +6,7 @@ import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import { localeAtom } from '../../atoms/app-ui';
-import { paneLayoutAtomFamily } from './atoms/pane-layout';
+import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from './atoms/pane-layout';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 
 const mockSessionCard = vi.fn(
@@ -138,6 +138,7 @@ describe('AgentPanes', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
   });
 
   it('splits the active session pane when session-card requests a split', async () => {
@@ -160,6 +161,80 @@ describe('AgentPanes', () => {
             expect.objectContaining({ sessionId: 'sess_1' }),
             expect.objectContaining({ type: 'leaf' }),
           ],
+        })
+      );
+    });
+  });
+
+  it('persists pane layout mutations into workspace ui state after a split', async () => {
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === 'session.list') {
+        return [
+          {
+            id: 'sess_1',
+            workspaceId: 'ws-1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'running',
+            capability: 'full',
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+          {
+            id: 'sess_2',
+            workspaceId: 'ws-1',
+            terminalId: 'term-2',
+            providerId: 'codex',
+            state: 'idle',
+            capability: 'full',
+            startedAt: Date.now() - 8_000,
+            lastActiveAt: Date.now() - 500,
+          },
+        ];
+      }
+
+      if (op === 'workspace.uiState.set') {
+        return {
+          id: 'ws-1',
+          name: 'repo',
+          path: '/tmp/repo',
+          targetRuntime: 'native',
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: args?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'split-sess_1' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'workspace.uiState.set',
+        expect.objectContaining({
+          workspaceId: 'ws-1',
+          uiState: expect.objectContaining({
+            leftPanelWidth: 280,
+            bottomPanelHeight: 200,
+            focusMode: false,
+            paneLayout: expect.objectContaining({
+              type: 'split',
+              direction: 'horizontal',
+              children: [
+                expect.objectContaining({ sessionId: 'sess_1' }),
+                expect.objectContaining({ type: 'leaf' }),
+              ],
+            }),
+          }),
         })
       );
     });
@@ -301,7 +376,7 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('mounts only the first live session when no pane layout has been persisted yet', async () => {
+  it('mounts all live sessions when no pane layout has been persisted yet', async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
         return [
@@ -352,16 +427,100 @@ describe('AgentPanes', () => {
     });
 
     expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-      id: 'root',
-      type: 'leaf',
-      sessionId: 'sess_1',
+      id: 'split-fallback-1',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'fallback-leaf-1', type: 'leaf', sessionId: 'sess_1' },
+        { id: 'fallback-leaf-2', type: 'leaf', sessionId: 'sess_2' },
+      ],
     });
     expect(mockSessionCard).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'sess_1' })
     );
-    expect(mockSessionCard).not.toHaveBeenCalledWith(
+    expect(mockSessionCard).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'sess_2' })
     );
+  });
+
+  it('migrates legacy local pane layout to workspace ui state', async () => {
+    const legacyLayout = {
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      children: [
+        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+      ],
+    };
+    window.localStorage.setItem(
+      `${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}ws-1`,
+      JSON.stringify(legacyLayout)
+    );
+
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === 'session.list') {
+        return [
+          {
+            id: 'sess_1',
+            workspaceId: 'ws-1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'running',
+            capability: 'full',
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+          {
+            id: 'sess_2',
+            workspaceId: 'ws-1',
+            terminalId: 'term-2',
+            providerId: 'codex',
+            state: 'idle',
+            capability: 'full',
+            startedAt: Date.now() - 8_000,
+            lastActiveAt: Date.now() - 500,
+          },
+        ];
+      }
+
+      if (op === 'workspace.uiState.set') {
+        return {
+          id: 'ws-1',
+          name: 'repo',
+          path: '/tmp/repo',
+          targetRuntime: 'native',
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: args?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore({ id: 'root', type: 'leaf' }, sendCommand, 'connected');
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'workspace.uiState.set',
+        expect.objectContaining({
+          workspaceId: 'ws-1',
+          uiState: expect.objectContaining({
+            paneLayout: legacyLayout,
+          }),
+        })
+      );
+    });
+
+    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(legacyLayout);
   });
 
   it('keeps interrupted sessions mounted in the pane layout after session.list hydration', async () => {

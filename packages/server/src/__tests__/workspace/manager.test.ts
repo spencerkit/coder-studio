@@ -163,4 +163,43 @@ describe('WorkspaceManager', () => {
       expect(updated?.lastActiveAt).toBeGreaterThan(originalLastActive);
     });
   });
+
+  describe('updateUiState', () => {
+    it('updates workspace pane layout and emits workspace meta changed', async () => {
+      const workspace = await manager.open({ path: testDir });
+      events.length = 0;
+
+      manager.updateUiState(workspace.id, {
+        ...workspace.uiState,
+        paneLayout: {
+          id: 'root',
+          type: 'split',
+          direction: 'horizontal',
+          children: [
+            { id: 'left', type: 'leaf', sessionId: 'sess-left' },
+            { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+          ],
+        },
+      });
+
+      const updated = manager.get(workspace.id);
+      expect(updated?.uiState.paneLayout).toEqual({
+        id: 'root',
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { id: 'left', type: 'leaf', sessionId: 'sess-left' },
+          { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+        ],
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        type: 'workspace.meta.changed',
+        workspaceId: workspace.id,
+        patch: {
+          uiState: updated?.uiState,
+        },
+      });
+    });
+  });
 });

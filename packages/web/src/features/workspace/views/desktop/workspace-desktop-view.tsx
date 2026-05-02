@@ -147,7 +147,7 @@ export const WorkspaceDesktopView: FC = () => {
             <CodeEditorHost />
           ) : (
             <div className="agent-panes">
-              <AgentPanes />
+              <AgentPanes hydrateSessions={false} />
             </div>
           )}
 

@@ -3,10 +3,9 @@ import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { dispatchCommandAtom } from '../../../atoms/connection';
-import { sessionsByWorkspaceAtomFamily } from '../../../atoms/sessions';
 import { activeWorkspaceAtom } from '../../../atoms/workspaces';
-import { paneLayoutAtomFamily } from '../../agent-panes/atoms/pane-layout';
 import { collectSessionIds } from '../../agent-panes/pane-layout-tree';
+import { useWorkspaceSessions } from '../../agent-panes/actions/use-workspace-sessions';
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -19,6 +18,7 @@ import {
 import { useWorkspaceLayoutActions } from './use-workspace-layout-actions';
 import { usePaneActions } from '../../agent-panes/actions/use-pane-actions';
 import { useSessionActions } from '../../agent-panes/actions/use-session-actions';
+import { useWorkspaceUiStatePersistence } from './use-workspace-ui-state-persistence';
 
 export type WorkspaceSidebarTab = 'files' | 'git';
 export type WorkspaceMainAreaMode = 'agent' | 'editor' | 'diff';
@@ -45,14 +45,14 @@ export function useWorkspaceScreenModel() {
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
-  const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
-  const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
+  const { sessions, paneLayout } = useWorkspaceSessions(workspace);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
   const store = useStore();
   const layout = useWorkspaceLayoutActions();
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>('files');
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
@@ -149,6 +149,19 @@ export function useWorkspaceScreenModel() {
     setMobileActiveSessionId(mostRecentSession?.id ?? orderedSessions[0]?.id ?? null);
   }, [mobileActiveSessionId, orderedSessions, preferredSessionId]);
 
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    const nextActiveSessionId = mobileActiveSessionId ?? undefined;
+    if (workspace.uiState.activeSessionId === nextActiveSessionId) {
+      return;
+    }
+
+    void persistUiState({ activeSessionId: nextActiveSessionId });
+  }, [mobileActiveSessionId, persistUiState, workspace]);
+
   const activeSession =
     orderedSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
 
@@ -158,7 +171,7 @@ export function useWorkspaceScreenModel() {
 
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
-      paneActions.appendSession(sessionId, mobileActiveSessionId);
+      paneActions.appendSession(sessionId, mobileActiveSessionId, 'vertical');
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, paneActions]

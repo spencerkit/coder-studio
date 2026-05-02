@@ -66,6 +66,42 @@ describe('WorkspaceRepo', () => {
       expect(result.targetRuntime).toBe('wsl');
       expect(result.wslDistro).toBe('Ubuntu');
     });
+
+    it('persists pane layout in ui state', () => {
+      const newWorkspace: NewWorkspace = {
+        id: 'ws-pane',
+        path: '/path/to/pane-workspace',
+        targetRuntime: 'native',
+        openedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 180,
+          focusMode: false,
+          paneLayout: {
+            id: 'root',
+            type: 'split',
+            direction: 'horizontal',
+            children: [
+              {
+                id: 'left',
+                type: 'leaf',
+                sessionId: 'sess-1',
+              },
+              {
+                id: 'right',
+                type: 'leaf',
+                sessionId: 'sess-2',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = repo.create(newWorkspace);
+
+      expect(result.uiState.paneLayout).toEqual(newWorkspace.uiState.paneLayout);
+    });
   });
 
   describe('list', () => {
@@ -169,6 +205,43 @@ describe('WorkspaceRepo', () => {
       expect(result?.uiState.leftPanelWidth).toBe(300);
       expect(result?.uiState.focusMode).toBe(true);
       expect(result?.uiState.activeSessionId).toBe('session-1');
+    });
+
+    it('updates pane layout inside ui state', () => {
+      repo.create({
+        id: 'ws-1',
+        path: '/path/to/workspace',
+        targetRuntime: 'native',
+        openedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
+      });
+
+      repo.updateUiState('ws-1', {
+        leftPanelWidth: 300,
+        bottomPanelHeight: 220,
+        focusMode: false,
+        paneLayout: {
+          id: 'root',
+          type: 'split',
+          direction: 'vertical',
+          children: [
+            { id: 'top', type: 'leaf', sessionId: 'sess-top' },
+            { id: 'bottom', type: 'leaf' },
+          ],
+        },
+      });
+
+      const result = repo.findById('ws-1');
+      expect(result?.uiState.paneLayout).toEqual({
+        id: 'root',
+        type: 'split',
+        direction: 'vertical',
+        children: [
+          { id: 'top', type: 'leaf', sessionId: 'sess-top' },
+          { id: 'bottom', type: 'leaf' },
+        ],
+      });
     });
   });
 
