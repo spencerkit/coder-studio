@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
+import type { ReactNode } from 'react';
 import { MobileShell } from './index';
 import {
   authEnabledAtom,
@@ -53,11 +54,13 @@ vi.mock('../../features/agent-panes/views/shared/session-card', () => ({
     showHeaderActions,
     showSupervisorInline,
     terminalReadOnlyOverride,
+    headerAccessory,
   }: {
     sessionId: string;
     showHeaderActions?: boolean;
     showSupervisorInline?: boolean;
     terminalReadOnlyOverride?: boolean;
+    headerAccessory?: ReactNode;
   }) => (
     <div
       data-testid="mobile-session-card"
@@ -66,7 +69,12 @@ vi.mock('../../features/agent-panes/views/shared/session-card', () => ({
       data-readonly={String(terminalReadOnlyOverride)}
       style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 }}
     >
-      {sessionId}
+      <div data-testid="mobile-session-card-header">
+        <span>{sessionId}</span>
+        {headerAccessory ? (
+          <div data-testid="mobile-session-card-header-accessory">{headerAccessory}</div>
+        ) : null}
+      </div>
     </div>
   ),
 }));
@@ -692,8 +700,10 @@ describe('MobileShell Phase 2 workspace', () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    expect(await screen.findByRole('button', { name: 'Open Supervisor sheet' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Open Supervisor sheet' }));
+    const badge = await screen.findByRole('button', { name: 'Open Supervisor sheet' });
+    expect(screen.getByTestId('mobile-session-card-header-accessory')).toContainElement(badge);
+
+    await user.click(badge);
 
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
   });
@@ -702,9 +712,10 @@ describe('MobileShell Phase 2 workspace', () => {
     const user = userEvent.setup();
     renderMobileShell({ seedSupervisor: false });
 
-    expect(await screen.findByRole('button', { name: 'Open Supervisor sheet' })).toBeInTheDocument();
+    const badge = await screen.findByRole('button', { name: 'Open Supervisor sheet' });
+    expect(screen.getByTestId('mobile-session-card-header-accessory')).toContainElement(badge);
 
-    await user.click(screen.getByRole('button', { name: 'Open Supervisor sheet' }));
+    await user.click(badge);
 
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
     expect(screen.getByText('Supervisor 未启用')).toBeInTheDocument();

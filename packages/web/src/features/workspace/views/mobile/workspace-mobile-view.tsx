@@ -108,17 +108,18 @@ export function WorkspaceMobileView() {
         <div className="mobile-shell__content">
           {orderedSessions.length > 0 ? (
             <>
-              <MobileSupervisorBadge
-                sessionId={mobileActiveSessionId}
-                onOpen={() => openMobileSheet('supervisor')}
-              />
-
               {activeSession ? (
                 <section className="mobile-shell__agent-stage">
                   <SessionCard
                     sessionId={activeSession.id}
                     showHeaderActions={false}
                     showSupervisorInline={false}
+                    headerAccessory={
+                      <MobileSupervisorBadge
+                        sessionId={activeSession.id}
+                        onOpen={() => openMobileSheet('supervisor')}
+                      />
+                    }
                   />
                 </section>
               ) : null}

@@ -1846,6 +1846,21 @@ body.is-resizing-panels * {
   gap: var(--sp-1);
 }
 
+.session-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.session-header-accessory {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 /* Session terminal */
 .session-terminal {
   flex: 1;
@@ -7284,7 +7299,6 @@ textarea.input {
     display: inline-flex;
     align-items: center;
     gap: var(--sp-2);
-    align-self: flex-start;
     min-height: var(--touch-target-min);
     max-width: 100%;
     padding: 0 var(--sp-3);
@@ -7325,8 +7339,18 @@ textarea.input {
   }
 
   .mobile-shell__agent-stage .session-header-left,
-  .mobile-shell__agent-stage .session-header-copy {
+  .mobile-shell__agent-stage .session-header-copy,
+  .mobile-shell__agent-stage .session-header-accessory {
     min-width: 0;
+  }
+
+  .mobile-shell__agent-stage .session-header {
+    gap: var(--sp-2);
+  }
+
+  .mobile-shell__agent-stage .session-header-right {
+    min-width: 0;
+    max-width: min(48%, 220px);
   }
 
   .mobile-shell__agent-stage .session-title-row {
@@ -7349,6 +7373,18 @@ textarea.input {
   .mobile-shell__agent-stage .session-state-badge {
     flex-shrink: 0;
     max-width: 100%;
+  }
+
+  .mobile-shell__agent-stage .mobile-supervisor-badge {
+    min-height: 32px;
+    max-width: 100%;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-lg);
+  }
+
+  .mobile-shell__agent-stage .mobile-supervisor-badge__label {
+    max-width: 100%;
+    font-size: var(--text-xs);
   }
 
   .mobile-dock {

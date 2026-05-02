@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import type { ReactNode } from 'react';
 import { SessionCard } from '../views/shared/session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
 import { wsClientAtom } from '../../../atoms/connection';
@@ -104,6 +105,36 @@ describe('SessionCard', () => {
 
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+  });
+
+  it('renders a header accessory on the right side of the session header', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'idle',
+      endedAt: undefined,
+      capability: 'limited',
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard
+          sessionId="sess_123456"
+          showHeaderActions={false}
+          showSupervisorInline={false}
+          headerAccessory={<button type="button">Supervisor entry</button> as ReactNode}
+        />
+      </Provider>
+    );
+
+    const header = screen.getByText('SESSION-56').closest('.session-header');
+    const accessory = screen.getByRole('button', { name: 'Supervisor entry' });
+    const right = header?.querySelector('.session-header-right');
+
+    expect(header).not.toBeNull();
+    expect(accessory.parentElement).toHaveClass('session-header-accessory');
+    expect(right).not.toBeNull();
+    expect(right).toContainElement(accessory);
+    expect(header?.lastElementChild).toBe(right);
   });
 
   it('forces the terminal read-only when terminalReadOnlyOverride is true', () => {

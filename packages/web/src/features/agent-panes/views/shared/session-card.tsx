@@ -5,7 +5,7 @@
  * status indicators, and control buttons.
  */
 
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { X, FlipHorizontal, FlipVertical, Play, Square } from 'lucide-react';
@@ -24,6 +24,7 @@ interface SessionCardProps {
   showHeaderActions?: boolean;
   showSupervisorInline?: boolean;
   terminalReadOnlyOverride?: boolean;
+  headerAccessory?: ReactNode;
   onClose?: SessionCardAction;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
@@ -44,6 +45,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   showHeaderActions = true,
   showSupervisorInline = true,
   terminalReadOnlyOverride,
+  headerAccessory,
   onClose,
   onSplitHorizontal,
   onSplitVertical,
@@ -109,41 +111,51 @@ export const SessionCard: FC<SessionCardProps> = ({
           </div>
         </div>
 
-        {showHeaderActions ? (
-          <div className="session-header-actions">
-            {session.state === 'idle' || session.state === 'interrupted' ? (
-              <button className="session-action-btn" onClick={() => void onStart?.()} title="Start" aria-label="Start">
-                <Play size={13} />
-              </button>
-            ) : session.state === 'running' ? (
-              <button className="session-action-btn" onClick={() => void onStop?.()} title="Stop" aria-label="Stop">
-                <Square size={13} />
-              </button>
+        {showHeaderActions || headerAccessory ? (
+          <div className="session-header-right">
+            {headerAccessory ? (
+              <div className="session-header-accessory">
+                {headerAccessory}
+              </div>
             ) : null}
-            <button
-              className="session-action-btn"
-              onClick={() => onSplitHorizontal?.()}
-              title="Split horizontal"
-              aria-label="Split horizontal"
-            >
-              <FlipHorizontal size={13} />
-            </button>
-            <button
-              className="session-action-btn"
-              onClick={() => onSplitVertical?.()}
-              title="Split vertical"
-              aria-label="Split vertical"
-            >
-              <FlipVertical size={13} />
-            </button>
-            <button
-              className="session-action-btn session-action-btn-close"
-              onClick={() => void onClose?.()}
-              title="Close"
-              aria-label="Close"
-            >
-              <X size={14} />
-            </button>
+
+            {showHeaderActions ? (
+              <div className="session-header-actions">
+                {session.state === 'idle' || session.state === 'interrupted' ? (
+                  <button className="session-action-btn" onClick={() => void onStart?.()} title="Start" aria-label="Start">
+                    <Play size={13} />
+                  </button>
+                ) : session.state === 'running' ? (
+                  <button className="session-action-btn" onClick={() => void onStop?.()} title="Stop" aria-label="Stop">
+                    <Square size={13} />
+                  </button>
+                ) : null}
+                <button
+                  className="session-action-btn"
+                  onClick={() => onSplitHorizontal?.()}
+                  title="Split horizontal"
+                  aria-label="Split horizontal"
+                >
+                  <FlipHorizontal size={13} />
+                </button>
+                <button
+                  className="session-action-btn"
+                  onClick={() => onSplitVertical?.()}
+                  title="Split vertical"
+                  aria-label="Split vertical"
+                >
+                  <FlipVertical size={13} />
+                </button>
+                <button
+                  className="session-action-btn session-action-btn-close"
+                  onClick={() => void onClose?.()}
+                  title="Close"
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
