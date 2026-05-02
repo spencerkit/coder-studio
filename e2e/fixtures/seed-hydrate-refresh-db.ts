@@ -7,6 +7,15 @@ const INTERRUPTED_SESSION_ID = 'sess-hydrate-interrupted';
 const UNAVAILABLE_SESSION_ID = 'sess-hydrate-unavailable';
 const INTERRUPTED_TERMINAL_ID = 'term-hydrate-interrupted';
 const UNAVAILABLE_TERMINAL_ID = 'term-hydrate-unavailable';
+const HYDRATED_PANE_LAYOUT = {
+  id: 'root',
+  type: 'split',
+  direction: 'horizontal',
+  children: [
+    { id: 'left', type: 'leaf', sessionId: INTERRUPTED_SESSION_ID },
+    { id: 'right', type: 'leaf', sessionId: UNAVAILABLE_SESSION_ID },
+  ],
+};
 
 const [, , dbPath, workspacePath] = process.argv;
 
@@ -35,6 +44,8 @@ try {
       leftPanelWidth: 280,
       bottomPanelHeight: 200,
       focusMode: false,
+      activeSessionId: UNAVAILABLE_SESSION_ID,
+      paneLayout: HYDRATED_PANE_LAYOUT,
     })
   );
 

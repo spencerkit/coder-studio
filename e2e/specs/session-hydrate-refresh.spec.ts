@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 const HOST = '127.0.0.1';
@@ -13,22 +12,10 @@ const BASE_URL = `http://${HOST}:${WEB_PORT}`;
 const WORKSPACE_ID = 'ws-hydrate-e2e';
 const INTERRUPTED_SESSION_ID = 'sess-hydrate-interrupted';
 const UNAVAILABLE_SESSION_ID = 'sess-hydrate-unavailable';
-const HYDRATED_PANE_LAYOUT = {
-  id: 'root',
-  type: 'split' as const,
-  direction: 'horizontal' as const,
-  ratio: 0.5,
-  children: [
-    { id: 'left', type: 'leaf' as const, sessionId: INTERRUPTED_SESSION_ID },
-    { id: 'right', type: 'leaf' as const, sessionId: UNAVAILABLE_SESSION_ID },
-  ],
-};
-
 let sandboxDir: string;
 let workspaceDir: string;
 let dbPath: string;
 let runtimeDir: string;
-let userDataDir: string;
 let backendProcess: ChildProcess | undefined;
 let webProcess: ChildProcess | undefined;
 
@@ -83,11 +70,9 @@ test.describe('session hydrate refresh acceptance', () => {
     workspaceDir = join(sandboxDir, 'workspace');
     dbPath = join(sandboxDir, 'coder-studio.db');
     runtimeDir = join(sandboxDir, 'runtime');
-    userDataDir = join(sandboxDir, 'pw-user-data');
 
     mkdirSync(join(workspaceDir, '.git'), { recursive: true });
     mkdirSync(runtimeDir, { recursive: true });
-    mkdirSync(userDataDir, { recursive: true });
     writeFileSync(join(workspaceDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
 
     const seed = spawn('pnpm', [
@@ -157,14 +142,13 @@ test.describe('session hydrate refresh acceptance', () => {
     baseURL: BASE_URL,
   });
 
-  test('keeps hydrated interrupted and unavailable sessions mounted after refresh', async ({ page }) => {
-    await page.addInitScript(({ workspaceId, paneLayout }) => {
-      window.localStorage.setItem(`ui.paneLayout.${workspaceId}`, JSON.stringify(paneLayout));
-    }, {
-      workspaceId: WORKSPACE_ID,
-      paneLayout: HYDRATED_PANE_LAYOUT,
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('ui.locale', JSON.stringify('en'));
     });
+  });
 
+  test('desktop restores server-backed pane layout after refresh without local pane storage', async ({ page }) => {
     await page.goto('/workspace');
     await expect(page.getByTestId('workspace-resolving-shell')).toHaveCount(0, { timeout: 20000 });
     await expect(page.locator('.session-card.agent-pane')).toHaveCount(2, { timeout: 20000 });
@@ -195,5 +179,47 @@ test.describe('session hydrate refresh acceptance', () => {
     await expect(unavailableCard.getByRole('button', { name: 'Start' })).toHaveCount(0);
     await expect(interruptedTextarea).toHaveAttribute('readonly', '');
     await expect(unavailableTextarea).toHaveAttribute('readonly', '');
+  });
+
+  test('mobile restores the server-backed active session after refresh', async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: 430, height: 932 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.addInitScript(() => {
+        window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+      });
+
+      await page.goto('/workspace');
+      await expect(page.getByTestId('workspace-resolving-shell')).toHaveCount(0, { timeout: 20000 });
+      await expect(page.getByTestId('mobile-shell')).toBeVisible({ timeout: 20000 });
+
+      const visibleCard = page.locator('.mobile-shell .session-card.agent-pane').first();
+      await expect(visibleCard).toBeVisible();
+      await expect(visibleCard).toHaveAttribute('data-session-id', UNAVAILABLE_SESSION_ID);
+      await expect(visibleCard.locator('.session-title')).toHaveText('Unavailable');
+      await expect(visibleCard.locator('.session-state-badge')).toHaveText('Unavailable');
+
+      await page.reload();
+
+      await expect(page.getByTestId('workspace-resolving-shell')).toHaveCount(0, { timeout: 20000 });
+      await expect(page.getByTestId('mobile-shell')).toBeVisible({ timeout: 20000 });
+      await expect(visibleCard).toBeVisible();
+      await expect(visibleCard).toHaveAttribute('data-session-id', UNAVAILABLE_SESSION_ID);
+
+      await page.getByRole('button', { name: 'Open Agent sheet' }).click();
+      const agentSheet = page.getByRole('dialog', { name: 'Agent Sessions' });
+      await expect(agentSheet).toBeVisible();
+      await expect(
+        agentSheet.getByRole('button', { name: 'Switch to agent Resume me' })
+      ).toBeVisible();
+      await expect(
+        agentSheet.getByRole('button', { name: 'Switch to agent Unavailable' })
+      ).toHaveClass(/mobile-inline-sheet__option--active/);
+    } finally {
+      await context.close();
+    }
   });
 });

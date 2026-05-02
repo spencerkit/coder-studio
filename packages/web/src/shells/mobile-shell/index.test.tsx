@@ -926,6 +926,81 @@ describe('MobileShell Phase 2 workspace', () => {
     });
   });
 
+  it('does not clear a server-backed active mobile session before session hydration completes', async () => {
+    let resolveSessions: ((value: Session[]) => void) | null = null;
+    const sessionListPromise = new Promise<Session[]>((resolve) => {
+      resolveSessions = resolve;
+    });
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === 'session.list') {
+        return await sessionListPromise;
+      }
+
+      if (op === 'workspace.uiState.set') {
+        return {
+          id: 'ws-1',
+          name: 'Alpha',
+          path: '/tmp/alpha',
+          targetRuntime: 'native',
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      sessions: [],
+      sendCommand,
+      paneLayout: {
+        id: 'root',
+        type: 'split',
+        direction: 'horizontal',
+        children: [
+          { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+          { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      'workspace.uiState.set',
+      expect.objectContaining({
+        workspaceId: 'ws-1',
+        uiState: expect.objectContaining({
+          activeSessionId: undefined,
+        }),
+      })
+    );
+
+    resolveSessions?.([
+      createSession({
+        id: 'sess_1',
+        terminalId: 'term-1',
+        providerId: 'claude',
+        state: 'idle',
+        title: 'Claude',
+      }),
+      createSession({
+        id: 'sess_2',
+        terminalId: 'term-2',
+        providerId: 'codex',
+        state: 'unavailable',
+        title: 'Codex',
+      }),
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_2');
+    });
+  });
+
   it('falls back to the agent empty state when no sessions are open', async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn(async (op: string) => {

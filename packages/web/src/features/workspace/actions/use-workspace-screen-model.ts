@@ -154,6 +154,10 @@ export function useWorkspaceScreenModel() {
       return;
     }
 
+    if (mobileActiveSessionId === null && workspace.uiState.activeSessionId) {
+      return;
+    }
+
     const nextActiveSessionId = mobileActiveSessionId ?? undefined;
     if (workspace.uiState.activeSessionId === nextActiveSessionId) {
       return;
