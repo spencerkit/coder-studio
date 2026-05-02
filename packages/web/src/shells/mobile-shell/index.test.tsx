@@ -18,7 +18,11 @@ import {
   localeAtom,
   pendingFocusSessionAtom,
 } from '../../atoms/app-ui';
-import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
+import {
+  activeWorkspaceIdAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+} from '../../atoms/workspaces';
 import { paneLayoutAtomFamily } from '../../features/agent-panes/atoms/pane-layout';
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
 import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
@@ -510,6 +514,85 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Switch to workspace Beta' }));
 
     expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
+  });
+
+  it('closes the active workspace from the mobile workspace drawer and falls back to the next workspace', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [];
+      }
+
+      return undefined;
+    });
+    const { store } = renderMobileShell({
+      initialEntry: '/workspace',
+      sendCommand,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Switch workspace' }));
+    await user.click(screen.getByRole('button', { name: 'Close workspace Alpha' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.close', {
+        id: 'ws-1',
+      });
+    });
+
+    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
+  });
+
+  it('returns to welcome after closing the last workspace from the mobile workspace drawer', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [];
+      }
+
+      return undefined;
+    });
+    const { store } = renderMobileShell({
+      initialEntry: '/workspace',
+      sessions: [],
+      paneLayout: {
+        id: 'root',
+        type: 'leaf',
+      },
+      sendCommand,
+    });
+
+    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(workspacesLoadErrorAtom, null);
+    store.set(workspacesAtom, {
+      'ws-1': {
+        id: 'ws-1',
+        name: 'Alpha',
+        path: '/tmp/alpha',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(workspaceOrderAtom, ['ws-1']);
+
+    await user.click(screen.getByRole('button', { name: 'Switch workspace' }));
+    await user.click(screen.getByRole('button', { name: 'Close workspace Alpha' }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.close', {
+        id: 'ws-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('WelcomePage')).toBeInTheDocument();
+    });
   });
 
   it('shows a direct settings entry instead of a more-actions menu', async () => {

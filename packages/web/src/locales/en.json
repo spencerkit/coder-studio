@@ -176,7 +176,8 @@
       "aria_label": "Workspace drawer",
       "close": "Close workspace drawer",
       "select_title": "Select workspace",
-      "switch_to_workspace": "Switch to workspace {name}"
+      "switch_to_workspace": "Switch to workspace {name}",
+      "close_workspace": "Close workspace {name}"
     },
     "empty": {
       "start_session": "Start a new agent session for this workspace.",

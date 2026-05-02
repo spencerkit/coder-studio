@@ -1,8 +1,10 @@
 import { useSetAtom } from 'jotai';
+import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { activeWorkspaceIdAtom } from '../../../../atoms/workspaces';
 import type { Workspace } from '@coder-studio/core';
 import { useTranslation } from '../../../../lib/i18n';
+import { useWorkspaceCloseAction } from '../../actions/use-workspace-close-action';
 
 interface MobileWorkspaceDrawerProps {
   activeWorkspaceId: string | null;
@@ -22,6 +24,7 @@ export function MobileWorkspaceDrawer({
   const navigate = useNavigate();
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const t = useTranslation();
+  const closeWorkspace = useWorkspaceCloseAction();
 
   if (!isOpen) {
     return null;
@@ -50,22 +53,40 @@ export function MobileWorkspaceDrawer({
               workspace.id;
 
             return (
-              <button
+              <div
                 key={workspace.id}
-                type="button"
                 className={`mobile-workspace-drawer__item ${
                   workspace.id === activeWorkspaceId ? 'mobile-workspace-drawer__item--active' : ''
                 }`}
-                aria-label={t('mobile.workspace_drawer.switch_to_workspace', { name: displayName })}
-                onClick={() => {
-                  setActiveWorkspaceId(workspace.id);
-                  navigate('/workspace');
-                  onClose();
-                }}
               >
-                <span className="mobile-workspace-drawer__item-name">{displayName}</span>
-                <span className="mobile-workspace-drawer__item-path">{workspace.path}</span>
-              </button>
+                <button
+                  type="button"
+                  className="mobile-workspace-drawer__item-main"
+                  aria-label={t('mobile.workspace_drawer.switch_to_workspace', { name: displayName })}
+                  onClick={() => {
+                    setActiveWorkspaceId(workspace.id);
+                    navigate('/workspace');
+                    onClose();
+                  }}
+                >
+                  <span className="mobile-workspace-drawer__item-name">{displayName}</span>
+                  <span className="mobile-workspace-drawer__item-path">{workspace.path}</span>
+                </button>
+                <button
+                  type="button"
+                  className="mobile-workspace-drawer__item-close"
+                  aria-label={t('mobile.workspace_drawer.close_workspace', { name: displayName })}
+                  onClick={() => {
+                    void closeWorkspace(workspace.id, { navigateHomeWhenEmpty: true }).then((closed) => {
+                      if (closed) {
+                        onClose();
+                      }
+                    });
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             );
           })}
         </div>

@@ -8249,11 +8249,9 @@ textarea.input {
 
   .mobile-workspace-drawer__item {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: var(--sp-1);
-    padding: var(--sp-3);
+    align-items: stretch;
+    gap: var(--sp-2);
+    padding: var(--sp-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
@@ -8269,6 +8267,38 @@ textarea.input {
   .mobile-workspace-drawer__item--active {
     border-color: color-mix(in srgb, var(--accent-green) 38%, var(--border));
     background: color-mix(in srgb, var(--accent-green) 10%, var(--bg-surface));
+  }
+
+  .mobile-workspace-drawer__item-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    text-align: left;
+  }
+
+  .mobile-workspace-drawer__item-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    align-self: center;
+    border-radius: 12px;
+    color: color-mix(in srgb, var(--color-error) 82%, var(--text-primary));
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
+    transition:
+      background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
+      color var(--mobile-shell-motion-surface-duration) var(--ease-out);
+  }
+
+  .mobile-workspace-drawer__item-close:hover {
+    background: color-mix(in srgb, var(--color-error) 16%, transparent);
   }
 
   .mobile-workspace-drawer__item-name {

@@ -176,7 +176,8 @@
       "aria_label": "工作区抽屉",
       "close": "关闭工作区抽屉",
       "select_title": "选择工作区",
-      "switch_to_workspace": "切换到工作区 {name}"
+      "switch_to_workspace": "切换到工作区 {name}",
+      "close_workspace": "关闭工作区 {name}"
     },
     "empty": {
       "start_session": "为当前工作区启动一个新的 Agent 会话。",

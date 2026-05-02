@@ -6,13 +6,12 @@
  */
 
 import type { FC } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { X } from 'lucide-react';
 import type { Workspace } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { workspaceOrderAtom, workspacesAtom } from '../../../atoms/workspaces';
 import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useTranslation } from '../../../lib/i18n';
+import { useWorkspaceCloseAction } from '../../workspace/actions/use-workspace-close-action';
 
 interface WorkspaceTabProps {
   workspace: Workspace;
@@ -31,10 +30,7 @@ interface WorkspaceTabProps {
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
   const t = useTranslation();
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
-  const workspaceOrder = useAtomValue(workspaceOrderAtom);
-  const setWorkspaces = useSetAtom(workspacesAtom);
-  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const closeWorkspace = useWorkspaceCloseAction();
   const displayName =
     workspace.name || workspace.path?.split('/').filter(Boolean).pop() || workspace.path || workspace.id;
 
@@ -44,28 +40,7 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
 
   const handleClose = async (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    const result = await dispatch<void>('workspace.close', {
-      id: workspace.id,
-    });
-
-    if (!result.ok) {
-      console.error('Failed to close workspace:', result.error?.message);
-      return;
-    }
-
-    const remainingIds = workspaceOrder.filter((id) => id !== workspace.id);
-
-    setWorkspaces((prev) => {
-      const next = { ...prev };
-      delete next[workspace.id];
-      return next;
-    });
-    setWorkspaceOrder(remainingIds);
-
-    if (isActive) {
-      setActiveWorkspace(remainingIds[0] ?? null);
-    }
+    await closeWorkspace(workspace.id);
   };
 
   return (
