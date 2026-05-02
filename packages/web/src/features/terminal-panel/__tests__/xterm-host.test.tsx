@@ -39,9 +39,16 @@ const mockTerminal = {
   onResize: vi.fn(() => vi.fn()),
   write: vi.fn(),
   writeln: vi.fn(),
+  scrollLines: vi.fn(),
   dispose: vi.fn(),
   focus: vi.fn(),
   loadAddon: vi.fn(),
+  buffer: {
+    active: {
+      viewportY: 0,
+      baseY: 0,
+    },
+  },
   options: {},
 };
 
@@ -78,10 +85,19 @@ describe('XtermHost', () => {
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
+    mockTerminal.buffer.active.viewportY = 0;
+    mockTerminal.buffer.active.baseY = 0;
     mockTerminal.write.mockImplementation((_data: Uint8Array | string, callback?: () => void) => {
       callback?.();
     });
     mockTerminal.writeln.mockImplementation(() => {});
+    mockTerminal.scrollLines.mockImplementation((amount: number) => {
+      const nextViewportY = mockTerminal.buffer.active.viewportY + amount;
+      mockTerminal.buffer.active.viewportY = Math.max(
+        0,
+        Math.min(mockTerminal.buffer.active.baseY, nextViewportY)
+      );
+    });
   });
 
   afterEach(() => {
@@ -1581,6 +1597,57 @@ describe('XtermHost', () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('bridges single-finger touch drags into xterm scroll on coarse pointers', () => {
+    const originalMatchMedia = window.matchMedia;
+    mockTerminal.rows = 20;
+    mockTerminal.buffer.active.viewportY = 6;
+    mockTerminal.buffer.active.baseY = 80;
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    const { container } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="touch-scroll-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    const host = container.querySelector('.xterm-host');
+    expect(host).toBeTruthy();
+
+    const startEvent = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, 'touches', {
+      value: [{ identifier: 1, clientY: 100 }],
+    });
+    Object.defineProperty(startEvent, 'changedTouches', {
+      value: [{ identifier: 1, clientY: 100 }],
+    });
+
+    const moveEvent = new Event('touchmove', { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, 'touches', {
+      value: [{ identifier: 1, clientY: 68 }],
+    });
+    Object.defineProperty(moveEvent, 'changedTouches', {
+      value: [{ identifier: 1, clientY: 68 }],
+    });
+
+    host?.dispatchEvent(startEvent);
+    host?.dispatchEvent(moveEvent);
+
+    expect(mockTerminal.scrollLines).toHaveBeenCalledWith(2);
+    expect(mockTerminal.buffer.active.viewportY).toBe(8);
+
+    window.matchMedia = originalMatchMedia;
   });
 
   it('syncs xterm resize events back to the server PTY', async () => {

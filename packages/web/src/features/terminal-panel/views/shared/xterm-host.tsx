@@ -26,12 +26,16 @@ import {
   type TerminalReplayUiState,
 } from '../../replay-state';
 
+const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
+
 type TerminalInputActivity = 'typing' | 'submit' | 'system';
 
 interface TerminalInputDraftState {
   nextDraft: string;
   submittedText?: string;
 }
+
+type TouchPointLike = Pick<Touch, 'identifier' | 'clientY'>;
 
 function classifyTerminalInput(data: string): TerminalInputActivity {
   if (data === '\x1b[I' || data === '\x1b[O') {
@@ -93,6 +97,39 @@ function consumeTerminalInputDraft(
   }
 
   return { nextDraft, submittedText };
+}
+
+function getTouchAt(
+  list: TouchList | ArrayLike<TouchPointLike> | undefined | null,
+  index: number
+): TouchPointLike | null {
+  if (!list) {
+    return null;
+  }
+
+  if ('item' in list && typeof list.item === 'function') {
+    return list.item(index);
+  }
+
+  return list[index] ?? null;
+}
+
+function findTouchByIdentifier(
+  list: TouchList | ArrayLike<TouchPointLike> | undefined | null,
+  identifier: number | null
+): TouchPointLike | null {
+  if (identifier === null || !list) {
+    return null;
+  }
+
+  for (let index = 0; index < list.length; index += 1) {
+    const touch = getTouchAt(list, index);
+    if (touch?.identifier === identifier) {
+      return touch;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -282,6 +319,15 @@ export function XtermHost({
   const replayWriteDepthRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
+  const touchScrollStateRef = useRef<{
+    activeTouchId: number | null;
+    lastClientY: number;
+    carryPx: number;
+  }>({
+    activeTouchId: null,
+    lastClientY: 0,
+    carryPx: 0,
+  });
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
 
   const wsClient = useAtomValue(wsClientAtom);
@@ -318,6 +364,107 @@ export function XtermHost({
       terminalRef.current.options.theme = getTerminalTheme(uiTheme);
     }
   }, [uiTheme]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    if (!window.matchMedia('(pointer: coarse)').matches) {
+      return;
+    }
+
+    const state = touchScrollStateRef.current;
+
+    const resetTouchState = () => {
+      state.activeTouchId = null;
+      state.lastClientY = 0;
+      state.carryPx = 0;
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        resetTouchState();
+        return;
+      }
+
+      const touch = getTouchAt(event.touches, 0);
+      if (!touch) {
+        resetTouchState();
+        return;
+      }
+
+      state.activeTouchId = touch.identifier;
+      state.lastClientY = touch.clientY;
+      state.carryPx = 0;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
+      const terminal = terminalRef.current;
+      if (!touch || !terminal) {
+        return;
+      }
+
+      const viewport = terminal.buffer.active.viewportY;
+      const base = terminal.buffer.active.baseY;
+      if (base <= 0) {
+        state.lastClientY = touch.clientY;
+        state.carryPx = 0;
+        return;
+      }
+
+      const deltaY = state.lastClientY - touch.clientY;
+      state.lastClientY = touch.clientY;
+      state.carryPx += deltaY;
+
+      const scrollLines = state.carryPx > 0
+        ? Math.floor(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE)
+        : Math.ceil(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE);
+
+      if (scrollLines === 0) {
+        return;
+      }
+
+      const remainingScrollback = base - viewport;
+      const allowedScrollLines = scrollLines > 0
+        ? Math.min(scrollLines, remainingScrollback)
+        : Math.max(scrollLines, -viewport);
+
+      if (allowedScrollLines === 0) {
+        state.carryPx = 0;
+        return;
+      }
+
+      terminal.scrollLines(allowedScrollLines);
+      state.carryPx -= allowedScrollLines * MOBILE_TOUCH_SCROLL_PX_PER_LINE;
+      event.preventDefault();
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (findTouchByIdentifier(event.changedTouches, state.activeTouchId)) {
+        resetTouchState();
+      }
+    };
+
+    const handleTouchCancel = () => {
+      resetTouchState();
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchCancel);
+      resetTouchState();
+    };
+  }, []);
 
   const scheduleFit = useCallback(() => {
     if (fitFrameRef.current !== null) {
