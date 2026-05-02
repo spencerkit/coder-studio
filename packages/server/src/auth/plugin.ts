@@ -42,6 +42,18 @@ const parseCookies = (cookieHeader?: string) => {
     }, {});
 };
 
+const encodeAuthCookieValue = (value: string): string => encodeURIComponent(value);
+
+const decodeAuthCookieValue = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Keep accepting legacy/plain cookie values instead of failing auth
+    // hard on malformed encodings.
+    return value;
+  }
+};
+
 export const createAuthGuard = (config: ServerConfig) => {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!config.auth.enabled || isPublicPath(request.url) || request.url === '/auth/login') {
@@ -50,8 +62,9 @@ export const createAuthGuard = (config: ServerConfig) => {
 
     const cookies = parseCookies(request.headers.cookie);
     const authCookie = cookies[AUTH_COOKIE_NAME];
+    const decodedAuthCookie = authCookie ? decodeAuthCookieValue(authCookie) : null;
 
-    if (authCookie && config.auth.password && authCookie === config.auth.password) {
+    if (decodedAuthCookie && config.auth.password && decodedAuthCookie === config.auth.password) {
       return;
     }
 
@@ -81,7 +94,10 @@ export const registerAuthRoutes = (config: ServerConfig) => {
       return reply.status(401).send({ ok: false, error: 'Invalid password' });
     }
 
-    reply.header('Set-Cookie', `${AUTH_COOKIE_NAME}=${config.auth.password}; HttpOnly; Path=/; SameSite=Lax`);
+    reply.header(
+      'Set-Cookie',
+      `${AUTH_COOKIE_NAME}=${encodeAuthCookieValue(config.auth.password)}; HttpOnly; Path=/; SameSite=Lax`
+    );
     return reply.send({ ok: true, authEnabled: true });
   };
 };

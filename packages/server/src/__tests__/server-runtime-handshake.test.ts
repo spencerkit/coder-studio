@@ -189,6 +189,48 @@ describe('createServer runtime handshake', () => {
     }
   });
 
+  it('serves the SPA entrypoint for authenticated frontend routes when the auth password contains cookie-sensitive characters', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-spa-special-auth-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>spa shell</body></html>', 'utf-8');
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: true, password: 'sek;rit = value,1' },
+      } as any);
+
+      const address = server.app.server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to resolve server address');
+      }
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+
+      const login = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: 'sek;rit = value,1' }),
+      });
+      const cookie = login.headers.get('set-cookie');
+      if (!cookie) {
+        throw new Error('Expected auth cookie');
+      }
+
+      const res = await fetch(`${baseUrl}/workspace`, {
+        headers: { cookie },
+      });
+      const body = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      expect(body).toContain('spa shell');
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
   it('serves the auth route entrypoint without auth cookie when auth is enabled', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-auth-'));
     writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>auth shell</body></html>', 'utf-8');
