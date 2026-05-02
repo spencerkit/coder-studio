@@ -57,6 +57,7 @@ e2e/playwright.session.config.ts
 e2e/run-session-tests.*
 .playwright-cli/
 /superpowers/
+/.superpowers/
 /.coder-studio/
 /.codex
 tsconfig.tsbuildinfo
