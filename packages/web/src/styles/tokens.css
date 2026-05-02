@@ -144,7 +144,7 @@
   --nav-width: 280px;
 
   /* Terminal */
-  --terminal-font-size: 13px;
+  --terminal-font-size: 11px;
   --terminal-line-height: 1.6;
   --terminal-scrollback: 5000;
   --terminal-height: 200px;

@@ -621,7 +621,7 @@ export function XtermHost({
     const terminal = new Terminal({
       theme: getTerminalTheme(initialThemeRef.current),
       fontFamily: 'JetBrains Mono, Fira Code, SF Mono, monospace',
-      fontSize: 13,
+      fontSize: 11,
       scrollback: 5000,
       cursorBlink: interactiveRef.current,
       cursorStyle: 'block',

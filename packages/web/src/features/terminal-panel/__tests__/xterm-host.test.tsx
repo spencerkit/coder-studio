@@ -417,7 +417,7 @@ describe('XtermHost', () => {
     );
   });
 
-  it('sets font size to 13 and leaves line height at xterm default', async () => {
+  it('sets font size to 11 and leaves line height at xterm default', async () => {
     const { Terminal } = await import('@xterm/xterm');
 
     render(
@@ -426,7 +426,7 @@ describe('XtermHost', () => {
       </JotaiProvider>
     );
 
-    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 13 }));
+    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 11 }));
     expect(Terminal).toHaveBeenCalledWith(
       expect.not.objectContaining({ lineHeight: expect.any(Number) })
     );
