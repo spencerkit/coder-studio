@@ -472,4 +472,30 @@ describe('SessionCard', () => {
       });
     });
   });
+
+  it('does not persist activeSessionId when header action buttons are clicked', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const onClose = vi.fn();
+    const { store } = createSessionStore(
+      {
+        terminalId: 'term-live',
+        state: 'running',
+        endedAt: undefined,
+      },
+      sendCommand
+    );
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" onClose={onClose} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(
+      sendCommand.mock.calls.some(([command]) => command === 'workspace.uiState.set')
+    ).toBe(false);
+  });
 });

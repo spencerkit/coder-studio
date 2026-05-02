@@ -8,7 +8,7 @@
  * - Aurora Mint theme that follows the current UI mode
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useAtomValue, useAtom } from 'jotai';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -347,28 +347,12 @@ export function XtermHost({
     carryPx: 0,
   });
 
-  if (viewport !== 'mobile' && hydrationHandleRef.current === null) {
-    const tier: HydrationTier =
-      meta?.alive === false
-        ? 'background'
-        : isActiveSession
-          ? 'visible-active'
-          : 'visible-other';
-    hydrationHandleRef.current = globalHydrationCoordinator.request({ terminalId, tier });
-  }
-
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
   const [hydrationState, setHydrationState] = useState<
     | { kind: 'idle' }
     | { kind: 'queued'; queuePosition: number }
     | { kind: 'granted' }
-  >(
-    viewport === 'mobile'
-      ? { kind: 'granted' }
-      : hydrationHandleRef.current?.isGranted
-        ? { kind: 'granted' }
-        : { kind: 'idle' }
-  );
+  >(viewport === 'mobile' ? { kind: 'granted' } : { kind: 'idle' });
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -385,25 +369,30 @@ export function XtermHost({
   }, []);
 
   useEffect(() => {
+    initialThemeRef.current = uiTheme;
+  }, [uiTheme]);
+
+  useLayoutEffect(() => {
     if (viewport === 'mobile') {
       setHydrationState({ kind: 'granted' });
       hydrationReleasedRef.current = true;
+      hydrationHandleRef.current = null;
       return;
     }
 
     hydrationReleasedRef.current = false;
-    const handle =
-      hydrationHandleRef.current ??
-      globalHydrationCoordinator.request({
-        terminalId,
-        tier:
-          meta?.alive === false
-            ? 'background'
-            : isActiveSession
-              ? 'visible-active'
-              : 'visible-other',
-      });
+    const tier: HydrationTier =
+      meta?.alive === false
+        ? 'background'
+        : isActiveSession
+          ? 'visible-active'
+          : 'visible-other';
+    const handle = globalHydrationCoordinator.request({
+      terminalId,
+      tier,
+    });
     hydrationHandleRef.current = handle;
+    setHydrationState(handle.isGranted ? { kind: 'granted' } : { kind: 'idle' });
 
     let cancelled = false;
     const unsubscribe = handle.subscribePosition((queuePosition) => {
@@ -412,15 +401,13 @@ export function XtermHost({
       }
     });
 
-    if (handle.isGranted) {
-      setHydrationState({ kind: 'granted' });
+    if (!handle.isGranted) {
+      void handle.granted.then(() => {
+        if (!cancelled) {
+          setHydrationState({ kind: 'granted' });
+        }
+      });
     }
-
-    void handle.granted.then(() => {
-      if (!cancelled) {
-        setHydrationState({ kind: 'granted' });
-      }
-    });
 
     return () => {
       cancelled = true;
@@ -1068,7 +1055,7 @@ export function XtermHost({
 
       setOutputAtom((prev: OutputBuffer) => trimWrittenChunks(prev, writtenChunkCount));
     }
-  }, [outputAtom, setOutputAtom, terminalId]);
+  }, [hydrationState.kind, outputAtom, setOutputAtom, terminalId]);
 
   /**
    * Fit terminal on container resize
@@ -1150,10 +1137,14 @@ export function XtermHost({
           overflow: 'hidden',
         }}
         onFocusCapture={() => {
-          hydrationHandleRef.current?.promote('focused');
+          if (isInteractive) {
+            hydrationHandleRef.current?.promote('focused');
+          }
         }}
         onMouseDown={() => {
-          hydrationHandleRef.current?.promote('focused');
+          if (isInteractive) {
+            hydrationHandleRef.current?.promote('focused');
+          }
         }}
       />
       {viewport !== 'mobile' && hydrationState.kind === 'queued' ? (

@@ -141,6 +141,9 @@ export function createHydrationCoordinator(
     request(req) {
       const existing = requests.get(req.terminalId);
       if (existing) {
+        if (compareTier(req.tier, existing.tier) < 0) {
+          promote(existing, req.tier);
+        }
         return existing.handle;
       }
 

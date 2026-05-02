@@ -105,14 +105,6 @@ describe('HydrationCoordinator', () => {
     expect(duplicateQueued).toBe(queued);
     expect(coordinator.inspect()).toEqual({
       running: ['term-1'],
-      queued: [{ terminalId: 'term-2', tier: 'background', queuePosition: 0 }],
-    });
-
-    queued.promote('focused');
-    await flushMicrotasks();
-
-    expect(coordinator.inspect()).toEqual({
-      running: ['term-1'],
       queued: [{ terminalId: 'term-2', tier: 'focused', queuePosition: 0 }],
     });
   });

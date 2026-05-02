@@ -88,15 +88,25 @@ export const SessionCard: FC<SessionCardProps> = ({
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
+  const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.closest('button, a, input, textarea, select, [role="button"]')) {
+      return;
+    }
+
+    void persistUiState({ activeSessionId: session.id });
+  };
 
   return (
     <div
       ref={cardRef}
       className={`session-card agent-pane${highlight ? ' session-card--focus-pulse' : ''}`}
       data-session-id={sessionId}
-      onClick={() => {
-        void persistUiState({ activeSessionId: session.id });
-      }}
+      onClick={handleCardClick}
     >
       <div className="session-progress">
         <div

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload } from '../../../ws/client';
@@ -150,6 +150,7 @@ vi.mock('@xterm/addon-webgl', () => ({
 describe('XtermHost', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     viewportMocks.viewport = 'desktop';
     hydrationCoordinatorMocks.autoGrant = true;
     hydrationCoordinatorMocks.lastRequest = null;
@@ -324,6 +325,111 @@ describe('XtermHost', () => {
       hydrationCoordinatorMocks.emitQueuePosition(0);
     });
     expect(screen.getByText('Up next...')).toBeInTheDocument();
+  });
+
+  it('does not promote read-only terminals to focused on pointer interaction', async () => {
+    hydrationCoordinatorMocks.autoGrant = false;
+    const store = createStore();
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="readonly-terminal" workspaceId="test-workspace" readOnly />
+      </Provider>
+    );
+
+    const host = container.querySelector('.xterm-host');
+    expect(host).not.toBeNull();
+
+    fireEvent.mouseDown(host!);
+
+    expect(hydrationCoordinatorMocks.currentHandle()?.promote).not.toHaveBeenCalledWith('focused');
+  });
+
+  it('uses the latest ui theme when a queued terminal is granted later', async () => {
+    hydrationCoordinatorMocks.autoGrant = false;
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockImplementation((op: string) => {
+        if (op === 'terminal.replay') {
+          return new Promise(() => {});
+        }
+
+        return Promise.resolve({ ok: true, data: { status: 'ok' } });
+      }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="queued-theme-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      store.set(themeAtom, 'light');
+    });
+
+    await act(async () => {
+      hydrationCoordinatorMocks.resolveGranted();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const { Terminal } = await import('@xterm/xterm');
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          background: '#fafbfc',
+          foreground: '#1f2328',
+        }),
+      })
+    );
+  });
+
+  it('promotes the existing hydration request when active session changes', async () => {
+    const store = createStore();
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="active-toggle-terminal"
+          workspaceId="test-workspace"
+          isActiveSession={false}
+        />
+      </Provider>
+    );
+
+    const firstHandle = hydrationCoordinatorMocks.currentHandle();
+    expect(firstHandle).not.toBeNull();
+    expect(hydrationCoordinatorMocks.request).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="active-toggle-terminal"
+          workspaceId="test-workspace"
+          isActiveSession
+        />
+      </Provider>
+    );
+
+    expect(hydrationCoordinatorMocks.request).toHaveBeenCalledTimes(1);
+    expect(firstHandle?.release).not.toHaveBeenCalled();
+    expect(firstHandle?.promote).toHaveBeenCalledWith('visible-active');
+
+    const { Terminal } = await import('@xterm/xterm');
+    expect(Terminal).toHaveBeenCalledTimes(1);
   });
 
   it('bypasses hydration queue on mobile and starts replay immediately', async () => {
