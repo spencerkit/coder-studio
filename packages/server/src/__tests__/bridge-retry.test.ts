@@ -21,7 +21,9 @@ const writeRuntime = (runtimeDir: string, port: number) => {
   writeFileSync(
     join(runtimeDir, 'runtime.json'),
     JSON.stringify({
+      host: '127.0.0.1',
       port,
+      pid: process.pid,
       token: 'test-token',
       serverInstanceId: 'bridge-test',
       startedAt: Date.now(),

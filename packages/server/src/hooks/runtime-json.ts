@@ -7,6 +7,8 @@ import { homedir } from 'os';
  * Used by bridge scripts to communicate with the server
  */
 export interface RuntimeConfig {
+  /** Server listen host */
+  host: string;
   /** Server port (HTTP + WebSocket) */
   port: number;
   /** Server process ID */
@@ -35,6 +37,7 @@ export function readRuntimeConfig(): RuntimeConfig | null {
     const config = JSON.parse(content) as RuntimeConfig;
 
     if (
+      (config.host !== undefined && typeof config.host !== 'string') ||
       typeof config.port !== 'number' ||
       typeof config.pid !== 'number' ||
       typeof config.token !== 'string' ||
@@ -44,7 +47,14 @@ export function readRuntimeConfig(): RuntimeConfig | null {
       return null;
     }
 
-    return config;
+    return {
+      host: typeof config.host === 'string' ? config.host : 'localhost',
+      port: config.port,
+      pid: config.pid,
+      token: config.token,
+      serverInstanceId: config.serverInstanceId,
+      startedAt: config.startedAt,
+    };
   } catch {
     return null;
   }

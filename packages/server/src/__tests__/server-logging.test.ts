@@ -61,6 +61,7 @@ describe('server startup logging', () => {
 
   it('logs runtime.json write failures through the structured logger', () => {
     const runtime = {
+      host: '127.0.0.1',
       port: 3000,
       pid: 1,
       token: 't',

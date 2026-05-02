@@ -80,7 +80,14 @@ describe('manager', () => {
       );
     `);
     hookRegistrationRepo = new HookRegistrationRepo(db);
-    runtime = { port: 3000, token: 'test-token', serverInstanceId: 'server-abc', startedAt: Date.now() };
+    runtime = {
+      host: '127.0.0.1',
+      port: 3000,
+      pid: 1,
+      token: 'test-token',
+      serverInstanceId: 'server-abc',
+      startedAt: Date.now(),
+    };
     logger = { warn: vi.fn() };
     manager = new HooksManager(hookRegistrationRepo, runtime);
   });

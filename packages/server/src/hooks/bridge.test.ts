@@ -105,7 +105,9 @@ describe('bridge', () => {
           writeFileSync(
             join(runtimeDir, 'runtime.json'),
             JSON.stringify({
+              host: '127.0.0.1',
               port: address.port,
+              pid: process.pid,
               token: 'test-token',
               serverInstanceId: 'bridge-test',
               startedAt: Date.now(),

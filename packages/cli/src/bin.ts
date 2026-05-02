@@ -6,6 +6,9 @@ import { readCliConfig, writeCliConfig, type CliConfig } from './config-store.js
 import { startManagedServer } from './pm2-control.js';
 import { getServerStatus, stopRunningServer, type ServerStatus } from './server-control.js';
 import { startServer } from './server-runner.js';
+import { openBrowser } from './browser.js';
+import { confirmYesNo, isInteractiveSession } from './prompts.js';
+import { getBrowserUrl, getListenIp, getListenUrl } from './server-url.js';
 
 const MANAGED_SERVER_WAIT_MS = 5000;
 
@@ -14,12 +17,17 @@ function formatConfig(config: CliConfig | null): string {
 }
 
 function formatStatus(status: ServerStatus): string {
-  const url = status.port === null ? 'n/a' : `http://127.0.0.1:${status.port}`;
+  const listenUrl = getListenUrl(status) ?? 'n/a';
+  const browserUrl = getBrowserUrl(status) ?? 'n/a';
   const startedAt = status.startedAt === null ? 'n/a' : new Date(status.startedAt).toISOString();
 
   return [
     `Status: ${status.status}`,
-    `URL: ${url}`,
+    `Listen host: ${status.host ?? 'n/a'}`,
+    `Listen IP: ${getListenIp(status) ?? 'n/a'}`,
+    `Port: ${status.port ?? 'n/a'}`,
+    `Listen URL: ${listenUrl}`,
+    `Local URL: ${browserUrl}`,
     `PID: ${status.pid ?? 'n/a'}`,
     `Started: ${startedAt}`,
     `Restarts: ${status.restartCount}`,
@@ -52,6 +60,8 @@ USAGE:
 
 COMMANDS:
   serve    Start the Coder Studio server in background (default)
+  server   Alias for serve
+  open     Start the server if needed and open Coder Studio in a browser
   config   Persist CLI host/port/data-dir/password settings
   stop     Stop the managed Coder Studio server
   status   Show the managed server status
@@ -64,13 +74,18 @@ OPTIONS:
   --port, -p <number>      Save server port for future runs
   --data-dir, -d <path>    Save data directory for future runs
   --password <string>      Save auth password for future runs
+  --restart                Restart an already running managed server for serve/open
   --help                   Show help
   --version, -v            Show version
 
 EXAMPLES:
   coder-studio
   coder-studio serve
+  coder-studio server
   coder-studio serve --foreground
+  coder-studio serve --restart
+  coder-studio open
+  coder-studio open --restart
   coder-studio status
   coder-studio logs
   coder-studio stop
@@ -146,6 +161,75 @@ function isCliEntrypoint(): boolean {
   return entryCandidates.has(entryScript);
 }
 
+function isRunningStatus(status: ServerStatus): boolean {
+  return status.status === 'running' || status.status === 'starting';
+}
+
+interface ManagedStartupDecision {
+  existingStatus: ServerStatus | null;
+  restartRequested: boolean;
+}
+
+async function shouldRestartRunningServer(status: ServerStatus): Promise<boolean> {
+  const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? 'the existing server';
+
+  if (!isInteractiveSession()) {
+    return false;
+  }
+
+  return confirmYesNo(`Coder Studio is already running at ${currentUrl}. Restart it? [y/N] `);
+}
+
+async function prepareManagedStartup(forceRestart = false): Promise<ManagedStartupDecision> {
+  const status = await getServerStatus();
+  if (!isRunningStatus(status)) {
+    return {
+      existingStatus: null,
+      restartRequested: false,
+    };
+  }
+
+  const restart = forceRestart ? true : await shouldRestartRunningServer(status);
+  if (!restart) {
+    const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? 'n/a';
+    if (!isInteractiveSession()) {
+      console.log(`Coder Studio is already running at ${currentUrl}. Service already exists and was not restarted.`);
+    } else {
+      console.log(`Leaving the existing Coder Studio server running at ${currentUrl}.`);
+    }
+    return {
+      existingStatus: status,
+      restartRequested: false,
+    };
+  }
+
+  console.log('Restarting the managed Coder Studio server...');
+  return {
+    existingStatus: null,
+    restartRequested: true,
+  };
+}
+
+async function startManagedServerFlow(): Promise<void> {
+  await startManagedServer({
+    script: resolveManagedScriptPath(),
+    cwd: process.cwd(),
+    waitMs: MANAGED_SERVER_WAIT_MS,
+  });
+}
+
+async function openManagedServerInBrowser(existingStatus?: ServerStatus | null): Promise<void> {
+  const status = existingStatus ?? (await getServerStatus());
+  const browserUrl = getBrowserUrl(status);
+
+  if (browserUrl === null) {
+    throw new Error('Unable to determine the running Coder Studio URL.');
+  }
+
+  console.log(`Opening Coder Studio in your browser: ${browserUrl}`);
+  await openBrowser(browserUrl);
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
 
@@ -207,17 +291,37 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (args.command === 'open') {
+    const startup = await prepareManagedStartup(args.restart);
+    if (startup.existingStatus === null) {
+      await startManagedServerFlow();
+    }
+
+    await openManagedServerInBrowser(startup.existingStatus);
+    return;
+  }
+
   if (args.foreground) {
+    const startup = await prepareManagedStartup(args.restart);
+    if (startup.existingStatus !== null) {
+      return;
+    }
+
+    if (startup.restartRequested) {
+      await stopRunningServer();
+    }
+
     console.log('Starting Coder Studio Server in foreground...');
     await startServer();
     return;
   }
 
-  await startManagedServer({
-    script: resolveManagedScriptPath(),
-    cwd: process.cwd(),
-    waitMs: MANAGED_SERVER_WAIT_MS,
-  });
+  const startup = await prepareManagedStartup(args.restart);
+  if (startup.existingStatus !== null) {
+    return;
+  }
+
+  await startManagedServerFlow();
 
   console.log('Coder Studio server started in background.');
   console.log('Run `coder-studio status` to inspect the server.');

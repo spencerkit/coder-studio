@@ -11,7 +11,9 @@ describe('endpoint', () => {
   beforeEach(async () => {
     app = Fastify();
     runtime = {
+      host: '127.0.0.1',
       port: 3000,
+      pid: 1,
       token: 'test-token-123',
       serverInstanceId: 'server-abc',
       startedAt: Date.now(),

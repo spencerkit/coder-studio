@@ -77,6 +77,7 @@ describe('server-control', () => {
     deleteManagedServer.mockResolvedValue(true);
 
     writeRuntimeConfig({
+      host: '127.0.0.1',
       port: 4187,
       pid: 424242,
       token: 'test-token',
@@ -96,6 +97,7 @@ describe('server-control', () => {
     });
 
     writeRuntimeConfig({
+      host: '127.0.0.1',
       port: 4187,
       pid: 424242,
       token: 'test-token',
@@ -106,6 +108,7 @@ describe('server-control', () => {
     await expect(getServerStatus()).resolves.toEqual({
       status: 'running',
       pid: 424242,
+      host: '127.0.0.1',
       port: 4187,
       restartCount: 2,
       outFile: '/tmp/server.out.log',
@@ -124,6 +127,7 @@ describe('server-control', () => {
     await expect(getServerStatus()).resolves.toEqual({
       status: 'starting',
       pid: 424242,
+      host: null,
       port: null,
       restartCount: 0,
       outFile: '/tmp/server.out.log',
@@ -134,6 +138,7 @@ describe('server-control', () => {
 
   it('cleans stale runtime when pm2 reports stopped', async () => {
     writeRuntimeConfig({
+      host: '127.0.0.1',
       port: 4187,
       pid: 424242,
       token: 'test-token',
@@ -144,6 +149,7 @@ describe('server-control', () => {
     await expect(getServerStatus()).resolves.toEqual({
       status: 'stopped',
       pid: null,
+      host: null,
       port: null,
       restartCount: 0,
       outFile: '/tmp/server.out.log',
@@ -151,6 +157,34 @@ describe('server-control', () => {
       startedAt: null,
     });
     expect(readRuntimeConfig()).toBeNull();
+  });
+
+  it('maps runtime host details into a running status response', async () => {
+    getManagedServerStatus.mockResolvedValue({
+      status: 'running',
+      pm2Pid: 424242,
+      restartCount: 2,
+    });
+
+    writeRuntimeConfig({
+      host: '0.0.0.0',
+      port: 4187,
+      pid: 424242,
+      token: 'test-token',
+      serverInstanceId: 'server-1',
+      startedAt: 1000,
+    });
+
+    await expect(getServerStatus()).resolves.toEqual({
+      status: 'running',
+      pid: 424242,
+      host: '0.0.0.0',
+      port: 4187,
+      restartCount: 2,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
   });
 
   it('stops an existing instance before continuing serve startup', async () => {

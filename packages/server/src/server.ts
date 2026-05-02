@@ -126,6 +126,7 @@ export async function createServer(
   // captured reference (not strictly required — the endpoint only reads
   // `token` — but keeps the object truthful everywhere else).
   const runtime: RuntimeConfig = {
+    host: config.host,
     port: config.port,
     pid: process.pid,
     token: randomBytes(32).toString('hex'),
@@ -301,7 +302,9 @@ export async function createServer(
   // Resolve the real port before persisting runtime.json: callers may pass
   // port 0 (tests, dev tooling) to let the OS pick a free port, and bridge
   // scripts need the actual number to POST back.
+  const actualHost = extractListenHost(app) ?? config.host;
   const actualPort = extractListenPort(app) ?? config.port;
+  runtime.host = actualHost;
   runtime.port = actualPort;
 
   if (config.writeRuntime) {
@@ -326,6 +329,14 @@ function extractListenPort(app: FastifyInstance): number | undefined {
   const address = app.server.address();
   if (address && typeof address === 'object' && typeof address.port === 'number') {
     return address.port;
+  }
+  return undefined;
+}
+
+function extractListenHost(app: FastifyInstance): string | undefined {
+  const address = app.server.address();
+  if (address && typeof address === 'object' && typeof address.address === 'string') {
+    return address.address;
   }
   return undefined;
 }

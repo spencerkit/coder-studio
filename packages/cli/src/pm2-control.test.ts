@@ -44,6 +44,7 @@ describe('pm2-control', () => {
     disconnect.mockImplementation(() => undefined);
     start.mockImplementation((_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
       writeRuntimeConfig({
+        host: '127.0.0.1',
         port: 4187,
         pid: 424242,
         token: 'test-token',

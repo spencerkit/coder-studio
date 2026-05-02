@@ -4,14 +4,20 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  confirmYesNo,
   getServerStatus,
+  isInteractiveSession,
+  openBrowser,
   readCliConfig,
   startManagedServer,
   startServer,
   stopRunningServer,
   writeCliConfig,
 } = vi.hoisted(() => ({
+  confirmYesNo: vi.fn(),
   getServerStatus: vi.fn(),
+  isInteractiveSession: vi.fn(),
+  openBrowser: vi.fn(),
   readCliConfig: vi.fn(),
   startManagedServer: vi.fn(),
   startServer: vi.fn(),
@@ -37,6 +43,15 @@ vi.mock('./server-runner.js', () => ({
   startServer,
 }));
 
+vi.mock('./prompts.js', () => ({
+  confirmYesNo,
+  isInteractiveSession,
+}));
+
+vi.mock('./browser.js', () => ({
+  openBrowser,
+}));
+
 import { main } from './bin';
 import { parseArgs, RUNTIME_CONFIG_ERROR } from './parse-args';
 
@@ -46,9 +61,13 @@ beforeEach(() => {
   startManagedServer.mockResolvedValue(undefined);
   startServer.mockResolvedValue({ stop: vi.fn() });
   stopRunningServer.mockResolvedValue(false);
+  confirmYesNo.mockResolvedValue(false);
+  isInteractiveSession.mockReturnValue(true);
+  openBrowser.mockResolvedValue(undefined);
   getServerStatus.mockResolvedValue({
     status: 'stopped',
     pid: null,
+    host: null,
     port: null,
     restartCount: 0,
     outFile: '/tmp/server.out.log',
@@ -70,6 +89,53 @@ describe('main', () => {
     expect(startManagedServer).not.toHaveBeenCalled();
   });
 
+  it('does not start foreground mode when restart is declined for an existing server', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 1,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    confirmYesNo.mockResolvedValue(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve', '--foreground']);
+
+    expect(confirmYesNo).toHaveBeenCalledWith(
+      'Coder Studio is already running at http://127.0.0.1:4187. Restart it? [y/N] '
+    );
+    expect(startServer).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      'Leaving the existing Coder Studio server running at http://127.0.0.1:4187.'
+    );
+  });
+
+  it('restarts the managed server before starting foreground mode with --restart', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 1,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve', '--foreground', '--restart']);
+
+    expect(confirmYesNo).not.toHaveBeenCalled();
+    expect(stopRunningServer).toHaveBeenCalledTimes(1);
+    expect(startServer).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith('Restarting the managed Coder Studio server...');
+    expect(logSpy).toHaveBeenCalledWith('Starting Coder Studio Server in foreground...');
+  });
+
   it('starts pm2-managed mode for bare serve', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -88,6 +154,7 @@ describe('main', () => {
     getServerStatus.mockResolvedValue({
       status: 'running',
       pid: 424242,
+      host: '0.0.0.0',
       port: 4187,
       restartCount: 2,
       outFile: '/tmp/server.out.log',
@@ -100,7 +167,10 @@ describe('main', () => {
 
     const output = logSpy.mock.calls[0]?.[0];
     expect(output).toContain('Status: running');
-    expect(output).toContain('4187');
+    expect(output).toContain('Port: 4187');
+    expect(output).toContain('Listen host: 0.0.0.0');
+    expect(output).toContain('Listen IP: 0.0.0.0');
+    expect(output).toContain('Local URL: http://127.0.0.1:4187');
   });
 
   it('prints combined log output for logs command', async () => {
@@ -112,6 +182,7 @@ describe('main', () => {
     getServerStatus.mockResolvedValue({
       status: 'running',
       pid: 424242,
+      host: '127.0.0.1',
       port: 4187,
       restartCount: 2,
       outFile,
@@ -137,6 +208,189 @@ describe('main', () => {
     await main(['stop']);
 
     expect(logSpy).toHaveBeenCalledWith('Stopped Coder Studio server.');
+  });
+
+  it('parses server alias through main as a normal background start', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['server']);
+
+    expect(startManagedServer).toHaveBeenCalledWith({
+      script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
+      cwd: process.cwd(),
+      waitMs: 5000,
+    });
+    expect(logSpy).toHaveBeenCalledWith('Coder Studio server started in background.');
+  });
+
+  it('prompts before restarting an existing background server', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 1,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    confirmYesNo.mockResolvedValue(true);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve']);
+
+    expect(confirmYesNo).toHaveBeenCalledWith(
+      'Coder Studio is already running at http://127.0.0.1:4187. Restart it? [y/N] '
+    );
+    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith('Restarting the managed Coder Studio server...');
+  });
+
+  it('restarts immediately with --restart without prompting', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 1,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve', '--restart']);
+
+    expect(confirmYesNo).not.toHaveBeenCalled();
+    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith('Restarting the managed Coder Studio server...');
+  });
+
+  it('keeps the current server when restart is declined', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 1,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    confirmYesNo.mockResolvedValue(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve']);
+
+    expect(startManagedServer).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      'Leaving the existing Coder Studio server running at http://127.0.0.1:4187.'
+    );
+  });
+
+  it('starts the managed server for open and opens the browser', async () => {
+    getServerStatus
+      .mockResolvedValueOnce({
+        status: 'stopped',
+        pid: null,
+        host: null,
+        port: null,
+        restartCount: 0,
+        outFile: '/tmp/server.out.log',
+        errFile: '/tmp/server.err.log',
+        startedAt: null,
+      })
+      .mockResolvedValueOnce({
+        status: 'running',
+        pid: 424242,
+        host: '127.0.0.1',
+        port: 4187,
+        restartCount: 0,
+        outFile: '/tmp/server.out.log',
+        errFile: '/tmp/server.err.log',
+        startedAt: 1000,
+      });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['open']);
+
+    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(openBrowser).toHaveBeenCalledWith('http://127.0.0.1:4187');
+    expect(logSpy).toHaveBeenCalledWith('Opening Coder Studio in your browser: http://127.0.0.1:4187');
+  });
+
+  it('opens the current service from open when restart is declined', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '0.0.0.0',
+      port: 4187,
+      restartCount: 0,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    confirmYesNo.mockResolvedValue(false);
+
+    await main(['open']);
+
+    expect(startManagedServer).not.toHaveBeenCalled();
+    expect(openBrowser).toHaveBeenCalledWith('http://127.0.0.1:4187');
+  });
+
+  it('restarts immediately for open --restart and then opens the browser', async () => {
+    getServerStatus
+      .mockResolvedValueOnce({
+        status: 'running',
+        pid: 424242,
+        host: '127.0.0.1',
+        port: 4187,
+        restartCount: 0,
+        outFile: '/tmp/server.out.log',
+        errFile: '/tmp/server.err.log',
+        startedAt: 1000,
+      })
+      .mockResolvedValueOnce({
+        status: 'running',
+        pid: 434343,
+        host: '127.0.0.1',
+        port: 4190,
+        restartCount: 0,
+        outFile: '/tmp/server.out.log',
+        errFile: '/tmp/server.err.log',
+        startedAt: 2000,
+      });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['open', '--restart']);
+
+    expect(confirmYesNo).not.toHaveBeenCalled();
+    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith('Restarting the managed Coder Studio server...');
+    expect(openBrowser).toHaveBeenCalledWith('http://127.0.0.1:4190');
+  });
+
+  it('does not restart in non-interactive mode and prints a clear message', async () => {
+    getServerStatus.mockResolvedValue({
+      status: 'running',
+      pid: 424242,
+      host: '127.0.0.1',
+      port: 4187,
+      restartCount: 0,
+      outFile: '/tmp/server.out.log',
+      errFile: '/tmp/server.err.log',
+      startedAt: 1000,
+    });
+    isInteractiveSession.mockReturnValue(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['serve']);
+
+    expect(confirmYesNo).not.toHaveBeenCalled();
+    expect(startManagedServer).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      'Coder Studio is already running at http://127.0.0.1:4187. Service already exists and was not restarted.'
+    );
   });
 
   it('drops an ephemeral port when config updates rewrite saved settings', async () => {
@@ -198,6 +452,18 @@ describe('parseArgs', () => {
     });
   });
 
+  it('parses open command', () => {
+    expect(parseArgs(['open'])).toEqual({
+      command: 'open',
+    });
+  });
+
+  it('parses server alias as serve', () => {
+    expect(parseArgs(['server'])).toEqual({
+      command: 'serve',
+    });
+  });
+
   it('treats -h as help instead of host', () => {
     expect(parseArgs(['-h'])).toEqual({
       command: 'help',
@@ -222,6 +488,20 @@ describe('parseArgs', () => {
     expect(parseArgs(['serve', '--foreground'])).toEqual({
       command: 'serve',
       foreground: true,
+    });
+  });
+
+  it('parses serve --restart with restart: true', () => {
+    expect(parseArgs(['serve', '--restart'])).toEqual({
+      command: 'serve',
+      restart: true,
+    });
+  });
+
+  it('parses open --restart with restart: true', () => {
+    expect(parseArgs(['open', '--restart'])).toEqual({
+      command: 'open',
+      restart: true,
     });
   });
 
@@ -314,6 +594,10 @@ describe('parseArgs', () => {
 
   it('rejects foreground after switching from serve to version', () => {
     expect(() => parseArgs(['serve', '--version', '--foreground'])).toThrow('Unknown option: --foreground');
+  });
+
+  it('rejects restart on non-start commands', () => {
+    expect(() => parseArgs(['status', '--restart'])).toThrow('Unknown option: --restart');
   });
 
   it('rejects unknown positional tokens', () => {

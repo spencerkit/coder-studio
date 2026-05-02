@@ -10,20 +10,51 @@ npm install -g @spencer-kit/coder-studio
 
 ## 命令
 
-### serve
+### serve / server
 
 启动 Coder Studio 服务器:
 
 ```bash
 coder-studio serve [options]
+coder-studio server
 ```
 
-选项:
-- `--port, -p <number>` - 服务端口 (默认: 4173)
-- `--host, -h <string>` - 服务主机 (默认: 127.0.0.1)
-- `--data-dir, -d <path>` - 数据存储目录
-- `--password <string>` - 启用密码认证
-- `--no-auth` - 禁用认证
+说明:
+- `serve` 默认以后台托管模式启动服务
+- `server` 是 `serve` 的别名
+- 如果当前已有服务在运行，会先提示是否重启
+- `serve --restart` 会直接重启当前托管服务，不再询问
+- `serve --foreground` 会以前台模式启动服务
+
+### open
+
+启动服务并直接打开浏览器:
+
+```bash
+coder-studio open
+```
+
+说明:
+- 如果服务未启动，会先启动再打开浏览器
+- 如果服务已启动，会提示是否重启
+- `open --restart` 会直接重启后再打开浏览器
+- 选择不重启时，会直接打开当前运行中的地址
+- 非交互场景下如果已有服务，不会自动重启，并会明确提示未重新启动
+
+### status
+
+查看当前托管服务状态:
+
+```bash
+coder-studio status
+```
+
+输出包含:
+- 当前状态
+- 监听 host / IP / port
+- 完整监听 URL
+- 本地访问 URL
+- PID、启动时间、重启次数、日志路径
 
 ### version
 
@@ -48,7 +79,7 @@ coder-studio help
 默认情况下，服务不需要认证。启用认证:
 
 ```bash
-coder-studio serve --password mypassword
+coder-studio config --password mypassword
 ```
 
 ### 数据目录
@@ -56,7 +87,7 @@ coder-studio serve --password mypassword
 指定数据存储位置:
 
 ```bash
-coder-studio serve --data-dir /path/to/data
+coder-studio config --data-dir /path/to/data
 ```
 
 ## Provider 支持

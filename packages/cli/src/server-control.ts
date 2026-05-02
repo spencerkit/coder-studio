@@ -11,6 +11,7 @@ import {
 export interface ServerStatus {
   status: 'running' | 'starting' | 'stopped' | 'errored';
   pid: number | null;
+  host: string | null;
   port: number | null;
   restartCount: number;
   outFile: string;
@@ -47,6 +48,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
     return {
       status: 'stopped',
       pid: null,
+      host: null,
       port: null,
       restartCount: 0,
       outFile,
@@ -58,6 +60,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
   return {
     status: runtime ? managedStatus.status : 'starting',
     pid: runtime?.pid ?? managedStatus.pm2Pid,
+    host: runtime?.host ?? null,
     port: runtime?.port ?? null,
     restartCount: managedStatus.restartCount,
     outFile,

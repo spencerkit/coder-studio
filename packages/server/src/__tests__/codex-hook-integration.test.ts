@@ -160,7 +160,14 @@ describe('Codex notify hook integration', () => {
     });
 
     const hookRegistrationRepo = new HookRegistrationRepo(db);
-    hooksMgr = new HooksManager(hookRegistrationRepo, { port: 0, token: 'test', serverInstanceId: 'x', startedAt: Date.now() }, {
+    hooksMgr = new HooksManager(hookRegistrationRepo, {
+      host: '127.0.0.1',
+      port: 0,
+      pid: process.pid,
+      token: 'test',
+      serverInstanceId: 'x',
+      startedAt: Date.now(),
+    }, {
       sessionMgr,
       providerRegistry: [codex],
       sessionDb,

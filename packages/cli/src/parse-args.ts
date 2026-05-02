@@ -1,10 +1,11 @@
-type CliCommand = 'serve' | 'config' | 'stop' | 'status' | 'logs' | 'help' | 'version';
+type CliCommand = 'serve' | 'open' | 'config' | 'stop' | 'status' | 'logs' | 'help' | 'version';
 
 export const RUNTIME_CONFIG_ERROR =
   'Host, port, data-dir, password, and auth settings must be configured via the config command';
 
 export interface CliArgs {
   foreground?: boolean;
+  restart?: boolean;
   command?: CliCommand;
   configHelp?: boolean;
   port?: number;
@@ -34,6 +35,10 @@ function setCommand(args: CliArgs, command: CliCommand): void {
 
   if (command !== 'serve') {
     delete args.foreground;
+  }
+
+  if (command !== 'serve' && command !== 'open') {
+    delete args.restart;
   }
 
   args.command = command;
@@ -79,11 +84,16 @@ export function parseArgs(argv: string[]): CliArgs {
 
     switch (arg) {
       case 'serve':
+      case 'open':
       case 'config':
       case 'stop':
       case 'status':
       case 'logs':
         setCommand(args, arg);
+        break;
+
+      case 'server':
+        setCommand(args, 'serve');
         break;
 
       case 'help':
@@ -109,6 +119,17 @@ export function parseArgs(argv: string[]): CliArgs {
 
         args.foreground = true;
         break;
+
+      case '--restart': {
+        const command = getActiveCommand(args);
+
+        if (command !== 'serve' && command !== 'open') {
+          throwUnknownOption(arg);
+        }
+
+        args.restart = true;
+        break;
+      }
 
       case '--port':
       case '-p': {

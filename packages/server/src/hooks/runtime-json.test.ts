@@ -60,6 +60,7 @@ describe('runtime-json', () => {
 
     it('should return config when file exists and is valid', () => {
       const config: RuntimeConfig = {
+        host: '127.0.0.1',
         port: 3000,
         pid: 12345,
         token: 'test-token-123',
@@ -90,11 +91,38 @@ describe('runtime-json', () => {
       const result = readRuntimeConfig();
       expect(result).toBeNull();
     });
+
+    it('should default host to localhost when reading legacy runtime files', () => {
+      const { writeFileSync } = require('fs');
+      mkdirSync(getTestRuntimeDir(), { recursive: true });
+      writeFileSync(
+        getTestRuntimePath(),
+        JSON.stringify({
+          port: 3000,
+          pid: 12345,
+          token: 'legacy-token',
+          serverInstanceId: 'server-abc',
+          startedAt: 1000,
+        }),
+        'utf-8'
+      );
+
+      const result = readRuntimeConfig();
+      expect(result).toEqual({
+        host: 'localhost',
+        port: 3000,
+        pid: 12345,
+        token: 'legacy-token',
+        serverInstanceId: 'server-abc',
+        startedAt: 1000,
+      });
+    });
   });
 
   describe('writeRuntimeConfig', () => {
     it('should write config to disk', () => {
       const config: RuntimeConfig = {
+        host: '127.0.0.1',
         port: 3000,
         pid: 12345,
         token: 'test-token-123',
@@ -116,7 +144,9 @@ describe('runtime-json', () => {
       }
 
       const config: RuntimeConfig = {
+        host: '0.0.0.0',
         port: 3000,
+        pid: 12345,
         token: 'test-token',
         serverInstanceId: 'server-id',
         startedAt: Date.now(),
@@ -132,7 +162,9 @@ describe('runtime-json', () => {
   describe('deleteRuntimeConfig', () => {
     it('should delete file if it exists', () => {
       const config: RuntimeConfig = {
+        host: '127.0.0.1',
         port: 3000,
+        pid: 12345,
         token: 'test-token',
         serverInstanceId: 'server-id',
         startedAt: Date.now(),
