@@ -105,6 +105,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(monacoSliderHover).toContain("var(--border-focus)");
   });
 
+  it("keeps xterm viewport touch-scrollable on mobile browsers", () => {
+    const xtermViewport = getLastRuleBlock(".xterm-host .xterm-viewport");
+
+    expect(xtermViewport).toContain("touch-action: pan-y");
+    expect(xtermViewport).toContain("-webkit-overflow-scrolling: touch");
+    expect(xtermViewport).not.toContain("touch-action: none");
+  });
+
   it("scopes disabled provider card styling to the draft launcher", () => {
     expect(stylesheet).toContain(".agent-draft-launcher .agent-provider-card[disabled]");
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");

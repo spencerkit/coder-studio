@@ -854,6 +854,8 @@
 /* xterm.js overrides for Aurora Mint theme */
 .xterm-host .xterm-viewport {
   overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
