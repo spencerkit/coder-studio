@@ -10,12 +10,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { X, FlipHorizontal, FlipVertical, Play, Square } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../../atoms/sessions';
+import { workspaceByIdAtomFamily } from '../../../../atoms/workspaces';
 import { pendingFocusSessionAtom } from '../../../../atoms/app-ui';
 import type { SessionState } from '@coder-studio/core';
 import { ObjectiveDialog } from '../../../supervisor/views/shared/objective-dialog';
 import { SupervisorCard } from '../../../supervisor/views/shared/supervisor-card';
 import { useSupervisor } from '../../../supervisor/actions/use-supervisor';
 import { XtermHost } from '../../../terminal-panel/views/shared/xterm-host';
+import { useWorkspaceUiStatePersistence } from '../../../workspace/actions/use-workspace-ui-state-persistence';
 
 type SessionCardAction = () => void | Promise<void>;
 
@@ -53,12 +55,14 @@ export const SessionCard: FC<SessionCardProps> = ({
   onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
+  const workspace = useAtomValue(workspaceByIdAtomFamily(session?.workspaceId ?? '__workspace_empty__'));
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
   useSupervisor(session);
+  const { persistUiState } = useWorkspaceUiStatePersistence(session?.workspaceId ?? '__workspace_empty__');
 
   useEffect(() => {
     if (pendingFocus !== sessionId) {
@@ -83,12 +87,16 @@ export const SessionCard: FC<SessionCardProps> = ({
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
+  const isActiveSession = workspace?.uiState.activeSessionId === session.id;
 
   return (
     <div
       ref={cardRef}
       className={`session-card agent-pane${highlight ? ' session-card--focus-pulse' : ''}`}
       data-session-id={sessionId}
+      onClick={() => {
+        void persistUiState({ activeSessionId: session.id });
+      }}
     >
       <div className="session-progress">
         <div
@@ -176,6 +184,7 @@ export const SessionCard: FC<SessionCardProps> = ({
           terminalId={session.terminalId}
           workspaceId={session.workspaceId}
           readOnly={terminalReadOnly}
+          isActiveSession={isActiveSession}
         />
       </div>
     </div>

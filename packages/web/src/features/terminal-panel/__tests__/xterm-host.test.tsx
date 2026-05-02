@@ -15,6 +15,74 @@ import { terminalOutputAtomFamily } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
 import { localeAtom, themeAtom } from '../../../atoms/app-ui';
 import { TERMINAL_REPLAY_TIMEOUT_MS } from '../replay-state';
+import type {
+  HydrationRequestHandle,
+  HydrationTier,
+} from '../hydration-coordinator';
+
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+const hydrationCoordinatorMocks = vi.hoisted(() => {
+  let currentHandle: HydrationRequestHandle | null = null;
+  return {
+    request: vi.fn((req: { terminalId: string; tier: HydrationTier }) => {
+      const listeners = new Set<(position: number) => void>();
+      let resolveGranted = () => {};
+      const granted = new Promise<void>((resolve) => {
+        resolveGranted = resolve;
+      });
+      currentHandle = {
+        granted,
+        isGranted: hydrationCoordinatorMocks.autoGrant,
+        promote: vi.fn(),
+        release: vi.fn(),
+        subscribePosition: vi.fn((callback: (position: number) => void) => {
+          listeners.add(callback);
+          return () => {
+            listeners.delete(callback);
+          };
+        }),
+      };
+      hydrationCoordinatorMocks.lastRequest = req;
+      hydrationCoordinatorMocks.listeners = listeners;
+      hydrationCoordinatorMocks.resolveGranted = resolveGranted;
+      if (hydrationCoordinatorMocks.autoGrant) {
+        resolveGranted();
+      }
+      return currentHandle;
+    }),
+    autoGrant: true,
+    lastRequest: null as { terminalId: string; tier: HydrationTier } | null,
+    listeners: new Set<(position: number) => void>(),
+    resolveGranted: (() => {}) as () => void,
+    emitQueuePosition(position: number) {
+      for (const listener of hydrationCoordinatorMocks.listeners) {
+        listener(position);
+      }
+    },
+    currentHandle() {
+      return currentHandle;
+    },
+  };
+});
+
+vi.mock('../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
+
+vi.mock('../hydration-coordinator', async () => {
+  const actual =
+    await vi.importActual<typeof import('../hydration-coordinator')>('../hydration-coordinator');
+  return {
+    ...actual,
+    globalHydrationCoordinator: {
+      request: hydrationCoordinatorMocks.request,
+      inspect: vi.fn(() => ({ running: [], queued: [] })),
+    },
+  };
+});
 
 function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, lastSeq: number) {
   expect(mock).toHaveBeenCalledWith(
@@ -82,6 +150,11 @@ vi.mock('@xterm/addon-webgl', () => ({
 describe('XtermHost', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    viewportMocks.viewport = 'desktop';
+    hydrationCoordinatorMocks.autoGrant = true;
+    hydrationCoordinatorMocks.lastRequest = null;
+    hydrationCoordinatorMocks.listeners = new Set();
+    hydrationCoordinatorMocks.resolveGranted = () => {};
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
@@ -184,6 +257,132 @@ describe('XtermHost', () => {
     expect(
       screen.getByText('你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。')
     ).toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('queues desktop hydration before creating xterm and shows queue placeholder copy', async () => {
+    hydrationCoordinatorMocks.autoGrant = false;
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({ status: 'ok' });
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="queued-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      hydrationCoordinatorMocks.emitQueuePosition(2);
+    });
+
+    expect(hydrationCoordinatorMocks.request).toHaveBeenCalledWith({
+      terminalId: 'queued-terminal',
+      tier: 'visible-other',
+    });
+    expect(screen.getByText('Waiting in queue (2 ahead)')).toBeInTheDocument();
+    expect(screen.queryByText('Restoring terminal output...')).not.toBeInTheDocument();
+
+    const { Terminal } = await import('@xterm/xterm');
+    expect(Terminal).not.toHaveBeenCalled();
+    expect(sendCommand).not.toHaveBeenCalledWith('terminal.replay', expect.anything(), expect.anything());
+  });
+
+  it('switches queue placeholder copy to up next when promoted to the head of the line', async () => {
+    hydrationCoordinatorMocks.autoGrant = false;
+    const store = createStore();
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="up-next-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      hydrationCoordinatorMocks.emitQueuePosition(1);
+    });
+    expect(screen.getByText('Waiting in queue (1 ahead)')).toBeInTheDocument();
+
+    await act(async () => {
+      hydrationCoordinatorMocks.emitQueuePosition(0);
+    });
+    expect(screen.getByText('Up next...')).toBeInTheDocument();
+  });
+
+  it('bypasses hydration queue on mobile and starts replay immediately', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.replay') {
+        return new Promise(() => {});
+      }
+
+      return Promise.resolve({ ok: true, data: { status: 'ok' } });
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(hydrationCoordinatorMocks.request).not.toHaveBeenCalled();
+    expect(await screen.findByText('Restoring terminal output...')).toBeInTheDocument();
+    expect(sendCommand).toHaveBeenCalledWith(
+      'terminal.replay',
+      {
+        terminalId: 'mobile-terminal',
+        lastSeq: 0,
+      },
+      {
+        timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+      }
+    );
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

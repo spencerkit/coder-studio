@@ -221,6 +221,8 @@
       "indexed": "终端 {index}"
     },
     "replay": {
+      "queued_title": "等待队列中（前方还有 {count} 个）",
+      "up_next": "即将开始…",
       "loading_title": "正在恢复终端内容…",
       "loading_body": "你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。",
       "failed_title": "历史内容恢复失败",

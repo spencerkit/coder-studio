@@ -6,6 +6,7 @@ import { SessionCard } from '../views/shared/session-card';
 import { sessionsAtom } from '../../../atoms/sessions';
 import { wsClientAtom } from '../../../atoms/connection';
 import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
+import { activeWorkspaceIdAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
@@ -25,6 +26,22 @@ function createSessionStore(
     sendCommand,
     subscribe: vi.fn(() => () => {}),
   } as never);
+  store.set(activeWorkspaceIdAtom, 'ws-123');
+  store.set(workspacesLoadStateAtom, 'ready');
+  store.set(workspacesAtom, {
+    'ws-123': {
+      id: 'ws-123',
+      path: '/tmp/ws-123',
+      targetRuntime: 'native',
+      openedAt: Date.now() - 10_000,
+      lastActiveAt: Date.now() - 500,
+      uiState: {
+        leftPanelWidth: 320,
+        bottomPanelHeight: 240,
+        focusMode: false,
+      },
+    },
+  });
 
   store.set(sessionsAtom, {
     sess_123456: {
@@ -86,6 +103,44 @@ describe('SessionCard', () => {
       expect.objectContaining({
         terminalId: 'term-live',
         readOnly: false,
+        isActiveSession: false,
+      })
+    );
+  });
+
+  it('passes isActiveSession to XtermHost when the workspace ui state targets this session', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-live',
+      state: 'running',
+      endedAt: undefined,
+    });
+
+    store.set(workspacesAtom, {
+      'ws-123': {
+        id: 'ws-123',
+        path: '/tmp/ws-123',
+        targetRuntime: 'native',
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now() - 500,
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: 'sess_123456',
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term-live',
+        isActiveSession: true,
       })
     );
   });
@@ -372,5 +427,49 @@ describe('SessionCard', () => {
 
     expect(onSplitHorizontal).toHaveBeenCalledTimes(1);
     expect(onSplitVertical).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists activeSessionId when the card is clicked', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'ws-123',
+        path: '/tmp/ws-123',
+        targetRuntime: 'native',
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now(),
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: 'sess_123456',
+        },
+      },
+    });
+    const { store } = createSessionStore(
+      {
+        terminalId: 'term-live',
+        state: 'running',
+        endedAt: undefined,
+      },
+      sendCommand
+    );
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    fireEvent.click(document.querySelector('[data-session-id="sess_123456"]')!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('workspace.uiState.set', {
+        workspaceId: 'ws-123',
+        uiState: expect.objectContaining({
+          activeSessionId: 'sess_123456',
+        }),
+      });
+    });
   });
 });

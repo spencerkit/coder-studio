@@ -221,6 +221,8 @@
       "indexed": "Terminal {index}"
     },
     "replay": {
+      "queued_title": "Waiting in queue ({count} ahead)",
+      "up_next": "Up next...",
       "loading_title": "Restoring terminal output...",
       "loading_body": "You can keep using this page while history catches up in the background. Larger histories may take longer to restore.",
       "failed_title": "Terminal history could not be restored",

@@ -25,6 +25,13 @@ import {
   TERMINAL_REPLAY_TIMEOUT_MS,
   type TerminalReplayUiState,
 } from '../../replay-state';
+import { useViewport } from '../../../../hooks/use-viewport';
+import {
+  globalHydrationCoordinator,
+  type HydrationRequestHandle,
+  type HydrationTier,
+} from '../../hydration-coordinator';
+import { XtermPlaceholder } from './xterm-placeholder';
 
 const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
 
@@ -258,6 +265,8 @@ interface XtermHostProps {
   workspaceId: string;
   /** Prevent stdin dispatch for historical or ended terminals */
   readOnly?: boolean;
+  /** Marks the session prioritized by workspace UI state */
+  isActiveSession?: boolean;
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
 }
@@ -289,9 +298,16 @@ export function XtermHost({
   terminalId,
   workspaceId,
   readOnly = false,
+  isActiveSession = false,
 }: XtermHostProps) {
   const t = useTranslation();
+  const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
+  const wsClient = useAtomValue(wsClientAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
+  const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
+  const isInteractive = !readOnly && meta?.alive !== false;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -319,6 +335,8 @@ export function XtermHost({
   const replayWriteDepthRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
+  const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
+  const hydrationReleasedRef = useRef(false);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -328,13 +346,29 @@ export function XtermHost({
     lastClientY: 0,
     carryPx: 0,
   });
-  const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
 
-  const wsClient = useAtomValue(wsClientAtom);
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
-  const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
-  const isInteractive = !readOnly && meta?.alive !== false;
+  if (viewport !== 'mobile' && hydrationHandleRef.current === null) {
+    const tier: HydrationTier =
+      meta?.alive === false
+        ? 'background'
+        : isActiveSession
+          ? 'visible-active'
+          : 'visible-other';
+    hydrationHandleRef.current = globalHydrationCoordinator.request({ terminalId, tier });
+  }
+
+  const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
+  const [hydrationState, setHydrationState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'queued'; queuePosition: number }
+    | { kind: 'granted' }
+  >(
+    viewport === 'mobile'
+      ? { kind: 'granted' }
+      : hydrationHandleRef.current?.isGranted
+        ? { kind: 'granted' }
+        : { kind: 'idle' }
+  );
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -349,6 +383,69 @@ export function XtermHost({
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (viewport === 'mobile') {
+      setHydrationState({ kind: 'granted' });
+      hydrationReleasedRef.current = true;
+      return;
+    }
+
+    hydrationReleasedRef.current = false;
+    const handle =
+      hydrationHandleRef.current ??
+      globalHydrationCoordinator.request({
+        terminalId,
+        tier:
+          meta?.alive === false
+            ? 'background'
+            : isActiveSession
+              ? 'visible-active'
+              : 'visible-other',
+      });
+    hydrationHandleRef.current = handle;
+
+    let cancelled = false;
+    const unsubscribe = handle.subscribePosition((queuePosition) => {
+      if (!cancelled) {
+        setHydrationState({ kind: 'queued', queuePosition });
+      }
+    });
+
+    if (handle.isGranted) {
+      setHydrationState({ kind: 'granted' });
+    }
+
+    void handle.granted.then(() => {
+      if (!cancelled) {
+        setHydrationState({ kind: 'granted' });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      if (!hydrationReleasedRef.current) {
+        handle.release();
+        hydrationReleasedRef.current = true;
+      }
+      hydrationHandleRef.current = null;
+    };
+  }, [terminalId, viewport]);
+
+  useEffect(() => {
+    if (viewport === 'mobile') {
+      return;
+    }
+
+    const tier: HydrationTier =
+      meta?.alive === false
+        ? 'background'
+        : isActiveSession
+          ? 'visible-active'
+          : 'visible-other';
+    hydrationHandleRef.current?.promote(tier);
+  }, [isActiveSession, meta?.alive, viewport]);
 
   useEffect(() => {
     interactiveRef.current = isInteractive;
@@ -603,6 +700,10 @@ export function XtermHost({
    * replay, which used to amplify "blank line" artifacts on benign renders.
    */
   useEffect(() => {
+    if (viewport !== 'mobile' && hydrationState.kind !== 'granted') {
+      return;
+    }
+
     if (!containerRef.current) return;
 
     let disposed = false;
@@ -675,6 +776,9 @@ export function XtermHost({
     };
 
     const initialReplayReady = initialFitReady.then(async () => {
+      if (!wsClient) {
+        return;
+      }
       await waitForConnected();
       if (disposed || !mountedRef.current) {
         return;
@@ -746,17 +850,33 @@ export function XtermHost({
         }
         coveredSeq = result.data.seq ?? coveredSeq;
         setReplayUiState({ kind: 'ready' });
+        if (viewport !== 'mobile') {
+          hydrationHandleRef.current?.release();
+          hydrationReleasedRef.current = true;
+        }
       } else if (result.data?.status === 'too_old') {
         // Ring buffer overflow - show a message to the user
         if (terminalRef.current) {
           terminalRef.current.writeln('\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m');
         }
         setReplayUiState({ kind: 'degraded', reason: 'truncated' });
+        if (viewport !== 'mobile') {
+          hydrationHandleRef.current?.release();
+          hydrationReleasedRef.current = true;
+        }
       } else if (result.data?.status === 'unknown') {
         setReplayUiState({ kind: 'degraded', reason: 'closed' });
+        if (viewport !== 'mobile') {
+          hydrationHandleRef.current?.release();
+          hydrationReleasedRef.current = true;
+        }
       } else if (!result.ok) {
         console.error('Failed to replay terminal output:', result.error);
         setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(result.error) });
+        if (viewport !== 'mobile') {
+          hydrationHandleRef.current?.release();
+          hydrationReleasedRef.current = true;
+        }
       }
 
       setOutputAtom((prev: OutputBuffer) => ({
@@ -777,6 +897,10 @@ export function XtermHost({
       }
 
       setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(error) });
+      if (viewport !== 'mobile') {
+        hydrationHandleRef.current?.release();
+        hydrationReleasedRef.current = true;
+      }
 
       setOutputAtom((prev: OutputBuffer) => ({
         ...prev,
@@ -788,6 +912,9 @@ export function XtermHost({
     };
 
     const requestReplay = (lastSeq: number) => {
+      if (!wsClient) {
+        return;
+      }
       replayCompletedRef.current = false;
       if (lastSeq === 0) {
         setReplayUiState({ kind: 'loading' });
@@ -914,7 +1041,7 @@ export function XtermHost({
         fitAddonRef.current = null;
       }
     };
-  }, [terminalId, workspaceId, wsClient, dispatch, scheduleFit, setOutputAtom]);
+  }, [dispatch, hydrationState.kind, scheduleFit, setOutputAtom, terminalId, viewport, workspaceId, wsClient]);
 
   /**
    * Write new output chunks to terminal
@@ -986,7 +1113,8 @@ export function XtermHost({
     }
   }, [meta?.alive]);
 
-  const showReplayOverlay = replayUiState.kind !== 'ready';
+  const showReplayOverlay =
+    replayUiState.kind !== 'ready' && (viewport === 'mobile' || hydrationState.kind === 'granted');
 
   let replayTitle = '';
   let replayBody = '';
@@ -1021,7 +1149,16 @@ export function XtermHost({
           height: '100%',
           overflow: 'hidden',
         }}
+        onFocusCapture={() => {
+          hydrationHandleRef.current?.promote('focused');
+        }}
+        onMouseDown={() => {
+          hydrationHandleRef.current?.promote('focused');
+        }}
       />
+      {viewport !== 'mobile' && hydrationState.kind === 'queued' ? (
+        <XtermPlaceholder state="queued" queuePosition={hydrationState.queuePosition} />
+      ) : null}
       {showReplayOverlay ? (
         <div className={replayClassName} role="status" aria-live="polite">
           <div className="xterm-replay-overlay__card">
