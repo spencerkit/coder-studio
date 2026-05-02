@@ -203,6 +203,7 @@ function renderMobileShell({
   withWorkspaces = true,
   connectionStatus = 'connected' as 'connected' | 'connecting' | 'reconnecting' | 'disconnected' | 'rejected',
   reconnectAttempts = 0,
+  seedSupervisor = true,
   sessions = [
     createSession({
       id: 'sess_1',
@@ -266,6 +267,7 @@ function renderMobileShell({
   initialEntry?: string;
   withWorkspaces?: boolean;
   sessions?: Session[];
+  seedSupervisor?: boolean;
   paneLayout?: {
     id: string;
     type: 'leaf' | 'split';
@@ -321,49 +323,53 @@ function renderMobileShell({
     store.set(paneLayoutAtomFamily('ws-1'), paneLayout as never);
     store.set(
       supervisorsAtom,
-      new Map([
-        [
-          'sess_2',
-          {
-            id: 'sup-1',
-            sessionId: 'sess_2',
-            workspaceId: 'ws-1',
-            objective: 'Ship mobile phase 3',
-            evaluatorProviderId: 'claude',
-            state: 'idle',
-            cycles: [
+      seedSupervisor
+        ? new Map([
+            [
+              'sess_2',
               {
-                id: 'cycle-1',
-                supervisorId: 'sup-1',
-                trigger: 'manual',
-                status: 'completed',
-                result: 'cycle 1/1',
-                createdAt: Date.now() - 5_000,
-                completedAt: Date.now() - 1_000,
+                id: 'sup-1',
+                sessionId: 'sess_2',
+                workspaceId: 'ws-1',
+                objective: 'Ship mobile phase 3',
+                evaluatorProviderId: 'claude',
+                state: 'idle',
+                cycles: [
+                  {
+                    id: 'cycle-1',
+                    supervisorId: 'sup-1',
+                    trigger: 'manual',
+                    status: 'completed',
+                    result: 'cycle 1/1',
+                    createdAt: Date.now() - 5_000,
+                    completedAt: Date.now() - 1_000,
+                  },
+                ],
               },
             ],
-          },
-        ],
-      ])
+          ])
+        : new Map()
     );
     store.set(
       supervisorCyclesAtom,
-      new Map([
-        [
-          'sup-1',
-          [
-            {
-              id: 'cycle-1',
-              supervisorId: 'sup-1',
-              trigger: 'manual',
-              status: 'completed',
-              result: 'cycle 1/1',
-              createdAt: Date.now() - 5_000,
-              completedAt: Date.now() - 1_000,
-            },
-          ],
-        ],
-      ])
+      seedSupervisor
+        ? new Map([
+            [
+              'sup-1',
+              [
+                {
+                  id: 'cycle-1',
+                  supervisorId: 'sup-1',
+                  trigger: 'manual',
+                  status: 'completed',
+                  result: 'cycle 1/1',
+                  createdAt: Date.now() - 5_000,
+                  completedAt: Date.now() - 1_000,
+                },
+              ],
+            ],
+          ])
+        : new Map()
     );
   }
 
@@ -690,6 +696,19 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Supervisor sheet' }));
 
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
+  });
+
+  it('keeps the supervisor entry available when the active session has not enabled supervisor yet', async () => {
+    const user = userEvent.setup();
+    renderMobileShell({ seedSupervisor: false });
+
+    expect(await screen.findByRole('button', { name: 'Open Supervisor sheet' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open Supervisor sheet' }));
+
+    expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
+    expect(screen.getByText('Supervisor 未启用')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '启用目标' })).toBeInTheDocument();
   });
 
   it('renders a reconnecting banner inside the mobile workspace scaffold', async () => {

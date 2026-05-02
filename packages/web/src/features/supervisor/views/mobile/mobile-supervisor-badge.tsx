@@ -1,3 +1,4 @@
+import type { SupervisorState } from '@coder-studio/core';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { supervisorCyclesAtom, supervisorsAtom } from '../../atoms';
@@ -18,7 +19,10 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
 
     const supervisor = supervisors.get(sessionId);
     if (!supervisor) {
-      return null;
+      return {
+        state: 'inactive' as SupervisorState,
+        label: '启用 Supervisor',
+      };
     }
 
     const cycles = cyclesBySupervisor.get(supervisor.id) ?? supervisor.cycles ?? [];
