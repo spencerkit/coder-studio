@@ -22,6 +22,10 @@ interface ReadTreeResult {
   children: FileNode[];
 }
 
+interface SearchFilesResult {
+  files: FileNode[];
+}
+
 export interface CreateDialogState {
   mode: 'file' | 'folder';
   draftPath: string;
@@ -116,6 +120,27 @@ export function useFileActions({
       setIsLoadingDir(null);
     },
     [workspaceId, isLoadingDir, loadedDirs, dispatch, setFileTree, setLoadedDirs]
+  );
+
+  const loadSearchResults = useCallback(
+    async (query: string) => {
+      if (!workspaceId) {
+        return [];
+      }
+
+      const result = await dispatch<SearchFilesResult>('file.search', {
+        workspaceId,
+        query,
+        limit: 10,
+      });
+
+      if (!result.ok || !result.data) {
+        return [];
+      }
+
+      return result.data.files;
+    },
+    [dispatch, workspaceId]
   );
 
   const openCreateDialog = useCallback((mode: 'file' | 'folder', baseDir: string | null) => {
@@ -304,6 +329,7 @@ export function useFileActions({
     confirmDelete,
     handleSelectFile,
     loadChildren,
+    loadSearchResults,
     openCreateDialog,
     requestDelete: setPendingDelete,
     submitCreateDialog,

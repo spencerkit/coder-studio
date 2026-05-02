@@ -429,6 +429,43 @@ describe('FileTreePanel', () => {
     expect(screen.getByText('file.empty_directory')).toBeInTheDocument();
   });
 
+  it('filters loaded files by fuzzy filename search', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === 'file.search') {
+        const query = args.query?.toLowerCase() ?? '';
+        const files = [
+          { path: 'README.md', name: 'README.md', kind: 'file' },
+          { path: 'src/AppController.tsx', name: 'AppController.tsx', kind: 'file' },
+          { path: 'src/button.tsx', name: 'button.tsx', kind: 'file' },
+        ].filter((item) => item.name.toLowerCase().includes(query));
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const searchInput = screen.getByPlaceholderText('action.search_files');
+    fireEvent.change(searchInput, { target: { value: 'app' } });
+
+    expect(await screen.findByText('AppController.tsx')).toBeInTheDocument();
+    expect(screen.queryByText('button.tsx')).not.toBeInTheDocument();
+    expect(screen.queryByText('README.md')).not.toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: 'read' } });
+
+    expect(await screen.findByText('README.md')).toBeInTheDocument();
+    expect(screen.queryByText('AppController.tsx')).not.toBeInTheDocument();
+  });
+
   it('keeps expanded directories populated after refreshing the file tree', async () => {
     let libReadCount = 0;
     const sendCommand = vi.fn().mockImplementation(async (_op: string, args: { subPath?: string }) => {

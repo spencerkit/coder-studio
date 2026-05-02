@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
-import { readTree } from '../fs/tree.js';
+import { readTree, searchFiles } from '../fs/tree.js';
 import { createDirectory, createFile, deleteEntry, readFile, writeFile } from '../fs/file-io.js';
 
 // file.readTree
@@ -21,6 +21,24 @@ registerCommand(
     }
 
     return readTree(workspace.path, args.subPath);
+  }
+);
+
+// file.search
+registerCommand(
+  'file.search',
+  z.object({
+    workspaceId: z.string(),
+    query: z.string(),
+    limit: z.number().int().positive().max(50).optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return searchFiles(workspace.path, args.query, args.limit ?? 10);
   }
 );
 

@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  Search,
   Trash2,
   X,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   onCreateRequestConsumed,
   onSelectFile,
 }) => {
+  const t = useTranslation();
   const {
     activeFilePath,
     createDialog,
@@ -52,6 +54,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     confirmDelete,
     handleSelectFile,
     loadChildren,
+    loadSearchResults,
     openCreateDialog,
     requestDelete,
     submitCreateDialog,
@@ -64,30 +67,104 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     onCreateRequestConsumed,
     onSelectFile,
   });
-  const t = useTranslation();
+  const [searchValue, setSearchValue] = useState('');
+  const searchQuery = searchValue.trim();
+  const treeNodes = useMemo(() => (fileTree ? sortNodes(buildNestedTree(fileTree)) : []), [fileTree]);
+  const [searchResults, setSearchResults] = useState<FileNode[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRequestIdRef = useRef(0);
+  const hasSearch = searchQuery.length > 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!hasSearch) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSearchLoading(true);
+    const requestId = ++searchRequestIdRef.current;
+
+    const timeout = setTimeout(() => {
+      void (async () => {
+        const result = await loadSearchResults(searchQuery);
+
+        if (cancelled || requestId !== searchRequestIdRef.current) {
+          return;
+        }
+
+        setSearchResults(result);
+        setSearchLoading(false);
+      })();
+    }, 150);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [hasSearch, loadSearchResults, searchQuery]);
 
   return (
     <>
-      <div className="file-tree">
-        {fileTree && fileTree.size > 0 ? (
-          sortNodes(buildNestedTree(fileTree)).map((node) => (
-            <FileTreeNode
-              key={node.path}
-              node={node}
-              depth={0}
-              selectedPath={activeFilePath}
-              onRequestCreate={openCreateDialog}
-              onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
-              onSelectFile={handleSelectFile}
-              onLoadChildren={loadChildren}
-              isLoadingDir={isLoadingDir}
-            />
-          ))
-        ) : (
-          <div className="file-tree-empty">
-            <p>{isLoading ? t('common.loading') : t('file.title')}</p>
-          </div>
-        )}
+      <div className="file-tree-shell">
+        <label className="file-tree-search" htmlFor={`file-tree-search-${workspaceId}`}>
+          <Search size={14} className="file-tree-search-icon" aria-hidden="true" />
+          <input
+            id={`file-tree-search-${workspaceId}`}
+            className="file-tree-search-input"
+            type="search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder={t('action.search_files')}
+            aria-label={t('action.search_files')}
+          />
+        </label>
+
+        <div className="file-tree">
+          {hasSearch ? (
+            searchLoading ? (
+              <div className="file-tree-empty">
+                <p>{t('common.loading')}</p>
+              </div>
+            ) : searchResults.length > 0 ? (
+              searchResults.map((node) => (
+                <FileSearchResultRow
+                  key={node.path}
+                  node={node}
+                  selectedPath={activeFilePath}
+                  onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
+                  onSelectFile={handleSelectFile}
+                />
+              ))
+            ) : (
+              <div className="file-tree-empty">
+                <p>{t('command.no_results')}</p>
+              </div>
+            )
+          ) : fileTree && fileTree.size > 0 ? (
+            treeNodes.map((node) => (
+              <FileTreeNode
+                key={node.path}
+                node={node}
+                depth={0}
+                selectedPath={activeFilePath}
+                onRequestCreate={openCreateDialog}
+                onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
+                onSelectFile={handleSelectFile}
+                onLoadChildren={loadChildren}
+                isLoadingDir={isLoadingDir}
+              />
+            ))
+          ) : (
+            <div className="file-tree-empty">
+              <p>{isLoading ? t('common.loading') : t('file.title')}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <CreatePathModal
@@ -103,6 +180,59 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         onConfirm={confirmDelete}
       />
     </>
+  );
+};
+
+interface FileSearchResultRowProps {
+  node: FileNode;
+  selectedPath: string | null;
+  onRequestDelete: (path: string, name: string) => void;
+  onSelectFile: (path: string) => void;
+}
+
+const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
+  node,
+  selectedPath,
+  onRequestDelete,
+  onSelectFile,
+}) => {
+  const t = useTranslation();
+  const Icon = getNodeIcon(node, false);
+  const dirName = node.path.includes('/') ? node.path.slice(0, node.path.lastIndexOf('/')) : '';
+
+  return (
+    <div
+      className={`tree-item ${selectedPath === node.path ? 'selected' : ''}`}
+      onClick={() => onSelectFile(node.path)}
+      style={{ paddingLeft: 12 }}
+      title={node.path}
+    >
+      <span className="tree-chevron" aria-hidden="true" />
+
+      <span className={`tree-icon ${getFileToneClass(node)}`}>
+        <Icon size={14} />
+      </span>
+
+      <span className="tree-search-labels">
+        <span className="tree-label">{node.name}</span>
+        {dirName ? <span className="tree-search-path">{dirName}</span> : null}
+      </span>
+
+      <div className="tree-item-actions">
+        <button
+          aria-label={`${t('file.delete')} ${node.path}`}
+          className="git-row-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestDelete(node.path, node.name);
+          }}
+          title={t('file.delete')}
+          type="button"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
   );
 };
 
