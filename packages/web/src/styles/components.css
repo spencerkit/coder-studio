@@ -3177,12 +3177,6 @@ body.is-resizing-panels * {
   text-align: right;
 }
 
-.launch-path-display {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-
 .launch-close-btn {
   width: 28px;
   height: 28px;
@@ -3208,41 +3202,8 @@ body.is-resizing-panels * {
   padding: var(--sp-5) var(--sp-6);
 }
 
-.launch-choice-row {
-  display: flex;
-  gap: var(--sp-2);
+.launch-intro {
   margin-bottom: var(--sp-4);
-}
-
-.launch-choice {
-  flex: 1;
-  padding: var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.launch-choice.active {
-  border-color: var(--accent-blue);
-  background: rgba(108, 182, 255, 0.06);
-}
-
-.launch-choice.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.launch-choice-title {
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  font-weight: var(--font-medium);
-}
-
-.launch-choice-desc {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  margin-top: var(--sp-1);
 }
 
 .folder-picker {
@@ -3386,25 +3347,64 @@ body.is-resizing-panels * {
 }
 
 .launch-start-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 44px;
   padding: var(--sp-2) var(--sp-5);
-  background: var(--accent-blue);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-blue) 78%, white 22%) 0%,
+      color-mix(in srgb, var(--accent-blue) 92%, black 8%) 100%
+    );
   color: var(--text-inverse);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   font-size: var(--text-base);
-  font-weight: var(--font-medium);
+  font-weight: 600;
+  letter-spacing: 0.01em;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 12px 24px rgba(37, 99, 235, 0.22);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    filter var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
 }
 
 .launch-start-btn:hover {
-  filter: brightness(1.1);
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 14px 28px rgba(37, 99, 235, 0.28);
 }
 
 .launch-start-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  filter: saturate(0.8);
+}
+
+.launch-start-btn--desktop {
+  min-width: 160px;
+  padding-inline: var(--sp-6);
+}
+
+.launch-start-btn--mobile {
+  min-height: 52px;
+  border-radius: 18px;
+  font-size: var(--text-lg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 14px 32px rgba(37, 99, 235, 0.24);
 }
 
 /* Legacy modal styles kept for compatibility */
@@ -7737,24 +7737,110 @@ textarea.input {
 
   .mobile-launch-sheet {
     display: flex;
+    flex: 1;
     min-height: 0;
     flex-direction: column;
-    gap: var(--sp-4);
+    gap: 0;
+    padding:
+      var(--sp-3)
+      var(--sp-3)
+      calc(var(--sp-3) + var(--mobile-safe-bottom))
+      var(--sp-3);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%, var(--bg-page) 100%);
   }
 
-  .mobile-launch-sheet .launch-choice-row {
-    grid-template-columns: 1fr;
+  .mobile-launch-sheet .launch-intro {
+    margin-bottom: var(--sp-3);
+  }
+
+  .mobile-launch-sheet .launch-body {
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .mobile-launch-sheet .folder-picker {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    padding: var(--sp-3);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 8%, transparent),
+      0 10px 30px color-mix(in srgb, var(--bg-page) 42%, transparent);
+  }
+
+  .mobile-launch-sheet .fp-toolbar {
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+
+  .mobile-launch-sheet .fp-root-chips {
+    margin-bottom: var(--sp-3);
   }
 
   .mobile-launch-sheet .folder-picker,
-  .mobile-launch-sheet .fp-dir-list {
+  .mobile-launch-sheet .fp-dir-list,
+  .mobile-launch-sheet .directory-loading,
+  .mobile-launch-sheet .directory-empty {
     min-height: 0;
   }
 
+  .mobile-launch-sheet .fp-dir-list {
+    flex: 1;
+    max-height: none;
+    padding-bottom: var(--sp-1);
+  }
+
+  .mobile-launch-sheet .fp-dir {
+    min-height: 44px;
+    padding: var(--sp-2) var(--sp-2);
+    border-radius: var(--radius-md);
+  }
+
+  .mobile-launch-sheet .fp-dir-action {
+    margin-left: auto;
+  }
+
   .mobile-launch-sheet__footer {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-2);
+    display: flex;
+    width: 100%;
+  }
+
+  .mobile-launch-sheet__footer > * {
+    width: 100%;
+  }
+
+  .mobile-launch-sheet__footer .launch-start-btn--mobile {
+    width: 100%;
+  }
+
+  .mobile-sheet--launch {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%, var(--bg-page) 100%);
+  }
+
+  .mobile-sheet--launch .mobile-sheet__title {
+    margin-top: 0;
+    font-size: var(--text-lg);
+    line-height: 1.2;
+  }
+
+  .mobile-sheet--launch .mobile-sheet__body {
+    padding: 0;
+  }
+
+  .mobile-sheet--launch .mobile-sheet__footer {
+    padding:
+      var(--sp-3)
+      var(--sp-3)
+      calc(var(--sp-3) + var(--mobile-safe-bottom))
+      var(--sp-3);
+    background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
   }
 
   .mobile-worktree-sheet {
@@ -7924,13 +8010,15 @@ textarea.input {
   }
 
   .mobile-sheet--files,
-  .mobile-sheet--terminal {
+  .mobile-sheet--terminal,
+  .mobile-sheet--launch {
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%, var(--bg-page) 100%);
   }
 
   .mobile-sheet--files .mobile-sheet__title,
-  .mobile-sheet--terminal .mobile-sheet__title {
+  .mobile-sheet--terminal .mobile-sheet__title,
+  .mobile-sheet--launch .mobile-sheet__title {
     margin-top: 0;
     overflow: hidden;
     text-overflow: ellipsis;

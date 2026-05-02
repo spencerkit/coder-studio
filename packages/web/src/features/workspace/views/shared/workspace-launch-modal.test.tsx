@@ -125,6 +125,11 @@ describe('WorkspaceLaunchModal', () => {
     expect(screen.queryByRole('button', { name: 'Native' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'WSL' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Target:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Local Folder')).not.toBeInTheDocument();
+    expect(screen.queryByText('Remote Git')).not.toBeInTheDocument();
+    expect(screen.getByText('Open Workspace')).toBeInTheDocument();
+    expect(screen.getAllByText('Select a directory to use as the workspace root.')).toHaveLength(1);
+    expect(document.querySelector('.launch-path-display')).toBeNull();
 
     const folderName = await screen.findByText('workspace');
     fireEvent.click(folderName);
@@ -229,7 +234,14 @@ describe('WorkspaceLaunchModal', () => {
     await screen.findByText('workspace');
 
     expect(document.querySelector('.mobile-sheet')).toBeTruthy();
+    expect(document.querySelector('.mobile-sheet--fullscreen')).toBeTruthy();
+    expect(document.querySelector('.mobile-sheet--launch')).toBeTruthy();
+    expect(document.querySelector('.mobile-sheet__body--fullscreen')).toBeTruthy();
+    expect(document.querySelector('.launch-start-btn--mobile')).toBeTruthy();
     expect(document.querySelector('.launch-overlay')).toBeNull();
+    expect(screen.queryByText('Select a directory to use as the workspace root.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
 
     const folderName = screen.getByText('workspace');
     fireEvent.click(folderName);
@@ -266,8 +278,11 @@ describe('WorkspaceLaunchModal', () => {
       </Provider>
     );
 
-    expect(await screen.findAllByText('Local Folder')).toHaveLength(2);
-    expect(screen.getByText('Select a directory on your machine')).toBeInTheDocument();
+    expect(await screen.findByText('Open Workspace')).toBeInTheDocument();
+    expect(screen.queryByText('Local Folder')).not.toBeInTheDocument();
+    expect(screen.queryByText('Remote Git')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Select a directory to use as the workspace root.')).toHaveLength(1);
+    expect(document.querySelector('.launch-start-btn--desktop')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Home Directory' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start Workspace' })).toBeInTheDocument();
     expect(screen.getByText('3 items')).toBeInTheDocument();

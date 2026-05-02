@@ -109,10 +109,7 @@
     "load_failed_description": "Failed to fetch workspace list",
     "launch": {
       "kicker": "START WORKSPACE",
-      "local_title": "Local Folder",
-      "local_description": "Select a directory on your machine",
-      "remote_title": "Remote Git",
-      "remote_description": "Clone a repository (Coming Soon)",
+      "title": "Open Workspace",
       "home_directory": "Home Directory",
       "go_up": "Go Up",
       "no_directories": "No directories found",
@@ -122,8 +119,7 @@
       "cancel": "Cancel",
       "start": "Start Workspace",
       "starting": "Starting...",
-      "hint_local": "Select a directory to use as the workspace root.",
-      "hint_remote": "Clone a repository to use as the workspace root.",
+      "hint": "Select a directory to use as the workspace root.",
       "browse_failed": "Failed to browse directories",
       "select_required": "Please select a directory",
       "open_failed": "Failed to open workspace"

@@ -20,7 +20,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     handleNavigate,
     handleOpen,
     handleSelect,
-    launchChoice,
+    launchHint,
     launchTitle,
     loading,
     parentPath,
@@ -30,17 +30,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
   const launchBody = (
     <div className="launch-body">
-      <div className="launch-choice-row">
-        <div className={`launch-choice ${launchChoice === 'local' ? 'active' : ''}`}>
-          <div className="launch-choice-title">{t('workspace.launch.local_title')}</div>
-          <div className="launch-choice-desc">{t('workspace.launch.local_description')}</div>
-        </div>
-        <div className="launch-choice disabled">
-          <div className="launch-choice-title">{t('workspace.launch.remote_title')}</div>
-          <div className="launch-choice-desc">{t('workspace.launch.remote_description')}</div>
-        </div>
-      </div>
-
       <div className="folder-picker">
         <div className="fp-toolbar">
           <button className="fp-btn" onClick={() => handleNavigate('~')}>
@@ -121,11 +110,8 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
   const launchFooter = (
     <div className="mobile-launch-sheet__footer">
-      <button className="btn btn-secondary" onClick={onClose}>
-        {t('workspace.launch.cancel')}
-      </button>
       <button
-        className="launch-start-btn"
+        className="launch-start-btn launch-start-btn--mobile"
         onClick={() => void handleOpen()}
         disabled={loading || !selectedPath}
       >
@@ -141,7 +127,8 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
         title={launchTitle}
         body={launchBody}
         footer={launchFooter}
-        bodyClassName="mobile-launch-sheet"
+        fullscreen
+        bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen mobile-launch-sheet"
         contentClassName="mobile-sheet--launch"
         onClose={onClose}
       />
@@ -155,14 +142,9 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
           <div className="launch-header-left">
             <div className="launch-kicker">{t('workspace.launch.kicker')}</div>
             <div className="launch-title">{launchTitle}</div>
-            <div className="launch-hint">
-              {launchChoice === 'local'
-                ? t('workspace.launch.hint_local')
-                : t('workspace.launch.hint_remote')}
-            </div>
+            <div className="launch-hint">{launchHint}</div>
           </div>
           <div className="launch-header-right">
-            <div className="launch-path-display">{getShortPath(currentPath) || '/'}</div>
             <div
               className="launch-close-btn"
               onClick={onClose}
@@ -179,7 +161,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
         <div className="launch-footer">
           <button
-            className="launch-start-btn"
+            className="launch-start-btn launch-start-btn--desktop"
             onClick={() => void handleOpen()}
             disabled={loading || !selectedPath}
           >

@@ -109,10 +109,7 @@
     "load_failed_description": "获取工作区列表失败",
     "launch": {
       "kicker": "启动工作区",
-      "local_title": "本地目录",
-      "local_description": "选择你机器上的一个目录",
-      "remote_title": "远程 Git",
-      "remote_description": "克隆仓库（即将支持）",
+      "title": "打开工作区",
       "home_directory": "主目录",
       "go_up": "返回上一级",
       "no_directories": "未找到目录",
@@ -122,8 +119,7 @@
       "cancel": "取消",
       "start": "启动工作区",
       "starting": "启动中...",
-      "hint_local": "选择一个目录作为工作区根目录。",
-      "hint_remote": "克隆一个仓库作为工作区根目录。",
+      "hint": "选择一个目录作为工作区根目录。",
       "browse_failed": "浏览目录失败",
       "select_required": "请选择一个目录",
       "open_failed": "打开工作区失败"

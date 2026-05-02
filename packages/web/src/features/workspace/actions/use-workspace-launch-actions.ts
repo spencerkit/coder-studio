@@ -25,7 +25,6 @@ interface BrowseResult {
   rootPaths?: string[];
 }
 
-type LaunchChoice = 'local' | 'remote';
 type TabType = 'status' | 'diff' | 'tree';
 
 export function useWorkspaceLaunchActions(onClose: () => void) {
@@ -47,11 +46,8 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [browsing, setBrowsing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const launchChoice: LaunchChoice = 'local';
-  const launchTitle =
-    launchChoice === 'local'
-      ? t('workspace.launch.local_title')
-      : t('workspace.launch.remote_title');
+  const launchTitle = t('workspace.launch.title');
+  const launchHint = t('workspace.launch.hint');
   const rootPaths = ['/', '~', '/home/spencer'];
 
   useEffect(() => {
@@ -181,7 +177,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     handleNavigate,
     handleOpen,
     handleSelect,
-    launchChoice,
+    launchHint,
     launchTitle,
     loading,
     parentPath,
