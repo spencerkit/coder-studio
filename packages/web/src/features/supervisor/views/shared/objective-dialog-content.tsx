@@ -1,4 +1,5 @@
 import { AlertTriangle, Eye, Pencil, PowerOff } from 'lucide-react';
+import { useTranslation } from '../../../../lib/i18n';
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
@@ -28,6 +29,8 @@ export function ObjectiveDialogContent({
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
 }: ObjectiveDialogContentProps) {
+  const t = useTranslation();
+
   if (mode === 'disable') {
     return (
       <>
@@ -38,14 +41,14 @@ export function ObjectiveDialogContent({
             aria-hidden="true"
           />
           <div className="supervisor-danger-callout-copy">
-            <strong>禁用后会停止评估周期</strong>
+            <strong>{t('supervisor.dialog.disable.warning_title')}</strong>
             <small>
-              当前会话的 supervisor 将被移除,历史 cycles 会一并清理。可重新启用,但无法恢复记录。
+              {t('supervisor.dialog.disable.warning_body')}
             </small>
           </div>
         </div>
         <div className="form-group">
-          <label>当前目标</label>
+          <label>{t('supervisor.field.current_objective')}</label>
           <pre className="objective-preview">{disableObjective}</pre>
         </div>
       </>
@@ -55,28 +58,23 @@ export function ObjectiveDialogContent({
   return (
     <>
       <div className="form-group">
-        <label htmlFor="objective">目标描述</label>
+        <label htmlFor="objective">{t('supervisor.field.objective')}</label>
         <textarea
           id="objective"
           className="input textarea"
           rows={5}
           value={draftObjective}
           onChange={(event) => onDraftObjectiveChange(event.target.value)}
-          placeholder={
-            '描述希望 Supervisor 盯住的目标,例如:\n' +
-            '· 完成用户认证功能的实现\n' +
-            '· 修复所有失败的单元测试\n' +
-            '· 把 P95 响应时间压到 100ms 以内'
-          }
+          placeholder={t('supervisor.field.objective_placeholder')}
           autoFocus
         />
         <span className="dialog-helper">
-          越具体、越可衡量,评估效果越好。建议包含完成条件。
+          {t('supervisor.field.objective_helper')}
         </span>
       </div>
 
       <div className="form-group">
-        <label htmlFor="evaluator-provider">评估方 (Evaluator)</label>
+        <label htmlFor="evaluator-provider">{t('supervisor.field.evaluator')}</label>
         <select
           id="evaluator-provider"
           className="input"
@@ -94,7 +92,7 @@ export function ObjectiveDialogContent({
           ))}
         </select>
         <span className="dialog-helper">
-          用于评估进度并生成下一步指引的 provider,与执行方可不相同。
+          {t('supervisor.field.evaluator_helper')}
         </span>
       </div>
     </>

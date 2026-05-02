@@ -19,6 +19,7 @@ import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ConfigEditor } from './config-editor';
 import { resolveSettingsExitTargetFromBrowserHistory } from './settings-navigation';
 import {
+  MOBILE_SETTINGS_SECTIONS,
   SETTINGS_SECTIONS,
   type SettingsSection,
 } from './settings-sections';
@@ -112,8 +113,9 @@ export function SettingsPage() {
     navigationState.kind === 'detail'
       ? navigationState.section
       : navigationState.lastSection;
+  const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
   const activeSectionMeta =
-    SETTINGS_SECTIONS.find((section) => section.id === detailSection) ?? SETTINGS_SECTIONS[0];
+    availableSections.find((section) => section.id === detailSection) ?? availableSections[0];
 
   useEffect(() => {
     setNavigationState((state) => {
@@ -239,7 +241,7 @@ export function SettingsPage() {
           />
         );
       case 'shortcuts':
-        return <ShortcutsSettings />;
+        return isMobile ? null : <ShortcutsSettings />;
       default:
         return null;
     }
@@ -248,7 +250,7 @@ export function SettingsPage() {
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
       <div className="settings-mobile-list">
-        {SETTINGS_SECTIONS.map(({ id, labelKey, Icon }) => (
+        {availableSections.map(({ id, labelKey, Icon }) => (
           <button
             key={id}
             type="button"
@@ -289,7 +291,7 @@ export function SettingsPage() {
           {isMobile ? null : (
             <aside className="settings-sidebar">
               <nav className="settings-nav">
-                {SETTINGS_SECTIONS.map(({ id, labelKey, Icon }) => (
+                {availableSections.map(({ id, labelKey, Icon }) => (
                   <SettingsNavItem
                     key={id}
                     icon={<Icon size={16} />}

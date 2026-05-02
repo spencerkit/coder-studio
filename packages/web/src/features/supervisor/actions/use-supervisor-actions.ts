@@ -2,20 +2,12 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect, useState } from 'react';
 import type { Supervisor, SupervisorCycle, SupervisorState } from '@coder-studio/core';
 import { dispatchCommandAtom } from '../../../atoms/connection';
+import { useTranslation } from '../../../lib/i18n';
 import {
   supervisorCyclesAtom,
   supervisorDialogAtom,
   supervisorsAtom,
 } from '../atoms';
-
-const STATE_LABELS: Record<SupervisorState, string> = {
-  inactive: '未启用',
-  idle: '空闲',
-  evaluating: '评估中',
-  injecting: '注入中',
-  paused: '已暂停',
-  error: '错误',
-};
 
 const STATE_CLASSES: Record<SupervisorState, string> = {
   inactive: 'supervisor-state-inactive',
@@ -35,6 +27,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -79,24 +72,24 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
       return;
     }
 
-    await runAction('supervisor.pause', supervisor.id, '暂停失败');
-  }, [runAction, supervisor]);
+    await runAction('supervisor.pause', supervisor.id, t('supervisor.action.pause_failed'));
+  }, [runAction, supervisor, t]);
 
   const handleResume = useCallback(async () => {
     if (!supervisor) {
       return;
     }
 
-    await runAction('supervisor.resume', supervisor.id, '恢复失败');
-  }, [runAction, supervisor]);
+    await runAction('supervisor.resume', supervisor.id, t('supervisor.action.resume_failed'));
+  }, [runAction, supervisor, t]);
 
   const handleTrigger = useCallback(async () => {
     if (!supervisor) {
       return;
     }
 
-    await runAction('supervisor.trigger', supervisor.id, '触发评估失败');
-  }, [runAction, supervisor]);
+    await runAction('supervisor.trigger', supervisor.id, t('supervisor.action.trigger_failed'));
+  }, [runAction, supervisor, t]);
 
   const cycles = supervisor
     ? [...(cyclesBySupervisor.get(supervisor.id) ?? supervisor.cycles ?? [])].sort(
@@ -110,10 +103,10 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     ? latestCycle.result ??
       latestCycle.errorReason ??
       (latestCycle.status === 'completed'
-        ? '本轮无需注入 guidance'
+        ? t('supervisor.cycle.no_guidance')
         : latestCycle.status === 'evaluating'
-          ? '评估中…'
-          : '等待评估结果')
+          ? t('supervisor.cycle.evaluating')
+          : t('supervisor.cycle.waiting'))
     : null;
 
   return {
@@ -127,7 +120,9 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     latestCycleText,
     openDialog,
     stateClass: supervisor ? STATE_CLASSES[supervisor.state] : STATE_CLASSES.inactive,
-    stateLabel: supervisor ? STATE_LABELS[supervisor.state] : STATE_LABELS.inactive,
+    stateLabel: t(
+      `supervisor.state.${supervisor ? supervisor.state : ('inactive' as SupervisorState)}`
+    ),
     supervisor,
   };
 }

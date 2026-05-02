@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { wsClientAtom } from '../../../../atoms/connection';
 import { supervisorDialogAtom, supervisorsAtom } from '../../atoms';
 import { MobileSupervisorSheet } from './mobile-supervisor-sheet';
@@ -9,6 +10,8 @@ describe('MobileSupervisorSheet', () => {
   it('opens the enable flow inside the same sheet without rendering a second overlay', async () => {
     const sendCommand = vi.fn().mockResolvedValue({ id: 'sup-1' });
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(supervisorsAtom, new Map());
 
@@ -22,18 +25,18 @@ describe('MobileSupervisorSheet', () => {
       </Provider>
     );
 
-    expect(screen.getByText('Supervisor 未启用')).toBeInTheDocument();
+    expect(screen.getByText('Supervisor is not enabled')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '启用目标' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enable Objective' }));
 
-    expect(screen.getByLabelText('目标描述')).toBeInTheDocument();
+    expect(screen.getByLabelText('Objective')).toBeInTheDocument();
     expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
     expect(document.querySelector('.modal-overlay')).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('目标描述'), {
+    fireEvent.change(screen.getByLabelText('Objective'), {
       target: { value: 'Reduce mobile regression bugs' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '启用' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('supervisor.create', {
@@ -47,6 +50,8 @@ describe('MobileSupervisorSheet', () => {
 
   it('returns from detail view to the supervisor root when tapping back', () => {
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map());
     store.set(supervisorDialogAtom, {
@@ -67,10 +72,10 @@ describe('MobileSupervisorSheet', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '启用目标' }));
-    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enable Objective' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
-    expect(screen.getByText('Supervisor 未启用')).toBeInTheDocument();
-    expect(screen.queryByLabelText('目标描述')).not.toBeInTheDocument();
+    expect(screen.getByText('Supervisor is not enabled')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Objective')).not.toBeInTheDocument();
   });
 });

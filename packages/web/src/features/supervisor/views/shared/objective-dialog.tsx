@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useViewport } from '../../../../hooks/use-viewport';
+import { useTranslation } from '../../../../lib/i18n';
 import { useObjectiveDialogState } from '../../actions/use-objective-dialog-state';
 import {
   ObjectiveDialogContent,
@@ -13,6 +14,7 @@ interface ObjectiveDialogProps {
 
 export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps) {
   const viewport = useViewport();
+  const t = useTranslation();
   const {
     dialog,
     isVisible,
@@ -46,7 +48,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
               <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
             </div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={close} aria-label="关闭">
+          <button className="btn btn-ghost btn-sm" onClick={close} aria-label={t('action.close')}>
             <X size={14} />
           </button>
         </div>
@@ -66,7 +68,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={close}>
-            取消
+            {t('action.cancel')}
           </button>
           <button
             className={`btn ${isDisable ? 'btn-danger' : 'btn-primary'}`}

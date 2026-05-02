@@ -2,13 +2,13 @@ import { useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { activeWorkspaceIdAtom } from '../../../../atoms/workspaces';
 import type { Workspace } from '@coder-studio/core';
+import { useTranslation } from '../../../../lib/i18n';
 
 interface MobileWorkspaceDrawerProps {
   activeWorkspaceId: string | null;
   isOpen: boolean;
   workspaces: Workspace[];
   onClose: () => void;
-  onOpenSettings: () => void;
   onOpenWorkspaceLauncher: () => void;
 }
 
@@ -17,11 +17,11 @@ export function MobileWorkspaceDrawer({
   isOpen,
   workspaces,
   onClose,
-  onOpenSettings,
   onOpenWorkspaceLauncher,
 }: MobileWorkspaceDrawerProps) {
   const navigate = useNavigate();
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const t = useTranslation();
 
   if (!isOpen) {
     return null;
@@ -32,13 +32,13 @@ export function MobileWorkspaceDrawer({
       <button
         type="button"
         className="mobile-drawer-layer__backdrop"
-        aria-label="Close workspace drawer"
+        aria-label={t('mobile.workspace_drawer.close')}
         onClick={onClose}
       />
-      <aside className="mobile-workspace-drawer" aria-label="Workspace drawer">
+      <aside className="mobile-workspace-drawer" aria-label={t('mobile.workspace_drawer.aria_label')}>
         <div className="mobile-workspace-drawer__header">
-          <div className="mobile-workspace-drawer__kicker">Workspace</div>
-          <h2 className="mobile-workspace-drawer__title">选择工作区</h2>
+          <div className="mobile-workspace-drawer__kicker">{t('label.workspace')}</div>
+          <h2 className="mobile-workspace-drawer__title">{t('mobile.workspace_drawer.select_title')}</h2>
         </div>
 
         <div className="mobile-workspace-drawer__list">
@@ -56,7 +56,7 @@ export function MobileWorkspaceDrawer({
                 className={`mobile-workspace-drawer__item ${
                   workspace.id === activeWorkspaceId ? 'mobile-workspace-drawer__item--active' : ''
                 }`}
-                aria-label={`Switch to workspace ${displayName}`}
+                aria-label={t('mobile.workspace_drawer.switch_to_workspace', { name: displayName })}
                 onClick={() => {
                   setActiveWorkspaceId(workspace.id);
                   navigate('/workspace');
@@ -79,17 +79,7 @@ export function MobileWorkspaceDrawer({
               onClose();
             }}
           >
-            New Workspace
-          </button>
-          <button
-            type="button"
-            className="mobile-workspace-drawer__footer-button"
-            onClick={() => {
-              onOpenSettings();
-              onClose();
-            }}
-          >
-            Settings
+            {t('tooltip.new_workspace')}
           </button>
         </div>
       </aside>

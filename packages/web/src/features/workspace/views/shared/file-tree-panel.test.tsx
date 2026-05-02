@@ -351,6 +351,25 @@ describe('FileTreePanel', () => {
     expect(await screen.findByLabelText('file.path')).toBeInTheDocument();
   });
 
+  it('uses translated loading copy while the tree is still being fetched', async () => {
+    const sendCommand = vi.fn().mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the initial tree request pending so the loading state remains visible.
+        })
+    );
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByText('common.loading')).toBeInTheDocument();
+  });
+
   it('loads children for default-expanded root directories', async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       path: 'src',
@@ -386,6 +405,28 @@ describe('FileTreePanel', () => {
     });
 
     expect(await screen.findByText('index.ts')).toBeInTheDocument();
+  });
+
+  it('uses translated empty-directory copy for expanded folders with no children', () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily('ws-test'), new Map([['.', [
+      {
+        path: 'src',
+        name: 'src',
+        kind: 'dir',
+        children: [],
+      },
+    ]]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByText('file.empty_directory')).toBeInTheDocument();
   });
 
   it('keeps expanded directories populated after refreshing the file tree', async () => {

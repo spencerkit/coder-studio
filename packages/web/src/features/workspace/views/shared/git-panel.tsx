@@ -17,6 +17,7 @@ export const GitPanel: FC<GitPanelProps> = ({
   refreshToken = 0,
   onPreviewChange,
 }) => {
+  const t = useTranslation();
   const {
     commitMessage,
     diffPreview,
@@ -36,7 +37,6 @@ export const GitPanel: FC<GitPanelProps> = ({
     loadGitStatus,
     requestDiff,
     runGitMutation,
-    t,
   } = useGitPanelActions({
     workspaceId,
     refreshToken,
@@ -51,7 +51,7 @@ export const GitPanel: FC<GitPanelProps> = ({
             className="panel-toolbar-btn"
             onClick={() => void loadGitStatus()}
             disabled={isLoading}
-            title="Refresh"
+            title={t('action.refresh')}
             type="button"
           >
             <RefreshCw size={14} className={isLoading ? 'spin' : undefined} />
@@ -62,7 +62,7 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 className="panel-toolbar-btn"
                 onClick={() => void handleStageAll()}
-                title="Stage All"
+                title={t('git.stage_all')}
                 type="button"
               >
                 <Plus size={14} />
@@ -70,7 +70,7 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 className="panel-toolbar-btn"
                 onClick={() => void handleUnstageAll()}
-                title="Unstage All"
+                title={t('git.unstage_all')}
                 type="button"
               >
                 <Minus size={14} />
@@ -78,7 +78,7 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 className="panel-toolbar-btn"
                 onClick={() => void handleDiscardAll()}
-                title="Discard All"
+                title={t('git.discard_all')}
                 type="button"
               >
                 <RotateCcw size={14} />
@@ -87,7 +87,7 @@ export const GitPanel: FC<GitPanelProps> = ({
                 className="panel-toolbar-btn git-panel-commit-btn"
                 onClick={() => void handleCommit()}
                 disabled={!commitMessage.trim() || !gitState?.staged.length}
-                title="Commit"
+                title={t('git.commit')}
                 type="button"
               >
                 <ArrowUp size={14} />
@@ -99,7 +99,7 @@ export const GitPanel: FC<GitPanelProps> = ({
 
       <textarea
         className="git-commit-input"
-        placeholder="Enter commit message..."
+        placeholder={t('git.commit_placeholder')}
         value={commitMessage}
         onChange={(event) => setCommitMessage(event.target.value)}
         rows={1}
@@ -125,7 +125,7 @@ export const GitPanel: FC<GitPanelProps> = ({
             <div className="git-empty">{t('git.no_changes')}</div>
           )
         ) : (
-          <div className="git-empty">{isLoading ? 'Loading...' : t('git.no_changes')}</div>
+          <div className="git-empty">{isLoading ? t('common.loading') : t('git.no_changes')}</div>
         )}
       </div>
 
@@ -163,10 +163,21 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
   onViewDiff,
   onRunMutation,
   onRequestDiscard,
-}) => (
+}) => {
+  const t = useTranslation();
+  const titleKey =
+    title === 'staged'
+      ? 'git.staged'
+      : title === 'changes'
+        ? 'git.changes'
+        : title === 'deleted'
+          ? 'git.deleted'
+          : 'git.untracked';
+
+  return (
   <div className="git-group">
     <div className="git-group-header">
-      <span>{title}</span>
+      <span>{t(titleKey)}</span>
       <span className="git-group-count">{changes.length}</span>
     </div>
 
@@ -183,7 +194,8 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
       />
     ))}
   </div>
-);
+  );
+};
 
 interface GitChangeRowProps {
   change: GitFileChange;
@@ -209,18 +221,19 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   onRunMutation,
   onRequestDiscard,
 }) => {
+  const t = useTranslation();
   const pathParts = useMemo(() => change.path.split('/'), [change.path]);
   const fileName = pathParts[pathParts.length - 1] ?? change.path;
   const dirName = pathParts.length > 1 ? `${pathParts.slice(0, -1).join('/')}/` : '';
 
   const badgeLabel =
     type === 'staged'
-      ? 'Staged'
+      ? t('git.staged')
       : type === 'modified'
-        ? 'Modified'
+        ? t('git.modified')
         : type === 'deleted'
-          ? 'Deleted'
-          : 'Untracked';
+          ? t('git.deleted')
+          : t('git.untracked');
 
   const iconTone =
     type === 'modified'
@@ -270,7 +283,7 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
             event.stopPropagation();
             void handleToggleStage();
           }}
-          title={type === 'staged' ? 'Unstage' : 'Stage'}
+          title={type === 'staged' ? t('git.unstage') : t('git.stage')}
           type="button"
         >
           {type === 'staged' ? <Minus size={12} /> : <Plus size={12} />}
@@ -282,7 +295,7 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
             event.stopPropagation();
             onRequestDiscard(change.path);
           }}
-          title="Discard"
+          title={t('git.discard')}
           type="button"
         >
           <RotateCcw size={12} />

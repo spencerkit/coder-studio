@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { GitPanel } from './git-panel';
 import { wsClientAtom } from '../../../../atoms/connection';
 import {
@@ -37,6 +38,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -84,6 +86,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -116,6 +119,7 @@ describe('GitPanel', () => {
     const onPreviewChange = vi.fn();
     const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -163,6 +167,7 @@ describe('GitPanel', () => {
 
     const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(gitStateAtomFamily('ws-test'), status);
 
@@ -196,6 +201,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'zh');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -207,7 +213,7 @@ describe('GitPanel', () => {
     const row = (await screen.findByText('AppController.tsx')).closest('.git-row');
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle('Discard'));
+    fireEvent.click(within(row as HTMLElement).getByTitle('放弃'));
 
     expect(screen.getByText('放弃文件更改')).toBeInTheDocument();
     expect(screen.getByText('确定要放弃 “src/app/AppController.tsx” 的更改吗？')).toBeInTheDocument();
@@ -228,6 +234,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'zh');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -239,8 +246,10 @@ describe('GitPanel', () => {
     const row = (await screen.findByText('AppController.tsx')).closest('.git-row');
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle('Discard'));
-    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+    fireEvent.click(within(row as HTMLElement).getByTitle('放弃'));
+    const modal = screen.getByText('放弃文件更改').closest('.modal-card');
+    expect(modal).not.toBeNull();
+    fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('git.discard', {
@@ -258,6 +267,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'zh');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -266,12 +276,14 @@ describe('GitPanel', () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByTitle('Discard All'));
+    fireEvent.click(await screen.findByTitle('放弃全部'));
 
     expect(screen.getByText('放弃所有更改')).toBeInTheDocument();
     expect(screen.getByText('确定要放弃 4 个文件的更改吗？')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+    const modal = screen.getByText('放弃所有更改').closest('.modal-card');
+    expect(modal).not.toBeNull();
+    fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('git.discard', {
@@ -294,6 +306,7 @@ describe('GitPanel', () => {
       return {};
     });
     const store = createStore();
+    store.set(localeAtom, 'zh');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -305,8 +318,10 @@ describe('GitPanel', () => {
     const row = (await screen.findByText('AuthGate.tsx')).closest('.git-row');
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle('Discard'));
-    fireEvent.click(screen.getByRole('button', { name: '放弃' }));
+    fireEvent.click(within(row as HTMLElement).getByTitle('放弃'));
+    const modal = screen.getByText('放弃文件更改').closest('.modal-card');
+    expect(modal).not.toBeNull();
+    fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('git.discard', {
@@ -314,5 +329,33 @@ describe('GitPanel', () => {
         paths: ['src/auth/AuthGate.tsx'],
       });
     });
+  });
+
+  it('renders translated Chinese panel copy when locale is zh', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return status;
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, 'zh');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findAllByText('已暂存')).toHaveLength(2);
+    expect(screen.getByText('更改')).toBeInTheDocument();
+    expect(screen.getByText('已修改')).toBeInTheDocument();
+    expect(screen.getAllByText('未跟踪').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已删除').length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText('输入提交信息...')).toBeInTheDocument();
+    expect(screen.getByTitle('刷新')).toBeInTheDocument();
+    expect(screen.getByTitle('暂存全部')).toBeInTheDocument();
+    expect(screen.getByTitle('放弃全部')).toBeInTheDocument();
   });
 });

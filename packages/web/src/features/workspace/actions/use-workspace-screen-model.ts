@@ -17,6 +17,8 @@ import {
   terminalPanelVisibleAtom,
 } from '../atoms';
 import { useWorkspaceLayoutActions } from './use-workspace-layout-actions';
+import { usePaneActions } from '../../agent-panes/actions/use-pane-actions';
+import { useSessionActions } from '../../agent-panes/actions/use-session-actions';
 
 export type WorkspaceSidebarTab = 'files' | 'git';
 export type WorkspaceMainAreaMode = 'agent' | 'editor' | 'diff';
@@ -49,6 +51,8 @@ export function useWorkspaceScreenModel() {
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
   const store = useStore();
   const layout = useWorkspaceLayoutActions();
+  const paneActions = usePaneActions(workspaceId);
+  const sessionActions = useSessionActions();
 
   const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>('files');
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
@@ -152,6 +156,31 @@ export function useWorkspaceScreenModel() {
     setMobileActiveSessionId(sessionId);
   }, []);
 
+  const handleMobileSessionCreated = useCallback(
+    (sessionId: string) => {
+      paneActions.appendSession(sessionId, mobileActiveSessionId);
+      setMobileActiveSessionId(sessionId);
+    },
+    [mobileActiveSessionId, paneActions]
+  );
+
+  const closeMobileSession = useCallback(
+    async (sessionId: string) => {
+      paneActions.closeSessionPane(sessionId);
+      await sessionActions.closeSession(sessionId);
+
+      setMobileActiveSessionId((current) => {
+        if (current !== sessionId) {
+          return current;
+        }
+
+        const remainingSessions = orderedSessions.filter((session) => session.id !== sessionId);
+        return remainingSessions[0]?.id ?? null;
+      });
+    },
+    [orderedSessions, paneActions, sessionActions]
+  );
+
   const openMobileSheet = useCallback((sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
     setMobileSheet(sheet);
     if (sheet !== 'files') {
@@ -184,6 +213,7 @@ export function useWorkspaceScreenModel() {
     handleOpenFileCreate,
     handleOpenFolderCreate,
     handleRefreshSidebarPanel,
+    handleMobileSessionCreated,
     mainAreaMode,
     mobileActiveSessionId,
     mobileFilesRoute,
@@ -192,6 +222,7 @@ export function useWorkspaceScreenModel() {
     orderedSessions,
     paneLayout,
     panelRefreshToken,
+    closeMobileSession,
     selectMobileSession,
     sessions,
     setSidebarTab,

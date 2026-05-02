@@ -85,7 +85,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
           ))
         ) : (
           <div className="file-tree-empty">
-            <p>{isLoading ? 'Loading...' : t('file.title')}</p>
+            <p>{isLoading ? t('common.loading') : t('file.title')}</p>
           </div>
         )}
       </div>
@@ -252,13 +252,13 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
-            <div className="tree-empty-hint">Empty directory</div>
+            <div className="tree-empty-hint">{t('file.empty_directory')}</div>
           )}
         </div>
       )}
 
       {isFolder && isExpanded && !node.children && isLoadingDir === node.path && (
-        <div className="tree-loading">Loading...</div>
+        <div className="tree-loading">{t('common.loading')}</div>
       )}
     </>
   );

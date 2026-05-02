@@ -18,7 +18,8 @@
     "close": "Close",
     "yes": "Yes",
     "no": "No",
-    "ok": "OK"
+    "ok": "OK",
+    "all": "All"
   },
   "action": {
     "open": "Open",
@@ -48,6 +49,7 @@
   },
   "label": {
     "workspace": "Workspace",
+    "agent": "Agent",
     "session": "Session",
     "terminal": "Terminal",
     "file": "File",
@@ -101,6 +103,31 @@
     "path": "Path",
     "no_workspace": "No workspace open",
     "open_hint": "Click the button below to open a project directory",
+    "loading_title": "Loading workspaces",
+    "loading_description": "Preparing your workspace list and restoring the last active session.",
+    "load_failed_title": "Failed to load workspaces",
+    "load_failed_description": "Failed to fetch workspace list",
+    "launch": {
+      "kicker": "START WORKSPACE",
+      "local_title": "Local Folder",
+      "local_description": "Select a directory on your machine",
+      "remote_title": "Remote Git",
+      "remote_description": "Clone a repository (Coming Soon)",
+      "home_directory": "Home Directory",
+      "go_up": "Go Up",
+      "no_directories": "No directories found",
+      "items_count": "{count} items",
+      "enter_folder": "Enter {name}",
+      "enter_folder_action": "Enter folder →",
+      "cancel": "Cancel",
+      "start": "Start Workspace",
+      "starting": "Starting...",
+      "hint_local": "Select a directory to use as the workspace root.",
+      "hint_remote": "Clone a repository to use as the workspace root.",
+      "browse_failed": "Failed to browse directories",
+      "select_required": "Please select a directory",
+      "open_failed": "Failed to open workspace"
+    },
     "runtime_check": {
       "title": "Runtime Check",
       "checking": "Checking runtime environment...",
@@ -109,6 +136,51 @@
       "missing_git": "Git command not found",
       "missing_node": "Node.js not found",
       "missing_provider": "{provider} CLI not found"
+    }
+  },
+  "mobile": {
+    "dock": {
+      "aria_label": "Mobile dock",
+      "open_agent": "Open Agent sheet",
+      "open_files": "Open Files sheet",
+      "open_terminal": "Open Terminal sheet"
+    },
+    "agent": {
+      "title": "Agent Sessions",
+      "close_current_session": "Close Current Session",
+      "providers": "Session providers",
+      "start_session": "Start {provider} session",
+      "starting": "Starting...",
+      "start_new_session": "Start new session",
+      "active_agents": "Active agents",
+      "switch_to_agent": "Switch to agent {name}",
+      "empty": "No active sessions"
+    },
+    "supervisor": {
+      "open_sheet": "Open Supervisor sheet"
+    },
+    "topbar": {
+      "switch_workspace": "Switch workspace",
+      "open_settings": "Open settings"
+    },
+    "sheet": {
+      "dismiss": "Dismiss current sheet",
+      "region": "{title} sheet"
+    },
+    "files": {
+      "tabs": "Files sheet tabs",
+      "git_diff": "Git Diff",
+      "editor_fallback": "Editor"
+    },
+    "workspace_drawer": {
+      "aria_label": "Workspace drawer",
+      "close": "Close workspace drawer",
+      "select_title": "Select workspace",
+      "switch_to_workspace": "Switch to workspace {name}"
+    },
+    "empty": {
+      "start_session": "Start a new agent session for this workspace.",
+      "files_terminal_hint": "Files and Terminal stay available from the bottom bar."
     }
   },
   "session": {
@@ -135,16 +207,25 @@
   },
   "terminal": {
     "title": "Terminal",
+    "kicker": "TERMINAL",
     "new_terminal": "New Terminal",
     "close_terminal": "Close Terminal",
     "shell": "Shell Terminal",
     "agent": "Agent Terminal",
     "reconnect_hint": "Connection lost, reconnecting...",
     "no_terminal": "No terminals",
+    "empty_hint": "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace.",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
+    "selector": {
+      "switch": "Switch terminal",
+      "title": "Terminal Sessions",
+      "current": "Current terminal",
+      "indexed": "Terminal {index}"
+    },
     "replay": {
       "loading_title": "Restoring terminal output...",
+      "loading_body": "You can keep using this page while history catches up in the background. Larger histories may take longer to restore.",
       "failed_title": "Terminal history could not be restored",
       "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
       "closed_title": "This session has been closed",
@@ -158,6 +239,7 @@
     "modified": "Modified",
     "unsaved": "Unsaved",
     "dirty": "Has unsaved changes",
+    "empty_directory": "Empty directory",
     "new_file": "New File",
     "new_folder": "New Folder",
     "rename": "Rename",
@@ -173,10 +255,21 @@
     "conflict": "File has been modified externally",
     "conflict_message": "The file may have been modified outside the editor. Discard local changes and reload?"
   },
+  "code_editor": {
+    "saving": "Saving...",
+    "edit_as_text": "Edit as text",
+    "preview_as_image": "Preview as image",
+    "mode_text": "Text",
+    "mode_image": "Image",
+    "open_failed_title": "Failed to open file",
+    "empty_hint": "Select a file on the left to open it in the editor."
+  },
   "git": {
     "title": "Git",
     "changes": "Changes",
     "staged": "Staged",
+    "modified": "Modified",
+    "deleted": "Deleted",
     "unstaged": "Unstaged",
     "untracked": "Untracked",
     "no_changes": "No changes",
@@ -188,6 +281,7 @@
     "stage_all": "Stage All",
     "unstage_all": "Unstage All",
     "discard": "Discard",
+    "discard_all": "Discard All",
     "discard_file_confirm_title": "Discard File Changes",
     "discard_file_confirm_message": "Are you sure you want to discard changes in \"{path}\"?",
     "discard_all_confirm_title": "Discard All Changes",
@@ -199,6 +293,23 @@
     "ahead": "{count} commits ahead",
     "behind": "{count} commits behind",
     "synced": "Synced with remote"
+  },
+  "worktree": {
+    "title": "Worktree",
+    "status_tab": "Status",
+    "diff_tab": "Diff",
+    "tree_tab": "Tree",
+    "path": "Path",
+    "branch": "Branch",
+    "changes": "Changes",
+    "loading": "Loading...",
+    "empty_tree": "Empty tree",
+    "clean": "Clean",
+    "dirty": "Dirty",
+    "dirty_status": "Has changes",
+    "staged_count": "Staged: {count}",
+    "modified_count": "Modified: {count}",
+    "untracked_count": "Untracked: {count}"
   },
   "settings": {
     "title": "Settings",
@@ -306,6 +417,67 @@
     "server_shutdown": "Server has shut down",
     "backpressure_warning": "Network congested, some output may be lost"
   },
+  "supervisor": {
+    "title": "Supervisor",
+    "empty": "Supervisor is not enabled",
+    "latest_evaluation": "Latest evaluation",
+    "state": {
+      "inactive": "Inactive",
+      "idle": "Idle",
+      "evaluating": "Evaluating",
+      "injecting": "Injecting",
+      "paused": "Paused",
+      "error": "Error"
+    },
+    "trigger": {
+      "manual": "MANUAL",
+      "auto": "AUTO"
+    },
+    "cycle": {
+      "no_guidance": "No guidance injected this cycle",
+      "evaluating": "Evaluating...",
+      "waiting": "Waiting for evaluation result"
+    },
+    "field": {
+      "objective": "Objective",
+      "current_objective": "Current objective",
+      "objective_placeholder": "Describe what Supervisor should watch, for example:\n- Finish implementing user authentication\n- Fix all failing unit tests\n- Reduce P95 latency below 100ms",
+      "objective_helper": "The more specific and measurable the target, the better the evaluation. Include completion criteria when possible.",
+      "evaluator": "Evaluator",
+      "evaluator_helper": "The provider that evaluates progress and suggests the next step. It can differ from the execution provider."
+    },
+    "action": {
+      "enable": "Enable Supervisor",
+      "enable_objective": "Enable Objective",
+      "edit_objective": "Edit Objective",
+      "disable": "Disable Supervisor",
+      "pause": "Pause",
+      "resume": "Resume",
+      "trigger": "Trigger Evaluation",
+      "pause_failed": "Failed to pause Supervisor",
+      "resume_failed": "Failed to resume Supervisor",
+      "trigger_failed": "Failed to trigger evaluation"
+    },
+    "dialog": {
+      "enable": {
+        "title": "Enable Supervisor",
+        "subtitle": "Describe an objective and Supervisor will evaluate progress and suggest the next step after each turn.",
+        "confirm": "Enable"
+      },
+      "edit": {
+        "title": "Edit Supervisor",
+        "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
+        "confirm": "Save"
+      },
+      "disable": {
+        "title": "Disable Supervisor",
+        "subtitle": "Stop automatic evaluation. The current session's supervision cycles will be removed.",
+        "confirm": "Disable",
+        "warning_title": "Disabling stops evaluation cycles",
+        "warning_body": "Supervisor will be removed from the current session and its cycle history will be cleared. You can enable it again later, but previous records cannot be restored."
+      }
+    }
+  },
   "command": {
     "palette": "Command Palette",
     "no_results": "No results found",
@@ -341,6 +513,25 @@
     "validation": "Validation failed",
     "conflict": "Resource conflict"
   },
+  "welcome": {
+    "kicker": "GET STARTED",
+    "title": "Welcome to Coder Studio",
+    "description": "A local-first AI coding workbench. Launch AI agent sessions, review generated code, manage Git changes, and run terminals all in one place.",
+    "features": {
+      "agent_first": {
+        "title": "Agent-first AI coding",
+        "description": "Launch AI sessions that write, test, and deploy code."
+      },
+      "git_tools": {
+        "title": "Built-in Git tools",
+        "description": "Stage, commit, and manage branches without leaving the IDE."
+      },
+      "terminals": {
+        "title": "Integrated terminals",
+        "description": "Run commands and scripts alongside your AI sessions."
+      }
+    }
+  },
   "confirm": {
     "save_changes": "Save changes?",
     "discard_changes": "Discard changes?",
@@ -357,7 +548,13 @@
     "focus_mode": "Focus Mode: Hide sidebar and bottom panel",
     "split_horizontal": "Split panel horizontally",
     "split_vertical": "Split panel vertically",
-    "close_pane": "Close panel"
+    "close_pane": "Close panel",
+    "new_workspace": "New workspace",
+    "quick_actions": "Quick Actions",
+    "show_terminal": "Show Terminal",
+    "hide_terminal": "Hide Terminal",
+    "show_files": "Show Files",
+    "hide_files": "Hide Files"
   },
   "time": {
     "just_now": "Just now",

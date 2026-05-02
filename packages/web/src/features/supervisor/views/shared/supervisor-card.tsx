@@ -6,6 +6,7 @@ import {
   Play,
   PowerOff,
 } from 'lucide-react';
+import { useTranslation } from '../../../../lib/i18n';
 import { useSupervisorActions } from '../../actions/use-supervisor-actions';
 
 interface SupervisorCardProps {
@@ -14,6 +15,7 @@ interface SupervisorCardProps {
 }
 
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
+  const t = useTranslation();
   const {
     actionError,
     handlePause,
@@ -34,10 +36,10 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <button
           className="supervisor-enable-btn"
           onClick={() => openDialog('enable')}
-          title="启用 Supervisor"
+          title={t('supervisor.action.enable')}
         >
           <Eye size={13} />
-          <span>启用 Supervisor</span>
+          <span>{t('supervisor.action.enable')}</span>
         </button>
       </div>
     );
@@ -51,7 +53,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
       <div className="supervisor-strip-row">
         <span className="supervisor-strip-eyebrow">
           <span className={`supervisor-pulse ${stateClass}`} aria-hidden="true" />
-          <span className="supervisor-label">Supervisor</span>
+          <span className="supervisor-label">{t('supervisor.title')}</span>
         </span>
 
         <span className={`supervisor-state-tag ${stateClass}`}>
@@ -62,8 +64,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           <button
             className="supervisor-icon-btn"
             onClick={() => openDialog('edit')}
-            title="编辑目标"
-            aria-label="编辑目标"
+            title={t('supervisor.action.edit_objective')}
+            aria-label={t('supervisor.action.edit_objective')}
           >
             <Pencil size={12} />
           </button>
@@ -74,8 +76,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               onClick={() => {
                 void handleResume();
               }}
-              title="恢复"
-              aria-label="恢复"
+              title={t('supervisor.action.resume')}
+              aria-label={t('supervisor.action.resume')}
             >
               <Play size={12} />
             </button>
@@ -85,8 +87,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               onClick={() => {
                 void handlePause();
               }}
-              title="暂停"
-              aria-label="暂停"
+              title={t('supervisor.action.pause')}
+              aria-label={t('supervisor.action.pause')}
               disabled={isBusy}
             >
               <Pause size={12} />
@@ -98,8 +100,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
             onClick={() => {
               void handleTrigger();
             }}
-            title="触发评估"
-            aria-label="触发评估"
+            title={t('supervisor.action.trigger')}
+            aria-label={t('supervisor.action.trigger')}
             disabled={isBusy}
           >
             <ArrowUpCircle size={12} />
@@ -108,8 +110,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           <button
             className="supervisor-icon-btn supervisor-icon-btn-danger"
             onClick={() => openDialog('disable')}
-            title="禁用 Supervisor"
-            aria-label="禁用 Supervisor"
+            title={t('supervisor.action.disable')}
+            aria-label={t('supervisor.action.disable')}
           >
             <PowerOff size={12} />
           </button>
@@ -124,10 +126,10 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
       </div>
 
       {latestCycle ? (
-        <ol className="supervisor-history-list" aria-label="最近一次评估">
+        <ol className="supervisor-history-list" aria-label={t('supervisor.latest_evaluation')}>
           <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
             <span className="supervisor-history-trigger">
-              {latestCycle.trigger === 'manual' ? 'MANUAL' : 'AUTO'}
+              {latestCycle.trigger === 'manual' ? t('supervisor.trigger.manual') : t('supervisor.trigger.auto')}
             </span>
             <span className="supervisor-history-result">
               {latestCycleText}

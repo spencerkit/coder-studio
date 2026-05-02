@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { localeAtom } from '../../atoms/app-ui';
 import { wsClientAtom } from '../../atoms/connection';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import {
@@ -62,6 +63,7 @@ function setupStore(options?: {
     },
   });
   store.set(activeWorkspaceIdAtom, 'ws-1');
+  store.set(localeAtom, 'en');
 
   if (options?.activePath !== undefined) {
     store.set(activeFilePathAtomFamily('ws-1'), options.activePath);
@@ -159,11 +161,37 @@ describe('CodeEditorHost', () => {
 
     expect(store.get(activeFilePathAtomFamily('ws-1'))).toBe('src/c.ts');
 
-    const closeBtn = screen.getByRole('button', { name: /close|关闭/i });
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeBtn);
 
     expect(store.get(activeFilePathAtomFamily('ws-1'))).toBeNull();
     expect(store.get(openFilesAtomFamily('ws-1'))['src/c.ts']).toBeUndefined();
+  });
+
+  it('can render without the editor header for mobile content-only chrome', async () => {
+    const { store } = setupStore({
+      activePath: 'src/mobile.ts',
+      openFiles: {
+        'src/mobile.ts': {
+          kind: 'text',
+          path: 'src/mobile.ts',
+          content: 'content',
+          baseHash: 'h',
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost chrome="content-only" />
+      </Provider>
+    );
+
+    expect(screen.getByTestId('monaco-host')).toHaveTextContent('content');
+    expect(screen.queryByText('src/mobile.ts')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save File' })).not.toBeInTheDocument();
   });
 
   it('renders ImagePreview when file.read returns an image descriptor', async () => {
@@ -198,7 +226,7 @@ describe('CodeEditorHost', () => {
     expect(screen.queryByTestId('monaco-host')).not.toBeInTheDocument();
 
     // Save button must be disabled for images (nothing to write back).
-    const saveBtn = screen.getByRole('button', { name: /save|保存/i });
+    const saveBtn = screen.getByRole('button', { name: 'Save File' });
     expect(saveBtn).toBeDisabled();
   });
 
@@ -258,7 +286,7 @@ describe('CodeEditorHost', () => {
       // Initially renders as image preview.
       expect(screen.getByTestId('image-preview')).toBeInTheDocument();
 
-      const toggleBtn = screen.getByRole('button', { name: /edit as text/i });
+      const toggleBtn = screen.getByRole('button', { name: 'Edit as text' });
       fireEvent.click(toggleBtn);
 
       // After the fetch resolves we should be viewing it in Monaco with the
@@ -267,7 +295,7 @@ describe('CodeEditorHost', () => {
         expect(screen.getByTestId('monaco-host')).toHaveTextContent('<svg');
       });
       expect(screen.queryByTestId('image-preview')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /preview as image/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Preview as image' })).toBeInTheDocument();
     });
 
     it('does not show the toggle for non-text-backed images like PNG', async () => {
@@ -292,8 +320,8 @@ describe('CodeEditorHost', () => {
       );
 
       expect(screen.getByTestId('image-preview')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /edit as text/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /preview as image/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit as text' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Preview as image' })).not.toBeInTheDocument();
     });
   });
 });

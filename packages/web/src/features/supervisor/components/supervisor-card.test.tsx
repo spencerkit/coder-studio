@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { localeAtom } from '../../../atoms/app-ui';
 import { SupervisorCard } from '../views/shared/supervisor-card';
 import { supervisorsAtom, supervisorCyclesAtom } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
@@ -9,6 +10,8 @@ describe('SupervisorCard', () => {
   it('shows the latest cycle history and trigger action', () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as any);
     store.set(
       supervisorsAtom,
@@ -65,13 +68,15 @@ describe('SupervisorCard', () => {
     expect(
       document.querySelector('.supervisor-progress-track')
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '触发评估' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Trigger Evaluation' }));
     expect(sendCommand).toHaveBeenCalledWith('supervisor.trigger', { id: 'sup-1' });
   });
 
-  it('shows "本轮无需注入 guidance" for a completed cycle with no result and no errorReason', () => {
+  it('shows "No guidance injected this cycle" for a completed cycle with no result and no errorReason', () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as any);
     store.set(
       supervisorsAtom,
@@ -122,7 +127,7 @@ describe('SupervisorCard', () => {
       </Provider>
     );
 
-    expect(screen.getByText('本轮无需注入 guidance')).toBeInTheDocument();
+    expect(screen.getByText('No guidance injected this cycle')).toBeInTheDocument();
     expect(screen.queryByText('65%')).not.toBeInTheDocument();
     expect(
       document.querySelector('.supervisor-progress-track')

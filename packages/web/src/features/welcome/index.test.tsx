@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { localeAtom } from '../../atoms/app-ui';
 import { WelcomePage } from './index';
 
 const viewportMocks = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ describe('WelcomePage', () => {
 
   it('opens the workspace launch modal directly from the primary action', () => {
     const store = createStore();
+    store.set(localeAtom, 'en');
 
     render(
       <Provider store={store}>
@@ -45,6 +47,7 @@ describe('WelcomePage', () => {
 
   it('navigates to settings from the secondary action', () => {
     const store = createStore();
+    store.set(localeAtom, 'en');
 
     render(
       <Provider store={store}>
@@ -57,7 +60,7 @@ describe('WelcomePage', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
     expect(screen.getByText('Settings Screen')).toBeInTheDocument();
   });
@@ -76,5 +79,23 @@ describe('WelcomePage', () => {
 
     expect(document.querySelector('.welcome-container--mobile')).toBeTruthy();
     expect(document.querySelector('.welcome-card--mobile')).toBeTruthy();
+  });
+
+  it('renders translated English copy when locale is set to en', () => {
+    const store = createStore();
+    store.set(localeAtom, 'en');
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WelcomePage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText('GET STARTED')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome to Coder Studio' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   });
 });

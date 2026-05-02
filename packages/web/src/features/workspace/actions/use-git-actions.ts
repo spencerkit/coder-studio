@@ -41,10 +41,10 @@ export function getFirstChange(
   status: GitStatus
 ): { change: GitFileChange; type: GitChangeType } | null {
   const groups: GitChangeGroupDescriptor[] = [
-    { title: 'Staged', type: 'staged', changes: status.staged },
-    { title: 'Changes', type: 'modified', changes: status.modified },
-    { title: 'Deleted', type: 'deleted', changes: status.deleted },
-    { title: 'Untracked', type: 'untracked', changes: status.untracked },
+    { title: 'staged', type: 'staged', changes: status.staged },
+    { title: 'modified', type: 'modified', changes: status.modified },
+    { title: 'deleted', type: 'deleted', changes: status.deleted },
+    { title: 'untracked', type: 'untracked', changes: status.untracked },
   ];
 
   for (const group of groups) {
@@ -368,10 +368,10 @@ export function useGitPanelActions({
   const groups = useMemo<GitChangeGroupDescriptor[]>(
     () =>
       [
-        { title: 'Staged', type: 'staged', changes: gitState?.staged ?? [] },
-        { title: 'Changes', type: 'modified', changes: gitState?.modified ?? [] },
-        { title: 'Deleted', type: 'deleted', changes: gitState?.deleted ?? [] },
-        { title: 'Untracked', type: 'untracked', changes: gitState?.untracked ?? [] },
+        { title: 'staged', type: 'staged', changes: gitState?.staged ?? [] },
+        { title: 'changes', type: 'modified', changes: gitState?.modified ?? [] },
+        { title: 'deleted', type: 'deleted', changes: gitState?.deleted ?? [] },
+        { title: 'untracked', type: 'untracked', changes: gitState?.untracked ?? [] },
       ].filter((group) => group.changes.length > 0),
     [gitState]
   );

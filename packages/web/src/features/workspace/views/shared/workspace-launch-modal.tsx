@@ -1,5 +1,6 @@
 import { Home, ArrowUp, Folder, Loader2, X } from 'lucide-react';
 import { useViewport } from '../../../../hooks/use-viewport';
+import { useTranslation } from '../../../../lib/i18n';
 import { MobileSheet } from '../mobile/mobile-sheet';
 import { useWorkspaceLaunchActions } from '../../actions/use-workspace-launch-actions';
 
@@ -9,6 +10,7 @@ interface WorkspaceLaunchModalProps {
 
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const isMobile = useViewport() === 'mobile';
+  const t = useTranslation();
   const {
     browsing,
     currentPath,
@@ -30,12 +32,12 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     <div className="launch-body">
       <div className="launch-choice-row">
         <div className={`launch-choice ${launchChoice === 'local' ? 'active' : ''}`}>
-          <div className="launch-choice-title">Local Folder</div>
-          <div className="launch-choice-desc">Select a directory on your machine</div>
+          <div className="launch-choice-title">{t('workspace.launch.local_title')}</div>
+          <div className="launch-choice-desc">{t('workspace.launch.local_description')}</div>
         </div>
         <div className="launch-choice disabled">
-          <div className="launch-choice-title">Remote Git</div>
-          <div className="launch-choice-desc">Clone a repository (Coming Soon)</div>
+          <div className="launch-choice-title">{t('workspace.launch.remote_title')}</div>
+          <div className="launch-choice-desc">{t('workspace.launch.remote_description')}</div>
         </div>
       </div>
 
@@ -43,12 +45,12 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
         <div className="fp-toolbar">
           <button className="fp-btn" onClick={() => handleNavigate('~')}>
             <Home size={12} />
-            Home Directory
+            {t('workspace.launch.home_directory')}
           </button>
           {parentPath && (
             <button className="fp-btn" onClick={() => handleNavigate(parentPath)}>
               <ArrowUp size={12} />
-              Go Up
+              {t('workspace.launch.go_up')}
             </button>
           )}
         </div>
@@ -74,7 +76,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               <Loader2 size={16} className="animate-spin" />
             </div>
           ) : directories.length === 0 ? (
-            <div className="directory-empty">No directories found</div>
+            <div className="directory-empty">{t('workspace.launch.no_directories')}</div>
           ) : (
             directories.map((dir) => (
               <div
@@ -90,19 +92,21 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
                   {dir.name}
                 </span>
                 {dir.itemCount !== undefined && (
-                  <span className="fp-dir-hint">{dir.itemCount} items</span>
+                  <span className="fp-dir-hint">
+                    {t('workspace.launch.items_count', { count: dir.itemCount })}
+                  </span>
                 )}
                 {selectedPath === dir.path && (
                   <button
                     className="fp-dir-action"
                     type="button"
-                    aria-label={`Enter ${dir.name}`}
+                    aria-label={t('workspace.launch.enter_folder', { name: dir.name })}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleNavigate(dir.path);
                     }}
                   >
-                    Enter folder →
+                    {t('workspace.launch.enter_folder_action')}
                   </button>
                 )}
               </div>
@@ -118,14 +122,14 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const launchFooter = (
     <div className="mobile-launch-sheet__footer">
       <button className="btn btn-secondary" onClick={onClose}>
-        取消
+        {t('workspace.launch.cancel')}
       </button>
       <button
         className="launch-start-btn"
         onClick={() => void handleOpen()}
         disabled={loading || !selectedPath}
       >
-        {loading ? 'Starting...' : 'Start Workspace'}
+        {loading ? t('workspace.launch.starting') : t('workspace.launch.start')}
       </button>
     </div>
   );
@@ -133,7 +137,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   if (isMobile) {
     return (
       <MobileSheet
-        kicker="START WORKSPACE"
+        kicker={t('workspace.launch.kicker')}
         title={launchTitle}
         body={launchBody}
         footer={launchFooter}
@@ -149,12 +153,12 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       <div className="launch-modal" onClick={(event) => event.stopPropagation()}>
         <div className="launch-header">
           <div className="launch-header-left">
-            <div className="launch-kicker">START WORKSPACE</div>
+            <div className="launch-kicker">{t('workspace.launch.kicker')}</div>
             <div className="launch-title">{launchTitle}</div>
             <div className="launch-hint">
               {launchChoice === 'local'
-                ? 'Select a directory to use as the workspace root.'
-                : 'Clone a repository to use as the workspace root.'}
+                ? t('workspace.launch.hint_local')
+                : t('workspace.launch.hint_remote')}
             </div>
           </div>
           <div className="launch-header-right">
@@ -164,7 +168,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               onClick={onClose}
               role="button"
               tabIndex={0}
-              aria-label="Close"
+              aria-label={t('action.close')}
             >
               <X size={16} />
             </div>
@@ -179,7 +183,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
             onClick={() => void handleOpen()}
             disabled={loading || !selectedPath}
           >
-            {loading ? 'Starting...' : 'Start Workspace'}
+            {loading ? t('workspace.launch.starting') : t('workspace.launch.start')}
           </button>
         </div>
       </div>

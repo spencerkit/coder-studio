@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '../../../../lib/i18n';
 import { TerminalPanel } from '../../../terminal-panel';
-import { AgentPanes } from '../../../agent-panes';
 import { SessionCard } from '../../../agent-panes/views/shared/session-card';
 import { MobileSupervisorBadge } from '../../../supervisor/views/mobile/mobile-supervisor-badge';
 import { MobileSupervisorSheet } from '../../../supervisor/views/mobile/mobile-supervisor-sheet';
@@ -11,6 +11,7 @@ import { useWorkspaceScreenModel } from '../../actions/use-workspace-screen-mode
 import { MobileDock } from './mobile-dock';
 import { MobileFilesSheet } from './mobile-files-sheet';
 import { MobileSheet } from './mobile-sheet';
+import { MobileAgentSheet } from './mobile-agent-sheet';
 import { MobileTopBar } from './mobile-topbar';
 import { MobileWorkspaceDrawer } from './mobile-workspace-drawer';
 import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
@@ -18,14 +19,19 @@ import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
 import { useMobileMotionMode } from './hooks/use-mobile-motion-mode';
 import { pendingFocusSessionAtom } from '../../../../atoms/app-ui';
 import { useAtomValue } from 'jotai';
+import { useCodeEditorActions } from '../../../code-editor/actions/use-code-editor-actions';
+import { CodeEditorHeaderActions } from '../../../code-editor/views/shared/code-editor-host';
 
 export function WorkspaceMobileView() {
+  const t = useTranslation();
   const navigate = useNavigate();
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
   const {
     activeSession,
     activeWorkspaceId,
+    closeMobileSession,
     closeMobileSheet,
+    handleMobileSessionCreated,
     mobileActiveSessionId,
     mobileFilesRoute,
     mobileSheet,
@@ -37,10 +43,12 @@ export function WorkspaceMobileView() {
     workspaces,
   } = useWorkspaceScreenModel();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [agentSheetOpen, setAgentSheetOpen] = useState(false);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
   const keyboardInset = useVisualViewportInset();
   const layoutMode = useMobileLayoutMode();
   const motionMode = useMobileMotionMode();
+  const mobileEditorState = useCodeEditorActions();
 
   useEffect(() => {
     if (!pendingFocusSessionId) {
@@ -61,30 +69,59 @@ export function WorkspaceMobileView() {
       ? {
           title:
             mobileFilesRoute.kind === 'editor'
-              ? mobileFilesRoute.path.split('/').pop() ?? 'Editor'
+              ? mobileFilesRoute.path.split('/').pop() ?? t('mobile.files.editor_fallback')
               : mobileFilesRoute.kind === 'diff'
-                ? mobileFilesRoute.path.split('/').pop() ?? 'Diff'
-                : 'Files',
+                ? mobileFilesRoute.path.split('/').pop() ?? t('worktree.diff_tab')
+                : t('file.title'),
           body: (
             activeWorkspaceId ? (
               <MobileFilesSheet
                 workspaceId={activeWorkspaceId}
                 route={mobileFilesRoute}
                 onRouteChange={updateMobileFilesRoute}
+                detailBackMode="sheet"
+                editorState={mobileEditorState}
               />
             ) : null
           ),
+          kicker: mobileFilesRoute.kind === 'root' ? t('label.workspace') : t('file.title'),
+          onBack: mobileFilesRoute.kind === 'root' ? undefined : () => updateMobileFilesRoute({ kind: 'root' }),
+          backLabel: t('action.back'),
+          headerAction:
+            mobileFilesRoute.kind === 'editor' ? (
+              <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
+            ) : null,
+          fullscreen: true,
+          bodyClassName: 'mobile-sheet__body--flush mobile-sheet__body--fullscreen',
+          contentClassName: 'mobile-sheet--files',
         }
       : mobileSheet === 'terminal'
         ? {
-            title: 'Terminal',
+            title: t('label.terminal'),
             body: (
-              <div className="mobile-terminal-sheet">
-                <TerminalPanel />
+              <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
+                <TerminalPanel chrome="mobile-fullscreen" />
               </div>
             ),
-          }
+          kicker: null,
+          fullscreen: true,
+          bodyClassName: 'mobile-sheet__body--flush mobile-sheet__body--fullscreen',
+          contentClassName: 'mobile-sheet--terminal',
+        }
         : null;
+
+  const handleDockSelect = (item: 'agent' | 'files' | 'terminal') => {
+    if (item === 'agent') {
+      setAgentSheetOpen((value) => !value);
+      return;
+    }
+
+    setAgentSheetOpen(false);
+    openMobileSheet(item);
+  };
+
+  const activeDockItem =
+    agentSheetOpen ? 'agent' : mobileSheet === 'files' || mobileSheet === 'terminal' ? mobileSheet : null;
 
   return (
     <div
@@ -95,11 +132,15 @@ export function WorkspaceMobileView() {
     >
       <MobileTopBar
         activeWorkspace={workspace}
-        activeSessionId={mobileActiveSessionId}
         drawerOpen={drawerOpen}
-        sessions={orderedSessions}
-        onSelectSession={selectMobileSession}
-        onToggleDrawer={() => setDrawerOpen((value) => !value)}
+        onOpenSettings={() => {
+          setAgentSheetOpen(false);
+          navigate('/settings');
+        }}
+        onToggleDrawer={() => {
+          setAgentSheetOpen(false);
+          setDrawerOpen((value) => !value);
+        }}
       />
 
       <ConfigDriftBanner />
@@ -117,7 +158,10 @@ export function WorkspaceMobileView() {
                     headerAccessory={
                       <MobileSupervisorBadge
                         sessionId={activeSession.id}
-                        onOpen={() => openMobileSheet('supervisor')}
+                        onOpen={() => {
+                          setAgentSheetOpen(false);
+                          openMobileSheet('supervisor');
+                        }}
                       />
                     }
                   />
@@ -126,15 +170,19 @@ export function WorkspaceMobileView() {
             </>
           ) : (
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
-              <div className="mobile-shell__workspace-meta">
-                <span className="mobile-shell__workspace-badge">
-                  {workspace?.name ?? workspace?.path ?? 'No active workspace'}
-                </span>
-                <span className="mobile-shell__workspace-badge mobile-shell__workspace-badge--muted">
-                  {workspaces.length} workspaces
-                </span>
+              <div className="mobile-shell__empty-content">
+                <div className="mobile-shell__placeholder-copy">
+                  <p>{t('mobile.empty.start_session')}</p>
+                  <p>{t('mobile.empty.files_terminal_hint')}</p>
+                </div>
+                <button
+                  type="button"
+                  className="mobile-shell__empty-cta"
+                  onClick={() => setAgentSheetOpen(true)}
+                >
+                  {t('action.create_session')}
+                </button>
               </div>
-              <AgentPanes />
             </section>
           )}
         </div>
@@ -145,14 +193,33 @@ export function WorkspaceMobileView() {
         data-testid="mobile-bottom-stack"
         style={{ '--mobile-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
       >
-        <MobileDock activeSheet={mobileSheet} onSelectSheet={openMobileSheet} />
+        <div className="mobile-dock-shell">
+          {agentSheetOpen ? (
+            <MobileAgentSheet
+              activeSessionId={mobileActiveSessionId}
+              activeWorkspaceId={activeWorkspaceId}
+              className="mobile-dock__agent-sheet"
+              defaultMode={orderedSessions.length === 0 ? 'create' : 'list'}
+              sessions={orderedSessions}
+              onClose={() => setAgentSheetOpen(false)}
+              onCloseSession={closeMobileSession}
+              onSelectSession={selectMobileSession}
+              onSessionCreated={handleMobileSessionCreated}
+            />
+          ) : null}
+
+          <MobileDock activeItem={activeDockItem} onSelectItem={handleDockSelect} />
+        </div>
       </div>
 
       {mobileSheet === 'supervisor' && activeSession ? (
         <MobileSupervisorSheet
           sessionId={activeSession.id}
           workspaceId={activeSession.workspaceId}
-          onClose={closeMobileSheet}
+          onClose={() => {
+            setAgentSheetOpen(false);
+            closeMobileSheet();
+          }}
         />
       ) : null}
 
@@ -160,7 +227,17 @@ export function WorkspaceMobileView() {
         <MobileSheet
           title={sheetBody.title}
           body={sheetBody.body}
-          onClose={closeMobileSheet}
+          onClose={() => {
+            setAgentSheetOpen(false);
+            closeMobileSheet();
+          }}
+          kicker={sheetBody.kicker ?? undefined}
+          onBack={sheetBody.onBack}
+          backLabel={sheetBody.backLabel}
+          headerAction={'headerAction' in sheetBody ? sheetBody.headerAction : undefined}
+          bodyClassName={sheetBody.bodyClassName}
+          contentClassName={sheetBody.contentClassName}
+          fullscreen={sheetBody.fullscreen}
         />
       ) : null}
 
@@ -169,8 +246,10 @@ export function WorkspaceMobileView() {
         isOpen={drawerOpen}
         workspaces={workspaces}
         onClose={() => setDrawerOpen(false)}
-        onOpenSettings={() => navigate('/settings')}
-        onOpenWorkspaceLauncher={() => setWorkspaceLaunchOpen(true)}
+        onOpenWorkspaceLauncher={() => {
+          setAgentSheetOpen(false);
+          setWorkspaceLaunchOpen(true);
+        }}
       />
 
       {workspaceLaunchOpen ? <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} /> : null}

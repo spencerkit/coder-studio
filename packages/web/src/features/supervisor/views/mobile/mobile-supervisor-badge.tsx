@@ -1,6 +1,7 @@
 import type { SupervisorState } from '@coder-studio/core';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { useTranslation } from '../../../../lib/i18n';
 import { supervisorCyclesAtom, supervisorsAtom } from '../../atoms';
 
 interface MobileSupervisorBadgeProps {
@@ -11,6 +12,7 @@ interface MobileSupervisorBadgeProps {
 export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBadgeProps) {
   const supervisors = useAtomValue(supervisorsAtom);
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
+  const t = useTranslation();
 
   const copy = useMemo(() => {
     if (!sessionId) {
@@ -21,7 +23,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
     if (!supervisor) {
       return {
         state: 'inactive' as SupervisorState,
-        label: '启用 Supervisor',
+        label: t('supervisor.action.enable'),
       };
     }
 
@@ -37,7 +39,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
         latestCycle?.errorReason ??
         (cycles.length > 0 ? `cycle ${cycles.length}` : supervisor.objective),
     };
-  }, [cyclesBySupervisor, sessionId, supervisors]);
+  }, [cyclesBySupervisor, sessionId, supervisors, t]);
 
   if (!copy) {
     return null;
@@ -47,7 +49,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
     <button
       type="button"
       className={`mobile-supervisor-badge mobile-supervisor-badge--${copy.state}`}
-      aria-label="Open Supervisor sheet"
+      aria-label={t('mobile.supervisor.open_sheet')}
       onClick={onOpen}
     >
       <span className="mobile-supervisor-badge__icon" aria-hidden="true">

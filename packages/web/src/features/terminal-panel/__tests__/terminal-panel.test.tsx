@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
+import { localeAtom } from '../../../atoms/app-ui';
 import { TerminalPanel } from '../views/shared/terminal-panel';
 import { wsClientAtom } from '../../../atoms/connection';
 import { bottomPanelHeightAtom } from '../../workspace/atoms';
@@ -11,6 +13,7 @@ import {
 } from '../atoms';
 import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../views/shared/xterm-host', () => ({
   XtermHost: ({ terminalId }: { terminalId: string }) => (
@@ -25,11 +28,16 @@ describe('TerminalPanel', () => {
 
   beforeEach(() => {
     handlers = [];
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  function setEnglishLocale(store: ReturnType<typeof createStore>) {
+    store.set(localeAtom, 'en');
+  }
 
   it('keeps rendering when the first terminal is created after mount', async () => {
     const store = createStore();
@@ -40,7 +48,26 @@ describe('TerminalPanel', () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
       };
     });
-    const sendCommand = vi.fn().mockResolvedValue([]);
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.list') {
+        return Promise.resolve([
+          {
+            id: 'term_1',
+            workspaceId: 'ws-test',
+            kind: 'shell',
+            title: 'Workspace Shell',
+            cwd: '/tmp/ws-test',
+            argv: ['/bin/bash'],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
 
     seedReadyWorkspaceState(store, {
       'ws-test': {
@@ -57,6 +84,7 @@ describe('TerminalPanel', () => {
       },
     });
     store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
     const terminalMeta: TerminalMeta = {
@@ -74,7 +102,7 @@ describe('TerminalPanel', () => {
       </Provider>
     );
 
-    expect(screen.getByText('暂无终端')).toBeInTheDocument();
+    expect(screen.getByText('No terminals')).toBeInTheDocument();
     expect(subscribe).toHaveBeenCalledWith(
       [Topics.terminalsAll('ws-test')],
       expect.any(Function)
@@ -142,6 +170,7 @@ describe('TerminalPanel', () => {
       },
     });
     store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
     render(
@@ -151,7 +180,7 @@ describe('TerminalPanel', () => {
     );
 
     await act(async () => {
-      screen.getAllByRole('button', { name: '新建终端' })[0]?.click();
+      screen.getAllByRole('button', { name: 'New Terminal' })[0]?.click();
     });
 
     await waitFor(() => {
@@ -186,6 +215,7 @@ describe('TerminalPanel', () => {
       },
     });
     store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
     render(
@@ -202,7 +232,7 @@ describe('TerminalPanel', () => {
       );
     });
 
-    expect(screen.getByText('暂无终端')).toBeInTheDocument();
+    expect(screen.getByText('No terminals')).toBeInTheDocument();
     expect(screen.queryByTestId('xterm-host')).not.toBeInTheDocument();
     expect(consoleSpy).not.toHaveBeenCalled();
   });
@@ -233,6 +263,7 @@ describe('TerminalPanel', () => {
       },
     });
     store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
     // Set terminal meta before output arrives
@@ -268,5 +299,213 @@ describe('TerminalPanel', () => {
     expect(outputState.lastSeq).toBe(18);
 
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders a lighter mobile fullscreen terminal toolbar when requested by the mobile sheet', async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockResolvedValue([]);
+
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+    store.set(terminalMetaAtomFamily('term_1'), {
+      id: 'term_1',
+      workspaceId: 'ws-test',
+      kind: 'shell',
+      alive: true,
+      title: 'Workspace Shell',
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
+            <TerminalPanel chrome="mobile-fullscreen" />
+          </div>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.queryByText('TERMINAL')).not.toBeInTheDocument();
+    expect(screen.queryByText('Workspace Shell')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'New Terminal' }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps only one terminal switcher in mobile fullscreen mode', async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.list') {
+        return Promise.resolve([
+          {
+            id: 'term_1',
+            workspaceId: 'ws-test',
+            kind: 'shell',
+            title: 'Workspace Shell',
+            cwd: '/tmp/ws-test',
+            argv: ['/bin/bash'],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: 'term_2',
+            workspaceId: 'ws-test',
+            kind: 'shell',
+            title: 'Workspace Shell 2',
+            cwd: '/tmp/ws-test',
+            argv: ['/bin/bash'],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
+            <TerminalPanel chrome="mobile-fullscreen" />
+          </div>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_1');
+    });
+
+    expect(document.querySelectorAll('.terminal-selector-btn')).toHaveLength(1);
+    expect(document.querySelector('.bottom-terminal-tabs')).not.toBeInTheDocument();
+  });
+
+  it('opens a mobile terminal switcher sheet instead of relying on hover dropdowns', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.list') {
+        return Promise.resolve([
+          {
+            id: 'term_1',
+            workspaceId: 'ws-test',
+            kind: 'shell',
+            title: 'Workspace Shell',
+            cwd: '/tmp/ws-test',
+            argv: ['/bin/bash'],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: 'term_2',
+            workspaceId: 'ws-test',
+            kind: 'shell',
+            title: 'Workspace Shell 2',
+            cwd: '/tmp/ws-test',
+            argv: ['/bin/bash'],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
+            <TerminalPanel chrome="mobile-fullscreen" />
+          </div>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_1');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Switch terminal' }));
+
+    expect(screen.getByRole('dialog', { name: 'Terminal Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workspace Shell 2' })).toBeInTheDocument();
+    expect(document.querySelector('.terminal-selector-dropdown')).not.toBeInTheDocument();
   });
 });

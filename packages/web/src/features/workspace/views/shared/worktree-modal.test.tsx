@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { WorktreeInfo } from '@coder-studio/core';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { wsClientAtom } from '../../../../atoms/connection';
 import { WorktreeModal } from './worktree-modal';
 
@@ -41,6 +42,7 @@ describe('WorktreeModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(
       wsClientAtom,
       {
@@ -98,6 +100,7 @@ describe('WorktreeModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(
       wsClientAtom,
       {
@@ -130,5 +133,45 @@ describe('WorktreeModal', () => {
     });
 
     expect(await screen.findByText('diff --git a/src/app.tsx b/src/app.tsx')).toBeInTheDocument();
+  });
+
+  it('renders translated Chinese worktree chrome when locale is zh', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      status: {
+        branch: 'feature/mobile-sheet',
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        untracked: [],
+        deleted: [],
+      },
+    });
+
+    const store = createStore();
+    store.set(localeAtom, 'zh');
+    store.set(
+      wsClientAtom,
+      {
+        sendCommand,
+        subscribe: vi.fn(() => () => {}),
+      } as never
+    );
+
+    render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
+        worktreePath: '/tmp/coder-studio-feature',
+      });
+    });
+
+    expect(screen.getByRole('button', { name: '状态' })).toBeInTheDocument();
+    expect(screen.getByText('路径')).toBeInTheDocument();
+    expect(screen.getByText('● 有更改')).toBeInTheDocument();
   });
 });

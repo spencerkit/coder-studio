@@ -12,13 +12,23 @@ import {
   wsClientAtom,
 } from '../../atoms/connection';
 import { sessionsAtom } from '../../atoms/sessions';
-import { authenticatedAtom, commandPaletteOpenAtom, pendingFocusSessionAtom } from '../../atoms/app-ui';
+import {
+  authenticatedAtom,
+  commandPaletteOpenAtom,
+  localeAtom,
+  pendingFocusSessionAtom,
+} from '../../atoms/app-ui';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import { paneLayoutAtomFamily } from '../../features/agent-panes/atoms/pane-layout';
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
 import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
 import type { Session } from '@coder-studio/core';
+
+const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
+  mockMobileEditorHandleSave: vi.fn(),
+  mockMobileEditorToggleSvgTextMode: vi.fn(),
+}));
 
 vi.mock('../../features/welcome', () => ({
   WelcomePage: () => <div>WelcomePage</div>,
@@ -112,8 +122,56 @@ vi.mock('../../features/workspace/views/shared/git-diff-viewer', () => ({
   GitDiffViewer: () => <div data-testid="mobile-git-diff-viewer">GitDiffViewer</div>,
 }));
 
+vi.mock('../../features/code-editor/actions/use-code-editor-actions', () => ({
+  useCodeEditorActions: () => ({
+    activeFilePath: 'src/app.tsx',
+    activeLoadError: null,
+    canSave: true,
+    currentFile: {
+      kind: 'text',
+      path: 'src/app.tsx',
+      content: 'export const app = true;',
+      baseHash: 'hash-1',
+      isDirty: true,
+    },
+    handleClose: vi.fn(),
+    handleContentChange: vi.fn(),
+    handleSave: mockMobileEditorHandleSave,
+    isImageFile: false,
+    isSaving: false,
+    isSvgTextBacked: false,
+    isTextFile: true,
+    openInDiffMode: vi.fn(),
+    saveError: null,
+    toggleSvgTextMode: mockMobileEditorToggleSvgTextMode,
+    workspace: {
+      id: 'ws-1',
+      name: 'Alpha',
+      path: '/tmp/alpha',
+      targetRuntime: 'native',
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
+    },
+    workspaceId: 'ws-1',
+  }),
+}));
+
 vi.mock('../../features/code-editor/views/shared/code-editor-host', () => ({
-  CodeEditorHost: () => <div data-testid="mobile-code-editor">CodeEditorHost</div>,
+  CodeEditorHost: ({ chrome }: { chrome?: string }) => (
+    <div data-testid="mobile-code-editor" data-chrome={chrome ?? 'full'}>
+      CodeEditorHost
+    </div>
+  ),
+  CodeEditorHeaderActions: () => (
+    <button type="button" aria-label="保存文件" onClick={mockMobileEditorHandleSave}>
+      保存文件
+    </button>
+  ),
 }));
 
 vi.mock('../../features/terminal-panel', () => ({
@@ -209,6 +267,7 @@ function installMatchMediaMock(predicate: (query: string) => boolean) {
 function renderMobileShell({
   initialEntry = '/workspace',
   withWorkspaces = true,
+  locale = 'en' as 'en' | 'zh',
   connectionStatus = 'connected' as 'connected' | 'connecting' | 'reconnecting' | 'disconnected' | 'rejected',
   reconnectAttempts = 0,
   seedSupervisor = true,
@@ -274,6 +333,7 @@ function renderMobileShell({
 }: {
   initialEntry?: string;
   withWorkspaces?: boolean;
+  locale?: 'en' | 'zh';
   sessions?: Session[];
   seedSupervisor?: boolean;
   paneLayout?: {
@@ -286,7 +346,9 @@ function renderMobileShell({
   sendCommand?: ReturnType<typeof vi.fn>;
   sendTerminalInput?: ReturnType<typeof vi.fn>;
 } = {}) {
+  window.localStorage.setItem('ui.locale', JSON.stringify(locale));
   const store = createStore();
+  store.set(localeAtom, locale);
   store.set(connectionStatusAtom, connectionStatus);
   store.set(reconnectAttemptCountAtom, reconnectAttempts);
   store.set(authEnabledAtom, false);
@@ -397,6 +459,9 @@ afterEach(() => {
     configurable: true,
     value: undefined,
   });
+  window.localStorage.clear();
+  mockMobileEditorHandleSave.mockReset();
+  mockMobileEditorToggleSvgTextMode.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -405,7 +470,8 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell({ initialEntry: '/workspace' });
 
     expect(screen.getByRole('button', { name: 'Switch workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Switch active agent' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Switch active agent' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Agent sheet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Files sheet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Terminal sheet' })).toBeInTheDocument();
     expect(screen.queryByRole('tablist', { name: 'Mobile agents' })).not.toBeInTheDocument();
@@ -429,8 +495,9 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
 
     expect(screen.getByRole('tab', { name: 'Files' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close current sheet' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Close current sheet' }));
+    await user.click(screen.getByRole('button', { name: /back|返回/i }));
 
     expect(screen.queryByRole('tab', { name: 'Files' })).not.toBeInTheDocument();
   });
@@ -445,14 +512,21 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
   });
 
-  it('opens quick actions from the topbar menu', async () => {
+  it('shows a direct settings entry instead of a more-actions menu', async () => {
+    renderMobileShell({ initialEntry: '/workspace' });
+
+    expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open more actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open quick actions' })).not.toBeInTheDocument();
+  });
+
+  it('opens settings directly from the mobile topbar', async () => {
     const user = userEvent.setup();
-    const { store } = renderMobileShell({ initialEntry: '/workspace' });
+    renderMobileShell({ initialEntry: '/workspace' });
 
-    await user.click(screen.getByRole('button', { name: 'Open more actions' }));
-    await user.click(screen.getByRole('button', { name: 'Open quick actions' }));
+    await user.click(screen.getByRole('button', { name: 'Open settings' }));
 
-    expect(store.get(commandPaletteOpenAtom)).toBe(true);
+    expect(screen.getByText('SettingsPage')).toBeInTheDocument();
   });
 
   it('keeps welcome route as full-page content outside the workspace scaffold', () => {
@@ -467,6 +541,7 @@ describe('MobileShell Phase 2 workspace', () => {
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, 'en');
     store.set(workspacesLoadStateAtom, 'loading');
 
     render(
@@ -486,6 +561,7 @@ describe('MobileShell Phase 2 workspace', () => {
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, 'en');
     store.set(workspacesLoadStateAtom, 'error');
     store.set(workspacesLoadErrorAtom, 'Failed to fetch workspace list');
 
@@ -529,6 +605,7 @@ describe('MobileShell Phase 2 workspace', () => {
     store.set(connectionStatusAtom, 'reconnecting');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, 'en');
     store.set(workspacesLoadStateAtom, 'ready');
 
     render(
@@ -550,6 +627,7 @@ describe('MobileShell Phase 2 workspace', () => {
   it('shows the global reconnecting banner on non-workspace mobile routes', () => {
     renderMobileShell({
       initialEntry: '/settings',
+      locale: 'zh',
       connectionStatus: 'reconnecting',
       withWorkspaces: false,
     });
@@ -557,14 +635,100 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(screen.getByText('正在重新连接...')).toBeInTheDocument();
   });
 
-  it('switches the active session from the header selector', async () => {
+  it('switches the active session from the dock selector', async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    await user.click(await screen.findByRole('button', { name: 'Switch active agent' }));
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+    expect(screen.getByRole('dialog', { name: 'Agent Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close Current Session' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Switch to agent Claude' }));
 
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+  });
+
+  it('creates a new agent from the mobile session sheet', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === 'session.list') {
+        return [];
+      }
+
+      if (op === 'provider.runtimeStatus') {
+        return {
+          providers: {
+            claude: {
+              providerId: 'claude',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: 'ready',
+              manualGuideKeys: [],
+              docUrls: { provider: '', prerequisites: {} },
+            },
+            codex: {
+              providerId: 'codex',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: 'ready',
+              manualGuideKeys: [],
+              docUrls: { provider: '', prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      if (op === 'session.create') {
+        return createSession({
+          id: 'sess_3',
+          terminalId: 'term-3',
+          providerId: String(payload?.providerId ?? 'codex'),
+          state: 'idle',
+          title: 'Codex 2',
+        });
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ sendCommand });
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+    await user.click(screen.getByRole('button', { name: 'Create Session' }));
+    await user.click(screen.getByRole('button', { name: 'Start Codex session' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_3');
+    });
+    expect(sendCommand).toHaveBeenCalledWith('session.create', {
+      workspaceId: 'ws-1',
+      providerId: 'codex',
+    });
+  });
+
+  it('closes the active agent from the mobile session sheet', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [];
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ sendCommand });
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+    await user.click(screen.getByRole('button', { name: 'Close Current Session' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+    });
+    expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_2' });
   });
 
   it('switches to the target session when a pending focus marker points at a non-active mobile session', async () => {
@@ -580,24 +744,94 @@ describe('MobileShell Phase 2 workspace', () => {
   });
 
   it('falls back to the agent empty state when no sessions are open', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [];
+      }
+
+      if (op === 'provider.runtimeStatus') {
+        return {
+          providers: {
+            claude: {
+              providerId: 'claude',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: 'ready',
+              manualGuideKeys: [],
+              docUrls: { provider: '', prerequisites: {} },
+            },
+            codex: {
+              providerId: 'codex',
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: 'ready',
+              manualGuideKeys: [],
+              docUrls: { provider: '', prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      return undefined;
+    });
+
     renderMobileShell({
       sessions: [],
       paneLayout: {
         id: 'root',
         type: 'leaf',
       },
-      sendCommand: vi.fn(async (op: string) => {
-        if (op === 'session.list') {
-          return [];
-        }
-
-        return undefined;
-      }),
+      sendCommand,
     });
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-agent-empty')).toBeInTheDocument();
     });
+    expect(screen.queryByTestId('agent-panes-empty-mock')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Create Session' }));
+
+    expect(screen.getByRole('dialog', { name: 'Agent Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Claude session' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Codex session' })).toBeInTheDocument();
+  });
+
+  it('renders translated mobile workspace chrome in Chinese', async () => {
+    const user = userEvent.setup();
+
+    renderMobileShell({
+      locale: 'zh',
+      sessions: [],
+      paneLayout: {
+        id: 'root',
+        type: 'leaf',
+      },
+    });
+
+    expect(screen.getByRole('button', { name: '切换工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开 Agent 面板' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开文件面板' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开终端面板' })).toBeInTheDocument();
+    expect(screen.getByText('为当前工作区启动一个新的 Agent 会话。')).toBeInTheDocument();
+    expect(screen.getByText('文件和终端可继续通过底部栏访问。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '切换工作区' }));
+
+    expect(screen.getByRole('complementary', { name: '工作区抽屉' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭工作区抽屉' })).toBeInTheDocument();
+    expect(screen.getByText('选择工作区')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建工作区' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '打开文件面板' }));
+
+    expect(screen.getByRole('region', { name: '文件面板' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭当前面板' })).toBeInTheDocument();
   });
 
   it('applies visualViewport inset to the bottom control stack', async () => {
@@ -667,12 +901,18 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell();
 
     await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
+    expect(screen.getByRole('region', { name: 'Files sheet' })).toHaveClass('mobile-sheet--fullscreen');
     expect(screen.getByRole('tab', { name: 'Files' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'mock-file-tree' }));
     expect(screen.getByTestId('mobile-code-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-code-editor')).toHaveAttribute('data-chrome', 'content-only');
+    expect(screen.getAllByRole('button', { name: /back|返回/i })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Close current sheet' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /save file|保存文件/i }));
+    expect(mockMobileEditorHandleSave).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: /back|返回/i }));
     expect(screen.getByRole('button', { name: 'mock-file-tree' })).toBeInTheDocument();
   });
 
@@ -694,23 +934,25 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Open Terminal sheet' }));
 
     expect(screen.getByTestId('mobile-terminal-panel')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Terminal sheet' })).toHaveClass('mobile-sheet--fullscreen');
+    expect(screen.queryByText('Phase 1')).not.toBeInTheDocument();
   });
 
   it('shows a supervisor badge for the active session and opens the supervisor sheet', async () => {
     const user = userEvent.setup();
-    renderMobileShell();
+    renderMobileShell({ locale: 'zh' });
 
-    const badge = await screen.findByRole('button', { name: 'Open Supervisor sheet' });
+    const badge = await screen.findByRole('button', { name: '打开 Supervisor 面板' });
     expect(screen.getByTestId('mobile-session-card-header-accessory')).toContainElement(badge);
 
     await user.click(badge);
 
-    expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Supervisor面板' })).toBeInTheDocument();
   });
 
   it('keeps the supervisor entry available when the active session has not enabled supervisor yet', async () => {
     const user = userEvent.setup();
-    renderMobileShell({ seedSupervisor: false });
+    renderMobileShell({ seedSupervisor: false, locale: 'en' });
 
     const badge = await screen.findByRole('button', { name: 'Open Supervisor sheet' });
     expect(screen.getByTestId('mobile-session-card-header-accessory')).toContainElement(badge);
@@ -718,8 +960,8 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(badge);
 
     expect(screen.getByRole('region', { name: 'Supervisor sheet' })).toBeInTheDocument();
-    expect(screen.getByText('Supervisor 未启用')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '启用目标' })).toBeInTheDocument();
+    expect(screen.getByText('Supervisor is not enabled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable Objective' })).toBeInTheDocument();
   });
 
   it('renders a reconnecting banner inside the mobile workspace scaffold', async () => {

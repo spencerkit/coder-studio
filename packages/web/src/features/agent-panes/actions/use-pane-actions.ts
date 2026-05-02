@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useSetAtom } from 'jotai';
 import { paneLayoutAtomFamily } from '../atoms/pane-layout';
 import {
+  appendSessionToLayout,
   assignSessionToPane,
   closeDraftPaneById,
   closePaneBySessionId,
@@ -58,7 +59,15 @@ export function usePaneActions(workspaceId: string) {
     [setPaneLayout]
   );
 
+  const appendSession = useCallback(
+    (sessionId: string, anchorSessionId?: string | null) => {
+      setPaneLayout((current) => appendSessionToLayout(current, sessionId, anchorSessionId));
+    },
+    [setPaneLayout]
+  );
+
   return {
+    appendSession,
     assignSession,
     closeDraftPane,
     closeSessionPane,

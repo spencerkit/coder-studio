@@ -15,3 +15,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'appearance', labelKey: 'settings.appearance', Icon: Palette },
   { id: 'shortcuts', labelKey: 'settings.shortcuts.title', Icon: Keyboard },
 ] as const satisfies readonly SettingsSectionMeta[];
+
+export const MOBILE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(
+  (section) => section.id !== 'shortcuts'
+);

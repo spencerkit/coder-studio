@@ -5,7 +5,7 @@ import { Provider, createStore } from 'jotai';
 import { DesktopShell } from './desktop-shell';
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from '../atoms/connection';
 import { activeWorkspaceIdAtom } from '../atoms/workspaces';
-import { authenticatedAtom } from '../atoms/app-ui';
+import { authenticatedAtom, localeAtom } from '../atoms/app-ui';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../atoms/workspaces';
 
 vi.mock('../features/welcome', () => ({
@@ -122,6 +122,7 @@ describe('DesktopShell auth gating', () => {
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, 'en');
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
     store.set(workspacesLoadStateAtom, 'loading');
@@ -139,6 +140,7 @@ describe('DesktopShell auth gating', () => {
     store.set(connectionStatusAtom, 'reconnecting');
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, 'en');
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
     store.set(workspacesLoadStateAtom, 'ready');

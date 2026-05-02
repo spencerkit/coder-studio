@@ -10,6 +10,7 @@ import { Plus, Settings, Terminal, Zap, GitBranch } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useViewport } from '../../hooks/use-viewport';
+import { useTranslation } from '../../lib/i18n';
 import { WorkspaceLaunchModal } from '../workspace/views/shared/workspace-launch-modal';
 
 interface FeatureItem {
@@ -17,24 +18,6 @@ interface FeatureItem {
   title: string;
   description: string;
 }
-
-const features: FeatureItem[] = [
-  {
-    icon: <Zap size={18} />,
-    title: 'Agent-first AI coding',
-    description: 'Launch AI sessions that write, test, and deploy code.',
-  },
-  {
-    icon: <GitBranch size={18} />,
-    title: 'Built-in Git tools',
-    description: 'Stage, commit, and manage branches without leaving the IDE.',
-  },
-  {
-    icon: <Terminal size={18} />,
-    title: 'Integrated terminals',
-    description: 'Run commands and scripts alongside your AI sessions.',
-  },
-];
 
 /**
  * Welcome Page
@@ -46,9 +29,27 @@ const features: FeatureItem[] = [
  *   - Three feature highlights at bottom
  */
 export const WelcomePage: FC = () => {
+  const t = useTranslation();
   const navigate = useNavigate();
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
   const isMobile = useViewport() === 'mobile';
+  const features: FeatureItem[] = [
+    {
+      icon: <Zap size={18} />,
+      title: t('welcome.features.agent_first.title'),
+      description: t('welcome.features.agent_first.description'),
+    },
+    {
+      icon: <GitBranch size={18} />,
+      title: t('welcome.features.git_tools.title'),
+      description: t('welcome.features.git_tools.description'),
+    },
+    {
+      icon: <Terminal size={18} />,
+      title: t('welcome.features.terminals.title'),
+      description: t('welcome.features.terminals.description'),
+    },
+  ];
 
   const handleOpenWorkspace = () => {
     setWorkspaceLaunchOpen(true);
@@ -62,19 +63,16 @@ export const WelcomePage: FC = () => {
     <>
       <div className={`welcome-container ${isMobile ? 'welcome-container--mobile' : ''}`}>
         <div className={`welcome-card ${isMobile ? 'welcome-card--mobile' : ''}`}>
-          <div className="welcome-kicker">GET STARTED</div>
-          <h1 className="welcome-title">Welcome to Coder Studio</h1>
-          <p className="welcome-body">
-            A local-first AI coding workbench. Launch AI agent sessions, review generated code,
-            manage Git changes, and run terminals — all in one place.
-          </p>
+          <div className="welcome-kicker">{t('welcome.kicker')}</div>
+          <h1 className="welcome-title">{t('welcome.title')}</h1>
+          <p className="welcome-body">{t('welcome.description')}</p>
           <button className="welcome-btn" onClick={handleOpenWorkspace}>
             <Plus size={18} />
-            <span>Open Workspace</span>
+            <span>{t('action.open_workspace')}</span>
           </button>
           <button className="welcome-link" onClick={handleOpenSettings}>
             <Settings size={14} />
-            <span>Open Settings</span>
+            <span>{t('action.settings')}</span>
           </button>
 
           <div className="welcome-divider" />

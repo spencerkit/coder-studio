@@ -1,6 +1,7 @@
 import { useSetAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 import { supervisorDialogAtom } from '../../atoms';
+import { useTranslation } from '../../../../lib/i18n';
 import {
   ObjectiveDialogContent,
   ObjectiveDialogModeIcon,
@@ -24,6 +25,7 @@ export function MobileSupervisorSheet({
   workspaceId,
   onClose,
 }: MobileSupervisorSheetProps) {
+  const t = useTranslation();
   const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const {
@@ -64,7 +66,7 @@ export function MobileSupervisorSheet({
     return (
       <MobileSheet
         title={copy.title}
-        kicker="Supervisor"
+        kicker={t('supervisor.title')}
         onBack={() => {
           close();
           setDetailMode(null);
@@ -108,7 +110,7 @@ export function MobileSupervisorSheet({
                 setDetailMode(null);
               }}
             >
-              取消
+              {t('action.cancel')}
             </button>
             <button
               className={`btn ${isDisable ? 'btn-danger' : 'btn-primary'}`}
@@ -127,8 +129,8 @@ export function MobileSupervisorSheet({
 
   return (
     <MobileSheet
-      title="Supervisor"
-      kicker="Supervisor"
+      title={t('supervisor.title')}
+      kicker={t('supervisor.title')}
       onClose={onClose}
       contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--root"
       body={
@@ -138,19 +140,19 @@ export function MobileSupervisorSheet({
               <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
               <div className="mobile-supervisor-sheet__actions">
                 <button className="btn btn-secondary" onClick={() => openDetail('edit')}>
-                  编辑目标
+                  {t('supervisor.action.edit_objective')}
                 </button>
                 <button className="btn btn-secondary" onClick={() => openDetail('disable')}>
-                  禁用 Supervisor
+                  {t('supervisor.action.disable')}
                 </button>
               </div>
             </>
           ) : (
             <div className="mobile-supervisor-sheet__empty">
-              <h3>Supervisor</h3>
-              <p>Supervisor 未启用</p>
+              <h3>{t('supervisor.title')}</h3>
+              <p>{t('supervisor.empty')}</p>
               <button className="btn btn-primary" onClick={() => openDetail('enable')}>
-                启用目标
+                {t('supervisor.action.enable_objective')}
               </button>
             </div>
           )}

@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/components.css`, "utf8");
 
+function getLastGroupedRuleBlock(pattern: RegExp) {
+  const matches = Array.from(stylesheet.matchAll(pattern));
+  const match = matches.at(-1);
+
+  expect(match, `expected CSS rule matching ${pattern}`).toBeTruthy();
+  return match?.[1] ?? "";
+}
+
 function getLastRuleBlock(selector: string) {
   let block = "";
   const matcher = /([^{}]+)\{([^}]*)\}/g;
@@ -126,5 +134,38 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sheetBody).toContain("flex-direction: column");
     expect(sheetBodyChildren).toContain("flex: 1");
     expect(sheetBodyChildren).toContain("min-height: 0");
+  });
+
+  it("keeps fullscreen mobile sheet headers aligned to a settings-style back and title row", () => {
+    const fullscreenHeader = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__header");
+    const headerMain = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__header-main");
+    const backButton = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__back");
+    const headerActions = getLastRuleBlock(".mobile-sheet__header-actions");
+
+    expect(fullscreenHeader).toContain("display: flex");
+    expect(fullscreenHeader).toContain("align-items: center");
+    expect(headerMain).toContain("align-items: flex-start");
+    expect(backButton).toContain("background: transparent");
+    expect(backButton).not.toContain("border-radius: 999px");
+    expect(headerActions).toContain("margin-left: auto");
+  });
+
+  it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
+    const inlineSheet = getLastRuleBlock(".mobile-inline-sheet");
+    const workspaceButton = getLastGroupedRuleBlock(/\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g);
+    const sessionButton = getLastGroupedRuleBlock(/\.mobile-topbar__session-button\s*\{([^}]*)\}/g);
+    const iconButton = getLastRuleBlock(".mobile-topbar__icon-button");
+
+    expect(inlineSheet).toContain("position: absolute");
+    expect(inlineSheet).toContain("border-radius: 20px");
+    expect(workspaceButton).toContain("height: 48px");
+    expect(sessionButton).toContain("min-height: 48px");
+    expect(iconButton).toContain("height: 48px");
+  });
+
+  it("keeps the mobile dock as a three-entry bottom rail for agent, files, and terminal", () => {
+    const mobileDock = getLastRuleBlock(".mobile-dock");
+
+    expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
   });
 });

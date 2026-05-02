@@ -1,5 +1,6 @@
 import type { WorktreeInfo } from '@coder-studio/core';
 import { useViewport } from '../../../../hooks/use-viewport';
+import { useTranslation } from '../../../../lib/i18n';
 import { MobileSheet } from '../mobile/mobile-sheet';
 import { useWorktreeActions } from '../../actions/use-workspace-launch-actions';
 
@@ -12,6 +13,7 @@ interface WorktreeModalProps {
 
 export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
   const isMobile = useViewport() === 'mobile';
+  const t = useTranslation();
   const { activeTab, diff, error, handleTabChange, loading, status, tree } = useWorktreeActions(worktree);
 
   if (!worktree) {
@@ -31,7 +33,7 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
           worktree.status === 'clean' ? 'worktree-clean' : 'worktree-dirty'
         }`}
       >
-        {worktree.status === 'clean' ? '✓ Clean' : '● Dirty'}
+        {worktree.status === 'clean' ? `✓ ${t('worktree.clean')}` : `● ${t('worktree.dirty_status')}`}
       </span>
     </div>
   );
@@ -44,7 +46,11 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
           className={`modal-tab ${activeTab === tab ? 'active' : ''}`}
           onClick={() => handleTabChange(tab)}
         >
-          {tab === 'status' ? 'Status' : tab === 'diff' ? 'Diff' : 'Tree'}
+          {tab === 'status'
+            ? t('worktree.status_tab')
+            : tab === 'diff'
+              ? t('worktree.diff_tab')
+              : t('worktree.tree_tab')}
         </button>
       ))}
     </div>
@@ -54,39 +60,41 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
     <div className="modal-body worktree-content">
       {error && <div className="worktree-error">{error}</div>}
       {loading ? (
-        <div className="worktree-loading">Loading...</div>
+        <div className="worktree-loading">{t('worktree.loading')}</div>
       ) : (
         <>
           {activeTab === 'status' && (
             <div className="worktree-status-tab">
               <div className="worktree-info-row">
-                <span className="worktree-info-label">Path</span>
+                <span className="worktree-info-label">{t('worktree.path')}</span>
                 <span className="worktree-info-value">{worktree.path}</span>
               </div>
               <div className="worktree-info-row">
-                <span className="worktree-info-label">Branch</span>
+                <span className="worktree-info-label">{t('worktree.branch')}</span>
                 <span className="worktree-info-value">{worktree.branch}</span>
               </div>
               <div className="worktree-info-row">
-                <span className="worktree-info-label">Status</span>
-                <span className="worktree-info-value">{worktree.status}</span>
+                <span className="worktree-info-label">{t('label.status')}</span>
+                <span className="worktree-info-value">
+                  {worktree.status === 'clean' ? t('worktree.clean') : t('worktree.dirty')}
+                </span>
               </div>
               {status && (
                 <div className="worktree-changes">
-                  <h4>Changes</h4>
+                  <h4>{t('worktree.changes')}</h4>
                   {status.staged.length > 0 && (
                     <div className="worktree-change-group">
-                      <span>Staged: {status.staged.length}</span>
+                      <span>{t('worktree.staged_count', { count: status.staged.length })}</span>
                     </div>
                   )}
                   {status.modified.length > 0 && (
                     <div className="worktree-change-group">
-                      <span>Modified: {status.modified.length}</span>
+                      <span>{t('worktree.modified_count', { count: status.modified.length })}</span>
                     </div>
                   )}
                   {status.untracked.length > 0 && (
                     <div className="worktree-change-group">
-                      <span>Untracked: {status.untracked.length}</span>
+                      <span>{t('worktree.untracked_count', { count: status.untracked.length })}</span>
                     </div>
                   )}
                 </div>
@@ -99,7 +107,7 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
               {diff ? (
                 <pre className="worktree-diff-output">{diff}</pre>
               ) : (
-                <div className="worktree-empty">No changes</div>
+                <div className="worktree-empty">{t('git.no_changes')}</div>
               )}
             </div>
           )}
@@ -118,7 +126,7 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
                   ))}
                 </div>
               ) : (
-                <div className="worktree-empty">Empty tree</div>
+                <div className="worktree-empty">{t('worktree.empty_tree')}</div>
               )}
             </div>
           )}
@@ -130,7 +138,7 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
   if (isMobile) {
     return (
       <MobileSheet
-        kicker="WORKTREE"
+        kicker={t('worktree.title').toUpperCase()}
         title={worktree.name}
         body={
           <div className="mobile-worktree-sheet">

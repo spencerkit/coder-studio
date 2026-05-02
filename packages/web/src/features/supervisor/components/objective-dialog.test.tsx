@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { localeAtom } from '../../../atoms/app-ui';
 import { ObjectiveDialog } from '../views/shared/objective-dialog';
 import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
@@ -21,6 +22,8 @@ describe('ObjectiveDialog', () => {
   it('submits evaluatorProviderId during enable', async () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(supervisorDialogAtom, {
       open: true,
@@ -37,10 +40,10 @@ describe('ObjectiveDialog', () => {
       </Provider>
     );
 
-    fireEvent.change(screen.getByLabelText('评估方 (Evaluator)'), {
+    fireEvent.change(screen.getByLabelText('Evaluator'), {
       target: { value: 'claude' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '启用' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('supervisor.create', {
@@ -54,6 +57,8 @@ describe('ObjectiveDialog', () => {
 
   it('renders disable confirmation mode', () => {
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,
@@ -88,12 +93,14 @@ describe('ObjectiveDialog', () => {
       </Provider>
     );
 
-    expect(screen.getByText('禁用后会停止评估周期')).toBeInTheDocument();
+    expect(screen.getByText('Disabling stops evaluation cycles')).toBeInTheDocument();
     expect(screen.getByText('Finish the server refactor')).toBeInTheDocument();
   });
 
   it('keeps the centered modal shell on desktop viewports', () => {
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,
@@ -116,6 +123,8 @@ describe('ObjectiveDialog', () => {
   it('renders nothing on mobile because mobile supervisor detail owns the flow', () => {
     viewportMocks.viewport = 'mobile';
     const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorDialogAtom, {
       open: true,

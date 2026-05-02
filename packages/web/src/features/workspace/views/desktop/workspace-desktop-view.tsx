@@ -46,7 +46,7 @@ export const WorkspaceDesktopView: FC = () => {
     );
   }
 
-  const panelKicker = sidebarTab === 'files' ? t('file') : t('git');
+  const panelKicker = sidebarTab === 'files' ? t('label.file') : t('label.git');
   const panelBranch = gitState?.branch ?? '—';
   const activeTabLabel = sidebarTab === 'files' ? 'file tree' : 'git diff';
 

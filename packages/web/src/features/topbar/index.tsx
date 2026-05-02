@@ -9,6 +9,7 @@ import { Plus, Search, Settings, PanelBottom, PanelLeft } from 'lucide-react';
 import type { FC } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '../../lib/i18n';
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../atoms/workspaces';
 import { commandPaletteOpenAtom } from '../../atoms/app-ui';
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from '../workspace/atoms';
@@ -25,6 +26,7 @@ import { WorkspaceLaunchModal } from '../workspace/views/shared/workspace-launch
  *   - Right: ConnectionStatus, Quick Actions, Terminal toggle, Files toggle, Settings
  */
 export const TopBar: FC = () => {
+  const t = useTranslation();
   const navigate = useNavigate();
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
@@ -38,7 +40,7 @@ export const TopBar: FC = () => {
       <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
           <div className="topbar-empty-state">
-            <span className="topbar-hint">No workspaces open</span>
+            <span className="topbar-hint">{t('workspace.no_workspace')}</span>
           </div>
         ) : (
           workspaceList.map((ws) => (
@@ -52,8 +54,8 @@ export const TopBar: FC = () => {
         <button
           className="topbar-add"
           onClick={() => setWorkspaceLaunchOpen(true)}
-          aria-label="New workspace"
-          title="New workspace"
+          aria-label={t('tooltip.new_workspace')}
+          title={t('tooltip.new_workspace')}
         >
           <Plus size={14} />
         </button>
@@ -64,33 +66,33 @@ export const TopBar: FC = () => {
         <button
           className="topbar-btn topbar-quick-actions"
           onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
-          aria-label="Quick Actions"
-          title="Quick Actions"
+          aria-label={t('tooltip.quick_actions')}
+          title={t('tooltip.quick_actions')}
         >
           <Search size={14} />
-          <span className="topbar-btn-label">Quick Actions</span>
+          <span className="topbar-btn-label">{t('tooltip.quick_actions')}</span>
         </button>
         <button
           className={`topbar-btn ${terminalPanelVisible ? '' : 'topbar-btn--muted'}`}
           onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
-          aria-label={terminalPanelVisible ? 'Hide Terminal' : 'Show Terminal'}
-          title={terminalPanelVisible ? 'Hide Terminal (Ctrl+\`)' : 'Show Terminal (Ctrl+\`)'}
+          aria-label={terminalPanelVisible ? t('tooltip.hide_terminal') : t('tooltip.show_terminal')}
+          title={terminalPanelVisible ? t('tooltip.hide_terminal') : t('tooltip.show_terminal')}
         >
           <PanelBottom size={14} />
         </button>
         <button
           className={`topbar-btn ${sidebarCollapsed ? 'topbar-btn--muted' : ''}`}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          aria-label={sidebarCollapsed ? 'Show Files' : 'Hide Files'}
-          title={sidebarCollapsed ? 'Show Files' : 'Hide Files'}
+          aria-label={sidebarCollapsed ? t('tooltip.show_files') : t('tooltip.hide_files')}
+          title={sidebarCollapsed ? t('tooltip.show_files') : t('tooltip.hide_files')}
         >
           <PanelLeft size={14} />
         </button>
         <button
           className="topbar-btn"
           onClick={() => navigate('/settings')}
-          aria-label="Settings"
-          title="Settings"
+          aria-label={t('settings.title')}
+          title={t('settings.title')}
           data-testid="settings-open"
         >
           <Settings size={14} />

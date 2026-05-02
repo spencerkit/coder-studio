@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { describe, expect, it } from 'vitest';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { activeWorkspaceIdAtom } from '../../../../atoms/workspaces';
 import {
   workspaceOrderAtom,
@@ -13,6 +14,7 @@ import { WorkspaceRouteGate } from './workspace-route-gate';
 describe('WorkspaceRouteGate', () => {
   it('shows a loading shell while workspaces are unresolved', () => {
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(workspacesLoadStateAtom, 'loading');
 
     render(
@@ -29,6 +31,7 @@ describe('WorkspaceRouteGate', () => {
 
   it('shows an error shell when workspace bootstrap fails', () => {
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(workspacesLoadStateAtom, 'error');
     store.set(workspacesLoadErrorAtom, 'Failed to fetch workspace list');
 

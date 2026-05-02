@@ -18,7 +18,8 @@
     "close": "关闭",
     "yes": "是",
     "no": "否",
-    "ok": "确定"
+    "ok": "确定",
+    "all": "全部"
   },
   "action": {
     "open": "打开",
@@ -48,6 +49,7 @@
   },
   "label": {
     "workspace": "工作区",
+    "agent": "Agent",
     "session": "会话",
     "terminal": "终端",
     "file": "文件",
@@ -101,6 +103,31 @@
     "path": "路径",
     "no_workspace": "未打开工作区",
     "open_hint": "点击下方按钮打开一个项目目录",
+    "loading_title": "正在加载工作区",
+    "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
+    "load_failed_title": "工作区加载失败",
+    "load_failed_description": "获取工作区列表失败",
+    "launch": {
+      "kicker": "启动工作区",
+      "local_title": "本地目录",
+      "local_description": "选择你机器上的一个目录",
+      "remote_title": "远程 Git",
+      "remote_description": "克隆仓库（即将支持）",
+      "home_directory": "主目录",
+      "go_up": "返回上一级",
+      "no_directories": "未找到目录",
+      "items_count": "{count} 项",
+      "enter_folder": "进入 {name}",
+      "enter_folder_action": "进入文件夹 →",
+      "cancel": "取消",
+      "start": "启动工作区",
+      "starting": "启动中...",
+      "hint_local": "选择一个目录作为工作区根目录。",
+      "hint_remote": "克隆一个仓库作为工作区根目录。",
+      "browse_failed": "浏览目录失败",
+      "select_required": "请选择一个目录",
+      "open_failed": "打开工作区失败"
+    },
     "runtime_check": {
       "title": "运行时检查",
       "checking": "正在检查运行时环境...",
@@ -109,6 +136,51 @@
       "missing_git": "未找到 Git 命令",
       "missing_node": "未找到 Node.js",
       "missing_provider": "未找到 {provider} CLI"
+    }
+  },
+  "mobile": {
+    "dock": {
+      "aria_label": "移动底栏",
+      "open_agent": "打开 Agent 面板",
+      "open_files": "打开文件面板",
+      "open_terminal": "打开终端面板"
+    },
+    "agent": {
+      "title": "Agent 会话",
+      "close_current_session": "关闭当前会话",
+      "providers": "会话提供方",
+      "start_session": "启动 {provider} 会话",
+      "starting": "正在启动…",
+      "start_new_session": "启动新会话",
+      "active_agents": "活跃 Agent",
+      "switch_to_agent": "切换到 Agent {name}",
+      "empty": "暂无活跃会话"
+    },
+    "supervisor": {
+      "open_sheet": "打开 Supervisor 面板"
+    },
+    "topbar": {
+      "switch_workspace": "切换工作区",
+      "open_settings": "打开设置"
+    },
+    "sheet": {
+      "dismiss": "关闭当前面板",
+      "region": "{title}面板"
+    },
+    "files": {
+      "tabs": "文件面板标签",
+      "git_diff": "Git 差异",
+      "editor_fallback": "编辑器"
+    },
+    "workspace_drawer": {
+      "aria_label": "工作区抽屉",
+      "close": "关闭工作区抽屉",
+      "select_title": "选择工作区",
+      "switch_to_workspace": "切换到工作区 {name}"
+    },
+    "empty": {
+      "start_session": "为当前工作区启动一个新的 Agent 会话。",
+      "files_terminal_hint": "文件和终端可继续通过底部栏访问。"
     }
   },
   "session": {
@@ -135,16 +207,25 @@
   },
   "terminal": {
     "title": "终端",
+    "kicker": "TERMINAL",
     "new_terminal": "新建终端",
     "close_terminal": "关闭终端",
     "shell": "Shell 终端",
     "agent": "Agent 终端",
     "reconnect_hint": "连接已断开，正在重连...",
     "no_terminal": "暂无终端",
+    "empty_hint": "启动一个 Shell 来查看文件、运行命令，并在不离开工作区的情况下验证更改。",
     "hide": "隐藏终端",
     "show": "显示终端",
+    "selector": {
+      "switch": "切换终端",
+      "title": "终端会话",
+      "current": "当前终端",
+      "indexed": "终端 {index}"
+    },
     "replay": {
       "loading_title": "正在恢复终端内容…",
+      "loading_body": "你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。",
       "failed_title": "历史内容恢复失败",
       "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
       "closed_title": "该会话已被关闭",
@@ -158,6 +239,7 @@
     "modified": "已修改",
     "unsaved": "未保存",
     "dirty": "有未保存更改",
+    "empty_directory": "空文件夹",
     "new_file": "新建文件",
     "new_folder": "新建文件夹",
     "rename": "重命名",
@@ -173,10 +255,21 @@
     "conflict": "文件已被外部程序修改",
     "conflict_message": "文件可能已被编辑器外部修改。要放弃本地更改并重新加载吗？"
   },
+  "code_editor": {
+    "saving": "保存中...",
+    "edit_as_text": "以文本编辑",
+    "preview_as_image": "以图像预览",
+    "mode_text": "文本",
+    "mode_image": "图像",
+    "open_failed_title": "打开文件失败",
+    "empty_hint": "从左侧选择一个文件以在编辑器中打开。"
+  },
   "git": {
     "title": "Git",
     "changes": "更改",
     "staged": "已暂存",
+    "modified": "已修改",
+    "deleted": "已删除",
     "unstaged": "未暂存",
     "untracked": "未跟踪",
     "no_changes": "无更改",
@@ -188,6 +281,7 @@
     "stage_all": "暂存全部",
     "unstage_all": "取消暂存全部",
     "discard": "放弃",
+    "discard_all": "放弃全部",
     "discard_file_confirm_title": "放弃文件更改",
     "discard_file_confirm_message": "确定要放弃 “{path}” 的更改吗？",
     "discard_all_confirm_title": "放弃所有更改",
@@ -199,6 +293,23 @@
     "ahead": "领先 {count} 个提交",
     "behind": "落后 {count} 个提交",
     "synced": "与远程同步"
+  },
+  "worktree": {
+    "title": "工作树",
+    "status_tab": "状态",
+    "diff_tab": "差异",
+    "tree_tab": "树",
+    "path": "路径",
+    "branch": "分支",
+    "changes": "更改",
+    "loading": "加载中...",
+    "empty_tree": "空目录树",
+    "clean": "干净",
+    "dirty": "有更改",
+    "dirty_status": "有更改",
+    "staged_count": "已暂存：{count}",
+    "modified_count": "已修改：{count}",
+    "untracked_count": "未跟踪：{count}"
   },
   "settings": {
     "title": "设置",
@@ -306,6 +417,67 @@
     "server_shutdown": "服务器已关闭",
     "backpressure_warning": "网络拥堵，部分输出可能丢失"
   },
+  "supervisor": {
+    "title": "Supervisor",
+    "empty": "Supervisor 未启用",
+    "latest_evaluation": "最近一次评估",
+    "state": {
+      "inactive": "未启用",
+      "idle": "空闲",
+      "evaluating": "评估中",
+      "injecting": "注入中",
+      "paused": "已暂停",
+      "error": "错误"
+    },
+    "trigger": {
+      "manual": "手动",
+      "auto": "自动"
+    },
+    "cycle": {
+      "no_guidance": "本轮无需注入 guidance",
+      "evaluating": "评估中…",
+      "waiting": "等待评估结果"
+    },
+    "field": {
+      "objective": "目标描述",
+      "current_objective": "当前目标",
+      "objective_placeholder": "描述希望 Supervisor 盯住的目标，例如:\n- 完成用户认证功能的实现\n- 修复所有失败的单元测试\n- 把 P95 响应时间压到 100ms 以内",
+      "objective_helper": "越具体、越可衡量，评估效果越好。建议包含完成条件。",
+      "evaluator": "评估方",
+      "evaluator_helper": "用于评估进度并生成下一步指引的 provider，与执行方可不相同。"
+    },
+    "action": {
+      "enable": "启用 Supervisor",
+      "enable_objective": "启用目标",
+      "edit_objective": "编辑目标",
+      "disable": "禁用 Supervisor",
+      "pause": "暂停",
+      "resume": "恢复",
+      "trigger": "触发评估",
+      "pause_failed": "暂停失败",
+      "resume_failed": "恢复失败",
+      "trigger_failed": "触发评估失败"
+    },
+    "dialog": {
+      "enable": {
+        "title": "启用 Supervisor",
+        "subtitle": "描述一个目标，Supervisor 会在每轮结束后自动评估并提示下一步",
+        "confirm": "启用"
+      },
+      "edit": {
+        "title": "编辑 Supervisor",
+        "subtitle": "调整目标描述或切换评估方，历史评估不会被清除",
+        "confirm": "保存"
+      },
+      "disable": {
+        "title": "禁用 Supervisor",
+        "subtitle": "停止自动评估。当前会话的监督周期将被移除",
+        "confirm": "禁用",
+        "warning_title": "禁用后会停止评估周期",
+        "warning_body": "当前会话的 Supervisor 将被移除，历史 cycles 会一并清理。可重新启用，但无法恢复记录。"
+      }
+    }
+  },
   "command": {
     "palette": "命令面板",
     "no_results": "未找到结果",
@@ -341,6 +513,25 @@
     "validation": "数据验证失败",
     "conflict": "资源冲突"
   },
+  "welcome": {
+    "kicker": "开始使用",
+    "title": "欢迎使用 Coder Studio",
+    "description": "一个本地优先的 AI 编码工作台。在同一个界面里启动 AI Agent 会话、审阅生成代码、管理 Git 变更并运行终端。",
+    "features": {
+      "agent_first": {
+        "title": "以 Agent 为核心的 AI 编码",
+        "description": "启动能够编写、测试和部署代码的 AI 会话。"
+      },
+      "git_tools": {
+        "title": "内置 Git 工具",
+        "description": "无需离开 IDE，就能暂存、提交并管理分支。"
+      },
+      "terminals": {
+        "title": "集成终端",
+        "description": "在 AI 会话旁边直接运行命令和脚本。"
+      }
+    }
+  },
   "confirm": {
     "save_changes": "是否保存更改？",
     "discard_changes": "确定要放弃更改吗？",
@@ -357,7 +548,13 @@
     "focus_mode": "专注模式：隐藏侧边栏和底部面板",
     "split_horizontal": "水平分割面板",
     "split_vertical": "垂直分割面板",
-    "close_pane": "关闭面板"
+    "close_pane": "关闭面板",
+    "new_workspace": "新建工作区",
+    "quick_actions": "快捷操作",
+    "show_terminal": "显示终端",
+    "hide_terminal": "隐藏终端",
+    "show_files": "显示文件",
+    "hide_files": "隐藏文件"
   },
   "time": {
     "just_now": "刚刚",

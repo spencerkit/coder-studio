@@ -48,7 +48,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [error, setError] = useState<string | null>(null);
 
   const launchChoice: LaunchChoice = 'local';
-  const launchTitle = launchChoice === 'local' ? 'Local Folder' : 'Remote Git';
+  const launchTitle =
+    launchChoice === 'local'
+      ? t('workspace.launch.local_title')
+      : t('workspace.launch.remote_title');
   const rootPaths = ['/', '~', '/home/spencer'];
 
   useEffect(() => {
@@ -71,7 +74,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         const result = await dispatch<BrowseResult>('workspace.browse', { path });
 
         if (!result.ok || !result.data) {
-          setError(result.error?.message || 'Failed to browse directories');
+          setError(result.error?.message || t('workspace.launch.browse_failed'));
           return;
         }
 
@@ -105,7 +108,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath) {
-      setError(t('error.required_field') || 'Please select a directory');
+      setError(t('workspace.launch.select_required'));
       return;
     }
 
@@ -138,7 +141,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
         onClose();
       } else {
-        setError(result.error?.message || t('error.workspace_open') || 'Failed to open workspace');
+        setError(result.error?.message || t('workspace.launch.open_failed'));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

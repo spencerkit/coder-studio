@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { MemoryRouter } from 'react-router-dom';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { wsClientAtom } from '../../../../atoms/connection';
 import { WorkspaceLaunchModal } from './workspace-launch-modal';
 
@@ -61,6 +62,7 @@ describe('WorkspaceLaunchModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -109,6 +111,7 @@ describe('WorkspaceLaunchModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -161,6 +164,7 @@ describe('WorkspaceLaunchModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
     routerMocks.location.pathname = '/';
 
@@ -211,6 +215,7 @@ describe('WorkspaceLaunchModal', () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, 'en');
     store.set(wsClientAtom, { sendCommand } as never);
 
     render(
@@ -239,5 +244,32 @@ describe('WorkspaceLaunchModal', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
     });
+  });
+
+  it('renders English labels when locale is set to en', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: '/home/spencer',
+      parentPath: '/home',
+      directories: [
+        { name: 'workspace', path: '/home/spencer/workspace', itemCount: 3 },
+      ],
+    });
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findAllByText('Local Folder')).toHaveLength(2);
+    expect(screen.getByText('Select a directory on your machine')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home Directory' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Workspace' })).toBeInTheDocument();
+    expect(screen.getByText('3 items')).toBeInTheDocument();
   });
 });

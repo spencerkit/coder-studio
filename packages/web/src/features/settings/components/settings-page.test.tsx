@@ -323,6 +323,7 @@ describe('SettingsPage', () => {
     renderSettingsPage(store);
 
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '快捷键' })).not.toBeInTheDocument();
     expect(screen.queryByText('通知')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
 
@@ -336,6 +337,17 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+  });
+
+  it('keeps the shortcuts section available on desktop', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '快捷键' })).toBeInTheDocument();
+    });
   });
 
   it('prefers browser history when leaving the mobile settings root', async () => {

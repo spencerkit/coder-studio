@@ -9,6 +9,14 @@ function createDraftLeaf(id: string): PaneNode {
   };
 }
 
+function createSessionLeaf(id: string, sessionId: string): PaneNode {
+  return {
+    id,
+    type: 'leaf',
+    sessionId,
+  };
+}
+
 export function splitPaneByPaneId(
   node: PaneNode,
   paneId: string,
@@ -252,6 +260,42 @@ export function collectSessionIds(node: PaneNode): string[] {
   );
 }
 
+export function appendSessionToLayout(
+  node: PaneNode,
+  sessionId: string,
+  anchorSessionId?: string | null
+): PaneNode {
+  const draftFilled = assignFirstDraftPane(node, sessionId);
+  if (draftFilled) {
+    return draftFilled;
+  }
+
+  if (anchorSessionId) {
+    const anchoredSplit = splitLeafForNewSession(node, sessionId, anchorSessionId);
+    if (anchoredSplit) {
+      return anchoredSplit;
+    }
+  }
+
+  const fallbackSplit = splitLeafForNewSession(node, sessionId);
+  if (fallbackSplit) {
+    return fallbackSplit;
+  }
+
+  if (node.type === 'leaf' && !node.sessionId) {
+    return {
+      ...node,
+      sessionId,
+    };
+  }
+
+  return {
+    id: 'root',
+    type: 'leaf',
+    sessionId,
+  };
+}
+
 /**
  * Sanitize pane layout: replace references to ended/removed sessions with draft leaves.
  * Preserves the entire split structure so layout is maintained on page refresh.
@@ -293,4 +337,81 @@ export function sanitizePaneLayout(
     ...node,
     children: nextChildren,
   };
+}
+
+function assignFirstDraftPane(node: PaneNode, sessionId: string): PaneNode | null {
+  if (node.type === 'leaf') {
+    if (!node.sessionId) {
+      return {
+        ...node,
+        sessionId,
+      };
+    }
+
+    return null;
+  }
+
+  const children = node.children ?? [];
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index]!;
+    const nextChild = assignFirstDraftPane(child, sessionId);
+    if (!nextChild) {
+      continue;
+    }
+
+    return {
+      ...node,
+      children: children.map((candidate, candidateIndex) =>
+        candidateIndex === index ? nextChild : candidate
+      ),
+    };
+  }
+
+  return null;
+}
+
+function splitLeafForNewSession(
+  node: PaneNode,
+  sessionId: string,
+  preferredSessionId?: string
+): PaneNode | null {
+  if (node.type === 'leaf') {
+    if (!node.sessionId) {
+      return null;
+    }
+
+    if (preferredSessionId && node.sessionId !== preferredSessionId) {
+      return null;
+    }
+
+    const splitId = `split-${node.id}-horizontal-${Date.now()}`;
+    return {
+      id: splitId,
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { ...node },
+        createSessionLeaf(`${splitId}-session`, sessionId),
+      ],
+    };
+  }
+
+  const children = node.children ?? [];
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index]!;
+    const nextChild = splitLeafForNewSession(child, sessionId, preferredSessionId);
+    if (!nextChild) {
+      continue;
+    }
+
+    return {
+      ...node,
+      children: children.map((candidate, candidateIndex) =>
+        candidateIndex === index ? nextChild : candidate
+      ),
+    };
+  }
+
+  return null;
 }

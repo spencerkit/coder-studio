@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { Workspace } from '@coder-studio/core';
+import { localeAtom } from '../../atoms/app-ui';
 import { TopBar } from './index';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 
@@ -79,5 +80,21 @@ describe('TopBar', () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(['ws-b', 'ws-a']);
     expect(tabs[0]?.getAttribute('data-active')).toBe('true');
     expect(tabs[1]?.getAttribute('data-active')).toBe('false');
+  });
+
+  it('uses translated labels when locale is set to en', () => {
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(workspacesLoadStateAtom, 'ready');
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    expect(screen.getByText('No workspace open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quick Actions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   });
 });
