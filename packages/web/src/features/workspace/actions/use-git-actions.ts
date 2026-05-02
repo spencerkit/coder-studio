@@ -94,6 +94,7 @@ export function useGitPanelActions({
   const [isLoading, setIsLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
+  const pendingReloadRef = useRef(false);
 
   const updateBranchList = useCallback(
     (
@@ -172,7 +173,12 @@ export function useGitPanelActions({
   }, [dispatch, setBranchList, updateBranchList, workspaceId]);
 
   const loadGitStatus = useCallback(async () => {
-    if (!workspaceId || isLoadingRef.current) {
+    if (!workspaceId) {
+      return;
+    }
+
+    if (isLoadingRef.current) {
+      pendingReloadRef.current = true;
       return;
     }
 
@@ -210,6 +216,13 @@ export function useGitPanelActions({
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
+
+      if (pendingReloadRef.current) {
+        pendingReloadRef.current = false;
+        queueMicrotask(() => {
+          void loadGitStatus();
+        });
+      }
     }
   }, [diffPreview, dispatch, requestDiff, setGitState, updatePreview, workspaceId]);
 

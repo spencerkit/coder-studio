@@ -17,7 +17,7 @@ describe('WorkspaceWatcher', () => {
   let testDir: string;
   let broadcaster: { broadcast: ReturnType<typeof vi.fn> };
   let watchSpy: ReturnType<typeof vi.spyOn<typeof chokidar, 'watch'>>;
-  let watcherEvents: Record<string, (() => void) | undefined>;
+  let watcherEvents: Record<string, ((...args: any[]) => void) | undefined>;
   let closeMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
@@ -30,7 +30,7 @@ describe('WorkspaceWatcher', () => {
     watcherEvents = {};
     closeMock = vi.fn().mockResolvedValue(undefined);
     watchSpy = vi.spyOn(chokidar, 'watch').mockReturnValue({
-      on(event: string, handler: () => void) {
+      on(event: string, handler: (...args: any[]) => void) {
         watcherEvents[event] = handler;
         return this;
       },
@@ -64,7 +64,7 @@ describe('WorkspaceWatcher', () => {
     expect(broadcaster.broadcast).toBeDefined();
   });
 
-  it('ignores .git, node_modules, .DS_Store, Thumbs.db, .playwright-mcp when no .gitignore', () => {
+  it('watches git metadata but ignores node_modules, .DS_Store, Thumbs.db, .playwright-mcp when no .gitignore', () => {
     new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
 
     expect(watchSpy).toHaveBeenCalledTimes(1);
@@ -72,11 +72,27 @@ describe('WorkspaceWatcher', () => {
     const ignored = options?.ignored;
 
     expect(typeof ignored).toBe('function');
-    expect(ignored?.(join(testDir, '.git/config'))).toBe(true);
+    expect(ignored?.(join(testDir, '.git/config'))).toBe(false);
     expect(ignored?.(join(testDir, 'node_modules/package'))).toBe(true);
     expect(ignored?.(join(testDir, '.DS_Store'))).toBe(true);
     expect(ignored?.(join(testDir, 'Thumbs.db'))).toBe(true);
     expect(ignored?.(join(testDir, 'src/index.ts'))).toBe(false);
+  });
+
+  it('broadcasts fs.dirty after git metadata events settle', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+    watcherEvents.all?.('change', join(testDir, '.git/index'));
+    await vi.advanceTimersByTimeAsync(199);
+    expect(broadcaster.broadcast).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledWith(
+      Topics.workspaceFsDirty('test-workspace-id'),
+      { reason: 'fs_change' }
+    );
   });
 
   it('broadcasts fs.dirty after a single file event settles', async () => {
@@ -137,4 +153,3 @@ describe('WorkspaceWatcher', () => {
   });
 
 });
-

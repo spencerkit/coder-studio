@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { join, relative } from 'path';
 
 const DEFAULT_WATCHER_IGNORED_PATTERNS: RegExp[] = [
-  /\.git\//,
   /(^|\/)node_modules(\/|$)/,
   /\.DS_Store/,
   /Thumbs\.db/,
@@ -73,7 +72,8 @@ export function createWatcherIgnoreFilter(rootPath: string): (path: string) => b
   const gitignorePath = join(rootPath, '.gitignore');
 
   if (!existsSync(gitignorePath)) {
-    // Default: ignore .git/, node_modules, .DS_Store, Thumbs.db
+    // Default: ignore obvious noise, but keep .git metadata watched so git
+    // operations can trigger refreshes.
     return (path: string) => DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizePath(path)));
   }
 

@@ -193,6 +193,63 @@ describe('GitPanel', () => {
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
 
+  it('retries a refresh request after the in-flight git status load finishes', async () => {
+    let resolveFirst: ((value: GitStatus) => void) | null = null;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'git.status') {
+        return new Promise<GitStatus>((resolve) => {
+          if (!resolveFirst) {
+            resolveFirst = resolve;
+            return;
+          }
+
+          resolve({
+            ...status,
+            modified: [],
+            untracked: [],
+            deleted: [],
+          });
+        });
+      }
+
+      if (op === 'git.branches') {
+        return Promise.resolve({ current: 'feature/ai-agent', branches: [] });
+      }
+
+      if (op === 'git.diff') {
+        return Promise.resolve({ diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx' });
+      }
+
+      return Promise.resolve({});
+    });
+
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" refreshToken={0} />
+      </Provider>
+    );
+
+    rerender(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" refreshToken={1} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' });
+    });
+
+    resolveFirst?.(status);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(3);
+    });
+  });
+
   it('requires confirmation before discarding a single file', async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.status') {
