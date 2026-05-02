@@ -64,6 +64,7 @@ vi.mock('../../features/agent-panes/views/shared/session-card', () => ({
       data-show-header-actions={String(showHeaderActions)}
       data-show-supervisor-inline={String(showSupervisorInline)}
       data-readonly={String(terminalReadOnlyOverride)}
+      style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 }}
     >
       {sessionId}
     </div>
@@ -390,17 +391,21 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell({ initialEntry: '/workspace' });
 
     expect(screen.getByRole('button', { name: 'Switch workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Switch active agent' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Files sheet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Terminal sheet' })).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByRole('tablist', { name: 'Mobile agents' })).toBeInTheDocument();
-    });
-
-    expect(screen.getByRole('button', { name: 'Switch to agent Claude' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Switch to agent Codex' })).toBeInTheDocument();
+    expect(screen.queryByRole('tablist', { name: 'Mobile agents' })).not.toBeInTheDocument();
+    expect(screen.queryByText('已连接')).not.toBeInTheDocument();
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_2');
-    expect(screen.getByRole('textbox', { name: 'Agent composer' })).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-session-card')).not.toHaveAttribute('data-readonly', 'true');
+    expect(screen.getByTestId('mobile-session-card')).toHaveStyle({
+      display: 'flex',
+      flex: '1 1 auto',
+      minHeight: '0',
+      minWidth: '0',
+    });
+    expect(screen.getByTestId('mobile-session-card').parentElement).toHaveClass('mobile-shell__agent-stage');
+    expect(screen.queryByRole('textbox', { name: 'Agent composer' })).not.toBeInTheDocument();
   });
 
   it('opens and closes the files sheet', async () => {
@@ -538,11 +543,12 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(screen.getByText('正在重新连接...')).toBeInTheDocument();
   });
 
-  it('switches the active session when a chip is tapped', async () => {
+  it('switches the active session from the header selector', async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    await user.click(await screen.findByRole('button', { name: 'Switch to agent Claude' }));
+    await user.click(await screen.findByRole('button', { name: 'Switch active agent' }));
+    await user.click(screen.getByRole('button', { name: 'Switch to agent Claude' }));
 
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
   });
@@ -556,30 +562,6 @@ describe('MobileShell Phase 2 workspace', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
-    });
-  });
-
-  it('submits composer text through sendTerminalInput', async () => {
-    const user = userEvent.setup();
-    const { sendTerminalInput } = renderMobileShell();
-
-    const composer = await screen.findByRole('textbox', { name: 'Agent composer' });
-    fireEvent.change(composer, { target: { value: 'ship it' } });
-    expect(composer).toHaveValue('ship it');
-
-    const sendButton = screen.getByRole('button', { name: 'Send prompt' });
-    await waitFor(() => {
-      expect(sendButton).not.toBeDisabled();
-    });
-    await user.click(sendButton);
-
-    await waitFor(() => {
-      expect(sendTerminalInput).toHaveBeenCalledWith(
-        'term-2',
-        new TextEncoder().encode('ship it\r'),
-        'submit',
-        'ship it'
-      );
     });
   });
 

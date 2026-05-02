@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { TerminalPanel } from '../../../terminal-panel';
 import { AgentPanes } from '../../../agent-panes';
 import { SessionCard } from '../../../agent-panes/views/shared/session-card';
-import { MobileAgentStrip } from '../../../agent-panes/views/mobile/mobile-agent-strip';
-import { MobileComposer } from '../../../agent-panes/views/mobile/mobile-composer';
 import { MobileSupervisorBadge } from '../../../supervisor/views/mobile/mobile-supervisor-badge';
 import { MobileSupervisorSheet } from '../../../supervisor/views/mobile/mobile-supervisor-sheet';
 import { ConfigDriftBanner } from '../../../config-drift-banner';
@@ -97,7 +95,10 @@ export function WorkspaceMobileView() {
     >
       <MobileTopBar
         activeWorkspace={workspace}
+        activeSessionId={mobileActiveSessionId}
         drawerOpen={drawerOpen}
+        sessions={orderedSessions}
+        onSelectSession={selectMobileSession}
         onToggleDrawer={() => setDrawerOpen((value) => !value)}
       />
 
@@ -107,11 +108,6 @@ export function WorkspaceMobileView() {
         <div className="mobile-shell__content">
           {orderedSessions.length > 0 ? (
             <>
-              <MobileAgentStrip
-                activeSessionId={mobileActiveSessionId}
-                sessions={orderedSessions}
-                onSelect={selectMobileSession}
-              />
               <MobileSupervisorBadge
                 sessionId={mobileActiveSessionId}
                 onOpen={() => openMobileSheet('supervisor')}
@@ -123,7 +119,6 @@ export function WorkspaceMobileView() {
                     sessionId={activeSession.id}
                     showHeaderActions={false}
                     showSupervisorInline={false}
-                    terminalReadOnlyOverride
                   />
                 </section>
               ) : null}
@@ -149,7 +144,6 @@ export function WorkspaceMobileView() {
         data-testid="mobile-bottom-stack"
         style={{ '--mobile-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
       >
-        <MobileComposer activeSession={activeSession} />
         <MobileDock activeSheet={mobileSheet} onSelectSheet={openMobileSheet} />
       </div>
 
