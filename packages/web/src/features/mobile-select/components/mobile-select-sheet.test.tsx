@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
@@ -11,6 +11,10 @@ function renderWithEnglishLocale(node: React.ReactNode) {
 
   return render(<Provider store={store}>{node}</Provider>);
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('MobileSelectSheet', () => {
   it('renders option sections and highlights the selected item', async () => {
@@ -38,12 +42,12 @@ describe('MobileSelectSheet', () => {
     );
 
     expect(screen.getByRole('region', { name: 'Terminal Sessions sheet' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace ShellCurrent terminal' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
+    expect(screen.getByRole('button', { name: 'Workspace Shell' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Workspace Shell' })).toHaveAccessibleDescription(
+      'Current terminal'
     );
 
-    await user.click(screen.getByRole('button', { name: 'Workspace Shell 2Terminal 2' }));
+    await user.click(screen.getByRole('button', { name: 'Workspace Shell 2' }));
     expect(onSelect).toHaveBeenCalledWith('term_2');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -84,6 +88,36 @@ describe('MobileSelectSheet', () => {
     await Promise.resolve();
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs and keeps the sheet open when async onSelect rejects', async () => {
+    const user = userEvent.setup();
+    const error = new Error('select failed');
+    const onSelect = vi.fn().mockRejectedValue(error);
+    const onClose = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Terminal Sessions"
+        sections={[
+          {
+            kind: 'options',
+            id: 'terminals',
+            items: [{ id: 'term_1', label: 'Workspace Shell' }],
+          },
+        ]}
+        onSelect={onSelect}
+        onClose={onClose}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Workspace Shell' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith('MobileSelectSheet select failed', error);
   });
 
   it('filters only option sections when searchable and matches descriptions and keywords', async () => {
@@ -127,22 +161,28 @@ describe('MobileSelectSheet', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'CodexCode generation' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'ClaudeAnthropic session' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Codex' })).toHaveAccessibleDescription(
+      'Code generation'
+    );
+    expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search sessions'), {
       target: { value: 'Anthropic' },
     });
 
-    expect(screen.getByRole('button', { name: 'ClaudeAnthropic session' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'CodexCode generation' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Claude' })).toHaveAccessibleDescription(
+      'Anthropic session'
+    );
+    expect(screen.queryByRole('button', { name: 'Codex' })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search sessions'), {
       target: { value: 'automation' },
     });
 
-    expect(screen.getByRole('button', { name: 'CodexCode generation' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'ClaudeAnthropic session' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Codex' })).toHaveAccessibleDescription(
+      'Code generation'
+    );
+    expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
   });
 
   it('renders the create action from the current query when enabled', async () => {
@@ -251,11 +291,12 @@ describe('MobileSelectSheet', () => {
       target: { value: 'main' },
     });
 
-    const option = screen.getByRole('button', { name: 'mainProtected branch' });
+    const option = screen.getByRole('button', { name: 'main' });
     const action = screen.getByRole('button', { name: 'Refresh' });
     const create = screen.getByRole('button', { name: 'Create branch: main' });
 
     expect(option).toBeDisabled();
+    expect(option).toHaveAccessibleDescription('Protected branch');
     expect(action).toBeDisabled();
     expect(create).toBeDisabled();
 
