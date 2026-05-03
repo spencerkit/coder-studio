@@ -359,6 +359,8 @@ export function XtermHost({
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
   const coldStartStateRef = useRef<'idle' | 'in-flight' | 'done'>('idle');
+  const latestRenderedSeqRef = useRef(0);
+  const shouldRecoverOnNextConnectRef = useRef(false);
   // Tracks whether xterm is currently processing replay data. While > 0,
   // handleInput suppresses only known terminal auto-responses (e.g. DSR
   // `\x1b[6n` → `\x1b[row;colR`) so real user keystrokes still reach the PTY.
@@ -368,6 +370,7 @@ export function XtermHost({
   const inputDraftRef = useRef('');
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
   const hydrationReleasedRef = useRef(false);
+  const reconnectRecoveryTriggerRef = useRef<(() => void) | null>(null);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -733,6 +736,8 @@ export function XtermHost({
 
     replayWriteGenerationRef.current = replayWriteGeneration;
     replayWriteDepthRef.current = 0;
+    reconnectRecoveryTriggerRef.current = null;
+    shouldRecoverOnNextConnectRef.current = false;
 
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
@@ -915,16 +920,18 @@ export function XtermHost({
         }
       }
 
-      setOutputAtom((prev: OutputBuffer) => ({
-        ...prev,
-        chunks: [],
-        lastSeq: Math.max(prev.lastSeq, coveredSeq),
-      }));
+        setOutputAtom((prev: OutputBuffer) => ({
+          ...prev,
+          chunks: [],
+          lastSeq: Math.max(prev.lastSeq, coveredSeq),
+        }));
 
       replayedSeqRef.current = coveredSeq;
+      latestRenderedSeqRef.current = coveredSeq;
       replayCompletedRef.current = true;
       coldStartStateRef.current = 'done';
       flushPendingReplayChunks(coveredSeq);
+      reconnectRecoveryTriggerRef.current?.();
     };
 
     const finishReplay = (result: ReplayCommandResult | null) => {
@@ -955,12 +962,14 @@ export function XtermHost({
       replayCompletedRef.current = true;
       coldStartStateRef.current = 'done';
       flushPendingReplayChunks(replayedSeqRef.current);
+      reconnectRecoveryTriggerRef.current?.();
     };
 
     const requestReplay = (lastSeq: number) => {
       if (!wsClient) {
         return;
       }
+      coldStartStateRef.current = 'in-flight';
       replayCompletedRef.current = false;
       if (lastSeq === 0) {
         setReplayUiState({ kind: 'loading' });
@@ -982,19 +991,22 @@ export function XtermHost({
         });
     };
 
-    const requestColdStart = () => {
-      if (!wsClient || coldStartStateRef.current !== 'idle') {
-        return;
-      }
-
-      if (terminalKind !== 'agent') {
-        coldStartStateRef.current = 'in-flight';
-        requestReplay(0);
+    const requestHistoricalRecovery = (mode: 'initial' | 'reconnect') => {
+      if (!wsClient) {
         return;
       }
 
       coldStartStateRef.current = 'in-flight';
       replayCompletedRef.current = false;
+
+      if (terminalKind !== 'agent') {
+        if (mode === 'initial') {
+          setReplayUiState({ kind: 'loading' });
+        }
+        requestReplay(mode === 'initial' ? 0 : latestRenderedSeqRef.current);
+        return;
+      }
+
       setReplayUiState({ kind: 'loading' });
 
       const snapshotPromise: Promise<SnapshotCommandResult> = wsClient
@@ -1023,8 +1035,25 @@ export function XtermHost({
         traceTerminal(terminalId, 'snapshot.fallback', {
           reason: result.ok ? result.data?.status ?? 'unsupported' : String(result.error),
         });
-        requestReplay(0);
+        requestReplay(mode === 'initial' ? 0 : latestRenderedSeqRef.current);
       });
+    };
+
+    reconnectRecoveryTriggerRef.current = () => {
+      if (!shouldRecoverOnNextConnectRef.current) {
+        return;
+      }
+
+      if (typeof wsClient.getStatus === 'function' && wsClient.getStatus() !== 'connected') {
+        return;
+      }
+
+      if (coldStartStateRef.current === 'in-flight') {
+        return;
+      }
+
+      shouldRecoverOnNextConnectRef.current = false;
+      requestHistoricalRecovery('reconnect');
     };
 
     if (wsClient) {
@@ -1103,13 +1132,15 @@ export function XtermHost({
         return;
       }
 
-      requestColdStart();
+      requestHistoricalRecovery('initial');
     })().catch((error) => {
       failReplay(error);
     });
 
     return () => {
       disposed = true;
+      reconnectRecoveryTriggerRef.current = null;
+      shouldRecoverOnNextConnectRef.current = false;
       if (replayWriteGenerationRef.current === replayWriteGeneration) {
         replayWriteGenerationRef.current += 1;
         replayWriteDepthRef.current = 0;
@@ -1148,6 +1179,32 @@ export function XtermHost({
     wsClient,
   ]);
 
+  useEffect(() => {
+    if (!wsClient || typeof wsClient.onStatus !== 'function') {
+      return;
+    }
+
+    let shouldRecoverOnNextConnect = false;
+    const unsubscribe = wsClient.onStatus((status) => {
+      if (status === 'disconnected' || status === 'reconnecting') {
+        if (coldStartStateRef.current !== 'idle') {
+          shouldRecoverOnNextConnect = true;
+          shouldRecoverOnNextConnectRef.current = true;
+        }
+        return;
+      }
+
+      if (status !== 'connected' || !shouldRecoverOnNextConnect) {
+        return;
+      }
+
+      shouldRecoverOnNextConnect = false;
+      reconnectRecoveryTriggerRef.current?.();
+    });
+
+    return unsubscribe;
+  }, [wsClient]);
+
   /**
    * Write new output chunks to terminal
    */
@@ -1159,16 +1216,26 @@ export function XtermHost({
     const writtenChunkCount = chunks.length;
 
     if (writtenChunkCount > 0) {
+      const chunkEndSeqs = new Array<number>(chunks.length);
+      let nextSeq = outputAtom.lastSeq;
+      for (let i = chunks.length - 1; i >= 0; i -= 1) {
+        chunkEndSeqs[i] = nextSeq;
+        nextSeq -= chunks[i]?.byteLength ?? 0;
+      }
+
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         if (!chunk) continue;
+        const chunkEndSeq = chunkEndSeqs[i] ?? outputAtom.lastSeq;
 
         traceTerminal(terminalId, 'write.live-buffer', {
           index: i,
           lastSeq: outputAtom.lastSeq,
           summary: summarizeTerminalData(chunk),
         });
-        terminal.write(chunk);
+        terminal.write(chunk, () => {
+          latestRenderedSeqRef.current = Math.max(latestRenderedSeqRef.current, chunkEndSeq);
+        });
       }
 
       setOutputAtom((prev: OutputBuffer) => trimWrittenChunks(prev, writtenChunkCount));

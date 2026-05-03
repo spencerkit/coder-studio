@@ -753,7 +753,7 @@ describe('XtermHost', () => {
     );
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith(chunk);
+      expect(mockTerminal.write).toHaveBeenCalledWith(chunk, expect.any(Function));
     });
   });
 
@@ -1136,7 +1136,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.write).toHaveBeenCalledWith(lateChunk);
+      expect(mockTerminal.write).toHaveBeenCalledWith(lateChunk, expect.any(Function));
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
@@ -2108,6 +2108,527 @@ describe('XtermHost', () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('replays shell history again after websocket reconnect', async () => {
+    const store = createStore();
+    const firstReplayChunk = new TextEncoder().encode('first replay\n');
+    const reconnectReplayChunk = new TextEncoder().encode('reconnected replay\n');
+    const sendCommand = vi.fn();
+    let replayCount = 0;
+    let statusHandler: ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    sendCommand.mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+      if (op !== 'terminal.replay') {
+        return Promise.resolve({ status: 'ok' });
+      }
+
+      replayCount += 1;
+      if (replayCount === 1) {
+        expect(args.lastSeq).toBe(0);
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 900,
+          size: firstReplayChunk.byteLength,
+          seq: 100,
+          bytes: firstReplayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      expect(args.lastSeq).toBe(100);
+      return Promise.resolve({
+        status: 'ok',
+        transport: 'binary',
+        streamId: 901,
+        size: reconnectReplayChunk.byteLength,
+        seq: 120,
+        bytes: reconnectReplayChunk,
+      } satisfies TerminalReplayPayload);
+    });
+
+    const subscribe = vi.fn(() => vi.fn());
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="reconnect-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === firstReplayChunk)).toBe(true);
+    });
+
+    await act(async () => {
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === reconnectReplayChunk)).toBe(true);
+    });
+    expect(replayCount).toBe(2);
+  });
+
+  it('replays agent history again after websocket reconnect using snapshot', async () => {
+    const store = createStore();
+    const firstSnapshot = new TextEncoder().encode('agent snapshot\n');
+    const reconnectSnapshot = new TextEncoder().encode('agent snapshot after reconnect\n');
+    const sendCommand = vi.fn();
+    let snapshotCount = 0;
+    let statusHandler: ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === 'terminal.snapshot') {
+        snapshotCount += 1;
+        if (snapshotCount === 1) {
+          return Promise.resolve({
+            status: 'ok',
+            transport: 'binary',
+            streamId: 950,
+            size: firstSnapshot.byteLength,
+            seq: 200,
+            rows: 36,
+            cols: 132,
+            source: 'headless',
+            bytes: firstSnapshot,
+          } satisfies TerminalSnapshotPayload);
+        }
+
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 951,
+          size: reconnectSnapshot.byteLength,
+          seq: 240,
+          rows: 36,
+          cols: 132,
+          source: 'headless',
+          bytes: reconnectSnapshot,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="agent-reconnect-terminal" workspaceId="test-workspace" terminalKind="agent" />
+      </Provider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === firstSnapshot)).toBe(true);
+    });
+
+    await act(async () => {
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === reconnectSnapshot)).toBe(true);
+    });
+    expect(snapshotCount).toBe(2);
+  });
+
+  it('retries historical recovery after reconnect when the initial replay is interrupted by disconnect', async () => {
+    const store = createStore();
+    const recoveredChunk = new TextEncoder().encode('recovered after reconnect\n');
+    let statusHandler:
+      | ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void)
+      | undefined;
+    let rejectInitialReplay: ((error: Error) => void) | undefined;
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op !== 'terminal.replay') {
+        return Promise.resolve({ status: 'ok' });
+      }
+
+      if (sendCommand.mock.calls.filter(([calledOp]) => calledOp === 'terminal.replay').length === 1) {
+        return new Promise((_, reject: (error: Error) => void) => {
+          rejectInitialReplay = reject;
+        });
+      }
+
+      return Promise.resolve({
+        status: 'ok',
+        transport: 'binary',
+        streamId: 960,
+        size: recoveredChunk.byteLength,
+        seq: recoveredChunk.byteLength,
+        bytes: recoveredChunk,
+      } satisfies TerminalReplayPayload);
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="interrupted-initial-replay" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectReplayCall(sendCommand, 'interrupted-initial-replay', 0);
+    });
+
+    await act(async () => {
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      rejectInitialReplay?.(new Error('WebSocket disconnected'));
+      await Promise.resolve();
+      await Promise.resolve();
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === 'terminal.replay')).toHaveLength(2);
+      expectTerminalWriteData(recoveredChunk);
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('reconnect replay resumes from the last rendered seq instead of buffered live seq', async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode('initial replay\n');
+    const liveBufferedChunk = new TextEncoder().encode('live but not yet painted\n');
+    const reconnectChunk = new TextEncoder().encode('recovered tail\n');
+    let statusHandler:
+      | ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void)
+      | undefined;
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    let replayCount = 0;
+    const sendCommand = vi.fn().mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+      if (op !== 'terminal.replay') {
+        return Promise.resolve({ status: 'ok' });
+      }
+
+      replayCount += 1;
+      if (replayCount === 1) {
+        expect(args.lastSeq).toBe(0);
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 970,
+          size: initialReplayChunk.byteLength,
+          seq: 100,
+          bytes: initialReplayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      expect(args.lastSeq).toBe(100);
+      return Promise.resolve({
+        status: 'ok',
+        transport: 'binary',
+        streamId: 971,
+        size: reconnectChunk.byteLength,
+        seq: 130,
+        bytes: reconnectChunk,
+      } satisfies TerminalReplayPayload);
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+        subscriptionHandler = handler;
+        return vi.fn();
+      }),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="rendered-seq-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'rendered-seq-terminal'),
+        {
+          transport: 'binary',
+          streamId: 972,
+          size: liveBufferedChunk.byteLength,
+          bytes: liveBufferedChunk,
+        },
+        120
+      );
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(replayCount).toBe(2);
+      expectTerminalWriteData(reconnectChunk);
+    });
+  });
+
+  it('does not advance rendered seq for reconnect recovery until the live write callback completes', async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode('initial replay\n');
+    const delayedLiveChunk = new TextEncoder().encode('delayed live chunk\n');
+    const reconnectChunk = new TextEncoder().encode('recovered after delayed live\n');
+    let statusHandler:
+      | ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void)
+      | undefined;
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    let replayCount = 0;
+    let releaseDelayedWrite: (() => void) | undefined;
+
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === delayedLiveChunk) {
+        releaseDelayedWrite = callback;
+        return;
+      }
+      callback?.();
+    });
+
+    const sendCommand = vi.fn().mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+      if (op !== 'terminal.replay') {
+        return Promise.resolve({ status: 'ok' });
+      }
+
+      replayCount += 1;
+      if (replayCount === 1) {
+        expect(args.lastSeq).toBe(0);
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 973,
+          size: initialReplayChunk.byteLength,
+          seq: 100,
+          bytes: initialReplayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      expect(args.lastSeq).toBe(100);
+      return Promise.resolve({
+        status: 'ok',
+        transport: 'binary',
+        streamId: 974,
+        size: reconnectChunk.byteLength,
+        seq: 140,
+        bytes: reconnectChunk,
+      } satisfies TerminalReplayPayload);
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+        subscriptionHandler = handler;
+        return vi.fn();
+      }),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="delayed-rendered-seq-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'delayed-rendered-seq-terminal'),
+        {
+          transport: 'binary',
+          streamId: 975,
+          size: delayedLiveChunk.byteLength,
+          bytes: delayedLiveChunk,
+        },
+        100 + delayedLiveChunk.byteLength
+      );
+      await Promise.resolve();
+    });
+
+    expect(typeof releaseDelayedWrite).toBe('function');
+
+    await act(async () => {
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(replayCount).toBe(2);
+      expectTerminalWriteData(reconnectChunk);
+    });
+  });
+
+  it('falls back to replay on agent reconnect when snapshot refresh fails', async () => {
+    const store = createStore();
+    const initialSnapshot = new TextEncoder().encode('initial snapshot\n');
+    const replayFallback = new TextEncoder().encode('snapshot fallback replay\n');
+    let statusHandler:
+      | ((status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected') => void)
+      | undefined;
+    let snapshotCount = 0;
+    const sendCommand = vi.fn().mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+      if (op === 'terminal.snapshot') {
+        snapshotCount += 1;
+        if (snapshotCount === 1) {
+          return Promise.resolve({
+            status: 'ok',
+            transport: 'binary',
+            streamId: 980,
+            size: initialSnapshot.byteLength,
+            seq: 200,
+            rows: 36,
+            cols: 132,
+            source: 'headless',
+            bytes: initialSnapshot,
+          } satisfies TerminalSnapshotPayload);
+        }
+
+        return Promise.reject(new Error('Command timeout: terminal.snapshot'));
+      }
+
+      if (op === 'terminal.replay') {
+        expect(args.lastSeq).toBe(200);
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 981,
+          size: replayFallback.byteLength,
+          seq: 240,
+          bytes: replayFallback,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="agent-reconnect-fallback" workspaceId="test-workspace" terminalKind="agent" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialSnapshot);
+    });
+
+    await act(async () => {
+      statusHandler?.('disconnected');
+      statusHandler?.('reconnecting');
+      statusHandler?.('connected');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'terminal.replay',
+        {
+          terminalId: 'agent-reconnect-fallback',
+          lastSeq: 200,
+        },
+        {
+          timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+        }
+      );
+      expectTerminalWriteData(replayFallback);
+    });
   });
 
   it('waits for the first fit frame before writing replay output', async () => {
