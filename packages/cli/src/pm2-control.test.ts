@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { writeRuntimeConfig } from '../../server/src/hooks/runtime-json.js';
+import { writeRuntimeConfig } from '@coder-studio/core/runtime';
 
 const { connect, start, deleteProcess, describeProcess, disconnect } = vi.hoisted(() => ({
   connect: vi.fn(),

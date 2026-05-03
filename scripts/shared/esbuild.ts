@@ -76,6 +76,7 @@ export async function createCliBuildOptions(
     // Resolve internal workspace packages to their source files
     alias: {
       '@coder-studio/server': resolve(SERVER_DIR, 'src/index.ts'),
+      '@coder-studio/core/runtime': resolve(CORE_DIR, 'src/runtime.ts'),
       '@coder-studio/core': resolve(CORE_DIR, 'src/index.ts'),
       '@coder-studio/providers': resolve(PROVIDERS_DIR, 'src/index.ts'),
     },

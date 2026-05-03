@@ -11,12 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-// Runtime directory (default: ~/.coder-studio)
 const RUNTIME_DIR =
   process.env.CODER_STUDIO_RUNTIME_DIR ||
   path.join(process.env.HOME || process.env.USERPROFILE, '.coder-studio');
-
-const RUNTIME_JSON_PATH = path.join(RUNTIME_DIR, 'runtime.json');
+const RUNTIME_JSON_PATH =
+  process.env.CODER_STUDIO_RUNTIME_JSON_PATH ||
+  path.join(RUNTIME_DIR, 'runtime.json');
 
 /**
  * Read runtime configuration
@@ -25,7 +25,7 @@ function readRuntimeConfig() {
   try {
     const content = fs.readFileSync(RUNTIME_JSON_PATH, 'utf-8');
     return JSON.parse(content);
-  } catch (err) {
+  } catch (_err) {
     // Silently fail - server may not be running
     return null;
   }
@@ -46,7 +46,7 @@ async function readStdinPayload() {
       const content = Buffer.concat(chunks).toString('utf-8');
       try {
         resolve(JSON.parse(content));
-      } catch (err) {
+      } catch (_err) {
         resolve(content); // Return raw string if not JSON
       }
     });
