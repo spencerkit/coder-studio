@@ -1,7 +1,16 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from '../../../lib/i18n';
 import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
+
+export interface MobileSelectItemTrailingAction {
+  id: string;
+  ariaLabel: string;
+  icon: ReactNode;
+  tone?: 'default' | 'danger';
+  disabled?: boolean;
+  onAction: () => void | Promise<void>;
+}
 
 export interface MobileSelectItem {
   id: string;
@@ -13,6 +22,7 @@ export interface MobileSelectItem {
   disabled?: boolean;
   keywords?: string[];
   tone?: 'default' | 'danger';
+  trailingAction?: MobileSelectItemTrailingAction;
 }
 
 export interface MobileSelectActionItem {
@@ -54,6 +64,7 @@ export interface MobileSelectSheetProps {
   title: string;
   sections: MobileSelectSection[];
   selectedId?: string | null;
+  presentation?: 'sheet' | 'inline';
   searchable?: boolean;
   searchPlaceholder?: string;
   searchValue?: string;
@@ -73,6 +84,7 @@ export function MobileSelectSheet({
   title,
   sections,
   selectedId,
+  presentation = 'sheet',
   searchable = false,
   searchPlaceholder,
   searchValue,
@@ -157,6 +169,10 @@ export function MobileSelectSheet({
     runAsyncHandler('action', action);
   };
 
+  const handleTrailingAction = (action: () => void | Promise<void>) => {
+    runAsyncHandler('action', action);
+  };
+
   const handleCreate = () => {
     if (!create || !query.trim()) {
       return;
@@ -165,8 +181,8 @@ export function MobileSelectSheet({
     runAsyncHandler('create', () => create.onCreate(query.trim()));
   };
 
-  const body = (
-    <div className="mobile-select-sheet">
+  const content = (
+    <>
       {searchable ? (
         <div className="mobile-select-sheet__search">
           <label className="mobile-select-sheet__search-label" htmlFor={searchId}>
@@ -211,14 +227,12 @@ export function MobileSelectSheet({
                           ]
                             .filter(Boolean)
                             .join(' ');
-                          return (
+                          const optionButton = (
                             <button
-                              key={item.id}
                               type="button"
                               className={`mobile-select-sheet__item ${
                                 item.tone === 'danger' ? 'mobile-select-sheet__item--danger' : ''
                               }`}
-                              data-selected={isSelected ? 'true' : 'false'}
                               aria-pressed={isSelected}
                               aria-labelledby={labelId}
                               aria-describedby={descriptionIds || undefined}
@@ -254,10 +268,43 @@ export function MobileSelectSheet({
                               {item.badge ? (
                                 <span className="mobile-select-sheet__item-badge">{item.badge}</span>
                               ) : null}
-                              <span className="mobile-select-sheet__item-check" aria-hidden="true">
-                                {isSelected ? <Check size={16} /> : null}
-                              </span>
                             </button>
+                          );
+
+                          if (!item.trailingAction) {
+                            return (
+                              <div key={item.id} data-selected={isSelected ? 'true' : 'false'}>
+                                {optionButton}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="mobile-select-sheet__item-row"
+                              data-selected={isSelected ? 'true' : 'false'}
+                            >
+                              {optionButton}
+                              <button
+                                type="button"
+                                className={`mobile-select-sheet__item-side-action ${
+                                  item.trailingAction.tone === 'danger'
+                                    ? 'mobile-select-sheet__item-side-action--danger'
+                                    : ''
+                                }`}
+                                aria-label={item.trailingAction.ariaLabel}
+                                disabled={item.disabled || item.trailingAction.disabled}
+                                onClick={() => handleTrailingAction(item.trailingAction.onAction)}
+                              >
+                                <span
+                                  className="mobile-select-sheet__item-side-action-icon"
+                                  aria-hidden="true"
+                                >
+                                  {item.trailingAction.icon}
+                                </span>
+                              </button>
+                            </div>
                           );
                         })
                       : section.items.map((item) => {
@@ -311,19 +358,19 @@ export function MobileSelectSheet({
                     const labelId = 'mobile-select-create-label';
 
                     return (
-                  <button
-                    type="button"
-                    className="mobile-select-sheet__item mobile-select-sheet__item--create"
-                    aria-labelledby={labelId}
-                    disabled={createDisabled}
-                    onClick={handleCreate}
-                  >
-                    <span className="mobile-select-sheet__item-copy">
-                      <span id={labelId} className="mobile-select-sheet__item-label">
-                        {create?.label(query.trim())}
-                      </span>
-                    </span>
-                  </button>
+                      <button
+                        type="button"
+                        className="mobile-select-sheet__item mobile-select-sheet__item--create"
+                        aria-labelledby={labelId}
+                        disabled={createDisabled}
+                        onClick={handleCreate}
+                      >
+                        <span className="mobile-select-sheet__item-copy">
+                          <span id={labelId} className="mobile-select-sheet__item-label">
+                            {create?.label(query.trim())}
+                          </span>
+                        </span>
+                      </button>
                     );
                   })()}
                 </div>
@@ -336,13 +383,38 @@ export function MobileSelectSheet({
           </>
         )}
       </div>
-    </div>
+    </>
   );
+
+  if (presentation === 'inline') {
+    return (
+      <div className="mobile-inline-sheet" role="dialog" aria-label={title}>
+        <div className="mobile-inline-sheet__handle" aria-hidden="true" />
+        <div className="mobile-inline-sheet__header">
+          {onBack ? (
+            <button
+              type="button"
+              className="mobile-sheet__back"
+              aria-label={t('action.back')}
+              onClick={onBack}
+            >
+              <ArrowLeft size={16} />
+              <span>{t('action.back')}</span>
+            </button>
+          ) : null}
+          <h3 className="mobile-inline-sheet__title">{title}</h3>
+        </div>
+        <div className="mobile-inline-sheet__body">
+          <div className="mobile-select-sheet mobile-select-sheet--inline">{content}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <MobileSheet
       title={title}
-      body={body}
+      body={<div className="mobile-select-sheet">{content}</div>}
       onClose={onClose}
       kicker={kicker}
       onBack={onBack}

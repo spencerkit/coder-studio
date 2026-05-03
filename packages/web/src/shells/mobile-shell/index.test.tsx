@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
@@ -785,7 +785,22 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
     expect(screen.getByRole('region', { name: 'Agent Sessions sheet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Close Current Session' })).toBeInTheDocument();
+    const activeRow = screen
+      .getByRole('button', {
+        name: 'Codex',
+        description: 'Switch to agent Codex CODEX',
+      })
+      .closest('.mobile-select-sheet__item-row');
+    const inactiveRow = screen
+      .getByRole('button', {
+        name: 'Claude',
+        description: 'Switch to agent Claude CLAUDE',
+      })
+      .closest('.mobile-select-sheet__item-row');
+    expect(activeRow).not.toBeNull();
+    expect(inactiveRow).not.toBeNull();
+    expect(within(activeRow as HTMLElement).getByRole('button', { name: 'Close Current Session' })).toBeInTheDocument();
+    expect(within(inactiveRow as HTMLElement).getByRole('button', { name: 'Close Current Session' })).toBeInTheDocument();
     await user.click(
       screen.getByRole('button', {
         name: 'Claude',
@@ -794,6 +809,29 @@ describe('MobileShell Phase 2 workspace', () => {
     );
 
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+  });
+
+  it('renders the agent sheet as a fullscreen mobile sheet on mobile', async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+
+    expect(screen.getByRole('region', { name: 'Agent Sessions sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
+    expect(document.querySelector('.mobile-shell__bottom-stack .mobile-sheet-layer')).toBeNull();
+  });
+
+  it('dismisses the agent sheet when tapping the backdrop', async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+    await user.click(screen.getByRole('button', { name: 'Dismiss current sheet' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Agent Sessions sheet' })).not.toBeInTheDocument();
+    });
   });
 
   it('keeps the provider sheet open when provider launch fails', async () => {
@@ -1030,7 +1068,7 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(0);
   });
 
-  it('closes the active agent from the mobile session sheet', async () => {
+  it('closes the active agent from the current session row action', async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
@@ -1058,12 +1096,68 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell({ sendCommand });
 
     await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
-    await user.click(screen.getByRole('button', { name: 'Close Current Session' }));
+    const activeRow = screen
+      .getByRole('button', {
+        name: 'Codex',
+        description: 'Switch to agent Codex CODEX',
+      })
+      .closest('.mobile-select-sheet__item-row');
+    expect(activeRow).not.toBeNull();
+
+    await user.click(
+      within(activeRow as HTMLElement).getByRole('button', { name: 'Close Current Session' })
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
     });
     expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_2' });
+  });
+
+  it('closes a non-active agent from its row action without switching first', async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === 'session.list') {
+        return [
+          createSession({
+            id: 'sess_1',
+            terminalId: 'term-1',
+            providerId: 'claude',
+            state: 'idle',
+            title: 'Claude',
+          }),
+          createSession({
+            id: 'sess_2',
+            terminalId: 'term-2',
+            providerId: 'codex',
+            state: 'running',
+            title: 'Codex',
+          }),
+        ];
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ sendCommand });
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+    const inactiveRow = screen
+      .getByRole('button', {
+        name: 'Claude',
+        description: 'Switch to agent Claude CLAUDE',
+      })
+      .closest('.mobile-select-sheet__item-row');
+    expect(inactiveRow).not.toBeNull();
+
+    await user.click(
+      within(inactiveRow as HTMLElement).getByRole('button', { name: 'Close Current Session' })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_1' });
+    });
+    expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_2');
   });
 
   it('switches to the target session when a pending focus marker points at a non-active mobile session', async () => {

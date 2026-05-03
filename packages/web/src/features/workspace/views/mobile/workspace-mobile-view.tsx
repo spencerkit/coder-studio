@@ -194,23 +194,22 @@ export function WorkspaceMobileView() {
         style={{ '--mobile-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
       >
         <div className="mobile-dock-shell">
-          {agentSheetOpen ? (
-            <MobileAgentSheet
-              activeSessionId={mobileActiveSessionId}
-              activeWorkspaceId={activeWorkspaceId}
-              className="mobile-dock__agent-sheet"
-              defaultMode={orderedSessions.length === 0 ? 'create' : 'list'}
-              sessions={orderedSessions}
-              onClose={() => setAgentSheetOpen(false)}
-              onCloseSession={closeMobileSession}
-              onSelectSession={selectMobileSession}
-              onSessionCreated={handleMobileSessionCreated}
-            />
-          ) : null}
-
           <MobileDock activeItem={activeDockItem} onSelectItem={handleDockSelect} />
         </div>
       </div>
+
+      {agentSheetOpen ? (
+        <MobileAgentSheet
+          activeSessionId={mobileActiveSessionId}
+          activeWorkspaceId={activeWorkspaceId}
+          defaultMode={orderedSessions.length === 0 ? 'create' : 'list'}
+          sessions={orderedSessions}
+          onClose={() => setAgentSheetOpen(false)}
+          onCloseSession={closeMobileSession}
+          onSelectSession={selectMobileSession}
+          onSessionCreated={handleMobileSessionCreated}
+        />
+      ) : null}
 
       {mobileSheet === 'supervisor' && activeSession ? (
         <MobileSupervisorSheet

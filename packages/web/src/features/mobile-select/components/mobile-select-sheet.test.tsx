@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
 import { localeAtom } from '../../../atoms/app-ui';
@@ -183,6 +183,130 @@ describe('MobileSelectSheet', () => {
       'Code generation'
     );
     expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
+  });
+
+  it('renders an inline back button when onBack is provided', async () => {
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Agent Sessions"
+        presentation="inline"
+        sections={[
+          {
+            kind: 'options',
+            id: 'sessions',
+            items: [{ id: 'sess_1', label: 'Claude' }],
+          },
+        ]}
+        onBack={onBack}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a trailing item action without selecting the row', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    const onCloseSession = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Agent Sessions"
+        sections={[
+          {
+            kind: 'options',
+            id: 'sessions',
+            items: [
+              {
+                id: 'sess_2',
+                label: 'Codex',
+                description: 'Switch to agent Codex',
+                meta: 'CODEX',
+                trailingAction: {
+                  id: 'close-current',
+                  ariaLabel: 'Close Current Session',
+                  icon: <span aria-hidden="true">x</span>,
+                  onAction: onCloseSession,
+                },
+              },
+            ],
+          },
+        ]}
+        onSelect={onSelect}
+        onClose={onClose}
+      />
+    );
+
+    const row = screen
+      .getByRole('button', {
+        name: 'Codex',
+        description: 'Switch to agent Codex CODEX',
+      })
+      .closest('.mobile-select-sheet__item-row');
+
+    expect(row).not.toBeNull();
+
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Close Current Session' }));
+
+    expect(onCloseSession).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps selected state on the row background and does not render a check icon', () => {
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Agent Sessions"
+        sections={[
+          {
+            kind: 'options',
+            id: 'sessions',
+            items: [
+              {
+                id: 'sess_1',
+                label: 'Claude',
+                trailingAction: {
+                  id: 'close-claude',
+                  ariaLabel: 'Close Claude',
+                  icon: <span aria-hidden="true">x</span>,
+                  onAction: vi.fn(),
+                },
+              },
+              {
+                id: 'sess_2',
+                label: 'Codex',
+                trailingAction: {
+                  id: 'close-codex',
+                  ariaLabel: 'Close Codex',
+                  icon: <span aria-hidden="true">x</span>,
+                  onAction: vi.fn(),
+                },
+              },
+            ],
+          },
+        ]}
+        selectedId="sess_2"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const selectedRow = screen.getByRole('button', { name: 'Codex' }).closest('.mobile-select-sheet__item-row');
+    const unselectedRow = screen.getByRole('button', { name: 'Claude' }).closest('.mobile-select-sheet__item-row');
+
+    expect(selectedRow).toHaveAttribute('data-selected', 'true');
+    expect(unselectedRow).toHaveAttribute('data-selected', 'false');
+    expect(document.querySelector('.mobile-select-sheet__item-check')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Close Claude' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close Codex' })).toBeInTheDocument();
   });
 
   it('supports a controlled search value when the caller owns the query state', () => {

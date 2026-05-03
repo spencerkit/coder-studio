@@ -11,7 +11,6 @@ import { useProviderLauncher } from '../../../agent-panes/actions/use-provider-l
 interface MobileAgentSheetProps {
   activeSessionId: string | null;
   activeWorkspaceId: string | null;
-  className?: string;
   defaultMode?: 'list' | 'create';
   sessions: Session[];
   onClose: () => void;
@@ -42,7 +41,6 @@ function formatSessionLabel(session: Session) {
 export function MobileAgentSheet({
   activeSessionId,
   activeWorkspaceId,
-  className,
   defaultMode = 'list',
   sessions,
   onClose,
@@ -103,20 +101,6 @@ export function MobileAgentSheet({
           onAction: () => setMode('providers'),
           disabled: !canLaunchSession,
         },
-        ...(activeSession
-          ? [
-              {
-                id: 'close-current',
-                label: t('mobile.agent.close_current_session'),
-                icon: <X size={16} />,
-                tone: 'danger' as const,
-                onAction: async () => {
-                  await onCloseSession(activeSession.id);
-                  closeSheet();
-                },
-              },
-            ]
-          : []),
       ],
     },
     {
@@ -131,6 +115,17 @@ export function MobileAgentSheet({
                 name: formatSessionLabel(session),
               }),
               meta: session.providerId.toUpperCase(),
+              trailingAction:
+                {
+                  id: `${session.id}-close`,
+                  ariaLabel: t('mobile.agent.close_current_session'),
+                  icon: <X size={16} />,
+                  tone: 'danger' as const,
+                  onAction: async () => {
+                    await onCloseSession(session.id);
+                    closeSheet();
+                  },
+                },
             }))
           : [],
     },
@@ -160,26 +155,24 @@ export function MobileAgentSheet({
   ];
 
   return (
-    <div className={className}>
-      <MobileSelectSheet
-        title={mode === 'sessions' ? t('mobile.agent.title') : t('session.provider_select')}
-        sections={mode === 'sessions' ? sessionSections : providerSections}
-        selectedId={mode === 'sessions' ? activeSession?.id ?? null : null}
-        emptyText={mode === 'sessions' ? t('mobile.agent.empty') : undefined}
-        closeOnSelect={false}
-        onBack={mode === 'providers' ? () => setMode('sessions') : undefined}
-        onClose={closeSheet}
-        onSelect={(id) => {
-          if (mode === 'sessions') {
-            onSelectSession(id);
-            closeSheet();
-            return;
-          }
+    <MobileSelectSheet
+      title={mode === 'sessions' ? t('mobile.agent.title') : t('session.provider_select')}
+      sections={mode === 'sessions' ? sessionSections : providerSections}
+      selectedId={mode === 'sessions' ? activeSession?.id ?? null : null}
+      emptyText={mode === 'sessions' ? t('mobile.agent.empty') : undefined}
+      closeOnSelect={false}
+      onBack={mode === 'providers' ? () => setMode('sessions') : undefined}
+      onClose={closeSheet}
+      onSelect={(id) => {
+        if (mode === 'sessions') {
+          onSelectSession(id);
+          closeSheet();
+          return;
+        }
 
-          return launch(id as 'claude' | 'codex');
-        }}
-      />
-    </div>
+        return launch(id as 'claude' | 'codex');
+      }}
+    />
   );
 }
 

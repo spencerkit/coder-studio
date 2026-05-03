@@ -152,15 +152,34 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
     const inlineSheet = getLastRuleBlock(".mobile-inline-sheet");
+    const inlineSelectSheet = getLastRuleBlock(".mobile-select-sheet--inline");
     const workspaceButton = getLastGroupedRuleBlock(/\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g);
     const sessionButton = getLastGroupedRuleBlock(/\.mobile-topbar__session-button\s*\{([^}]*)\}/g);
     const iconButton = getLastRuleBlock(".mobile-topbar__icon-button");
 
     expect(inlineSheet).toContain("position: absolute");
     expect(inlineSheet).toContain("border-radius: 20px");
+    expect(inlineSelectSheet).toContain("flex: 1");
+    expect(inlineSelectSheet).toContain("flex-direction: column");
     expect(workspaceButton).toContain("height: 48px");
     expect(sessionButton).toContain("min-height: 48px");
     expect(iconButton).toContain("height: 48px");
+  });
+
+  it("keeps mobile select row-side actions lightweight and token-driven", () => {
+    const row = getLastRuleBlock(".mobile-select-sheet__item-row");
+    const rowSelected = getLastRuleBlock(".mobile-select-sheet__item-row[data-selected='true']");
+    const sideAction = getLastRuleBlock(".mobile-select-sheet__item-side-action");
+    const sideActionDanger = getLastRuleBlock(".mobile-select-sheet__item-side-action--danger");
+
+    expect(row).toContain("display: flex");
+    expect(row).toContain("padding: var(--sp-1) var(--sp-2)");
+    expect(rowSelected).toContain("var(--accent-blue)");
+    expect(sideAction).toContain("width: 40px");
+    expect(sideAction).toContain("border-radius: 999px");
+    expect(sideAction).toContain("background: transparent");
+    expect(sideActionDanger).toContain("var(--accent-red)");
+    expect(stylesheet).not.toContain(".mobile-select-sheet__item-check {");
   });
 
   it("keeps the mobile dock as a three-entry bottom rail for agent, files, and terminal", () => {
