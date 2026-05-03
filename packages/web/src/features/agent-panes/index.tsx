@@ -9,7 +9,7 @@ import type { FC } from 'react';
 import { useAtomValue } from 'jotai';
 import { activeWorkspaceAtom } from '../../atoms/workspaces';
 import { useWorkspaceSessions } from './actions/use-workspace-sessions';
-import type { PaneNode } from './atoms/pane-layout';
+import { readPaneRatio, writePaneRatio, type PaneNode } from './atoms/pane-layout';
 import { useTranslation } from '../../lib/i18n';
 import { DraftLauncher } from './views/shared/draft-launcher';
 import { PaneLayout } from './views/shared/pane-layout';
@@ -142,8 +142,15 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   }
 
   // Render split container
+  const resolvedRatio = readPaneRatio(workspaceId, node.id) ?? node.ratio ?? 0.5;
+
   return (
-    <PaneLayout direction={node.direction || 'horizontal'} ratio={node.ratio || 0.5}>
+    <PaneLayout
+      splitId={node.id}
+      direction={node.direction || 'horizontal'}
+      ratio={resolvedRatio}
+      onRatioCommit={(ratio) => writePaneRatio(workspaceId, node.id, ratio)}
+    >
       {node.children?.map((child) => (
         <PaneNodeRenderer
           key={child.id}

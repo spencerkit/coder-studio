@@ -51,8 +51,23 @@ vi.mock('./views/shared/session-card', () => ({
 }));
 
 vi.mock('./views/shared/pane-layout', () => ({
-  PaneLayout: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="pane-layout">{children}</div>
+  PaneLayout: ({
+    children,
+    ratio,
+    splitId,
+    onRatioCommit,
+  }: {
+    children: React.ReactNode;
+    ratio: number;
+    splitId?: string;
+    onRatioCommit?: (ratio: number) => void;
+  }) => (
+    <div data-testid="pane-layout" data-ratio={ratio} data-split-id={splitId}>
+      <button type="button" onClick={() => onRatioCommit?.(0.73)}>
+        resize-{splitId ?? 'unknown'}
+      </button>
+      {children}
+    </div>
   ),
 }));
 
@@ -521,6 +536,49 @@ describe('AgentPanes', () => {
     });
 
     expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(legacyLayout);
+    expect(
+      window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}ws-1`)
+    ).toBeNull();
+  });
+
+  it('restores split ratios from client-local storage after remount', async () => {
+    const { store } = createAgentPaneStore({
+      id: 'root',
+      type: 'split',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [
+        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
+        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+      ],
+    });
+
+    const { unmount } = render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    const initialPaneLayout = screen.getByTestId('pane-layout');
+    expect(initialPaneLayout).toHaveAttribute('data-ratio', '0.5');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'resize-root' }));
+    });
+
+    expect(window.localStorage.getItem('ui.paneRatio.ws-1.root')).toBe('0.73');
+
+    unmount();
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pane-layout')).toHaveAttribute('data-ratio', '0.73');
+    });
   });
 
   it('keeps interrupted sessions mounted in the pane layout after session.list hydration', async () => {

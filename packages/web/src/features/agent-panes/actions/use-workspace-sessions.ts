@@ -6,9 +6,10 @@ import { connectionStatusAtom, dispatchCommandAtom } from '../../../atoms/connec
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../../atoms/sessions';
 import { useWorkspaceUiStatePersistence } from '../../workspace/actions/use-workspace-ui-state-persistence';
 import {
-  LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX,
+  clearLegacyPaneLayout,
   defaultPaneLayout,
   paneLayoutAtomFamily,
+  readLegacyPaneLayout,
   type PaneNode,
 } from '../atoms/pane-layout';
 import { collectSessionIds, createFallbackPaneLayout, sanitizePaneLayout } from '../pane-layout-tree';
@@ -99,7 +100,11 @@ export function useWorkspaceSessions(
           const shouldPersistLayout =
             legacyPaneLayout !== null || collectSessionIds(nextLayout).length > 0;
           if (shouldPersistLayout) {
-            void persistUiState({ paneLayout: nextLayout });
+            void persistUiState({ paneLayout: nextLayout }).then((persisted) => {
+              if (persisted && legacyPaneLayout !== null) {
+                clearLegacyPaneLayout(workspace.id);
+              }
+            });
           }
         }
       })
@@ -142,21 +147,4 @@ function normalizePaneLayout(layout: Workspace['uiState']['paneLayout']): PaneNo
     ...layout,
     children: layout.children?.map((child) => normalizePaneLayout(child) ?? defaultPaneLayout),
   };
-}
-
-function readLegacyPaneLayout(workspaceId: string): PaneNode | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}${workspaceId}`);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw) as PaneNode;
-  } catch {
-    return null;
-  }
 }

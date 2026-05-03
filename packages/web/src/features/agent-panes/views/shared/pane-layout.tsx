@@ -6,12 +6,14 @@
  */
 
 import type { FC, ReactNode } from 'react';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 
 interface PaneLayoutProps {
+  splitId: string;
   direction: 'horizontal' | 'vertical';
   ratio: number;
   children: ReactNode;
+  onRatioCommit?: (ratio: number) => void;
 }
 
 /**
@@ -22,15 +24,23 @@ interface PaneLayoutProps {
  *   - Horizontal/vertical direction
  *   - Resizable by dragging
  */
-export const PaneLayout: FC<PaneLayoutProps> = ({ direction, ratio, children }) => {
+export const PaneLayout: FC<PaneLayoutProps> = ({
+  splitId,
+  direction,
+  ratio,
+  children,
+  onRatioCommit,
+}) => {
   const [currentRatio, setCurrentRatio] = useState(ratio);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const pendingRatio = useRef(ratio);
 
   const handleMouseDown = useCallback(() => {
     isDragging.current = true;
+    pendingRatio.current = currentRatio;
     document.body.classList.add('is-resizing-panels');
-  }, []);
+  }, [currentRatio]);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isDragging.current || !containerRef.current) {
@@ -43,12 +53,18 @@ export const PaneLayout: FC<PaneLayoutProps> = ({ direction, ratio, children }) 
     const nextRatio = Math.max(0.1, Math.min(0.9, position / total));
 
     setCurrentRatio(nextRatio);
+    pendingRatio.current = nextRatio;
   }, [direction]);
 
   const handleMouseUp = useCallback(() => {
+    if (!isDragging.current) {
+      return;
+    }
+
     isDragging.current = false;
     document.body.classList.remove('is-resizing-panels');
-  }, []);
+    onRatioCommit?.(pendingRatio.current);
+  }, [onRatioCommit]);
 
   useEffect(() => {
     document.addEventListener('mousemove', handleMouseMove);
@@ -59,6 +75,11 @@ export const PaneLayout: FC<PaneLayoutProps> = ({ direction, ratio, children }) 
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    setCurrentRatio(ratio);
+    pendingRatio.current = ratio;
+  }, [ratio, splitId]);
 
   const childArray = Array.isArray(children) ? children : [children];
   const [first, second] = childArray;
