@@ -85,9 +85,9 @@ describe('createWatcherIgnoreFilter', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  it('ignores .git/, node_modules, .DS_Store, Thumbs.db when no .gitignore', () => {
+  it('keeps .git/ watched but ignores node_modules, .DS_Store, Thumbs.db when no .gitignore', () => {
     const filter = createWatcherIgnoreFilter(testDir);
-    expect(filter(join(testDir, '.git/config'))).toBe(true);
+    expect(filter(join(testDir, '.git/config'))).toBe(false);
     expect(filter(join(testDir, 'node_modules/package'))).toBe(true);
     expect(filter(join(testDir, '.DS_Store'))).toBe(true);
     expect(filter(join(testDir, 'Thumbs.db'))).toBe(true);
@@ -103,12 +103,12 @@ describe('createWatcherIgnoreFilter', () => {
     expect(filter(join(testDir, 'file.txt'))).toBe(false);
   });
 
-  it('keeps default watcher ignores when .gitignore exists', async () => {
+  it('keeps default watcher behavior when .gitignore exists', async () => {
     await writeFile(join(testDir, '.gitignore'), '*.log');
 
     const filter = createWatcherIgnoreFilter(testDir);
 
-    expect(filter(join(testDir, '.git/config'))).toBe(true);
+    expect(filter(join(testDir, '.git/config'))).toBe(false);
     expect(filter(join(testDir, 'node_modules/package'))).toBe(true);
     expect(filter(join(testDir, '.playwright-mcp/page.yml'))).toBe(true);
     expect(filter(join(testDir, 'app.log'))).toBe(true);

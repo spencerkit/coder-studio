@@ -20,7 +20,7 @@ export interface EventBus {
 export interface WorkspaceManagerDeps {
   db: Database;
   eventBus: EventBus;
-  broadcaster: Broadcaster;
+  broadcaster?: Broadcaster;
 }
 
 /**
@@ -40,6 +40,17 @@ export class WorkspaceManager {
   private watchers = new Map<string, WorkspaceWatcher>();
 
   constructor(private deps: WorkspaceManagerDeps) {}
+
+  private startWatcher(workspaceId: string, rootPath: string): void {
+    if (!this.deps.broadcaster || this.watchers.has(workspaceId)) {
+      return;
+    }
+
+    this.watchers.set(
+      workspaceId,
+      new WorkspaceWatcher(workspaceId, rootPath, this.deps.broadcaster)
+    );
+  }
 
   updateUiState(workspaceId: string, uiState: Workspace['uiState']): void {
     const workspace = this.get(workspaceId);
@@ -80,12 +91,7 @@ export class WorkspaceManager {
       this.touch(existing.id);
 
       // Start watcher if not already watching (e.g., after server restart)
-      if (!this.watchers.has(existing.id)) {
-        this.watchers.set(
-          existing.id,
-          new WorkspaceWatcher(existing.id, existing.path, this.deps.broadcaster)
-        );
-      }
+      this.startWatcher(existing.id, existing.path);
 
       this.deps.eventBus.emit({
         type: 'workspace.meta.changed',
@@ -137,10 +143,7 @@ export class WorkspaceManager {
     });
 
     // Start file system watcher
-    this.watchers.set(
-      workspace.id,
-      new WorkspaceWatcher(workspace.id, workspace.path, this.deps.broadcaster)
-    );
+    this.startWatcher(workspace.id, workspace.path);
 
     return workspace;
   }

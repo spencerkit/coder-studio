@@ -103,6 +103,14 @@ describe('WorkspaceManager', () => {
       expect(second.id).toBe(first.id);
       expect(second.path).toBe(first.path);
     });
+
+    it('does not start file watchers when broadcaster is omitted', async () => {
+      await manager.open({
+        path: testDir,
+      });
+
+      expect((manager as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(0);
+    });
   });
 
   describe('list', () => {

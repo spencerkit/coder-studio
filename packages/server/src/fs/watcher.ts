@@ -27,7 +27,7 @@ export class WorkspaceWatcher {
   constructor(
     private workspaceId: string,
     rootPath: string,
-    private broadcaster: Broadcaster
+    private broadcaster?: Broadcaster
   ) {
     const shouldIgnore = createWatcherIgnoreFilter(rootPath);
 
@@ -62,7 +62,7 @@ export class WorkspaceWatcher {
   }
 
   private flushDirty(): void {
-    this.broadcaster.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
+    this.broadcaster?.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
       reason: 'fs_change',
     });
     this.dirtyTimer = null;

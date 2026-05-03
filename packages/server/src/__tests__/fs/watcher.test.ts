@@ -64,6 +64,18 @@ describe('WorkspaceWatcher', () => {
     expect(broadcaster.broadcast).toBeDefined();
   });
 
+  it('does not throw when broadcaster is missing', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher(
+      'test-workspace-id',
+      testDir,
+      undefined as unknown as Parameters<typeof WorkspaceWatcher>[2]
+    );
+
+    watcherEvents.all?.();
+    await vi.advanceTimersByTimeAsync(200);
+  });
+
   it('watches git metadata but ignores node_modules, .DS_Store, Thumbs.db, .playwright-mcp when no .gitignore', () => {
     new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
 
