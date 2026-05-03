@@ -114,7 +114,7 @@ export function MobileFilesSheet({
         {activeTab === 'files' ? (
           <FileTreePanel workspaceId={workspaceId} onSelectFile={handleSelectFile} />
         ) : (
-          <GitPanel workspaceId={workspaceId} onPreviewChange={handlePreviewChange} />
+          <GitPanel workspaceId={workspaceId} onPreviewOpen={handlePreviewChange} />
         )}
       </div>
     </div>

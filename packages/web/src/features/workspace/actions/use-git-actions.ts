@@ -34,7 +34,7 @@ interface GitCheckoutResult {
 interface UseGitPanelActionsArgs {
   workspaceId: string;
   refreshToken?: number;
-  onPreviewChange?: (preview: GitDiffPreview) => void;
+  onPreviewOpen?: (preview: GitDiffPreview) => void;
 }
 
 export function getFirstChange(
@@ -80,7 +80,7 @@ export function getChangeByPath(
 export function useGitPanelActions({
   workspaceId,
   refreshToken = 0,
-  onPreviewChange,
+  onPreviewOpen,
 }: UseGitPanelActionsArgs) {
   const t = useTranslation();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
@@ -115,15 +115,12 @@ export function useGitPanelActions({
   const updatePreview = useCallback(
     (preview: GitDiffPreview | null) => {
       setDiffPreview(preview);
-      if (preview) {
-        onPreviewChange?.(preview);
-      }
     },
-    [onPreviewChange, setDiffPreview]
+    [setDiffPreview]
   );
 
   const requestDiff = useCallback(
-    async (change: GitFileChange, type: GitChangeType) => {
+    async (change: GitFileChange, type: GitChangeType): Promise<GitDiffPreview | null> => {
       const result = await dispatch<{ diff: string }>('git.diff', {
         workspaceId,
         path: change.path,
@@ -132,16 +129,28 @@ export function useGitPanelActions({
 
       if (!result.ok || !result.data) {
         console.error('Failed to get diff:', result.error?.message);
-        return;
+        return null;
       }
 
-      updatePreview({
+      const preview = {
         path: change.path,
         diff: result.data.diff,
         staged: type === 'staged',
-      });
+      };
+      updatePreview(preview);
+      return preview;
     },
     [dispatch, updatePreview, workspaceId]
+  );
+
+  const openDiff = useCallback(
+    async (change: GitFileChange, type: GitChangeType) => {
+      const preview = await requestDiff(change, type);
+      if (preview) {
+        onPreviewOpen?.(preview);
+      }
+    },
+    [onPreviewOpen, requestDiff]
   );
 
   const loadBranchList = useCallback(async () => {
@@ -406,6 +415,7 @@ export function useGitPanelActions({
     handleStageAll,
     handleUnstageAll,
     loadGitStatus,
+    openDiff,
     requestDiff,
     runGitMutation,
     t,

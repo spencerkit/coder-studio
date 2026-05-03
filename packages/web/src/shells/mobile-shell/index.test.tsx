@@ -27,6 +27,7 @@ import { paneLayoutAtomFamily } from '../../features/agent-panes/atoms/pane-layo
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
 import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
+import { gitDiffPreviewAtomFamily } from '../../features/workspace/atoms';
 import type { Session } from '@coder-studio/core';
 
 const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
@@ -103,14 +104,14 @@ vi.mock('../../features/workspace/views/shared/file-tree-panel', () => ({
 
 vi.mock('../../features/workspace/views/shared/git-panel', () => ({
   GitPanel: ({
-    onPreviewChange,
+    onPreviewOpen,
   }: {
-    onPreviewChange?: (preview: { path: string; diff: string; staged: boolean }) => void;
+    onPreviewOpen?: (preview: { path: string; diff: string; staged: boolean }) => void;
   }) => (
     <button
       type="button"
       onClick={() =>
-        onPreviewChange?.({
+        onPreviewOpen?.({
           path: 'src/app.tsx',
           diff: 'diff --git a/src/app.tsx b/src/app.tsx',
           staged: false,
@@ -1183,6 +1184,25 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: 'mock-git-panel' }));
 
     expect(screen.getByTestId('mobile-git-diff-viewer')).toBeInTheDocument();
+  });
+
+  it('does not navigate into the diff viewer when the git tab auto-hydrates preview state', async () => {
+    const user = userEvent.setup();
+    const { store } = renderMobileShell();
+
+    await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
+    await user.click(screen.getByRole('tab', { name: 'Git Diff' }));
+
+    store.set(gitDiffPreviewAtomFamily('ws-1'), {
+      path: 'src/app.tsx',
+      diff: 'diff --git a/src/app.tsx b/src/app.tsx',
+      staged: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('mock-git-panel')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('mobile-git-diff-viewer')).not.toBeInTheDocument();
   });
 
   it('opens the terminal sheet from the dock', async () => {

@@ -102,7 +102,7 @@ describe('GitPanel', () => {
     expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('feature/ai-agent');
   });
 
-  it('requests a diff, updates preview state, and does not emit a workspace diff event when a row is clicked', async () => {
+  it('requests a diff, updates preview state, and emits an explicit preview-open event only when a row is clicked', async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'git.status') {
         return status;
@@ -116,7 +116,7 @@ describe('GitPanel', () => {
 
       return {};
     });
-    const onPreviewChange = vi.fn();
+    const onPreviewOpen = vi.fn();
     const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     const store = createStore();
     store.set(localeAtom, 'en');
@@ -124,7 +124,7 @@ describe('GitPanel', () => {
 
     render(
       <Provider store={store}>
-        <GitPanel workspaceId="ws-test" onPreviewChange={onPreviewChange} />
+        <GitPanel workspaceId="ws-test" onPreviewOpen={onPreviewOpen} />
       </Provider>
     );
 
@@ -146,7 +146,7 @@ describe('GitPanel', () => {
       diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
       staged: true,
     });
-    expect(onPreviewChange).toHaveBeenCalledWith({
+    expect(onPreviewOpen).toHaveBeenCalledWith({
       path: 'src/auth/AuthGate.tsx',
       diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
       staged: true,

@@ -9,13 +9,13 @@ import type { GitDiffPreview } from '../../atoms';
 interface GitPanelProps {
   workspaceId: string;
   refreshToken?: number;
-  onPreviewChange?: (preview: GitDiffPreview) => void;
+  onPreviewOpen?: (preview: GitDiffPreview) => void;
 }
 
 export const GitPanel: FC<GitPanelProps> = ({
   workspaceId,
   refreshToken = 0,
-  onPreviewChange,
+  onPreviewOpen,
 }) => {
   const t = useTranslation();
   const {
@@ -35,12 +35,12 @@ export const GitPanel: FC<GitPanelProps> = ({
     handleStageAll,
     handleUnstageAll,
     loadGitStatus,
-    requestDiff,
+    openDiff,
     runGitMutation,
   } = useGitPanelActions({
     workspaceId,
     refreshToken,
-    onPreviewChange,
+    onPreviewOpen,
   });
 
   return (
@@ -115,7 +115,7 @@ export const GitPanel: FC<GitPanelProps> = ({
                 changes={group.changes}
                 type={group.type}
                 selectedPath={diffPreview?.path ?? null}
-                onViewDiff={requestDiff}
+                onViewDiff={openDiff}
                 onRunMutation={runGitMutation}
                 onRequestDiscard={handleRequestDiscardSingle}
                 workspaceId={workspaceId}
