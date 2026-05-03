@@ -303,6 +303,15 @@
     "pull_success_body": "Latest remote commits were pulled into your local branch.",
     "push_failed_title": "Push failed",
     "pull_failed_title": "Pull failed",
+    "branch_remote": "Remote",
+    "quick_pick": {
+      "search_placeholder": "Search branches or create new branch...",
+      "loading": "Loading branches...",
+      "empty_filtered": "No branches found",
+      "empty_idle": "Type to search branches",
+      "create": "Create branch: {name}",
+      "confirm_create": "Confirm create branch: {name}"
+    },
     "statusbar": {
       "changes": "Uncommitted file changes",
       "ahead": "Local commits to push",

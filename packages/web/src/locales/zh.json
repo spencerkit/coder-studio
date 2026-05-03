@@ -303,6 +303,15 @@
     "pull_success_body": "已拉取远端最新提交到当前分支。",
     "push_failed_title": "推送失败",
     "pull_failed_title": "拉取失败",
+    "branch_remote": "远程",
+    "quick_pick": {
+      "search_placeholder": "搜索分支或创建新分支...",
+      "loading": "正在加载分支...",
+      "empty_filtered": "未找到分支",
+      "empty_idle": "输入以搜索分支",
+      "create": "创建分支：{name}",
+      "confirm_create": "确认创建分支：{name}"
+    },
     "statusbar": {
       "changes": "未提交的文件变更",
       "ahead": "待推送的本地提交",

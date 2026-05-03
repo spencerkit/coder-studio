@@ -5,10 +5,10 @@ import { useTranslation } from '../../../../lib/i18n';
 import { formatTerminalTitle } from '../../components/title-format';
 import { useTerminalActions } from '../../actions/use-terminal-actions';
 import { terminalMetaAtomFamily } from '../../atoms';
+import { MobileSelectSheet } from '../../../mobile-select';
 import { XtermHost } from './xterm-host';
 import { TerminalTab } from './terminal-tab';
 import { TerminalSelectorItem } from './terminal-selector-item';
-import { MobileInlineSheet } from '../../../../shells/shared/mobile-inline-sheet';
 
 interface TerminalPanelProps {
   chrome?: 'default' | 'mobile-fullscreen';
@@ -85,43 +85,35 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
 
                   {isMobileFullscreen ? (
                     selectorSheetOpen ? (
-                      <MobileInlineSheet
+                      <MobileSelectSheet
                         title={t('terminal.selector.title')}
-                        className="terminal-selector-sheet"
+                        sections={[
+                          {
+                            kind: 'options',
+                            id: 'terminals',
+                            items: terminalIds.map((id, index) => {
+                              const terminalMeta = store.get(terminalMetaAtomFamily(id));
+                              const label = formatTerminalTitle(
+                                terminalMeta,
+                                index,
+                                t('terminal.shell')
+                              );
+
+                              return {
+                                id,
+                                label,
+                                meta:
+                                  id === activeTerminalId
+                                    ? t('terminal.selector.current')
+                                    : t('terminal.selector.indexed', { index: index + 1 }),
+                              };
+                            }),
+                          },
+                        ]}
+                        selectedId={activeTerminalId}
+                        onSelect={handleSwitchTerminal}
                         onClose={() => setSelectorSheetOpen(false)}
-                      >
-                        <div className="mobile-inline-sheet__list">
-                          {terminalIds.map((id, index) => {
-                            const terminalMeta = store.get(terminalMetaAtomFamily(id));
-                            const label = formatTerminalTitle(
-                              terminalMeta,
-                              index,
-                              t('terminal.shell')
-                            );
-                            return (
-                              <button
-                                key={id}
-                                type="button"
-                                className={`mobile-inline-sheet__option${id === activeTerminalId ? ' mobile-inline-sheet__option--active' : ''}`}
-                                aria-label={label}
-                                onClick={() => {
-                                  handleSwitchTerminal(id);
-                                  setSelectorSheetOpen(false);
-                                }}
-                              >
-                                <span className="mobile-inline-sheet__option-copy">
-                                  <span className="mobile-inline-sheet__option-title">{label}</span>
-                                  <span className="mobile-inline-sheet__option-meta">
-                                    {id === activeTerminalId
-                                      ? t('terminal.selector.current')
-                                      : t('terminal.selector.indexed', { index: index + 1 })}
-                                  </span>
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </MobileInlineSheet>
+                      />
                     ) : null
                   ) : terminalIds.length > 1 ? (
                     <div className="terminal-selector-dropdown">

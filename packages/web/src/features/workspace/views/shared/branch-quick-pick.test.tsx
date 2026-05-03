@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import userEvent from '@testing-library/user-event';
 import type { GitStatus } from '@coder-studio/core';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { BranchQuickPick } from './branch-quick-pick';
 import {
   branchQuickPickAtom,
   gitBranchListAtomFamily,
 } from '../../atoms';
 import { wsClientAtom } from '../../../../atoms/connection';
+
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
 
 describe('BranchQuickPick', () => {
   let store: ReturnType<typeof createStore>;
@@ -25,6 +35,7 @@ describe('BranchQuickPick', () => {
 
   beforeEach(() => {
     store = createStore();
+    store.set(localeAtom, 'en');
     sendCommandMock = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.checkout') {
         return {
@@ -75,6 +86,7 @@ describe('BranchQuickPick', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    viewportMocks.viewport = 'desktop';
   });
 
   it('filters branches by input text', async () => {
@@ -104,6 +116,61 @@ describe('BranchQuickPick', () => {
       expect(screen.queryByText('main')).not.toBeInTheDocument();
       expect(screen.queryByText('origin/develop')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders the shared MobileSelectSheet shell for branch quick pick', () => {
+    viewportMocks.viewport = 'mobile';
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    expect(screen.getByRole('region', { name: 'Branch sheet' })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Search branches or create new branch...')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('data-selected', 'true');
+  });
+
+  it('does not keep the current branch selected when mobile focus moves to create branch', async () => {
+    viewportMocks.viewport = 'mobile';
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: 'ws-test',
+      inputValue: 'm',
+    });
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Create branch: m' })).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(screen.getByPlaceholderText('Search branches or create new branch...'), {
+      key: 'ArrowDown',
+    });
+
+    expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('data-selected', 'false');
+  });
+
+  it('renders localized copy for the mobile branch quick pick', () => {
+    viewportMocks.viewport = 'mobile';
+    store.set(localeAtom, 'zh');
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    expect(screen.getByRole('region', { name: '分支面板' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索分支或创建新分支...')).toBeInTheDocument();
   });
 
   it('shows create option for non-existent branch', async () => {
@@ -218,6 +285,43 @@ describe('BranchQuickPick', () => {
 
     await waitFor(() => {
       expect(store.get(branchQuickPickAtom).visible).toBe(false);
+    });
+  });
+
+  it('keeps the mobile keyboard target on confirm create after tapping create with mixed results', async () => {
+    const user = userEvent.setup();
+    viewportMocks.viewport = 'mobile';
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: 'ws-test',
+      inputValue: 'm',
+    });
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    const input = screen.getByPlaceholderText('Search branches or create new branch...');
+
+    await user.click(screen.getByRole('button', { name: 'Create branch: m' }));
+
+    expect(screen.getByRole('button', { name: 'Confirm create branch: m' })).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(sendCommandMock).toHaveBeenCalledWith('git.checkout', {
+        workspaceId: 'ws-test',
+        ref: 'm',
+        createBranch: true,
+      });
+    });
+
+    expect(sendCommandMock).not.toHaveBeenCalledWith('git.checkout', {
+      workspaceId: 'ws-test',
+      ref: 'main',
     });
   });
 

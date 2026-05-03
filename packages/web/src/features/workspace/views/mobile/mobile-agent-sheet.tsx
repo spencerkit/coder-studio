@@ -5,7 +5,7 @@ import type { Session } from '@coder-studio/core';
 import { dispatchCommandAtom } from '../../../../atoms/connection';
 import { sessionsAtom } from '../../../../atoms/sessions';
 import { useTranslation } from '../../../../lib/i18n';
-import { MobileInlineSheet } from '../../../../shells/shared/mobile-inline-sheet';
+import { MobileSelectSheet } from '../../../mobile-select';
 import { useProviderLauncher } from '../../../agent-panes/actions/use-provider-launcher';
 
 interface MobileAgentSheetProps {
@@ -19,6 +19,8 @@ interface MobileAgentSheetProps {
   onSelectSession: (sessionId: string) => void;
   onSessionCreated: (sessionId: string) => void;
 }
+
+type AgentSheetMode = 'sessions' | 'providers';
 
 function formatSessionLabel(session: Session) {
   if (session.title?.trim()) {
@@ -51,7 +53,9 @@ export function MobileAgentSheet({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const t = useTranslation();
-  const [providerSheetOpen, setProviderSheetOpen] = useState(defaultMode === 'create');
+  const [mode, setMode] = useState<AgentSheetMode>(
+    defaultMode === 'create' ? 'providers' : 'sessions'
+  );
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null;
@@ -70,7 +74,7 @@ export function MobileAgentSheet({
   ];
 
   const closeSheet = () => {
-    setProviderSheetOpen(false);
+    setMode(defaultMode === 'create' ? 'providers' : 'sessions');
     onClose();
   };
 
@@ -87,102 +91,95 @@ export function MobileAgentSheet({
     }
   );
 
-  return (
-    <MobileInlineSheet title={t('mobile.agent.title')} className={className} onClose={closeSheet}>
-      <div className="mobile-inline-sheet__actions">
-        <button
-          type="button"
-          className={`mobile-inline-sheet__action${providerSheetOpen ? ' mobile-inline-sheet__action--active' : ''}`}
-          aria-label={t('action.create_session')}
-          disabled={!canLaunchSession}
-          onClick={() => {
-            setProviderSheetOpen((value) => !value);
-          }}
-        >
-          <Plus size={15} />
-          <span>{t('action.create_session')}</span>
-        </button>
-        {activeSession ? (
-          <button
-            type="button"
-            className="mobile-inline-sheet__action mobile-inline-sheet__action--danger"
-            aria-label={t('mobile.agent.close_current_session')}
-            onClick={() => {
-              void onCloseSession(activeSession.id);
-              closeSheet();
-            }}
-          >
-            <X size={15} />
-            <span>{t('mobile.agent.close_current_session')}</span>
-          </button>
-        ) : null}
-      </div>
-
-      {providerSheetOpen ? (
-        <div className="mobile-inline-sheet__providers" aria-label={t('mobile.agent.providers')}>
-          {providerButtons.map((provider) => {
-            const state = states[provider.id];
-            const isBusy =
-              state.loading ||
-              state.installJob?.status === 'queued' ||
-              state.installJob?.status === 'running';
-            return (
-              <button
-                key={provider.id}
-                type="button"
-                className="mobile-inline-sheet__provider"
-                aria-label={t('mobile.agent.start_session', { provider: provider.title })}
-                disabled={!canLaunchSession || isBusy}
-                onClick={() => {
-                  void launch(provider.id);
-                }}
-              >
-                <span className="mobile-inline-sheet__provider-icon" aria-hidden="true">
-                  {provider.icon}
-                </span>
-                <span className="mobile-inline-sheet__provider-copy">
-                  <span className="mobile-inline-sheet__provider-title">{provider.title}</span>
-                  <span className="mobile-inline-sheet__provider-meta">
-                    {isBusy ? t('mobile.agent.starting') : t('mobile.agent.start_new_session')}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {sessions.length > 0 ? (
-        <div className="mobile-inline-sheet__list" role="menu" aria-label={t('mobile.agent.active_agents')}>
-          {sessions.map((session) => {
-            const active = session.id === activeSession?.id;
-            const label = formatSessionLabel(session);
-            return (
-              <button
-                key={session.id}
-                type="button"
-                className={`mobile-inline-sheet__option${active ? ' mobile-inline-sheet__option--active' : ''}`}
-                aria-label={t('mobile.agent.switch_to_agent', { name: label })}
-                onClick={() => {
-                  onSelectSession(session.id);
+  const sessionSections = [
+    {
+      kind: 'actions' as const,
+      id: 'agent-actions',
+      items: [
+        {
+          id: 'create',
+          label: t('action.create_session'),
+          icon: <Plus size={16} />,
+          onAction: () => setMode('providers'),
+          disabled: !canLaunchSession,
+        },
+        ...(activeSession
+          ? [
+              {
+                id: 'close-current',
+                label: t('mobile.agent.close_current_session'),
+                icon: <X size={16} />,
+                tone: 'danger' as const,
+                onAction: async () => {
+                  await onCloseSession(activeSession.id);
                   closeSheet();
-                }}
-              >
-                <span className={`mobile-topbar__session-dot mobile-topbar__session-dot--${session.state}`} />
-                <span className="mobile-inline-sheet__option-copy">
-                  <span className="mobile-inline-sheet__option-title">{label}</span>
-                  <span className="mobile-inline-sheet__option-meta">
-                    {session.providerId.toUpperCase()}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="mobile-inline-sheet__empty">{t('mobile.agent.empty')}</div>
-      )}
-    </MobileInlineSheet>
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      kind: 'options' as const,
+      id: 'sessions',
+      items:
+        sessions.length > 0
+          ? sessions.map((session) => ({
+              id: session.id,
+              label: formatSessionLabel(session),
+              description: t('mobile.agent.switch_to_agent', {
+                name: formatSessionLabel(session),
+              }),
+              meta: session.providerId.toUpperCase(),
+            }))
+          : [],
+    },
+  ];
+
+  const providerSections = [
+    {
+      kind: 'options' as const,
+      id: 'providers',
+      items: providerButtons.map((provider) => {
+        const state = states[provider.id];
+        const busy =
+          state.loading ||
+          state.installJob?.status === 'queued' ||
+          state.installJob?.status === 'running';
+
+        return {
+          id: provider.id,
+          label: provider.title,
+          description: t('mobile.agent.start_session', { provider: provider.title }),
+          meta: busy ? t('mobile.agent.starting') : t('mobile.agent.start_new_session'),
+          icon: provider.icon,
+          disabled: !canLaunchSession || busy,
+        };
+      }),
+    },
+  ];
+
+  return (
+    <div className={className}>
+      <MobileSelectSheet
+        title={mode === 'sessions' ? t('mobile.agent.title') : t('session.provider_select')}
+        sections={mode === 'sessions' ? sessionSections : providerSections}
+        selectedId={mode === 'sessions' ? activeSession?.id ?? null : null}
+        emptyText={mode === 'sessions' ? t('mobile.agent.empty') : undefined}
+        closeOnSelect={false}
+        onBack={mode === 'providers' ? () => setMode('sessions') : undefined}
+        onClose={closeSheet}
+        onSelect={(id) => {
+          if (mode === 'sessions') {
+            onSelectSession(id);
+            closeSheet();
+            return;
+          }
+
+          return launch(id as 'claude' | 'codex');
+        }}
+      />
+    </div>
   );
 }
 

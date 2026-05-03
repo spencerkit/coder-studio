@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import userEvent from '@testing-library/user-event';
 import { localeAtom } from '../../../../atoms/app-ui';
 import { wsClientAtom } from '../../../../atoms/connection';
 import { supervisorDialogAtom, supervisorsAtom } from '../../atoms';
@@ -77,5 +78,35 @@ describe('MobileSupervisorSheet', () => {
 
     expect(screen.getByText('Supervisor is not enabled')).toBeInTheDocument();
     expect(screen.queryByLabelText('Objective')).not.toBeInTheDocument();
+  });
+
+  it('opens the evaluator provider picker inside the mobile supervisor detail flow', async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <MobileSupervisorSheet
+          sessionId="sess-1"
+          workspaceId="ws-1"
+          onClose={vi.fn()}
+        />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Enable Objective' }));
+    await user.click(screen.getByRole('button', { name: 'Evaluator Claude' }));
+
+    expect(screen.getByRole('region', { name: 'Evaluator sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Codex' }));
+
+    expect(screen.getByRole('button', { name: 'Evaluator Codex' })).toBeInTheDocument();
   });
 });

@@ -552,6 +552,7 @@ export function useGitDiffViewerActions(workspaceId: string) {
 }
 
 export function useBranchQuickPickActions() {
+  const t = useTranslation();
   const quickPickState = useAtomValue(branchQuickPickAtom);
   const setQuickPick = useSetAtom(branchQuickPickAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -679,13 +680,13 @@ export function useBranchQuickPickActions() {
         type: pendingCreateBranchName === trimmedInput ? 'confirm-create' : 'create',
         label:
           pendingCreateBranchName === trimmedInput
-            ? `Confirm create branch: ${trimmedInput}`
-            : `Create branch: ${trimmedInput}`,
+            ? t('git.quick_pick.confirm_create', { name: trimmedInput })
+            : t('git.quick_pick.create', { name: trimmedInput }),
       });
     }
 
     return items;
-  }, [branchList.loading, exactMatch, filteredBranches, pendingCreateBranchName, trimmedInput]);
+  }, [branchList.loading, exactMatch, filteredBranches, pendingCreateBranchName, t, trimmedInput]);
 
   const handleClose = useCallback(() => {
     setPendingCreateBranchName(null);

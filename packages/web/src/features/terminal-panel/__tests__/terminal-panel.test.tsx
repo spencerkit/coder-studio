@@ -440,7 +440,7 @@ describe('TerminalPanel', () => {
     expect(document.querySelector('.bottom-terminal-tabs')).not.toBeInTheDocument();
   });
 
-  it('opens a mobile terminal switcher sheet instead of relying on hover dropdowns', async () => {
+  it('uses MobileSelectSheet for the mobile terminal selector', async () => {
     const user = userEvent.setup();
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
@@ -516,8 +516,19 @@ describe('TerminalPanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Switch terminal' }));
 
-    expect(screen.getByRole('dialog', { name: 'Terminal Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace Shell 2' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Terminal Sessions sheet' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Workspace Shell',
+        description: 'Current terminal',
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Workspace Shell 2',
+        description: 'Terminal 2',
+      })
+    ).toBeInTheDocument();
     expect(document.querySelector('.terminal-selector-dropdown')).not.toBeInTheDocument();
   });
 });
