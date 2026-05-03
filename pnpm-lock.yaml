@@ -38,6 +38,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@fastify/compress':
+        specifier: ^8.3.1
+        version: 8.3.1
       '@fastify/cors':
         specifier: ^11.2.0
         version: 11.2.0
