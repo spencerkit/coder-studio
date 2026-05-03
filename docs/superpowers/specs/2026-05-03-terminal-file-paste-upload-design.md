@@ -65,7 +65,7 @@ xterm 默认拦截 `Cmd/Ctrl+V` 走 `clipboard.readText()`，所以剪贴板里�
 │                                                               │
 │  uploads/cleanup.ts (NEW)                                     │
 │    runStartupGc(uploadsDir)                                   │
-│      delete files older than 14 days                          │
+│      delete files older than 72 hours                         │
 │    deleteWorkspaceUploads(uploadsDir, wsId)                   │
 │      called from WorkspaceManager.delete                      │
 │                                                               │
@@ -155,7 +155,7 @@ function resolveUploadsDir(override?: string): string {
 | 层 | 触发 | 行为 |
 |---|---|---|
 | L1 级联删除 | `WorkspaceManager.delete(wsId)` 成功后 | `fs.rm(<uploadsDir>/<wsId>, { recursive: true, force: true })`；失败仅 log，不阻塞主流程 |
-| L2 启动期 GC | server 启动后 5s 异步 | 遍历 `<uploadsDir>`，删 `mtime` 早于 `UPLOAD_TTL_DAYS=14` 的文件；空目录顺带回收 |
+| L2 启动期 GC | server 启动后 5s 异步 | 遍历 `<uploadsDir>`，删 `mtime` 早于 `UPLOAD_TTL_HOURS=72` 的文件；空目录顺带回收 |
 | L3 容量保护 | 每次批量写入完成后 + 启动期 | 单 workspace 桶超过 `UPLOAD_BUCKET_MAX_BYTES=200MB` 时，按 `mtime` 升序（最旧优先）删除文件直至合规；当前批刚写入的文件因 `mtime` 最新天然被保护 |
 
 不入库的取舍：
