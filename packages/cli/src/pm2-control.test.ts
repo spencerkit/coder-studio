@@ -92,6 +92,9 @@ describe('pm2-control', () => {
         name: MANAGED_SERVER_NAME,
         script: '/cli/dist/esm/server-runner.js',
         cwd: '/repo',
+        env: expect.objectContaining({
+          NODE_ENV: 'production',
+        }),
         autorestart: true,
         restart_delay: 2000,
         min_uptime: '5s',

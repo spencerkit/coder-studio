@@ -7,6 +7,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import websocket, { type WebSocket } from '@fastify/websocket';
 import staticPlugin from '@fastify/static';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
 import type { HooksManager } from './hooks/manager.js';
@@ -81,6 +82,8 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     authSessionRepo: deps.authSessionRepo,
   }));
 
+  await app.register(compress);
+
   // CORS configuration (development mode)
   await app.register(cors, {
     origin: true, // Allow all origins in development
@@ -131,14 +134,27 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     app.register(staticPlugin, {
       root: deps.webRoot,
       prefix: '/',
+      globIgnore: ['index.html'],
+      maxAge: '1y',
+      immutable: true,
       wildcard: false,
+    });
+
+    app.get('/', async (_request, reply) => {
+      return reply.sendFile('index.html', {
+        maxAge: 0,
+        immutable: false,
+      });
     });
 
     app.get('/*', async (request, reply) => {
       if (request.url.startsWith('/api/') || request.url.startsWith('/auth/') || request.url.startsWith('/internal/')) {
         return reply.callNotFound();
       }
-      return reply.sendFile('index.html');
+      return reply.sendFile('index.html', {
+        maxAge: 0,
+        immutable: false,
+      });
     });
   }
 

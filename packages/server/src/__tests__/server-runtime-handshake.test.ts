@@ -221,7 +221,72 @@ describe('createServer runtime handshake', () => {
 
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/html');
+      expect(res.headers.get('cache-control')).toBe('public, max-age=0');
+      expect(res.headers.get('etag')).toBeTruthy();
+      expect(res.headers.get('last-modified')).toBeTruthy();
       expect(body).toContain('login shell');
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('serves static web assets with strong cache headers', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-assets-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>asset shell</body></html>', 'utf-8');
+    writeFileSync(
+      join(webRoot, 'app-ABC123.js'),
+      `window.__asset = "${'asset-payload-'.repeat(256)}";`,
+      'utf-8'
+    );
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: false },
+      } as any);
+
+      const baseUrl = getBaseUrl(server);
+      const res = await fetch(`${baseUrl}/app-ABC123.js`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+      expect(res.headers.get('etag')).toBeTruthy();
+      expect(res.headers.get('last-modified')).toBeTruthy();
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('compresses static web assets when the client accepts gzip', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-compress-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>compress shell</body></html>', 'utf-8');
+    writeFileSync(
+      join(webRoot, 'app-ABC123.js'),
+      `window.__asset = "${'asset-payload-'.repeat(256)}";`,
+      'utf-8'
+    );
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: false },
+      } as any);
+
+      const baseUrl = getBaseUrl(server);
+      const res = await fetch(`${baseUrl}/app-ABC123.js`, {
+        headers: {
+          'accept-encoding': 'gzip',
+        },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-encoding')).toBe('gzip');
     } finally {
       rmSync(webRoot, { recursive: true, force: true });
     }

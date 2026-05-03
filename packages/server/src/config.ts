@@ -5,7 +5,7 @@
  *
  * Database path resolution:
  * - Development: uses OS temp directory so SQLite files stay out of the repo
- * - Production: uses CWD-relative path (configurable via DATA_DIR env)
+ * - Production: uses ~/.coder-studio/data/coder-studio.db by default
  */
 
 import os from 'node:os';
@@ -45,15 +45,16 @@ export interface ServerConfig {
  * Resolve the database file path.
  *
  * In development (NODE_ENV !== 'production') the DB is placed in the OS temp
- * directory so it never pollutes the working tree.  In production the path
- * defaults to `<cwd>/data` and can be overridden via the DATA_DIR env var.
+ * directory so it never pollutes the working tree. In production the path
+ * defaults to ~/.coder-studio/data/coder-studio.db and can be overridden via
+ * the DATA_DIR env var.
  */
 function resolveDbPath(explicit?: string): string {
   if (explicit) return explicit;
   if (process.env.NODE_ENV !== 'production') {
     return path.join(os.tmpdir(), 'coder-studio-dev.db');
   }
-  return path.resolve(process.cwd(), 'data');
+  return path.join(os.homedir(), '.coder-studio', 'data', 'coder-studio.db');
 }
 
 /**
@@ -84,11 +85,12 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
 }
 
 /**
- * Ensure the database directory exists (production only).
- * In dev the OS temp dir always exists.
+ * Ensure the database parent directory exists for file-backed databases.
  */
 export function ensureDataDir(config: ServerConfig): void {
-  if (process.env.NODE_ENV === 'production') {
-    fs.mkdirSync(config.dataDir, { recursive: true });
+  if (config.dataDir === ':memory:') {
+    return;
   }
+
+  fs.mkdirSync(path.dirname(config.dataDir), { recursive: true });
 }

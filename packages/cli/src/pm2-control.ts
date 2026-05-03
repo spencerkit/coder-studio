@@ -284,6 +284,10 @@ export const startManagedServer = async ({ script, cwd, waitMs, args }: StartMan
           script,
           cwd,
           ...(args !== undefined ? { args } : {}),
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+          },
           autorestart: true,
           restart_delay: PM2_RESTART_DELAY_MS,
           min_uptime: PM2_MIN_UPTIME,
