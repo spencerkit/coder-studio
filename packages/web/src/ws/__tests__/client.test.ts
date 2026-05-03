@@ -82,6 +82,34 @@ describe('web WsClient', () => {
     await connectPromise;
   });
 
+  it('reuses the in-flight connect attempt when connect is called again before the socket opens', async () => {
+    const client = new WsClient('ws://127.0.0.1:4173/ws');
+
+    const firstConnectPromise = client.connect();
+    const secondConnectPromise = client.connect();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    let firstSettled = false;
+    let secondSettled = false;
+    firstConnectPromise.finally(() => {
+      firstSettled = true;
+    });
+    secondConnectPromise.finally(() => {
+      secondSettled = true;
+    });
+    await Promise.resolve();
+    expect(firstSettled).toBe(false);
+    expect(secondSettled).toBe(false);
+
+    MockWebSocket.instances[0]!.triggerOpen();
+
+    await expect(Promise.all([firstConnectPromise, secondConnectPromise])).resolves.toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it('handles v2 output frame: routes directly to topic without waiting for JSON event', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const handler = vi.fn();
@@ -668,6 +696,259 @@ describe('web WsClient', () => {
       await expect(snapshotPromise).resolves.toMatchObject({
         streamId: 82,
         seq: 14,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores late snapshot payloads from an old socket after reconnect', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient('ws://127.0.0.1:4173/ws');
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      const snapshotPromise = client.sendCommand('terminal.snapshot', { terminalId: 'term_1' });
+      const handledSnapshotPromise = snapshotPromise.catch((error) => error);
+
+      const firstCommand = firstSocket.sent
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => JSON.parse(entry))
+        .find((entry) => entry.kind === 'command' && entry.op === 'terminal.snapshot');
+
+      firstSocket.triggerMessage({
+        kind: 'result',
+        id: firstCommand.id,
+        ok: true,
+        data: {
+          status: 'ok',
+          transport: 'binary',
+          streamId: 91,
+          size: 3,
+          seq: 10,
+          cols: 120,
+          rows: 30,
+          source: 'headless',
+        },
+      });
+
+      expect((client as { pendingBinaryStreamIds: Map<number, unknown> }).pendingBinaryStreamIds.size).toBe(1);
+
+      client.disconnect('manual_reset');
+
+      await expect(snapshotPromise).rejects.toThrow('WebSocket disconnected');
+      await handledSnapshotPromise;
+      expect((client as { pendingBinaryStreamIds: Map<number, unknown> }).pendingBinaryStreamIds.size).toBe(0);
+      expect((client as { orphanBinaryPayloads: Map<number, unknown> }).orphanBinaryPayloads.size).toBe(0);
+
+      const reconnectPromise = client.connect();
+      const secondSocket = MockWebSocket.instances.at(-1)!;
+      secondSocket.triggerOpen();
+      await reconnectPromise;
+
+      firstSocket.triggerBinaryMessage(
+        encodeTerminalBinaryFrame(
+          {
+            version: TERMINAL_BINARY_PROTOCOL_VERSION,
+            type: TerminalBinaryFrameType.Snapshot,
+            flags: 0,
+            meta: 10,
+            streamId: 91,
+            payloadSize: 3,
+          },
+          new TextEncoder().encode('old')
+        )
+      );
+
+      const retryPromise = client.sendCommand<{
+        status: 'ok';
+        transport: 'binary';
+        streamId: number;
+        size: number;
+        seq: number;
+        cols: number;
+        rows: number;
+        source: 'headless';
+        bytes: Uint8Array;
+      }>('terminal.snapshot', { terminalId: 'term_1' });
+      const retryCommand = secondSocket.sent
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => JSON.parse(entry))
+        .filter((entry) => entry.kind === 'command' && entry.op === 'terminal.snapshot')
+        .at(-1);
+
+      secondSocket.triggerMessage({
+        kind: 'result',
+        id: retryCommand.id,
+        ok: true,
+        data: {
+          status: 'ok',
+          transport: 'binary',
+          streamId: 92,
+          size: 5,
+          seq: 11,
+          cols: 120,
+          rows: 30,
+          source: 'headless',
+        },
+      });
+      secondSocket.triggerBinaryMessage(
+        encodeTerminalBinaryFrame(
+          {
+            version: TERMINAL_BINARY_PROTOCOL_VERSION,
+            type: TerminalBinaryFrameType.Snapshot,
+            flags: 0,
+            meta: 11,
+            streamId: 92,
+            payloadSize: 5,
+          },
+          new TextEncoder().encode('fresh')
+        )
+      );
+
+      await expect(retryPromise).resolves.toMatchObject({
+        streamId: 92,
+        seq: 11,
+        bytes: new Uint8Array(new TextEncoder().encode('fresh')),
+      });
+      expect((client as { orphanBinaryPayloads: Map<number, unknown> }).orphanBinaryPayloads.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores late JSON and binary messages from an unexpectedly closed socket after auto reconnect', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient('ws://127.0.0.1:4173/ws', {
+        baseDelayMs: 10,
+        maxDelayMs: 10,
+      });
+      const eventHandler = vi.fn();
+
+      client.subscribe(['workspace.*'], eventHandler);
+
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      const snapshotPromise = client.sendCommand('terminal.snapshot', { terminalId: 'term_1' });
+      const handledSnapshotPromise = snapshotPromise.catch((error) => error);
+
+      const firstCommand = firstSocket.sent
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => JSON.parse(entry))
+        .find((entry) => entry.kind === 'command' && entry.op === 'terminal.snapshot');
+
+      firstSocket.triggerMessage({
+        kind: 'result',
+        id: firstCommand.id,
+        ok: true,
+        data: {
+          status: 'ok',
+          transport: 'binary',
+          streamId: 191,
+          size: 3,
+          seq: 20,
+          cols: 120,
+          rows: 30,
+          source: 'headless',
+        },
+      });
+
+      firstSocket.triggerClose(1006, 'network_lost');
+
+      await expect(snapshotPromise).rejects.toThrow('WebSocket disconnected');
+      await handledSnapshotPromise;
+      expect(client.getStatus()).toBe('reconnecting');
+
+      await vi.advanceTimersByTimeAsync(10);
+
+      const secondSocket = MockWebSocket.instances[1]!;
+
+      firstSocket.triggerMessage({
+        kind: 'event',
+        topic: 'workspace.ws_1.session.sess_1.state',
+        seq: 99,
+        timestamp: Date.now(),
+        data: { state: 'stale' },
+      });
+      firstSocket.triggerBinaryMessage(
+        encodeTerminalBinaryFrame(
+          {
+            version: TERMINAL_BINARY_PROTOCOL_VERSION,
+            type: TerminalBinaryFrameType.Snapshot,
+            flags: 0,
+            meta: 20,
+            streamId: 191,
+            payloadSize: 3,
+          },
+          new TextEncoder().encode('old')
+        )
+      );
+
+      expect(eventHandler).not.toHaveBeenCalled();
+      expect((client as { orphanBinaryPayloads: Map<number, unknown> }).orphanBinaryPayloads.size).toBe(0);
+
+      secondSocket.triggerOpen();
+      await Promise.resolve();
+
+      const retryPromise = client.sendCommand<{
+        status: 'ok';
+        transport: 'binary';
+        streamId: number;
+        size: number;
+        seq: number;
+        cols: number;
+        rows: number;
+        source: 'headless';
+        bytes: Uint8Array;
+      }>('terminal.snapshot', { terminalId: 'term_1' });
+      const retryCommand = secondSocket.sent
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => JSON.parse(entry))
+        .filter((entry) => entry.kind === 'command' && entry.op === 'terminal.snapshot')
+        .at(-1);
+
+      secondSocket.triggerMessage({
+        kind: 'result',
+        id: retryCommand.id,
+        ok: true,
+        data: {
+          status: 'ok',
+          transport: 'binary',
+          streamId: 192,
+          size: 5,
+          seq: 21,
+          cols: 120,
+          rows: 30,
+          source: 'headless',
+        },
+      });
+      secondSocket.triggerBinaryMessage(
+        encodeTerminalBinaryFrame(
+          {
+            version: TERMINAL_BINARY_PROTOCOL_VERSION,
+            type: TerminalBinaryFrameType.Snapshot,
+            flags: 0,
+            meta: 21,
+            streamId: 192,
+            payloadSize: 5,
+          },
+          new TextEncoder().encode('fresh')
+        )
+      );
+
+      await expect(retryPromise).resolves.toMatchObject({
+        streamId: 192,
+        seq: 21,
+        bytes: new Uint8Array(new TextEncoder().encode('fresh')),
       });
     } finally {
       vi.useRealTimers();

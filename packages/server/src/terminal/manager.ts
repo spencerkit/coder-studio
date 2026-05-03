@@ -115,13 +115,20 @@ export class TerminalManager {
     }
 
     const ringBuffer = new RingBuffer(RING_BUFFER_SIZE)
-    const snapshotBuffer =
-      spec.kind === 'agent'
-        ? new HeadlessSnapshotBuffer({
-            cols: spec.cols ?? 120,
-            rows: spec.rows ?? 30,
-          })
-        : undefined
+    let snapshotBuffer: HeadlessSnapshotBuffer | undefined
+
+    if (spec.kind === 'agent') {
+      try {
+        snapshotBuffer = new HeadlessSnapshotBuffer({
+          cols: spec.cols ?? 120,
+          rows: spec.rows ?? 30,
+        })
+      } catch (err) {
+        traceTerminal(id, 'snapshot.init.error', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
 
     // Create active terminal
     const active = new ActiveTerminal(id, spec, pty, ringBuffer, snapshotBuffer)

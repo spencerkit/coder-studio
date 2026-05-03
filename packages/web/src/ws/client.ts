@@ -98,6 +98,11 @@ const normalizeWsUrl = (url: string): string => {
 
 export class WsClient {
   private ws: WebSocket | null = null;
+  private connectDeferred: {
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null = null;
   private pendingCommands = new Map<string, PendingCommand>();
   private eventListeners = new Map<string, Set<EventListener>>();
   private statusListeners = new Set<StatusListener>();
@@ -134,63 +139,100 @@ export class WsClient {
    * Connect to WebSocket server
    */
   async connect(): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN && this.status === 'connected') {
+      return Promise.resolve();
+    }
+
+    if (this.connectDeferred) {
+      return this.connectDeferred.promise;
+    }
+
     this.isManualClose = false;
     this.setStatus('connecting');
 
-    return new Promise((resolve, reject) => {
-      try {
-        this.ws = new WebSocket(this.url);
-        this.ws.binaryType = 'arraybuffer';
-
-        this.ws.onopen = () => {
-          this.setStatus('connected');
-          this.reconnectAttempts = 0;
-
-          const subscribedTopics = Array.from(this.eventListeners.keys());
-          if (subscribedTopics.length > 0) {
-            const msg: ClientToServer = { kind: 'subscribe', topics: subscribedTopics };
-            this.ws?.send(JSON.stringify(msg));
-          }
-
-          // Resync if we have lastSeen events
-          if (this.lastSeenSeq.size > 0) {
-            this.resync();
-          }
-
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          try {
-            if (typeof event.data === 'string') {
-              const msg = JSON.parse(event.data) as ServerToClient;
-              this.handleMessage(msg);
-              return;
-            }
-
-            if (event.data instanceof ArrayBuffer) {
-              this.handleBinaryMessage(new Uint8Array(event.data));
-              return;
-            }
-
-            console.error('Unsupported WebSocket message type:', typeof event.data);
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
-          }
-        };
-
-        this.ws.onclose = (event) => {
-          this.handleClose(event.code, event.reason);
-          reject(new Error(`WebSocket closed: ${event.reason || event.code}`));
-        };
-
-        this.ws.onerror = (err) => {
-          console.error('WebSocket error:', err);
-        };
-      } catch (err) {
-        reject(err);
-      }
+    let resolveConnect!: () => void;
+    let rejectConnect!: (error: Error) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      resolveConnect = resolve;
+      rejectConnect = reject;
     });
+    this.connectDeferred = {
+      promise,
+      resolve: resolveConnect,
+      reject: rejectConnect,
+    };
+
+    try {
+      const socket = new WebSocket(this.url);
+      this.ws = socket;
+      socket.binaryType = 'arraybuffer';
+
+      socket.onopen = () => {
+        if (this.ws !== socket) {
+          return;
+        }
+
+        this.setStatus('connected');
+        this.reconnectAttempts = 0;
+
+        const subscribedTopics = Array.from(this.eventListeners.keys());
+        if (subscribedTopics.length > 0) {
+          const msg: ClientToServer = { kind: 'subscribe', topics: subscribedTopics };
+          socket.send(JSON.stringify(msg));
+        }
+
+        // Resync if we have lastSeen events
+        if (this.lastSeenSeq.size > 0) {
+          this.resync();
+        }
+
+        this.resolveConnectDeferred();
+      };
+
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) {
+          return;
+        }
+
+        try {
+          if (typeof event.data === 'string') {
+            const msg = JSON.parse(event.data) as ServerToClient;
+            this.handleMessage(msg);
+            return;
+          }
+
+          if (event.data instanceof ArrayBuffer) {
+            this.handleBinaryMessage(new Uint8Array(event.data));
+            return;
+          }
+
+          console.error('Unsupported WebSocket message type:', typeof event.data);
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err);
+        }
+      };
+
+      socket.onclose = (event) => {
+        if (this.ws !== socket) {
+          return;
+        }
+
+        this.handleClose(event.code, event.reason);
+        this.rejectConnectDeferred(new Error(`WebSocket closed: ${event.reason || event.code}`));
+      };
+
+      socket.onerror = (err) => {
+        if (this.ws !== socket) {
+          return;
+        }
+
+        console.error('WebSocket error:', err);
+      };
+    } catch (err) {
+      this.rejectConnectDeferred(err instanceof Error ? err : new Error(String(err)));
+    }
+
+    return promise;
   }
 
   /**
@@ -203,16 +245,13 @@ export class WsClient {
       this.reconnectTimer = null;
     }
 
+    this.rejectConnectDeferred(new Error('WebSocket disconnected'));
+    this.rejectPendingCommands(new Error('WebSocket disconnected'));
+    this.clearBinaryCommandState();
+
     if (this.ws) {
       this.ws.close(1000, reason || 'client_disconnect');
       this.ws = null;
-    }
-
-    // Reject all pending commands
-    for (const [id, pending] of this.pendingCommands) {
-      clearTimeout(pending.timeoutId);
-      pending.reject(new Error('WebSocket disconnected'));
-      this.pendingCommands.delete(id);
     }
 
     this.setStatus('disconnected');
@@ -528,6 +567,42 @@ export class WsClient {
     }
   }
 
+  private clearBinaryCommandState(): void {
+    this.pendingBinaryStreamIds.clear();
+    for (const orphan of this.orphanBinaryPayloads.values()) {
+      clearTimeout(orphan.timeoutId);
+    }
+    this.orphanBinaryPayloads.clear();
+  }
+
+  private resolveConnectDeferred(): void {
+    const deferred = this.connectDeferred;
+    if (!deferred) {
+      return;
+    }
+
+    this.connectDeferred = null;
+    deferred.resolve();
+  }
+
+  private rejectConnectDeferred(error: Error): void {
+    const deferred = this.connectDeferred;
+    if (!deferred) {
+      return;
+    }
+
+    this.connectDeferred = null;
+    deferred.reject(error);
+  }
+
+  private rejectPendingCommands(error: Error): void {
+    for (const [id, pending] of this.pendingCommands) {
+      clearTimeout(pending.timeoutId);
+      pending.reject(error);
+      this.pendingCommands.delete(id);
+    }
+  }
+
   private allocateTerminalInputStreamId(): number {
     const id = this.nextTerminalInputStreamId;
     this.nextTerminalInputStreamId += 1;
@@ -539,6 +614,8 @@ export class WsClient {
    */
   private handleClose(code: number, _reason: string): void {
     this.ws = null;
+    this.rejectPendingCommands(new Error('WebSocket disconnected'));
+    this.clearBinaryCommandState();
 
     // Check for rejection codes
     if (code === 4001 || code === 4002) {

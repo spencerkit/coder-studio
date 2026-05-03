@@ -48,6 +48,10 @@ interface TerminalInputDraftState {
 
 type TouchPointLike = Pick<Touch, 'identifier' | 'clientY'>;
 
+function isReplayGeneratedTerminalResponse(data: string): boolean {
+  return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
+}
+
 function classifyTerminalInput(data: string): TerminalInputActivity {
   if (data === '\x1b[I' || data === '\x1b[O') {
     return 'system';
@@ -356,10 +360,10 @@ export function XtermHost({
   const replayedSeqRef = useRef(0);
   const coldStartStateRef = useRef<'idle' | 'in-flight' | 'done'>('idle');
   // Tracks whether xterm is currently processing replay data. While > 0,
-  // handleInput suppresses all terminal.onData callbacks — this prevents
-  // xterm.js auto-responses (e.g. DSR `\x1b[6n` → `\x1b[row;colR`) from
-  // being forwarded to the server PTY as spurious input during replay.
+  // handleInput suppresses only known terminal auto-responses (e.g. DSR
+  // `\x1b[6n` → `\x1b[row;colR`) so real user keystrokes still reach the PTY.
   const replayWriteDepthRef = useRef(0);
+  const replayWriteGenerationRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
@@ -617,7 +621,10 @@ export function XtermHost({
    */
   const handleInput = useCallback(
     async (data: string) => {
-      if (replayWriteDepthRef.current > 0) {
+      if (
+        replayWriteDepthRef.current > 0 &&
+        isReplayGeneratedTerminalResponse(data)
+      ) {
         traceTerminal(terminalId, 'input.suppressed-replay-response', {
           summary: summarizeTerminalData(data),
         });
@@ -722,6 +729,10 @@ export function XtermHost({
 
     let disposed = false;
     let unsubscribeStatus: (() => void) | null = null;
+    const replayWriteGeneration = replayWriteGenerationRef.current + 1;
+
+    replayWriteGenerationRef.current = replayWriteGeneration;
+    replayWriteDepthRef.current = 0;
 
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
@@ -803,6 +814,30 @@ export function XtermHost({
       await handleResizeRef.current({ cols, rows });
     });
 
+    // Wraps terminal.write with a depth guard so handleInput can tell
+    // whether an onData callback originated from replay processing.
+    const writeReplayBytes = (bytes: Uint8Array) => {
+      replayWriteDepthRef.current += 1;
+      let completed = false;
+      const complete = () => {
+        if (completed) {
+          return;
+        }
+        completed = true;
+        if (replayWriteGenerationRef.current !== replayWriteGeneration) {
+          return;
+        }
+        replayWriteDepthRef.current = Math.max(0, replayWriteDepthRef.current - 1);
+      };
+
+      try {
+        terminal.write(bytes, complete);
+      } catch (error) {
+        complete();
+        throw error;
+      }
+    };
+
     const outputTopic = Topics.terminalOutput(workspaceId, terminalId);
     const exitTopic = Topics.terminalExit(workspaceId, terminalId);
 
@@ -816,7 +851,7 @@ export function XtermHost({
           continue;
         }
 
-        terminal.write(entry.bytes);
+        writeReplayBytes(entry.bytes);
         traceTerminal(terminalId, 'write.pending-replay-chunk', {
           seq: entry.seq,
           summary: summarizeTerminalData(entry.bytes),
@@ -825,27 +860,6 @@ export function XtermHost({
       }
 
       replayedSeqRef.current = latestCoveredSeq;
-    };
-
-    // Wraps terminal.write with a depth guard so handleInput can tell
-    // whether an onData callback originated from replay processing.
-    const writeReplayBytes = (bytes: Uint8Array) => {
-      replayWriteDepthRef.current += 1;
-      let completed = false;
-      const complete = () => {
-        if (completed) {
-          return;
-        }
-        completed = true;
-        replayWriteDepthRef.current = Math.max(0, replayWriteDepthRef.current - 1);
-      };
-
-      try {
-        terminal.write(bytes, complete);
-      } catch (error) {
-        complete();
-        throw error;
-      }
     };
 
     const finishHistoricalLoad = (
@@ -1096,6 +1110,10 @@ export function XtermHost({
 
     return () => {
       disposed = true;
+      if (replayWriteGenerationRef.current === replayWriteGeneration) {
+        replayWriteGenerationRef.current += 1;
+        replayWriteDepthRef.current = 0;
+      }
       if (unsubscribeStatus) {
         unsubscribeStatus();
         unsubscribeStatus = null;

@@ -6,6 +6,7 @@ import { RingBuffer } from './ring-buffer'
 import { EventBus } from '../bus/event-bus'
 import type { PtyProcess, PtyHost, TerminalDatabase, TerminalSpec } from './types'
 import type { Terminal } from '@coder-studio/core'
+import * as snapshotBufferModule from './terminal-snapshot-buffer'
 
 describe('TerminalManager', () => {
   let manager: TerminalManager
@@ -195,6 +196,36 @@ describe('TerminalManager', () => {
 
       expect(manager.get(shell.id)?.snapshotBuffer).toBeUndefined()
       expect(manager.get(agent.id)?.snapshotBuffer).toBeDefined()
+    })
+
+    it('degrades gracefully when the snapshot buffer fails to initialize', async () => {
+      const snapshotCtorSpy = vi
+        .spyOn(snapshotBufferModule, 'HeadlessSnapshotBuffer')
+        .mockImplementation(
+          class MockHeadlessSnapshotBuffer {
+            constructor() {
+              throw new Error('headless init failed')
+            }
+          } as unknown as typeof snapshotBufferModule.HeadlessSnapshotBuffer
+        )
+
+      try {
+        const terminal = manager.create({
+          workspaceId: 'ws-123',
+          kind: 'agent',
+          argv: ['node', 'agent.js'],
+          cwd: '/home/user',
+        })
+
+        expect(terminal.alive).toBe(true)
+        expect(mockPtyHost.spawn).toHaveBeenCalledTimes(1)
+        expect(manager.get(terminal.id)?.snapshotBuffer).toBeUndefined()
+        await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+          status: 'unsupported',
+        })
+      } finally {
+        snapshotCtorSpy.mockRestore()
+      }
     })
   })
 
