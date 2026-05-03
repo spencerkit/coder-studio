@@ -70,6 +70,8 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
+  const authEnabled = useAtomValue(authEnabledAtom);
+  const authenticated = useAtomValue(authenticatedAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
   const setConnectionError = useSetAtom(connectionErrorAtom);
   const setServerInfo = useSetAtom(serverInfoAtom);
@@ -128,6 +130,34 @@ export function AppProviders({ children }: AppProvidersProps) {
     };
 
     void loadAuthStatus();
+  }, [setAuthEnabled, store]);
+
+  useEffect(() => {
+    if (authEnabled === null) {
+      return;
+    }
+
+    if (authEnabled === true && !authenticated) {
+      if (pendingDisconnectTimer) {
+        clearTimeout(pendingDisconnectTimer);
+        pendingDisconnectTimer = null;
+      }
+
+      if (globalWsClient) {
+        globalWsClient.disconnect('auth_required');
+        globalWsClient = null;
+      }
+
+      wsClientRef.current = null;
+      setWsClient(null);
+      setConnectionStatus('connecting');
+      setConnectionError(null);
+      setServerInfo(null);
+      setReconnectCount(0);
+      setLastReconnect(null);
+      setIsWriter(false);
+      return;
+    }
 
     // Subscribe to connection status changes
     const handleStatusChange = (status: ConnectionStatus) => {
@@ -188,11 +218,16 @@ export function AppProviders({ children }: AppProvidersProps) {
     if (globalWsClient) {
       wsClientRef.current = globalWsClient;
       setWsClient(globalWsClient);
-      setConnectionStatus(globalWsClient.getStatus());
+      const status = globalWsClient.getStatus();
+      setConnectionStatus(status);
 
       // Re-establish subscriptions for this mount
       const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
       const unsubscribeEvents = globalWsClient.subscribe(topics, handleEvent);
+
+      if (status === 'disconnected' || status === 'reconnecting') {
+        globalWsClient.recoverConnection('manual_retry');
+      }
 
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
@@ -287,6 +322,8 @@ export function AppProviders({ children }: AppProvidersProps) {
     setSupervisors,
     setSupervisorCycles,
     store,
+    authEnabled,
+    authenticated,
   ]);
 
   return <>{children}</>;

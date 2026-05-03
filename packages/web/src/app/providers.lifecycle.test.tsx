@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { authEnabledAtom } from '../atoms/connection';
 import { authenticatedAtom } from '../atoms/app-ui';
@@ -75,22 +75,34 @@ describe('AppProviders lifecycle recovery', () => {
   it('recovers the websocket when the page becomes visible again', () => {
     renderProviders();
 
-    Object.defineProperty(document, 'visibilityState', {
-      configurable: true,
-      value: 'visible',
+    return vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    }).then(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'visible',
+      });
+
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      expect(wsState.client?.recoverConnection).toHaveBeenCalledWith('visibility_resume');
     });
-
-    document.dispatchEvent(new Event('visibilitychange'));
-
-    expect(wsState.client?.recoverConnection).toHaveBeenCalledWith('visibility_resume');
   });
 
   it('recovers the websocket when the browser reports network return', () => {
     renderProviders();
 
-    window.dispatchEvent(new Event('online'));
+    return vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    }).then(() => {
+      act(() => {
+        window.dispatchEvent(new Event('online'));
+      });
 
-    expect(wsState.client?.recoverConnection).toHaveBeenCalledWith('network_online');
+      expect(wsState.client?.recoverConnection).toHaveBeenCalledWith('network_online');
+    });
   });
 
   it('hydrates authEnabled and authenticated from /auth/status instead of trusting stale local state', async () => {
@@ -106,6 +118,51 @@ describe('AppProviders lifecycle recovery', () => {
     await vi.waitFor(() => {
       expect(store.get(authEnabledAtom)).toBe(true);
       expect(store.get(authenticatedAtom)).toBe(false);
+    });
+  });
+
+  it('does not connect or recover the websocket before login when auth is required', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ authEnabled: true, authenticated: false }),
+    }) as unknown as typeof fetch;
+
+    const { store } = renderProviders();
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(true);
+      expect(store.get(authenticatedAtom)).toBe(false);
+    });
+
+    expect(wsState.client?.connect).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('online'));
+
+    expect(wsState.client?.recoverConnection).not.toHaveBeenCalled();
+  });
+
+  it('connects the websocket after auth state flips to authenticated', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ authEnabled: true, authenticated: false }),
+    }) as unknown as typeof fetch;
+
+    const { store } = renderProviders();
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(true);
+      expect(store.get(authenticatedAtom)).toBe(false);
+    });
+
+    expect(wsState.client?.connect).not.toHaveBeenCalled();
+
+    store.set(authenticatedAtom, true);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalledTimes(1);
     });
   });
 
