@@ -124,27 +124,6 @@ describe('Claude Provider Definition', () => {
     });
   });
 
-  describe('buildResumeCommand', () => {
-    it('should build resume command without a model flag when no model is configured', () => {
-      const config: ProviderConfig = {};
-
-      const ctx = {
-        sessionId: 'session-123',
-        workspacePath: '/workspace',
-      };
-
-      const result = claudeDefinition.buildResumeCommand?.(
-        'resume-id-456',
-        config,
-        ctx
-      );
-
-      expect(result?.argv).toEqual(['claude', '--resume', 'resume-id-456']);
-      expect(result?.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
-      expect(result?.cwd).toBe('/workspace');
-    });
-  });
-
   describe('buildSupervisorEvalCommand', () => {
     it('builds a supervisor eval command with claude -p --output-format json', () => {
       const result = claudeDefinition.buildSupervisorEvalCommand?.(
@@ -192,13 +171,18 @@ describe('Claude Provider Definition', () => {
     });
   });
 
-  describe('hooks', () => {
-    it('should have hooks descriptor', () => {
-      expect(claudeDefinition.hooks).toBeDefined();
-      expect(claudeDefinition.hooks.markerVersion).toBe('cs-v1');
-      expect(claudeDefinition.hooks.events.sessionStart).toBe(true);
-      expect(claudeDefinition.hooks.events.completion).toBe(true);
-      expect(claudeDefinition.hooks.events.progress).toBe(false);
+  describe('idle heuristics', () => {
+    it('exposes conservative idle heuristics for PTY-driven state detection', () => {
+      expect(claudeDefinition.idleHeuristics).toBeDefined();
+      expect(claudeDefinition.idleHeuristics?.idlePromptPatterns).toEqual([]);
+      expect(claudeDefinition.idleHeuristics?.idleDebounceMs).toBe(4000);
+    });
+
+    it('does not expose legacy hooks or transcript helpers', () => {
+      expect('hooks' in claudeDefinition).toBe(false);
+      expect('buildResumeCommand' in claudeDefinition).toBe(false);
+      expect('resolveTranscriptPath' in claudeDefinition).toBe(false);
+      expect('readTranscriptExcerpt' in claudeDefinition).toBe(false);
     });
   });
 });

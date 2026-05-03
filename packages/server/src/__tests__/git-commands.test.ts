@@ -51,7 +51,6 @@ describe('Git Commands', () => {
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},
-      hooksMgr: {},
       eventBus,
       broadcaster: { broadcast: () => {} },
       providerRegistry: [],

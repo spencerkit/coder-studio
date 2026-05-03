@@ -14,14 +14,12 @@ const mockSessionCard = vi.fn(
     sessionId,
     onSplitHorizontal,
     onSplitVertical,
-    onStart,
     onStop,
     onClose,
   }: {
     sessionId: string;
     onSplitHorizontal?: () => void;
     onSplitVertical?: () => void;
-    onStart?: () => void;
     onStop?: () => void;
     onClose?: () => void;
   }) => (
@@ -32,9 +30,6 @@ const mockSessionCard = vi.fn(
       </button>
       <button type="button" onClick={onSplitVertical}>
         split-vertical-{sessionId}
-      </button>
-      <button type="button" onClick={onStart}>
-        start-{sessionId}
       </button>
       <button type="button" onClick={onStop}>
         stop-{sessionId}
@@ -391,7 +386,7 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('mounts all live sessions when no pane layout has been persisted yet', async () => {
+  it('mounts all ended sessions when no pane layout has been persisted yet', async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
         return [
@@ -400,21 +395,22 @@ describe('AgentPanes', () => {
             workspaceId: 'ws-1',
             terminalId: 'term-1',
             providerId: 'claude',
-            state: 'interrupted',
-            resumeId: 'resume-1',
+            state: 'ended',
             capability: 'full',
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
+            endedAt: Date.now() - 500,
           },
           {
             id: 'sess_2',
             workspaceId: 'ws-1',
             terminalId: 'term-2',
             providerId: 'codex',
-            state: 'unavailable',
+            state: 'ended',
             capability: 'full',
             startedAt: Date.now() - 8_000,
             lastActiveAt: Date.now() - 500,
+            endedAt: Date.now() - 250,
           },
         ];
       }
@@ -581,7 +577,7 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('keeps interrupted sessions mounted in the pane layout after session.list hydration', async () => {
+  it('keeps ended sessions mounted in the pane layout after session.list hydration', async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
         return [
@@ -590,11 +586,11 @@ describe('AgentPanes', () => {
             workspaceId: 'ws-1',
             terminalId: 'term-1',
             providerId: 'claude',
-            state: 'interrupted',
-            resumeId: 'resume-1',
+            state: 'ended',
             capability: 'full',
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
+            endedAt: Date.now() - 250,
           },
         ];
       }
@@ -630,9 +626,13 @@ describe('AgentPanes', () => {
     expect(mockSessionCard).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'sess_1' })
     );
+    const endedCardProps = mockSessionCard.mock.calls.find(
+      ([props]) => (props as { sessionId?: string }).sessionId === 'sess_1'
+    )?.[0] as { onStart?: unknown } | undefined;
+    expect(endedCardProps?.onStart).toBeUndefined();
   });
 
-  it('keeps unavailable sessions mounted in the pane layout after session.list hydration', async () => {
+  it('keeps multiple ended sessions mounted in the pane layout after session.list hydration', async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === 'session.list') {
         return [
@@ -641,10 +641,11 @@ describe('AgentPanes', () => {
             workspaceId: 'ws-1',
             terminalId: 'term-1',
             providerId: 'claude',
-            state: 'unavailable',
+            state: 'ended',
             capability: 'full',
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
+            endedAt: Date.now() - 250,
           },
         ];
       }

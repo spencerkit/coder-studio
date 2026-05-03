@@ -34,7 +34,6 @@ describe('Workspace Commands', () => {
       workspaceMgr,
       sessionMgr: {} as any,
       terminalMgr: {} as any,
-      hooksMgr: {} as any,
       eventBus,
       broadcaster: { broadcast: () => {} } as any,
       providerRegistry: [],

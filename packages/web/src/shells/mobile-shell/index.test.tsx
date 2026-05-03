@@ -214,8 +214,6 @@ function createSession(partial: Partial<Session> & Pick<Session, 'id' | 'termina
     endedAt: partial.endedAt,
     completionPercent: partial.completionPercent,
     errorReason: partial.errorReason,
-    resumeId: partial.resumeId,
-    transcriptPath: partial.transcriptPath,
   };
 }
 
@@ -1050,8 +1048,9 @@ describe('MobileShell Phase 2 workspace', () => {
         id: 'sess_2',
         terminalId: 'term-2',
         providerId: 'codex',
-        state: 'unavailable',
+        state: 'ended',
         title: 'Codex',
+        endedAt: Date.now(),
       }),
     ]);
 

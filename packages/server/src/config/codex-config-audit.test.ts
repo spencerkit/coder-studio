@@ -7,11 +7,6 @@ import {
   cleanupCodexConfigToml,
 } from './codex-config-audit.js';
 
-/**
- * These tests exercise the auditor against realistic TOML shapes. We keep
- * the fixtures close to the user-reported config.toml that triggered this
- * work so regressions there are caught immediately.
- */
 describe('codex-config-audit', () => {
   let tmp: string;
   let configPath: string;
@@ -24,8 +19,6 @@ describe('codex-config-audit', () => {
   afterEach(() => {
     rmSync(tmp, { recursive: true, force: true });
   });
-
-  // --- audit -------------------------------------------------------------
 
   it('returns exists:false when config.toml is missing', () => {
     const audit = auditCodexConfigToml(join(tmp, 'nope.toml'));
@@ -68,8 +61,6 @@ describe('codex-config-audit', () => {
   });
 
   it('detects multi-line top-level notify with bracketed block', () => {
-    // This is exactly the shape of the user's real config.toml that
-    // kicked off this work — keep it verbatim as a regression fixture.
     const content = [
       'model = "gpt-5.3-codex"',
       'service_tier = "fast"',
@@ -125,8 +116,6 @@ describe('codex-config-audit', () => {
   });
 
   it('does NOT flag codex_hooks = true outside [features]', () => {
-    // Suppose user has it scoped under some other hypothetical section.
-    // Only [features] should match.
     writeFileSync(
       configPath,
       ['[other]', 'codex_hooks = true'].join('\n')
@@ -159,8 +148,6 @@ describe('codex-config-audit', () => {
     const ids = audit.findings.map((f) => f.id).sort();
     expect(ids).toEqual(['toml_codex_hooks', 'toml_notify']);
   });
-
-  // --- cleanup -----------------------------------------------------------
 
   it('cleanup is a no-op when nothing is selected', () => {
     writeFileSync(configPath, 'notify = ["x"]\n');

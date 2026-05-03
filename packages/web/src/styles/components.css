@@ -1768,14 +1768,6 @@ body.is-resizing-panels * {
   background: var(--accent-green);
 }
 
-.session-progress-interrupted {
-  background: var(--accent-pink);
-}
-
-.session-progress-unavailable {
-  background: var(--color-error);
-}
-
 /* Session header */
 .session-header {
   display: flex;
@@ -1813,14 +1805,6 @@ body.is-resizing-panels * {
 
 .session-dot-complete {
   background: var(--accent-green);
-}
-
-.session-dot-interrupted {
-  background: var(--accent-pink);
-}
-
-.session-dot-unavailable {
-  background: var(--color-error);
 }
 
 .session-title {
@@ -7049,8 +7033,6 @@ textarea.input {
     background: var(--accent-amber);
   }
 
-  .mobile-topbar__session-dot--interrupted,
-  .mobile-topbar__session-dot--unavailable,
   .mobile-topbar__session-dot--ended {
     background: var(--color-warning);
   }

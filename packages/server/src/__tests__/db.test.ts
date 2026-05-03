@@ -95,7 +95,7 @@ describe('Database', () => {
       expect(tableNames).toContain('sessions');
       expect(tableNames).toContain('provider_configs');
       expect(tableNames).toContain('user_settings');
-      expect(tableNames).toContain('hook_registrations');
+      expect(tableNames).toContain('auth_sessions');
     });
 
     it('should create required indexes', () => {

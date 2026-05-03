@@ -106,20 +106,18 @@ describe('Codex Provider Definition', () => {
       expect(result.cwd).toBe('/workspace');
     });
 
-    it('should include -c notify when bridgeScriptPath is provided', () => {
+    it('does not inject hook bridge arguments into the codex command', () => {
       const config: ProviderConfig = { additionalArgs: [], envVars: {} };
       const ctx = {
         sessionId: 'session-123',
         workspacePath: '/workspace',
-        bridgeScriptPath: '/path/to/codex-bridge.js',
       };
 
       const result = codexDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toContain('-c');
-      const notifyArg = result.argv.find((a: string) => a.startsWith('notify='));
-      expect(notifyArg).toContain('node');
-      expect(notifyArg).toContain('/path/to/codex-bridge.js');
+      expect(result.argv).toEqual(['codex']);
+      expect(result.argv).not.toContain('-c');
+      expect(result.argv.some((a: string) => a.startsWith('notify='))).toBe(false);
     });
 
     it('should include additional arguments and env vars', () => {
@@ -138,12 +136,6 @@ describe('Codex Provider Definition', () => {
       expect(result.argv).toEqual(['codex', '--flag']);
       expect(result.env.TOKEN).toBe('abc');
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
-    });
-  });
-
-  describe('buildResumeCommand', () => {
-    it('should not have resume command', () => {
-      expect(codexDefinition.buildResumeCommand).toBeUndefined();
     });
   });
 
@@ -204,41 +196,19 @@ describe('Codex Provider Definition', () => {
     });
   });
 
-  describe('hooks', () => {
-    it('should have real hooks descriptor with completion enabled', () => {
-      expect(codexDefinition.hooks).toBeDefined();
-      expect(codexDefinition.hooks.markerVersion).toBe('cs-v1');
-      expect(codexDefinition.hooks.events.sessionStart).toBe(false);
-      expect(codexDefinition.hooks.events.completion).toBe(true);
-      expect(codexDefinition.hooks.events.progress).toBe(false);
+  describe('idle heuristics', () => {
+    it('exposes idle heuristics for PTY-driven state detection', () => {
+      expect(codexDefinition.idleHeuristics).toBeDefined();
+      expect(codexDefinition.idleHeuristics?.sessionIdPatterns).toBeDefined();
+      expect(codexDefinition.idleHeuristics?.idlePromptPatterns).toBeDefined();
+      expect(codexDefinition.idleHeuristics?.idleDebounceMs).toBe(3000);
     });
 
-    it('should have stdout heuristics as fallback', () => {
-      expect(codexDefinition.hooks.stdoutHeuristics).toBeDefined();
-      expect(codexDefinition.hooks.stdoutHeuristics?.sessionIdPatterns).toBeDefined();
-      expect(codexDefinition.hooks.stdoutHeuristics?.idlePromptPatterns).toBeDefined();
-      expect(codexDefinition.hooks.stdoutHeuristics?.idleDebounceMs).toBe(3000);
-    });
-
-    it('should parse agent-turn-complete events', () => {
-      const result = codexDefinition.hooks.parseEvent('agent-turn-complete', {
-        'thread-id': 'uuid-1',
-        'turn-id': 'turn-42',
-      });
-
-      expect(result).toBeDefined();
-      expect(result?.type).toBe('turn_completed');
-      expect(result?.payload.resumeId).toBe('uuid-1');
-      expect(result?.payload.turnId).toBe('turn-42');
-    });
-
-    it('should return null for unknown events', () => {
-      const result = codexDefinition.hooks.parseEvent('unknown', {});
-      expect(result).toBeNull();
-    });
-
-    it('should have resolveTranscriptPath', () => {
-      expect(codexDefinition.resolveTranscriptPath).toBeDefined();
+    it('does not expose legacy hooks or transcript helpers', () => {
+      expect('hooks' in codexDefinition).toBe(false);
+      expect('buildResumeCommand' in codexDefinition).toBe(false);
+      expect('resolveTranscriptPath' in codexDefinition).toBe(false);
+      expect('readTranscriptExcerpt' in codexDefinition).toBe(false);
     });
   });
 });

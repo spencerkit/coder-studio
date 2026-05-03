@@ -5,6 +5,7 @@ function createManagerDeps() {
   const supervisors = new Map<string, any>();
   const cyclesBySupervisor = new Map<string, any[]>();
   const logger = {
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   };
@@ -35,7 +36,8 @@ function createManagerDeps() {
         startedAt: 1,
         lastActiveAt: 1,
       })),
-      getOutputTail: vi.fn(() => Buffer.from('terminal fallback output')),
+      getRenderedSnapshot: vi.fn(async () => 'headless snapshot output'),
+      getLatestSubmittedUserInput: vi.fn(() => 'run the tests'),
       sendInput: vi.fn(),
     },
     providerRegistry: [
@@ -49,7 +51,6 @@ function createManagerDeps() {
             progress: false,
           },
         },
-        readTranscriptExcerpt: vi.fn(async () => null),
       },
       {
         id: 'codex',
@@ -275,7 +276,7 @@ describe('SupervisorManager cycle triggers', () => {
       sessionId: 'sess-orphan',
       status: 'queued',
       trigger: 'manual',
-      evidenceSource: 'terminal_fallback',
+      evidenceSource: 'headless_snapshot',
       objective: supervisor.objective,
       evaluatorProviderId: supervisor.evaluatorProviderId,
       createdAt: Date.now(),
@@ -289,7 +290,7 @@ describe('SupervisorManager cycle triggers', () => {
     expect(legacy?.errorReason).toBeTruthy();
   });
 
-  it('allows supervisor creation when the session provider exposes completion hooks even if the UI capability label is limited', async () => {
+  it('rejects supervisor creation when the session provider capability is limited', async () => {
     deps.sessionMgr.get.mockImplementation((sessionId: string) => ({
       id: sessionId,
       terminalId: `term-${sessionId}`,
@@ -303,13 +304,6 @@ describe('SupervisorManager cycle triggers', () => {
     deps.providerRegistry[0] = {
       ...deps.providerRegistry[0],
       capability: 'limited',
-      hooks: {
-        events: {
-          sessionStart: true,
-          completion: true,
-          progress: false,
-        },
-      },
     };
 
     await expect(
@@ -319,9 +313,9 @@ describe('SupervisorManager cycle triggers', () => {
         objective: 'Ship the fix',
         evaluatorProviderId: 'codex',
       })
-    ).resolves.toMatchObject({
-      sessionId: 'sess-limited-label',
-      workspaceId: 'ws-1',
+    ).rejects.toMatchObject({
+      code: 'supervisor_unsupported_provider',
+      message: 'Provider claude does not support supervisor-driven sessions',
     });
   });
 

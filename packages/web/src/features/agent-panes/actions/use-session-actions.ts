@@ -8,16 +8,6 @@ export function useSessionActions() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
 
-  const resumeSession = useCallback(
-    async (sessionId: string) => {
-      const result = await dispatch<{ sessionId: string }>('session.resume', { sessionId });
-      if (!result.ok) {
-        console.error('Failed to resume session:', result.error?.message);
-      }
-    },
-    [dispatch]
-  );
-
   const stopSession = useCallback(
     async (sessionId: string) => {
       const result = await dispatch<void>('session.stop', { sessionId });
@@ -61,7 +51,6 @@ export function useSessionActions() {
 
   return {
     closeSession,
-    resumeSession,
     submitSessionPrompt,
     stopSession,
   };

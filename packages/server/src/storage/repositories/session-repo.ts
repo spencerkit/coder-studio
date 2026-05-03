@@ -9,7 +9,6 @@ export interface SessionRow {
   workspace_id: string;
   terminal_id: string;
   provider_id: string;
-  resume_id: string | null;
   capability: 'full' | 'limited' | 'unsupported';
   state: SessionState;
   started_at: number | null;
@@ -18,7 +17,6 @@ export interface SessionRow {
   completion_percent: number | null;
   error_reason: string | null;
   archived: number; // SQLite uses 0/1 for boolean
-  transcript_path: string | null;
   title: string | null;
   draft?: string | null;
 }
@@ -30,14 +28,12 @@ export function rowToSession(row: SessionRow): Session {
     terminalId: row.terminal_id,
     providerId: row.provider_id,
     state: row.state,
-    resumeId: row.resume_id ?? undefined,
     capability: row.capability,
     startedAt: row.started_at ?? row.last_active_at,
     lastActiveAt: row.last_active_at,
     endedAt: row.ended_at ?? undefined,
     completionPercent: row.completion_percent ?? undefined,
     errorReason: row.error_reason ?? undefined,
-    transcriptPath: row.transcript_path ?? undefined,
     title: row.title ?? undefined,
     ...(row.draft != null ? { draft: row.draft } : {}),
   };
@@ -50,7 +46,6 @@ export function sessionToRow(session: Session & { draft?: string }): SessionRow 
     terminal_id: session.terminalId,
     provider_id: session.providerId,
     state: session.state,
-    resume_id: session.resumeId ?? null,
     capability: session.capability,
     started_at: session.startedAt ?? session.lastActiveAt,
     last_active_at: session.lastActiveAt,
@@ -59,7 +54,6 @@ export function sessionToRow(session: Session & { draft?: string }): SessionRow 
     error_reason: session.errorReason ?? null,
     archived: 0,
     draft: session.draft ?? null,
-    transcript_path: session.transcriptPath ?? null,
     title: session.title ?? null,
   };
 }
@@ -73,13 +67,11 @@ export interface NewSession {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  resumeId?: string;
   capability: 'full' | 'limited' | 'unsupported';
   startedAt: number;
   lastActiveAt: number;
   completionPercent?: number;
   errorReason?: string;
-  transcriptPath?: string;
 }
 
 /**
@@ -129,8 +121,8 @@ export class SessionRepo {
    */
   create(session: NewSession): Session {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at, completion_percent, error_reason, transcript_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, completion_percent, error_reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -138,14 +130,12 @@ export class SessionRepo {
       session.workspaceId,
       session.terminalId,
       session.providerId,
-      session.resumeId ?? null,
       session.capability,
       session.state,
       session.startedAt,
       session.lastActiveAt,
       session.completionPercent ?? null,
-      session.errorReason ?? null,
-      session.transcriptPath ?? null
+      session.errorReason ?? null
     );
 
     return this.findById(session.id)!;
@@ -157,14 +147,6 @@ export class SessionRepo {
   updateState(id: string, state: SessionState): void {
     const stmt = this.db.prepare('UPDATE sessions SET state = ? WHERE id = ?');
     stmt.run(state, id);
-  }
-
-  /**
-   * Updates resume_id
-   */
-  updateResumeId(id: string, resumeId: string): void {
-    const stmt = this.db.prepare('UPDATE sessions SET resume_id = ? WHERE id = ?');
-    stmt.run(resumeId, id);
   }
 
   /**

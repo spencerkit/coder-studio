@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from './types';
+import type { SessionState } from './types';
 
 describe('deriveSessionTitle', () => {
   it('returns undefined for empty/whitespace-only input', () => {
@@ -31,5 +32,13 @@ describe('deriveSessionTitle', () => {
     const exact = 'abcdefghij'; // 10 chars
     expect(exact).toHaveLength(SESSION_TITLE_MAX_LENGTH);
     expect(deriveSessionTitle(exact)).toBe(exact);
+  });
+});
+
+describe('SessionState', () => {
+  it('only allows the PTY-driven lifecycle states', () => {
+    expectTypeOf<SessionState>().toEqualTypeOf<
+      'draft' | 'starting' | 'running' | 'idle' | 'ended'
+    >();
   });
 });

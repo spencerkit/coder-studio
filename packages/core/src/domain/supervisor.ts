@@ -17,7 +17,7 @@ export type CycleStatus =
 
 export type CycleTrigger = 'turn_completed' | 'manual';
 
-export type EvidenceSource = 'transcript' | 'terminal_fallback';
+export type EvidenceSource = 'headless_snapshot' | 'transcript' | 'terminal_fallback';
 
 export interface SupervisorCycle {
   id: string;

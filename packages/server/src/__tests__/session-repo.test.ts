@@ -83,14 +83,13 @@ describe('SessionRepo', () => {
       expect(result.capability).toBe('full');
     });
 
-    it('should create a session with resume_id and completion percent', () => {
+    it('should create a session with completion percent', () => {
       const newSession: NewSession = {
         id: 's-2',
         workspaceId: 'ws-1',
         terminalId: 't-1',
         providerId: 'claude-cli',
         state: 'running',
-        resumeId: 'resume-123',
         capability: 'full',
         startedAt: Date.now(),
         lastActiveAt: Date.now(),
@@ -99,7 +98,6 @@ describe('SessionRepo', () => {
 
       const result = repo.create(newSession);
 
-      expect(result.resumeId).toBe('resume-123');
       expect(result.completionPercent).toBe(50);
     });
   });
@@ -260,26 +258,6 @@ describe('SessionRepo', () => {
 
       const result = repo.findById('s-1');
       expect(result?.state).toBe('running');
-    });
-  });
-
-  describe('updateResumeId', () => {
-    it('should update resume_id', () => {
-      repo.create({
-        id: 's-1',
-        workspaceId: 'ws-1',
-        terminalId: 't-1',
-        providerId: 'claude-cli',
-        state: 'running',
-        capability: 'full',
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      repo.updateResumeId('s-1', 'new-resume-id');
-
-      const result = repo.findById('s-1');
-      expect(result?.resumeId).toBe('new-resume-id');
     });
   });
 

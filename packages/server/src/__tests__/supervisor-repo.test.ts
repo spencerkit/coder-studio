@@ -21,8 +21,8 @@ describe('SupervisorRepo', () => {
       'INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run('term-1', 'ws-1', 'agent', tempDir, '[]', 120, 30, 1);
     db.prepare(
-      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run('sess-1', 'ws-1', 'term-1', 'claude', null, 'full', 'idle', 1, 1);
+      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run('sess-1', 'ws-1', 'term-1', 'claude', 'full', 'idle', 1, 1);
 
     supervisorRepo = new SupervisorRepo(db);
     cycleRepo = new SupervisorCycleRepo(db);
@@ -59,8 +59,8 @@ describe('SupervisorRepo', () => {
       'INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run('term-2', 'ws-2', 'agent', tempDir, '[]', 120, 30, 2);
     db.prepare(
-      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run('sess-2', 'ws-2', 'term-2', 'codex', null, 'full', 'idle', 2, 2);
+      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run('sess-2', 'ws-2', 'term-2', 'codex', 'full', 'idle', 2, 2);
 
     expect(() =>
       supervisorRepo.create({
@@ -81,8 +81,8 @@ describe('SupervisorRepo', () => {
       'INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run('term-2', 'ws-1', 'agent', tempDir, '[]', 120, 30, 2);
     db.prepare(
-      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run('sess-2', 'ws-1', 'term-2', 'codex', null, 'full', 'idle', 2, 2);
+      'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run('sess-2', 'ws-1', 'term-2', 'codex', 'full', 'idle', 2, 2);
 
     supervisorRepo.create({
       id: 'sup-1',
@@ -102,7 +102,7 @@ describe('SupervisorRepo', () => {
         sessionId: 'sess-2',
         status: 'completed',
         trigger: 'manual',
-        evidenceSource: 'terminal_fallback',
+        evidenceSource: 'headless_snapshot',
         objective: 'This insert must fail',
         evaluatorProviderId: 'claude',
         createdAt: 11,
@@ -181,7 +181,7 @@ describe('SupervisorRepo', () => {
       sessionId: 'sess-1',
       status: 'evaluating',
       trigger: 'manual',
-      evidenceSource: 'terminal_fallback',
+      evidenceSource: 'headless_snapshot',
       objective: 'Keep cycle fields intact',
       evaluatorProviderId: 'claude',
       progress: 40,
@@ -221,7 +221,7 @@ describe('SupervisorRepo', () => {
       sessionId: 'sess-1',
       status: 'evaluating',
       trigger: 'manual',
-      evidenceSource: 'terminal_fallback',
+      evidenceSource: 'headless_snapshot',
       objective: 'Clear cycle fields',
       evaluatorProviderId: 'claude',
       progress: 40,
@@ -283,7 +283,7 @@ describe('SupervisorRepo', () => {
         sessionId: 'sess-1',
         status: 'completed',
         trigger: 'manual',
-        evidenceSource: 'terminal_fallback',
+        evidenceSource: 'headless_snapshot',
         objective: 'Keep the newest 100 cycles',
         evaluatorProviderId: 'claude',
         createdAt: i,

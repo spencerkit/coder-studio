@@ -18,6 +18,14 @@ import {
   type ConfigType,
 } from '../config/config-io.js';
 
+const EMPTY_CODEX_AUDIT = {
+  codex: {
+    configPath: '',
+    exists: false,
+    findings: [],
+  },
+};
+
 // Settings schema
 const SettingsSchema = z.object({
   defaultProviderId: z.string().optional(),
@@ -69,14 +77,11 @@ registerCommand(
       Object.assign(settings, flattenSettings(sanitizeProviderLaunchConfig(config), `providers.${providerId}`));
     }
 
-    const hookRegistrations = ctx.hooksMgr.listRegistrations();
-    settings.hookRegistrations = hookRegistrations;
-
     // Surface config drift (Codex config.toml interfering settings) so the
     // web UI can show a banner + cleanup action. Cheap to compute on every
     // settings.get — it's a single file read + a couple regex passes.
     try {
-      settings.externalConfigAudit = ctx.hooksMgr.auditExternalConfigs();
+      settings.externalConfigAudit = ctx.codexConfigAudit?.audit() ?? EMPTY_CODEX_AUDIT;
     } catch {
       // Never let a broken audit take down settings fetch.
       settings.externalConfigAudit = null;
@@ -141,12 +146,17 @@ registerCommand(
       .min(1),
   }),
   async (args, ctx) => {
-    const result = ctx.hooksMgr.cleanupCodexConfig(args.removeIds);
+    const result =
+      ctx.codexConfigAudit?.cleanup(args.removeIds) ?? {
+        removed: [],
+        backupPath: null,
+        noop: true,
+      };
     return {
       removed: result.removed,
       backupPath: result.backupPath,
       noop: result.noop,
-      audit: ctx.hooksMgr.auditExternalConfigs(),
+      audit: ctx.codexConfigAudit?.audit() ?? EMPTY_CODEX_AUDIT,
     };
   }
 );

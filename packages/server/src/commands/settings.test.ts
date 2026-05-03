@@ -15,10 +15,9 @@ describe('settings commands', () => {
       workspaceMgr: {} as never,
       sessionMgr: {} as never,
       terminalMgr: {} as never,
-      hooksMgr: {
-        listRegistrations: () => [],
-        auditExternalConfigs: () => ({ codex: { configPath: '/tmp/config.toml', exists: false, findings: [] } }),
-        cleanupCodexConfig: () => ({ removed: [], backupPath: null, noop: true }),
+      codexConfigAudit: {
+        audit: () => ({ codex: { configPath: '/tmp/config.toml', exists: false, findings: [] } }),
+        cleanup: () => ({ removed: [], backupPath: null, noop: true }),
       } as never,
       eventBus: {} as never,
       broadcaster: {} as never,
@@ -183,7 +182,7 @@ describe('settings commands', () => {
     expect(result.data?.['providers.openai.additionalArgs']).toBeUndefined();
   });
 
-  it('settings.get reads settings from user_settings and includes audit metadata', async () => {
+  it('settings.get reads settings from user_settings and includes config audit metadata', async () => {
     db.prepare('INSERT INTO user_settings (key, value) VALUES (?, ?)').run('defaultProviderId', '"codex"');
     db.prepare('INSERT INTO user_settings (key, value) VALUES (?, ?)').run('notifications.enabled', 'true');
 
@@ -201,7 +200,6 @@ describe('settings commands', () => {
     expect(result.data).toMatchObject({
       defaultProviderId: 'codex',
       'notifications.enabled': true,
-      hookRegistrations: [],
       externalConfigAudit: {
         codex: {
           configPath: '/tmp/config.toml',

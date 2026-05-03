@@ -8,7 +8,7 @@
 import type { FC, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { X, FlipHorizontal, FlipVertical, Play, Square } from 'lucide-react';
+import { X, FlipHorizontal, FlipVertical, Square } from 'lucide-react';
 import { sessionByIdAtomFamily } from '../../../../atoms/sessions';
 import { workspaceByIdAtomFamily } from '../../../../atoms/workspaces';
 import { pendingFocusSessionAtom } from '../../../../atoms/app-ui';
@@ -30,7 +30,6 @@ interface SessionCardProps {
   onClose?: SessionCardAction;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
-  onStart?: SessionCardAction;
   onStop?: SessionCardAction;
 }
 
@@ -51,7 +50,6 @@ export const SessionCard: FC<SessionCardProps> = ({
   onClose,
   onSplitHorizontal,
   onSplitVertical,
-  onStart,
   onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
@@ -139,11 +137,7 @@ export const SessionCard: FC<SessionCardProps> = ({
 
             {showHeaderActions ? (
               <div className="session-header-actions">
-                {session.state === 'idle' || session.state === 'interrupted' ? (
-                  <button className="session-action-btn" onClick={() => void onStart?.()} title="Start" aria-label="Start">
-                    <Play size={13} />
-                  </button>
-                ) : session.state === 'running' ? (
+                {session.state === 'running' ? (
                   <button className="session-action-btn" onClick={() => void onStop?.()} title="Stop" aria-label="Stop">
                     <Square size={13} />
                   </button>
@@ -181,8 +175,7 @@ export const SessionCard: FC<SessionCardProps> = ({
       {showSupervisorInline &&
       session.capability === 'full' &&
       session.state !== 'draft' &&
-      session.state !== 'ended' &&
-      session.state !== 'unavailable' ? (
+      session.state !== 'ended' ? (
         <>
           <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
           <ObjectiveDialog workspaceId={session.workspaceId} sessionId={session.id} />
@@ -210,8 +203,6 @@ function getProgressWidth(state: SessionState): number {
       return 42;
     case 'ended':
       return 100;
-    case 'unavailable':
-      return 100;
     default:
       return 8;
   }
@@ -225,12 +216,8 @@ function getSessionProgressClass(state: SessionState) {
       return 'session-progress-running';
     case 'idle':
       return 'session-progress-idle';
-    case 'interrupted':
-      return 'session-progress-interrupted';
     case 'ended':
       return 'session-progress-complete';
-    case 'unavailable':
-      return 'session-progress-unavailable';
     default:
       return 'session-progress-idle';
   }
@@ -242,12 +229,8 @@ function getSessionDotClass(state: SessionState) {
       return 'session-dot-starting';
     case 'running':
       return 'session-dot-running';
-    case 'interrupted':
-      return 'session-dot-interrupted';
     case 'ended':
       return 'session-dot-complete';
-    case 'unavailable':
-      return 'session-dot-unavailable';
     default:
       return 'session-dot-idle';
   }
@@ -259,12 +242,8 @@ function getSessionBadgeClass(state: SessionState) {
       return 'badge badge-amber';
     case 'running':
       return 'badge badge-green';
-    case 'interrupted':
-      return 'badge badge-pink';
     case 'ended':
       return 'badge badge-blue';
-    case 'unavailable':
-      return 'badge badge-pink';
     default:
       return 'badge badge-gray';
   }

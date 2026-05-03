@@ -13,8 +13,6 @@ export {
 
 // Claude-specific exports
 export { claudeConfigSchema, type ClaudeConfig } from './claude/config-schema.js';
-export { parseClaudeEvent } from './claude/event-parser.js';
-export { claudeHooksDescriptor } from './claude/hooks-template.js';
 
 // Codex-specific exports
 export { codexConfigSchema, type CodexConfig } from './codex/config-schema.js';

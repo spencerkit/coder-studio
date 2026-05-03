@@ -26,7 +26,7 @@ describe('Provider Registry', () => {
         expect(provider.requiredCommands).toBeDefined();
         expect(provider.configSchema).toBeDefined();
         expect(provider.defaultConfig).toBeDefined();
-        expect(provider.hooks).toBeDefined();
+        expect(provider.buildCommand).toBeDefined();
       }
     });
   });

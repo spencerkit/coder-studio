@@ -9,8 +9,6 @@ import type { SessionRow } from '../storage/repositories/session-repo.js';
  * Whitelisted fields that can be passed to SessionDatabase.update()
  */
 export interface SessionUpdatePatch {
-  resumeId?: string;
-  transcriptPath?: string;
   terminalId?: string;
   state?: string;
   startedAt?: number;

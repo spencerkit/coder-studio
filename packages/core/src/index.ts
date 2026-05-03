@@ -11,3 +11,4 @@ export * from './domain/mcp';
 
 // Provider
 export * from './provider/definition';
+export * from './provider/idle-heuristics';

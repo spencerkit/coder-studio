@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, basename } from 'node:path';
-import { resolveCodexConfigPath } from '../hooks/codex-config-audit';
+import { resolveCodexConfigPath } from './codex-config-audit.js';
 
 export type ConfigType = 'codex' | 'claude';
 

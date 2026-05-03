@@ -10,8 +10,8 @@
  *  Fallback: running → ended     (terminal exited or user clicked Stop without
  *                                 ever returning to idle — fire once anyway)
  *
- *  Both `starting` and `interrupted` count as "active" too, so any active →
- *  idle/ended transition fires.
+ *  Any running turn that later returns to `idle` or `ended` may fire a
+ *  completion notification.
  *
  *  We deliberately ignore extremely short turns (< MIN_NOTIFY_DURATION_MS)
  *  because echoing "hi" to the agent and getting an instant reply should not
@@ -85,7 +85,6 @@ interface SessionTrace {
 // "session completed" toast before the user has done anything.
 const ACTIVE_STATES: ReadonlySet<SessionState> = new Set([
   'running',
-  'interrupted',
 ]);
 
 /** Terminal states for our purposes — these are the ones that trigger a check. */

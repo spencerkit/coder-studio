@@ -9,7 +9,6 @@ import { z } from 'zod';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import type { SessionManager } from '../session/manager.js';
 import type { TerminalManager } from '../terminal/manager.js';
-import type { HooksManager } from '../hooks/manager.js';
 import type { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster } from './hub.js';
 import type { FencingManager } from './fencing.js';
@@ -17,6 +16,11 @@ import type { SupervisorManager } from '../supervisor/manager.js';
 import type { RuntimeStatusDeps } from '../provider-runtime/runtime-status.js';
 import type { ProviderInstallManager } from '../provider-runtime/install-manager.js';
 import type { Database } from '../storage/database.js';
+import type {
+  CodexConfigAudit,
+  CodexAuditFindingType,
+  CodexCleanupResult,
+} from '../config/codex-config-audit.js';
 
 /**
  * Command context - injected dependencies for handlers
@@ -25,7 +29,6 @@ export interface CommandContext {
   workspaceMgr: WorkspaceManager;
   sessionMgr: SessionManager;
   terminalMgr: TerminalManager;
-  hooksMgr: HooksManager;
   eventBus: EventBus;
   broadcaster: Broadcaster;
   db: Database;
@@ -34,6 +37,10 @@ export interface CommandContext {
   supervisorMgr: SupervisorManager;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
+  codexConfigAudit?: {
+    audit: () => { codex: CodexConfigAudit };
+    cleanup: (removeIds: CodexAuditFindingType[]) => CodexCleanupResult;
+  };
 }
 
 /**

@@ -54,7 +54,6 @@ describe('Session Commands', () => {
       workspaceMgr,
       sessionMgr,
       terminalMgr: {} as any,
-      hooksMgr: {} as any,
       eventBus,
       broadcaster: { broadcast: () => {} } as any,
       providerRegistry: [],
@@ -169,7 +168,7 @@ describe('Session Commands', () => {
   });
 
   describe('session.resume', () => {
-    it('should error if session not found', async () => {
+    it('should return unknown_op because the command has been removed', async () => {
       const result = await dispatch(
         {
           kind: 'command',
@@ -183,6 +182,7 @@ describe('Session Commands', () => {
       );
 
       expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('unknown_op');
     });
   });
 });
