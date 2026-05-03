@@ -11,6 +11,7 @@ import {
   terminalOutputAtomFamily,
   type TerminalMeta,
 } from '../atoms';
+import { toastsAtom } from '../../notifications';
 import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
 import { MemoryRouter } from 'react-router-dom';
@@ -199,6 +200,63 @@ describe('TerminalPanel', () => {
       })
     );
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows an error toast when terminal creation fails', async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.list') {
+        return Promise.resolve([]);
+      }
+
+      if (op === 'terminal.create') {
+        return Promise.reject(new Error('Terminal spawn failed: posix_spawnp failed.'));
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/tmp/ws-test',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    await act(async () => {
+      screen.getAllByRole('button', { name: 'New Terminal' })[0]?.click();
+    });
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]).toMatchObject({
+        kind: 'error',
+        title: 'Could not create terminal',
+        body: 'Terminal spawn failed: posix_spawnp failed.',
+      });
+    });
   });
 
   it('ignores agent terminals and keeps the shell panel empty', async () => {

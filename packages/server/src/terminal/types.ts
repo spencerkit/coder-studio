@@ -48,9 +48,16 @@ export class TerminalNotAliveError extends Error {
  * Error thrown when terminal spawn fails synchronously
  */
 export class TerminalSpawnError extends Error {
+  readonly code = 'terminal_spawn_failed'
+
   constructor(
     public readonly kind: 'spawn_failed_sync',
-    public readonly cause: Error
+    public readonly cause: Error,
+    public readonly details?: {
+      command?: string
+      cwd?: string
+      terminalKind?: 'agent' | 'shell'
+    }
   ) {
     super(`Terminal spawn failed: ${cause.message}`)
     this.name = 'TerminalSpawnError'

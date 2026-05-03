@@ -9,6 +9,7 @@ import type {
   TerminalId,
   TerminalSpec,
 } from './types'
+import { TerminalSpawnError } from './types'
 import type { EventBus } from '../bus/event-bus'
 import { ActiveTerminal } from './active-terminal'
 import { RingBuffer } from './ring-buffer'
@@ -112,7 +113,11 @@ export class TerminalManager {
       })
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
-      throw new Error(`Terminal spawn failed: ${error.message}`)
+      throw new TerminalSpawnError('spawn_failed_sync', error, {
+        command: spec.argv[0],
+        cwd: spec.cwd,
+        terminalKind: spec.kind,
+      })
     }
 
     const ringBuffer = new RingBuffer(RING_BUFFER_SIZE)

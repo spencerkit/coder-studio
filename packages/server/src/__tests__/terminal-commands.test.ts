@@ -223,6 +223,55 @@ describe('terminal commands', () => {
     );
   });
 
+  it('returns terminal_spawn_failed when shell terminal creation throws a terminal spawn error', async () => {
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn().mockImplementation(() => {
+          const error = new Error('Terminal spawn failed: posix_spawnp failed.') as Error & {
+            code: string;
+            details: Record<string, unknown>;
+          };
+          error.code = 'terminal_spawn_failed';
+          error.details = {
+            command: '/bin/zsh',
+            cwd: '/tmp/workspace',
+            terminalKind: 'shell',
+          };
+          throw error;
+        }),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn(),
+        snapshot: vi.fn(),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-create-fail-1',
+        op: 'terminal.create',
+        args: {
+          workspaceId: 'ws-1',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: 'terminal_spawn_failed',
+      message: 'Terminal spawn failed: posix_spawnp failed.',
+      details: {
+        command: '/bin/zsh',
+        cwd: '/tmp/workspace',
+        terminalKind: 'shell',
+      },
+    });
+  });
+
   it('returns snapshot metadata and sends snapshot payload to requesting client', async () => {
     const snapshotData = Buffer.from('serialized snapshot');
     const ctx = createContext({

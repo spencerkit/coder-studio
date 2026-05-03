@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAtomValue, useStore } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { Topics, type Terminal as TerminalDto } from '@coder-studio/core';
 import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms';
 import type { TerminalBinaryPayload } from '../../../ws/client';
+import { pushToastAtom } from '../../notifications/atoms';
+import { useTranslation } from '../../../lib/i18n';
 
 const EMPTY_TERMINAL_ID = '__terminal_panel_empty__';
 
@@ -34,9 +36,11 @@ function toTerminalMeta(terminal: TerminalDto) {
 }
 
 export function useTerminalActions() {
+  const t = useTranslation();
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
+  const pushToast = useSetAtom(pushToastAtom);
   const store = useStore();
 
   const [terminalIds, setTerminalIds] = useState<string[]>([]);
@@ -67,6 +71,11 @@ export function useTerminalActions() {
 
         if (!result.ok || !result.data) {
           console.error('Failed to fetch terminals:', result.error?.message);
+          pushToast({
+            kind: 'error',
+            title: t('terminal.load_failed_title'),
+            body: result.error?.message ?? t('terminal.load_failed_body'),
+          });
           return;
         }
 
@@ -83,13 +92,18 @@ export function useTerminalActions() {
       .catch((error) => {
         if (!cancelled) {
           console.error('Failed to fetch terminals:', error);
+          pushToast({
+            kind: 'error',
+            title: t('terminal.load_failed_title'),
+            body: error instanceof Error ? error.message : t('terminal.load_failed_body'),
+          });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, dispatch, store]);
+  }, [activeWorkspaceId, dispatch, pushToast, store, t]);
 
   useEffect(() => {
     if (!wsClient || !activeWorkspaceId) {
@@ -153,29 +167,47 @@ export function useTerminalActions() {
 
   const handleCreateTerminal = useCallback(async () => {
     if (!activeWorkspaceId) {
+      pushToast({
+        kind: 'warning',
+        title: t('terminal.create_unavailable_title'),
+        body: t('terminal.create_unavailable_body'),
+      });
       return;
     }
 
-    const result = await dispatch<TerminalDto>('terminal.create', {
-      workspaceId: activeWorkspaceId,
-      kind: 'shell',
-    });
+    try {
+      const result = await dispatch<TerminalDto>('terminal.create', {
+        workspaceId: activeWorkspaceId,
+        kind: 'shell',
+      });
 
-    if (!result.ok || !result.data) {
-      return;
-    }
-
-    const terminal = result.data;
-    store.set(terminalMetaAtomFamily(terminal.id), toTerminalMeta(terminal));
-
-    setTerminalIds((previous) => {
-      if (previous.includes(terminal.id)) {
-        return previous;
+      if (!result.ok || !result.data) {
+        pushToast({
+          kind: 'error',
+          title: t('terminal.create_failed_title'),
+          body: result.error?.message ?? t('terminal.create_failed_body'),
+        });
+        return;
       }
-      return [...previous, terminal.id];
-    });
-    setActiveTerminalId(terminal.id);
-  }, [activeWorkspaceId, dispatch, store]);
+
+      const terminal = result.data;
+      store.set(terminalMetaAtomFamily(terminal.id), toTerminalMeta(terminal));
+
+      setTerminalIds((previous) => {
+        if (previous.includes(terminal.id)) {
+          return previous;
+        }
+        return [...previous, terminal.id];
+      });
+      setActiveTerminalId(terminal.id);
+    } catch (error) {
+      pushToast({
+        kind: 'error',
+        title: t('terminal.create_failed_title'),
+        body: error instanceof Error ? error.message : t('terminal.create_failed_body'),
+      });
+    }
+  }, [activeWorkspaceId, dispatch, pushToast, store, t]);
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {

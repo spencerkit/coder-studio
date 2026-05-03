@@ -212,6 +212,12 @@
     "reconnect_hint": "连接已断开，正在重连...",
     "no_terminal": "暂无终端",
     "empty_hint": "启动一个 Shell 来查看文件、运行命令，并在不离开工作区的情况下验证更改。",
+    "load_failed_title": "加载终端失败",
+    "load_failed_body": "请刷新工作区连接后重试。",
+    "create_failed_title": "创建终端失败",
+    "create_failed_body": "Shell 进程启动失败，请检查服务端运行环境和 Shell 配置。",
+    "create_unavailable_title": "当前没有已选中的工作区",
+    "create_unavailable_body": "请先打开或切换到一个工作区，再新建终端。",
     "hide": "隐藏终端",
     "show": "显示终端",
     "selector": {
