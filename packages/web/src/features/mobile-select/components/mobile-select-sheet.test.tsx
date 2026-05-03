@@ -38,13 +38,51 @@ describe('MobileSelectSheet', () => {
     );
 
     expect(screen.getByRole('region', { name: 'Terminal Sessions sheet' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace Shell' })).toHaveAttribute(
-      'data-selected',
+    expect(screen.getByRole('button', { name: 'Workspace ShellCurrent terminal' })).toHaveAttribute(
+      'aria-pressed',
       'true'
     );
 
-    await user.click(screen.getByRole('button', { name: 'Workspace Shell 2' }));
+    await user.click(screen.getByRole('button', { name: 'Workspace Shell 2Terminal 2' }));
     expect(onSelect).toHaveBeenCalledWith('term_2');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for async onSelect to settle before closing when closeOnSelect is true', async () => {
+    const user = userEvent.setup();
+    let resolveSelect: (() => void) | null = null;
+    const onSelect = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSelect = resolve;
+        })
+    );
+    const onClose = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Terminal Sessions"
+        sections={[
+          {
+            kind: 'options',
+            id: 'terminals',
+            items: [{ id: 'term_1', label: 'Workspace Shell' }],
+          },
+        ]}
+        onSelect={onSelect}
+        onClose={onClose}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Workspace Shell' }));
+
+    expect(onSelect).toHaveBeenCalledWith('term_1');
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveSelect?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -89,22 +127,22 @@ describe('MobileSelectSheet', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Codex' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CodexCode generation' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ClaudeAnthropic session' })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search sessions'), {
       target: { value: 'Anthropic' },
     });
 
-    expect(screen.getByRole('button', { name: 'Claude' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Codex' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ClaudeAnthropic session' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'CodexCode generation' })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search sessions'), {
       target: { value: 'automation' },
     });
 
-    expect(screen.getByRole('button', { name: 'Codex' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CodexCode generation' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ClaudeAnthropic session' })).not.toBeInTheDocument();
   });
 
   it('renders the create action from the current query when enabled', async () => {
@@ -213,7 +251,7 @@ describe('MobileSelectSheet', () => {
       target: { value: 'main' },
     });
 
-    const option = screen.getByRole('button', { name: 'main' });
+    const option = screen.getByRole('button', { name: 'mainProtected branch' });
     const action = screen.getByRole('button', { name: 'Refresh' });
     const create = screen.getByRole('button', { name: 'Create branch: main' });
 
@@ -242,7 +280,7 @@ describe('MobileSelectSheet', () => {
       />
     );
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading...');
     expect(screen.queryByText('No results found')).not.toBeInTheDocument();
   });
 });

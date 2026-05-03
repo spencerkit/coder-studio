@@ -1,5 +1,6 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
+import { useTranslation } from '../../../lib/i18n';
 import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
 
 export interface MobileSelectItem {
@@ -75,16 +76,20 @@ export function MobileSelectSheet({
   create,
   closeOnSelect = true,
   loading = false,
-  loadingText = 'Loading',
-  emptyText = 'No results found',
+  loadingText,
+  emptyText,
   kicker,
   onBack,
   onSelect,
   onClose,
 }: MobileSelectSheetProps) {
+  const t = useTranslation();
   const [query, setQuery] = useState('');
   const searchId = useId();
   const normalizedQuery = query.trim().toLowerCase();
+  const resolvedLoadingText = loadingText ?? t('common.loading');
+  const resolvedEmptyText = emptyText ?? t('command.no_results');
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('action.search');
 
   const filteredSections = useMemo(() => {
     if (!normalizedQuery) {
@@ -117,15 +122,29 @@ export function MobileSelectSheet({
   const canCreate = Boolean(create?.visible && query.trim());
   const createDisabled = Boolean(canCreate && create?.disabled?.(query.trim()));
 
-  const handleOptionSelect = (id: string) => {
-    onSelect(id);
-    if (closeOnSelect) {
-      onClose();
-    }
+  const runAsyncHandler = (handler: () => void | Promise<void>) => {
+    void Promise.resolve(handler()).catch(() => {});
   };
 
-  const handleActionSelect = (action: () => void) => {
-    action();
+  const handleOptionSelect = (id: string) => {
+    runAsyncHandler(async () => {
+      await onSelect(id);
+      if (closeOnSelect) {
+        onClose();
+      }
+    });
+  };
+
+  const handleActionSelect = (action: () => void | Promise<void>) => {
+    runAsyncHandler(action);
+  };
+
+  const handleCreate = () => {
+    if (!create || !query.trim()) {
+      return;
+    }
+
+    runAsyncHandler(() => create.onCreate(query.trim()));
   };
 
   const body = (
@@ -133,13 +152,13 @@ export function MobileSelectSheet({
       {searchable ? (
         <div className="mobile-select-sheet__search">
           <label className="mobile-select-sheet__search-label" htmlFor={searchId}>
-            Search
+            {t('action.search')}
           </label>
           <input
             id={searchId}
             type="text"
             className="mobile-select-sheet__search-input"
-            placeholder={searchPlaceholder}
+            placeholder={resolvedSearchPlaceholder}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -149,7 +168,7 @@ export function MobileSelectSheet({
       <div className="mobile-select-sheet__content">
         {loading ? (
           <div className="mobile-select-sheet__loading" role="status">
-            {loadingText}
+            {resolvedLoadingText}
           </div>
         ) : (
           <>
@@ -175,7 +194,7 @@ export function MobileSelectSheet({
                                 item.tone === 'danger' ? 'mobile-select-sheet__item--danger' : ''
                               }`}
                               data-selected={isSelected ? 'true' : 'false'}
-                              aria-label={item.label}
+                              aria-pressed={isSelected}
                               disabled={item.disabled}
                               onClick={() => handleOptionSelect(item.id)}
                             >
@@ -211,7 +230,6 @@ export function MobileSelectSheet({
                             className={`mobile-select-sheet__item mobile-select-sheet__item--action ${
                               item.tone === 'danger' ? 'mobile-select-sheet__item--danger' : ''
                             }`}
-                            aria-label={item.label}
                             disabled={item.disabled}
                             onClick={() => handleActionSelect(item.onAction)}
                           >
@@ -241,9 +259,8 @@ export function MobileSelectSheet({
                   <button
                     type="button"
                     className="mobile-select-sheet__item mobile-select-sheet__item--create"
-                    aria-label={create?.label(query.trim())}
                     disabled={createDisabled}
-                    onClick={() => create?.onCreate(query.trim())}
+                    onClick={handleCreate}
                   >
                     <span className="mobile-select-sheet__item-copy">
                       <span className="mobile-select-sheet__item-label">
@@ -256,7 +273,7 @@ export function MobileSelectSheet({
             ) : null}
 
             {!hasVisibleItems && !canCreate ? (
-              <div className="mobile-select-sheet__empty">{emptyText}</div>
+              <div className="mobile-select-sheet__empty">{resolvedEmptyText}</div>
             ) : null}
           </>
         )}
@@ -272,7 +289,6 @@ export function MobileSelectSheet({
       kicker={kicker}
       onBack={onBack}
       bodyClassName="mobile-sheet__body--flush"
-      contentClassName="mobile-sheet--mobile-select"
       fullscreen
     />
   );
