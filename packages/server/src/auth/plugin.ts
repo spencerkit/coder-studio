@@ -58,6 +58,32 @@ interface AuthDeps {
   authSessionRepo: AuthSessionRepo;
 }
 
+const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
+  if (!deps.config.webRoot) {
+    return false;
+  }
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return false;
+  }
+
+  const path = request.url;
+  if (
+    path.startsWith('/api/') ||
+    path.startsWith('/auth/') ||
+    path.startsWith('/internal/') ||
+    path === '/ws' ||
+    path.startsWith('/assets/') ||
+    path.startsWith('/@') ||
+    path === '/favicon.ico'
+  ) {
+    return false;
+  }
+
+  const accept = request.headers.accept ?? '';
+  return accept.includes('text/html');
+};
+
 const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
   if (!deps.config.auth.enabled) {
     return true;
@@ -81,6 +107,10 @@ export const createAuthGuard = (deps: AuthDeps) => {
 
     if (isAuthenticatedRequest(request, deps)) {
       return;
+    }
+
+    if (isFrontendNavigationRequest(request, deps)) {
+      return reply.redirect('/auth');
     }
 
     reply.status(401).send({

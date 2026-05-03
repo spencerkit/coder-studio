@@ -437,6 +437,35 @@ describe('createServer runtime handshake', () => {
     }
   });
 
+  it('redirects unauthenticated frontend routes to /auth when auth is enabled', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'cs-web-root-auth-redirect-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body>auth shell</body></html>', 'utf-8');
+
+    try {
+      server = await createServer({
+        dataDir: ':memory:',
+        host: '127.0.0.1',
+        port: 0,
+        webRoot,
+        auth: { enabled: true, password: 'sekrit' },
+      } as any);
+
+      const baseUrl = getBaseUrl(server);
+
+      for (const path of ['/workspace', '/settings']) {
+        const res = await fetch(`${baseUrl}${path}`, {
+          headers: { accept: 'text/html' },
+          redirect: 'manual',
+        });
+
+        expect(res.status).toBe(302);
+        expect(res.headers.get('location')).toBe('/auth');
+      }
+    } finally {
+      rmSync(webRoot, { recursive: true, force: true });
+    }
+  });
+
   it('accepts /internal/hooks/:event only when the per-process token matches', async () => {
     server = await createServer({
       dataDir: ':memory:',
