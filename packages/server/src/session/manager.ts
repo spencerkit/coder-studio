@@ -103,21 +103,22 @@ export class SessionManager {
       title: req.provider.displayName,
     };
 
-    // Pre-register session placeholder for pending events
+    // Create terminal (delegates to TerminalManager)
+    const terminal = this.deps.terminalMgr.create(terminalSpec);
+
+    // Register session only after terminal creation succeeds so failed creates
+    // do not leak half-created sessions into memory or hydration state.
     const active = new ActiveSession({
       id: sessionId,
       workspaceId: req.workspaceId,
       providerId: req.providerId,
-      terminalId: '', // Will be set after terminal creation
+      terminalId: terminal.id,
       capability: req.provider.capability,
       state: 'starting',
       draft: req.draft,
     });
 
     this.sessions.set(sessionId, active);
-
-    // Create terminal (delegates to TerminalManager)
-    const terminal = this.deps.terminalMgr.create(terminalSpec);
     active.terminalId = terminal.id;
     this.terminalToSession.set(terminal.id, sessionId);
     this.attachShadowDetector(active, req.provider);

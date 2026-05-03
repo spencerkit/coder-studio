@@ -331,4 +331,44 @@ describe('SessionManager session-level API', () => {
   it('throws on unknown session id for sendInput', () => {
     expect(() => sessionMgr.sendInput('sess-missing', Buffer.from('x'))).toThrow(/Session not found/);
   });
+
+  it('does not retain a half-created session when terminal creation throws', async () => {
+    const failingProvider = {
+      ...provider,
+      id: 'failing-stub',
+      buildCommand: () => ({ argv: ['failing-stub'], cwd: '/tmp', env: {} }),
+    } as ProviderDefinition;
+
+    const failingSessionMgr = new SessionManager({
+      terminalMgr: {
+        ...terminalMgr,
+        create: vi.fn(() => {
+          throw new Error('spawn failed');
+        }),
+      } as TerminalManager,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [failingProvider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+
+    await expect(
+      failingSessionMgr.create({
+        workspaceId: 'ws-1',
+        workspacePath: '/tmp',
+        providerId: failingProvider.id,
+        provider: failingProvider,
+      })
+    ).rejects.toThrow('spawn failed');
+
+    expect(failingSessionMgr.getForWorkspace('ws-1')).toEqual([]);
+  });
 });

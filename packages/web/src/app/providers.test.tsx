@@ -10,6 +10,7 @@ import {
 import { fileTreeStaleAtomFamily } from '../features/workspace/atoms';
 import { sessionsAtom } from '../atoms';
 import { sessionOutputTailAtom } from '../features/notifications';
+import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
 import { routeEventToAtom } from './providers';
 
@@ -179,6 +180,44 @@ describe('routeEventToAtom', () => {
       store as any
     );
 
+    expect(store.get(sessionOutputTailAtom)).toEqual({});
+  });
+
+  it('removes local session artifacts on session removed lifecycle events', () => {
+    const store = createStore();
+    store.set(sessionsAtom, {
+      'sess-1': {
+        id: 'sess-1',
+        workspaceId: 'ws-1',
+        terminalId: 'term-1',
+        providerId: 'claude',
+        state: 'ended',
+        capability: 'full',
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      },
+    });
+    store.set(terminalMetaAtomFamily('term-1'), {
+      id: 'term-1',
+      workspaceId: 'ws-1',
+      kind: 'agent',
+      alive: false,
+      exitCode: 1,
+      title: 'Claude',
+    });
+    store.set(sessionOutputTailAtom, {
+      'sess-1': 'tail output',
+    });
+
+    routeEventToAtom(
+      'workspace.ws-1.session.sess-1.lifecycle',
+      { event: 'removed' },
+      store as any
+    );
+
+    expect(store.get(sessionsAtom)).toEqual({});
+    expect(store.get(terminalMetaAtomFamily('term-1'))).toBeNull();
     expect(store.get(sessionOutputTailAtom)).toEqual({});
   });
 });

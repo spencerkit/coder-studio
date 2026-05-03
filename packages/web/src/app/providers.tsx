@@ -424,6 +424,26 @@ export function routeEventToAtom(
       const sessionId = sessionMatch[1]!;
       const sessionSubtopic = sessionMatch[2]!;
 
+      if (sessionSubtopic === 'lifecycle') {
+        const data = payload as { event?: string };
+        if (data.event === 'removed') {
+          const removedSession = store.get(sessionsAtom)[sessionId];
+          if (removedSession?.terminalId) {
+            store.set(terminalMetaAtomFamily(removedSession.terminalId), null);
+          }
+          store.set(clearSessionOutputAtom, sessionId);
+          store.set(sessionsAtom, (prev: Record<string, Session>) => {
+            if (!(sessionId in prev)) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[sessionId];
+            return next;
+          });
+        }
+        return;
+      }
+
       // workspace.{id}.session.{sessionId}.state
       if (sessionSubtopic === 'state') {
         const session = payload as Session;
