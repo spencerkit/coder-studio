@@ -60,14 +60,12 @@ export interface Session {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  resumeId?: string;
   capability: 'full' | 'limited' | 'unsupported';
   startedAt: number;
   lastActiveAt: number;
   endedAt?: number;
   completionPercent?: number;
   errorReason?: string;
-  transcriptPath?: string;
   /**
    * Human-friendly title derived from the user's first submitted instruction
    * (trimmed/truncated to SESSION_TITLE_MAX_LENGTH). Assigned once on first
@@ -89,8 +87,6 @@ export type SessionState =
   | 'starting'
   | 'running'
   | 'idle'
-  | 'interrupted'
-  | 'unavailable'
   | 'ended';
 
 export interface GitStatus {

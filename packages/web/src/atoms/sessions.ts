@@ -57,8 +57,6 @@ export const sessionCountByStateAtomFamily = atomFamily((workspaceId: string) =>
       starting: 0,
       running: 0,
       idle: 0,
-      interrupted: 0,
-      unavailable: 0,
       ended: 0,
     };
     for (const s of sessions) {

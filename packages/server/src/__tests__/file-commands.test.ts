@@ -65,7 +65,6 @@ describe('File Commands', () => {
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},
-      hooksMgr: {},
       eventBus,
       broadcaster: { broadcast: () => {} },
       providerRegistry: [],

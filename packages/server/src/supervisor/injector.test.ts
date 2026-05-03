@@ -94,8 +94,6 @@ describe('SupervisorInjector', () => {
 describe('describeNonInjectableState', () => {
   it('returns actionable copy for every non-injectable session state', () => {
     expect(describeNonInjectableState('starting')).toMatch(/starting up/);
-    expect(describeNonInjectableState('interrupted')).toMatch(/resume/);
-    expect(describeNonInjectableState('unavailable')).toMatch(/unavailable/);
     expect(describeNonInjectableState('ended')).toMatch(/ended/);
     expect(describeNonInjectableState('draft')).toMatch(/draft/);
   });

@@ -26,9 +26,9 @@ describe('Supervisor integration', () => {
       .run('term-1', 'ws-1', 'agent', process.cwd(), '[]', 120, 30, 1);
     ctx.db
       .prepare(
-        'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .run('sess-1', 'ws-1', 'term-1', 'claude', null, 'full', 'running', 1, 1);
+      .run('sess-1', 'ws-1', 'term-1', 'claude', 'full', 'running', 1, 1);
 
     ctx.workspaceMgr.get = () => ({ id: 'ws-1', path: process.cwd() });
     ctx.sessionMgr.get = () => ({
@@ -40,8 +40,10 @@ describe('Supervisor integration', () => {
       capability: 'full',
       startedAt: 1,
       lastActiveAt: 1,
-      transcriptPath: undefined,
     });
+    ctx.sessionMgr.getRenderedSnapshot = async () =>
+      'assistant: built the persistent supervisor repos';
+    ctx.sessionMgr.getLatestSubmittedUserInput = () => 'run the tests';
 
     (ctx.supervisorMgr as any).deps.providerConfigRepo.get = () => ({
       model: 'claude-sonnet-4-6',
@@ -57,9 +59,9 @@ describe('Supervisor integration', () => {
         sessionProviderId: 'claude',
         evaluatorProviderId: 'claude',
         sessionState: 'running',
-        transcriptExcerpt: 'assistant: built the persistent supervisor repos',
-        evidenceSource: 'transcript',
-        lastTurnId: 'turn-1',
+        terminalExcerpt: 'assistant: built the persistent supervisor repos',
+        evidenceSource: 'headless_snapshot',
+        latestUserInput: 'run the tests',
       }),
     };
     (ctx.supervisorMgr as any).evaluator = {
@@ -110,7 +112,7 @@ describe('Supervisor integration', () => {
     expect(fetched.ok).toBe(true);
     expect(fetched.data?.supervisor?.cycles).toHaveLength(1);
     expect(fetched.data?.supervisor?.cycles[0]?.evaluatorProviderId).toBe('claude');
-    expect(fetched.data?.supervisor?.cycles[0]?.evidenceSource).toBe('transcript');
+    expect(fetched.data?.supervisor?.cycles[0]?.evidenceSource).toBe('headless_snapshot');
     expect(fetched.data?.supervisor?.cycles[0]).toEqual(
       expect.objectContaining({
         trigger: 'manual',

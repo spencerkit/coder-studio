@@ -74,7 +74,6 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         onAssignSession={paneActions.assignSession}
         onReplaceWithSession={paneActions.replaceWithSession}
         onCloseSessionCommand={sessionActions.closeSession}
-        onResumeSession={sessionActions.resumeSession}
         onStopSession={sessionActions.stopSession}
       />
     </div>
@@ -89,7 +88,6 @@ interface PaneNodeRendererProps {
   onCloseSession: (sessionId: string) => void;
   onCloseSessionCommand: (sessionId: string) => Promise<void>;
   onReplaceWithSession: (sessionId: string) => void;
-  onResumeSession: (sessionId: string) => Promise<void>;
   onSplitDraftPane: (paneId: string, direction: 'horizontal' | 'vertical') => void;
   onSplitSession: (sessionId: string, direction: 'horizontal' | 'vertical') => void;
   onStopSession: (sessionId: string) => Promise<void>;
@@ -106,7 +104,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   onCloseSession,
   onCloseSessionCommand,
   onReplaceWithSession,
-  onResumeSession,
   onSplitDraftPane,
   onSplitSession,
   onStopSession,
@@ -123,7 +120,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           }}
           onSplitHorizontal={() => onSplitSession(node.sessionId!, 'horizontal')}
           onSplitVertical={() => onSplitSession(node.sessionId!, 'vertical')}
-          onStart={() => onResumeSession(node.sessionId!)}
           onStop={() => onStopSession(node.sessionId!)}
         />
       );
@@ -161,7 +157,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           onCloseSession={onCloseSession}
           onCloseSessionCommand={onCloseSessionCommand}
           onReplaceWithSession={onReplaceWithSession}
-          onResumeSession={onResumeSession}
           onSplitDraftPane={onSplitDraftPane}
           onSplitSession={onSplitSession}
           onStopSession={onStopSession}

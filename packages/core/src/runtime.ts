@@ -1,43 +1,43 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 
-/**
- * Runtime configuration stored in ~/.coder-studio/runtime.json
- * Used by bridge scripts to communicate with the server
- */
 export interface RuntimeConfig {
-  /** Server listen host */
   host: string;
-  /** Server port (HTTP + WebSocket) */
   port: number;
-  /** Server process ID */
   pid: number;
-  /** Authentication token for internal hooks endpoint */
   token: string;
-  /** Server instance ID (unique per server startup) */
   serverInstanceId: string;
-  /** Server startup timestamp */
   startedAt: number;
 }
 
-/**
- * Reads runtime.json from disk
- * Returns null if file doesn't exist or is malformed
- */
+export function getRuntimeDir(): string {
+  const override = process.env.CODER_STUDIO_RUNTIME_DIR;
+  if (override && override.trim()) {
+    return override;
+  }
+
+  return join(homedir(), '.coder-studio');
+}
+
+export function getRuntimePath(): string {
+  const pathOverride = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+  if (pathOverride && pathOverride.trim()) {
+    return pathOverride;
+  }
+
+  return join(getRuntimeDir(), 'runtime.json');
+}
+
 export function readRuntimeConfig(): RuntimeConfig | null {
   const runtimePath = getRuntimePath();
-
   if (!existsSync(runtimePath)) {
     return null;
   }
 
   try {
-    const content = readFileSync(runtimePath, 'utf-8');
-    const config = JSON.parse(content) as RuntimeConfig;
-
+    const config = JSON.parse(readFileSync(runtimePath, 'utf-8')) as Partial<RuntimeConfig>;
     if (
-      (config.host !== undefined && typeof config.host !== 'string') ||
       typeof config.port !== 'number' ||
       typeof config.pid !== 'number' ||
       typeof config.token !== 'string' ||
@@ -60,14 +60,9 @@ export function readRuntimeConfig(): RuntimeConfig | null {
   }
 }
 
-/**
- * Writes runtime.json to disk atomically
- * Creates parent directory if it doesn't exist
- */
 export function writeRuntimeConfig(config: RuntimeConfig): void {
   const runtimePath = getRuntimePath();
-  const runtimeDir = join(homedir(), '.coder-studio');
-
+  const runtimeDir = dirname(runtimePath);
   if (!existsSync(runtimeDir)) {
     mkdirSync(runtimeDir, { recursive: true });
   }
@@ -75,21 +70,9 @@ export function writeRuntimeConfig(config: RuntimeConfig): void {
   writeFileSync(runtimePath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-/**
- * Deletes runtime.json from disk
- * Used during server shutdown for clean state
- */
 export function deleteRuntimeConfig(): void {
   const runtimePath = getRuntimePath();
-
   if (existsSync(runtimePath)) {
     unlinkSync(runtimePath);
   }
-}
-
-/**
- * Gets the path to runtime.json
- */
-export function getRuntimePath(): string {
-  return join(homedir(), '.coder-studio', 'runtime.json');
 }

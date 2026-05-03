@@ -12,12 +12,6 @@ export {
 export { SettingsRepo } from './repositories/settings-repo.js';
 export { ProviderConfigRepo } from './repositories/provider-config-repo.js';
 export {
-  HookRegistrationRepo,
-  type HookRegistrationRow,
-  type HookRegistration,
-  type NewHookRegistration,
-} from './repositories/hook-registration-repo.js';
-export {
   SupervisorRepo,
   type NewSupervisor,
   type SupervisorUpdatePatch,

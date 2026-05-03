@@ -52,8 +52,9 @@ function makeContext() {
     sessionProviderId: 'claude',
     evaluatorProviderId: 'codex',
     sessionState: 'running',
-    evidenceSource: 'terminal_fallback',
+    evidenceSource: 'headless_snapshot',
     terminalExcerpt: 'build passes',
+    latestUserInput: 'run the tests',
   } as any;
 }
 
@@ -100,8 +101,9 @@ describe('SupervisorEvaluator', () => {
         sessionProviderId: 'claude',
         evaluatorProviderId: 'codex',
         sessionState: 'running',
-        evidenceSource: 'terminal_fallback',
+        evidenceSource: 'headless_snapshot',
         terminalExcerpt: 'build passes',
+        latestUserInput: 'run the tests',
       }
     );
 
@@ -145,8 +147,9 @@ describe('SupervisorEvaluator', () => {
         sessionProviderId: 'codex',
         evaluatorProviderId: 'claude',
         sessionState: 'running',
-        evidenceSource: 'terminal_fallback',
+        evidenceSource: 'headless_snapshot',
         terminalExcerpt: 'build passes',
+        latestUserInput: 'run the tests',
       }
     );
 
@@ -186,6 +189,8 @@ describe('SupervisorEvaluator', () => {
     expect(prompt).toContain('generate the next concrete task');
     expect(prompt).toContain('Current objective:');
     expect(prompt).toContain('Ship the fix');
+    expect(prompt).toContain('Latest user input:');
+    expect(prompt).toContain('run the tests');
     expect(prompt).toContain('Latest business agent output:');
     expect(prompt).toContain('latest output');
     expect(prompt).toContain('[objective complete]');

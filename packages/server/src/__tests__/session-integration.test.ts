@@ -34,41 +34,59 @@ import '../commands/provider.js';
 /**
  * Mock PtyHost for testing without spawning real processes
  */
-function createMockPtyHost(spawnCalls: Array<{ argv: string[]; options: unknown }>): PtyHost {
+function createMockPtyHost(
+  spawnCalls: Array<{ argv: string[]; options: unknown }>
+): {
+  ptyHost: PtyHost;
+  triggerDataForProcessIndex: (processIndex: number, data: string) => void;
+} {
   const terminals = new Map<string, { onDataCallbacks: Array<(data: string) => void>; onExitCallbacks: Array<(event: { exitCode: number }) => void> }>();
 
   return {
-    spawn: (argv: string[], options) => {
-      spawnCalls.push({ argv, options });
-      const id = `mock-pty-${Date.now()}`;
+    ptyHost: {
+      spawn: (argv: string[], options) => {
+        spawnCalls.push({ argv, options });
+        const id = `mock-pty-${Date.now()}`;
 
-      const pty: PtyProcess = {
-        onData: (callback) => {
+        const pty: PtyProcess = {
+          onData: (callback) => {
+            const term = terminals.get(id);
+            if (term) term.onDataCallbacks.push(callback);
+          },
+          onExit: (callback) => {
+            const term = terminals.get(id);
+            if (term) term.onExitCallbacks.push(callback);
+          },
+          write: vi.fn(),
+          resize: vi.fn(),
+          kill: vi.fn(),
+        };
+
+        terminals.set(id, { onDataCallbacks: [], onExitCallbacks: [] });
+
+        // Simulate startup output
+        setTimeout(() => {
           const term = terminals.get(id);
-          if (term) term.onDataCallbacks.push(callback);
-        },
-        onExit: (callback) => {
-          const term = terminals.get(id);
-          if (term) term.onExitCallbacks.push(callback);
-        },
-        write: vi.fn(),
-        resize: vi.fn(),
-        kill: vi.fn(),
-      };
-
-      terminals.set(id, { onDataCallbacks: [], onExitCallbacks: [] });
-
-      // Simulate startup output
-      setTimeout(() => {
-        const term = terminals.get(id);
-        if (term) {
-          for (const cb of term.onDataCallbacks) {
-            cb('\x1b[32mMock Agent Started\x1b[0m\n');
+          if (term) {
+            for (const cb of term.onDataCallbacks) {
+              cb('\x1b[32mMock Agent Started\x1b[0m\n');
+            }
           }
-        }
-      }, 50);
+        }, 50);
 
-      return pty;
+        return pty;
+      },
+    },
+    triggerDataForProcessIndex: (processIndex: number, data: string) => {
+      const id = Array.from(terminals.keys())[processIndex];
+      const term = id ? terminals.get(id) : undefined;
+      if (!term) {
+        return;
+      }
+
+      for (const cb of term.onDataCallbacks) {
+        cb(data);
+      }
     },
   };
 }
@@ -81,6 +99,7 @@ describe('Session Integration', () => {
   let sessionMgr: SessionManager;
   let terminalMgr: TerminalManager;
   let mockPtyHost: PtyHost;
+  let triggerDataForProcessIndex: (processIndex: number, data: string) => void;
   let broadcastEvents: Array<{ topic: string; payload: unknown }>;
   let spawnCalls: Array<{ argv: string[]; options: unknown }>;
   let sessionDb: {
@@ -100,7 +119,9 @@ describe('Session Integration', () => {
 
     // Create mock PTY host
     spawnCalls = [];
-    mockPtyHost = createMockPtyHost(spawnCalls);
+    const mockPtyHostSetup = createMockPtyHost(spawnCalls);
+    mockPtyHost = mockPtyHostSetup.ptyHost;
+    triggerDataForProcessIndex = mockPtyHostSetup.triggerDataForProcessIndex;
 
     // Track broadcast events
     broadcastEvents = [];
@@ -151,7 +172,6 @@ describe('Session Integration', () => {
       workspaceMgr,
       sessionMgr,
       terminalMgr,
-      hooksMgr: {} as any,
       eventBus,
       broadcaster: mockBroadcaster,
       providerRegistry,
@@ -164,6 +184,7 @@ describe('Session Integration', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     // Clean up test directory
     try {
       rmSync(testDir, { recursive: true, force: true });
@@ -599,17 +620,10 @@ describe('Session Integration', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('should resume session with resume_id', async () => {
-      // First set resume_id on session (simulating SessionStart hook event)
+    it('rejects session.resume because the command has been removed', async () => {
       const sessions = sessionMgr.getForWorkspace(workspaceId);
       const activeSession = sessions.find((s) => s.id === sessionId);
       expect(activeSession).toBeDefined();
-
-      // Simulate hook event setting resume_id
-      sessionMgr.onHookEvent(sessionId, {
-        kind: 'SessionStart',
-        resumeId: 'test-resume-id-123',
-      });
 
       // Stop the session
       await dispatch(
@@ -633,9 +647,8 @@ describe('Session Integration', () => {
         ctx
       );
 
-      // Note: resume might fail in test without proper setup
-      // but we verify the command is dispatched correctly
-      expect(result.ok).toBeDefined();
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe('unknown_op');
     });
   });
 
@@ -645,6 +658,7 @@ describe('Session Integration', () => {
     let terminalId: string;
 
     beforeEach(async () => {
+      vi.useFakeTimers();
       const openResult = await dispatch(
         {
           kind: 'command',
@@ -674,39 +688,41 @@ describe('Session Integration', () => {
       terminalId = sessionResult.data!.terminalId;
     });
 
-    it('moves a session to idle when a turn completes', () => {
-      sessionMgr.onHookEvent(sessionId, {
-        kind: 'TurnCompleted',
-        resumeId: 'resume-1',
-        turnId: 'turn-1',
-      });
+    it('moves a session to idle when PTY output goes quiet after startup', () => {
+      vi.advanceTimersByTime(3050);
 
       const session = sessionMgr.get(sessionId);
       expect(session?.state).toBe('idle');
     });
 
-    it('opens Codex-style sessions directly in idle (no SessionStart hook)', () => {
-      // Providers whose HooksDescriptor declares events.sessionStart=false
-      // (currently: codex) never emit a "CLI finished booting" event. The
-      // session manager must recognise that and optimistically promote the
-      // session from `starting` to `idle` the moment spawn succeeds,
-      // otherwise the UI would be pinned to "starting…" until the user
-      // completes an entire turn round-trip.
-      //
-      // The shared beforeEach above creates a codex session, so by the time
-      // we observe it here the optimistic transition should already be done.
+    it('keeps Codex-style sessions in starting until PTY output settles', () => {
+      expect(sessionMgr.get(sessionId)?.state).toBe('starting');
+
+      vi.advanceTimersByTime(3050);
+
       expect(sessionMgr.get(sessionId)?.state).toBe('idle');
     });
 
-    it('moves a session to idle when a stop hook marks the turn complete', () => {
-      // Re-enter `running` first so Stop actually has something to close.
-      const internal = (sessionMgr as any).sessions.get(sessionId);
-      internal.state = 'running';
+    it('moves a session to idle when a submitted turn quiets down after output', async () => {
+      vi.advanceTimersByTime(3050);
 
-      sessionMgr.onHookEvent(sessionId, {
-        kind: 'Stop',
-      });
+      const result = await dispatch(
+        {
+          kind: 'command',
+          id: 'idle-test-cycle-submit',
+          op: 'terminal.input',
+          args: {
+            terminalId,
+            bytes: btoa('next turn\n'),
+            activity: 'submit',
+          },
+        },
+        ctx
+      );
 
+      expect(result.ok).toBe(true);
+      triggerDataForProcessIndex(0, 'assistant working\n');
+      vi.advanceTimersByTime(3000);
       const session = sessionMgr.get(sessionId);
       expect(session?.state).toBe('idle');
     });
@@ -757,7 +773,7 @@ describe('Session Integration', () => {
   });
 
   describe('Session hydration', () => {
-    it('marks persisted resumable sessions as interrupted when hydrating without a live terminal', async () => {
+    it('marks persisted stale sessions as ended when hydrating without a live terminal', async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
           id: 'sess-hydrate-1',
@@ -765,11 +781,9 @@ describe('Session Integration', () => {
           terminalId: 'term-stale',
           providerId: 'claude',
           state: 'running',
-          resumeId: 'resume-123',
           capability: 'full',
           startedAt: 100,
           lastActiveAt: 200,
-          transcriptPath: '/tmp/session.jsonl',
           title: 'resume me',
         },
       ]);
@@ -780,14 +794,12 @@ describe('Session Integration', () => {
         expect.objectContaining({
           id: 'sess-hydrate-1',
           terminalId: 'term-stale',
-          state: 'interrupted',
-          resumeId: 'resume-123',
-          transcriptPath: '/tmp/session.jsonl',
+          state: 'ended',
           title: 'resume me',
         })
       );
       expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-1', {
-        state: 'interrupted',
+        state: 'ended',
       });
     });
 
@@ -799,7 +811,6 @@ describe('Session Integration', () => {
           terminalId: 'term-stale',
           providerId: 'claude',
           state: 'running',
-          resumeId: 'resume-error',
           capability: 'full',
           startedAt: 100,
           lastActiveAt: 200,
@@ -812,13 +823,13 @@ describe('Session Integration', () => {
       expect(sessionMgr.get('sess-hydrate-error')).toEqual(
         expect.objectContaining({
           id: 'sess-hydrate-error',
-          state: 'interrupted',
+          state: 'ended',
           errorReason: 'Orphaned before restart',
         })
       );
     });
 
-    it('marks persisted non-resumable sessions as unavailable when hydrating without a live terminal', async () => {
+    it('marks persisted non-resumable sessions as ended when hydrating without a live terminal', async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
           id: 'sess-hydrate-2',
@@ -838,15 +849,15 @@ describe('Session Integration', () => {
         expect.objectContaining({
           id: 'sess-hydrate-2',
           terminalId: 'term-dead',
-          state: 'unavailable',
+          state: 'ended',
         })
       );
       expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-2', {
-        state: 'unavailable',
+        state: 'ended',
       });
     });
 
-    it('persists the replacement terminal id when a hydrated interrupted session is resumed', async () => {
+    it('keeps hydrated ended sessions bound to their persisted terminal id', async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
           id: 'sess-hydrate-3',
@@ -854,7 +865,6 @@ describe('Session Integration', () => {
           terminalId: 'term-old',
           providerId: 'claude',
           state: 'running',
-          resumeId: 'resume-456',
           capability: 'full',
           startedAt: 100,
           lastActiveAt: 200,
@@ -862,20 +872,11 @@ describe('Session Integration', () => {
       ]);
 
       await sessionMgr.hydrate();
-      sessionDb.update.mockClear();
-
-      const result = await sessionMgr.resume(
-        'sess-hydrate-3',
-        testDir,
-        providerRegistry.find((provider) => provider.id === 'claude')!
-      );
-
-      expect(result.terminalId).not.toBe('term-old');
-      expect(sessionDb.update).toHaveBeenCalledWith(
-        'sess-hydrate-3',
+      expect(sessionMgr.get('sess-hydrate-3')).toEqual(
         expect.objectContaining({
-          terminalId: result.terminalId,
-          state: 'running',
+          id: 'sess-hydrate-3',
+          terminalId: 'term-old',
+          state: 'ended',
         })
       );
     });
@@ -951,21 +952,5 @@ describe('Session Integration', () => {
       expect(cmd.env.CODER_STUDIO_SESSION_ID).toBe('test-session-123');
     });
 
-    it('should build correct resume command for claude provider', async () => {
-      const claudeProvider = providerRegistry.find((p) => p.id === 'claude');
-      expect(claudeProvider).toBeDefined();
-
-      const cmd = claudeProvider!.buildResumeCommand!(
-        'resume-id-456',
-        claudeProvider!.defaultConfig,
-        {
-          workspacePath: testDir,
-          sessionId: 'test-session-123',
-        }
-      );
-
-      expect(cmd.argv).toContain('--resume');
-      expect(cmd.argv).toContain('resume-id-456');
-    });
   });
 });

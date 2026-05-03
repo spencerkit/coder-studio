@@ -10,7 +10,6 @@ import staticPlugin from '@fastify/static';
 import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
-import type { HooksManager } from './hooks/manager.js';
 import type { WorkspaceManager } from './workspace/manager.js';
 import type { FastifyRequest } from 'fastify';
 import type { ServerConfig } from './config.js';
@@ -20,20 +19,16 @@ import {
   registerAuthRoutes,
   registerAuthStatusRoute,
 } from './auth/index.js';
-import { registerHooksEndpoint } from './hooks/endpoint.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
-import type { RuntimeConfig } from './hooks/runtime-json.js';
 import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
 import type { Database } from './storage/database.js';
 
 interface AppDeps {
   wsHub: WsHub;
   db: Database;
-  hooksMgr: HooksManager;
   webRoot?: string;
   workspaceMgr: WorkspaceManager;
   config: ServerConfig;
-  runtime: RuntimeConfig;
   authSessionRepo: AuthSessionRepo;
   logger?: any;
 }
@@ -109,17 +104,6 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // Health check endpoint
   app.get('/healthz', async () => {
     return { ok: true };
-  });
-
-  // Internal hooks endpoint (for bridge scripts). Enforces:
-  // - localhost-only origin
-  // - per-process token from runtime.json
-  // Auth cookie is skipped for this path (see `auth/plugin.ts::isPublicPath`)
-  // because bridge scripts don't and can't carry cookies.
-  registerHooksEndpoint(app, deps.runtime, (event, payload, ctx) => {
-    deps.hooksMgr.handleHookEvent(event, payload, {
-      coderStudioSessionId: ctx.coderStudioSessionId,
-    });
   });
 
   // /api/file — binary streaming endpoint used by the editor's image preview.

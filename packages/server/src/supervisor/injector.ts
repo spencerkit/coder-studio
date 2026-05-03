@@ -24,10 +24,6 @@ export function describeNonInjectableState(state: SessionState): string {
   switch (state) {
     case 'starting':
       return 'session is still starting up (provider CLI has not completed its first turn yet)';
-    case 'interrupted':
-      return 'session is interrupted; resume it before injecting guidance';
-    case 'unavailable':
-      return 'session is unavailable (provider process missing or disconnected)';
     case 'ended':
       return 'session has already ended';
     case 'draft':

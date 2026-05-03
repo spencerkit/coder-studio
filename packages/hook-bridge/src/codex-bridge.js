@@ -16,8 +16,9 @@ const http = require('http');
 const RUNTIME_DIR =
   process.env.CODER_STUDIO_RUNTIME_DIR ||
   path.join(process.env.HOME || process.env.USERPROFILE, '.coder-studio');
-
-const RUNTIME_JSON_PATH = path.join(RUNTIME_DIR, 'runtime.json');
+const RUNTIME_JSON_PATH =
+  process.env.CODER_STUDIO_RUNTIME_JSON_PATH ||
+  path.join(RUNTIME_DIR, 'runtime.json');
 
 function readRuntimeConfig() {
   try {

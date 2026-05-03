@@ -14,6 +14,7 @@ import { ActiveTerminal } from './active-terminal'
 import { RingBuffer } from './ring-buffer'
 import { RING_BUFFER_SIZE } from './constants'
 import { HeadlessSnapshotBuffer } from './terminal-snapshot-buffer'
+import { renderSnapshotToText, type RenderOptions } from './snapshot-render'
 
 function isTerminalTraceEnabled(): boolean {
   return process.env.CODER_STUDIO_TERMINAL_TRACE === '1'
@@ -341,6 +342,18 @@ export class TerminalManager {
       })
       return { status: 'unsupported' }
     }
+  }
+
+  /**
+   * Render the current terminal snapshot to plain text for supervisor use.
+   */
+  async getRenderedSnapshot(terminalId: TerminalId, options: RenderOptions): Promise<string> {
+    const snapshot = await this.snapshot(terminalId)
+    if (snapshot.status !== 'ok') {
+      return ''
+    }
+
+    return renderSnapshotToText(snapshot.data, options)
   }
 
   /**

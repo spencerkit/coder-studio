@@ -75,14 +75,14 @@ export function useWorkspaceSessions(
         const workspacePaneLayout = normalizePaneLayout(workspace?.uiState.paneLayout);
         const legacyPaneLayout = workspacePaneLayout ? null : readLegacyPaneLayout(workspace.id);
         const baseLayout = workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
-        const liveSessionIds = new Set(
+        const displayableSessionIds = new Set(
           nextSessions
-            .filter((session) => session.state !== 'ended')
+            .filter((session) => session.state !== 'draft')
             .map((session) => session.id)
         );
 
-        const liveSessions = nextSessions.filter((session) => session.state !== 'ended');
-        const sanitized = sanitizePaneLayout(baseLayout, liveSessionIds);
+        const displayableSessions = nextSessions.filter((session) => session.state !== 'draft');
+        const sanitized = sanitizePaneLayout(baseLayout, displayableSessionIds);
         let nextLayout = sanitized;
         if (sanitized !== currentLayout) {
           setPaneLayout(sanitized);
@@ -90,8 +90,8 @@ export function useWorkspaceSessions(
 
         const hasAnySessionInLayout = collectSessionIds(sanitized).length > 0;
         if (!hasAnySessionInLayout) {
-          if (liveSessions.length > 0) {
-            nextLayout = createFallbackPaneLayout(liveSessions.map((session) => session.id));
+          if (displayableSessions.length > 0) {
+            nextLayout = createFallbackPaneLayout(displayableSessions.map((session) => session.id));
             setPaneLayout(nextLayout);
           }
         }

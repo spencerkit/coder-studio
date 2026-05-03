@@ -33,5 +33,8 @@ export const CLI_WEB_DIR = resolve(CLI_DIST_DIR, 'web');
 
 // Hook bridge scripts
 export const HOOK_BRIDGE_SRC = resolve(HOOK_BRIDGE_DIR, 'src');
-export const RUNTIME_DIR = resolve(ROOT_DIR, '.coder-studio');
+export const RUNTIME_DIR =
+  process.env.CODER_STUDIO_RUNTIME_DIR && process.env.CODER_STUDIO_RUNTIME_DIR.trim()
+    ? resolve(process.env.CODER_STUDIO_RUNTIME_DIR)
+    : resolve(ROOT_DIR, '.coder-studio');
 export const RUNTIME_HOOKS_DIR = resolve(RUNTIME_DIR, 'hooks');

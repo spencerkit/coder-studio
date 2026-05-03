@@ -100,6 +100,7 @@ describe('SessionCard', () => {
     );
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
         terminalId: 'term-live',
@@ -340,12 +341,11 @@ describe('SessionCard', () => {
     expect(screen.getByText('SESSION-56')).toBeInTheDocument();
   });
 
-  it('renders interrupted sessions as read-only terminals with a resume action', () => {
+  it('renders ended sessions without a start action', () => {
     const { store } = createSessionStore({
-      terminalId: 'term-interrupted',
-      state: 'interrupted',
-      resumeId: 'resume-1',
-      endedAt: undefined,
+      terminalId: 'term-ended',
+      state: 'ended',
+      endedAt: Date.now(),
     });
 
     render(
@@ -356,33 +356,27 @@ describe('SessionCard', () => {
 
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-interrupted',
-        readOnly: true,
-      })
-    );
-    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
-  });
-
-  it('renders unavailable sessions as read-only terminals without a resume action', () => {
-    const { store } = createSessionStore({
-      terminalId: 'term-unavailable',
-      state: 'unavailable',
-      endedAt: undefined,
-    });
-
-    render(
-      <Provider store={store}>
-        <SessionCard sessionId="sess_123456" />
-      </Provider>
-    );
-
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
-      expect.objectContaining({
-        terminalId: 'term-unavailable',
+        terminalId: 'term-ended',
         readOnly: true,
       })
     );
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+  });
+
+  it('does not render supervisor chrome for ended sessions', () => {
+    const { store } = createSessionStore({
+      terminalId: 'term-ended',
+      state: 'ended',
+      endedAt: Date.now(),
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.queryByText('Supervisor')).not.toBeInTheDocument();
   });
 
   it('routes close through the explicit callback', async () => {

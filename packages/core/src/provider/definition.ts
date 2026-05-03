@@ -2,8 +2,8 @@ import type { ZodSchema } from 'zod';
 import type {
   ProviderConfig,
   ProviderInstallDocUrls,
-  Session,
 } from '../domain/types';
+import type { IdleHeuristics } from './idle-heuristics';
 
 export interface ProviderInstallStrategy {
   id: string;
@@ -30,12 +30,6 @@ export interface SupervisorEvalCommandRequest {
   outputFile?: string;
 }
 
-export interface TranscriptExcerptRequest {
-  transcriptPath: string;
-  maxChars: number;
-  maxTurns: number;
-}
-
 export interface ProviderDefinition {
   // Metadata
   id: string;
@@ -55,16 +49,6 @@ export interface ProviderDefinition {
     cwd: string;
   };
 
-  buildResumeCommand?(
-    resumeId: string,
-    config: ProviderConfig,
-    ctx: LaunchContext
-  ): {
-    argv: string[];
-    env: Record<string, string>;
-    cwd: string;
-  } | null;
-
   buildSupervisorEvalCommand?(
     config: ProviderConfig,
     req: SupervisorEvalCommandRequest
@@ -75,16 +59,6 @@ export interface ProviderDefinition {
     env?: Record<string, string>;
   } | null;
 
-  readTranscriptExcerpt?(
-    req: TranscriptExcerptRequest
-  ): Promise<
-    | {
-        excerpt: string;
-        lastTurnId?: string;
-      }
-    | null
-  >;
-
   // Configuration
   configSchema: ZodSchema<ProviderConfig>;
   defaultConfig: ProviderConfig;
@@ -92,46 +66,11 @@ export interface ProviderDefinition {
   // Runtime requirements
   requiredCommands: string[];
 
-  // Hooks integration
-  hooks: HooksDescriptor;
-
-  // Optional transcript path resolver.
-  // Returns absolute path or null if not yet discoverable.
-  // Must not throw.
-  resolveTranscriptPath?(session: Session): Promise<string | null>;
+  /** PTY-output-based idle detection used by the session manager. */
+  idleHeuristics?: IdleHeuristics;
 }
 
 export interface LaunchContext {
   sessionId: string;
   workspacePath: string;
-  bridgeScriptPath?: string;
-}
-
-export interface HooksDescriptor {
-  resolveGlobalConfigPath(): string;
-  mergeInto(existing: unknown, managed: ManagedHooks): unknown;
-  extractManaged(config: unknown): ManagedHooks | null;
-  markerVersion: string;
-  bridgeCommand(bridgeScriptPath: string, event: string): string[];
-  parseEvent(event: string, payload: unknown): ProviderEvent | null;
-  events: {
-    sessionStart: boolean;
-    completion: boolean;
-    progress: boolean;
-  };
-  stdoutHeuristics?: {
-    sessionIdPatterns: RegExp[];
-    idlePromptPatterns: RegExp[];
-    idleDebounceMs: number;
-  };
-}
-
-export interface ManagedHooks {
-  commands: Record<string, string>;
-}
-
-export interface ProviderEvent {
-  type: 'session_start' | 'stop' | 'turn_completed' | 'progress' | 'error';
-  sessionId: string;
-  payload: Record<string, unknown>;
 }

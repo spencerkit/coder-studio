@@ -4,6 +4,7 @@ import type { SessionManager } from '../session/manager.js';
 import type { TerminalManager } from '../terminal/manager.js';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import { getGitDiffStatSummary, getGitStatusSummary } from '../git/cli.js';
+export { stripAnsi } from '../terminal/snapshot-render.js';
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -17,22 +18,9 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   warn: () => {},
 };
 
-const TRANSCRIPT_MAX_CHARS = 12_000;
-const TRANSCRIPT_MAX_TURNS = 12;
 const TERMINAL_MAX_LINES = 200;
 const TERMINAL_MAX_CHARS = 12_000;
 const GIT_SUMMARY_MAX_CHARS = 4_000;
-
-export function stripAnsi(text: string): string {
-  return text
-    // CSI 序列: \x1b[ 开头，参数含 0-9;?>，结尾为 final-char
-    .replace(/\x1b\[[0-9;<>?]*[a-zA-Z>=~]/g, '')
-    // OSC 序列: \x1b]...BEL 或 \x1b]...ST(\x1b\\)
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-    // 孤立的 ESC
-    .replace(/\x1b/g, '')
-    .trim();
-}
 
 export interface SupervisorEvaluationContext {
   objective: string;
@@ -47,27 +35,9 @@ export interface SupervisorEvaluationContext {
   gitStatusSummary?: string;
   gitDiffStat?: string;
   lastTurnId?: string;
-  evidenceSource: 'transcript' | 'terminal_fallback';
+  evidenceSource: 'headless_snapshot' | 'transcript' | 'terminal_fallback';
   /** Latest user input from the current turn (for supervisor context) */
   latestUserInput?: string;
-}
-
-/**
- * Extract the latest user message from a Claude transcript.
- * Returns the text of the most recent user (human) message.
- */
-function extractLatestUserInput(transcriptExcerpt: string): string | undefined {
-  // Transcript format is: "user: ...\n\nassistant: ..." per entry
-  const entries = transcriptExcerpt.split(/\n\n+/);
-  // Iterate in reverse to find the most recent user message
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i]!;
-    const match = entry.match(/^user:\s*/i);
-    if (match) {
-      return entry.slice(match[0]!.length).trim() || undefined;
-    }
-  }
-  return undefined;
 }
 
 export class SupervisorContextBuilder {
@@ -100,31 +70,18 @@ export class SupervisorContextBuilder {
       };
     }
 
-    const provider = this.deps.providerRegistry.find((item) => item.id === session.providerId);
-    let transcript: { excerpt: string; lastTurnId?: string } | null = null;
-    if (session.transcriptPath && provider?.readTranscriptExcerpt) {
-      try {
-        transcript =
-          (await provider.readTranscriptExcerpt({
-            transcriptPath: session.transcriptPath,
-            maxChars: TRANSCRIPT_MAX_CHARS,
-            maxTurns: TRANSCRIPT_MAX_TURNS,
-          })) ?? null;
-      } catch (error) {
-        this.logger.warn(
-          { err: error, sessionId: session.id, transcriptPath: session.transcriptPath },
-          'Supervisor transcript read failed; falling back to terminal snapshot'
-        );
-        transcript = null;
-      }
+    let renderedSnapshot = '';
+    try {
+      renderedSnapshot = await this.deps.sessionMgr.getRenderedSnapshot(session.id, {
+        maxLines: TERMINAL_MAX_LINES,
+        maxChars: TERMINAL_MAX_CHARS,
+      });
+    } catch (error) {
+      this.logger.warn(
+        { err: error, sessionId: session.id },
+        'Supervisor headless snapshot read failed'
+      );
     }
-
-    const terminalSnapshot = this.deps.sessionMgr.getOutputTail(session.id, TERMINAL_MAX_CHARS).toString('utf8');
-    const terminalExcerpt = stripAnsi(terminalSnapshot)
-      .split('\n')
-      .slice(-TERMINAL_MAX_LINES)
-      .join('\n')
-      .slice(-TERMINAL_MAX_CHARS);
 
     const getStatusSummary = this.deps.git?.getStatusSummary ?? getGitStatusSummary;
     const getDiffStatSummary = this.deps.git?.getDiffStatSummary ?? getGitDiffStatSummary;
@@ -148,9 +105,18 @@ export class SupervisorContextBuilder {
         return '';
       });
 
-    const latestUserInput = transcript?.excerpt
-      ? extractLatestUserInput(transcript.excerpt)
-      : undefined;
+    const latestUserInput = this.deps.sessionMgr.getLatestSubmittedUserInput(session.id);
+
+    this.logger.info(
+      {
+        metric: 'supervisor.evidence.built',
+        sessionId: session.id,
+        workspaceId: workspace.id,
+        evidenceSource: 'headless_snapshot',
+        terminalCharCount: renderedSnapshot.length,
+      },
+      'supervisor evidence built'
+    );
 
     return {
       objective: supervisor.objective,
@@ -160,12 +126,12 @@ export class SupervisorContextBuilder {
       sessionProviderId: session.providerId,
       evaluatorProviderId: supervisor.evaluatorProviderId,
       sessionState: session.state,
-      transcriptExcerpt: transcript?.excerpt,
-      terminalExcerpt: transcript?.excerpt ? undefined : terminalExcerpt,
+      transcriptExcerpt: undefined,
+      terminalExcerpt: renderedSnapshot,
       gitStatusSummary,
       gitDiffStat,
-      lastTurnId: transcript?.lastTurnId,
-      evidenceSource: transcript?.excerpt ? 'transcript' : 'terminal_fallback',
+      lastTurnId: undefined,
+      evidenceSource: 'headless_snapshot',
       latestUserInput,
     };
   }

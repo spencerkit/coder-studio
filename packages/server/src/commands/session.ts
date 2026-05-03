@@ -92,37 +92,10 @@ registerCommand(
       throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
     }
 
-    if (session.state !== 'ended' && session.state !== 'unavailable') {
+    if (session.state !== 'ended') {
       throw { code: 'invalid_state', message: `Cannot remove session in state: ${session.state}` };
     }
 
     ctx.sessionMgr.delete(args.sessionId);
-  }
-);
-
-// session.resume
-registerCommand(
-  'session.resume',
-  z.object({
-    sessionId: z.string(),
-  }),
-  async (args, ctx) => {
-    const session = ctx.sessionMgr.get(args.sessionId);
-    if (!session) {
-      throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
-    }
-
-    // Get workspace
-    const workspace = ctx.workspaceMgr.get(session.workspaceId);
-    if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${session.workspaceId}` };
-    }
-
-    const provider = getProviderFromRegistry(session.providerId, ctx.providerRegistry);
-    if (!provider) {
-      throw { code: 'unknown_provider', message: `Provider not found: ${session.providerId}` };
-    }
-
-    return ctx.sessionMgr.resume(args.sessionId, workspace.path, provider);
   }
 );

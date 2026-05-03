@@ -2,12 +2,12 @@
  * Session Manager (spec §4.6)
  *
  * Session is a business wrapper around an agent-kind Terminal.
- * It manages Agent domain semantics, state machine, and hook events.
+ * It manages Agent domain semantics and the PTY-driven state machine.
  */
 
 import type { Session, SessionState, ProviderDefinition, DomainEvent } from '@coder-studio/core';
 import { deriveSessionTitle } from '@coder-studio/core';
-import type { EventBus } from '../bus/event-bus.js';
+import type { EventBus, Unsubscribe } from '../bus/event-bus.js';
 import type { TerminalManager } from '../terminal/manager.js';
 import type { TerminalSpec } from '../terminal/types.js';
 import type { SessionDatabase } from './types.js';
@@ -15,6 +15,9 @@ import type { Broadcaster } from '../ws/hub.js';
 import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 import { sessionToRow, type SessionRow } from '../storage/repositories/session-repo.js';
 import { mergeProviderLaunchConfig } from '../provider-config.js';
+import type { RenderOptions } from '../terminal/snapshot-render.js';
+import { PtyStateDetector } from './pty-state-detector.js';
+import { createShadowComparator, type ShadowComparator } from './state-shadow-comparator.js';
 
 export interface CreateSessionRequest {
   workspaceId: string;
@@ -35,7 +38,6 @@ export interface SessionManagerDeps {
   broadcaster: Broadcaster;
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: ProviderConfigRepo;
-  resolveBridgeScriptPath?: (providerId: string) => string | undefined;
   logger?: SessionLogger;
 }
 
@@ -50,7 +52,6 @@ function generateSessionId(): string {
  * Session Manager handles:
  * - Creating sessions via provider configuration
  * - Managing session state machine
- * - Processing hook events
  * - Broadcasting session events
  */
 const NOOP_SESSION_LOGGER: SessionLogger = {
@@ -58,12 +59,14 @@ const NOOP_SESSION_LOGGER: SessionLogger = {
 };
 
 type TerminalExitedEvent = Extract<DomainEvent, { type: 'terminal.exited' }>;
+type TerminalOutputEvent = Extract<DomainEvent, { type: 'terminal.output' }>;
 
 export class SessionManager {
   private sessions = new Map<string, ActiveSession>();
   private terminalToSession = new Map<string, string>();
-  // Pending events for sessions not yet initialized
-  private pendingEvents = new Map<string, { events: ProviderHookEvent[]; expiresAt: number }>();
+  private detectors = new Map<string, PtyStateDetector>();
+  private comparators = new Map<string, ShadowComparator>();
+  private detectorUnsubscribes = new Map<string, Unsubscribe>();
   private readonly logger: SessionLogger;
 
   constructor(private readonly deps: SessionManagerDeps) {
@@ -85,7 +88,6 @@ export class SessionManager {
     const cmd = req.provider.buildCommand(launchConfig, {
       workspacePath: req.workspacePath,
       sessionId,
-      bridgeScriptPath: this.deps.resolveBridgeScriptPath?.(req.providerId),
     });
 
     // Create terminal spec
@@ -114,19 +116,11 @@ export class SessionManager {
 
     this.sessions.set(sessionId, active);
 
-    // Process any pending events that arrived before session was registered
-    const pending = this.pendingEvents.get(sessionId);
-    if (pending) {
-      for (const ev of pending.events) {
-        this.applyHookEvent(sessionId, ev);
-      }
-      this.pendingEvents.delete(sessionId);
-    }
-
     // Create terminal (delegates to TerminalManager)
     const terminal = this.deps.terminalMgr.create(terminalSpec);
     active.terminalId = terminal.id;
     this.terminalToSession.set(terminal.id, sessionId);
+    this.attachShadowDetector(active, req.provider);
 
     // Persist initial (`starting`) row so subsequent update() calls have a
     // target to UPDATE and so a crash between here and the optimistic idle
@@ -136,32 +130,6 @@ export class SessionManager {
     // Emit the initial `starting` snapshot so clients can latch session
     // creation before any optimistic transition fires.
     this.emitStateChanged(active, null, 'starting');
-
-    // If the provider cannot signal "CLI has finished booting" (Codex and any
-    // future provider without a SessionStart hook), there is nothing left to
-    // wait for: a successful `terminalMgr.create()` means the process
-    // spawned, and from the user's perspective the CLI is now at the prompt.
-    // Advance the session to `idle` immediately so the UI doesn't lie with
-    // "starting…" forever. If the process crashes on boot, `onTerminalExit`
-    // will move it straight to `ended`, overriding this optimistic
-    // transition. Providers that DO emit SessionStart (e.g. Claude) keep the
-    // initial `starting` and flip to `idle` in applyHookEvent('SessionStart').
-    // Tolerate test/stub providers that omit the full HooksDescriptor: if
-    // the structure isn't there, assume no start signal (same class as
-    // Codex) and take the optimistic-idle path. Real providers always
-    // declare `events.sessionStart` because the core type requires it.
-    const hasStartSignal =
-      req.provider.hooks?.events?.sessionStart === true;
-    if (!hasStartSignal) {
-      const prev = active.state;
-      active.state = 'idle';
-      active.startedAt = Date.now();
-      this.deps.db.update(sessionId, {
-        state: 'idle',
-        startedAt: active.startedAt,
-      });
-      this.emitStateChanged(active, prev, 'idle');
-    }
 
     return active.toDTO();
   }
@@ -191,69 +159,6 @@ export class SessionManager {
     this.emitStateChanged(session, prev, 'ended');
   }
 
-  /**
-   * Resume a session (create new terminal with --resume)
-   */
-  async resume(sessionId: string, workspacePath: string, provider: ProviderDefinition): Promise<Session> {
-    const existing = this.sessions.get(sessionId);
-    if (!existing) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    if (!existing.resumeId) {
-      throw new Error('Session has no resume_id');
-    }
-
-    // Build resume command
-    const launchConfig = this.getLaunchConfig(existing.providerId, provider);
-    const cmd = provider.buildResumeCommand!(
-      existing.resumeId,
-      launchConfig,
-      {
-        workspacePath,
-        sessionId,
-        bridgeScriptPath: this.deps.resolveBridgeScriptPath?.(existing.providerId),
-      }
-    );
-
-    if (!cmd) {
-      throw new Error('Provider buildResumeCommand returned null');
-    }
-
-    // Create new terminal
-    const terminalSpec: TerminalSpec = {
-      workspaceId: existing.workspaceId,
-      kind: 'agent',
-      argv: cmd.argv,
-      cwd: cmd.cwd,
-      env: {
-        ...cmd.env,
-        CODER_STUDIO_SESSION_ID: sessionId,
-      },
-      title: provider.displayName,
-    };
-
-    const terminal = this.deps.terminalMgr.create(terminalSpec);
-
-    // Update session
-    const prev = existing.state;
-    if (existing.terminalId) {
-      this.terminalToSession.delete(existing.terminalId);
-    }
-    existing.terminalId = terminal.id;
-    this.terminalToSession.set(terminal.id, sessionId);
-    existing.state = 'running';
-
-    this.deps.db.update(sessionId, {
-      terminalId: terminal.id,
-      state: 'running',
-    });
-
-    this.emitStateChanged(existing, prev, 'running');
-
-    return existing.toDTO();
-  }
-
   async hydrate(): Promise<void> {
     const persistedSessions = this.deps.db.listHydratable();
 
@@ -271,13 +176,11 @@ export class SessionManager {
         capability: session.capability,
         state: nextState,
         title: session.title,
-        resumeId: session.resumeId,
         startedAt: session.startedAt,
         lastActiveAt: session.lastActiveAt,
         endedAt: session.endedAt,
         completionPercent: session.completionPercent,
         errorReason: session.errorReason,
-        transcriptPath: session.transcriptPath,
       });
 
       this.sessions.set(session.id, hydrated);
@@ -290,148 +193,24 @@ export class SessionManager {
   }
 
   private resolveHydratedState(session: Session): SessionState {
+    if (session.state === 'draft') {
+      return 'draft';
+    }
+
     const activeTerminal = this.deps.terminalMgr.get(session.terminalId);
     if (activeTerminal?.alive) {
       return session.state;
     }
 
-    if (session.state === 'ended' || session.state === 'unavailable' || session.state === 'interrupted') {
+    if (session.state === 'ended') {
       return session.state;
     }
 
-    return session.resumeId ? 'interrupted' : 'unavailable';
+    return 'ended';
   }
 
   private getLaunchConfig(providerId: string, provider: ProviderDefinition) {
     return mergeProviderLaunchConfig(provider, this.deps.providerConfigRepo.get(providerId));
-  }
-
-  /**
-   * Handle hook event from provider
-   */
-  onHookEvent(sessionId: string, event: ProviderHookEvent): void {
-    const session = this.sessions.get(sessionId);
-
-    if (!session) {
-      // Session not yet registered - store in pending pool
-      const pending = this.pendingEvents.get(sessionId) ?? {
-        events: [],
-        expiresAt: Date.now() + 5000, // 5s TTL
-      };
-      pending.events.push(event);
-      this.pendingEvents.set(sessionId, pending);
-      this.logger.warn({
-        sessionId,
-        eventKind: event.kind,
-      }, '[SessionManager] Hook event queued');
-      this.scheduleCleanup();
-      return;
-    }
-
-    this.applyHookEvent(sessionId, event);
-  }
-
-  /**
-   * Apply hook event to session
-   */
-  private applyHookEvent(sessionId: string, event: ProviderHookEvent): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const prev = session.state;
-
-    switch (event.kind) {
-      case 'SessionStart':
-        // SessionStart fires once the provider CLI has finished booting and is
-        // sitting at the input prompt — no turn is in flight yet, so the
-        // natural next state is `idle`. `running` is reserved for "there is a
-        // turn actively executing" (entered via onTerminalInput(submit) or a
-        // resume). Without this, Claude-style providers that only emit Stop
-        // per-turn would never transition out of `running` until the user had
-        // submitted and completed their first turn.
-        session.resumeId = event.resumeId;
-        if (event.transcriptPath) session.transcriptPath = event.transcriptPath;
-        session.state = 'idle';
-        session.startedAt = Date.now();
-
-        this.deps.db.update(sessionId, {
-          resumeId: event.resumeId,
-          transcriptPath: event.transcriptPath,
-          state: 'idle',
-          startedAt: session.startedAt,
-        });
-        break;
-
-      case 'TurnCompleted': {
-        if (!session.resumeId) session.resumeId = event.resumeId;
-        if (session.state === 'starting' || session.state === 'running') {
-          session.state = 'idle';
-        }
-
-        this.deps.db.update(sessionId, {
-          resumeId: session.resumeId,
-          state: session.state,
-        });
-
-        this.deps.eventBus.emit({
-          type: 'session.lifecycle',
-          workspaceId: session.workspaceId,
-          sessionId,
-          event: 'turn_completed',
-        } as DomainEvent);
-
-        // Resolve transcript path asynchronously on first turn
-        if (!session.transcriptPath) {
-          this.resolveTranscriptPathAsync(session);
-        }
-        break;
-      }
-
-      case 'Stop':
-        if (session.state === 'starting' || session.state === 'running') {
-          session.state = 'idle';
-        }
-        this.deps.db.update(sessionId, {
-          state: session.state,
-        });
-
-        // Session completed a turn
-        this.deps.eventBus.emit({
-          type: 'session.lifecycle', workspaceId: session.workspaceId,
-          sessionId,
-          event: 'turn_completed',
-        } as DomainEvent);
-        break;
-
-      case 'Progress':
-        session.completionPercent = event.percent;
-        this.deps.db.update(sessionId, {
-          completionPercent: event.percent,
-        });
-        break;
-    }
-
-    if (session.state !== prev) {
-      this.emitStateChanged(session, prev, session.state);
-    }
-  }
-
-  /**
-   * Asynchronously resolve transcript path via provider
-   */
-  private async resolveTranscriptPathAsync(session: ActiveSession): Promise<void> {
-    const provider = this.deps.providerRegistry.find((p) => p.id === session.providerId);
-    if (!provider?.resolveTranscriptPath || !session.resumeId) return;
-
-    try {
-      const path = await provider.resolveTranscriptPath(session.toDTO());
-      if (path) {
-        session.transcriptPath = path;
-        this.deps.db.update(session.id, { transcriptPath: path });
-      }
-    } catch {
-      // Never throw from transcript resolution
-    }
   }
 
   /**
@@ -470,9 +249,28 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
+    if (activity === 'system') {
+      session.awaitingTurnCompletion = true;
+      const prev = session.state;
+      if (session.state !== 'running') {
+        session.state = 'running';
+        session.lastActiveAt = Date.now();
+        this.deps.db.update(session.id, {
+          state: 'running',
+          lastActiveAt: session.lastActiveAt,
+        });
+        this.emitStateChanged(session, prev, 'running');
+      }
+      return;
+    }
+
     if (activity !== 'submit') return;
 
     const submittedText = text;
+    if (submittedText?.trim()) {
+      session.latestSubmittedUserInput = submittedText.trim();
+    }
+    session.awaitingTurnCompletion = true;
 
     // Title capture runs independently of state transitions: a session that
     // is still 'starting' or 'running' when the user types won't flip state
@@ -480,7 +278,9 @@ export class SessionManager {
     const titleChanged = this.maybeAssignTitle(session, submittedText);
 
     const prev = session.state;
-    const shouldResume = session.state === 'idle' || session.state === 'interrupted';
+    const shouldResume =
+      session.state === 'idle' ||
+      session.state === 'starting';
 
     if (shouldResume) {
       session.state = 'running';
@@ -544,6 +344,25 @@ export class SessionManager {
   }
 
   /**
+   * Render the current session snapshot to plain text for supervisor use.
+   */
+  async getRenderedSnapshot(sessionId: string, options: RenderOptions): Promise<string> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return '';
+    }
+
+    return this.deps.terminalMgr.getRenderedSnapshot(session.terminalId, options);
+  }
+
+  /**
+   * Return the most recent submitted user input observed for the session.
+   */
+  getLatestSubmittedUserInput(sessionId: string): string | undefined {
+    return this.sessions.get(sessionId)?.latestSubmittedUserInput;
+  }
+
+  /**
    * Resolve the session that owns a terminal, if any.
    */
   findSessionIdByTerminal(terminalId: string): string | undefined {
@@ -582,6 +401,7 @@ export class SessionManager {
     session.endedAt = Date.now();
     session.exitCode = exitCode;
     this.terminalToSession.delete(terminalId);
+    this.cleanupDetector(sessionId);
 
     this.deps.db.update(session.id, {
       state: 'ended',
@@ -593,7 +413,7 @@ export class SessionManager {
 
   /**
    * Delete a session
-   * Only allowed for sessions in 'ended' or 'unavailable' state
+   * Only allowed for sessions in 'ended' state
    */
   delete(sessionId: string): void {
     const session = this.sessions.get(sessionId);
@@ -601,13 +421,14 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (session.state !== 'ended' && session.state !== 'unavailable') {
+    if (session.state !== 'ended') {
       throw new Error(`Cannot delete session in state: ${session.state}`);
     }
 
     // Remove from memory
     this.sessions.delete(sessionId);
     this.terminalToSession.delete(session.terminalId);
+    this.cleanupDetector(sessionId);
 
     // Delete from database
     this.deps.db.delete(sessionId);
@@ -624,6 +445,7 @@ export class SessionManager {
    * Emit state changed event
    */
   private emitStateChanged(session: ActiveSession, from: SessionState | null, to: SessionState): void {
+    this.comparators.get(session.id)?.observeHookState(session.state);
     this.deps.eventBus.emit({
       type: 'session.state.changed',
       sessionId: session.id,
@@ -633,24 +455,89 @@ export class SessionManager {
       session: session.toDTO(),
     } as any);
   }
+  private attachShadowDetector(session: ActiveSession, provider: ProviderDefinition): void {
+    if (!provider.idleHeuristics) {
+      return;
+    }
 
-  /**
-   * Schedule cleanup of expired pending events
-   */
-  private scheduleCleanup(): void {
-    const now = Date.now();
-    const cleanedSessionIds: string[] = [];
-    for (const [sessionId, pending] of this.pendingEvents.entries()) {
-      if (pending.expiresAt < now) {
-        this.pendingEvents.delete(sessionId);
-        cleanedSessionIds.push(sessionId);
+    const comparator = createShadowComparator((info) => {
+      this.logger.warn(
+        {
+          ...info,
+          sessionId: session.id,
+          terminalId: session.terminalId,
+          providerId: session.providerId,
+        },
+        '[SessionManager] PTY shadow state divergence'
+      );
+    });
+
+    const detector = new PtyStateDetector({
+      heuristics: provider.idleHeuristics,
+      onStateChange: (state) => {
+        const activeSession = this.sessions.get(session.id);
+        if (!activeSession) {
+          return;
+        }
+
+        const prev = activeSession.state;
+        if (state === 'running' && prev !== 'running') {
+          activeSession.state = 'running';
+          activeSession.lastActiveAt = Date.now();
+          if (!activeSession.startedAt) {
+            activeSession.startedAt = activeSession.lastActiveAt;
+          }
+          this.deps.db.update(session.id, {
+            state: 'running',
+            startedAt: activeSession.startedAt,
+            lastActiveAt: activeSession.lastActiveAt,
+          });
+          this.emitStateChanged(activeSession, prev, 'running');
+        } else if (state === 'idle' && (prev === 'running' || prev === 'starting')) {
+          const shouldEmitTurnCompleted = activeSession.awaitingTurnCompletion;
+          activeSession.state = 'idle';
+          activeSession.awaitingTurnCompletion = false;
+          if (!activeSession.startedAt) {
+            activeSession.startedAt = Date.now();
+          }
+          this.deps.db.update(session.id, {
+            state: 'idle',
+            startedAt: activeSession.startedAt,
+          });
+          this.emitStateChanged(activeSession, prev, 'idle');
+          if (shouldEmitTurnCompleted) {
+            this.deps.eventBus.emit({
+              type: 'session.lifecycle',
+              workspaceId: activeSession.workspaceId,
+              sessionId: activeSession.id,
+              event: 'turn_completed',
+            } as DomainEvent);
+          }
+        }
+
+        comparator.observePtyState(state);
+      },
+    });
+
+    const unsubscribe = this.deps.eventBus.on('terminal.output', (event: TerminalOutputEvent) => {
+      if (event.terminalId !== session.terminalId) {
+        return;
       }
-    }
-    if (cleanedSessionIds.length > 0) {
-      this.logger.warn({
-        cleanedSessionIds,
-      }, '[SessionManager] Expired pending events cleaned');
-    }
+
+      detector.feed(event.chunk);
+    });
+
+    this.comparators.set(session.id, comparator);
+    this.detectors.set(session.id, detector);
+    this.detectorUnsubscribes.set(session.id, unsubscribe);
+  }
+
+  private cleanupDetector(sessionId: string): void {
+    this.detectorUnsubscribes.get(sessionId)?.();
+    this.detectorUnsubscribes.delete(sessionId);
+    this.detectors.get(sessionId)?.dispose();
+    this.detectors.delete(sessionId);
+    this.comparators.delete(sessionId);
   }
 }
 
@@ -663,7 +550,6 @@ class ActiveSession {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  resumeId?: string;
   capability: 'full' | 'limited' | 'unsupported';
   startedAt?: number;
   lastActiveAt: number;
@@ -672,8 +558,9 @@ class ActiveSession {
   errorReason?: string;
   exitCode?: number;
   draft?: string;
-  transcriptPath?: string;
   title?: string;
+  latestSubmittedUserInput?: string;
+  awaitingTurnCompletion = false;
 
   constructor(data: {
     id: string;
@@ -684,13 +571,11 @@ class ActiveSession {
     state: SessionState;
     draft?: string;
     title?: string;
-    resumeId?: string;
     startedAt?: number;
     lastActiveAt?: number;
     endedAt?: number;
     completionPercent?: number;
     errorReason?: string;
-    transcriptPath?: string;
   }) {
     this.id = data.id;
     this.workspaceId = data.workspaceId;
@@ -700,13 +585,11 @@ class ActiveSession {
     this.state = data.state;
     this.draft = data.draft;
     this.title = data.title;
-    this.resumeId = data.resumeId;
     this.startedAt = data.startedAt ?? Date.now();
     this.lastActiveAt = data.lastActiveAt ?? this.startedAt;
     this.endedAt = data.endedAt;
     this.completionPercent = data.completionPercent;
     this.errorReason = data.errorReason;
-    this.transcriptPath = data.transcriptPath;
   }
 
   toDTO(): Session {
@@ -716,14 +599,12 @@ class ActiveSession {
       terminalId: this.terminalId,
       providerId: this.providerId,
       state: this.state,
-      resumeId: this.resumeId,
       capability: this.capability,
       startedAt: this.startedAt ?? Date.now(),
       lastActiveAt: this.lastActiveAt,
       endedAt: this.endedAt,
       completionPercent: this.completionPercent,
       errorReason: this.errorReason,
-      transcriptPath: this.transcriptPath,
       title: this.title,
     };
   }
@@ -735,12 +616,3 @@ class ActiveSession {
     });
   }
 }
-
-/**
- * Provider hook event types
- */
-export type ProviderHookEvent =
-  | { kind: 'SessionStart'; resumeId: string; transcriptPath?: string }
-  | { kind: 'Stop' }
-  | { kind: 'TurnCompleted'; resumeId: string; turnId: string }
-  | { kind: 'Progress'; percent: number };

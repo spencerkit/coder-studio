@@ -5,7 +5,7 @@ import { join } from 'path';
 import {
   readRuntimeConfig,
   writeRuntimeConfig,
-} from '../../server/src/hooks/runtime-json.js';
+} from '@coder-studio/core/runtime';
 
 const { deleteManagedServer, getManagedServerStatus, getLogPaths } = vi.hoisted(() => ({
   deleteManagedServer: vi.fn(),

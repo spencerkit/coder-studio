@@ -215,6 +215,8 @@ describe('SettingsPage', () => {
     expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('模型')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hooks')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '注入 Hooks' })).not.toBeInTheDocument();
 
     const argsInput = screen.getByLabelText('启动命令参数');
     expect(argsInput).toHaveValue('--verbose');

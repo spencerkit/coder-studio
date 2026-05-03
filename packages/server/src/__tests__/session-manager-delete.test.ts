@@ -124,38 +124,52 @@ describe('SessionManager.delete', () => {
       } as any,
     });
 
-    // Stub provider has no HooksDescriptor, so SessionManager treats it as
-    // "no SessionStart signal" and optimistically advances to `idle` on
-    // create. Either way, delete must reject any non-terminal state.
-    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(sessionMgr.get(session.id)?.state).toBe('starting');
     expect(() => sessionMgr.delete(session.id)).toThrow(
-      'Cannot delete session in state: idle'
+      'Cannot delete session in state: starting'
     );
     expect(mockDb.delete).not.toHaveBeenCalled();
   });
 
-  it('should allow deleting unavailable session', async () => {
+  it('cleans up PTY detector subscriptions when deleting a terminal session', async () => {
     mockDb.insert.mockImplementation(() => {});
     mockDb.update.mockImplementation(() => {});
 
     const session = await sessionMgr.create({
       workspaceId: 'ws-1',
       workspacePath: '/test/path',
-      providerId: 'test-provider',
+      providerId: 'codex',
       provider: {
-        id: 'test-provider',
-        displayName: 'Test Provider',
+        id: 'codex',
+        displayName: 'Codex',
         capability: 'full',
-        buildCommand: () => ({ argv: ['test'], cwd: '/test' }),
+        defaultConfig: {},
+        idleHeuristics: {
+          idlePromptPatterns: [],
+          idleDebounceMs: 3000,
+        },
+        buildCommand: () => ({ argv: ['codex'], cwd: '/test', env: {} }),
+        hooks: {
+          events: {
+            sessionStart: false,
+            completion: true,
+            progress: false,
+          },
+        },
       } as any,
     });
 
-    // Set state to unavailable
     const internalSession = (sessionMgr as any).sessions.get(session.id);
-    internalSession.state = 'unavailable';
+    internalSession.state = 'ended';
 
-    // Should be able to delete
+    expect((sessionMgr as any).detectors.get(session.id)).toBeDefined();
+    expect((sessionMgr as any).comparators.get(session.id)).toBeDefined();
+    expect((sessionMgr as any).detectorUnsubscribes.get(session.id)).toBeTypeOf('function');
+
     sessionMgr.delete(session.id);
-    expect(mockDb.delete).toHaveBeenCalledWith(session.id);
+
+    expect((sessionMgr as any).detectors.has(session.id)).toBe(false);
+    expect((sessionMgr as any).comparators.has(session.id)).toBe(false);
+    expect((sessionMgr as any).detectorUnsubscribes.has(session.id)).toBe(false);
   });
 });

@@ -28,7 +28,6 @@ interface ProviderInfo {
   id: string;
   displayName: string;
   capability: 'full' | 'limited' | 'unsupported';
-  hooksRegistered: boolean;
 }
 
 type SettingsNavigationState =
@@ -77,7 +76,7 @@ function loadProviderAdditionalArgs(
  *   - Two-column layout: sidebar (200px) + content area
  *   - Navigation sections: General, Provider (per provider), Appearance
  *   - General: notifications
- *   - Provider: config fields, hooks injection, command preview
+ *   - Provider: config fields and command preview
  *   - Appearance: theme, terminal renderer, language
  */
 export function SettingsPage() {
@@ -96,8 +95,8 @@ export function SettingsPage() {
 
   // Provider settings state (would come from server in real implementation)
   const [providers, setProviders] = useState<ProviderInfo[]>([
-    { id: 'claude', displayName: 'Claude', capability: 'full', hooksRegistered: false },
-    { id: 'codex', displayName: 'Codex', capability: 'limited', hooksRegistered: false },
+    { id: 'claude', displayName: 'Claude', capability: 'full' },
+    { id: 'codex', displayName: 'Codex', capability: 'limited' },
   ]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -167,17 +166,6 @@ export function SettingsPage() {
         setLocale(settings['appearance.locale']);
       }
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
-      if (Array.isArray(settings.hookRegistrations)) {
-        setProviders((prev) => prev.map((provider) => {
-          const registration = (settings.hookRegistrations as Array<{ providerId: string; lastStatus?: string }>).find(
-            (item) => item.providerId === provider.id
-          );
-          return {
-            ...provider,
-            hooksRegistered: registration?.lastStatus === 'ok',
-          };
-        }));
-      }
     };
 
     void loadSettings();
@@ -233,7 +221,6 @@ export function SettingsPage() {
         return (
           <ProviderSettings
             providers={providers}
-            setProviders={setProviders}
             additionalArgsById={providerAdditionalArgsById}
             setAdditionalArgsById={setProviderAdditionalArgsById}
             commandPreview={commandPreview}
@@ -592,7 +579,6 @@ function AppearanceSettings({
 
 interface ProviderSettingsProps {
   providers: ProviderInfo[];
-  setProviders: React.Dispatch<React.SetStateAction<ProviderInfo[]>>;
   additionalArgsById: Record<string, string>;
   setAdditionalArgsById: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   commandPreview: string;
@@ -601,7 +587,6 @@ interface ProviderSettingsProps {
 
 function ProviderSettings({
   providers,
-  setProviders,
   additionalArgsById,
   setAdditionalArgsById,
   commandPreview,
@@ -614,17 +599,6 @@ function ProviderSettings({
   const provider = providers.find((p) => p.id === selectedProvider);
   const additionalArgsText = provider ? additionalArgsById[provider.id] ?? '' : '';
   const additionalArgs = parseProviderAdditionalArgs(additionalArgsText);
-
-  const handleInjectHooks = async () => {
-    if (!provider) return;
-
-    const result = await dispatch('settings.injectHooks', { providerId: provider.id });
-
-    if (result.ok) {
-      setProviders((prev) => prev.map((item) => item.id === provider.id ? { ...item, hooksRegistered: true } : item));
-    } else if (result.error) {
-    }
-  };
 
   useEffect(() => {
     const loadPreview = async () => {
@@ -682,28 +656,6 @@ function ProviderSettings({
                 {t(`settings.provider.capability_${provider.capability}`)}
               </span>
             </div>
-
-            <div className="settings-provider-meta">
-              <div className="settings-provider-meta-item">
-                <span className="settings-provider-meta-label">{t('settings.provider.status')}</span>
-                <span className={`settings-provider-status ${provider.hooksRegistered ? 'status-registered' : 'status-unregistered'}`}>
-                  {provider.hooksRegistered ? t('settings.provider.hooks_registered') : t('settings.provider.hooks_unregistered')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.provider.hooks')}</h3>
-            <p className="settings-group-desc">{t('settings.provider.hooks_hint')}</p>
-
-            <button
-              className="btn btn-primary"
-              onClick={handleInjectHooks}
-              disabled={provider.hooksRegistered}
-            >
-              {provider.hooksRegistered ? t('settings.provider.hooks_registered') : t('settings.provider.hooks_inject')}
-            </button>
           </div>
 
           <div className="settings-group">

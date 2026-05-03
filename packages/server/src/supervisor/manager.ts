@@ -257,7 +257,7 @@ export class SupervisorManager {
     if (!this.supportsSupervisor(sessionProvider)) {
       throw {
         code: 'supervisor_unsupported_provider',
-        message: `Provider ${session.providerId} does not expose the hooks required for supervisor-driven sessions`,
+        message: `Provider ${session.providerId} does not support supervisor-driven sessions`,
       };
     }
     if (this.supervisorsBySession.has(req.sessionId)) {
@@ -693,7 +693,7 @@ export class SupervisorManager {
   }
 
   private supportsSupervisor(provider: ProviderDefinition): boolean {
-    return Boolean(provider.hooks?.events?.completion);
+    return provider.capability === 'full';
   }
 
   private assertEvaluatorProvider(providerId: string): void {

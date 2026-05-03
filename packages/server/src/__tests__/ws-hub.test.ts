@@ -69,7 +69,6 @@ describe('WsHub', () => {
       workspaceMgr: {} as any,
       sessionMgr: {} as any,
       terminalMgr: {} as any,
-      hooksMgr: {} as any,
       eventBus,
       broadcaster: {} as any,
       db: {} as any,

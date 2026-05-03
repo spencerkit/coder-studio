@@ -15,7 +15,6 @@ describe('Command Dispatch', () => {
       workspaceMgr: {},
       sessionMgr: {},
       terminalMgr: {},
-      hooksMgr: {},
       eventBus: {},
       broadcaster: {},
       db: {},

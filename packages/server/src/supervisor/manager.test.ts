@@ -71,7 +71,7 @@ describe('SupervisorManager', () => {
           sessionId: 'sess-1',
           status: patch.status ?? 'completed',
           trigger: 'manual',
-          evidenceSource: 'transcript',
+          evidenceSource: 'headless_snapshot',
           objective: 'Persist supervisors',
           evaluatorProviderId: 'claude',
           createdAt: 1,

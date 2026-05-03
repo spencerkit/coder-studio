@@ -36,7 +36,6 @@ describe('session hydrate restart', () => {
       dataDir: dbPath,
       host: '127.0.0.1',
       port: 0,
-      writeRuntime: false,
     } as any);
 
     const firstCtx = server.__test__!.commandContext;
@@ -62,9 +61,9 @@ describe('session hydrate restart', () => {
       .run('term-hydrated', workspaceId, 'agent', workspaceDir, '[]', 120, 30, now, now, 0);
     firstCtx.db
       .prepare(
-        'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, resume_id, capability, state, started_at, last_active_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)'
+        'INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)'
       )
-      .run('sess-hydrated', workspaceId, 'term-hydrated', 'claude', 'resume-xyz', 'full', 'running', now, now);
+      .run('sess-hydrated', workspaceId, 'term-hydrated', 'claude', 'full', 'running', now, now);
 
     await server.stop();
     server = undefined;
@@ -73,7 +72,6 @@ describe('session hydrate restart', () => {
       dataDir: dbPath,
       host: '127.0.0.1',
       port: 0,
-      writeRuntime: false,
     } as any);
 
     const secondCtx = server.__test__!.commandContext;
@@ -93,8 +91,7 @@ describe('session hydrate restart', () => {
         id: 'sess-hydrated',
         workspaceId,
         terminalId: 'term-hydrated',
-        state: 'interrupted',
-        resumeId: 'resume-xyz',
+        state: 'ended',
       }),
     ]);
   });

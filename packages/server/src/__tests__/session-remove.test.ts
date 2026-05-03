@@ -41,7 +41,6 @@ describe('session.remove command', () => {
       workspaceMgr: {} as any,
       sessionMgr: mockSessionMgr as any,
       terminalMgr: {} as any,
-      hooksMgr: {} as any,
       eventBus: mockEventBus as any,
       broadcaster: {} as any,
       db: {} as any,
@@ -67,26 +66,6 @@ describe('session.remove command', () => {
 
     expect(result.ok).toBe(true);
     expect(mockSessionMgr.delete).toHaveBeenCalledWith('session-1');
-  });
-
-  it('should remove unavailable session', async () => {
-    mockSessionMgr.get.mockReturnValue({
-      id: 'session-2',
-      state: 'unavailable',
-    });
-
-    const result = await dispatch(
-      {
-        kind: 'command',
-        id: 'cmd-2',
-        op: 'session.remove',
-        args: { sessionId: 'session-2' },
-      },
-      ctx
-    );
-
-    expect(result.ok).toBe(true);
-    expect(mockSessionMgr.delete).toHaveBeenCalledWith('session-2');
   });
 
   it('should error if session not found', async () => {

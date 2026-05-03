@@ -44,7 +44,6 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       write: vi.fn(),
       resize: vi.fn(),
     } as never,
-    hooksMgr: {} as never,
     eventBus: {} as never,
     broadcaster: {
       broadcast: vi.fn(),

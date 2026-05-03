@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -62,15 +62,109 @@ describe('runMigrations', () => {
     db.close();
   });
 
-  it('migration 002 adds transcript_path column to sessions', async () => {
+  it('migration 006 drops legacy resume and transcript columns from sessions', async () => {
     const { runMigrations } = await import('./db');
 
     const db = new DatabaseSync(dbPath);
     runMigrations(db);
 
     const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
-    const transcriptCol = cols.find(c => c.name === 'transcript_path');
-    expect(transcriptCol).toBeDefined();
+    expect(cols.find(c => c.name === 'resume_id')).toBeUndefined();
+    expect(cols.find(c => c.name === 'transcript_path')).toBeUndefined();
+
+    db.close();
+  });
+
+  it('upgrades a pre-006 database with legacy session columns and hook registrations intact', async () => {
+    const { runMigrations } = await import('./db');
+
+    const db = new DatabaseSync(dbPath);
+    const migrationsDir = join(import.meta.dirname, 'migrations');
+
+    for (const file of ['001_init.sql', '002_transcript_path.sql', '003_supervisors.sql', '004_session_title.sql', '005_auth_sessions.sql']) {
+      db.exec(readFileSync(join(migrationsDir, file), 'utf8'));
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        applied_at INTEGER NOT NULL
+      );
+    `);
+
+    for (const [index, name] of ['001_init', '002_transcript_path', '003_supervisors', '004_session_title', '005_auth_sessions'].entries()) {
+      db.prepare('INSERT INTO _migrations (id, name, applied_at) VALUES (?, ?, ?)').run(index + 1, name, 1000 + index);
+    }
+
+    db.prepare('INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)').run(
+      'ws-1',
+      '/workspace',
+      'native',
+      1,
+      1,
+      '{}'
+    );
+    db.prepare('INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      'term-1',
+      'ws-1',
+      'agent',
+      '/workspace',
+      '[]',
+      80,
+      24,
+      1
+    );
+    db.prepare(`
+      INSERT INTO sessions (
+        id, workspace_id, terminal_id, provider_id, resume_id, capability, state,
+        started_at, ended_at, last_active_at, completion_percent, error_reason,
+        archived, transcript_path, title
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'sess-1',
+      'ws-1',
+      'term-1',
+      'claude',
+      'resume-1',
+      'full',
+      'ended',
+      1,
+      2,
+      1,
+      null,
+      null,
+      0,
+      '/tmp/transcript.jsonl',
+      'title'
+    );
+    db.prepare(`
+      INSERT INTO hook_registrations (
+        provider_id, marker_version, injected_at, global_config_path, last_check_at, last_status, last_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('claude', 'v1', 1, '/tmp/settings.json', 1, 'ok', null);
+
+    runMigrations(db);
+
+    const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+    expect(cols.find((c) => c.name === 'resume_id')).toBeUndefined();
+    expect(cols.find((c) => c.name === 'transcript_path')).toBeUndefined();
+
+    const session = db.prepare('SELECT id, provider_id, state, title FROM sessions WHERE id = ?').get('sess-1') as {
+      id: string;
+      provider_id: string;
+      state: string;
+      title: string | null;
+    };
+    expect(session).toEqual({
+      id: 'sess-1',
+      provider_id: 'claude',
+      state: 'ended',
+      title: 'title',
+    });
+
+    const hookTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='hook_registrations'").get();
+    expect(hookTable).toBeUndefined();
 
     db.close();
   });

@@ -3,20 +3,6 @@ import { z } from 'zod';
 import { expect, it, vi } from 'vitest';
 import { buildProviderRuntimeStatus } from '../../provider-runtime/runtime-status.js';
 
-const testHooks: ProviderDefinition['hooks'] = {
-  resolveGlobalConfigPath: () => '',
-  mergeInto: (existing) => existing,
-  extractManaged: () => null,
-  markerVersion: 'test',
-  bridgeCommand: () => [],
-  parseEvent: () => null,
-  events: {
-    sessionStart: false,
-    completion: false,
-    progress: false,
-  },
-};
-
 function createTestProvider(
   id: string,
   strategies: ProviderDefinition['install']['strategies'],
@@ -45,7 +31,6 @@ function createTestProvider(
     configSchema: z.object({}).passthrough(),
     defaultConfig: {},
     requiredCommands: [id],
-    hooks: testHooks,
   };
 }
 

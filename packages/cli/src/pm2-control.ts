@@ -4,7 +4,7 @@ import { join } from 'path';
 import {
   deleteRuntimeConfig,
   readRuntimeConfig,
-} from '../../server/src/hooks/runtime-json.js';
+} from '@coder-studio/core/runtime';
 
 export const MANAGED_SERVER_NAME = 'coder-studio-server';
 const PM2_RESTART_DELAY_MS = 2000;

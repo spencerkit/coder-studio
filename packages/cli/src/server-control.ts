@@ -1,7 +1,7 @@
 import {
   deleteRuntimeConfig,
   readRuntimeConfig,
-} from '../../server/src/hooks/runtime-json.js';
+} from '@coder-studio/core/runtime';
 import {
   deleteManagedServer,
   getLogPaths,

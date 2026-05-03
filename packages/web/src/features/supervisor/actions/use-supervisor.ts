@@ -29,8 +29,7 @@ export function useSupervisor(session: Session | null | undefined) {
       hydrated ||
       session.capability !== 'full' ||
       session.state === 'draft' ||
-      session.state === 'ended' ||
-      session.state === 'unavailable'
+      session.state === 'ended'
     ) {
       return;
     }

@@ -103,20 +103,7 @@ export class SupervisorEvaluator {
 
 function buildPrompt(context: SupervisorEvaluationContext): string {
   const agentOutput = context.transcriptExcerpt ?? context.terminalExcerpt ?? '';
-
-  // Extract latest user input from transcript (format: "user: ...\n\nassistant: ...")
-  let userInput = '';
-  if (context.transcriptExcerpt) {
-    const entries = context.transcriptExcerpt.split(/\n\n+/);
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const entry = entries[i]!;
-      const match = entry.match(/^user:\s*/i);
-      if (match) {
-        userInput = entry.slice(match[0]!.length).trim();
-        break;
-      }
-    }
-  }
+  const userInput = context.latestUserInput?.trim() ?? '';
 
   const lines: string[] = [
     'You are the supervisor for a business agent terminal session.',

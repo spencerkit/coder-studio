@@ -27,6 +27,7 @@ import { join } from 'node:path';
  */
 function createMockPtyHost(): {
   ptyHost: PtyHost;
+  triggerDataForProcessIndex: (processIndex: number, data: string) => void;
   triggerExitForProcessIndex: (processIndex: number, exitCode: number) => void;
 } {
   const processes: Array<{
@@ -65,7 +66,16 @@ function createMockPtyHost(): {
     }
   };
 
-  return { ptyHost, triggerExitForProcessIndex };
+  const triggerDataForProcessIndex = (processIndex: number, data: string) => {
+    const proc = processes[processIndex];
+    if (proc) {
+      for (const cb of proc.onDataCallbacks) {
+        cb(data);
+      }
+    }
+  };
+
+  return { ptyHost, triggerDataForProcessIndex, triggerExitForProcessIndex };
 }
 
 describe('Session Terminal Exit', () => {
@@ -73,6 +83,7 @@ describe('Session Terminal Exit', () => {
   let eventBus: EventBus;
   let sessionMgr: SessionManager;
   let terminalMgr: TerminalManager;
+  let triggerDataForProcessIndex: (processIndex: number, data: string) => void;
   let triggerExitForProcessIndex: (processIndex: number, exitCode: number) => void;
   let broadcastEvents: Array<{ topic: string; payload: unknown }>;
   let sessionDb: {
@@ -95,6 +106,7 @@ describe('Session Terminal Exit', () => {
 
     // Create mock PTY host with exit trigger
     const mockPtyHostSetup = createMockPtyHost();
+    triggerDataForProcessIndex = mockPtyHostSetup.triggerDataForProcessIndex;
     triggerExitForProcessIndex = mockPtyHostSetup.triggerExitForProcessIndex;
 
     // Track broadcast events
@@ -144,6 +156,7 @@ describe('Session Terminal Exit', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     try {
       rmSync(testDir, { recursive: true, force: true });
     } catch {
@@ -153,6 +166,7 @@ describe('Session Terminal Exit', () => {
 
   describe('PTY exit handling', () => {
     it('should transition session to ended when PTY exits', async () => {
+      vi.useFakeTimers();
       // Create session (this will spawn process at index 0)
       const session = await sessionMgr.create({
         workspaceId: 'ws-test-1',
@@ -161,7 +175,10 @@ describe('Session Terminal Exit', () => {
         provider: providerRegistry.find(p => p.id === 'codex')!,
       });
 
-      expect(session.state).toBe('idle');
+      triggerDataForProcessIndex(0, 'boot output\n');
+      vi.advanceTimersByTime(3000);
+
+      expect(sessionMgr.get(session.id)?.state).toBe('idle');
       expect(session.terminalId).toBeDefined();
 
       // Trigger PTY exit for process 0
@@ -199,6 +216,7 @@ describe('Session Terminal Exit', () => {
     });
 
     it('should emit state change event when PTY exits', async () => {
+      vi.useFakeTimers();
       // Track state change events
       const stateChanges: Array<{ from: string; to: string }> = [];
       eventBus.on('session.state.changed', (event: any) => {
@@ -212,6 +230,8 @@ describe('Session Terminal Exit', () => {
         providerId: 'codex',
         provider: providerRegistry.find(p => p.id === 'codex')!,
       });
+      triggerDataForProcessIndex(0, 'boot output\n');
+      vi.advanceTimersByTime(3000);
 
       // Clear previous state changes from initialization
       stateChanges.length = 0;
@@ -222,6 +242,25 @@ describe('Session Terminal Exit', () => {
       // Verify state change event was emitted
       expect(stateChanges.length).toBeGreaterThan(0);
       expect(stateChanges[0]).toEqual({ from: 'idle', to: 'ended' });
+    });
+
+    it('cleans up PTY detector subscriptions when the terminal exits', async () => {
+      const session = await sessionMgr.create({
+        workspaceId: 'ws-test-4',
+        workspacePath: testDir,
+        providerId: 'codex',
+        provider: providerRegistry.find((p) => p.id === 'codex')!,
+      });
+
+      expect((sessionMgr as any).detectors.get(session.id)).toBeDefined();
+      expect((sessionMgr as any).comparators.get(session.id)).toBeDefined();
+      expect((sessionMgr as any).detectorUnsubscribes.get(session.id)).toBeTypeOf('function');
+
+      triggerExitForProcessIndex(0, 0);
+
+      expect((sessionMgr as any).detectors.has(session.id)).toBe(false);
+      expect((sessionMgr as any).comparators.has(session.id)).toBe(false);
+      expect((sessionMgr as any).detectorUnsubscribes.has(session.id)).toBe(false);
     });
   });
 });

@@ -1,45 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  runOptionalRuntimeSetup,
-  writeRuntimeConfigWithWarning,
-  type RuntimeSetupHooks,
+  createCodexConfigAuditApi,
+  logCodexConfigFindings,
   type ServerWarnLogger,
 } from '../server.js';
-import type { ProviderDefinition } from '@coder-studio/core';
 
 describe('server startup logging', () => {
   const logger: ServerWarnLogger = {
     warn: vi.fn(),
   };
 
-  const providers: ProviderDefinition[] = [];
-
   beforeEach(() => {
     vi.mocked(logger.warn).mockReset();
   });
 
-  it('logs bridge deployment failures through the structured logger', async () => {
-    const hooks: RuntimeSetupHooks = {
-      deployBridgeScripts: vi.fn().mockRejectedValue(new Error('boom')),
-      auditExternalConfigs: vi.fn().mockReturnValue({
-        codex: { configPath: '/tmp/config.toml', findings: [] },
-      }),
-    };
-
-    await runOptionalRuntimeSetup(hooks, providers, logger);
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        err: expect.any(Error),
-      }),
-      'Failed to deploy provider bridge scripts — hooks may not fire'
-    );
-  });
-
   it('logs codex audit findings through the structured logger', async () => {
-    const hooks: RuntimeSetupHooks = {
-      deployBridgeScripts: vi.fn().mockResolvedValue(undefined),
-      auditExternalConfigs: vi.fn().mockReturnValue({
+    const auditApi = {
+      audit: vi.fn().mockReturnValue({
         codex: {
           configPath: '/tmp/config.toml',
           findings: [{ startLine: 12, message: 'remove notify override' }],
@@ -47,7 +24,7 @@ describe('server startup logging', () => {
       }),
     };
 
-    await runOptionalRuntimeSetup(hooks, providers, logger);
+    await logCodexConfigFindings(auditApi, logger);
 
     expect(logger.warn).toHaveBeenCalledWith(
       {
@@ -59,29 +36,26 @@ describe('server startup logging', () => {
     );
   });
 
-  it('logs runtime.json write failures through the structured logger', () => {
-    const runtime = {
-      host: '127.0.0.1',
-      port: 3000,
-      pid: 1,
-      token: 't',
-      serverInstanceId: 's',
-      startedAt: 0,
+  it('logs audit failures as non-fatal warnings', async () => {
+    const auditApi = {
+      audit: vi.fn(() => {
+        throw new Error('boom');
+      }),
     };
 
-    writeRuntimeConfigWithWarning(
-      runtime,
-      logger,
-      () => {
-        throw new Error('disk full');
-      }
-    );
+    await logCodexConfigFindings(auditApi, logger);
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         err: expect.any(Error),
       }),
-      'Failed to write runtime.json — provider hooks will not reach the server'
+      'Codex config audit failed (non-fatal)'
     );
+  });
+
+  it('creates an audit api wired to the codex config helpers', () => {
+    const auditApi = createCodexConfigAuditApi();
+    expect(typeof auditApi.audit).toBe('function');
+    expect(typeof auditApi.cleanup).toBe('function');
   });
 });

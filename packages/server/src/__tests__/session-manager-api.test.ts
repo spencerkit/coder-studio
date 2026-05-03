@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../bus/event-bus.js';
 import { SessionManager } from '../session/manager.js';
 import { TerminalManager } from '../terminal/manager.js';
@@ -78,6 +78,10 @@ describe('SessionManager session-level API', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const createSession = async () => {
     const session = await sessionMgr.create({
       workspaceId: 'ws-1',
@@ -122,6 +126,206 @@ describe('SessionManager session-level API', () => {
     onData?.('abcdefghij');
 
     expect(sessionMgr.getOutputTail(session.id, 4).toString()).toBe('ghij');
+  });
+
+  it('returns rendered text from the session headless snapshot buffer', async () => {
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls[0]?.[0];
+    expect(onData).toBeTypeOf('function');
+
+    onData?.('hello \x1b[31mworld\x1b[0m\n');
+
+    await expect(
+      sessionMgr.getRenderedSnapshot(session.id, { maxLines: 10, maxChars: 1000 })
+    ).resolves.toBe('hello world');
+  });
+
+  it('returns empty string when the session snapshot buffer is unavailable', async () => {
+    const session = await createSession();
+    terminalMgr.get(session.terminalId)?.snapshotBuffer?.dispose();
+
+    await expect(
+      sessionMgr.getRenderedSnapshot(session.id, { maxLines: 10, maxChars: 1000 })
+    ).resolves.toBe('');
+  });
+
+  it('records the latest submitted user input for supervisor context', async () => {
+    const session = await createSession();
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', '  fix the build  ');
+    sessionMgr.sendInput(session.id, Buffer.from('draft'), 'typing');
+
+    expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
+  });
+
+  it('subscribes PTY detector shadow mode when provider exposes idle heuristics', async () => {
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+
+    const session = await createSession();
+    const outputHandlers = vi
+      .mocked((eventBus as any).handlers?.get?.('terminal.output') ?? new Set())
+    expect(session).toBeDefined()
+    expect((sessionMgr as any).detectors.get(session.id)).toBeDefined()
+    expect((sessionMgr as any).comparators.get(session.id)).toBeDefined()
+    expect((sessionMgr as any).detectorUnsubscribes.get(session.id)).toBeTypeOf('function')
+    expect(outputHandlers.size).toBeGreaterThan(0)
+  });
+
+  it('moves a PTY-driven session to idle after startup output without emitting turn_completed', async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+    const lifecycleEvents: string[] = [];
+    eventBus.on('session.lifecycle', (event) => lifecycleEvents.push(event.event));
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+    expect(sessionMgr.get(session.id)?.state).toBe('starting');
+
+    onData?.('booting up\n');
+    expect(sessionMgr.get(session.id)?.state).toBe('running');
+
+    vi.advanceTimersByTime(3000);
+
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(lifecycleEvents).toEqual([]);
+  });
+
+  it('emits turn_completed only after an armed submit returns to idle', async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+    const lifecycleEvents: string[] = [];
+    eventBus.on('session.lifecycle', (event) => lifecycleEvents.push(event.event));
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+    onData?.('booting up\n');
+    vi.advanceTimersByTime(3000);
+    lifecycleEvents.length = 0;
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', 'fix the build');
+    expect(sessionMgr.get(session.id)?.state).toBe('running');
+
+    onData?.('working...\n');
+    vi.advanceTimersByTime(3000);
+
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
+    expect(lifecycleEvents).toEqual(['turn_completed']);
+  });
+
+  it('arms turn completion for system input without overwriting latest submitted user input', async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+    const lifecycleEvents: string[] = [];
+    eventBus.on('session.lifecycle', (event) => lifecycleEvents.push(event.event));
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+    onData?.('booting up\n');
+    vi.advanceTimersByTime(3000);
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', 'fix the build');
+    onData?.('working...\n');
+    vi.advanceTimersByTime(3000);
+    lifecycleEvents.length = 0;
+
+    sessionMgr.sendInput(session.id, Buffer.from('[Supervisor] follow up\r', 'utf8'), 'system');
+    expect(sessionMgr.get(session.id)?.state).toBe('running');
+
+    onData?.('agent reply\n');
+    vi.advanceTimersByTime(3000);
+
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
+    expect(lifecycleEvents).toEqual(['turn_completed']);
+  });
+
+  it('does not expose a resume API', () => {
+    expect((sessionMgr as unknown as { resume?: unknown }).resume).toBeUndefined();
   });
 
   it('throws on unknown session id for sendInput', () => {

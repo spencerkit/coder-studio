@@ -43,7 +43,6 @@ describe('supervisor commands', () => {
       workspaceMgr: {} as any,
       sessionMgr: {} as any,
       terminalMgr: {} as any,
-      hooksMgr: {} as any,
       eventBus: {} as any,
       broadcaster: { broadcast: vi.fn() } as any,
       providerRegistry: [],

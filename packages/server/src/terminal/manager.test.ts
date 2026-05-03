@@ -622,6 +622,35 @@ describe('TerminalManager', () => {
         status: 'unsupported',
       })
     })
+
+    it('renders a text snapshot for agent terminals', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
+
+      onDataCallback('hello \x1b[31mworld\x1b[0m\n')
+
+      await expect(
+        manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+      ).resolves.toBe('hello world')
+    })
+
+    it('returns an empty rendered snapshot when snapshotting is unsupported', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+
+      await expect(
+        manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+      ).resolves.toBe('')
+    })
   })
 
   describe('get', () => {
