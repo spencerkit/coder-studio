@@ -476,6 +476,12 @@ describe('parseArgs', () => {
     });
   });
 
+  it('parses version command', () => {
+    expect(parseArgs(['version'])).toEqual({
+      command: 'version',
+    });
+  });
+
   it('parses server alias as serve', () => {
     expect(parseArgs(['server'])).toEqual({
       command: 'serve',

@@ -89,6 +89,7 @@ export function parseArgs(argv: string[]): CliArgs {
       case 'stop':
       case 'status':
       case 'logs':
+      case 'version':
         setCommand(args, arg);
         break;
 
