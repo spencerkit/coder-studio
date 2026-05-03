@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import userEvent from '@testing-library/user-event';
 import type { GitStatus } from '@coder-studio/core';
 import { localeAtom } from '../../../../atoms/app-ui';
 import { BranchQuickPick } from './branch-quick-pick';
@@ -131,6 +132,45 @@ describe('BranchQuickPick', () => {
       screen.getByPlaceholderText('Search branches or create new branch...')
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('data-selected', 'true');
+  });
+
+  it('does not keep the current branch selected when mobile focus moves to create branch', async () => {
+    viewportMocks.viewport = 'mobile';
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: 'ws-test',
+      inputValue: 'm',
+    });
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Create branch: m' })).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(screen.getByPlaceholderText('Search branches or create new branch...'), {
+      key: 'ArrowDown',
+    });
+
+    expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('data-selected', 'false');
+  });
+
+  it('renders localized copy for the mobile branch quick pick', () => {
+    viewportMocks.viewport = 'mobile';
+    store.set(localeAtom, 'zh');
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    expect(screen.getByRole('region', { name: '分支面板' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索分支或创建新分支...')).toBeInTheDocument();
   });
 
   it('shows create option for non-existent branch', async () => {

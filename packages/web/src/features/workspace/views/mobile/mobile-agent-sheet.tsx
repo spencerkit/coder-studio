@@ -166,6 +166,7 @@ export function MobileAgentSheet({
         sections={mode === 'sessions' ? sessionSections : providerSections}
         selectedId={mode === 'sessions' ? activeSession?.id ?? null : null}
         emptyText={mode === 'sessions' ? t('mobile.agent.empty') : undefined}
+        closeOnSelect={false}
         onBack={mode === 'providers' ? () => setMode('sessions') : undefined}
         onClose={closeSheet}
         onSelect={(id) => {
@@ -175,7 +176,7 @@ export function MobileAgentSheet({
             return;
           }
 
-          void launch(id as 'claude' | 'codex');
+          return launch(id as 'claude' | 'codex');
         }}
       />
     </div>

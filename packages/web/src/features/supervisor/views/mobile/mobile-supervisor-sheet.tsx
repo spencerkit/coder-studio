@@ -2,12 +2,14 @@ import { useSetAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 import { supervisorDialogAtom } from '../../atoms';
 import { useTranslation } from '../../../../lib/i18n';
+import { MobileSelectSheet } from '../../../mobile-select';
 import {
   ObjectiveDialogContent,
   ObjectiveDialogModeIcon,
 } from '../shared/objective-dialog-content';
 import { SupervisorCard } from '../shared/supervisor-card';
 import {
+  OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
@@ -65,6 +67,33 @@ export function MobileSupervisorSheet({
     setDetailMode(nextMode);
   };
 
+  if (detailMode && evaluatorPickerOpen) {
+    return (
+      <MobileSelectSheet
+        title={t('supervisor.field.evaluator')}
+        sections={[
+          {
+            kind: 'options',
+            id: 'evaluator-providers',
+            items: OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
+              id: option.id,
+              label: option.label,
+            })),
+          },
+        ]}
+        selectedId={dialog.draftEvaluatorProviderId}
+        onBack={() => setEvaluatorPickerOpen(false)}
+        onClose={() => setEvaluatorPickerOpen(false)}
+        onSelect={(id) => {
+          updateDraft({
+            draftEvaluatorProviderId: id as ObjectiveDialogEvaluatorProviderId,
+          });
+          setEvaluatorPickerOpen(false);
+        }}
+      />
+    );
+  }
+
   if (detailMode) {
     return (
       <MobileSheet
@@ -100,14 +129,11 @@ export function MobileSupervisorSheet({
               draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
               disableObjective={disableObjective}
               onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
-              onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) => {
-                updateDraft({ draftEvaluatorProviderId });
-                setEvaluatorPickerOpen(false);
-              }}
+              onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
+                updateDraft({ draftEvaluatorProviderId })
+              }
               mobileEvaluatorPicker={{
-                open: evaluatorPickerOpen,
                 onOpen: () => setEvaluatorPickerOpen(true),
-                onClose: () => setEvaluatorPickerOpen(false),
                 isMobile: true,
               }}
             />

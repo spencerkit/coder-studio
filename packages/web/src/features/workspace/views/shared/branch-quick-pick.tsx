@@ -1,11 +1,13 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { useViewport } from '../../../../hooks/use-viewport';
+import { useTranslation } from '../../../../lib/i18n';
 import { MobileSelectSheet } from '../../../mobile-select';
 import { useBranchQuickPickActions } from '../../actions/use-git-actions';
 
 export function BranchQuickPick() {
   const viewport = useViewport();
+  const t = useTranslation();
   const {
     branchList,
     displayItems,
@@ -167,7 +169,7 @@ export function BranchQuickPick() {
   const selectedId =
     selectedItem?.type === 'branch' && selectedItem.branch
       ? selectedItem.branch.name
-      : branchList.current;
+      : null;
   const hasExactMatch = displayItems.some(
     (item) =>
       item.type === 'branch' &&
@@ -178,7 +180,7 @@ export function BranchQuickPick() {
     .map((item) => ({
       id: item.branch!.name,
       label: item.branch!.name,
-      badge: item.branch!.isRemote ? 'Remote' : undefined,
+      badge: item.branch!.isRemote ? t('git.branch_remote') : undefined,
     }));
   const createItem = displayItems.find(
     (item) => item.type === 'create' || item.type === 'confirm-create'
@@ -187,9 +189,9 @@ export function BranchQuickPick() {
   return (
     <div onKeyDown={handleKeyDown}>
       <MobileSelectSheet
-        title="Branch"
+        title={t('git.branch')}
         searchable
-        searchPlaceholder="Search branches or create new branch..."
+        searchPlaceholder={t('git.quick_pick.search_placeholder')}
         searchValue={inputValue}
         onSearchValueChange={(value) => {
           setInputValue(value);
@@ -205,11 +207,13 @@ export function BranchQuickPick() {
         ]}
         selectedId={selectedId}
         loading={branchList.loading}
-        loadingText="Loading branches..."
-        emptyText={inputValue ? 'No branches found' : 'Type to search branches'}
+        loadingText={t('git.quick_pick.loading')}
+        emptyText={
+          inputValue ? t('git.quick_pick.empty_filtered') : t('git.quick_pick.empty_idle')
+        }
         create={{
           visible: Boolean(trimmedInput) && !hasExactMatch,
-          label: () => createItem?.label ?? `Create branch: ${trimmedInput}`,
+          label: () => createItem?.label ?? t('git.quick_pick.create', { name: trimmedInput }),
           onCreate: async () => {
             if (createItem?.type === 'confirm-create') {
               await handleBranchCreate(trimmedInput);

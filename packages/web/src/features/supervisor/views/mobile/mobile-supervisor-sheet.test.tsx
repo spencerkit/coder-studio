@@ -100,12 +100,13 @@ describe('MobileSupervisorSheet', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Enable Objective' }));
-    await user.click(screen.getByRole('button', { name: 'Evaluator' }));
+    await user.click(screen.getByRole('button', { name: 'Evaluator Claude' }));
 
     expect(screen.getByRole('region', { name: 'Evaluator sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
 
     await user.click(screen.getByRole('button', { name: 'Codex' }));
 
-    expect(screen.getByRole('button', { name: 'Evaluator' })).toHaveTextContent('Codex');
+    expect(screen.getByRole('button', { name: 'Evaluator Codex' })).toBeInTheDocument();
   });
 });

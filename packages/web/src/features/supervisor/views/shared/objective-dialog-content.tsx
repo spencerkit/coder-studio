@@ -1,7 +1,6 @@
 import { useId } from 'react';
 import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from 'lucide-react';
 import { useTranslation } from '../../../../lib/i18n';
-import { MobileSelectSheet } from '../../../mobile-select';
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
@@ -16,9 +15,7 @@ interface ObjectiveDialogContentProps {
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
   mobileEvaluatorPicker?: {
-    open: boolean;
     onOpen: () => void;
-    onClose: () => void;
     isMobile: boolean;
   };
 }
@@ -101,9 +98,9 @@ export function ObjectiveDialogContent({
               id="evaluator-provider-trigger"
               type="button"
               className="input mobile-select-trigger"
-              aria-labelledby={evaluatorLabelId}
-              aria-describedby={`${evaluatorValueId} ${evaluatorHelperId}`}
-              aria-expanded={mobileEvaluatorPicker.open}
+              aria-labelledby={`${evaluatorLabelId} ${evaluatorValueId}`}
+              aria-describedby={evaluatorHelperId}
+              aria-haspopup="dialog"
               onClick={mobileEvaluatorPicker.onOpen}
             >
               <span id={evaluatorValueId} className="mobile-select-trigger__value">
@@ -115,26 +112,6 @@ export function ObjectiveDialogContent({
                 aria-hidden="true"
               />
             </button>
-            {mobileEvaluatorPicker.open ? (
-              <MobileSelectSheet
-                title={t('supervisor.field.evaluator')}
-                sections={[
-                  {
-                    kind: 'options',
-                    id: 'evaluator-providers',
-                    items: OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
-                      id: option.id,
-                      label: option.label,
-                    })),
-                  },
-                ]}
-                selectedId={draftEvaluatorProviderId}
-                onSelect={(id) =>
-                  onDraftEvaluatorProviderChange(id as ObjectiveDialogEvaluatorProviderId)
-                }
-                onClose={mobileEvaluatorPicker.onClose}
-              />
-            ) : null}
           </>
         ) : (
           <select
