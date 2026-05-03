@@ -288,6 +288,43 @@ describe('BranchQuickPick', () => {
     });
   });
 
+  it('keeps the mobile keyboard target on confirm create after tapping create with mixed results', async () => {
+    const user = userEvent.setup();
+    viewportMocks.viewport = 'mobile';
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: 'ws-test',
+      inputValue: 'm',
+    });
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    const input = screen.getByPlaceholderText('Search branches or create new branch...');
+
+    await user.click(screen.getByRole('button', { name: 'Create branch: m' }));
+
+    expect(screen.getByRole('button', { name: 'Confirm create branch: m' })).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(sendCommandMock).toHaveBeenCalledWith('git.checkout', {
+        workspaceId: 'ws-test',
+        ref: 'm',
+        createBranch: true,
+      });
+    });
+
+    expect(sendCommandMock).not.toHaveBeenCalledWith('git.checkout', {
+      workspaceId: 'ws-test',
+      ref: 'main',
+    });
+  });
+
   it('navigates with arrow keys', async () => {
     render(
       <Provider store={store}>
