@@ -9,6 +9,7 @@ import { useWorkspaceScreenModel } from '../../actions/use-workspace-screen-mode
 import { FileTreePanel } from '../shared/file-tree-panel';
 import { GitDiffViewer } from '../shared/git-diff-viewer';
 import { GitPanel } from '../shared/git-panel';
+import { GitStatusBar } from '../shared/git-status-bar';
 
 export const WorkspaceDesktopView: FC = () => {
   const t = useTranslation();
@@ -70,19 +71,22 @@ export const WorkspaceDesktopView: FC = () => {
                     <GitBranch size={12} />
                     <span>{panelBranch}</span>
                   </button>
-                  <div className="panel-tabs">
-                    <button
-                      className={`panel-tab ${sidebarTab === 'files' ? 'active' : ''}`}
-                      onClick={() => setSidebarTab('files')}
-                    >
-                      Files
-                    </button>
-                    <button
-                      className={`panel-tab ${sidebarTab === 'git' ? 'active' : ''}`}
-                      onClick={() => setSidebarTab('git')}
-                    >
-                      Git Diff
-                    </button>
+                  <div className="panel-tabs-row">
+                    <div className="panel-tabs">
+                      <button
+                        className={`panel-tab ${sidebarTab === 'files' ? 'active' : ''}`}
+                        onClick={() => setSidebarTab('files')}
+                      >
+                        Files
+                      </button>
+                      <button
+                        className={`panel-tab ${sidebarTab === 'git' ? 'active' : ''}`}
+                        onClick={() => setSidebarTab('git')}
+                      >
+                        Git Diff
+                      </button>
+                    </div>
+                    <GitStatusBar workspaceId={workspace.id} gitState={gitState} inline />
                   </div>
                 </div>
 

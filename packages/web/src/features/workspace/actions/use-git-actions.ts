@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import type { GitBranch, GitFileChange, GitStatus } from '@coder-studio/core';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import {
   branchQuickPickAtom,
+  fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type GitDiffPreview,
 } from '../atoms';
 import { useTranslation } from '../../../lib/i18n';
+import { pushToastAtom } from '../../notifications/atoms';
 
 export type GitChangeType = 'staged' | 'modified' | 'untracked' | 'deleted';
 
@@ -29,6 +31,125 @@ interface GitCheckoutResult {
   success: boolean;
   message: string;
   branch?: string;
+}
+
+interface GitSyncResult {
+  success: boolean;
+  message: string;
+  updatedFiles?: string[];
+}
+
+export function useGitSyncActions(workspaceId: string) {
+  const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
+  const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
+  const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
+  const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
+
+  const refreshBranchState = useCallback(async () => {
+    if (!workspaceId) {
+      return false;
+    }
+
+    const [branchResult, statusResult] = await Promise.all([
+      dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+        workspaceId,
+      }),
+      dispatch<GitStatus>('git.status', {
+        workspaceId,
+      }),
+    ]);
+
+    if (branchResult.ok && branchResult.data) {
+      setBranchList({
+        current: branchResult.data.current,
+        branches: branchResult.data.branches,
+        loading: false,
+      });
+    } else {
+      setBranchList((prev) => ({
+        ...prev,
+        loading: false,
+      }));
+    }
+
+    if (statusResult.ok && statusResult.data) {
+      setGitState(statusResult.data);
+    }
+    return branchResult.ok && statusResult.ok;
+  }, [dispatch, setBranchList, setGitState, workspaceId]);
+
+  const runSyncAction = useCallback(
+    async (
+      op: 'git.push' | 'git.pull',
+      options: {
+        successTitle: string;
+        fallbackSuccessBody?: string;
+        errorTitle: string;
+        markFileTreeStale?: boolean;
+      }
+    ) => {
+      if (!workspaceId) {
+        return false;
+      }
+
+      const result = await dispatch<GitSyncResult>(op, { workspaceId });
+
+      if (!result.ok || !result.data?.success) {
+        const body = result.error?.message ?? result.data?.message;
+        pushToast({
+          kind: 'error',
+          title: options.errorTitle,
+          body,
+        });
+        console.error(`Failed to run ${op}:`, body);
+        return false;
+      }
+
+      await refreshBranchState();
+
+      if (options.markFileTreeStale) {
+        setFileTreeStale(true);
+      }
+
+      pushToast({
+        kind: 'success',
+        title: options.successTitle,
+        body: result.data.message || options.fallbackSuccessBody,
+      });
+
+      return true;
+    },
+    [dispatch, pushToast, refreshBranchState, setFileTreeStale, workspaceId]
+  );
+
+  const handlePush = useCallback(
+    async () =>
+      runSyncAction('git.push', {
+        successTitle: t('git.push_success_title'),
+        fallbackSuccessBody: t('git.push_success_body'),
+        errorTitle: t('git.push_failed_title'),
+      }),
+    [runSyncAction, t]
+  );
+
+  const handlePull = useCallback(
+    async () =>
+      runSyncAction('git.pull', {
+        successTitle: t('git.pull_success_title'),
+        fallbackSuccessBody: t('git.pull_success_body'),
+        errorTitle: t('git.pull_failed_title'),
+        markFileTreeStale: true,
+      }),
+    [runSyncAction, t]
+  );
+
+  return {
+    handlePull,
+    handlePush,
+    refreshBranchState,
+  };
 }
 
 interface UseGitPanelActionsArgs {
@@ -434,10 +555,10 @@ export function useBranchQuickPickActions() {
   const quickPickState = useAtomValue(branchQuickPickAtom);
   const setQuickPick = useSetAtom(branchQuickPickAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const store = useStore();
-
   const workspaceId = quickPickState.workspaceId;
   const branchList = useAtomValue(gitBranchListAtomFamily(workspaceId ?? ''));
+  const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId ?? ''));
+  const { refreshBranchState } = useGitSyncActions(workspaceId ?? '');
 
   const [inputValue, setInputValue] = useState(quickPickState.inputValue);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -453,6 +574,70 @@ export function useBranchQuickPickActions() {
       setPendingCreateBranchName(null);
     }
   }, [quickPickState.visible]);
+
+  useEffect(() => {
+    if (!quickPickState.visible || !workspaceId) {
+      return;
+    }
+
+    if (branchList.branches.length > 0) {
+      setBranchList((prev) => ({
+        ...prev,
+        loading: false,
+        error: undefined,
+      }));
+      return;
+    }
+
+    let cancelled = false;
+
+    setBranchList((prev) => ({
+      ...prev,
+      loading: true,
+      error: undefined,
+    }));
+
+    void dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+      workspaceId,
+    })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          setBranchList((prev) => ({
+            ...prev,
+            loading: false,
+            error: result.error?.message ?? 'Failed to load branches',
+          }));
+          console.error('Failed to load git branches:', result.error?.message);
+          return;
+        }
+
+        setBranchList({
+          current: result.data.current,
+          branches: result.data.branches,
+          loading: false,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setBranchList((prev) => ({
+          ...prev,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to load branches',
+        }));
+        console.error('Failed to load git branches:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [branchList.branches.length, dispatch, quickPickState.visible, setBranchList, workspaceId]);
 
   const trimmedInput = inputValue.trim();
 
@@ -509,35 +694,6 @@ export function useBranchQuickPickActions() {
       inputValue: '',
     });
   }, [setQuickPick]);
-
-  const refreshBranchState = useCallback(async () => {
-    if (!workspaceId) {
-      return false;
-    }
-
-    const [branchResult, statusResult] = await Promise.all([
-      dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
-        workspaceId,
-      }),
-      dispatch<GitStatus>('git.status', {
-        workspaceId,
-      }),
-    ]);
-
-    if (branchResult.ok && branchResult.data) {
-      store.set(gitBranchListAtomFamily(workspaceId), {
-        current: branchResult.data.current,
-        branches: branchResult.data.branches,
-        loading: false,
-      });
-    }
-
-    if (statusResult.ok && statusResult.data) {
-      store.set(gitStateAtomFamily(workspaceId), statusResult.data);
-    }
-
-    return branchResult.ok && statusResult.ok;
-  }, [dispatch, store, workspaceId]);
 
   const handleRequestBranchCreate = useCallback((branchName: string) => {
     if (!branchName) {

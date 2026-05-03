@@ -27,7 +27,7 @@ import { paneLayoutAtomFamily } from '../../features/agent-panes/atoms/pane-layo
 import { supervisorsAtom, supervisorCyclesAtom } from '../../features/supervisor/atoms';
 import { workspacesLoadErrorAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
 import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
-import { gitDiffPreviewAtomFamily } from '../../features/workspace/atoms';
+import { branchQuickPickAtom, gitDiffPreviewAtomFamily, gitStateAtomFamily } from '../../features/workspace/atoms';
 import type { Session } from '@coder-studio/core';
 
 const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
@@ -47,9 +47,19 @@ vi.mock('../../features/command-palette', () => ({
   CommandPalette: () => null,
 }));
 
-vi.mock('../../features/workspace/views/shared/branch-quick-pick', () => ({
-  BranchQuickPick: () => null,
-}));
+vi.mock('../../features/workspace/views/shared/branch-quick-pick', async () => {
+  const [{ useAtomValue }, { branchQuickPickAtom }] = await Promise.all([
+    import('jotai'),
+    import('../../features/workspace/atoms'),
+  ]);
+
+  return {
+    BranchQuickPick: () => {
+      const quickPick = useAtomValue(branchQuickPickAtom);
+      return quickPick.visible ? <div data-testid="branch-quick-pick-overlay-mock" /> : null;
+    },
+  };
+});
 
 vi.mock('../../features/auth', () => ({
   LoginPage: () => <div>LoginPage</div>,
@@ -506,6 +516,54 @@ describe('MobileShell Phase 2 workspace', () => {
     await user.click(screen.getByRole('button', { name: /back|返回/i }));
 
     expect(screen.queryByRole('tab', { name: 'Files' })).not.toBeInTheDocument();
+  });
+
+  it('shows the current branch name in the files sheet', async () => {
+    const user = userEvent.setup();
+    const { store } = renderMobileShell({ initialEntry: '/workspace' });
+
+    store.set(gitStateAtomFamily('ws-1'), {
+      branch: 'feature/mobile-branch-pill',
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [],
+      deleted: [],
+      untracked: [],
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
+
+    expect(
+      screen.getByRole('button', { name: 'Current Branch: feature/mobile-branch-pill' })
+    ).toBeInTheDocument();
+  });
+
+  it('opens branch quick pick from the mobile branch pill', async () => {
+    const user = userEvent.setup();
+    const { store } = renderMobileShell({ initialEntry: '/workspace' });
+
+    store.set(gitStateAtomFamily('ws-1'), {
+      branch: 'feature/mobile-branch-pill',
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [],
+      deleted: [],
+      untracked: [],
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Current Branch: feature/mobile-branch-pill' })
+    );
+
+    expect(store.get(branchQuickPickAtom)).toEqual({
+      visible: true,
+      workspaceId: 'ws-1',
+      inputValue: '',
+    });
+    expect(screen.getByTestId('branch-quick-pick-overlay-mock')).toBeInTheDocument();
   });
 
   it('opens the workspace drawer and switches active workspace', async () => {

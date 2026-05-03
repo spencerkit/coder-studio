@@ -1,8 +1,13 @@
 import { useState } from 'react';
+import { ChevronDown, GitBranch } from 'lucide-react';
+import { useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
+import { branchQuickPickAtom, gitStateAtomFamily } from '../../atoms';
 import type { MobileFilesRoute } from '../../actions/use-workspace-screen-model';
 import { FileTreePanel } from '../shared/file-tree-panel';
 import { GitPanel } from '../shared/git-panel';
 import { GitDiffViewer } from '../shared/git-diff-viewer';
+import { GitStatusBar } from '../shared/git-status-bar';
 import { useTranslation } from '../../../../lib/i18n';
 import {
   CodeEditorHost,
@@ -25,7 +30,10 @@ export function MobileFilesSheet({
   editorState,
 }: MobileFilesSheetProps) {
   const t = useTranslation();
+  const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
+  const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');
+  const branchName = gitState?.branch?.trim() || t('git.no_branch');
 
   const handleSelectFile = (path: string) => {
     onRouteChange?.({ kind: 'editor', path });
@@ -37,6 +45,14 @@ export function MobileFilesSheet({
 
   const handleBack = () => {
     onRouteChange?.({ kind: 'root' });
+  };
+
+  const handleOpenBranchSwitcher = () => {
+    setBranchQuickPick({
+      visible: true,
+      workspaceId,
+      inputValue: '',
+    });
   };
 
   if (route.kind === 'editor') {
@@ -85,29 +101,52 @@ export function MobileFilesSheet({
 
   return (
     <div className="mobile-files-sheet">
-      <div
-        className="panel-tabs mobile-files-sheet__tabs"
-        role="tablist"
-        aria-label={t('mobile.files.tabs')}
-      >
+      <div className="mobile-files-sheet__branch-row">
         <button
+          className="panel-branch panel-branch-button mobile-files-sheet__branch"
+          onClick={handleOpenBranchSwitcher}
+          aria-label={`${t('git.current_branch')}: ${branchName}`}
+          title={branchName}
           type="button"
-          role="tab"
-          aria-selected={activeTab === 'files'}
-          className={`panel-tab ${activeTab === 'files' ? 'active' : ''}`}
-          onClick={() => setActiveTab('files')}
         >
-          {t('file.title')}
+          <span className="mobile-files-sheet__branch-icon" aria-hidden="true">
+            <GitBranch size={12} />
+          </span>
+          <span className="mobile-files-sheet__branch-copy">
+            <span className="mobile-files-sheet__branch-label">{t('git.current_branch')}</span>
+            <span className="mobile-files-sheet__branch-name">{branchName}</span>
+          </span>
+          <span className="mobile-files-sheet__branch-chevron" aria-hidden="true">
+            <ChevronDown size={14} />
+          </span>
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'git'}
-          className={`panel-tab ${activeTab === 'git' ? 'active' : ''}`}
-          onClick={() => setActiveTab('git')}
+      </div>
+      <div className="panel-tabs-row mobile-files-sheet__tabs-row">
+        <div
+          className="panel-tabs mobile-files-sheet__tabs"
+          role="tablist"
+          aria-label={t('mobile.files.tabs')}
         >
-          {t('mobile.files.git_diff')}
-        </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'files'}
+            className={`panel-tab ${activeTab === 'files' ? 'active' : ''}`}
+            onClick={() => setActiveTab('files')}
+          >
+            {t('file.title')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'git'}
+            className={`panel-tab ${activeTab === 'git' ? 'active' : ''}`}
+            onClick={() => setActiveTab('git')}
+          >
+            {t('mobile.files.git_diff')}
+          </button>
+        </div>
+        <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />
       </div>
 
       <div className="mobile-files-sheet__content">

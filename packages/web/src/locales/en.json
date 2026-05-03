@@ -291,7 +291,23 @@
     "no_branch": "Not on any branch",
     "ahead": "{count} commits ahead",
     "behind": "{count} commits behind",
-    "synced": "Synced with remote"
+    "synced": "Synced with remote",
+    "push_confirm_title": "Push Changes",
+    "push_confirm_message": "Do you want to push {count} local commits to the remote?",
+    "pull_confirm_title": "Pull Changes",
+    "pull_confirm_message": "Do you want to pull {count} remote commits into your local branch?",
+    "sync_confirm_helper": "This action updates your current branch and workspace state.",
+    "push_success_title": "Push completed",
+    "push_success_body": "Local commits were pushed to the remote.",
+    "pull_success_title": "Pull completed",
+    "pull_success_body": "Latest remote commits were pulled into your local branch.",
+    "push_failed_title": "Push failed",
+    "pull_failed_title": "Pull failed",
+    "statusbar": {
+      "changes": "Uncommitted file changes",
+      "ahead": "Local commits to push",
+      "behind": "Remote commits to pull"
+    }
   },
   "worktree": {
     "title": "Worktree",

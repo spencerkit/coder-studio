@@ -6776,7 +6776,7 @@ textarea.input {
   align-items: flex-start;
   justify-content: center;
   padding-top: var(--sp-16);
-  z-index: var(--z-modal-backdrop);
+  z-index: calc(var(--z-modal) + 1);
   animation: fadeIn var(--duration-fast) var(--ease-out);
 }
 
@@ -7914,6 +7914,79 @@ textarea.input {
     gap: 0;
   }
 
+  .mobile-files-sheet__branch-row {
+    padding: var(--sp-2) var(--sp-3) 0;
+    flex-shrink: 0;
+  }
+
+  .mobile-files-sheet__branch {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent-blue) 18%);
+    border-radius: 10px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--bg-hover) 78%, var(--accent-blue) 22%) 0%,
+        color-mix(in srgb, var(--bg-hover) 92%, transparent) 100%
+      );
+    color: var(--text-primary);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  }
+
+  .mobile-files-sheet__branch:hover {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--bg-hover) 68%, var(--accent-blue) 32%) 0%,
+        color-mix(in srgb, var(--bg-hover) 88%, var(--accent-blue) 12%) 100%
+      );
+  }
+
+  .mobile-files-sheet__branch:active {
+    transform: translateY(1px);
+  }
+
+  .mobile-files-sheet__branch-icon,
+  .mobile-files-sheet__branch-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: color-mix(in srgb, var(--text-secondary) 72%, var(--accent-blue) 28%);
+  }
+
+  .mobile-files-sheet__branch-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+
+  .mobile-files-sheet__branch-label {
+    font-size: 10px;
+    line-height: 1.1;
+    color: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .mobile-files-sheet__branch-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+
   .mobile-files-sheet__tabs {
     flex-shrink: 0;
   }
@@ -8738,4 +8811,86 @@ textarea.input {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+.panel-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.panel-tabs-row .panel-tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.git-status-bar--inline {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.git-status-bar__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.git-status-bar__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.git-status-bar__item--actionable {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 999px;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.git-status-bar__item--actionable:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.git-status-bar__item--actionable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 35%, transparent);
+}
+
+.git-status-bar__item--actionable:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.git-status-bar__item--ahead {
+  color: var(--accent-blue);
+}
+
+.git-status-bar__item--behind {
+  color: var(--orange, #e5a50a);
+}
+
+.git-status-bar__confirm {
+  min-width: min(420px, calc(100vw - 32px));
 }

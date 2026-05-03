@@ -291,7 +291,23 @@
     "no_branch": "不在任何分支上",
     "ahead": "领先 {count} 个提交",
     "behind": "落后 {count} 个提交",
-    "synced": "与远程同步"
+    "synced": "与远程同步",
+    "push_confirm_title": "推送更改",
+    "push_confirm_message": "是否将 {count} 个本地提交推送到远端？",
+    "pull_confirm_title": "拉取更改",
+    "pull_confirm_message": "是否从远端拉取 {count} 个最新提交到本地？",
+    "sync_confirm_helper": "该操作会更新当前分支和工作区状态。",
+    "push_success_title": "推送完成",
+    "push_success_body": "本地提交已推送到远端。",
+    "pull_success_title": "拉取完成",
+    "pull_success_body": "已拉取远端最新提交到当前分支。",
+    "push_failed_title": "推送失败",
+    "pull_failed_title": "拉取失败",
+    "statusbar": {
+      "changes": "未提交的文件变更",
+      "ahead": "待推送的本地提交",
+      "behind": "远端有新提交待拉取"
+    }
   },
   "worktree": {
     "title": "工作树",
