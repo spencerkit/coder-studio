@@ -259,8 +259,25 @@
   border-bottom: none;
 }
 
+.mobile-select-sheet__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .mobile-select-sheet__item[data-selected='true'] {
   background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-surface));
+}
+
+.mobile-select-sheet__item--danger .mobile-select-sheet__item-label {
+  color: var(--accent-red);
+}
+
+.mobile-select-sheet__item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .mobile-select-sheet__item-copy {
@@ -276,9 +293,23 @@
   color: var(--text-primary);
 }
 
+.mobile-select-sheet__item-description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
 .mobile-select-sheet__item-meta {
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+.mobile-select-sheet__item-badge {
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
 }
 
 .mobile-select-sheet__item-check {
@@ -297,6 +328,12 @@
 .mobile-select-sheet__empty {
   padding: var(--sp-6) var(--sp-4);
   color: var(--text-tertiary);
+  text-align: center;
+}
+
+.mobile-select-sheet__loading {
+  padding: var(--sp-6) var(--sp-4);
+  color: var(--text-secondary);
   text-align: center;
 }
 
