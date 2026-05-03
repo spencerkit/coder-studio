@@ -12,9 +12,8 @@ import type {
 import type { EventBus } from '../bus/event-bus'
 import { ActiveTerminal } from './active-terminal'
 import { RingBuffer } from './ring-buffer'
-
-// 64 MiB per terminal — freed when the terminal exits
-const RING_BUFFER_SIZE = 64 * 1024 * 1024
+import { RING_BUFFER_SIZE } from './constants'
+import { HeadlessSnapshotBuffer } from './terminal-snapshot-buffer'
 
 function isTerminalTraceEnabled(): boolean {
   return process.env.CODER_STUDIO_TERMINAL_TRACE === '1'
@@ -54,6 +53,10 @@ function traceTerminal(terminalId: TerminalId, event: string, details: Record<st
     ...details,
   })
 }
+
+type SnapshotResult =
+  | { status: 'ok'; data: Buffer; seq: number; cols: number; rows: number }
+  | { status: 'unsupported' }
 
 /**
  * Generate unique terminal ID
@@ -112,9 +115,16 @@ export class TerminalManager {
     }
 
     const ringBuffer = new RingBuffer(RING_BUFFER_SIZE)
+    const snapshotBuffer =
+      spec.kind === 'agent'
+        ? new HeadlessSnapshotBuffer({
+            cols: spec.cols ?? 120,
+            rows: spec.rows ?? 30,
+          })
+        : undefined
 
     // Create active terminal
-    const active = new ActiveTerminal(id, spec, pty, ringBuffer)
+    const active = new ActiveTerminal(id, spec, pty, ringBuffer, snapshotBuffer)
 
     // Wire up PTY events
     this.wireEvents(active)
@@ -162,6 +172,16 @@ export class TerminalManager {
         seq,
       } satisfies DomainEvent
       this.deps.eventBus.emit(event)
+
+      if (active.snapshotBuffer && !active.snapshotBuffer.disabled) {
+        try {
+          active.snapshotBuffer.write(buffer, seq)
+        } catch (err) {
+          traceTerminal(id, 'snapshot.write.error', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      }
     })
 
     // Handle PTY exit
@@ -180,6 +200,7 @@ export class TerminalManager {
 
       // Keep ActiveTerminal object for 1s to allow replay, then cleanup
       setTimeout(() => {
+        active.snapshotBuffer?.dispose()
         this.terminals.delete(id)
       }, 1000)
 
@@ -237,6 +258,15 @@ export class TerminalManager {
     terminal.currentCols = cols
     terminal.currentRows = rows
     terminal.pty.resize(cols, rows)
+    if (terminal.snapshotBuffer && !terminal.snapshotBuffer.disabled) {
+      try {
+        terminal.snapshotBuffer.resize(cols, rows)
+      } catch (err) {
+        traceTerminal(terminalId, 'snapshot.resize.error', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
   }
 
   /**
@@ -277,6 +307,36 @@ export class TerminalManager {
   }
 
   /**
+   * Serialize the current terminal screen state for hard-refresh recovery.
+   */
+  async snapshot(terminalId: TerminalId): Promise<SnapshotResult> {
+    const terminal = this.terminals.get(terminalId)
+    if (!terminal || terminal.spec.kind !== 'agent' || !terminal.snapshotBuffer) {
+      return { status: 'unsupported' }
+    }
+
+    if (terminal.snapshotBuffer.disabled) {
+      return { status: 'unsupported' }
+    }
+
+    try {
+      const result = await terminal.snapshotBuffer.snapshot()
+      return {
+        status: 'ok',
+        data: result.data,
+        seq: result.seq,
+        cols: result.cols,
+        rows: result.rows,
+      }
+    } catch (err) {
+      traceTerminal(terminalId, 'snapshot.unsupported', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return { status: 'unsupported' }
+    }
+  }
+
+  /**
    * Read the last N bytes of terminal output from the active ring buffer.
    */
   getRingBufferTail(terminalId: TerminalId, bytes: number): Buffer {
@@ -303,6 +363,7 @@ export class TerminalManager {
       if (terminal.alive) {
         terminal.pty.kill('SIGTERM')
       }
+      terminal.snapshotBuffer?.dispose()
     }
     this.terminals.clear()
   }

@@ -19,7 +19,11 @@ import { themeAtom } from '../../../../atoms/app-ui';
 import { useTranslation } from '../../../../lib/i18n';
 import { Topics } from '@coder-studio/core';
 import type { OutputBuffer } from '../../atoms';
-import type { TerminalBinaryPayload } from '../../../../ws/client';
+import type {
+  TerminalBinaryPayload,
+  TerminalReplayPayload,
+  TerminalSnapshotPayload,
+} from '../../../../ws/client';
 import {
   classifyReplayFailure,
   TERMINAL_REPLAY_TIMEOUT_MS,
@@ -267,6 +271,8 @@ interface XtermHostProps {
   readOnly?: boolean;
   /** Marks the session prioritized by workspace UI state */
   isActiveSession?: boolean;
+  /** Stable terminal kind for cold-start routing, with store metadata as fallback */
+  terminalKind?: 'agent' | 'shell';
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
 }
@@ -286,6 +292,24 @@ interface ReplayCommandResult {
   error?: unknown;
 }
 
+interface SnapshotPayload {
+  status: 'ok' | 'unsupported';
+  transport?: 'binary';
+  streamId?: number;
+  size?: number;
+  seq?: number;
+  rows?: number;
+  cols?: number;
+  source?: 'headless';
+  bytes?: Uint8Array;
+}
+
+interface SnapshotCommandResult {
+  ok: boolean;
+  data?: SnapshotPayload;
+  error?: unknown;
+}
+
 /**
  * XtermHost renders an xterm.js terminal instance
  *
@@ -299,6 +323,7 @@ export function XtermHost({
   workspaceId,
   readOnly = false,
   isActiveSession = false,
+  terminalKind: terminalKindProp,
 }: XtermHostProps) {
   const t = useTranslation();
   const viewport = useViewport();
@@ -307,6 +332,7 @@ export function XtermHost({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
+  const terminalKind = terminalKindProp ?? meta?.kind ?? 'shell';
   const isInteractive = !readOnly && meta?.alive !== false;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -328,6 +354,7 @@ export function XtermHost({
   const pendingReplayChunksRef = useRef<Array<{ bytes: Uint8Array; seq: number }>>([]);
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
+  const coldStartStateRef = useRef<'idle' | 'in-flight' | 'done'>('idle');
   // Tracks whether xterm is currently processing replay data. While > 0,
   // handleInput suppresses all terminal.onData callbacks — this prevents
   // xterm.js auto-responses (e.g. DSR `\x1b[6n` → `\x1b[row;colR`) from
@@ -698,6 +725,7 @@ export function XtermHost({
 
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
+    coldStartStateRef.current = 'idle';
     pendingReplayChunksRef.current = [];
     lastReportedSizeRef.current = null;
     setReplayUiState({ kind: 'loading' });
@@ -820,22 +848,29 @@ export function XtermHost({
       }
     };
 
-    const finishReplay = (result: ReplayCommandResult | null) => {
+    const finishHistoricalLoad = (
+      result: ReplayCommandResult | null,
+      options: {
+        successStatus: 'ok';
+        successBytes: Uint8Array | undefined;
+        coveredSeq: number | undefined;
+      }
+    ) => {
       if (!mountedRef.current || !terminalRef.current || !result) {
         return;
       }
 
       let coveredSeq = replayedSeqRef.current;
-      if (result.ok && result.data?.status === 'ok') {
-        if (result.data.bytes) {
-          traceTerminal(terminalId, 'write.replay', {
-            seq: result.data.seq,
-            size: result.data.bytes.byteLength,
-            summary: summarizeTerminalData(result.data.bytes),
+      if (result.ok && result.data?.status === options.successStatus) {
+        if (options.successBytes) {
+          traceTerminal(terminalId, 'write.historical', {
+            seq: options.coveredSeq,
+            size: options.successBytes.byteLength,
+            summary: summarizeTerminalData(options.successBytes),
           });
-          writeReplayBytes(result.data.bytes);
+          writeReplayBytes(options.successBytes);
         }
-        coveredSeq = result.data.seq ?? coveredSeq;
+        coveredSeq = options.coveredSeq ?? coveredSeq;
         setReplayUiState({ kind: 'ready' });
         if (viewport !== 'mobile') {
           hydrationHandleRef.current?.release();
@@ -874,7 +909,16 @@ export function XtermHost({
 
       replayedSeqRef.current = coveredSeq;
       replayCompletedRef.current = true;
+      coldStartStateRef.current = 'done';
       flushPendingReplayChunks(coveredSeq);
+    };
+
+    const finishReplay = (result: ReplayCommandResult | null) => {
+      finishHistoricalLoad(result, {
+        successStatus: 'ok',
+        successBytes: result?.data?.bytes,
+        coveredSeq: result?.data?.seq,
+      });
     };
 
     const failReplay = (error: unknown) => {
@@ -895,6 +939,7 @@ export function XtermHost({
       }));
 
       replayCompletedRef.current = true;
+      coldStartStateRef.current = 'done';
       flushPendingReplayChunks(replayedSeqRef.current);
     };
 
@@ -921,6 +966,51 @@ export function XtermHost({
         .catch((error) => {
           failReplay(error);
         });
+    };
+
+    const requestColdStart = () => {
+      if (!wsClient || coldStartStateRef.current !== 'idle') {
+        return;
+      }
+
+      if (terminalKind !== 'agent') {
+        coldStartStateRef.current = 'in-flight';
+        requestReplay(0);
+        return;
+      }
+
+      coldStartStateRef.current = 'in-flight';
+      replayCompletedRef.current = false;
+      setReplayUiState({ kind: 'loading' });
+
+      const snapshotPromise: Promise<SnapshotCommandResult> = wsClient
+        .sendCommand<TerminalSnapshotPayload>(
+          'terminal.snapshot',
+          { terminalId },
+          { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+        )
+        .then((data) => ({ ok: true as const, data }))
+        .catch((error) => ({ ok: false as const, error }));
+
+      void snapshotPromise.then((result) => {
+        if (!mountedRef.current || !terminalRef.current) {
+          return;
+        }
+
+        if (result.ok && result.data?.status === 'ok') {
+          finishHistoricalLoad(result, {
+            successStatus: 'ok',
+            successBytes: result.data.bytes,
+            coveredSeq: result.data.seq,
+          });
+          return;
+        }
+
+        traceTerminal(terminalId, 'snapshot.fallback', {
+          reason: result.ok ? result.data?.status ?? 'unsupported' : String(result.error),
+        });
+        requestReplay(0);
+      });
     };
 
     if (wsClient) {
@@ -999,7 +1089,7 @@ export function XtermHost({
         return;
       }
 
-      requestReplay(0);
+      requestColdStart();
     })().catch((error) => {
       failReplay(error);
     });
@@ -1028,7 +1118,17 @@ export function XtermHost({
         fitAddonRef.current = null;
       }
     };
-  }, [dispatch, hydrationState.kind, scheduleFit, setOutputAtom, terminalId, viewport, workspaceId, wsClient]);
+  }, [
+    dispatch,
+    hydrationState.kind,
+    scheduleFit,
+    setOutputAtom,
+    terminalId,
+    terminalKind,
+    viewport,
+    workspaceId,
+    wsClient,
+  ]);
 
   /**
    * Write new output chunks to terminal

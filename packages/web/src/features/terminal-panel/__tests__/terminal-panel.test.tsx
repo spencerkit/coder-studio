@@ -15,10 +15,15 @@ import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
 import { Topics } from '@coder-studio/core';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../views/shared/xterm-host', () => ({
-  XtermHost: ({ terminalId }: { terminalId: string }) => (
-    <div data-testid="xterm-host">{terminalId}</div>
+const mockXtermHost = vi.fn(
+  ({ terminalId, terminalKind }: { terminalId: string; terminalKind?: 'agent' | 'shell' }) => (
+    <div data-testid="xterm-host" data-terminal-kind={terminalKind}>{terminalId}</div>
   ),
+);
+
+vi.mock('../views/shared/xterm-host', () => ({
+  XtermHost: (props: { terminalId: string; terminalKind?: 'agent' | 'shell' }) =>
+    mockXtermHost(props),
 }));
 
 type EventHandler = (topic: string, payload: unknown, seq: number) => void;
@@ -28,6 +33,7 @@ describe('TerminalPanel', () => {
 
   beforeEach(() => {
     handlers = [];
+    mockXtermHost.mockClear();
     window.localStorage.setItem('ui.locale', JSON.stringify('en'));
   });
 
@@ -186,6 +192,12 @@ describe('TerminalPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_2');
     });
+    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        terminalId: 'term_2',
+        terminalKind: 'shell',
+      })
+    );
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 

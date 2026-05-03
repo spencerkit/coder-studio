@@ -1,7 +1,11 @@
 import {
+  decodeTerminalBinaryFrame,
+  encodeTerminalBinaryFrame,
   decodeTerminalOutputFrame,
   encodeTerminalOutputFrame,
   TERMINAL_BINARY_OUTPUT_VERSION,
+  TERMINAL_BINARY_PROTOCOL_VERSION,
+  TerminalBinaryFrameType,
 } from './messages';
 import { describe, expect, it } from 'vitest';
 
@@ -66,5 +70,30 @@ describe('v2 terminal output frame codec', () => {
     expect(() => decodeTerminalOutputFrame(encoded.subarray(0, encoded.length - 1))).toThrow(
       'payload length mismatch',
     );
+  });
+});
+
+describe('terminal binary frame codec', () => {
+  it('decodes snapshot frames with metadata intact', () => {
+    const payload = new Uint8Array([1, 2, 3, 4]);
+    const encoded = encodeTerminalBinaryFrame(
+      {
+        version: TERMINAL_BINARY_PROTOCOL_VERSION,
+        type: TerminalBinaryFrameType.Snapshot,
+        flags: 0,
+        meta: 123,
+        streamId: 9,
+        payloadSize: payload.byteLength,
+      },
+      payload,
+    );
+
+    const decoded = decodeTerminalBinaryFrame(encoded);
+
+    expect(decoded.header.version).toBe(TERMINAL_BINARY_PROTOCOL_VERSION);
+    expect(decoded.header.type).toBe(TerminalBinaryFrameType.Snapshot);
+    expect(decoded.header.meta).toBe(123);
+    expect(decoded.header.streamId).toBe(9);
+    expect(decoded.payload).toEqual(payload);
   });
 });

@@ -81,6 +81,7 @@ describe('SessionCard', () => {
         terminalId: 'term-ended',
         workspaceId: 'ws-123',
         readOnly: true,
+        terminalKind: 'agent',
       })
     );
   });
@@ -104,6 +105,7 @@ describe('SessionCard', () => {
         terminalId: 'term-live',
         readOnly: false,
         isActiveSession: false,
+        terminalKind: 'agent',
       })
     );
   });
