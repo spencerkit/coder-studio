@@ -178,6 +178,7 @@
 .settings-header {
   display: flex;
   align-items: center;
+  gap: var(--sp-4);
   padding: var(--sp-3) var(--sp-4);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
@@ -3911,12 +3912,6 @@ textarea.input {
   color: var(--text-tertiary);
 }
 
-.panel-toolbar-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-}
-
 .panel-toolbar-btn:hover {
   background: color-mix(in srgb, var(--bg-hover) 72%, var(--accent-blue) 28%);
   color: var(--text-primary);
@@ -4275,8 +4270,8 @@ textarea.input {
 }
 
 .terminal-toolbar {
-  padding: 6px 12px;
-  gap: 8px;
+  padding: 3px 10px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
@@ -4286,6 +4281,18 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+
+.terminal-toolbar-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.terminal-toolbar-right {
+  min-width: 0;
+  flex: 1;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .terminal-toolbar-left::before {
@@ -4923,9 +4930,9 @@ textarea.input {
 }
 
 .terminal-toolbar {
-  min-height: 36px;
-  padding: 8px 14px;
-  gap: 10px;
+  min-height: 28px;
+  padding: 2px 10px;
+  gap: 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
   background: linear-gradient(180deg, rgba(18, 26, 34, 0.96), rgba(14, 21, 28, 0.92));
 }
@@ -4936,16 +4943,16 @@ textarea.input {
 
 .terminal-toolbar-left::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex-shrink: 0;
   border-radius: 999px;
-  margin-right: 24px;
+  margin-right: 12px;
   background: #ff5f57;
   box-shadow:
-    14px 0 0 #febc2e,
-    28px 0 0 #28c840;
-  opacity: 0.95;
+    10px 0 0 #febc2e,
+    20px 0 0 #28c840;
+  opacity: 0.8;
 }
 
 .terminal-kicker {
@@ -5608,12 +5615,6 @@ textarea.input {
   border-bottom: 1px solid var(--border);
 }
 
-.panel-toolbar-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-}
-
 .file-tree-shell {
   display: flex;
   min-height: 0;
@@ -5810,9 +5811,9 @@ textarea.input {
 }
 
 .terminal-toolbar {
-  min-height: 34px;
-  padding: 6px 12px;
-  gap: 8px;
+  min-height: 28px;
+  padding: 3px 10px;
+  gap: 6px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
@@ -5867,7 +5868,7 @@ textarea.input {
 .terminal-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .terminal-selector-btn {
@@ -8203,9 +8204,9 @@ textarea.input {
 
   .bottom-terminal--mobile-fullscreen .terminal-toolbar {
     padding:
-      var(--sp-2)
+      var(--sp-1)
       var(--sp-3)
-      var(--sp-2)
+      var(--sp-1)
       var(--sp-3);
     border-radius: 0;
     border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
@@ -8222,8 +8223,8 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-toolbar-right {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
     gap: var(--sp-2);
   }
 
@@ -8236,7 +8237,7 @@ textarea.input {
   .bottom-terminal--mobile-fullscreen .terminal-selector-btn {
     display: flex;
     width: 100%;
-    min-height: 44px;
+    min-height: 32px;
     min-width: 0;
     align-items: center;
     padding: 0 var(--sp-3);
@@ -8273,11 +8274,11 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .panel-toolbar-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-selector-sheet {
@@ -8685,6 +8686,7 @@ textarea.input {
     font-size: var(--text-base);
     font-weight: 600;
     color: var(--text-primary);
+    margin-left: auto;
   }
 
   .settings-footer--mobile {
