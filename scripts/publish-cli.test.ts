@@ -89,7 +89,9 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -99,6 +101,14 @@ describe("publish-cli", () => {
         version: "1.2.3",
         bin: { "coder-studio": "./dist/bin.js" },
         files: ["dist"],
+        exports: {
+          ".": {
+            import: "./dist/esm/index.mjs",
+          },
+        },
+        dependencies: {
+          "@xterm/addon-serialize": "^0.14.0",
+        },
       })
     );
 
@@ -106,6 +116,42 @@ describe("publish-cli", () => {
       name: "@spencer-kit/coder-studio",
       version: "1.2.3",
     });
+  });
+
+  it("rejects built runtime imports that are not declared in the CLI package dependencies", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
+    const cliDir = join(dir, "packages", "cli");
+
+    await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "web"), { recursive: true });
+    await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(
+      join(cliDir, "dist", "esm", "bin.mjs"),
+      'import { SerializeAddon } from "@xterm/addon-serialize";\nvoid SerializeAddon;\n'
+    );
+    await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
+    await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(
+      join(cliDir, "package.json"),
+      JSON.stringify({
+        name: "@spencer-kit/coder-studio",
+        version: "1.2.3",
+        bin: { "coder-studio": "./dist/bin.js" },
+        files: ["dist"],
+        exports: {
+          ".": {
+            import: "./dist/esm/index.mjs",
+          },
+        },
+        dependencies: {},
+      })
+    );
+
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow(
+      "@xterm/addon-serialize"
+    );
   });
 
   it("rejects a real publish from a dirty worktree unless explicitly allowed", async () => {

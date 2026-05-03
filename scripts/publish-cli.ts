@@ -131,6 +131,7 @@ export async function assertCliPublishArtifacts(
     bin?: unknown;
     files?: unknown;
     exports?: unknown;
+    dependencies?: unknown;
   };
 
   if (pkg.name !== "@spencer-kit/coder-studio") {
@@ -145,11 +146,23 @@ export async function assertCliPublishArtifacts(
   if (!hasRecordValue(pkg.bin, "coder-studio", "./dist/bin.js")) {
     throw new Error('CLI package.json bin must point "coder-studio" to "./dist/bin.js"');
   }
+  if (
+    !hasNestedRecordValue(pkg.exports, ".", "import", "./dist/esm/index.mjs")
+  ) {
+    throw new Error('CLI package.json exports must point "." import to "./dist/esm/index.mjs"');
+  }
 
   await assertFile(resolve(cliDir, "dist/bin.js"));
+  await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
+  await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
   await assertDirectoryHasFile(resolve(cliDir, "dist/esm/migrations"), ".sql");
+  assertBundleRuntimeDependenciesDeclared(
+    pkg.dependencies,
+    await collectBareImports(resolve(cliDir, "dist/esm"), ["bin.mjs", "index.mjs", "server-runner.mjs"]),
+    packageJsonPath
+  );
 
   return { name: pkg.name, version: pkg.version };
 }
@@ -272,6 +285,98 @@ function hasRecordValue(value: unknown, key: string, expected: string): boolean 
     typeof value === "object" &&
     value !== null &&
     (value as Record<string, unknown>)[key] === expected
+  );
+}
+
+function hasNestedRecordValue(
+  value: unknown,
+  key: string,
+  nestedKey: string,
+  expected: string
+): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const nested = (value as Record<string, unknown>)[key];
+  return (
+    typeof nested === "object" &&
+    nested !== null &&
+    (nested as Record<string, unknown>)[nestedKey] === expected
+  );
+}
+
+function assertBundleRuntimeDependenciesDeclared(
+  dependencies: unknown,
+  bareImports: string[],
+  packageJsonPath: string
+): void {
+  if (typeof dependencies !== "object" || dependencies === null) {
+    throw new Error(`CLI package.json is missing dependencies in ${packageJsonPath}`);
+  }
+
+  const declaredDeps = new Set(Object.keys(dependencies as Record<string, unknown>));
+  const undeclared = bareImports.filter((specifier) => !declaredDeps.has(specifier));
+
+  if (undeclared.length > 0) {
+    throw new Error(
+      `CLI bundle has runtime imports not declared in package.json dependencies: ${undeclared.join(", ")}`
+    );
+  }
+}
+
+async function collectBareImports(dir: string, entries: string[]): Promise<string[]> {
+  const specifiers = new Set<string>();
+
+  for (const entry of entries) {
+    const content = await readFile(resolve(dir, entry), "utf8");
+    for (const specifier of extractBareImports(content)) {
+      specifiers.add(specifier);
+    }
+  }
+
+  return Array.from(specifiers).sort();
+}
+
+function extractBareImports(content: string): string[] {
+  const specifiers = new Set<string>();
+  const importPattern =
+    /\bimport\s+(?:[^"'()]+?\s+from\s+)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g;
+
+  for (const match of content.matchAll(importPattern)) {
+    const specifier = match[1] ?? match[2];
+    if (!specifier || isNodeBuiltinImport(specifier) || specifier.startsWith(".") || specifier.startsWith("/")) {
+      continue;
+    }
+    specifiers.add(specifier);
+  }
+
+  return Array.from(specifiers);
+}
+
+function isNodeBuiltinImport(specifier: string): boolean {
+  return (
+    specifier.startsWith("node:") ||
+    specifier === "assert" ||
+    specifier === "buffer" ||
+    specifier === "child_process" ||
+    specifier === "crypto" ||
+    specifier === "events" ||
+    specifier === "fs" ||
+    specifier === "fs/promises" ||
+    specifier === "http" ||
+    specifier === "https" ||
+    specifier === "module" ||
+    specifier === "net" ||
+    specifier === "os" ||
+    specifier === "path" ||
+    specifier === "readline" ||
+    specifier === "stream" ||
+    specifier === "timers" ||
+    specifier === "tty" ||
+    specifier === "url" ||
+    specifier === "util" ||
+    specifier === "worker_threads"
   );
 }
 

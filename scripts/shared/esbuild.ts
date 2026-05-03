@@ -61,6 +61,7 @@ export async function createCliBuildOptions(
   return {
     entryPoints: [
       resolve(CLI_DIR, 'src/bin.ts'),
+      resolve(CLI_DIR, 'src/index.ts'),
       resolve(CLI_DIR, 'src/server-runner.ts'),
     ],
     bundle: true,
