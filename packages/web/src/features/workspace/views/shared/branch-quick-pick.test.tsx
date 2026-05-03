@@ -2,12 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { GitStatus } from '@coder-studio/core';
+import { localeAtom } from '../../../../atoms/app-ui';
 import { BranchQuickPick } from './branch-quick-pick';
 import {
   branchQuickPickAtom,
   gitBranchListAtomFamily,
 } from '../../atoms';
 import { wsClientAtom } from '../../../../atoms/connection';
+
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
 
 describe('BranchQuickPick', () => {
   let store: ReturnType<typeof createStore>;
@@ -25,6 +34,7 @@ describe('BranchQuickPick', () => {
 
   beforeEach(() => {
     store = createStore();
+    store.set(localeAtom, 'en');
     sendCommandMock = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.checkout') {
         return {
@@ -75,6 +85,7 @@ describe('BranchQuickPick', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    viewportMocks.viewport = 'desktop';
   });
 
   it('filters branches by input text', async () => {
@@ -104,6 +115,22 @@ describe('BranchQuickPick', () => {
       expect(screen.queryByText('main')).not.toBeInTheDocument();
       expect(screen.queryByText('origin/develop')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders the shared MobileSelectSheet shell for branch quick pick', () => {
+    viewportMocks.viewport = 'mobile';
+
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    expect(screen.getByRole('region', { name: 'Branch sheet' })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Search branches or create new branch...')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('data-selected', 'true');
   });
 
   it('shows create option for non-existent branch', async () => {

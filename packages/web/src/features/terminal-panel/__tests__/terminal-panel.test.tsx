@@ -518,9 +518,17 @@ describe('TerminalPanel', () => {
 
     expect(screen.getByRole('region', { name: 'Terminal Sessions sheet' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Workspace ShellCurrent terminal' })
+      screen.getByRole('button', {
+        name: 'Workspace Shell',
+        description: 'Current terminal',
+      })
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace Shell 2Terminal 2' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Workspace Shell 2',
+        description: 'Terminal 2',
+      })
+    ).toBeInTheDocument();
     expect(document.querySelector('.terminal-selector-dropdown')).not.toBeInTheDocument();
   });
 });

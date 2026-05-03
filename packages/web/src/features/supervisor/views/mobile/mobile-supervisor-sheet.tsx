@@ -27,6 +27,7 @@ export function MobileSupervisorSheet({
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
   const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
+  const [evaluatorPickerOpen, setEvaluatorPickerOpen] = useState(false);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const {
     dialog,
@@ -43,6 +44,7 @@ export function MobileSupervisorSheet({
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
       setDetailMode(null);
+      setEvaluatorPickerOpen(false);
       return;
     }
 
@@ -59,6 +61,7 @@ export function MobileSupervisorSheet({
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ??
         'claude',
     });
+    setEvaluatorPickerOpen(false);
     setDetailMode(nextMode);
   };
 
@@ -68,10 +71,12 @@ export function MobileSupervisorSheet({
         title={copy.title}
         kicker={t('supervisor.title')}
         onBack={() => {
+          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
         }}
         onClose={() => {
+          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
           onClose();
@@ -95,9 +100,16 @@ export function MobileSupervisorSheet({
               draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
               disableObjective={disableObjective}
               onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
-              onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
-                updateDraft({ draftEvaluatorProviderId })
-              }
+              onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) => {
+                updateDraft({ draftEvaluatorProviderId });
+                setEvaluatorPickerOpen(false);
+              }}
+              mobileEvaluatorPicker={{
+                open: evaluatorPickerOpen,
+                onOpen: () => setEvaluatorPickerOpen(true),
+                onClose: () => setEvaluatorPickerOpen(false),
+                isMobile: true,
+              }}
             />
           </div>
         }
@@ -106,6 +118,7 @@ export function MobileSupervisorSheet({
             <button
               className="btn btn-secondary"
               onClick={() => {
+                setEvaluatorPickerOpen(false);
                 close();
                 setDetailMode(null);
               }}

@@ -783,12 +783,37 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell();
 
     await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
-    expect(screen.getByRole('dialog', { name: 'Agent Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Agent Sessions sheet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Session' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close Current Session' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Switch to agent Claude' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Claude',
+        description: 'Switch to agent Claude CLAUDE',
+      })
+    );
 
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+  });
+
+  it('switches from session mode to provider mode inside a single mobile select sheet', async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
+
+    expect(screen.getByRole('region', { name: 'Agent Sessions sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Create Session' }));
+
+    expect(screen.getByRole('region', { name: 'Select Provider sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.getByRole('region', { name: 'Agent Sessions sheet' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.mobile-sheet-layer')).toHaveLength(1);
   });
 
   it('creates a new agent from the mobile session sheet', async () => {
@@ -871,7 +896,12 @@ describe('MobileShell Phase 2 workspace', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Open Agent sheet' }));
     await user.click(screen.getByRole('button', { name: 'Create Session' }));
-    await user.click(screen.getByRole('button', { name: 'Start Codex session' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Codex',
+        description: 'Start Codex session Start new session',
+      })
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_3');
@@ -1114,9 +1144,19 @@ describe('MobileShell Phase 2 workspace', () => {
 
     await user.click(screen.getByRole('button', { name: 'Create Session' }));
 
-    expect(screen.getByRole('dialog', { name: 'Agent Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start Claude session' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start Codex session' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Select Provider sheet' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Claude',
+        description: 'Start Claude session Start new session',
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Codex',
+        description: 'Start Codex session Start new session',
+      })
+    ).toBeInTheDocument();
   });
 
   it('renders translated mobile workspace chrome in Chinese', async () => {

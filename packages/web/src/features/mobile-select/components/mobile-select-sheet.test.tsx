@@ -185,6 +185,37 @@ describe('MobileSelectSheet', () => {
     expect(screen.queryByRole('button', { name: 'Claude' })).not.toBeInTheDocument();
   });
 
+  it('supports a controlled search value when the caller owns the query state', () => {
+    const onSearchValueChange = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Branch"
+        searchable
+        searchPlaceholder="Search branches"
+        searchValue="feature"
+        onSearchValueChange={onSearchValueChange}
+        sections={[
+          {
+            kind: 'options',
+            id: 'branches',
+            items: [{ id: 'feature/auth', label: 'feature/auth' }],
+          },
+        ]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Search branches');
+    expect(input).toHaveValue('feature');
+
+    fireEvent.change(input, { target: { value: 'feature/auth' } });
+
+    expect(onSearchValueChange).toHaveBeenCalledWith('feature/auth');
+    expect(input).toHaveValue('feature');
+  });
+
   it('renders the create action from the current query when enabled', async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn();

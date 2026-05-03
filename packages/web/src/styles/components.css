@@ -3006,6 +3006,25 @@ body.is-resizing-panels * {
   color: var(--text-secondary);
 }
 
+.mobile-select-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  text-align: left;
+}
+
+.mobile-select-trigger__value {
+  min-width: 0;
+  flex: 1;
+}
+
+.mobile-select-trigger__icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
 .textarea {
   resize: vertical;
   min-height: 80px;

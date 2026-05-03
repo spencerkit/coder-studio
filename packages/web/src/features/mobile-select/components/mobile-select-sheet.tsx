@@ -56,6 +56,8 @@ export interface MobileSelectSheetProps {
   selectedId?: string | null;
   searchable?: boolean;
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchValueChange?: (value: string) => void;
   create?: MobileSelectCreateConfig;
   closeOnSelect?: boolean;
   loading?: boolean;
@@ -73,6 +75,8 @@ export function MobileSelectSheet({
   selectedId,
   searchable = false,
   searchPlaceholder,
+  searchValue,
+  onSearchValueChange,
   create,
   closeOnSelect = true,
   loading = false,
@@ -84,12 +88,21 @@ export function MobileSelectSheet({
   onClose,
 }: MobileSelectSheetProps) {
   const t = useTranslation();
-  const [query, setQuery] = useState('');
+  const [uncontrolledQuery, setUncontrolledQuery] = useState('');
   const searchId = useId();
+  const query = searchValue ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
   const resolvedLoadingText = loadingText ?? t('common.loading');
   const resolvedEmptyText = emptyText ?? t('command.no_results');
   const resolvedSearchPlaceholder = searchPlaceholder ?? t('action.search');
+
+  const handleQueryChange = (value: string) => {
+    if (searchValue === undefined) {
+      setUncontrolledQuery(value);
+    }
+
+    onSearchValueChange?.(value);
+  };
 
   const filteredSections = useMemo(() => {
     if (!normalizedQuery) {
@@ -165,7 +178,7 @@ export function MobileSelectSheet({
             className="mobile-select-sheet__search-input"
             placeholder={resolvedSearchPlaceholder}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => handleQueryChange(event.target.value)}
           />
         </div>
       ) : null}
