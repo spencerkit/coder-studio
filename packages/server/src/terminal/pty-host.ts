@@ -4,10 +4,13 @@
  * Concrete implementation of PtyHost using node-pty
  */
 
+import { chmodSync, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import type { PtyHost, PtyProcess, PtySpawnOptions } from './types.js';
 
 const require = createRequire(import.meta.url);
+const NODE_PTY_PKG = 'node-pty/package.json';
 
 /**
  * Options for kill escalation polling
@@ -24,6 +27,60 @@ const DEFAULT_POLL_INTERVAL_MS = 50;
 
 /** Default timeout before SIGKILL escalation */
 const DEFAULT_TIMEOUT_MS = 2000;
+
+export function ensureNodePtySpawnHelperExecutable(
+  deps: {
+    platform?: NodeJS.Platform;
+    arch?: NodeJS.Architecture;
+    resolve?: (id: string) => string;
+    existsSync?: (path: string) => boolean;
+    statSync?: (path: string) => { mode: number };
+    chmodSync?: (path: string, mode: number) => void;
+  } = {},
+): void {
+  const platform = deps.platform ?? process.platform;
+  if (platform !== 'darwin') {
+    return;
+  }
+  const arch = deps.arch ?? process.arch;
+
+  const resolve = deps.resolve ?? ((id: string) => require.resolve(id));
+  const fileExists = deps.existsSync ?? existsSync;
+  const stat = deps.statSync ?? statSync;
+  const chmod = deps.chmodSync ?? chmodSync;
+
+  let packageJsonPath: string;
+  try {
+    packageJsonPath = resolve(NODE_PTY_PKG);
+  } catch {
+    return;
+  }
+
+  const packageDir = path.dirname(packageJsonPath);
+  const helperDir =
+    arch === 'arm64' ? 'darwin-arm64' : arch === 'x64' ? 'darwin-x64' : null;
+  if (!helperDir) {
+    return;
+  }
+
+  const helperPath = path.join(packageDir, 'prebuilds', helperDir, 'spawn-helper');
+
+  try {
+    if (!fileExists(helperPath)) {
+      return;
+    }
+
+    const currentMode = stat(helperPath).mode;
+    const executableMode = currentMode | 0o111;
+    if (executableMode === currentMode) {
+      return;
+    }
+
+    chmod(helperPath, executableMode);
+  } catch {
+    // Best-effort repair only. Fall back to node-pty's normal startup path.
+  }
+}
 
 /**
  * Send signal to process and all its children (process group)
@@ -132,6 +189,8 @@ export async function escalateKillWithPolling(
  */
 export class NodePtyHost implements PtyHost {
   spawn(argv: string[], options: PtySpawnOptions): PtyProcess {
+    ensureNodePtySpawnHelperExecutable();
+
     // Lazy load node-pty to avoid native module loading errors
     let pty: any;
     try {

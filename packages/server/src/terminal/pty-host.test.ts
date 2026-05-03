@@ -5,7 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { escalateKillWithPolling, killProcessGroup } from './pty-host'
+import {
+  ensureNodePtySpawnHelperExecutable,
+  escalateKillWithPolling,
+  killProcessGroup,
+} from './pty-host'
 
 describe('kill escalation', () => {
   let mockProcessKill: ReturnType<typeof vi.spyOn>
@@ -226,5 +230,105 @@ describe('kill escalation', () => {
       expect(mockProcessKill).not.toHaveBeenCalledWith(-123, 'SIGKILL')
       expect(mockProcessKill).not.toHaveBeenCalledWith(123, 'SIGKILL')
     })
+  })
+})
+
+describe('ensureNodePtySpawnHelperExecutable', () => {
+  it('adds execute permissions for the active darwin helper when needed', () => {
+    const chmodSync = vi.fn()
+    const resolve = vi.fn(() => '/tmp/node-pty/package.json')
+    const existsSync = vi.fn((file: string) => file.includes('spawn-helper'))
+    const statSync = vi.fn(() => ({ mode: 0o100644 }))
+
+    ensureNodePtySpawnHelperExecutable({
+      platform: 'darwin',
+      arch: 'arm64',
+      resolve,
+      existsSync,
+      statSync,
+      chmodSync,
+    })
+
+    expect(chmodSync).toHaveBeenCalledTimes(1)
+    expect(chmodSync).toHaveBeenCalledWith(
+      '/tmp/node-pty/prebuilds/darwin-arm64/spawn-helper',
+      0o100755,
+    )
+  })
+
+  it('does nothing outside darwin', () => {
+    const chmodSync = vi.fn()
+
+    ensureNodePtySpawnHelperExecutable({
+      platform: 'linux',
+      resolve: vi.fn(),
+      existsSync: vi.fn(),
+      statSync: vi.fn(),
+      chmodSync,
+    })
+
+    expect(chmodSync).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the active helper is already executable', () => {
+    const chmodSync = vi.fn()
+
+    ensureNodePtySpawnHelperExecutable({
+      platform: 'darwin',
+      arch: 'x64',
+      resolve: vi.fn(() => '/tmp/node-pty/package.json'),
+      existsSync: vi.fn(() => true),
+      statSync: vi.fn(() => ({ mode: 0o100755 })),
+      chmodSync,
+    })
+
+    expect(chmodSync).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the active helper is missing', () => {
+    const chmodSync = vi.fn()
+
+    expect(() =>
+      ensureNodePtySpawnHelperExecutable({
+        platform: 'darwin',
+        arch: 'arm64',
+        resolve: vi.fn(() => '/tmp/node-pty/package.json'),
+        existsSync: vi.fn(() => false),
+        statSync: vi.fn(),
+        chmodSync,
+      }),
+    ).not.toThrow()
+
+    expect(chmodSync).not.toHaveBeenCalled()
+  })
+
+  it('swallows chmod failures so repair remains best-effort', () => {
+    expect(() =>
+      ensureNodePtySpawnHelperExecutable({
+        platform: 'darwin',
+        arch: 'arm64',
+        resolve: vi.fn(() => '/tmp/node-pty/package.json'),
+        existsSync: vi.fn(() => true),
+        statSync: vi.fn(() => ({ mode: 0o100644 })),
+        chmodSync: vi.fn(() => {
+          throw Object.assign(new Error('read only'), { code: 'EPERM' })
+        }),
+      }),
+    ).not.toThrow()
+  })
+
+  it('swallows stat races so repair does not block startup', () => {
+    expect(() =>
+      ensureNodePtySpawnHelperExecutable({
+        platform: 'darwin',
+        arch: 'arm64',
+        resolve: vi.fn(() => '/tmp/node-pty/package.json'),
+        existsSync: vi.fn(() => true),
+        statSync: vi.fn(() => {
+          throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+        }),
+        chmodSync: vi.fn(),
+      }),
+    ).not.toThrow()
   })
 })
