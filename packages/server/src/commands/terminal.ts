@@ -5,6 +5,7 @@
 import {
   TerminalInputBase64Args,
   TerminalInputBinaryArgs,
+  TerminalSnapshotBinaryResult,
   TERMINAL_BINARY_PROTOCOL_VERSION,
   TerminalBinaryFrameType,
   encodeTerminalBinaryFrame,
@@ -31,7 +32,7 @@ const TerminalInputSchema = z.union([
 ]);
 
 const pendingTerminalInput = new Map<number, { args: TerminalInputBinaryArgs; payload: Buffer }>();
-let nextReplayStreamId = 0;
+let nextOutboundBinaryStreamId = 0;
 
 function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinaryArgs): Buffer {
   if ('bytes' in args) {
@@ -48,6 +49,49 @@ function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinary
 
 export function registerPendingTerminalInput(args: TerminalInputBinaryArgs, payload: Buffer): void {
   pendingTerminalInput.set(args.streamId, { args, payload });
+}
+
+function allocateOutboundBinaryStreamId(): number {
+  nextOutboundBinaryStreamId = (nextOutboundBinaryStreamId + 1) >>> 0;
+  return nextOutboundBinaryStreamId;
+}
+
+function sendTerminalBinaryFrame(
+  clientId: string | undefined,
+  ctx: Parameters<typeof registerCommand>[2] extends (
+    args: unknown,
+    ctx: infer T,
+    clientId?: string
+  ) => Promise<unknown>
+    ? T
+    : never,
+  frame: {
+    type: (typeof TerminalBinaryFrameType)[keyof typeof TerminalBinaryFrameType];
+    meta: number;
+    streamId: number;
+    payload: Buffer;
+  },
+): void {
+  if (!clientId) {
+    return;
+  }
+
+  ctx.broadcaster.sendBinaryToClient(
+    clientId,
+    Buffer.from(
+      encodeTerminalBinaryFrame(
+        {
+          version: TERMINAL_BINARY_PROTOCOL_VERSION,
+          type: frame.type,
+          flags: 0,
+          meta: frame.meta,
+          streamId: frame.streamId,
+          payloadSize: frame.payload.length,
+        },
+        frame.payload,
+      ),
+    ),
+  );
 }
 
 function resolveShellCommand(): { argv: string[]; title: string } {
@@ -128,26 +172,13 @@ registerCommand(
       return replay;
     }
 
-    nextReplayStreamId = (nextReplayStreamId + 1) >>> 0;
-    const streamId = nextReplayStreamId;
-    if (clientId) {
-      ctx.broadcaster.sendBinaryToClient(
-        clientId,
-        Buffer.from(
-          encodeTerminalBinaryFrame(
-            {
-              version: TERMINAL_BINARY_PROTOCOL_VERSION,
-              type: TerminalBinaryFrameType.Replay,
-              flags: 0,
-              meta: replay.seq,
-              streamId,
-              payloadSize: replay.data.length,
-            },
-            replay.data,
-          ),
-        ),
-      );
-    }
+    const streamId = allocateOutboundBinaryStreamId();
+    sendTerminalBinaryFrame(clientId, ctx, {
+      type: TerminalBinaryFrameType.Replay,
+      meta: replay.seq,
+      streamId,
+      payload: replay.data,
+    });
 
     return {
       status: 'ok' as const,
@@ -157,6 +188,40 @@ registerCommand(
       seq: replay.seq,
     };
   }
+);
+
+// terminal.snapshot
+registerCommand(
+  'terminal.snapshot',
+  z.object({
+    terminalId: z.string(),
+  }),
+  async (args, ctx, clientId) => {
+    const snapshot = await ctx.terminalMgr.snapshot(args.terminalId);
+
+    if (snapshot.status !== 'ok') {
+      return snapshot;
+    }
+
+    const streamId = allocateOutboundBinaryStreamId();
+    sendTerminalBinaryFrame(clientId, ctx, {
+      type: TerminalBinaryFrameType.Snapshot,
+      meta: snapshot.seq,
+      streamId,
+      payload: snapshot.data,
+    });
+
+    return {
+      status: 'ok' as const,
+      transport: 'binary' as const,
+      streamId,
+      size: snapshot.data.length,
+      seq: snapshot.seq,
+      rows: snapshot.rows,
+      cols: snapshot.cols,
+      source: 'headless' as const,
+    } satisfies TerminalSnapshotBinaryResult;
+  },
 );
 
 // terminal.close

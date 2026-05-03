@@ -39,6 +39,7 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       } satisfies Terminal)),
       getAll: vi.fn().mockReturnValue([]),
       replay: vi.fn(),
+      snapshot: vi.fn(),
       kill: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
@@ -69,6 +70,7 @@ describe('terminal commands', () => {
         create: vi.fn(),
         getAll: vi.fn().mockReturnValue([]),
         replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 9 }),
+        snapshot: vi.fn(),
         kill: vi.fn(),
         write: vi.fn(),
         resize: vi.fn(),
@@ -107,6 +109,7 @@ describe('terminal commands', () => {
         create: vi.fn(),
         getAll: vi.fn().mockReturnValue([]),
         replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 9 }),
+        snapshot: vi.fn(),
         kill: vi.fn(),
         write: vi.fn(),
         resize: vi.fn(),
@@ -155,6 +158,7 @@ describe('terminal commands', () => {
         create: vi.fn(),
         getAll: vi.fn().mockReturnValue([]),
         replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 0 }),
+        snapshot: vi.fn(),
         kill: vi.fn(),
         write: vi.fn(),
         resize: vi.fn(),
@@ -218,6 +222,145 @@ describe('terminal commands', () => {
         title: 'zsh',
       })
     );
+  });
+
+  it('returns snapshot metadata and sends snapshot payload to requesting client', async () => {
+    const snapshotData = Buffer.from('serialized snapshot');
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn(),
+        snapshot: vi.fn().mockResolvedValue({
+          status: 'ok',
+          data: snapshotData,
+          seq: 17,
+          cols: 132,
+          rows: 40,
+        }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-snapshot-1',
+        op: 'terminal.snapshot',
+        args: {
+          terminalId: 'term-1',
+        },
+      },
+      ctx,
+      'client-1',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      status: 'ok',
+      transport: 'binary',
+      streamId: expect.any(Number),
+      size: snapshotData.length,
+      seq: 17,
+      cols: 132,
+      rows: 40,
+      source: 'headless',
+    });
+    expect(ctx.broadcaster.sendBinaryToClient).toHaveBeenCalledWith('client-1', expect.any(Buffer));
+
+    const frame = vi.mocked(ctx.broadcaster.sendBinaryToClient).mock.calls[0]?.[1] as Buffer;
+    const { header, payload } = decodeTerminalBinaryFrame(frame);
+    expect(header.type).toBe(TerminalBinaryFrameType.Snapshot);
+    expect(header.meta).toBe(17);
+    expect(header.streamId).toBe((result.data as { streamId: number }).streamId);
+    expect(Buffer.from(payload)).toEqual(snapshotData);
+  });
+
+  it('returns unsupported for shell or disabled snapshot terminals', async () => {
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn(),
+        snapshot: vi.fn().mockResolvedValue({ status: 'unsupported' }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-snapshot-unsupported-1',
+        op: 'terminal.snapshot',
+        args: {
+          terminalId: 'term-shell',
+        },
+      },
+      ctx,
+      'client-1',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({ status: 'unsupported' });
+    expect(ctx.broadcaster.sendBinaryToClient).not.toHaveBeenCalled();
+  });
+
+  it('uses one outbound allocator for replay and snapshot streamIds', async () => {
+    const replayData = Buffer.from('replay payload');
+    const snapshotData = Buffer.from('snapshot payload');
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn().mockReturnValue({ status: 'ok', data: replayData, seq: 9 }),
+        snapshot: vi.fn().mockResolvedValue({
+          status: 'ok',
+          data: snapshotData,
+          seq: 11,
+          cols: 120,
+          rows: 30,
+        }),
+        kill: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const replayResult = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-replay-alloc-1',
+        op: 'terminal.replay',
+        args: { terminalId: 'term-1', lastSeq: 0 },
+      },
+      ctx,
+      'client-a',
+    );
+    const snapshotResult = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-snapshot-alloc-1',
+        op: 'terminal.snapshot',
+        args: { terminalId: 'term-1' },
+      },
+      ctx,
+      'client-a',
+    );
+
+    expect(replayResult.ok).toBe(true);
+    expect(snapshotResult.ok).toBe(true);
+    expect((replayResult.data as { streamId: number }).streamId).not.toBe(
+      (snapshotResult.data as { streamId: number }).streamId,
+    );
+
+    const replayFrame = vi.mocked(ctx.broadcaster.sendBinaryToClient).mock.calls[0]?.[1] as Buffer;
+    const snapshotFrame = vi.mocked(ctx.broadcaster.sendBinaryToClient).mock.calls[1]?.[1] as Buffer;
+    expect(decodeTerminalBinaryFrame(replayFrame).header.type).toBe(TerminalBinaryFrameType.Replay);
+    expect(decodeTerminalBinaryFrame(snapshotFrame).header.type).toBe(TerminalBinaryFrameType.Snapshot);
   });
 
   it('delegates terminal.input binary payload to sessionMgr.sendInput when a session owns the terminal', async () => {

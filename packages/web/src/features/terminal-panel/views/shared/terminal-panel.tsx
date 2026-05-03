@@ -207,6 +207,7 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                 <XtermHost
                   terminalId={activeTerminalMeta.id}
                   workspaceId={activeWorkspaceId}
+                  terminalKind={activeTerminalMeta.kind ?? 'shell'}
                 />
               </div>
             )}

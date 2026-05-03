@@ -195,6 +195,7 @@ export const SessionCard: FC<SessionCardProps> = ({
           workspaceId={session.workspaceId}
           readOnly={terminalReadOnly}
           isActiveSession={isActiveSession}
+          terminalKind="agent"
         />
       </div>
     </div>

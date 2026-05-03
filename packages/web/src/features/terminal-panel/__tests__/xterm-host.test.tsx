@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
-import type { TerminalReplayPayload } from '../../../ws/client';
+import type { TerminalReplayPayload, TerminalSnapshotPayload } from '../../../ws/client';
 import { JotaiProvider } from '../../../test-utils/jotai-provider';
 import { XtermHost, trimWrittenChunks } from '../views/shared/xterm-host';
 import { terminalOutputAtomFamily } from '../atoms';
@@ -1137,6 +1137,250 @@ describe('XtermHost', () => {
 
     await waitFor(() => {
       expect(mockTerminal.write).toHaveBeenCalledWith(lateChunk);
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('prefers terminal.snapshot for agent cold start and only flushes live chunks newer than the snapshot seq', async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode('snapshot view\n');
+    const coveredChunk = new TextEncoder().encode('covered\n');
+    const liveChunk = new TextEncoder().encode('fresh output\n');
+    const sendCommand = vi.fn();
+    let subscriptionHandler:
+      | ((topic: string, payload: unknown, seq: number) => void)
+      | undefined;
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === 'terminal.snapshot') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 801,
+          size: snapshotChunk.byteLength,
+          seq: 200,
+          cols: 132,
+          rows: 36,
+          source: 'headless',
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="agent-snapshot-terminal" workspaceId="test-workspace" terminalKind="agent" />
+      </Provider>
+    );
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'agent-snapshot-terminal'),
+        { transport: 'binary', streamId: 802, size: coveredChunk.byteLength, bytes: coveredChunk },
+        180
+      );
+      subscriptionHandler?.(
+        Topics.terminalOutput('test-workspace', 'agent-snapshot-terminal'),
+        { transport: 'binary', streamId: 803, size: liveChunk.byteLength, bytes: liveChunk },
+        200 + liveChunk.byteLength
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'terminal.snapshot',
+        {
+          terminalId: 'agent-snapshot-terminal',
+        },
+        {
+          timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+        }
+      );
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      'terminal.replay',
+      expect.anything(),
+      expect.anything()
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls[0]?.[0]).toBe(snapshotChunk);
+      expect(mockTerminal.write).toHaveBeenCalledWith(liveChunk);
+    });
+    expect(mockTerminal.write).not.toHaveBeenCalledWith(coveredChunk);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('falls back to terminal.replay when agent snapshot is unsupported', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('replay fallback\n');
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.snapshot') {
+        return Promise.resolve({ status: 'unsupported' });
+      }
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 811,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="agent-fallback-terminal" workspaceId="test-workspace" terminalKind="agent" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'terminal.snapshot',
+        { terminalId: 'agent-fallback-terminal' },
+        { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+      );
+      expectReplayCall(sendCommand, 'agent-fallback-terminal', 0);
+      expectTerminalWriteData(replayChunk);
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it('falls back to terminal.replay when agent snapshot times out', async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode('timeout replay\n');
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === 'terminal.snapshot') {
+        return Promise.reject(new Error('Command timeout: terminal.snapshot'));
+      }
+      if (op === 'terminal.replay') {
+        return Promise.resolve({
+          status: 'ok',
+          transport: 'binary',
+          streamId: 821,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: 'ok' });
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="agent-timeout-terminal" workspaceId="test-workspace" terminalKind="agent" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        'terminal.snapshot',
+        { terminalId: 'agent-timeout-terminal' },
+        { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+      );
+      expectReplayCall(sendCommand, 'agent-timeout-terminal', 0);
+      expectTerminalWriteData(replayChunk);
     });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;

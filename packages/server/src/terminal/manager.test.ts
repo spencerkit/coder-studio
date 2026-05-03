@@ -178,6 +178,24 @@ describe('TerminalManager', () => {
 
       expect(() => manager.create(spec)).toThrow('Terminal spawn failed')
     })
+
+    it('creates a snapshot buffer for agent terminals only', () => {
+      const shell = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+      const agent = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+
+      expect(manager.get(shell.id)?.snapshotBuffer).toBeUndefined()
+      expect(manager.get(agent.id)?.snapshotBuffer).toBeDefined()
+    })
   })
 
   describe('PTY event handling', () => {
@@ -260,6 +278,78 @@ describe('TerminalManager', () => {
       // Should be removed from manager
       expect(manager.get(terminal.id)).toBeUndefined()
     })
+
+    it('keeps replay live and marks snapshot unsupported when mirror writes fail', async () => {
+      const spec: TerminalSpec = {
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      }
+
+      const terminal = manager.create(spec)
+      const activeTerminal = manager.get(terminal.id)
+      const emittedEvents: any[] = []
+      eventBus.on('terminal.output', (event) => emittedEvents.push(event))
+
+      vi.spyOn(
+        (activeTerminal!.snapshotBuffer! as unknown as { term: { write: () => void } }).term,
+        'write'
+      ).mockImplementation(() => {
+        throw new Error('snapshot mirror exploded')
+      })
+
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
+      onDataCallback('live output')
+
+      expect(emittedEvents).toHaveLength(1)
+      expect(manager.replay(terminal.id, 0)).toMatchObject({
+        status: 'ok',
+        data: Buffer.from('live output'),
+        seq: 11,
+      })
+      await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+        status: 'unsupported',
+      })
+    })
+
+    it('keeps agent snapshots available until delayed exit cleanup runs', async () => {
+      vi.useFakeTimers()
+
+      try {
+        const spec: TerminalSpec = {
+          workspaceId: 'ws-123',
+          kind: 'agent',
+          argv: ['node', 'agent.js'],
+          cwd: '/home/user',
+        }
+
+        const terminal = manager.create(spec)
+        const activeTerminal = manager.get(terminal.id)
+        const disposeSpy = vi.spyOn(activeTerminal!.snapshotBuffer!, 'dispose')
+        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
+        const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+
+        onDataCallback('snapshot me')
+        await vi.runOnlyPendingTimersAsync()
+        onExitCallback({ exitCode: 0 })
+
+        await expect(manager.snapshot(terminal.id)).resolves.toMatchObject({
+          status: 'ok',
+          seq: 11,
+        })
+        expect(disposeSpy).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(1000)
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1)
+        await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+          status: 'unsupported',
+        })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   describe('write', () => {
@@ -323,6 +413,26 @@ describe('TerminalManager', () => {
       expect(mockPty.resize).toHaveBeenCalledWith(100, 40)
     })
 
+    it('resizes the PTY before resizing the snapshot mirror', () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+
+      const snapshotResizeSpy = vi
+        .spyOn(manager.get(terminal.id)!.snapshotBuffer!, 'resize')
+        .mockImplementation(() => {})
+
+      manager.resize(terminal.id, 100, 40)
+
+      const ptyResizeOrder = (mockPty.resize as Mock).mock.invocationCallOrder[0]
+      const snapshotResizeOrder = snapshotResizeSpy.mock.invocationCallOrder[0]
+
+      expect(ptyResizeOrder).toBeLessThan(snapshotResizeOrder)
+    })
+
     it('should fail silently when terminal not found', () => {
       // Should not throw
       manager.resize('nonexistent', 100, 40)
@@ -384,6 +494,22 @@ describe('TerminalManager', () => {
       // Should not throw
       manager.kill('nonexistent')
     })
+
+    it('does not dispose the snapshot buffer before the PTY exit cleanup window', () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+
+      const disposeSpy = vi.spyOn(manager.get(terminal.id)!.snapshotBuffer!, 'dispose')
+
+      manager.kill(terminal.id)
+
+      expect(mockPty.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(disposeSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('replay', () => {
@@ -418,6 +544,8 @@ describe('TerminalManager', () => {
     })
 
     it('returns unknown after terminal exit cleanup', async () => {
+      vi.useFakeTimers()
+
       const spec: TerminalSpec = {
         workspaceId: 'ws-123',
         kind: 'agent',
@@ -429,13 +557,39 @@ describe('TerminalManager', () => {
       const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0]
       const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
 
-      onDataCallback('session output')
-      onExitCallback({ exitCode: 0 })
+      try {
+        onDataCallback('session output')
+        await vi.runOnlyPendingTimersAsync()
+        onExitCallback({ exitCode: 0 })
 
-      await new Promise((resolve) => setTimeout(resolve, 1100))
+        await vi.advanceTimersByTimeAsync(1000)
 
-      const result = manager.replay(terminal.id, 0)
-      expect(result.status).toBe('unknown')
+        const result = manager.replay(terminal.id, 0)
+        expect(result.status).toBe('unknown')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  describe('snapshot', () => {
+    it('returns unsupported for shell terminals', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+
+      await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+        status: 'unsupported',
+      })
+    })
+
+    it('returns unsupported for unknown terminals', async () => {
+      await expect(manager.snapshot('nonexistent')).resolves.toEqual({
+        status: 'unsupported',
+      })
     })
   })
 
@@ -516,6 +670,21 @@ describe('TerminalManager', () => {
       manager.shutdown()
 
       expect(manager.getAll()).toHaveLength(0)
+    })
+
+    it('disposes snapshot buffers during shutdown', () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+
+      const disposeSpy = vi.spyOn(manager.get(terminal.id)!.snapshotBuffer!, 'dispose')
+
+      manager.shutdown()
+
+      expect(disposeSpy).toHaveBeenCalledTimes(1)
     })
   })
 })

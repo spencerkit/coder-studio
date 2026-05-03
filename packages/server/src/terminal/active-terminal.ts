@@ -3,6 +3,7 @@
 import type { Terminal } from '@coder-studio/core'
 import type { PtyProcess, TerminalSpec } from './types'
 import { RingBuffer } from './ring-buffer'
+import type { HeadlessSnapshotBuffer } from './terminal-snapshot-buffer'
 
 /**
  * Active terminal object that holds PTY instance and ring buffer
@@ -24,6 +25,7 @@ export class ActiveTerminal {
     public readonly spec: TerminalSpec,
     public readonly pty: PtyProcess,
     public readonly ringBuffer: RingBuffer,
+    public readonly snapshotBuffer: HeadlessSnapshotBuffer | undefined,
     public readonly createdAt: number = Date.now()
   ) {
     this.currentCols = spec.cols ?? 120

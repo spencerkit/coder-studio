@@ -7,6 +7,7 @@ export const TerminalBinaryFrameType = {
   Output: 1,
   Replay: 2,
   Input: 3,
+  Snapshot: 4,
 } as const;
 
 export type TerminalBinaryFrameType =
@@ -33,6 +34,17 @@ export interface TerminalReplayBinaryResult {
   streamId: number;
   size: number;
   seq: number;
+}
+
+export interface TerminalSnapshotBinaryResult {
+  status: 'ok';
+  transport: 'binary';
+  streamId: number;
+  size: number;
+  seq: number;
+  rows: number;
+  cols: number;
+  source: 'headless';
 }
 
 export interface TerminalInputBinaryArgs {

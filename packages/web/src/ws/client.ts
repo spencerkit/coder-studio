@@ -14,11 +14,15 @@ import {
   type ServerToClient,
   type TerminalBinaryEventData,
   type TerminalReplayBinaryResult,
+  type TerminalSnapshotBinaryResult,
 } from '@coder-studio/core';
 import { topicMatches } from './subscription';
 
 export type TerminalBinaryPayload = TerminalBinaryEventData & { bytes: Uint8Array };
 export type TerminalReplayPayload = TerminalReplayBinaryResult & { bytes: Uint8Array };
+export type TerminalSnapshotPayload = TerminalSnapshotBinaryResult & { bytes: Uint8Array };
+type TerminalCommandBinaryResult = TerminalReplayBinaryResult | TerminalSnapshotBinaryResult;
+type TerminalCommandBinaryPayload = TerminalReplayPayload | TerminalSnapshotPayload;
 
 export type ConnectionStatus =
   | 'connecting'
@@ -46,7 +50,8 @@ interface PendingCommand {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeoutId: NodeJS.Timeout;
-  terminalBinary?: TerminalReplayBinaryResult;
+  terminalBinary?: TerminalCommandBinaryResult;
+  binaryStreamId?: number;
 }
 
 interface SendCommandOptions {
@@ -97,12 +102,18 @@ export class WsClient {
   private eventListeners = new Map<string, Set<EventListener>>();
   private statusListeners = new Set<StatusListener>();
   private lastSeenSeq = new Map<string, number>();
-  private pendingReplayStreamIds = new Map<number, string>();
+  private pendingBinaryStreamIds = new Map<
+    number,
+    { commandId: string; expectedFrameType: TerminalBinaryFrameType }
+  >();
   // Binary frames can arrive ahead of their JSON metadata when the server
   // emits them in opposite order (e.g. terminal.replay sends the binary
   // before returning the result). We park orphan payloads here and consume
   // them once the matching metadata shows up.
-  private orphanBinaryPayloads = new Map<number, Uint8Array>();
+  private orphanBinaryPayloads = new Map<
+    number,
+    { frameType: TerminalBinaryFrameType; bytes: Uint8Array; timeoutId: NodeJS.Timeout }
+  >();
   private nextTerminalInputStreamId = 1;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -236,6 +247,7 @@ export class WsClient {
       const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
 
       const timeoutId = setTimeout(() => {
+        this.cleanupTimedOutBinaryCommand(id);
         this.pendingCommands.delete(id);
         reject(new Error(`Command timeout: ${op}`));
       }, timeoutMs);
@@ -266,6 +278,7 @@ export class WsClient {
       const id = createCommandId();
       const streamId = this.allocateTerminalInputStreamId();
       const timeoutId = setTimeout(() => {
+        this.cleanupTimedOutBinaryCommand(id);
         this.pendingCommands.delete(id);
         reject(new Error('Command timeout: terminal.input'));
       }, COMMAND_TIMEOUT_MS);
@@ -354,22 +367,36 @@ export class WsClient {
 
   private handleMessage(msg: ServerToClient): void {
     if (msg.kind === 'result') {
-      const pending = this.pendingCommands.get(msg.id);
+        const pending = this.pendingCommands.get(msg.id);
       if (pending) {
-        if (msg.ok && this.isTerminalReplayBinaryResult(msg.data)) {
+        if (msg.ok && this.isTerminalBinaryCommandResult(msg.data)) {
+          const expectedFrameType = this.getExpectedFrameType(msg.data);
           const orphan = this.orphanBinaryPayloads.get(msg.data.streamId);
           if (orphan) {
             this.orphanBinaryPayloads.delete(msg.data.streamId);
-            clearTimeout(pending.timeoutId);
-            this.pendingCommands.delete(msg.id);
-            pending.resolve({
-              ...msg.data,
-              bytes: orphan,
-            } satisfies TerminalReplayPayload);
-            return;
+            clearTimeout(orphan.timeoutId);
+            if (orphan.frameType === expectedFrameType) {
+              clearTimeout(pending.timeoutId);
+              this.pendingCommands.delete(msg.id);
+              pending.resolve({
+                ...msg.data,
+                bytes: orphan.bytes,
+              } satisfies TerminalCommandBinaryPayload);
+              return;
+            }
+
+            console.warn('Discarding terminal binary frame with unexpected type', {
+              streamId: msg.data.streamId,
+              expectedFrameType,
+              actualFrameType: orphan.frameType,
+            });
           }
           pending.terminalBinary = msg.data;
-          this.pendingReplayStreamIds.set(msg.data.streamId, msg.id);
+          pending.binaryStreamId = msg.data.streamId;
+          this.pendingBinaryStreamIds.set(msg.data.streamId, {
+            commandId: msg.id,
+            expectedFrameType,
+          });
           return;
         }
 
@@ -414,25 +441,43 @@ export class WsClient {
 
     const { header, payload } = decodeTerminalBinaryFrame(frame);
 
-    if (header.type === TerminalBinaryFrameType.Replay) {
-      const pendingId = this.pendingReplayStreamIds.get(header.streamId);
-      if (!pendingId) {
-        this.orphanBinaryPayloads.set(header.streamId, payload);
-        return;
+    const pendingInfo = this.pendingBinaryStreamIds.get(header.streamId);
+    if (!pendingInfo) {
+      const existingOrphan = this.orphanBinaryPayloads.get(header.streamId);
+      if (existingOrphan) {
+        clearTimeout(existingOrphan.timeoutId);
       }
-      this.pendingReplayStreamIds.delete(header.streamId);
-      const pending = this.pendingCommands.get(pendingId);
-      if (!pending?.terminalBinary) {
-        return;
-      }
-
-      clearTimeout(pending.timeoutId);
-      this.pendingCommands.delete(pendingId);
-      pending.resolve({
-        ...pending.terminalBinary,
+      this.orphanBinaryPayloads.set(header.streamId, {
+        frameType: header.type,
         bytes: payload,
-      } satisfies TerminalReplayPayload);
+        timeoutId: setTimeout(() => {
+          this.orphanBinaryPayloads.delete(header.streamId);
+        }, COMMAND_TIMEOUT_MS),
+      });
+      return;
     }
+
+    if (header.type !== pendingInfo.expectedFrameType) {
+      console.warn('Discarding terminal binary frame with unexpected type', {
+        streamId: header.streamId,
+        expectedFrameType: pendingInfo.expectedFrameType,
+        actualFrameType: header.type,
+      });
+      return;
+    }
+
+    this.pendingBinaryStreamIds.delete(header.streamId);
+    const pending = this.pendingCommands.get(pendingInfo.commandId);
+    if (!pending?.terminalBinary) {
+      return;
+    }
+
+    clearTimeout(pending.timeoutId);
+    this.pendingCommands.delete(pendingInfo.commandId);
+    pending.resolve({
+      ...pending.terminalBinary,
+      bytes: payload,
+    } satisfies TerminalCommandBinaryPayload);
   }
 
   private notifyEventListeners(topic: string, data: unknown, seq: number): void {
@@ -451,7 +496,7 @@ export class WsClient {
     }
   }
 
-  private isTerminalReplayBinaryResult(data: unknown): data is TerminalReplayBinaryResult {
+  private isTerminalBinaryCommandResult(data: unknown): data is TerminalCommandBinaryResult {
     return (
       typeof data === 'object' &&
       data !== null &&
@@ -462,6 +507,25 @@ export class WsClient {
       (data as { status?: unknown }).status === 'ok' &&
       (data as { transport?: unknown }).transport === 'binary'
     );
+  }
+
+  private getExpectedFrameType(data: TerminalCommandBinaryResult): TerminalBinaryFrameType {
+    return 'source' in data ? TerminalBinaryFrameType.Snapshot : TerminalBinaryFrameType.Replay;
+  }
+
+  private cleanupTimedOutBinaryCommand(commandId: string): void {
+    const pending = this.pendingCommands.get(commandId);
+    const streamId = pending?.binaryStreamId;
+    if (streamId == null) {
+      return;
+    }
+
+    this.pendingBinaryStreamIds.delete(streamId);
+    const orphan = this.orphanBinaryPayloads.get(streamId);
+    if (orphan) {
+      clearTimeout(orphan.timeoutId);
+      this.orphanBinaryPayloads.delete(streamId);
+    }
   }
 
   private allocateTerminalInputStreamId(): number {
