@@ -19,7 +19,6 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
     "@coder-studio/core": "workspace:*",
     "@coder-studio/providers": "workspace:*",
     "@xterm/addon-serialize": "^0.14.0",
