@@ -17,6 +17,7 @@
 ## 安装
 
 ```bash
+node --version  # 需要 >= 24.0.0
 npm install @spencer-kit/coder-studio
 ```
 
@@ -61,7 +62,7 @@ pnpm build:cli
 - **Backend**: Fastify + WebSocket
 - **Terminal**: xterm.js + node-pty
 - **Editor**: Monaco Editor
-- **Storage**: SQLite (better-sqlite3)
+- **Storage**: SQLite (`node:sqlite`)
 
 ## 文档
 

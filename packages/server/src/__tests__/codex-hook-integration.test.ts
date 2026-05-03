@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { HooksManager, type HookRouteDeps } from '../hooks/manager.js';
 import { HookRegistrationRepo } from '../storage/repositories/hook-registration-repo.js';
 import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
@@ -12,6 +12,7 @@ import { EventBus } from '../bus/event-bus.js';
 import type { Broadcaster, PtyHost, PtyProcess } from '../terminal/types.js';
 import type { ProviderDefinition } from '@coder-studio/core';
 import { providerRegistry } from '@coder-studio/providers';
+import type { Database } from '../storage/database.js';
 
 function createMockPtyHost(): PtyHost {
   const terminals = new Map<string, { onDataCallbacks: Array<(data: string) => void>; onExitCallbacks: Array<(event: { exitCode: number }) => void> }>();
@@ -40,7 +41,7 @@ function createMockPtyHost(): PtyHost {
 
 describe('Codex notify hook integration', () => {
   let tempHome: string;
-  let db: Database.Database;
+  let db: Database;
   let sessionMgr: SessionManager;
   let hooksMgr: HooksManager;
 
@@ -49,9 +50,9 @@ describe('Codex notify hook integration', () => {
     mkdirSync(tempHome, { recursive: true });
 
     // Create in-memory database
-    db = new Database(':memory:');
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
 
     // Create tables
     db.exec(`

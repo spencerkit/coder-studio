@@ -9,6 +9,7 @@ import { startServer } from './server-runner.js';
 import { openBrowser } from './browser.js';
 import { confirmYesNo, isInteractiveSession } from './prompts.js';
 import { getBrowserUrl, getListenIp, getListenUrl } from './server-url.js';
+import { assertSupportedNodeVersion } from './node-version.js';
 
 const MANAGED_SERVER_WAIT_MS = 5000;
 
@@ -231,6 +232,7 @@ async function openManagedServerInBrowser(existingStatus?: ServerStatus | null):
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
+  assertSupportedNodeVersion();
   const args = parseArgs(argv);
 
   if (args.command === 'config') {

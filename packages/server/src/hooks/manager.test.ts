@@ -5,9 +5,10 @@ import { HooksManager } from './manager.js';
 import { HookRegistrationRepo } from '../storage/repositories/hook-registration-repo.js';
 import type { RuntimeConfig } from './runtime-json.js';
 import type { ProviderDefinition, ManagedHooks } from '@coder-studio/core';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
+import type { Database } from '../storage/database.js';
 
 describe('manager', () => {
   const originalHome = process.env.HOME;
@@ -15,7 +16,7 @@ describe('manager', () => {
   let manager: HooksManager;
   let hookRegistrationRepo: HookRegistrationRepo;
   let runtime: RuntimeConfig;
-  let db: Database.Database;
+  let db: Database;
   let testDbPath: string;
   let testHomeDir: string;
   let logger: { warn: ReturnType<typeof vi.fn> };
@@ -65,9 +66,9 @@ describe('manager', () => {
     process.env.USERPROFILE = testHomeDir;
 
     testDbPath = join(tmpdir(), `test-${Date.now()}.db`);
-    db = new Database(testDbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    db = new DatabaseSync(testDbPath);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
     db.exec(`
       CREATE TABLE hook_registrations (
         provider_id TEXT PRIMARY KEY,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -18,9 +18,9 @@ describe('runMigrations', () => {
   });
 
   it('applies all sequentially-numbered migrations in order', async () => {
-    const { runMigrations, openDatabase, closeDatabase } = await import('./db');
+    const { runMigrations, closeDatabase } = await import('./db');
 
-    const db = new Database(dbPath);
+    const db = new DatabaseSync(dbPath);
     runMigrations(db);
 
     const migrations = db.prepare('SELECT name, applied_at FROM _migrations ORDER BY id').all();
@@ -40,7 +40,7 @@ describe('runMigrations', () => {
   it('is idempotent — running twice does not re-apply migrations', async () => {
     const { runMigrations } = await import('./db');
 
-    const db = new Database(dbPath);
+    const db = new DatabaseSync(dbPath);
 
     runMigrations(db);
     const firstRunMigrations = db.prepare('SELECT name, applied_at FROM _migrations ORDER BY id').all();
@@ -65,7 +65,7 @@ describe('runMigrations', () => {
   it('migration 002 adds transcript_path column to sessions', async () => {
     const { runMigrations } = await import('./db');
 
-    const db = new Database(dbPath);
+    const db = new DatabaseSync(dbPath);
     runMigrations(db);
 
     const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
@@ -77,7 +77,7 @@ describe('runMigrations', () => {
 
   it('migration 003 creates supervisor tables and composite integrity indexes', async () => {
     const { runMigrations } = await import('./db');
-    const db = new Database(dbPath);
+    const db = new DatabaseSync(dbPath);
     runMigrations(db);
 
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;

@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { Supervisor, SupervisorState } from '@coder-studio/core';
 
 interface SupervisorRow {
@@ -40,7 +40,7 @@ export interface SupervisorUpdatePatch {
 }
 
 export class SupervisorRepo {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database) {}
 
   create(input: NewSupervisor): Supervisor {
     this.db.prepare(
@@ -74,7 +74,7 @@ export class SupervisorRepo {
   }
 
   listAll(): Supervisor[] {
-    const rows = this.db.prepare('SELECT * FROM supervisors ORDER BY created_at ASC').all() as SupervisorRow[];
+    const rows = this.db.prepare('SELECT * FROM supervisors ORDER BY created_at ASC').all() as unknown as SupervisorRow[];
     return rows.map((row) => this.rowToSupervisor(row));
   }
 

@@ -9,7 +9,6 @@ import websocket, { type WebSocket } from '@fastify/websocket';
 import staticPlugin from '@fastify/static';
 import cors from '@fastify/cors';
 import type { WsHub } from './ws/hub.js';
-import type { Database } from 'better-sqlite3';
 import type { HooksManager } from './hooks/manager.js';
 import type { WorkspaceManager } from './workspace/manager.js';
 import type { FastifyRequest } from 'fastify';
@@ -24,6 +23,7 @@ import { registerHooksEndpoint } from './hooks/endpoint.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
 import type { RuntimeConfig } from './hooks/runtime-json.js';
 import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
+import type { Database } from './storage/database.js';
 
 interface AppDeps {
   wsHub: WsHub;

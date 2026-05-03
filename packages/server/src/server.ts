@@ -5,11 +5,10 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import type Database from 'better-sqlite3';
 import { EventBus } from './bus/event-bus.js';
 import { WsHub } from './ws/hub.js';
 import { buildFastifyApp } from './app.js';
-import { openDatabase, runMigrations } from './storage/db.js';
+import { openDatabase } from './storage/db.js';
 import { parseServerConfig, ensureDataDir, type ServerConfig } from './config.js';
 import { type CommandContext } from './ws/dispatch.js';
 import { WorkspaceManager } from './workspace/manager.js';
@@ -38,6 +37,7 @@ import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ProviderInstallManager } from './provider-runtime/install-manager.js';
 import type { RuntimeStatusDeps } from './provider-runtime/runtime-status.js';
+import type { Database } from './storage/database.js';
 
 // Import command handlers to register them
 import './commands/index.js';
@@ -136,7 +136,6 @@ export async function createServer(
 
   // Infrastructure: Database
   const db = openDatabase(config.dataDir);
-  runMigrations(db);
 
   // Collaboration infrastructure: Event Bus + WebSocket Hub
   const eventBus = new EventBus();
@@ -380,7 +379,7 @@ function createTerminalDatabase(db: any) {
 /**
  * Create session database adapter
  */
-function createSessionDatabase(db: Database.Database) {
+function createSessionDatabase(db: Database) {
   return {
     insert: (session: SessionRow) => {
       db.prepare(`
@@ -419,20 +418,20 @@ function createSessionDatabase(db: Database.Database) {
       if (setClauses.length === 0) return;
       const setClause = setClauses.join(', ');
 
-      db.prepare(`UPDATE sessions SET ${setClause} WHERE id = ?`).run(...values, id);
+      db.prepare(`UPDATE sessions SET ${setClause} WHERE id = ?`).run(...(values as Array<string | number | bigint | Uint8Array | null>), id);
     },
     findById: (id: string) => {
       const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
       return row ? rowToSession(row) : undefined;
     },
     findByWorkspaceId: (workspaceId: string) => {
-      const rows = db.prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC').all(workspaceId) as SessionRow[];
+      const rows = db.prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC').all(workspaceId) as unknown as SessionRow[];
       return rows.map(rowToSession);
     },
     listHydratable: () => {
       const rows = db.prepare(
         `SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC`
-      ).all() as SessionRow[];
+      ).all() as unknown as SessionRow[];
       return rows.map(rowToSession);
     },
     delete: (id: string) => {

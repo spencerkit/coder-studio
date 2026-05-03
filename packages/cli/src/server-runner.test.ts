@@ -127,4 +127,24 @@ describe('server-runner', () => {
 
     expect(createServer).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects unsupported Node.js versions before creating the server', async () => {
+    const originalVersions = process.versions;
+    Object.defineProperty(process, 'versions', {
+      configurable: true,
+      value: { ...process.versions, node: '22.4.0' },
+    });
+
+    try {
+      await expect(
+        runServerEntrypoint(import.meta.url, fileURLToPath(import.meta.url))
+      ).rejects.toThrow(/requires Node\.js >=24\.0\.0/);
+      expect(createServer).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'versions', {
+        configurable: true,
+        value: originalVersions,
+      });
+    }
+  });
 });

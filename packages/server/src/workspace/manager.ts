@@ -3,9 +3,9 @@
  */
 
 import type { Workspace } from '@coder-studio/core';
-import type { Database } from 'better-sqlite3';
 import type { DomainEvent } from '@coder-studio/core';
 import { WorkspaceValidator } from './validator.js';
+import type { Database } from '../storage/database.js';
 
 export interface OpenWorkspaceRequest {
   path: string;

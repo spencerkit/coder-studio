@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { Workspace, UiState } from '@coder-studio/core';
 
 /**
@@ -31,13 +31,13 @@ export interface NewWorkspace {
  * Workspace repository for CRUD operations
  */
 export class WorkspaceRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Lists all workspaces
    */
   list(): Workspace[] {
-    const rows = this.db.prepare('SELECT * FROM workspaces').all() as WorkspaceRow[];
+    const rows = this.db.prepare('SELECT * FROM workspaces').all() as unknown as WorkspaceRow[];
     return rows.map(row => this.rowToWorkspace(row));
   }
 

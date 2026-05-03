@@ -1,11 +1,11 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { ProviderConfig } from '@coder-studio/core';
 
 /**
  * Provider configuration repository
  */
 export class ProviderConfigRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Gets a provider configuration by provider ID

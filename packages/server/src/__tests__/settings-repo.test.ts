@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { openDatabase, closeDatabase, SettingsRepo } from '../storage/index.js';
-import type { Database } from 'better-sqlite3';
+import type { Database } from '../storage/database.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtempSync, rmSync } from 'fs';

@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { Terminal } from '@coder-studio/core';
 
 /**
@@ -39,7 +39,7 @@ export interface NewTerminal {
  * Terminal repository for CRUD operations
  */
 export class TerminalRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Lists all terminals for a workspace
@@ -47,7 +47,7 @@ export class TerminalRepo {
   listByWorkspace(workspaceId: string): Terminal[] {
     const rows = this.db
       .prepare('SELECT * FROM terminals WHERE workspace_id = ? ORDER BY created_at DESC')
-      .all(workspaceId) as TerminalRow[];
+      .all(workspaceId) as unknown as TerminalRow[];
     return rows.map(row => this.rowToTerminal(row));
   }
 
@@ -65,7 +65,7 @@ export class TerminalRepo {
   listActiveByWorkspace(workspaceId: string): Terminal[] {
     const rows = this.db
       .prepare('SELECT * FROM terminals WHERE workspace_id = ? AND ended_at IS NULL ORDER BY created_at DESC')
-      .all(workspaceId) as TerminalRow[];
+      .all(workspaceId) as unknown as TerminalRow[];
     return rows.map(row => this.rowToTerminal(row));
   }
 

@@ -5,7 +5,6 @@
  */
 
 import type { Command, Result, ProviderDefinition } from '@coder-studio/core';
-import type { Database } from 'better-sqlite3';
 import { z } from 'zod';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import type { SessionManager } from '../session/manager.js';
@@ -17,6 +16,7 @@ import type { FencingManager } from './fencing.js';
 import type { SupervisorManager } from '../supervisor/manager.js';
 import type { RuntimeStatusDeps } from '../provider-runtime/runtime-status.js';
 import type { ProviderInstallManager } from '../provider-runtime/install-manager.js';
+import type { Database } from '../storage/database.js';
 
 /**
  * Command context - injected dependencies for handlers

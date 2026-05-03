@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { openDatabase, closeDatabase, ProviderConfigRepo } from '../storage/index.js';
-import type { Database } from 'better-sqlite3';
+import type { Database } from '../storage/database.js';
 import type { ProviderConfig } from '@coder-studio/core';
 import { tmpdir } from 'os';
 import { join } from 'path';

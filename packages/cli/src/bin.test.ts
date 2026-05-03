@@ -409,6 +409,24 @@ describe('main', () => {
       password: 'sekrit',
     });
   });
+
+  it('rejects unsupported Node.js versions before dispatching commands', async () => {
+    const originalVersions = process.versions;
+    Object.defineProperty(process, 'versions', {
+      configurable: true,
+      value: { ...process.versions, node: '22.4.0' },
+    });
+
+    try {
+      await expect(main(['status'])).rejects.toThrow(/requires Node\.js >=24\.0\.0/);
+      expect(getServerStatus).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'versions', {
+        configurable: true,
+        value: originalVersions,
+      });
+    }
+  });
 });
 
 describe('parseArgs', () => {

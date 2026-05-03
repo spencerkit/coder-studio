@@ -1,6 +1,7 @@
-import Database from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { DatabaseSync } from 'node:sqlite';
+import { withTransaction, type Database } from './database.js';
 
 const MIGRATION_PATTERN = /^\d{3}_.+\.sql$/;
 
@@ -19,17 +20,17 @@ interface MigrationNameRow {
  * @param dbPath - Path to the SQLite database file
  * @returns Database instance
  */
-export function openDatabase(dbPath: string): Database.Database {
-  const db = new Database(dbPath);
+export function openDatabase(dbPath: string): Database {
+  const db = new DatabaseSync(dbPath);
 
   // Enable WAL mode for better concurrency and crash recovery
-  db.pragma('journal_mode = WAL');
+  db.exec('PRAGMA journal_mode = WAL');
 
   // Enable foreign key constraints
-  db.pragma('foreign_keys = ON');
+  db.exec('PRAGMA foreign_keys = ON');
 
   // Run integrity check
-  const integrityResult = db.pragma('integrity_check') as IntegrityCheckRow[];
+  const integrityResult = db.prepare('PRAGMA integrity_check').all() as unknown as IntegrityCheckRow[];
   if (integrityResult[0]?.integrity_check !== 'ok') {
     throw new Error(`Database integrity check failed: ${JSON.stringify(integrityResult)}`);
   }
@@ -60,7 +61,7 @@ function discoverMigrations(): string[] {
  *
  * @param db - Database instance
  */
-export function runMigrations(db: Database.Database): void {
+export function runMigrations(db: Database): void {
   // Create migrations tracking table if it doesn't exist
   db.exec(`
     CREATE TABLE IF NOT EXISTS _migrations (
@@ -74,7 +75,7 @@ export function runMigrations(db: Database.Database): void {
   const migrationFiles = discoverMigrations();
 
   // Get already applied migrations
-  const appliedMigrationRows = db.prepare('SELECT name FROM _migrations').all() as MigrationNameRow[];
+  const appliedMigrationRows = db.prepare('SELECT name FROM _migrations').all() as unknown as MigrationNameRow[];
   const appliedMigrations = new Set(appliedMigrationRows.map((row) => row.name));
 
   // Apply each migration that hasn't been applied yet
@@ -91,12 +92,10 @@ export function runMigrations(db: Database.Database): void {
     const migrationSQL = readFileSync(migrationPath, 'utf-8');
 
     // Apply migration in a transaction
-    const transaction = db.transaction(() => {
+    withTransaction(db, () => {
       db.exec(migrationSQL);
       db.prepare('INSERT INTO _migrations (name, applied_at) VALUES (?, ?)').run(migrationName, Date.now());
     });
-
-    transaction();
   }
 }
 
@@ -105,6 +104,8 @@ export function runMigrations(db: Database.Database): void {
  * 
  * @param db - Database instance
  */
-export function closeDatabase(db: Database.Database): void {
-  db.close();
+export function closeDatabase(db: Database): void {
+  if (db.isOpen) {
+    db.close();
+  }
 }

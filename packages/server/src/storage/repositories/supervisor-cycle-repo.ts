@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { SupervisorCycle } from '@coder-studio/core';
 
 interface SupervisorCycleRow {
@@ -29,7 +29,7 @@ export interface SupervisorCycleUpdatePatch {
 }
 
 export class SupervisorCycleRepo {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database) {}
 
   create(input: SupervisorCycle): SupervisorCycle {
     this.db.prepare(
@@ -64,7 +64,7 @@ export class SupervisorCycleRepo {
   listRecentForSupervisor(supervisorId: string, limit: number): SupervisorCycle[] {
     const rows = this.db.prepare(
       'SELECT * FROM supervisor_cycles WHERE supervisor_id = ? ORDER BY created_at DESC LIMIT ?'
-    ).all(supervisorId, limit) as SupervisorCycleRow[];
+    ).all(supervisorId, limit) as unknown as SupervisorCycleRow[];
     return rows.map((row) => this.rowToCycle(row));
   }
 

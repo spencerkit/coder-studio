@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 
 /**
  * Database row representation for hook_registrations table
@@ -43,7 +43,7 @@ export interface NewHookRegistration {
  * Hook registration repository for tracking provider hook injection status
  */
 export class HookRegistrationRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Gets a hook registration by provider ID
@@ -116,7 +116,7 @@ export class HookRegistrationRepo {
    * Lists all hook registrations
    */
   listAll(): HookRegistration[] {
-    const rows = this.db.prepare('SELECT * FROM hook_registrations').all() as HookRegistrationRow[];
+    const rows = this.db.prepare('SELECT * FROM hook_registrations').all() as unknown as HookRegistrationRow[];
     return rows.map(row => this.rowToHookRegistration(row));
   }
 

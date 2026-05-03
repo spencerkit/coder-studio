@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 
 export interface AuthSession {
   token: string;
@@ -7,7 +7,7 @@ export interface AuthSession {
 }
 
 export class AuthSessionRepo {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database) {}
 
   create(token: string, now: number): AuthSession {
     this.db.prepare(`

@@ -1,8 +1,8 @@
 import { fileURLToPath } from 'url';
-import { createServer } from '@coder-studio/server';
 import type { Server, ServerConfig } from '@coder-studio/server';
 import { readCliConfig } from './config-store.js';
 import { getStaticAssetsDir, hasWebAssets } from './embed.js';
+import { assertSupportedNodeVersion } from './node-version.js';
 
 export const buildServerConfig = (): Partial<ServerConfig> => {
   const savedConfig = readCliConfig();
@@ -62,6 +62,8 @@ export const runServerEntrypoint = async (
 };
 
 export const startServer = async (): Promise<Server> => {
+  assertSupportedNodeVersion();
+  const { createServer } = await import('@coder-studio/server');
   const server = await createServer(buildServerConfig());
   const shutdown = createShutdownHandler(server);
 

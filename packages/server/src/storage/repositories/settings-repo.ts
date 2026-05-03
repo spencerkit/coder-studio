@@ -1,11 +1,11 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 
 /**
  * Settings repository for key-value storage
  * Stores JSON values for various settings
  */
 export class SettingsRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Gets a setting value by key

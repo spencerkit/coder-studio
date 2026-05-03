@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { openDatabase, closeDatabase } from '../storage/index.js';
-import type { Database } from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtempSync, rmSync } from 'fs';
 
 describe('Database', () => {
-  let db: Database;
+  let db: DatabaseSync;
   let tempDir: string;
 
   beforeEach(() => {
@@ -25,23 +25,23 @@ describe('Database', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
-      const result = db.pragma('journal_mode', { simple: true });
-      expect(result).toBe('wal');
+      const result = db.prepare('PRAGMA journal_mode').get() as { journal_mode: string };
+      expect(result.journal_mode).toBe('wal');
     });
 
     it('should enable foreign key constraints', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
-      const result = db.pragma('foreign_keys', { simple: true });
-      expect(result).toBe(1);
+      const result = db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number };
+      expect(result.foreign_keys).toBe(1);
     });
 
     it('should run integrity check successfully', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
-      const result = db.pragma('integrity_check');
+      const result = db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check: string }>;
       expect(result[0].integrity_check).toBe('ok');
     });
 

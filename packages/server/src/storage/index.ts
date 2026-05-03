@@ -1,4 +1,5 @@
 export { openDatabase, closeDatabase } from './db.js';
+export { type Database, withTransaction } from './database.js';
 export { WorkspaceRepo, type WorkspaceRow, type NewWorkspace } from './repositories/workspace-repo.js';
 export { TerminalRepo, type TerminalRow, type NewTerminal } from './repositories/terminal-repo.js';
 export {

@@ -1,5 +1,6 @@
 import { SerializeAddon } from '@xterm/addon-serialize'
 import XtermHeadless from '@xterm/headless'
+import type { Terminal as HeadlessTerminal } from '@xterm/headless'
 import { TERMINAL_SNAPSHOT_SCROLLBACK } from './constants'
 
 const { Terminal } = XtermHeadless
@@ -19,7 +20,7 @@ export class SnapshotUnsupportedError extends Error {
 }
 
 export class HeadlessSnapshotBuffer {
-  private term: Terminal | null
+  private term: HeadlessTerminal | null
   private addon: SerializeAddon | null
   private cols: number
   private rows: number
@@ -133,7 +134,7 @@ export class HeadlessSnapshotBuffer {
     }
   }
 
-  private requireTerminal(): Terminal {
+  private requireTerminal(): HeadlessTerminal {
     if (this.disposed || this.disabledState || !this.term) {
       throw new SnapshotUnsupportedError()
     }

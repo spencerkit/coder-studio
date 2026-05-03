@@ -65,7 +65,7 @@ export async function createCliBuildOptions(
     ],
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node24',
     format,
     outdir,
     outExtension: { '.js': format === 'esm' ? '.mjs' : '.js' },

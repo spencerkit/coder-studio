@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { dispatch } from '../ws/dispatch.js';
 import type { CommandContext } from '../ws/dispatch.js';
 import { closeDatabase, openDatabase } from '../storage/db.js';
-import type { Database } from 'better-sqlite3';
+import type { Database } from '../storage/database.js';
 import './settings.js';
 
 describe('settings commands', () => {

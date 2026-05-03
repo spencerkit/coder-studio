@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Database } from '../database.js';
 import type { Session, SessionState } from '@coder-studio/core';
 
 /**
@@ -86,7 +86,7 @@ export interface NewSession {
  * Session repository for CRUD operations
  */
 export class SessionRepo {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database) {}
 
   /**
    * Lists all sessions for a workspace
@@ -94,7 +94,7 @@ export class SessionRepo {
   listByWorkspace(workspaceId: string): Session[] {
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC')
-      .all(workspaceId) as SessionRow[];
+      .all(workspaceId) as unknown as SessionRow[];
     return rows.map(rowToSession);
   }
 
@@ -120,7 +120,7 @@ export class SessionRepo {
   listActiveByWorkspace(workspaceId: string): Session[] {
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC')
-      .all(workspaceId) as SessionRow[];
+      .all(workspaceId) as unknown as SessionRow[];
     return rows.map(rowToSession);
   }
 

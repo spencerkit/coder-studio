@@ -6,14 +6,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rmdir } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { WorkspaceManager } from '../../workspace/manager.js';
-import { openDatabase } from '../../storage/db.js';
 import type { DomainEvent } from '@coder-studio/core';
+import type { Database } from '../../storage/database.js';
 
 describe('WorkspaceManager', () => {
   let testDir: string;
-  let db: Database.Database;
+  let db: Database;
   let manager: WorkspaceManager;
   let events: DomainEvent[];
 
@@ -23,9 +23,9 @@ describe('WorkspaceManager', () => {
     await mkdir(testDir);
 
     // Create in-memory database
-    db = new Database(':memory:');
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
 
     // Create tables
     db.exec(`
