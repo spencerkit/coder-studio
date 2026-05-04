@@ -35,6 +35,7 @@ interface MonacoHostProps {
   filePath: string;
   content: string;
   onContentChange?: (content: string) => void;
+  onSave?: () => void | Promise<void>;
 }
 
 /**
@@ -52,15 +53,21 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   filePath,
   content,
   onContentChange,
+  onSave,
 }) => {
   const uiTheme = useAtomValue(themeAtom);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const onContentChangeRef = useRef(onContentChange);
+  const onSaveRef = useRef(onSave);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
   }, [onContentChange]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   const language = detectLanguage(filePath);
   const editorTheme = uiTheme === 'light' ? 'vs' : 'vs-dark';
@@ -84,9 +91,18 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     const changeDisposable = editor.onDidChangeModelContent(() => {
       onContentChangeRef.current?.(editor.getValue());
     });
+    const saveCommand = editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      () => {
+        void onSaveRef.current?.();
+      }
+    );
 
     return () => {
       changeDisposable.dispose();
+      if (typeof saveCommand === 'function') {
+        saveCommand();
+      }
       editor.dispose();
       editorRef.current = null;
     };

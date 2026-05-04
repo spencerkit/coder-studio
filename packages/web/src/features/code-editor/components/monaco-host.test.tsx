@@ -10,12 +10,15 @@ const {
   mockSetTheme,
   mockEditorInstance,
   mockWorker,
+  mockAddCommand,
 } = vi.hoisted(() => {
+  const mockAddCommand = vi.fn(() => undefined);
   const mockEditorInstance = {
     dispose: vi.fn(),
     getModel: vi.fn(() => ({})),
     getValue: vi.fn(() => 'export const a = 1;'),
     onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
+    addCommand: mockAddCommand,
     setValue: vi.fn(),
   };
 
@@ -25,10 +28,17 @@ const {
     mockSetTheme: vi.fn(),
     mockEditorInstance,
     mockWorker: class MockWorker {},
+    mockAddCommand,
   };
 });
 
 vi.mock('monaco-editor', () => ({
+  KeyCode: {
+    KeyS: 49,
+  },
+  KeyMod: {
+    CtrlCmd: 2048,
+  },
   editor: {
     create: mockCreateEditor,
     setModelLanguage: mockSetModelLanguage,
@@ -47,6 +57,7 @@ describe('MonacoHost', () => {
     mockCreateEditor.mockClear();
     mockSetModelLanguage.mockClear();
     mockSetTheme.mockClear();
+    mockAddCommand.mockClear();
     mockEditorInstance.dispose.mockClear();
     mockEditorInstance.getValue.mockClear();
     mockEditorInstance.setValue.mockClear();
@@ -97,6 +108,25 @@ describe('MonacoHost', () => {
 
     await waitFor(() => {
       expect(mockSetTheme).toHaveBeenCalledWith('vs');
+    });
+  });
+
+  it('registers a save command for Ctrl/Cmd+S', async () => {
+    const onSave = vi.fn();
+
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+          onSave={onSave}
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockAddCommand).toHaveBeenCalledWith(2048 | 49, expect.any(Function));
     });
   });
 });

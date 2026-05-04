@@ -118,6 +118,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
     activeLoadError,
     currentFile,
     handleContentChange,
+    handleSave,
     isImageFile,
     isTextFile,
     saveError,
@@ -177,6 +178,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
               filePath={currentFile.path}
               content={currentFile.content}
               onContentChange={handleContentChange}
+              onSave={handleSave}
             />
           ) : isImageFile ? (
             <ImagePreview

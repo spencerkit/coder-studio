@@ -90,10 +90,14 @@ describe('CodeEditorHost', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('file.read', {
-        workspaceId: 'ws-1',
-        path: 'src/a.ts',
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'file.read',
+        {
+          workspaceId: 'ws-1',
+          path: 'src/a.ts',
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
