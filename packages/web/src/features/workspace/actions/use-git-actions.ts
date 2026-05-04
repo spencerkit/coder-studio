@@ -39,6 +39,8 @@ interface GitSyncResult {
   updatedFiles?: string[];
 }
 
+const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
+
 export function useGitSyncActions(workspaceId: string) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -46,6 +48,7 @@ export function useGitSyncActions(workspaceId: string) {
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
+  const [syncingIntent, setSyncingIntent] = useState<'push' | 'pull' | null>(null);
 
   const refreshBranchState = useCallback(async () => {
     if (!workspaceId) {
@@ -94,32 +97,38 @@ export function useGitSyncActions(workspaceId: string) {
         return false;
       }
 
-      const result = await dispatch<GitSyncResult>(op, { workspaceId });
+      setSyncingIntent(op === 'git.push' ? 'push' : 'pull');
 
-      if (!result.ok || !result.data?.success) {
-        const body = result.error?.message ?? result.data?.message;
+      try {
+        const result = await dispatch<GitSyncResult>(op, { workspaceId }, { timeoutMs: GIT_SYNC_TIMEOUT_MS });
+
+        if (!result.ok || !result.data?.success) {
+          const body = result.error?.message ?? result.data?.message;
+          pushToast({
+            kind: 'error',
+            title: options.errorTitle,
+            body,
+          });
+          console.error(`Failed to run ${op}:`, body);
+          return false;
+        }
+
+        await refreshBranchState();
+
+        if (options.markFileTreeStale) {
+          setFileTreeStale(true);
+        }
+
         pushToast({
-          kind: 'error',
-          title: options.errorTitle,
-          body,
+          kind: 'success',
+          title: options.successTitle,
+          body: result.data.message || options.fallbackSuccessBody,
         });
-        console.error(`Failed to run ${op}:`, body);
-        return false;
+
+        return true;
+      } finally {
+        setSyncingIntent(null);
       }
-
-      await refreshBranchState();
-
-      if (options.markFileTreeStale) {
-        setFileTreeStale(true);
-      }
-
-      pushToast({
-        kind: 'success',
-        title: options.successTitle,
-        body: result.data.message || options.fallbackSuccessBody,
-      });
-
-      return true;
     },
     [dispatch, pushToast, refreshBranchState, setFileTreeStale, workspaceId]
   );
@@ -149,6 +158,7 @@ export function useGitSyncActions(workspaceId: string) {
     handlePull,
     handlePush,
     refreshBranchState,
+    syncingIntent,
   };
 }
 

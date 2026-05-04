@@ -86,6 +86,35 @@ describe('Git Commands', () => {
     expect((result.data as { diff: string }).diff).toContain('+export const value = 2;');
   });
 
+  it('returns new file diff for untracked files via git.diff', async () => {
+    await writeFile(join(testDir, 'scratch.txt'), 'temporary\nnotes\n');
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'git-diff-untracked',
+        op: 'git.diff',
+        args: {
+          workspaceId,
+          path: 'scratch.txt',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        diff: expect.stringContaining('diff --git a/scratch.txt b/scratch.txt'),
+      })
+    );
+    expect((result.data as { diff: string }).diff).toContain('new file mode 100644');
+    expect((result.data as { diff: string }).diff).toContain('--- /dev/null');
+    expect((result.data as { diff: string }).diff).toContain('+++ b/scratch.txt');
+    expect((result.data as { diff: string }).diff).toContain('+temporary');
+    expect((result.data as { diff: string }).diff).toContain('+notes');
+  });
+
   it('discards modified tracked files', async () => {
     const result = await dispatch(
       {

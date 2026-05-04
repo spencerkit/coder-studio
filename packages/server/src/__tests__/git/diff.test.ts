@@ -56,6 +56,19 @@ describe('git diff operations', () => {
       const diff = await getFileDiff(testDir, 'initial.txt', true);
       expect(diff).toContain('modified');
     });
+
+    it('should get new file diff for untracked file', async () => {
+      await writeFile(join(testDir, 'scratch.txt'), 'hello\nworld\n');
+
+      const diff = await getFileDiff(testDir, 'scratch.txt');
+
+      expect(diff).toContain('diff --git a/scratch.txt b/scratch.txt');
+      expect(diff).toContain('new file mode 100644');
+      expect(diff).toContain('--- /dev/null');
+      expect(diff).toContain('+++ b/scratch.txt');
+      expect(diff).toContain('+hello');
+      expect(diff).toContain('+world');
+    });
   });
 
   describe('getDiff', () => {

@@ -9,9 +9,14 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { runGit, GitError } from '../../git/cli.js';
+import { runGit, GitError, runGitPull, runGitPush } from '../../git/cli.js';
 
 const execFileAsync = promisify(execFile);
+
+async function getCurrentBranch(cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd });
+  return stdout.trim();
+}
 
 describe('runGit', () => {
   let testDir: string;
@@ -93,6 +98,7 @@ describe('runGitListBranches', () => {
     await writeFile(join(testDir, 'README.md'), 'test');
     await execFileAsync('git', ['add', '.'], { cwd: testDir });
     await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
 
     // Create feature branch
     await execFileAsync('git', ['checkout', '-b', 'feature-1'], { cwd: testDir });
@@ -103,20 +109,20 @@ describe('runGitListBranches', () => {
 
     // Add remote and push branches to create remote tracking branches
     await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: testDir });
-    await execFileAsync('git', ['push', '-u', 'origin', 'master'], { cwd: testDir });
+    await execFileAsync('git', ['push', '-u', 'origin', defaultBranch], { cwd: testDir });
     await execFileAsync('git', ['push', '-u', 'origin', 'feature-1'], { cwd: testDir });
 
-    // Go back to master (default branch)
-    await execFileAsync('git', ['checkout', 'master'], { cwd: testDir });
+    // Go back to default branch
+    await execFileAsync('git', ['checkout', defaultBranch], { cwd: testDir });
 
     const { runGitListBranches } = await import('../../git/cli.js');
     const result = await runGitListBranches(testDir);
 
-    expect(result.current).toBe('master');
+    expect(result.current).toBe(defaultBranch);
 
     // Check local branches
     expect(result.branches).toContainEqual({
-      name: 'master',
+      name: defaultBranch,
       isRemote: false,
       isCurrent: true,
     });
@@ -128,7 +134,7 @@ describe('runGitListBranches', () => {
 
     // Check remote branches
     expect(result.branches).toContainEqual({
-      name: 'origin/master',
+      name: `origin/${defaultBranch}`,
       isRemote: true,
       isCurrent: false,
       remote: 'origin',
@@ -154,7 +160,8 @@ describe('runGitListBranches', () => {
     await mkdir(remoteDir);
     await execFileAsync('git', ['init', '--bare'], { cwd: remoteDir });
     await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: testDir });
-    await execFileAsync('git', ['push', '-u', 'origin', 'master'], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync('git', ['push', '-u', 'origin', defaultBranch], { cwd: testDir });
     await execFileAsync('git', ['remote', 'set-head', 'origin', '-a'], { cwd: testDir });
 
     const { runGitListBranches } = await import('../../git/cli.js');
@@ -166,7 +173,7 @@ describe('runGitListBranches', () => {
       })
     );
     expect(result.branches).toContainEqual({
-      name: 'origin/master',
+      name: `origin/${defaultBranch}`,
       isRemote: true,
       isCurrent: false,
       remote: 'origin',
@@ -271,7 +278,8 @@ describe('runGitCheckout', () => {
 
     // Add remote and push master to create remote tracking branch
     await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: testDir });
-    await execFileAsync('git', ['push', '-u', 'origin', 'master'], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync('git', ['push', '-u', 'origin', defaultBranch], { cwd: testDir });
 
     // Create a new branch on remote (simulate remote-only branch)
     await execFileAsync('git', ['checkout', '-b', 'feature-remote'], { cwd: testDir });
@@ -281,7 +289,7 @@ describe('runGitCheckout', () => {
     await execFileAsync('git', ['push', 'origin', 'feature-remote'], { cwd: testDir });
 
     // Go back to master and delete local feature-remote branch
-    await execFileAsync('git', ['checkout', 'master'], { cwd: testDir });
+    await execFileAsync('git', ['checkout', defaultBranch], { cwd: testDir });
     await execFileAsync('git', ['branch', '-D', 'feature-remote'], { cwd: testDir });
 
     // Now feature-remote exists only on remote
@@ -305,7 +313,8 @@ describe('runGitCheckout', () => {
     await mkdir(remoteDir);
     await execFileAsync('git', ['init', '--bare'], { cwd: remoteDir });
     await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: testDir });
-    await execFileAsync('git', ['push', '-u', 'origin', 'master'], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync('git', ['push', '-u', 'origin', defaultBranch], { cwd: testDir });
 
     await execFileAsync('git', ['checkout', '-b', 'feature/login'], { cwd: testDir });
     await writeFile(join(testDir, 'feature.txt'), 'feature content');
@@ -313,7 +322,7 @@ describe('runGitCheckout', () => {
     await execFileAsync('git', ['commit', '-m', 'feature'], { cwd: testDir });
     await execFileAsync('git', ['push', 'origin', 'feature/login'], { cwd: testDir });
 
-    await execFileAsync('git', ['checkout', 'master'], { cwd: testDir });
+    await execFileAsync('git', ['checkout', defaultBranch], { cwd: testDir });
     await execFileAsync('git', ['branch', '-D', 'feature/login'], { cwd: testDir });
 
     const { runGitCheckout } = await import('../../git/cli.js');
@@ -339,7 +348,8 @@ describe('runGitCheckout', () => {
     await execFileAsync('git', ['commit', '-m', 'login feature'], { cwd: testDir });
 
     // Go back to master
-    await execFileAsync('git', ['checkout', 'master'], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync('git', ['checkout', defaultBranch], { cwd: testDir });
 
     // Now checkout the local branch with slashes (should NOT treat as remote)
     const { runGitCheckout } = await import('../../git/cli.js');
@@ -351,5 +361,108 @@ describe('runGitCheckout', () => {
     // Verify we're on the correct branch
     const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: testDir });
     expect(stdout.trim()).toBe('feature/login-page');
+  });
+});
+
+describe('runGitPush', () => {
+  let testDir: string;
+  let remoteDir: string;
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `git-test-${Date.now()}`);
+    remoteDir = join(tmpdir(), `git-remote-${Date.now()}`);
+    await mkdir(testDir);
+    await mkdir(remoteDir);
+
+    await execFileAsync('git', ['init'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: testDir });
+    await execFileAsync('git', ['init', '--bare'], { cwd: remoteDir });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(remoteDir, { recursive: true, force: true });
+  });
+
+  it('sets upstream automatically when pushing a new local branch', async () => {
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: testDir });
+    await execFileAsync('git', ['checkout', '-b', 'feature/push-test'], { cwd: testDir });
+    await writeFile(join(testDir, 'feature.txt'), 'feature\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'feature'], { cwd: testDir });
+
+    const result = await runGitPush(testDir);
+
+    expect(result.success).toBe(true);
+
+    const { stdout: upstreamOutput } = await execFileAsync(
+      'git',
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+      { cwd: testDir }
+    );
+    expect(upstreamOutput.trim()).toBe('origin/feature/push-test');
+
+    const { stdout: remoteOutput } = await execFileAsync(
+      'git',
+      ['branch', '--list', 'feature/push-test'],
+      { cwd: remoteDir }
+    );
+    expect(remoteOutput).toContain('feature/push-test');
+  });
+});
+
+describe('runGitPull', () => {
+  let primaryDir: string;
+  let contributorDir: string;
+  let remoteDir: string;
+
+  beforeEach(async () => {
+    primaryDir = join(tmpdir(), `git-primary-${Date.now()}`);
+    contributorDir = join(tmpdir(), `git-contributor-${Date.now()}`);
+    remoteDir = join(tmpdir(), `git-remote-${Date.now()}`);
+    await mkdir(primaryDir);
+    await mkdir(remoteDir);
+
+    await execFileAsync('git', ['init'], { cwd: primaryDir });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: primaryDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: primaryDir });
+    await execFileAsync('git', ['init', '--bare'], { cwd: remoteDir });
+
+    await writeFile(join(primaryDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: primaryDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: primaryDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', remoteDir], { cwd: primaryDir });
+    const defaultBranch = await getCurrentBranch(primaryDir);
+    await execFileAsync('git', ['push', '-u', 'origin', defaultBranch], { cwd: primaryDir });
+
+    await execFileAsync('git', ['clone', remoteDir, contributorDir]);
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: contributorDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: contributorDir });
+  });
+
+  afterEach(async () => {
+    await rm(primaryDir, { recursive: true, force: true });
+    await rm(contributorDir, { recursive: true, force: true });
+    await rm(remoteDir, { recursive: true, force: true });
+  });
+
+  it('pulls from the tracked upstream when no remote args are provided', async () => {
+    await writeFile(join(contributorDir, 'README.md'), 'remote change\n');
+    await execFileAsync('git', ['add', '.'], { cwd: contributorDir });
+    await execFileAsync('git', ['commit', '-m', 'remote change'], { cwd: contributorDir });
+    const contributorBranch = await getCurrentBranch(contributorDir);
+    await execFileAsync('git', ['push', 'origin', contributorBranch], { cwd: contributorDir });
+
+    const result = await runGitPull(primaryDir);
+
+    expect(result.success).toBe(true);
+
+    const { stdout } = await execFileAsync('git', ['rev-parse', '@{upstream}'], { cwd: primaryDir });
+    const { stdout: headStdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: primaryDir });
+    expect(headStdout.trim()).toBe(stdout.trim());
   });
 });

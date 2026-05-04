@@ -307,6 +307,8 @@
     "push_success_body": "本地提交已推送到远端。",
     "pull_success_title": "拉取完成",
     "pull_success_body": "已拉取远端最新提交到当前分支。",
+    "push_in_progress": "推送中...",
+    "pull_in_progress": "拉取中...",
     "push_failed_title": "推送失败",
     "pull_failed_title": "拉取失败",
     "branch_remote": "远程",

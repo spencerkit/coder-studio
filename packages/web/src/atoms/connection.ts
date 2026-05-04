@@ -65,12 +65,17 @@ export const serverInfoAtom = atom<ServerInfo | null>(null);
  */
 export const authEnabledAtom = atom<boolean | null>(null);
 
+export interface DispatchCommandOptions {
+  timeoutMs?: number;
+}
+
 /**
  * Command dispatch function type
  */
 export type DispatchCommand = <T = unknown>(
   op: string,
-  args: unknown
+  args: unknown,
+  options?: DispatchCommandOptions
 ) => Promise<CommandResult<T>>;
 
 /**
@@ -96,7 +101,8 @@ export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
 
   return async <T = unknown>(
     op: string,
-    args: unknown
+    args: unknown,
+    options?: DispatchCommandOptions
   ): Promise<CommandResult<T>> => {
     if (!client) {
       return {
@@ -109,7 +115,7 @@ export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
     }
 
     try {
-      const data = await client.sendCommand<T>(op, args);
+      const data = await client.sendCommand<T>(op, args, options);
       return { ok: true, data };
     } catch (error) {
       if (error instanceof CommandResultError) {

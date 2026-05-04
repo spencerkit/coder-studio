@@ -19,7 +19,7 @@ interface SyncDialogState {
 
 export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inline = false }) => {
   const t = useTranslation();
-  const { handlePull, handlePush } = useGitSyncActions(workspaceId);
+  const { handlePull, handlePush, syncingIntent } = useGitSyncActions(workspaceId);
   const [pendingAction, setPendingAction] = useState<SyncDialogState | null>(null);
 
   if (!gitState) {
@@ -43,6 +43,9 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
       ? t('git.push_confirm_message', { count: pendingAction.count })
       : t('git.pull_confirm_message', { count: pendingAction?.count ?? 0 });
   const confirmActionLabel = pendingAction?.intent === 'push' ? t('action.push') : t('action.pull');
+  const confirmActionBusyLabel =
+    pendingAction?.intent === 'push' ? t('git.push_in_progress') : t('git.pull_in_progress');
+  const isSyncingCurrentAction = Boolean(pendingAction && syncingIntent === pendingAction.intent);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -61,15 +64,18 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
       return;
     }
 
-    const nextAction = pendingAction;
-    setPendingAction(null);
-
-    if (nextAction.intent === 'push') {
-      await handlePush();
+    if (pendingAction.intent === 'push') {
+      const success = await handlePush();
+      if (success) {
+        setPendingAction(null);
+      }
       return;
     }
 
-    await handlePull();
+    const success = await handlePull();
+    if (success) {
+      setPendingAction(null);
+    }
   };
 
   return (
@@ -130,8 +136,13 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
               <button className="btn btn-secondary" onClick={closeConfirm} type="button">
                 {t('action.cancel')}
               </button>
-              <button className="btn btn-primary" onClick={() => void confirmSync()} type="button">
-                {confirmActionLabel}
+              <button
+                className="btn btn-primary"
+                onClick={() => void confirmSync()}
+                type="button"
+                disabled={isSyncingCurrentAction}
+              >
+                {isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
               </button>
             </div>
           </div>

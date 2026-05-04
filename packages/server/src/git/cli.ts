@@ -11,6 +11,18 @@ export interface GitCommandResult {
   stderr: string;
 }
 
+interface RunGitOptions {
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+}
+
+interface GitRemoteBranchTarget {
+  remote: string;
+  branch: string;
+}
+
+const GIT_NETWORK_TIMEOUT_MS = 3 * 60 * 1000;
+
 /**
  * Executes a git command in the specified working directory.
  *
@@ -18,15 +30,33 @@ export interface GitCommandResult {
  * @param args - Git command arguments
  * @returns Command output
  */
-export async function runGit(cwd: string, args: string[]): Promise<GitCommandResult> {
+export async function runGit(
+  cwd: string,
+  args: string[],
+  options: RunGitOptions = {}
+): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(
+      'git',
+      args,
+      {
+        cwd,
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+          ...options.env,
+        },
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: options.timeoutMs,
+      },
+      (err, stdout, stderr) => {
       if (err) {
         reject(new GitError(err.message, stderr));
       } else {
         resolve({ stdout, stderr });
       }
-    });
+      }
+    );
   });
 }
 
@@ -195,18 +225,42 @@ export async function runGitPush(
   }
 ): Promise<{ success: boolean; message: string }> {
   const args = ['push'];
+  let remote = options?.remote;
+  let branch = options?.branch;
 
   if (options?.force) {
     args.push('--force');
   }
 
-  if (options?.remote && options?.branch) {
-    args.push(options.remote, options.branch);
-  } else if (options?.branch) {
-    args.push('origin', options.branch);
+  if (!remote || !branch) {
+    const pushTarget = await resolveRemoteBranchTarget(cwd, 'push');
+    remote = remote ?? pushTarget?.remote;
+    branch = branch ?? pushTarget?.branch;
   }
 
-  const { stdout, stderr } = await runGit(cwd, args);
+  if (!remote || !branch) {
+    const upstreamTarget = await resolveRemoteBranchTarget(cwd, 'upstream');
+    remote = remote ?? upstreamTarget?.remote;
+    branch = branch ?? upstreamTarget?.branch;
+  }
+
+  if (!remote && branch) {
+    remote = (await getPreferredRemote(cwd)) ?? 'origin';
+  }
+
+  if (!remote) {
+    remote = (await getPreferredRemote(cwd)) ?? undefined;
+  }
+
+  if (remote && branch) {
+    args.push(remote, `HEAD:${branch}`);
+  } else if (remote) {
+    args.push('--set-upstream', remote, 'HEAD');
+  }
+
+  const { stdout, stderr } = await runGit(cwd, args, {
+    timeoutMs: GIT_NETWORK_TIMEOUT_MS,
+  });
 
   // Combine output for message
   const message = stdout || stderr || 'Push completed successfully';
@@ -225,14 +279,26 @@ export async function runGitPull(
   }
 ): Promise<{ success: boolean; message: string; updatedFiles?: string[] }> {
   const args = ['pull'];
+  let remote = options?.remote;
+  let branch = options?.branch;
 
-  if (options?.remote && options?.branch) {
-    args.push(options.remote, options.branch);
-  } else if (options?.branch) {
-    args.push('origin', options.branch);
+  if (!remote || !branch) {
+    const upstreamTarget = await resolveRemoteBranchTarget(cwd, 'upstream');
+    remote = remote ?? upstreamTarget?.remote;
+    branch = branch ?? upstreamTarget?.branch;
   }
 
-  const { stdout, stderr } = await runGit(cwd, args);
+  if (!remote && branch) {
+    remote = (await getPreferredRemote(cwd)) ?? 'origin';
+  }
+
+  if (remote && branch) {
+    args.push(remote, branch);
+  }
+
+  const { stdout, stderr } = await runGit(cwd, args, {
+    timeoutMs: GIT_NETWORK_TIMEOUT_MS,
+  });
 
   // Parse updated files from output
   const updatedFiles: string[] = [];
@@ -406,4 +472,49 @@ export async function runGitListBranches(cwd: string): Promise<{
   }
 
   return { branches, current };
+}
+
+async function resolveRemoteBranchTarget(
+  cwd: string,
+  mode: 'push' | 'upstream'
+): Promise<GitRemoteBranchTarget | null> {
+  const symbolicRef = mode === 'push' ? '@{push}' : '@{upstream}';
+
+  try {
+    const { stdout } = await runGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', symbolicRef]);
+    const fullRef = stdout.trim();
+    if (!fullRef) {
+      return null;
+    }
+
+    const remoteSeparatorIndex = fullRef.indexOf('/');
+    if (remoteSeparatorIndex <= 0 || remoteSeparatorIndex === fullRef.length - 1) {
+      return null;
+    }
+
+    return {
+      remote: fullRef.slice(0, remoteSeparatorIndex),
+      branch: fullRef.slice(remoteSeparatorIndex + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getPreferredRemote(cwd: string): Promise<string | null> {
+  try {
+    const { stdout } = await runGit(cwd, ['remote']);
+    const remotes = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (remotes.length === 0) {
+      return null;
+    }
+
+    return remotes.includes('origin') ? 'origin' : (remotes[0] ?? null);
+  } catch {
+    return null;
+  }
 }

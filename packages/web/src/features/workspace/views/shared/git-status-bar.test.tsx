@@ -43,9 +43,22 @@ function renderStatusBar({
 
 describe('GitStatusBar', () => {
   it('confirms and pushes local commits from the status bar', async () => {
+    let resolvePush: (() => void) | null = null;
+    const pushPromise = new Promise<void>((resolve) => {
+      resolvePush = resolve;
+    });
+
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.push') {
+        await pushPromise;
         return { success: true, message: 'Push completed successfully' };
+      }
+
+      if (op === 'git.branches') {
+        return {
+          current: 'main',
+          branches: [{ name: 'main', isRemote: false, isCurrent: true }],
+        };
       }
 
       if (op === 'git.status') {
@@ -69,9 +82,18 @@ describe('GitStatusBar', () => {
     expect(modal).not.toBeNull();
     fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: 'Push' }));
 
+    expect(within(modal as HTMLElement).getByRole('button', { name: 'Pushing...' })).toBeDisabled();
+
+    resolvePush?.();
+
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.push', { workspaceId: 'ws-test' });
-      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.push',
+        { workspaceId: 'ws-test' },
+        { timeoutMs: 180000 }
+      );
+      expect(sendCommand).toHaveBeenCalledWith('git.branches', { workspaceId: 'ws-test' }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' }, undefined);
     });
 
     expect(store.get(gitStateAtomFamily('ws-test'))?.ahead).toBe(0);

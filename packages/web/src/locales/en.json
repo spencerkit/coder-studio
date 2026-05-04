@@ -307,6 +307,8 @@
     "push_success_body": "Local commits were pushed to the remote.",
     "pull_success_title": "Pull completed",
     "pull_success_body": "Latest remote commits were pulled into your local branch.",
+    "push_in_progress": "Pushing...",
+    "pull_in_progress": "Pulling...",
     "push_failed_title": "Push failed",
     "pull_failed_title": "Pull failed",
     "branch_remote": "Remote",
