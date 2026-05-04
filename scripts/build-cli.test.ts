@@ -1,8 +1,9 @@
-import { mkdtemp, readdir, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { prepareCliOutputDirs } from "./build-cli.js";
+import { CLI_DIR, getProductionDeps } from "./shared/index.js";
 
 describe("build-cli", () => {
   it("removes stale CLI dist files before recreating output directories", async () => {
@@ -19,5 +20,18 @@ describe("build-cli", () => {
 
     await expect(readdir(cliEsmDir)).resolves.toEqual([]);
     await expect(readdir(cliWebDir)).resolves.toEqual([]);
+  });
+
+  it("declares every bundled production dependency in the CLI package manifest", async () => {
+    const pkg = JSON.parse(
+      await readFile(join(CLI_DIR, "package.json"), "utf8")
+    ) as {
+      dependencies?: Record<string, string>;
+    };
+
+    const declaredDeps = new Set(Object.keys(pkg.dependencies ?? {}));
+    const productionDeps = await getProductionDeps();
+
+    expect(productionDeps.filter((dep) => !declaredDeps.has(dep))).toEqual([]);
   });
 });
