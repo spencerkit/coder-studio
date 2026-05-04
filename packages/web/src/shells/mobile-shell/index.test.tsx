@@ -65,6 +65,10 @@ vi.mock('../../features/auth', () => ({
   LoginPage: () => <div>LoginPage</div>,
 }));
 
+vi.mock('../../features/not-found', () => ({
+  NotFoundPage: () => <div>Page not found</div>,
+}));
+
 vi.mock('../../features/config-drift-banner', () => ({
   ConfigDriftBanner: () => null,
 }));
@@ -601,7 +605,7 @@ describe('MobileShell Phase 2 workspace', () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('workspace.close', {
         id: 'ws-1',
-      });
+      }, undefined);
     });
 
     expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
@@ -652,7 +656,7 @@ describe('MobileShell Phase 2 workspace', () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('workspace.close', {
         id: 'ws-1',
-      });
+      }, undefined);
     });
 
     await waitFor(() => {
@@ -781,6 +785,15 @@ describe('MobileShell Phase 2 workspace', () => {
     });
 
     expect(screen.getByText('正在重新连接...')).toBeInTheDocument();
+  });
+
+  it('shows a not found page for unknown frontend routes', () => {
+    renderMobileShell({
+      initialEntry: '/missing-page',
+      withWorkspaces: false,
+    });
+
+    expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
   it('switches the active session from the dock selector', async () => {
@@ -914,7 +927,7 @@ describe('MobileShell Phase 2 workspace', () => {
       expect(sendCommand).toHaveBeenCalledWith('session.create', {
         workspaceId: 'ws-1',
         providerId: 'codex',
-      });
+      }, undefined);
     });
 
     expect(screen.getByRole('region', { name: 'Select Provider sheet' })).toBeInTheDocument();
@@ -1034,7 +1047,7 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(sendCommand).toHaveBeenCalledWith('session.create', {
       workspaceId: 'ws-1',
       providerId: 'codex',
-    });
+    }, undefined);
     expect(sendCommand).toHaveBeenCalledWith(
       'workspace.uiState.set',
       expect.objectContaining({
@@ -1050,7 +1063,8 @@ describe('MobileShell Phase 2 workspace', () => {
             ],
           }),
         }),
-      })
+      }),
+      undefined
     );
   });
 
@@ -1116,7 +1130,7 @@ describe('MobileShell Phase 2 workspace', () => {
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
     });
-    expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_2' });
+    expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_2' }, undefined);
   });
 
   it('closes a non-active agent from its row action without switching first', async () => {
@@ -1160,7 +1174,7 @@ describe('MobileShell Phase 2 workspace', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_1' });
+      expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_1' }, undefined);
     });
     expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_2');
   });
@@ -1207,7 +1221,7 @@ describe('MobileShell Phase 2 workspace', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' }, undefined);
     });
 
     await waitFor(() => {
@@ -1255,7 +1269,7 @@ describe('MobileShell Phase 2 workspace', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' }, undefined);
     });
 
     expect(sendCommand).not.toHaveBeenCalledWith(

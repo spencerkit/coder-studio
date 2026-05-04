@@ -595,6 +595,13 @@
       }
     }
   },
+  "not_found": {
+    "kicker": "路由不存在",
+    "title": "页面不存在",
+    "description": "你访问的路径不在当前工作台的前端路由中。",
+    "path_label": "请求路径",
+    "go_home": "返回首页"
+  },
   "confirm": {
     "save_changes": "是否保存更改？",
     "discard_changes": "确定要放弃更改吗？",

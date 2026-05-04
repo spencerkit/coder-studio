@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildFastifyApp } from '../app.js';
@@ -20,10 +20,14 @@ describe('auth login protection', () => {
   let dbPath: string;
   let db: Database;
   let app: FastifyInstance;
+  let webRoot: string;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'coder-studio-auth-'));
     dbPath = join(tempDir, 'auth.db');
+    webRoot = join(tempDir, 'web');
+    mkdirSync(join(webRoot, 'assets'), { recursive: true });
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body><div id="root">shell</div></body></html>');
     db = openDatabase(dbPath);
 
     const eventBus = new EventBus();
@@ -33,6 +37,7 @@ describe('auth login protection', () => {
       port: 0,
       dataDir: dbPath,
       logLevel: 'info' as const,
+      webRoot,
       auth: {
         enabled: true,
         password: 'sekrit',
@@ -48,6 +53,7 @@ describe('auth login protection', () => {
     app = await buildFastifyApp({
       wsHub,
       db,
+      webRoot,
       workspaceMgr: new WorkspaceManager({ db, eventBus, broadcaster: wsHub }),
       config,
       authSessionRepo: new AuthSessionRepo(db),
@@ -238,5 +244,51 @@ describe('auth login protection', () => {
     } finally {
       Date.now = originalDateNow;
     }
+  });
+
+  it('does not treat dotted backend paths as public static files', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/internal/openapi.json',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      error: 'Authentication required',
+    });
+  });
+
+  it('does not redirect bare reserved backend namespaces to the auth page', async () => {
+    const apiResponse = await app.inject({
+      method: 'GET',
+      url: '/api',
+      headers: {
+        accept: 'text/html',
+      },
+    });
+
+    const internalResponse = await app.inject({
+      method: 'GET',
+      url: '/internal',
+      headers: {
+        accept: 'text/html',
+      },
+    });
+
+    expect(apiResponse.statusCode).toBe(401);
+    expect(apiResponse.json()).toMatchObject({
+      ok: false,
+      error: 'Authentication required',
+    });
+
+    expect(internalResponse.statusCode).toBe(401);
+    expect(internalResponse.json()).toMatchObject({
+      ok: false,
+      error: 'Authentication required',
+    });
   });
 });

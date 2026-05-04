@@ -20,6 +20,7 @@ import {
   registerAuthStatusRoute,
 } from './auth/index.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
+import { isFrontendNavigationRequest } from './web-ui-routing.js';
 import type { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
 import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
 import type { Database } from './storage/database.js';
@@ -124,10 +125,19 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     app.register(staticPlugin, {
       root: deps.webRoot,
       prefix: '/',
-      globIgnore: ['index.html'],
+      wildcard: false,
+      globIgnore: ['index.html', 'assets/**'],
       maxAge: '1y',
       immutable: true,
-      wildcard: false,
+    });
+
+    app.register(staticPlugin, {
+      root: `${deps.webRoot}/assets`,
+      prefix: '/assets/',
+      maxAge: '1y',
+      immutable: true,
+      wildcard: true,
+      decorateReply: false,
     });
 
     app.get('/', async (_request, reply) => {
@@ -137,8 +147,15 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
       });
     });
 
+    app.get('/index.html', async (_request, reply) => {
+      return reply.sendFile('index.html', {
+        maxAge: 0,
+        immutable: false,
+      });
+    });
+
     app.get('/*', async (request, reply) => {
-      if (request.url.startsWith('/api/') || request.url.startsWith('/auth/') || request.url.startsWith('/internal/')) {
+      if (!isFrontendNavigationRequest(request)) {
         return reply.callNotFound();
       }
       return reply.sendFile('index.html', {

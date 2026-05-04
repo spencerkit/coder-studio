@@ -32,6 +32,10 @@ vi.mock('../features/auth', () => ({
   LoginPage: () => <div>LoginPage</div>,
 }));
 
+vi.mock('../features/not-found', () => ({
+  NotFoundPage: () => <div>Page not found</div>,
+}));
+
 vi.mock('../features/config-drift-banner', () => ({
   ConfigDriftBanner: () => null,
 }));
@@ -168,6 +172,19 @@ describe('DesktopShell auth gating', () => {
     expect(screen.getByText('LoginPage')).toBeInTheDocument();
   });
 
+  it('shows a not found page for unknown frontend routes', () => {
+    window.history.replaceState({}, '', '/missing-page');
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    renderShell(store);
+
+    expect(screen.getByText('Page not found')).toBeInTheDocument();
+  });
+
   it('shows the reconnecting banner on desktop', () => {
     const store = createStore();
     store.set(connectionStatusAtom, 'reconnecting');
@@ -198,7 +215,7 @@ describe('DesktopShell auth gating', () => {
     renderShell(store);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {}, undefined);
     });
 
     await waitFor(() => {
@@ -245,7 +262,7 @@ describe('DesktopShell auth gating', () => {
     renderShell(store);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {}, undefined);
     });
 
     await waitFor(() => {
@@ -269,7 +286,7 @@ describe('DesktopShell auth gating', () => {
     renderShell(store);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {});
+      expect(sendCommand).toHaveBeenCalledWith('workspace.list', {}, undefined);
     });
 
     await waitFor(() => {

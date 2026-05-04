@@ -595,6 +595,13 @@
       }
     }
   },
+  "not_found": {
+    "kicker": "ROUTE NOT FOUND",
+    "title": "Page not found",
+    "description": "The route you opened does not exist in this workspace shell.",
+    "path_label": "Requested path",
+    "go_home": "Go Home"
+  },
   "confirm": {
     "save_changes": "Save changes?",
     "discard_changes": "Discard changes?",

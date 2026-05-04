@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 import { authEnabledAtom } from '../../atoms/connection';
 import { LoginPage } from '../../features/auth';
 import { CommandPalette } from '../../features/command-palette';
+import { NotFoundPage } from '../../features/not-found';
 import { ToastContainer } from '../../features/notifications';
 import { SettingsPage } from '../../features/settings';
 import { WelcomePage } from '../../features/welcome';
@@ -43,6 +44,7 @@ export function MobileShell() {
               )}
             />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         )}
       </main>

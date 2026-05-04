@@ -4,18 +4,24 @@ import type { ServerConfig } from '../config.js';
 import { AuthLoginProtection, resolveClientIp } from './login-protection.js';
 import type { AuthLoginBlockRepo } from '../storage/repositories/auth-login-block-repo.js';
 import type { AuthSessionRepo } from '../storage/repositories/auth-session-repo.js';
+import {
+  getRequestPathname,
+  isFrontendNavigationRequest as isFrontendNavigationRequestForWebUi,
+  isPublicStaticPath,
+} from '../web-ui-routing.js';
 
 const AUTH_COOKIE_NAME = 'coder_studio_auth';
 
 const isPublicPath = (path: string) => {
+  const pathname = getRequestPathname(path);
+
   return (
-    path === '/' ||
-    path === '/auth' ||
-    path === '/healthz' ||
-    path === '/auth/status' ||
-    path.startsWith('/assets/') ||
-    path.startsWith('/@') ||
-    path === '/favicon.ico'
+    pathname === '/' ||
+    pathname === '/auth' ||
+    pathname === '/healthz' ||
+    pathname === '/auth/status' ||
+    pathname.startsWith('/@') ||
+    isPublicStaticPath(pathname)
   );
 };
 
@@ -58,26 +64,7 @@ const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): b
   if (!deps.config.webRoot) {
     return false;
   }
-
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return false;
-  }
-
-  const path = request.url;
-  if (
-    path.startsWith('/api/') ||
-    path.startsWith('/auth/') ||
-    path.startsWith('/internal/') ||
-    path === '/ws' ||
-    path.startsWith('/assets/') ||
-    path.startsWith('/@') ||
-    path === '/favicon.ico'
-  ) {
-    return false;
-  }
-
-  const accept = request.headers.accept ?? '';
-  return accept.includes('text/html');
+  return isFrontendNavigationRequestForWebUi(request);
 };
 
 const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
