@@ -6,6 +6,7 @@ import {
   branchQuickPickAtom,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type GitDiffPreview,
@@ -216,10 +217,12 @@ export function useGitPanelActions({
   const t = useTranslation();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
+  const diffPreviewDismissed = useAtomValue(gitDiffPreviewDismissedAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
+  const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
 
   const [commitMessage, setCommitMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -268,6 +271,7 @@ export function useGitPanelActions({
         diff: result.data.diff,
         staged: type === 'staged',
       };
+      setDiffPreviewDismissed(false);
       updatePreview(preview);
       return preview;
     },
@@ -302,12 +306,10 @@ export function useGitPanelActions({
     if (!result.ok || !result.data) {
       setBranchList((prev) => ({
         ...prev,
-  const diffPreviewDismissed = useAtomValue(gitDiffPreviewDismissedAtomFamily(workspaceId));
         loading: false,
         error: result.error?.message ?? 'Failed to load branches',
       }));
       console.error('Failed to load git branches:', result.error?.message);
-  const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
       return;
     }
 
@@ -339,6 +341,11 @@ export function useGitPanelActions({
 
       setGitState(result.data);
 
+      if (diffPreviewDismissed) {
+        updatePreview(null);
+        return;
+      }
+
       const nextPreviewTarget =
         (diffPreview ? getChangeByPath(result.data, diffPreview.path) : null) ??
         getFirstChange(result.data);
@@ -358,7 +365,6 @@ export function useGitPanelActions({
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
-      setDiffPreviewDismissed(false);
 
       if (pendingReloadRef.current) {
         pendingReloadRef.current = false;
@@ -381,6 +387,10 @@ export function useGitPanelActions({
 
   useEffect(() => {
     if (!gitState) {
+      return;
+    }
+
+    if (diffPreviewDismissed) {
       return;
     }
 
@@ -428,11 +438,6 @@ export function useGitPanelActions({
 
   const handleStageAll = useCallback(async () => {
     const paths = [
-      if (diffPreviewDismissed) {
-        updatePreview(null);
-        return;
-      }
-
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
       ...(gitState?.untracked.map((file) => file.path) ?? []),
@@ -485,10 +490,6 @@ export function useGitPanelActions({
   const handleConfirmDiscard = useCallback(async () => {
     if (!pendingDiscard) {
       return;
-    if (diffPreviewDismissed) {
-      return;
-    }
-
     }
 
     const nextDiscard = pendingDiscard;
@@ -568,6 +569,7 @@ export function useGitPanelActions({
 export function useGitDiffViewerActions(workspaceId: string) {
   const preview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const setPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
+  const setPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
 
   return {
     closePreview: () => {
@@ -670,7 +672,6 @@ export function useBranchQuickPickActions() {
   const trimmedInput = inputValue.trim();
 
   const filteredBranches = useMemo(
-  const setPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
     () =>
       branchList.branches.filter((branch) =>
         branch.name.toLowerCase().includes(inputValue.toLowerCase())
