@@ -74,6 +74,10 @@ export async function runGit(
         env: {
           ...process.env,
           GIT_TERMINAL_PROMPT: '0',
+          // Force C locale so prompt detection (e.g. askpass `grep "username"`)
+          // and parsers do not break on systems running git in another language.
+          LC_ALL: 'C',
+          LANG: 'C',
           ...options.env,
         },
         maxBuffer: 10 * 1024 * 1024,
@@ -105,6 +109,21 @@ export class GitError extends Error {
   ) {
     super(message);
     this.name = 'GitError';
+  }
+}
+
+/**
+ * Error thrown when a git network operation fails authentication.
+ * The dispatcher serializes `code` and `details` onto the protocol error.
+ */
+export class GitAuthError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'git_auth_required' | 'git_auth_failed',
+    public readonly details: GitAuthFailureDetails
+  ) {
+    super(message);
+    this.name = 'GitAuthError';
   }
 }
 
@@ -709,11 +728,8 @@ function normalizeGitAuthFailure(error: unknown, context: GitAuthContext): unkno
     return error;
   }
 
-  return {
-    code: details.canPrompt ? 'git_auth_required' : 'git_auth_failed',
-    message: formatGitAuthFailureMessage(details),
-    details,
-  };
+  const code = details.canPrompt ? 'git_auth_required' : 'git_auth_failed';
+  return new GitAuthError(formatGitAuthFailureMessage(details), code, details);
 }
 
 export function classifyGitAuthFailure(

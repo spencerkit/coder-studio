@@ -119,7 +119,6 @@ export class SessionManager {
     });
 
     this.sessions.set(sessionId, active);
-    active.terminalId = terminal.id;
     this.terminalToSession.set(terminal.id, sessionId);
     this.attachShadowDetector(active, req.provider);
 

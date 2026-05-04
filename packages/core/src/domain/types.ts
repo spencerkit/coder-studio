@@ -96,9 +96,15 @@ export interface GitStatus {
   headSha?: string;
   headShortSha?: string;
   headSubject?: string;
+  /**
+   * Files with a non-blank index status. Includes staged deletions (index
+   * status 'D'); consumers showing a staged-files badge should count this
+   * array directly rather than diffing against `deleted`.
+   */
   staged: GitFileChange[];
   modified: GitFileChange[];
   untracked: GitFileChange[];
+  /** Worktree-only deletions (index unchanged, file removed in working tree). */
   deleted: GitFileChange[];
 }
 

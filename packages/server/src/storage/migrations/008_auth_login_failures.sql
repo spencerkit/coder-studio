@@ -3,6 +3,9 @@ CREATE TABLE auth_login_failures (
   failed_at INTEGER NOT NULL
 );
 
+-- Backfill bounded to 1000 synthetic rows per IP. SQLite's default recursion
+-- depth is 1000; pre-existing rows with very large failed_count (no upper
+-- cap was enforced before) would otherwise abort the migration.
 WITH RECURSIVE backfill(ip, first_failed_at, last_failed_at, failed_count, idx) AS (
   SELECT ip, first_failed_at, last_failed_at, failed_count, 0
   FROM auth_login_blocks
@@ -12,7 +15,7 @@ WITH RECURSIVE backfill(ip, first_failed_at, last_failed_at, failed_count, idx) 
 
   SELECT ip, first_failed_at, last_failed_at, failed_count, idx + 1
   FROM backfill
-  WHERE idx + 1 < failed_count
+  WHERE idx + 1 < failed_count AND idx + 1 < 1000
 )
 INSERT INTO auth_login_failures (ip, failed_at)
 SELECT

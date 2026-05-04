@@ -2,8 +2,8 @@ import {
   AuthLoginBlockRepo,
   closeDatabase,
   openDatabase,
-} from '../../server/src/storage/index.js';
-import { parseServerConfig } from '../../server/src/config.js';
+  parseServerConfig,
+} from '@coder-studio/server';
 import { readCliConfig } from './config-store.js';
 
 export interface CliAuthBlock {

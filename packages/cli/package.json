@@ -29,6 +29,7 @@
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
     "@coder-studio/core": "workspace:*",
+    "@coder-studio/server": "workspace:*",
     "chokidar": "^5.0.0",
     "fastify": "^5.8.5",
     "ignore": "^7.0.5",

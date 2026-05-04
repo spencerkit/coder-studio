@@ -28,12 +28,20 @@ import {
 describe('server-control', () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalRuntimeDir = process.env.CODER_STUDIO_RUNTIME_DIR;
+  const originalRuntimeJsonPath = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
   let testHomeDir: string;
 
   beforeEach(() => {
     testHomeDir = mkdtempSync(join(tmpdir(), 'cs-server-control-home-'));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+    // Anchor the runtime directory directly so the test does not depend on
+    // os.homedir() honoring HOME, and so any inherited env (e.g. when the
+    // shell was spawned from a pm2-managed server) cannot redirect writes
+    // back to the developer's real ~/.coder-studio.
+    process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, '.coder-studio');
+    delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
 
     deleteManagedServer.mockResolvedValue(false);
     getManagedServerStatus.mockResolvedValue({
@@ -61,6 +69,18 @@ describe('server-control', () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = originalUserProfile;
+    }
+
+    if (originalRuntimeDir === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_DIR;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_DIR = originalRuntimeDir;
+    }
+
+    if (originalRuntimeJsonPath === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_JSON_PATH = originalRuntimeJsonPath;
     }
 
     if (existsSync(testHomeDir)) {
