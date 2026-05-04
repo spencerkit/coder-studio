@@ -14,6 +14,20 @@ const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+const notificationMocks = vi.hoisted(() => ({
+  permission: 'default' as NotificationPermission,
+  requestPermission: vi.fn(async () => 'default' as NotificationPermission),
+}));
+
+const navigatorMocks = vi.hoisted(() => ({
+  userAgent:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+  platform: 'MacIntel',
+  maxTouchPoints: 0,
+  standalone: false,
+  displayModeStandalone: false,
+}));
+
 vi.mock('../../../hooks/use-viewport', () => ({
   useViewport: () => viewportMocks.viewport,
 }));
@@ -51,11 +65,72 @@ function renderSettingsPage(store = createConnectedStore(vi.fn().mockResolvedVal
   );
 }
 
+function installNotificationMock() {
+  class NotificationMock {
+    static permission = notificationMocks.permission;
+    static requestPermission = notificationMocks.requestPermission;
+  }
+
+  Object.defineProperty(window, 'Notification', {
+    configurable: true,
+    writable: true,
+    value: NotificationMock,
+  });
+}
+
+function removeNotificationMock() {
+  delete (window as Window & { Notification?: unknown }).Notification;
+}
+
+function applyNavigatorMocks() {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(display-mode: standalone)' ? navigatorMocks.displayModeStandalone : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    get: () => navigatorMocks.userAgent,
+  });
+  Object.defineProperty(window.navigator, 'platform', {
+    configurable: true,
+    get: () => navigatorMocks.platform,
+  });
+  Object.defineProperty(window.navigator, 'maxTouchPoints', {
+    configurable: true,
+    get: () => navigatorMocks.maxTouchPoints,
+  });
+  Object.defineProperty(window.navigator, 'standalone', {
+    configurable: true,
+    get: () => navigatorMocks.standalone,
+  });
+}
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
     viewportMocks.viewport = 'desktop';
+    notificationMocks.permission = 'default';
+    notificationMocks.requestPermission = vi.fn(async () => 'default' as NotificationPermission);
+    navigatorMocks.userAgent =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36';
+    navigatorMocks.platform = 'MacIntel';
+    navigatorMocks.maxTouchPoints = 0;
+    navigatorMocks.standalone = false;
+    navigatorMocks.displayModeStandalone = false;
+    installNotificationMock();
+    applyNavigatorMocks();
     window.history.replaceState({ idx: 0 }, '', '/settings');
   });
 
@@ -385,5 +460,64 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith(-1);
+  });
+
+  it('splits mobile notification support from denied browser permission on Android', async () => {
+    notificationMocks.permission = 'denied';
+    notificationMocks.requestPermission = vi.fn(async () => 'denied' as NotificationPermission);
+    navigatorMocks.userAgent =
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36';
+    navigatorMocks.platform = 'Linux armv8l';
+    navigatorMocks.maxTouchPoints = 5;
+    installNotificationMock();
+
+    renderSettingsPage();
+
+    expect(await screen.findByText('通知状态')).toBeInTheDocument();
+    expect(screen.getByText('受限')).toBeInTheDocument();
+    expect(
+      screen.getByText('当前移动端浏览器中的系统通知支持不稳定，浏览器权限不代表一定能正常送达。')
+    ).toBeInTheDocument();
+    expect(screen.getByText('通知权限')).toBeInTheDocument();
+    expect(screen.getByText('已拒绝')).toBeInTheDocument();
+    expect(
+      screen.getByText('浏览器或系统通知权限可能已阻止，请检查站点设置和设备通知设置')
+    ).toBeInTheDocument();
+  });
+
+  it('does not offer browser permission request when mobile notification support is limited', async () => {
+    notificationMocks.permission = 'default';
+    notificationMocks.requestPermission = vi.fn(async () => 'granted' as NotificationPermission);
+    navigatorMocks.userAgent =
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36';
+    navigatorMocks.platform = 'Linux armv8l';
+    navigatorMocks.maxTouchPoints = 5;
+    installNotificationMock();
+
+    renderSettingsPage();
+
+    expect(await screen.findByText('通知状态')).toBeInTheDocument();
+    expect(screen.getByText('受限')).toBeInTheDocument();
+    expect(screen.getByText('通知权限')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '请求授权' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('当前移动端浏览器内即使允许通知权限，也可能无法稳定展示系统通知。')
+    ).toBeInTheDocument();
+  });
+
+  it('shows unsupported notification status when the Notification API is unavailable', async () => {
+    removeNotificationMock();
+    navigatorMocks.userAgent =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
+    navigatorMocks.platform = 'iPhone';
+    navigatorMocks.maxTouchPoints = 5;
+
+    renderSettingsPage();
+
+    expect(await screen.findByText('通知状态')).toBeInTheDocument();
+    expect(screen.getByText('不支持')).toBeInTheDocument();
+    expect(screen.getByText('当前浏览器环境不支持此通知方式。')).toBeInTheDocument();
+    expect(screen.getByText('不可用')).toBeInTheDocument();
+    expect(screen.getByText('当前环境无法请求浏览器通知权限')).toBeInTheDocument();
   });
 });

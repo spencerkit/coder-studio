@@ -373,10 +373,18 @@
     "notifications_enabled_hint": "当 Agent 会话完成时发送通知",
     "notification_sound": "通知声音",
     "notification_sound_hint": "通知触发时播放完成提示音",
+    "notification_status": "通知状态",
+    "notification_status_available": "可用",
+    "notification_status_limited": "受限",
+    "notification_status_limited_hint": "当前移动端浏览器中的系统通知支持不稳定，浏览器权限不代表一定能正常送达。",
+    "notification_status_unsupported": "不支持",
+    "notification_status_unsupported_hint": "当前浏览器环境不支持此通知方式。",
     "notification_permission": "通知权限",
     "permission_granted": "已授权",
     "permission_denied": "已拒绝",
     "permission_request": "请求授权",
+    "permission_unavailable": "不可用",
+    "permission_limited_hint": "当前移动端浏览器内即使允许通知权限，也可能无法稳定展示系统通知。",
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
     "terminal_standard": "标准",
@@ -445,7 +453,8 @@
       "format_hint": "格式化 JSON 代码",
       "file_not_found_hint": "编辑并保存以创建配置文件。"
     },
-    "permission_denied_hint": "浏览器设置中已阻止，请在设置中手动开启"
+    "permission_denied_hint": "浏览器或系统通知权限可能已阻止，请检查站点设置和设备通知设置",
+    "permission_unavailable_hint": "当前环境无法请求浏览器通知权限"
   },
   "auth": {
     "description": "输入密码后继续进入当前工作区。",

@@ -638,16 +638,38 @@
 }
 
 .settings-info-value {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2);
   font-size: var(--text-sm);
   color: var(--text-primary);
+  text-align: right;
+  max-width: min(34ch, 62%);
 }
 
+.settings-capability-available,
 .settings-permission-granted {
   color: var(--color-success);
 }
 
+.settings-capability-limited {
+  color: var(--accent-amber);
+}
+
+.settings-capability-unsupported,
 .settings-permission-denied {
   color: var(--color-error);
+}
+
+.settings-permission-unavailable {
+  color: var(--text-tertiary);
+}
+
+.settings-status-hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
 }
 
 .settings-link {

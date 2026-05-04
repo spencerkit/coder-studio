@@ -29,6 +29,9 @@ interface ProviderInfo {
   displayName: string;
 }
 
+type NotificationCapabilityStatus = 'available' | 'limited' | 'unsupported';
+type NotificationPermissionState = NotificationPermission | 'unavailable';
+
 type SettingsNavigationState =
   | {
       kind: 'root';
@@ -40,6 +43,41 @@ type SettingsNavigationState =
     };
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
+
+function isStandaloneWebApp(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
+
+  return window.matchMedia?.('(display-mode: standalone)').matches === true
+    || navigatorWithStandalone.standalone === true;
+}
+
+function isMobileUserAgent(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const { userAgent = '', maxTouchPoints = 0, platform = '' } = window.navigator;
+  const ua = userAgent.toLowerCase();
+
+  return /android|iphone|ipad|ipod|mobile/.test(ua)
+    || (platform === 'MacIntel' && maxTouchPoints > 1);
+}
+
+function detectNotificationCapability(): NotificationCapabilityStatus {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'unsupported';
+  }
+
+  if (!isMobileUserAgent()) {
+    return 'available';
+  }
+
+  return isStandaloneWebApp() ? 'available' : 'limited';
+}
 
 function parseProviderAdditionalArgs(value: string): string[] {
   return value
@@ -356,7 +394,8 @@ function GeneralSettings({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>('unavailable');
+  const [notificationCapability, setNotificationCapability] = useState<NotificationCapabilityStatus>('unsupported');
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch('settings.update', { settings });
@@ -370,9 +409,14 @@ function GeneralSettings({
   };
 
   useEffect(() => {
+    setNotificationCapability(detectNotificationCapability());
+
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
+      return;
     }
+
+    setNotificationPermission('unavailable');
   }, []);
 
   const requestNotificationPermission = async () => {
@@ -436,21 +480,60 @@ function GeneralSettings({
         </div>
 
         <div className="settings-info-row">
+          <span className="settings-info-label">{t('settings.notification_status')}</span>
+          <span className={`settings-info-value settings-capability-${notificationCapability}`}>
+            {notificationCapability === 'available' && t('settings.notification_status_available')}
+            {notificationCapability === 'limited' && (
+              <>
+                {t('settings.notification_status_limited')}
+                <span className="settings-status-hint">
+                  {t('settings.notification_status_limited_hint')}
+                </span>
+              </>
+            )}
+            {notificationCapability === 'unsupported' && (
+              <>
+                {t('settings.notification_status_unsupported')}
+                <span className="settings-status-hint">
+                  {t('settings.notification_status_unsupported_hint')}
+                </span>
+              </>
+            )}
+          </span>
+        </div>
+
+        <div className="settings-info-row">
           <span className="settings-info-label">{t('settings.notification_permission')}</span>
           <span className={`settings-info-value settings-permission-${notificationPermission}`}>
             {notificationPermission === 'granted' && t('settings.permission_granted')}
             {notificationPermission === 'denied' && (
               <>
                 {t('settings.permission_denied')}
-                <span className="settings-deny-hint">
+                <span className="settings-status-hint">
                   {t('settings.permission_denied_hint')}
                 </span>
               </>
             )}
-            {notificationPermission === 'default' && (
+            {notificationPermission === 'default' && notificationCapability === 'available' && (
               <button className="settings-link" onClick={requestNotificationPermission}>
                 {t('settings.permission_request')}
               </button>
+            )}
+            {notificationPermission === 'default' && notificationCapability === 'limited' && (
+              <>
+                {t('settings.permission_unavailable')}
+                <span className="settings-status-hint">
+                  {t('settings.permission_limited_hint')}
+                </span>
+              </>
+            )}
+            {notificationPermission === 'unavailable' && (
+              <>
+                {t('settings.permission_unavailable')}
+                <span className="settings-status-hint">
+                  {t('settings.permission_unavailable_hint')}
+                </span>
+              </>
             )}
           </span>
         </div>
