@@ -18,6 +18,7 @@ export function parseStatus(porcelainV2: string): GitStatus {
   let branch = '';
   let ahead = 0;
   let behind = 0;
+  let headSha: string | undefined;
   const staged: GitFileChange[] = [];
   const modified: GitFileChange[] = [];
   const untracked: GitFileChange[] = [];
@@ -28,6 +29,13 @@ export function parseStatus(porcelainV2: string): GitStatus {
 
     // Branch header: # branch.oid <hash>
     // Branch name: # branch.head <name>
+    if (line.startsWith('# branch.oid ')) {
+      const oid = line.substring('# branch.oid '.length);
+      if (oid && oid !== '(initial)') {
+        headSha = oid;
+      }
+    }
+
     if (line.startsWith('# branch.head ')) {
       branch = line.substring('# branch.head '.length);
     }
@@ -60,6 +68,8 @@ export function parseStatus(porcelainV2: string): GitStatus {
     branch,
     ahead,
     behind,
+    headSha,
+    headShortSha: headSha?.slice(0, 7),
     staged,
     modified,
     untracked,

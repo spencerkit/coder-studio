@@ -51,6 +51,7 @@ export interface OpenTextFile {
   isDirty: boolean;
   language?: string;
   viewingTextBackedImageAsText?: boolean;
+  externalState?: 'modified' | 'deleted';
 }
 
 export interface OpenImageFile {
@@ -60,6 +61,7 @@ export interface OpenImageFile {
   url: string;
   size: number;
   isTextBacked: boolean;
+  externalState?: 'modified' | 'deleted';
 }
 
 export type OpenFile = OpenTextFile | OpenImageFile;
@@ -73,6 +75,14 @@ export const openFilesAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const activeFilePathAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | null>(null)
+);
+
+/**
+ * Incremented when external workspace activity means open editor buffers
+ * may need to reconcile with disk state.
+ */
+export const editorRefreshTokenAtomFamily = atomFamily((workspaceId: string) =>
+  atom<number>(0)
 );
 
 /**

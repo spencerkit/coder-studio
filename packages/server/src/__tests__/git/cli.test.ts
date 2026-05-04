@@ -9,7 +9,14 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { classifyGitAuthFailure, runGit, GitError, runGitPull, runGitPush } from '../../git/cli.js';
+import {
+  classifyGitAuthFailure,
+  getGitStatus,
+  runGit,
+  GitError,
+  runGitPull,
+  runGitPush,
+} from '../../git/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -393,6 +400,63 @@ describe('runGitListBranches', () => {
     expect(result.current).toBe('feature/login');
 
     await rm(testDir, { recursive: true });
+  });
+});
+
+describe('getGitStatus', () => {
+  it('returns HEAD commit metadata for a normal branch', async () => {
+    const testDir = await mkdtemp(join(tmpdir(), 'git-status-meta-'));
+    await execFileAsync('git', ['init'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: testDir });
+    await writeFile(join(testDir, 'file.txt'), 'hello\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial subject'], { cwd: testDir });
+
+    const status = await getGitStatus(testDir);
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: testDir });
+
+    expect(status.branch).not.toBe('');
+    expect(status.headSha).toBe(stdout.trim());
+    expect(status.headShortSha).toBe(stdout.trim().slice(0, 7));
+    expect(status.headSubject).toBe('initial subject');
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('does not invent HEAD metadata before the first commit', async () => {
+    const testDir = await mkdtemp(join(tmpdir(), 'git-status-empty-'));
+    await execFileAsync('git', ['init'], { cwd: testDir });
+
+    const status = await getGitStatus(testDir);
+
+    expect(status.branch).not.toBe('');
+    expect(status.headSha).toBeUndefined();
+    expect(status.headShortSha).toBeUndefined();
+    expect(status.headSubject).toBeUndefined();
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('keeps commit metadata in detached HEAD state', async () => {
+    const testDir = await mkdtemp(join(tmpdir(), 'git-status-detached-'));
+    await execFileAsync('git', ['init'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: testDir });
+    await writeFile(join(testDir, 'file.txt'), 'hello\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'detached subject'], { cwd: testDir });
+    await execFileAsync('git', ['checkout', '--detach', 'HEAD'], { cwd: testDir });
+
+    const status = await getGitStatus(testDir);
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: testDir });
+
+    expect(status.branch).toBe('(detached)');
+    expect(status.headSha).toBe(stdout.trim());
+    expect(status.headShortSha).toBe(stdout.trim().slice(0, 7));
+    expect(status.headSubject).toBe('detached subject');
+
+    await rm(testDir, { recursive: true, force: true });
   });
 });
 

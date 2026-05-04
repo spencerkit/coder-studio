@@ -6,8 +6,9 @@ import { execFile } from 'child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import type { GitStatus, GitFileChange, GitBranch } from '@coder-studio/core';
+import type { GitStatus, GitBranch } from '@coder-studio/core';
 import { GIT_COMMON_REMOTES } from '../constants/git.js';
+import { parseStatus } from './status-parser.js';
 
 export interface GitCommandResult {
   stdout: string;
@@ -132,67 +133,17 @@ interface PreparedGitAuthExecution {
  * Get git status for a workspace.
  */
 export async function getGitStatus(cwd: string): Promise<GitStatus> {
-  // Get porcelain status
   const { stdout: statusOutput } = await runGit(cwd, ['status', '--porcelain=v2', '--branch']);
+  const status = parseStatus(statusOutput);
 
-  // Get branch name and ahead/behind
-  const { stdout: branchOutput } = await runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  const branch = branchOutput.trim();
-
-  // Parse ahead/behind
-  let ahead = 0;
-  let behind = 0;
-  const aheadBehindMatch = statusOutput.match(/branch\.ab \+(\d+) -(\d+)/);
-  if (aheadBehindMatch) {
-    ahead = parseInt(aheadBehindMatch[1] ?? '0', 10);
-    behind = parseInt(aheadBehindMatch[2] ?? '0', 10);
+  if (!status.headSha) {
+    return status;
   }
 
-  // Parse file changes
-  const staged: GitFileChange[] = [];
-  const modified: GitFileChange[] = [];
-  const untracked: GitFileChange[] = [];
-  const deleted: GitFileChange[] = [];
-
-  const lines = statusOutput.split('\n');
-  for (const line of lines) {
-    if (line.startsWith('1 ') || line.startsWith('2 ')) {
-      // Ordinary or renamed file
-      const parts = line.split(' ');
-      const xy = parts[1];
-      const path = parts[parts.length - 1];
-      if (!xy || !path) {
-        continue;
-      }
-
-      const x = xy[0]; // Staged status
-      const y = xy[1]; // Unstaged status
-
-      if (x === 'A' || x === 'M' || x === 'D' || x === 'R' || x === 'C') {
-        staged.push({ path });
-      }
-      if (y === 'M' || y === 'D') {
-        if (y === 'D') {
-          deleted.push({ path });
-        } else {
-          modified.push({ path });
-        }
-      }
-    } else if (line.startsWith('? ')) {
-      // Untracked file
-      const path = line.substring(2);
-      untracked.push({ path });
-    }
-  }
-
+  const { stdout: headSubjectOutput } = await runGit(cwd, ['show', '-s', '--format=%s', 'HEAD']);
   return {
-    branch,
-    ahead,
-    behind,
-    staged,
-    modified,
-    untracked,
-    deleted,
+    ...status,
+    headSubject: headSubjectOutput.trim(),
   };
 }
 

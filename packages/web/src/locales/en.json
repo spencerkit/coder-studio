@@ -267,7 +267,9 @@
     "mode_text": "Text",
     "mode_image": "Image",
     "open_failed_title": "Failed to open file",
-    "empty_hint": "Select a file on the left to open it in the editor."
+    "empty_hint": "Select a file on the left to open it in the editor.",
+    "modified_on_disk": "This file changed on disk after you opened it. Save carefully or reload the file.",
+    "deleted_on_disk": "This file was deleted on disk after you opened it."
   },
   "git": {
     "title": "Git",
@@ -281,6 +283,8 @@
     "commit": "Commit",
     "commit_message": "Commit Message",
     "commit_placeholder": "Enter commit message...",
+    "latest_commit": "Latest Commit",
+    "no_commits": "No commits yet",
     "stage": "Stage",
     "unstage": "Unstage",
     "stage_all": "Stage All",

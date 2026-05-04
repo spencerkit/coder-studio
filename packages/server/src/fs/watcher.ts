@@ -21,6 +21,7 @@ export class WorkspaceWatcher {
   private chokidar: FSWatcher;
   private dirtyTimer: NodeJS.Timeout | null = null;
   private firstDirtyTime: number | null = null;
+  private pendingReason: 'fs_change' | 'git_metadata' | null = null;
   private readonly DEBOUNCE_MS = 200;
   private readonly MAX_WAIT_MS = 1_000;
 
@@ -37,7 +38,7 @@ export class WorkspaceWatcher {
       persistent: true,
     });
 
-    this.chokidar.on('all', () => this.markDirty());
+    this.chokidar.on('all', (_eventName, changedPath) => this.markDirty(changedPath));
   }
 
   /**
@@ -45,10 +46,18 @@ export class WorkspaceWatcher {
    * Each file change resets the timer by 200ms. If changes
    * continue for over 1s, forces a broadcast anyway.
    */
-  private markDirty(): void {
+  private markDirty(changedPath?: string): void {
     const now = Date.now();
     if (this.firstDirtyTime === null) {
       this.firstDirtyTime = now;
+    }
+
+    if (changedPath && !this.isGitMetadataPath(changedPath)) {
+      this.pendingReason = 'fs_change';
+    } else if (changedPath && this.pendingReason !== 'fs_change') {
+      this.pendingReason = 'git_metadata';
+    } else if (this.pendingReason === null) {
+      this.pendingReason = 'fs_change';
     }
 
     const elapsed = now - this.firstDirtyTime;
@@ -63,10 +72,15 @@ export class WorkspaceWatcher {
 
   private flushDirty(): void {
     this.broadcaster?.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-      reason: 'fs_change',
+      reason: this.pendingReason ?? 'fs_change',
     });
     this.dirtyTimer = null;
     this.firstDirtyTime = null;
+    this.pendingReason = null;
+  }
+
+  private isGitMetadataPath(changedPath: string): boolean {
+    return changedPath.replace(/\\/g, '/').includes('/.git/');
   }
 
   /**

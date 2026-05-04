@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
+import type { CommandContext } from '../ws/dispatch.js';
 import {
   getGitStatus,
   stageFiles,
@@ -17,6 +18,24 @@ import {
   runGitListBranches,
 } from '../git/cli.js';
 import { getFileDiff } from '../git/diff.js';
+
+function emitGitStateChanged(
+  ctx: CommandContext,
+  workspaceId: string,
+  options?: {
+    treeChanged?: boolean;
+    branchChanged?: boolean;
+    worktreeChanged?: boolean;
+  }
+) {
+  ctx.eventBus.emit({
+    type: 'git.state.changed',
+    workspaceId,
+    treeChanged: options?.treeChanged,
+    branchChanged: options?.branchChanged,
+    worktreeChanged: options?.worktreeChanged,
+  });
+}
 
 const gitHttpAuthSchema = z.object({
   username: z.string(),
@@ -52,7 +71,9 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return stageFiles(workspace.path, args.paths);
+    await stageFiles(workspace.path, args.paths);
+    emitGitStateChanged(ctx, args.workspaceId);
+    return {};
   }
 );
 
@@ -89,7 +110,9 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return unstageFiles(workspace.path, args.paths);
+    await unstageFiles(workspace.path, args.paths);
+    emitGitStateChanged(ctx, args.workspaceId);
+    return {};
   }
 );
 
@@ -106,7 +129,11 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return discardChanges(workspace.path, args.paths);
+    await discardChanges(workspace.path, args.paths);
+    emitGitStateChanged(ctx, args.workspaceId, {
+      treeChanged: true,
+    });
+    return {};
   }
 );
 
@@ -123,7 +150,12 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return commitChanges(workspace.path, args.message);
+    const result = await commitChanges(workspace.path, args.message);
+    emitGitStateChanged(ctx, args.workspaceId, {
+      branchChanged: true,
+      worktreeChanged: true,
+    });
+    return result;
   }
 );
 
@@ -143,12 +175,17 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return runGitPush(workspace.path, {
+    const result = await runGitPush(workspace.path, {
       remote: args.remote,
       branch: args.branch,
       force: args.force,
       auth: args.auth,
     });
+    emitGitStateChanged(ctx, args.workspaceId, {
+      branchChanged: true,
+      worktreeChanged: true,
+    });
+    return result;
   }
 );
 
@@ -167,11 +204,17 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return runGitPull(workspace.path, {
+    const result = await runGitPull(workspace.path, {
       remote: args.remote,
       branch: args.branch,
       auth: args.auth,
     });
+    emitGitStateChanged(ctx, args.workspaceId, {
+      treeChanged: true,
+      branchChanged: true,
+      worktreeChanged: true,
+    });
+    return result;
   }
 );
 
@@ -189,9 +232,17 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return runGitCheckout(workspace.path, args.ref, {
+    const result = await runGitCheckout(workspace.path, args.ref, {
       createBranch: args.createBranch,
     });
+    if (result.success) {
+      emitGitStateChanged(ctx, args.workspaceId, {
+        treeChanged: true,
+        branchChanged: true,
+        worktreeChanged: true,
+      });
+    }
+    return result;
   }
 );
 
@@ -209,9 +260,14 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return runGitCreateBranch(workspace.path, args.name, {
+    const result = await runGitCreateBranch(workspace.path, args.name, {
       startPoint: args.startPoint,
     });
+    emitGitStateChanged(ctx, args.workspaceId, {
+      branchChanged: true,
+      worktreeChanged: true,
+    });
+    return result;
   }
 );
 

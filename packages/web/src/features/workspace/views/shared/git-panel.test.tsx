@@ -17,6 +17,9 @@ describe('GitPanel', () => {
     branch: 'feature/ai-agent',
     ahead: 0,
     behind: 0,
+    headSha: 'abc1234567890',
+    headShortSha: 'abc1234',
+    headSubject: 'Refresh git projection',
     staged: [{ path: 'src/auth/AuthGate.tsx' }],
     modified: [{ path: 'src/app/AppController.tsx' }],
     untracked: [{ path: 'tests/supervisor.test.ts' }],
@@ -49,7 +52,7 @@ describe('GitPanel', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' });
+      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' }, undefined);
     });
 
     expect((await screen.findAllByText('Staged')).length).toBeGreaterThan(0);
@@ -60,6 +63,9 @@ describe('GitPanel', () => {
     expect(screen.getByText('AppController.tsx')).toBeInTheDocument();
     expect(screen.getByText('supervisor.test.ts')).toBeInTheDocument();
     expect(screen.getByText('deprecated.ts')).toBeInTheDocument();
+    expect(screen.getByLabelText('Latest Commit')).toBeInTheDocument();
+    expect(screen.getByText('abc1234')).toBeInTheDocument();
+    expect(screen.getByText('Refresh git projection')).toBeInTheDocument();
   });
 
   it('loads branch list on mount', async () => {
@@ -97,7 +103,11 @@ describe('GitPanel', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.branches', { workspaceId: 'ws-test' });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.branches',
+        { workspaceId: 'ws-test' },
+        undefined
+      );
     });
 
     expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('feature/ai-agent');
@@ -107,6 +117,13 @@ describe('GitPanel', () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === 'git.status') {
         return status;
+      }
+
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
       }
 
       if (op === 'git.diff') {
@@ -133,15 +150,19 @@ describe('GitPanel', () => {
     fireEvent.click(row);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.diff', {
-        workspaceId: 'ws-test',
-        path: 'src/auth/AuthGate.tsx',
-        staged: true,
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.diff',
+        {
+          workspaceId: 'ws-test',
+          path: 'src/auth/AuthGate.tsx',
+          staged: true,
+        },
+        undefined
+      );
     });
 
     expect(store.get(gitStateAtomFamily('ws-test'))).toEqual(status);
-    expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('');
+    expect(store.get(gitBranchListAtomFamily('ws-test')).current).toBe('feature/ai-agent');
     expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toEqual({
       path: 'src/auth/AuthGate.tsx',
       diff: expect.stringContaining('diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx'),
@@ -163,6 +184,13 @@ describe('GitPanel', () => {
         };
       }
 
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+
       throw new Error(`Unexpected command: ${op}`);
     });
 
@@ -179,11 +207,15 @@ describe('GitPanel', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.diff', {
-        workspaceId: 'ws-test',
-        path: 'src/auth/AuthGate.tsx',
-        staged: true,
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.diff',
+        {
+          workspaceId: 'ws-test',
+          path: 'src/auth/AuthGate.tsx',
+          staged: true,
+        },
+        undefined
+      );
     });
 
     expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toEqual({
@@ -199,6 +231,13 @@ describe('GitPanel', () => {
       if (op === 'git.diff') {
         return {
           diff: `diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx\n${JSON.stringify(args)}`,
+        };
+      }
+
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
         };
       }
 
@@ -277,7 +316,7 @@ describe('GitPanel', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' });
+      expect(sendCommand).toHaveBeenCalledWith('git.status', { workspaceId: 'ws-test' }, undefined);
     });
 
     resolveFirst?.(status);
@@ -291,6 +330,17 @@ describe('GitPanel', () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.status') {
         return status;
+      }
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
       }
       return {};
     });
@@ -325,6 +375,17 @@ describe('GitPanel', () => {
       if (op === 'git.status') {
         return status;
       }
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
+      }
       return {};
     });
     const store = createStore();
@@ -346,10 +407,14 @@ describe('GitPanel', () => {
     fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.discard', {
-        workspaceId: 'ws-test',
-        paths: ['src/app/AppController.tsx'],
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.discard',
+        {
+          workspaceId: 'ws-test',
+          paths: ['src/app/AppController.tsx'],
+        },
+        undefined
+      );
     });
   });
 
@@ -357,6 +422,17 @@ describe('GitPanel', () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.status') {
         return status;
+      }
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
       }
       return {};
     });
@@ -380,15 +456,19 @@ describe('GitPanel', () => {
     fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.discard', {
-        workspaceId: 'ws-test',
-        paths: [
-          'src/auth/AuthGate.tsx',
-          'src/app/AppController.tsx',
-          'src/legacy/deprecated.ts',
-          'tests/supervisor.test.ts',
-        ],
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.discard',
+        {
+          workspaceId: 'ws-test',
+          paths: [
+            'src/auth/AuthGate.tsx',
+            'src/app/AppController.tsx',
+            'src/legacy/deprecated.ts',
+            'tests/supervisor.test.ts',
+          ],
+        },
+        undefined
+      );
     });
   });
 
@@ -396,6 +476,17 @@ describe('GitPanel', () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.status') {
         return status;
+      }
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
       }
       return {};
     });
@@ -418,10 +509,14 @@ describe('GitPanel', () => {
     fireEvent.click(within(modal as HTMLElement).getByRole('button', { name: /^放弃$/ }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.discard', {
-        workspaceId: 'ws-test',
-        paths: ['src/auth/AuthGate.tsx'],
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.discard',
+        {
+          workspaceId: 'ws-test',
+          paths: ['src/auth/AuthGate.tsx'],
+        },
+        undefined
+      );
     });
   });
 
@@ -429,6 +524,17 @@ describe('GitPanel', () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === 'git.status') {
         return status;
+      }
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/ai-agent',
+          branches: [],
+        };
+      }
+      if (op === 'git.diff') {
+        return {
+          diff: 'diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx',
+        };
       }
       return {};
     });

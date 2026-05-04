@@ -103,6 +103,24 @@ describe('WorkspaceWatcher', () => {
     expect(broadcaster.broadcast).toHaveBeenCalledTimes(1);
     expect(broadcaster.broadcast).toHaveBeenCalledWith(
       Topics.workspaceFsDirty('test-workspace-id'),
+      { reason: 'git_metadata' }
+    );
+  });
+
+  it('upgrades mixed git metadata and file events to fs_change', async () => {
+    vi.useFakeTimers();
+    new WorkspaceWatcher('test-workspace-id', testDir, broadcaster);
+
+    watcherEvents.all?.('change', join(testDir, '.git/index'));
+    await vi.advanceTimersByTimeAsync(100);
+    watcherEvents.all?.('change', join(testDir, 'src/index.ts'));
+
+    await vi.advanceTimersByTimeAsync(199);
+    expect(broadcaster.broadcast).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(broadcaster.broadcast).toHaveBeenCalledWith(
+      Topics.workspaceFsDirty('test-workspace-id'),
       { reason: 'fs_change' }
     );
   });

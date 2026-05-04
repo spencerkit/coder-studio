@@ -383,7 +383,11 @@ export class WsHub implements Broadcaster {
 
       case 'git.state.changed':
         topic = Topics.workspaceGitState(event.workspaceId);
-        data = {}; // Actual git status will be fetched by client
+        data = {
+          treeChanged: Boolean(event.treeChanged),
+          branchChanged: Boolean(event.branchChanged),
+          worktreeChanged: Boolean(event.worktreeChanged),
+        };
         break;
 
       case 'fs.dirty':

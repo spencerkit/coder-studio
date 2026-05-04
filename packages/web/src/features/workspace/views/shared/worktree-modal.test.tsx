@@ -34,6 +34,9 @@ describe('WorktreeModal', () => {
         branch: 'feature/mobile-sheet',
         ahead: 0,
         behind: 0,
+        headSha: 'abc1234567890',
+        headShortSha: 'abc1234',
+        headSubject: 'Initial mobile sheet setup',
         staged: [],
         modified: [],
         untracked: [],
@@ -65,6 +68,9 @@ describe('WorktreeModal', () => {
 
     expect(document.querySelector('.modal-overlay')).toBeTruthy();
     expect(document.querySelector('.mobile-sheet')).toBeNull();
+    expect(screen.getByText('Latest Commit')).toBeInTheDocument();
+    expect(screen.getByText('abc1234')).toBeInTheDocument();
+    expect(screen.getByText('Initial mobile sheet setup')).toBeInTheDocument();
   });
 
   it('renders inside MobileSheet on mobile and still loads data when tabs change', async () => {
@@ -76,6 +82,9 @@ describe('WorktreeModal', () => {
             branch: 'feature/mobile-sheet',
             ahead: 0,
             behind: 0,
+            headSha: 'abc1234567890',
+            headShortSha: 'abc1234',
+            headSubject: 'Initial mobile sheet setup',
             staged: [],
             modified: [{ path: 'src/app.tsx' }],
             untracked: [],
@@ -141,6 +150,9 @@ describe('WorktreeModal', () => {
         branch: 'feature/mobile-sheet',
         ahead: 0,
         behind: 0,
+        headSha: 'abc1234567890',
+        headShortSha: 'abc1234',
+        headSubject: '初始移动端面板',
         staged: [],
         modified: [],
         untracked: [],
@@ -172,6 +184,8 @@ describe('WorktreeModal', () => {
 
     expect(screen.getByRole('button', { name: '状态' })).toBeInTheDocument();
     expect(screen.getByText('路径')).toBeInTheDocument();
+    expect(screen.getByText('最新提交')).toBeInTheDocument();
+    expect(screen.getByText('初始移动端面板')).toBeInTheDocument();
     expect(screen.getByText('● 有更改')).toBeInTheDocument();
   });
 });

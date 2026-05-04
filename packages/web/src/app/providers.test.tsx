@@ -135,6 +135,14 @@ describe('routeEventToAtom', () => {
     expect(store.get(fileTreeStaleAtomFamily('ws-1'))).toBe(true);
   });
 
+  it('ignores git metadata-only fs.dirty events for the file tree stale flag', () => {
+    const store = createStore();
+
+    routeEventToAtom('workspace.ws-1.fs.dirty', { reason: 'git_metadata' }, store as any);
+
+    expect(store.get(fileTreeStaleAtomFamily('ws-1'))).toBe(false);
+  });
+
   it('appends cleaned utf-8 terminal output bytes to the matching session tail buffer', () => {
     const store = createStore();
     store.set(sessionsAtom, {

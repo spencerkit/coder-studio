@@ -2,7 +2,7 @@
  * Tests for file system commands.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -53,6 +53,7 @@ describe('File Commands', () => {
     db = openDatabase(':memory:');
     runMigrations(db);
     eventBus = new EventBus();
+    vi.spyOn(eventBus, 'emit');
     workspaceMgr = new WorkspaceManager({ db, eventBus });
 
     const workspace = await workspaceMgr.open({
@@ -116,5 +117,28 @@ describe('File Commands', () => {
     expect(result.ok).toBe(true);
     const files = (result.data as { files: Array<{ path: string }> }).files;
     expect(files).toHaveLength(0);
+  });
+
+  it('emits fs.dirty after file writes', async () => {
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'file-write-1',
+        op: 'file.write',
+        args: {
+          workspaceId,
+          path: 'README.md',
+          content: 'updated\n',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: 'fs.dirty',
+      workspaceId,
+      reason: 'file_content',
+    });
   });
 });

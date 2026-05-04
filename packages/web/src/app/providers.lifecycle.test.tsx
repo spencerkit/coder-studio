@@ -3,6 +3,11 @@ import { act, render } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { authEnabledAtom } from '../atoms/connection';
 import { authenticatedAtom } from '../atoms/app-ui';
+import {
+  fileTreeStaleAtomFamily,
+  gitBranchListAtomFamily,
+  gitStateAtomFamily,
+} from '../features/workspace/atoms';
 import { AppProviders, resetAppProvidersSingletonsForTests } from './providers';
 
 const wsState = vi.hoisted(() => ({
@@ -13,6 +18,8 @@ const wsState = vi.hoisted(() => ({
     onStatus: ReturnType<typeof vi.fn>;
     getStatus: ReturnType<typeof vi.fn>;
     recoverConnection: ReturnType<typeof vi.fn>;
+    sendCommand?: ReturnType<typeof vi.fn>;
+    eventHandler?: (topic: string, payload: unknown, seq: number) => void;
   } | null,
 }));
 
@@ -54,10 +61,18 @@ describe('AppProviders lifecycle recovery', () => {
     wsState.client = {
       connect: vi.fn().mockResolvedValue(undefined),
       disconnect: vi.fn(),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn((topics, handler) => {
+        wsState.client!.eventHandler = handler;
+        return () => {
+          if (wsState.client?.eventHandler === handler) {
+            wsState.client.eventHandler = undefined;
+          }
+        };
+      }),
       onStatus: vi.fn(() => () => {}),
       getStatus: vi.fn(() => 'disconnected'),
       recoverConnection: vi.fn(),
+      sendCommand: vi.fn(),
     };
   });
 
@@ -177,5 +192,97 @@ describe('AppProviders lifecycle recovery', () => {
       expect(store.get(authEnabledAtom)).toBe(true);
       expect(store.get(authenticatedAtom)).toBe(true);
     });
+  });
+
+  it('coalesces git refresh events into one git status and branch reload while marking the tree stale', async () => {
+    wsState.client!.sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return {
+          branch: 'feature/refresh',
+          ahead: 1,
+          behind: 0,
+          staged: [],
+          modified: [],
+          untracked: [],
+          deleted: [],
+        };
+      }
+
+      if (op === 'git.branches') {
+        return {
+          current: 'feature/refresh',
+          branches: [{ name: 'feature/refresh', isCurrent: true, isRemote: false }],
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const { store } = renderProviders();
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.(
+        'workspace.ws-1.git.state',
+        { treeChanged: true, branchChanged: true },
+        1
+      );
+      wsState.client?.eventHandler?.('workspace.ws-1.fs.dirty', { reason: 'git_metadata' }, 2);
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith(
+        'git.status',
+        { workspaceId: 'ws-1' },
+        undefined
+      );
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith(
+        'git.branches',
+        { workspaceId: 'ws-1' },
+        undefined
+      );
+    });
+
+    const calls = wsState.client?.sendCommand?.mock.calls ?? [];
+    expect(calls.filter(([op]) => op === 'git.status')).toHaveLength(1);
+    expect(calls.filter(([op]) => op === 'git.branches')).toHaveLength(1);
+    expect(store.get(fileTreeStaleAtomFamily('ws-1'))).toBe(true);
+    expect(store.get(gitStateAtomFamily('ws-1'))?.branch).toBe('feature/refresh');
+    expect(store.get(gitBranchListAtomFamily('ws-1')).current).toBe('feature/refresh');
+  });
+
+  it('refreshes git status for file content events without marking the tree stale', async () => {
+    wsState.client!.sendCommand = vi.fn().mockResolvedValue({
+      branch: 'feature/edit',
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [{ path: 'README.md' }],
+      untracked: [],
+      deleted: [],
+    });
+
+    const { store } = renderProviders();
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.('workspace.ws-1.fs.dirty', { reason: 'file_content' }, 1);
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith(
+        'git.status',
+        { workspaceId: 'ws-1' },
+        undefined
+      );
+    });
+
+    expect(store.get(fileTreeStaleAtomFamily('ws-1'))).toBe(false);
   });
 });

@@ -109,9 +109,13 @@ describe('WorkspacePage', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('git.status', {
-        workspaceId: 'ws-test',
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        'git.status',
+        {
+          workspaceId: 'ws-test',
+        },
+        undefined
+      );
     });
 
     expect(await screen.findByText('feature/refactor-ts')).toBeInTheDocument();

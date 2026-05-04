@@ -74,6 +74,19 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
                 <span className="worktree-info-value">{worktree.branch}</span>
               </div>
               <div className="worktree-info-row">
+                <span className="worktree-info-label">{t('git.latest_commit')}</span>
+                <span className="worktree-info-value">
+                  {status?.headShortSha || worktree.commit ? (
+                    <>
+                      <code>{status?.headShortSha ?? worktree.commit}</code>
+                      {status?.headSubject ? ` ${status.headSubject}` : ''}
+                    </>
+                  ) : (
+                    t('git.no_commits')
+                  )}
+                </span>
+              </div>
+              <div className="worktree-info-row">
                 <span className="worktree-info-label">{t('label.status')}</span>
                 <span className="worktree-info-value">
                   {worktree.status === 'clean' ? t('worktree.clean') : t('worktree.dirty')}

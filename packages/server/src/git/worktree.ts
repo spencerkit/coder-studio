@@ -5,21 +5,8 @@
  */
 
 import { runGit, GitError } from './cli.js';
-import type { GitStatus, FileNode } from '@coder-studio/core';
+import type { GitStatus, FileNode, WorktreeInfo } from '@coder-studio/core';
 import { parseStatus } from './status-parser.js';
-
-export interface WorktreeInfo {
-  /** Worktree name (usually branch name or directory name) */
-  name: string;
-  /** Absolute path to the worktree */
-  path: string;
-  /** Branch name the worktree is on */
-  branch: string;
-  /** Commit hash (short) */
-  commit: string;
-  /** Whether the worktree has uncommitted changes */
-  status: 'clean' | 'dirty';
-}
 
 /**
  * List all worktrees for a repository.

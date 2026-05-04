@@ -25,7 +25,12 @@ import {
 } from '../atoms';
 import type { DispatchCommand } from '../atoms/connection';
 import { authenticatedAtom } from '../atoms/app-ui';
-import { fileTreeStaleAtomFamily, gitStateAtomFamily } from '../features/workspace/atoms';
+import {
+  editorRefreshTokenAtomFamily,
+  fileTreeStaleAtomFamily,
+  gitBranchListAtomFamily,
+  gitStateAtomFamily,
+} from '../features/workspace/atoms';
 import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms';
 import { WsClient, resolveWsUrl } from '../ws';
 import type { EventListener, ConnectionStatus, TerminalBinaryPayload } from '../ws';
@@ -36,7 +41,7 @@ import {
 } from '../features/notifications';
 import { stripAnsi } from '../features/notifications/format';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
-import type { Supervisor, SupervisorCycle } from '@coder-studio/core';
+import type { GitBranch, Supervisor, SupervisorCycle } from '@coder-studio/core';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
 
 /**
@@ -46,12 +51,83 @@ import type { Workspace, Session, GitStatus } from '@coder-studio/core';
 let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
 
+interface WorkspaceRefreshHint {
+  refreshGit: boolean;
+  refreshBranches: boolean;
+  markTreeStale: boolean;
+  refreshEditorBuffers: boolean;
+}
+
+const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
+  refreshGit: false,
+  refreshBranches: false,
+  markTreeStale: false,
+  refreshEditorBuffers: false,
+};
+
+function shouldMarkTreeStaleForFsReason(reason?: string): boolean {
+  return reason === 'fs_change';
+}
+
 export function resetAppProvidersSingletonsForTests() {
   if (pendingDisconnectTimer) {
     clearTimeout(pendingDisconnectTimer);
     pendingDisconnectTimer = null;
   }
   globalWsClient = null;
+}
+
+function mergeRefreshHints(
+  current: WorkspaceRefreshHint,
+  next: Partial<WorkspaceRefreshHint>
+): WorkspaceRefreshHint {
+  return {
+    refreshGit: current.refreshGit || Boolean(next.refreshGit),
+    refreshBranches: current.refreshBranches || Boolean(next.refreshBranches),
+    markTreeStale: current.markTreeStale || Boolean(next.markTreeStale),
+    refreshEditorBuffers: current.refreshEditorBuffers || Boolean(next.refreshEditorBuffers),
+  };
+}
+
+function parseWorkspaceRefreshHint(topic: string, payload: unknown): {
+  workspaceId: string;
+  hint: WorkspaceRefreshHint;
+} | null {
+  const match = topic.match(/^workspace\.([^.]+)\.(fs\.dirty|git\.state)$/);
+  if (!match) {
+    return null;
+  }
+
+  const workspaceId = match[1]!;
+  const subtopic = match[2]!;
+
+  if (subtopic === 'fs.dirty') {
+    const data = (payload ?? {}) as { reason?: string };
+    return {
+      workspaceId,
+      hint: {
+        refreshGit: true,
+        refreshBranches: false,
+        markTreeStale: shouldMarkTreeStaleForFsReason(data.reason),
+        refreshEditorBuffers: data.reason === 'fs_change' || data.reason === 'file_content',
+      },
+    };
+  }
+
+  const data = (payload ?? {}) as {
+    treeChanged?: boolean;
+    branchChanged?: boolean;
+  };
+
+  return {
+    workspaceId,
+    hint: {
+      refreshGit: true,
+      refreshBranches: Boolean(data.branchChanged),
+      markTreeStale: Boolean(data.treeChanged),
+      refreshEditorBuffers: Boolean(data.treeChanged),
+    },
+  };
 }
 
 /**
@@ -96,6 +172,8 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);
   const dispatchRef = useRef<DispatchCommand>(dispatch);
+  const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const refreshHintsRef = useRef<Map<string, WorkspaceRefreshHint>>(new Map());
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -187,17 +265,69 @@ export function AppProviders({ children }: AppProvidersProps) {
         });
     };
 
-    // Event handler: route WS events to atoms
-    const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
-      // Intercept fs.dirty to trigger git status refresh (debounced server-side)
-      const fsMatch = topic.match(/^workspace\.([^.]+)\.fs\.dirty$/);
-      if (fsMatch) {
-        refreshGitState(fsMatch[1]!);
+    const refreshBranchState = (workspaceId: string) => {
+      dispatchRef.current<{ current: string; branches: GitBranch[] }>('git.branches', { workspaceId })
+        .then((result) => {
+          if (result.ok && result.data) {
+            store.set(gitBranchListAtomFamily(workspaceId), {
+              current: result.data.current,
+              branches: result.data.branches,
+              loading: false,
+            });
+            return;
+          }
+
+          store.set(gitBranchListAtomFamily(workspaceId), (prev) => ({
+            ...prev,
+            loading: false,
+            error: result.error?.message ?? prev.error,
+          }));
+        })
+        .catch((error) => {
+          console.error('[Git Branches] git.branches command threw error:', error);
+        });
+    };
+
+    const queueWorkspaceRefresh = (workspaceId: string, hint: Partial<WorkspaceRefreshHint>) => {
+      const nextHint = mergeRefreshHints(
+        refreshHintsRef.current.get(workspaceId) ?? DEFAULT_REFRESH_HINT,
+        hint
+      );
+      refreshHintsRef.current.set(workspaceId, nextHint);
+
+      const existingTimer = refreshTimersRef.current.get(workspaceId);
+      if (existingTimer) {
+        return;
       }
 
-      const gitMatch = topic.match(/^workspace\.([^.]+)\.git\.state$/);
-      if (gitMatch) {
-        refreshGitState(gitMatch[1]!);
+      const timer = setTimeout(() => {
+        refreshTimersRef.current.delete(workspaceId);
+        const queuedHint =
+          refreshHintsRef.current.get(workspaceId) ?? DEFAULT_REFRESH_HINT;
+        refreshHintsRef.current.delete(workspaceId);
+
+        if (queuedHint.markTreeStale) {
+          store.set(fileTreeStaleAtomFamily(workspaceId), true);
+        }
+        if (queuedHint.refreshEditorBuffers) {
+          store.set(editorRefreshTokenAtomFamily(workspaceId), (prev) => prev + 1);
+        }
+        if (queuedHint.refreshGit) {
+          refreshGitState(workspaceId);
+        }
+        if (queuedHint.refreshBranches) {
+          refreshBranchState(workspaceId);
+        }
+      }, 60);
+
+      refreshTimersRef.current.set(workspaceId, timer);
+    };
+
+    // Event handler: route WS events to atoms
+    const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
+      const refreshInfo = parseWorkspaceRefreshHint(topic, payload);
+      if (refreshInfo) {
+        queueWorkspaceRefresh(refreshInfo.workspaceId, refreshInfo.hint);
       }
 
       try {
@@ -252,6 +382,9 @@ export function AppProviders({ children }: AppProvidersProps) {
         window.removeEventListener('online', handleOnline);
         unsubscribeStatus();
         unsubscribeEvents();
+        refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
+        refreshTimersRef.current.clear();
+        refreshHintsRef.current.clear();
         wsClientRef.current = null;
         // Deferred disconnect: wait 50ms to see if StrictMode remounts
         if (globalWsClient) {
@@ -303,6 +436,9 @@ export function AppProviders({ children }: AppProvidersProps) {
       window.removeEventListener('online', handleOnline);
       unsubscribeStatus();
       unsubscribeEvents();
+      refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
+      refreshTimersRef.current.clear();
+      refreshHintsRef.current.clear();
       wsClientRef.current = null;
       // Deferred disconnect: wait 50ms to see if StrictMode remounts
       pendingDisconnectTimer = setTimeout(() => {
@@ -407,9 +543,11 @@ export function routeEventToAtom(
 
     // workspace.{id}.fs.dirty - filesystem dirty state
     if (subtopic === 'fs.dirty') {
-      // Server sends { reason: 'fs_change' } - any payload means dirty
-      const atom = fileTreeStaleAtomFamily(workspaceId);
-      store.set(atom, true);
+      const data = (payload ?? {}) as { reason?: string };
+      if (shouldMarkTreeStaleForFsReason(data.reason)) {
+        const atom = fileTreeStaleAtomFamily(workspaceId);
+        store.set(atom, true);
+      }
       return;
     }
 

@@ -93,6 +93,9 @@ export interface GitStatus {
   branch: string;
   ahead: number;
   behind: number;
+  headSha?: string;
+  headShortSha?: string;
+  headSubject?: string;
   staged: GitFileChange[];
   modified: GitFileChange[];
   untracked: GitFileChange[];
@@ -109,6 +112,14 @@ export interface GitBranch {
   isRemote: boolean;   // Whether it's a remote branch
   isCurrent: boolean;  // Whether it's the current branch
   remote?: string;     // Remote name (e.g., "origin")
+}
+
+export interface WorktreeInfo {
+  name: string;
+  path: string;
+  branch: string;
+  commit: string;
+  status: 'clean' | 'dirty';
 }
 
 export interface FileNode {

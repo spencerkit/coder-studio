@@ -9,6 +9,9 @@ describe('parseStatus', () => {
   it('should parse empty status', () => {
     const status = parseStatus('');
     expect(status.branch).toBe('');
+    expect(status.headSha).toBeUndefined();
+    expect(status.headShortSha).toBeUndefined();
+    expect(status.headSubject).toBeUndefined();
     expect(status.staged).toHaveLength(0);
     expect(status.modified).toHaveLength(0);
     expect(status.untracked).toHaveLength(0);
@@ -20,6 +23,8 @@ describe('parseStatus', () => {
 # branch.oid abc123`;
     const status = parseStatus(porcelain);
     expect(status.branch).toBe('main');
+    expect(status.headSha).toBe('abc123');
+    expect(status.headShortSha).toBe('abc123');
   });
 
   it('should parse ahead/behind counts', () => {
@@ -84,10 +89,21 @@ describe('parseStatus', () => {
     const status = parseStatus(porcelain);
 
     expect(status.branch).toBe('main');
+    expect(status.headSha).toBe('abc123');
+    expect(status.headShortSha).toBe('abc123');
     expect(status.ahead).toBe(1);
     expect(status.behind).toBe(2);
     expect(status.staged).toHaveLength(1);
     expect(status.modified).toHaveLength(1);
     expect(status.untracked).toHaveLength(1);
+  });
+
+  it('ignores synthetic initial branch oid before the first commit', () => {
+    const porcelain = `# branch.oid (initial)
+# branch.head main`;
+    const status = parseStatus(porcelain);
+
+    expect(status.headSha).toBeUndefined();
+    expect(status.headShortSha).toBeUndefined();
   });
 });

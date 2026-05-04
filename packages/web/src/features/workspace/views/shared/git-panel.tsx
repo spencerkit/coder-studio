@@ -105,6 +105,16 @@ export const GitPanel: FC<GitPanelProps> = ({
         rows={1}
       />
 
+      {gitState?.headShortSha || gitState?.headSubject ? (
+        <div className="git-head-summary" aria-label={t('git.latest_commit')}>
+          <span className="git-head-summary__label">{t('git.latest_commit')}</span>
+          <span className="git-head-summary__value">
+            {gitState.headShortSha ? <code>{gitState.headShortSha}</code> : null}
+            {gitState.headSubject ? <span>{gitState.headSubject}</span> : null}
+          </span>
+        </div>
+      ) : null}
+
       <div className="git-list">
         {gitState ? (
           groups.length > 0 ? (

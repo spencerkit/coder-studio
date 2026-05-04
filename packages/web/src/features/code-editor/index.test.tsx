@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
+import { CommandResultError } from '../../ws/client';
 import { localeAtom } from '../../atoms/app-ui';
 import { wsClientAtom } from '../../atoms/connection';
 import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
 import {
   activeFilePathAtomFamily,
+  editorRefreshTokenAtomFamily,
   openFilesAtomFamily,
   type OpenFile,
 } from '../workspace/atoms';
@@ -232,6 +234,136 @@ describe('CodeEditorHost', () => {
     // Save button must be disabled for images (nothing to write back).
     const saveBtn = screen.getByRole('button', { name: 'Save File' });
     expect(saveBtn).toBeDisabled();
+  });
+
+  it('reloads a clean text buffer after an external refresh signal changes the file on disk', async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        kind: 'text',
+        content: 'original',
+        baseHash: 'hash-1',
+        encoding: 'utf-8',
+      })
+      .mockResolvedValueOnce({
+        kind: 'text',
+        content: 'updated on disk',
+        baseHash: 'hash-2',
+        encoding: 'utf-8',
+      });
+
+    const { store } = setupStore({
+      activePath: 'src/live.ts',
+      sendCommand,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-host')).toHaveTextContent('original');
+    });
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily('ws-1'), 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-host')).toHaveTextContent('updated on disk');
+    });
+    expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
+  });
+
+  it('marks a dirty text buffer as externally modified without overwriting local edits', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: 'text',
+      content: 'from disk',
+      baseHash: 'hash-2',
+      encoding: 'utf-8',
+    });
+
+    const { store } = setupStore({
+      activePath: 'src/dirty.ts',
+      sendCommand,
+      openFiles: {
+        'src/dirty.ts': {
+          kind: 'text',
+          path: 'src/dirty.ts',
+          content: 'local edits',
+          baseHash: 'hash-1',
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId('monaco-host')).toHaveTextContent('local edits');
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily('ws-1'), 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('changed on disk');
+    });
+
+    expect(screen.getByTestId('monaco-host')).toHaveTextContent('local edits');
+    expect(store.get(openFilesAtomFamily('ws-1'))['src/dirty.ts']).toMatchObject({
+      externalState: 'modified',
+      content: 'local edits',
+      baseHash: 'hash-1',
+    });
+  });
+
+  it('marks an open file as deleted when an external refresh can no longer read it', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'file.read') {
+        throw new CommandResultError({
+          code: 'not_found',
+          message: 'Target not found',
+        });
+      }
+      return null;
+    });
+
+    const { store } = setupStore({
+      activePath: 'src/deleted.ts',
+      sendCommand,
+      openFiles: {
+        'src/deleted.ts': {
+          kind: 'text',
+          path: 'src/deleted.ts',
+          content: 'stale buffer',
+          baseHash: 'hash-1',
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily('ws-1'), 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('deleted on disk');
+    });
+    expect(store.get(openFilesAtomFamily('ws-1'))['src/deleted.ts']).toMatchObject({
+      externalState: 'deleted',
+    });
   });
 
   describe('SVG edit-as-text toggle', () => {

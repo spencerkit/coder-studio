@@ -73,6 +73,11 @@ registerCommand(
     }
 
     await createFile(workspace.path, args.path);
+    ctx.eventBus.emit({
+      type: 'fs.dirty',
+      workspaceId: args.workspaceId,
+      reason: 'fs_change',
+    });
     return { ok: true };
   }
 );
@@ -91,6 +96,11 @@ registerCommand(
     }
 
     await createDirectory(workspace.path, args.path);
+    ctx.eventBus.emit({
+      type: 'fs.dirty',
+      workspaceId: args.workspaceId,
+      reason: 'fs_change',
+    });
     return { ok: true };
   }
 );
@@ -109,6 +119,11 @@ registerCommand(
     }
 
     await deleteEntry(workspace.path, args.path);
+    ctx.eventBus.emit({
+      type: 'fs.dirty',
+      workspaceId: args.workspaceId,
+      reason: 'fs_change',
+    });
     return { ok: true };
   }
 );
@@ -128,6 +143,12 @@ registerCommand(
       throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return writeFile(workspace.path, args.path, args.content, args.baseHash);
+    const result = await writeFile(workspace.path, args.path, args.content, args.baseHash);
+    ctx.eventBus.emit({
+      type: 'fs.dirty',
+      workspaceId: args.workspaceId,
+      reason: 'file_content',
+    });
+    return result;
   }
 );

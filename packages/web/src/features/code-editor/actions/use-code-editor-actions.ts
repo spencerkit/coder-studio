@@ -4,6 +4,7 @@ import { activeWorkspaceAtom } from '../../../atoms/workspaces';
 import { dispatchCommandAtom } from '../../../atoms/connection';
 import {
   activeFilePathAtomFamily,
+  editorRefreshTokenAtomFamily,
   openFilesAtomFamily,
   type OpenFile,
   gitDiffPreviewAtomFamily,
@@ -34,12 +35,14 @@ export function useCodeEditorActions() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fileLoadError, setFileLoadError] = useState<{ path: string; message: string } | null>(null);
+  const [externalStatus, setExternalStatus] = useState<{ path: string; status: 'modified' | 'deleted' } | null>(null);
 
   const workspaceId = workspace?.id;
   const [activeFilePath, setActiveFilePath] = useAtom(
     activeFilePathAtomFamily(workspaceId ?? '')
   );
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ''));
+  const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ''));
 
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? '']
@@ -106,6 +109,7 @@ export function useCodeEditorActions() {
               content: data.content,
               baseHash: data.baseHash,
               isDirty: false,
+              externalState: undefined,
             }
           : {
               kind: 'image',
@@ -114,9 +118,11 @@ export function useCodeEditorActions() {
               url: data.url,
               size: data.size,
               isTextBacked: data.isTextBacked,
+              externalState: undefined,
             };
 
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
+      setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
     [dispatch, setOpenFiles, workspaceId]
@@ -150,9 +156,11 @@ export function useCodeEditorActions() {
             ...prevFile,
             baseHash: result.data!.newHash,
             isDirty: false,
+            externalState: undefined,
           },
         };
       });
+      setExternalStatus((current) => (current?.path === currentFile.path ? null : current));
     } else {
       setSaveError(result.error?.message ?? 'Failed to save file');
     }
@@ -196,6 +204,137 @@ export function useCodeEditorActions() {
 
     void loadFile(activeFilePath);
   }, [activeFilePath, loadFile, openFiles, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || editorRefreshToken <= 0) {
+      return;
+    }
+
+    const entries = Object.entries(openFiles);
+    if (entries.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const reconcileOpenFiles = async () => {
+      for (const [path, file] of entries) {
+        const result = await dispatch<FileReadPayload>('file.read', {
+          workspaceId,
+          path,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          const isMissing = result.error?.code === 'not_found';
+          setOpenFiles((prev) => {
+            const existing = prev[path];
+            if (!existing) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [path]: {
+                ...existing,
+                externalState: isMissing ? 'deleted' : existing.externalState,
+              },
+            };
+          });
+          if (isMissing && activeFilePath === path) {
+            setExternalStatus({ path, status: 'deleted' });
+          }
+          continue;
+        }
+
+        const nextData = result.data;
+
+        if (file.kind === 'text' && nextData.kind === 'text') {
+          const hasChangedOnDisk = nextData.baseHash !== file.baseHash;
+          if (!hasChangedOnDisk) {
+            continue;
+          }
+
+          if (file.isDirty) {
+            setOpenFiles((prev) => {
+              const existing = prev[path];
+              if (!existing || existing.kind !== 'text') {
+                return prev;
+              }
+              return {
+                ...prev,
+                [path]: {
+                  ...existing,
+                  externalState: 'modified',
+                },
+              };
+            });
+            if (activeFilePath === path) {
+              setExternalStatus({ path, status: 'modified' });
+            }
+            continue;
+          }
+
+          setOpenFiles((prev) => ({
+            ...prev,
+            [path]: {
+              kind: 'text',
+              path,
+              content: nextData.content,
+              baseHash: nextData.baseHash,
+              isDirty: false,
+              externalState: undefined,
+              viewingTextBackedImageAsText: file.viewingTextBackedImageAsText,
+            },
+          }));
+          if (activeFilePath === path) {
+            setExternalStatus((current) => (current?.path === path ? null : current));
+          }
+          continue;
+        }
+
+        if (file.kind === 'image' && nextData.kind === 'image') {
+          if (file.url === nextData.url && file.size === nextData.size) {
+            continue;
+          }
+
+          setOpenFiles((prev) => ({
+            ...prev,
+            [path]: {
+              kind: 'image',
+              path,
+              mime: nextData.mime,
+              url: nextData.url,
+              size: nextData.size,
+              isTextBacked: nextData.isTextBacked,
+              externalState: undefined,
+            },
+          }));
+          if (activeFilePath === path) {
+            setExternalStatus((current) => (current?.path === path ? null : current));
+          }
+          continue;
+        }
+
+        setOpenFiles((prev) => {
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        if (activeFilePath === path) {
+          setExternalStatus({ path, status: 'modified' });
+        }
+      }
+    };
+
+    void reconcileOpenFiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFilePath, dispatch, editorRefreshToken, openFiles, setOpenFiles, workspaceId]);
 
   const handleClose = useCallback(() => {
     if (!workspaceId) {
@@ -268,9 +407,12 @@ export function useCodeEditorActions() {
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
+  const activeExternalStatus =
+    activeFilePath && externalStatus?.path === activeFilePath ? externalStatus.status : null;
 
   return {
     activeFilePath,
+    activeExternalStatus,
     activeLoadError,
     canSave,
     currentFile,

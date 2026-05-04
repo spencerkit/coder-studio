@@ -115,6 +115,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
   const t = useTranslation();
   const {
     activeFilePath,
+    activeExternalStatus,
     activeLoadError,
     currentFile,
     handleContentChange,
@@ -168,6 +169,17 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
           <div className="code-editor-error" role="alert">
             <AlertCircle size={14} />
             <span>{saveError}</span>
+          </div>
+        )}
+
+        {activeExternalStatus && (
+          <div className="code-editor-error" role="alert">
+            <AlertCircle size={14} />
+            <span>
+              {activeExternalStatus === 'deleted'
+                ? t('code_editor.deleted_on_disk')
+                : t('code_editor.modified_on_disk')}
+            </span>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -39,6 +39,7 @@ describe('Git Commands', () => {
     db = openDatabase(':memory:');
     runMigrations(db);
     eventBus = new EventBus();
+    vi.spyOn(eventBus, 'emit');
     workspaceMgr = new WorkspaceManager({ db, eventBus });
 
     const workspace = await workspaceMgr.open({
@@ -132,6 +133,13 @@ describe('Git Commands', () => {
     expect(result.ok).toBe(true);
     const { stdout } = await execFileAsync('git', ['status', '--short'], { cwd: testDir });
     expect(stdout.trim()).toBe('');
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: 'git.state.changed',
+      workspaceId,
+      treeChanged: true,
+      branchChanged: undefined,
+      worktreeChanged: undefined,
+    });
   });
 
   it('discards untracked files', async () => {
@@ -153,5 +161,34 @@ describe('Git Commands', () => {
     expect(result.ok).toBe(true);
     const { stdout } = await execFileAsync('git', ['status', '--short'], { cwd: testDir });
     expect(stdout).not.toContain('scratch.txt');
+  });
+
+  it('emits branch refresh hints after checkout', async () => {
+    await execFileAsync('git', ['checkout', '-b', 'feature/test'], { cwd: testDir });
+    await execFileAsync('git', ['checkout', 'master'], { cwd: testDir }).catch(async () => {
+      await execFileAsync('git', ['checkout', 'main'], { cwd: testDir });
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'git-checkout-1',
+        op: 'git.checkout',
+        args: {
+          workspaceId,
+          ref: 'feature/test',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: 'git.state.changed',
+      workspaceId,
+      treeChanged: true,
+      branchChanged: true,
+      worktreeChanged: true,
+    });
   });
 });
