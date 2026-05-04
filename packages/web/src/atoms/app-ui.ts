@@ -37,3 +37,10 @@ export const commandPaletteOpenAtom = atom<boolean>(false);
  * session into view.
  */
 export const pendingFocusSessionAtom = atom<string | null>(null);
+
+/**
+ * Currently visible session in the mobile workspace shell.
+ *
+ * This is transient render state, not persisted workspace UI state.
+ */
+export const visibleMobileSessionIdAtom = atom<string | null>(null);

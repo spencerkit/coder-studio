@@ -17,8 +17,11 @@ import { MobileWorkspaceDrawer } from './mobile-workspace-drawer';
 import { useVisualViewportInset } from './hooks/use-visual-viewport-inset';
 import { useMobileLayoutMode } from './hooks/use-mobile-layout-mode';
 import { useMobileMotionMode } from './hooks/use-mobile-motion-mode';
-import { pendingFocusSessionAtom } from '../../../../atoms/app-ui';
-import { useAtomValue } from 'jotai';
+import {
+  pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
+} from '../../../../atoms/app-ui';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useCodeEditorActions } from '../../../code-editor/actions/use-code-editor-actions';
 import { CodeEditorHeaderActions } from '../../../code-editor/views/shared/code-editor-host';
 
@@ -26,6 +29,7 @@ export function WorkspaceMobileView() {
   const t = useTranslation();
   const navigate = useNavigate();
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
+  const setVisibleMobileSessionId = useSetAtom(visibleMobileSessionIdAtom);
   const {
     activeSession,
     activeWorkspaceId,
@@ -63,6 +67,14 @@ export function WorkspaceMobileView() {
       selectMobileSession(pendingFocusSessionId);
     }
   }, [mobileActiveSessionId, orderedSessions, pendingFocusSessionId, selectMobileSession]);
+
+  useEffect(() => {
+    setVisibleMobileSessionId(mobileActiveSessionId);
+
+    return () => {
+      setVisibleMobileSessionId(null);
+    };
+  }, [mobileActiveSessionId, setVisibleMobileSessionId]);
 
   const sheetBody =
     mobileSheet === 'files'

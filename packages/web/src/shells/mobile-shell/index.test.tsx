@@ -17,6 +17,7 @@ import {
   commandPaletteOpenAtom,
   localeAtom,
   pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
 } from '../../atoms/app-ui';
 import {
   activeWorkspaceIdAtom,
@@ -1188,6 +1189,27 @@ describe('MobileShell Phase 2 workspace', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+    });
+  });
+
+  it('tracks the currently visible mobile session in app UI state and clears it on unmount', async () => {
+    const { store, unmount } = renderMobileShell({ initialEntry: '/workspace' });
+
+    await waitFor(() => {
+      expect(store.get(visibleMobileSessionIdAtom)).toBe('sess_2');
+    });
+
+    store.set(pendingFocusSessionAtom, 'sess_1');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-session-card')).toHaveTextContent('sess_1');
+    });
+    expect(store.get(visibleMobileSessionIdAtom)).toBe('sess_1');
+
+    unmount();
+
+    await waitFor(() => {
+      expect(store.get(visibleMobileSessionIdAtom)).toBeNull();
     });
   });
 

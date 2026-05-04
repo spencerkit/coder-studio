@@ -43,7 +43,10 @@ import {
   resolvedActiveWorkspaceIdAtom,
   workspacesAtom,
 } from '../../atoms/workspaces';
-import { pendingFocusSessionAtom } from '../../atoms/app-ui';
+import {
+  pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
+} from '../../atoms/app-ui';
 import {
   notificationPreferencesAtom,
   pushToastAtom,
@@ -58,6 +61,7 @@ import {
 import { focusSession } from './focus-session';
 import { useTranslation } from '../../lib/i18n';
 import type { SessionState } from '@coder-studio/core';
+import { useViewport } from '../../hooks/use-viewport';
 
 type NotificationChannel = 'none' | 'toast' | 'system';
 
@@ -91,22 +95,47 @@ const ACTIVE_STATES: ReadonlySet<SessionState> = new Set([
 const COMPLETION_STATES: ReadonlySet<SessionState> = new Set(['idle', 'ended']);
 
 /**
+ * Decide whether a visible-page completion should stay silent because the user
+ * is already looking at the relevant session/workspace.
+ */
+function shouldSuppressVisibleNotification(
+  sessionWorkspaceId: string,
+  sessionId: string,
+  activeWorkspaceId: string | null,
+  viewport: 'mobile' | 'desktop',
+  visibleMobileSessionId: string | null,
+): boolean {
+  if (activeWorkspaceId !== sessionWorkspaceId) {
+    return false;
+  }
+  if (viewport !== 'mobile') {
+    return true;
+  }
+  return visibleMobileSessionId === sessionId;
+}
+
+/**
  * Decide which delivery channel to use for a session-completion event.
  *
  * - If the page is hidden (`document.hidden`), use a system push so the
  *   user sees it from another tab/app.
- * - Otherwise, if the user is NOT looking at the originating workspace,
- *   show an in-app toast banner.
- * - Otherwise, the user is staring right at the workspace — stay quiet.
+ * - Otherwise, visible-page events that are not suppressed use an in-app toast.
  */
-function selectChannel(sessionWorkspaceId: string, activeWorkspaceId: string | null): NotificationChannel {
-  if (typeof document !== 'undefined' && document.hidden) {
+function selectChannel(hidden: boolean, suppressed: boolean): NotificationChannel {
+  if (hidden) {
     return 'system';
   }
-  if (activeWorkspaceId === sessionWorkspaceId) {
+  if (suppressed) {
     return 'none';
   }
   return 'toast';
+}
+
+function isDocumentHidden(): boolean {
+  if (typeof document !== 'undefined' && document.hidden) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -217,10 +246,12 @@ export function useSessionNotifications(): void {
   const notificationPreferences = useAtomValue(notificationPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const visibleMobileSessionId = useAtomValue(visibleMobileSessionIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const t = useTranslation();
+  const viewport = useViewport();
   // Read-on-demand handle for atoms we don't want to trigger re-renders for —
   // notably the workspaces map (cheap but noisy) and the high-frequency output
   // tail buffer. We snapshot them only at the moment a notification fires.
@@ -306,7 +337,17 @@ export function useSessionNotifications(): void {
 
       next.notifiedForTurn = true;
 
-      const channel = selectChannel(session.workspaceId, activeWorkspaceId);
+      const hidden = isDocumentHidden();
+      const suppressed = hidden
+        ? false
+        : shouldSuppressVisibleNotification(
+            session.workspaceId,
+            session.id,
+            activeWorkspaceId,
+            viewport,
+            visibleMobileSessionId,
+          );
+      const channel = selectChannel(hidden, suppressed);
       if (channel === 'none') continue;
 
       const title = t('notification.session_completed_title', {
@@ -388,6 +429,8 @@ export function useSessionNotifications(): void {
     sessions,
     notificationPreferences,
     activeWorkspaceId,
+    visibleMobileSessionId,
+    viewport,
     pushToast,
     setActiveWorkspaceId,
     setPendingFocus,

@@ -9,7 +9,10 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from '../../atoms/workspaces';
-import { pendingFocusSessionAtom } from '../../atoms/app-ui';
+import {
+  pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
+} from '../../atoms/app-ui';
 import type { SessionState, Workspace } from '@coder-studio/core';
 import {
   notificationPreferencesAtom,
@@ -17,6 +20,14 @@ import {
   toastsAtom,
 } from './atoms';
 import { useSessionNotifications } from './use-session-notifications';
+
+const viewportMocks = vi.hoisted(() => ({
+  viewport: 'desktop' as 'desktop' | 'mobile',
+}));
+
+vi.mock('../../hooks/use-viewport', () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
 
 const NotificationMock = vi.fn().mockImplementation(function () {
   return {
@@ -141,6 +152,7 @@ describe('useSessionNotifications', () => {
     vi.stubGlobal('Notification', NotificationMock);
     vi.stubGlobal('Audio', AudioElementMock);
     vi.stubGlobal('AudioContext', AudioContextMock);
+    viewportMocks.viewport = 'desktop';
     setDocumentHidden(false);
     Object.defineProperty(document, 'hidden', {
       configurable: true,
@@ -210,6 +222,88 @@ describe('useSessionNotifications', () => {
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
     seedWorkspace(store, 'ws-1');
     store.set(activeWorkspaceIdAtom, 'ws-1');
+    seedRunningSession(store, 'sess-1', 'ws-1');
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+    });
+
+    expect(store.get(toastsAtom)).toHaveLength(0);
+    expect(NotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps desktop behavior unchanged even when a different session is marked active in the same workspace', async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'disconnected');
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, 'ws-1', {
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+        activeSessionId: 'sess-other',
+      },
+    });
+    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(visibleMobileSessionIdAtom, 'sess-other');
+    seedRunningSession(store, 'sess-1', 'ws-1');
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+    });
+
+    expect(store.get(toastsAtom)).toHaveLength(0);
+    expect(NotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('on mobile, visible-page completion in the same workspace still toasts when another session is currently visible', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    store.set(connectionStatusAtom, 'disconnected');
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, 'ws-1');
+    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(visibleMobileSessionIdAtom, 'sess-visible');
+    seedRunningSession(store, 'sess-completed', 'ws-1');
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        'sess-completed': createSession('sess-completed', 'idle', 'ws-1'),
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+
+    expect(store.get(toastsAtom)[0]).toMatchObject({
+      kind: 'success',
+      workspaceId: 'ws-1',
+      sessionId: 'sess-completed',
+    });
+    expect(NotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('on mobile, visible-page completion stays silent when the completed session is the currently visible one', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    store.set(connectionStatusAtom, 'disconnected');
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, 'ws-1');
+    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(visibleMobileSessionIdAtom, 'sess-1');
     seedRunningSession(store, 'sess-1', 'ws-1');
 
     mountAndCompleteTurn(store, () => {
