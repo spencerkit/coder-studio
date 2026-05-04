@@ -4,9 +4,34 @@
  * Wrapper around git worktree commands.
  */
 
+import path from 'node:path';
 import { runGit, GitError } from './cli.js';
 import type { GitStatus, FileNode, WorktreeInfo } from '@coder-studio/core';
 import { parseStatus } from './status-parser.js';
+
+function normalizeWorktreePath(worktreePath: string): string {
+  return path.resolve(worktreePath);
+}
+
+export async function resolveWorktreePath(
+  repoPath: string,
+  worktreePath: string
+): Promise<string> {
+  const normalizedRequested = normalizeWorktreePath(worktreePath);
+  const worktrees = await listWorktrees(repoPath);
+  const matched = worktrees.find(
+    (worktree) => normalizeWorktreePath(worktree.path) === normalizedRequested
+  );
+
+  if (!matched) {
+    throw {
+      code: 'worktree_not_found',
+      message: `Worktree not found for repository: ${worktreePath}`,
+    };
+  }
+
+  return matched.path;
+}
 
 /**
  * List all worktrees for a repository.
@@ -84,7 +109,13 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
  * @returns Git status information
  */
 export async function getWorktreeStatus(worktreePath: string): Promise<GitStatus> {
-  const { stdout } = await runGit(worktreePath, ['status', '--porcelain=v2', '-z', '--branch']);
+  const { stdout } = await runGit(worktreePath, [
+    'status',
+    '--porcelain=v2',
+    '-z',
+    '--branch',
+    '--untracked-files=all',
+  ]);
   return parseStatus(stdout);
 }
 

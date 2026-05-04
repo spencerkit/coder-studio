@@ -152,7 +152,13 @@ interface PreparedGitAuthExecution {
  * Get git status for a workspace.
  */
 export async function getGitStatus(cwd: string): Promise<GitStatus> {
-  const { stdout: statusOutput } = await runGit(cwd, ['status', '--porcelain=v2', '-z', '--branch']);
+  const { stdout: statusOutput } = await runGit(cwd, [
+    'status',
+    '--porcelain=v2',
+    '-z',
+    '--branch',
+    '--untracked-files=all',
+  ]);
   const status = parseStatus(statusOutput);
 
   if (!status.headSha) {

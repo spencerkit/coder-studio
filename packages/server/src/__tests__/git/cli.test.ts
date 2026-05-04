@@ -440,6 +440,28 @@ describe('getGitStatus', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
+  it('expands untracked directories into file-level paths', async () => {
+    const testDir = await mkdtemp(join(tmpdir(), 'git-status-untracked-all-'));
+    await execFileAsync('git', ['init'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: testDir });
+    await writeFile(join(testDir, 'tracked.txt'), 'hello\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial subject'], { cwd: testDir });
+    await mkdir(join(testDir, 'docs', 'help', 'assets'), { recursive: true });
+    await writeFile(join(testDir, 'docs', 'help', 'README.md'), 'help\n');
+    await writeFile(join(testDir, 'docs', 'help', 'assets', 'logo.png'), 'png\n');
+
+    const status = await getGitStatus(testDir);
+
+    expect(status.untracked).toEqual([
+      { path: 'docs/help/README.md' },
+      { path: 'docs/help/assets/logo.png' },
+    ]);
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
   it('does not invent HEAD metadata before the first commit', async () => {
     const testDir = await mkdtemp(join(tmpdir(), 'git-status-empty-'));
     await execFileAsync('git', ['init'], { cwd: testDir });
