@@ -105,6 +105,7 @@ const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
   onResize: vi.fn(() => vi.fn()),
+  attachCustomKeyEventHandler: vi.fn(),
   write: vi.fn(),
   writeln: vi.fn(),
   scrollLines: vi.fn(),
@@ -207,6 +208,25 @@ describe('XtermHost', () => {
     // Check that the xterm-host container is rendered
     const hostContainer = container.querySelector('.xterm-host');
     expect(hostContainer).toBeTruthy();
+  });
+
+  it('lets the browser handle keyboard paste shortcuts instead of sending Ctrl+V to the PTY', () => {
+    render(
+      <JotaiProvider>
+        <XtermHost terminalId="paste-shortcut-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    expect(mockTerminal.attachCustomKeyEventHandler).toHaveBeenCalledTimes(1);
+
+    const handler = mockTerminal.attachCustomKeyEventHandler.mock.calls[0]?.[0] as
+      | ((event: KeyboardEvent) => boolean)
+      | undefined;
+
+    expect(handler).toBeTypeOf('function');
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', ctrlKey: true }))).toBe(false);
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', metaKey: true }))).toBe(false);
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true }))).toBe(true);
   });
 
   it('shows a restoring overlay while the initial replay is in flight', async () => {

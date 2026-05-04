@@ -207,6 +207,19 @@ function getTerminalTheme(theme: 'dark' | 'light') {
   return AURORA_MINT_THEMES[theme];
 }
 
+function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
+  if (event.type !== 'keydown') {
+    return false;
+  }
+
+  if (event.shiftKey || event.altKey) {
+    return false;
+  }
+
+  const isPasteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v';
+  return isPasteShortcut;
+}
+
 const terminalInputEncoder = new TextEncoder();
 const terminalTraceDecoder = new TextDecoder('utf-8', { fatal: false });
 const TERMINAL_TRACE_STORAGE_KEY = 'coderStudio.terminalTrace';
@@ -770,6 +783,7 @@ export function XtermHost({
     terminal.onData((data) => {
       void handleInputRef.current(data);
     });
+    terminal.attachCustomKeyEventHandler((event) => !shouldBypassPtyForKeyboardPaste(event));
 
     terminal.open(containerRef.current);
     traceTerminal(terminalId, 'mount.open');
