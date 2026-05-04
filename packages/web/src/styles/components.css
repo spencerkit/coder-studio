@@ -847,17 +847,17 @@
   font-size: var(--text-xs);
 }
 
-.settings-capability-full {
+.settings-provider-capability.settings-capability-full {
   background: rgba(120, 215, 178, 0.2);
   color: var(--accent-green);
 }
 
-.settings-capability-limited {
+.settings-provider-capability.settings-capability-limited {
   background: rgba(241, 184, 106, 0.2);
   color: var(--accent-amber);
 }
 
-.settings-capability-unsupported {
+.settings-provider-capability.settings-capability-unsupported {
   background: rgba(255, 158, 176, 0.2);
   color: var(--accent-pink);
 }

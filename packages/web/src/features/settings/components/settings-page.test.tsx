@@ -585,6 +585,10 @@ describe('SettingsPage', () => {
     expect(
       screen.getByText('浏览器或系统通知权限可能已阻止，请检查站点设置和设备通知设置')
     ).toBeInTheDocument();
+
+    const limitedStatus = screen.getByText('受限').closest('.settings-info-value');
+    expect(limitedStatus).toHaveClass('settings-capability-limited');
+    expect(limitedStatus).not.toHaveClass('settings-provider-capability');
   });
 
   it('does not offer browser permission request when mobile notification support is limited', async () => {
