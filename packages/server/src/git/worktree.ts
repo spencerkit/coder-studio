@@ -56,9 +56,13 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
     for (const wt of worktrees) {
       try {
         const status = await getWorktreeStatus(wt.path);
-        wt.status = status.staged.length > 0 || status.modified.length > 0 || status.untracked.length > 0
-          ? 'dirty'
-          : 'clean';
+        wt.status =
+          status.staged.length > 0 ||
+          status.modified.length > 0 ||
+          status.untracked.length > 0 ||
+          status.deleted.length > 0
+            ? 'dirty'
+            : 'clean';
       } catch {
         wt.status = 'clean';
       }
@@ -80,7 +84,7 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
  * @returns Git status information
  */
 export async function getWorktreeStatus(worktreePath: string): Promise<GitStatus> {
-  const { stdout } = await runGit(worktreePath, ['status', '--porcelain=v2', '--branch']);
+  const { stdout } = await runGit(worktreePath, ['status', '--porcelain=v2', '-z', '--branch']);
   return parseStatus(stdout);
 }
 

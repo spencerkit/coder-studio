@@ -60,6 +60,22 @@ describe('runGit', () => {
     const result = await runGit(testDir, ['rev-parse', '--git-dir']);
     expect(result.stdout.trim()).toBe('.git');
   });
+
+  it('returns raw deleted paths for non-ascii and spaced filenames', async () => {
+    await mkdir(join(testDir, 'docs', '验收报告', 'phase 1'), { recursive: true });
+    const deletedPath = join(testDir, 'docs', '验收报告', 'phase 1', 'a b.txt');
+    await writeFile(deletedPath, 'test');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await rm(deletedPath);
+
+    const status = await getGitStatus(testDir);
+
+    expect(status.deleted).toEqual([{ path: 'docs/验收报告/phase 1/a b.txt' }]);
+    await expect(
+      execFileAsync('git', ['add', '--', status.deleted[0]?.path ?? ''], { cwd: testDir })
+    ).resolves.toBeDefined();
+  });
 });
 
 describe('GitError', () => {

@@ -13,8 +13,6 @@ import type { GitStatus, GitFileChange } from '@coder-studio/core';
  * @returns Structured git status
  */
 export function parseStatus(porcelainV2: string): GitStatus {
-  const lines = porcelainV2.split('\n');
-
   let branch = '';
   let ahead = 0;
   let behind = 0;
@@ -23,44 +21,56 @@ export function parseStatus(porcelainV2: string): GitStatus {
   const modified: GitFileChange[] = [];
   const untracked: GitFileChange[] = [];
   const deleted: GitFileChange[] = [];
+  const records = porcelainV2.includes('\0')
+    ? porcelainV2.split('\0').filter((record) => record.length > 0)
+    : porcelainV2.split('\n').filter((record) => record.length > 0);
 
-  for (const line of lines) {
-    if (!line) continue;
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) {
+      continue;
+    }
 
-    // Branch header: # branch.oid <hash>
-    // Branch name: # branch.head <name>
-    if (line.startsWith('# branch.oid ')) {
-      const oid = line.substring('# branch.oid '.length);
+    if (record.startsWith('# branch.oid ')) {
+      const oid = record.substring('# branch.oid '.length);
       if (oid && oid !== '(initial)') {
         headSha = oid;
       }
+      continue;
     }
 
-    if (line.startsWith('# branch.head ')) {
-      branch = line.substring('# branch.head '.length);
+    if (record.startsWith('# branch.head ')) {
+      branch = record.substring('# branch.head '.length);
+      continue;
     }
 
-    // Ahead/behind: # branch.ab +<ahead> -<behind>
-    if (line.startsWith('# branch.ab ')) {
-      const match = line.match(/# branch\.ab \+(\d+) -(\d+)/);
+    if (record.startsWith('# branch.ab ')) {
+      const match = record.match(/# branch\.ab \+(\d+) -(\d+)/);
       const nextAhead = match?.[1];
       const nextBehind = match?.[2];
       if (nextAhead && nextBehind) {
         ahead = parseInt(nextAhead, 10);
         behind = parseInt(nextBehind, 10);
       }
+      continue;
     }
 
-    // Changed entries: 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
-    // Format: https://git-scm.com/docs/git-status#_changed_tracked_entries
-    if (line.startsWith('1 ') || line.startsWith('2 ')) {
-      parseChangedEntry(line, staged, modified, deleted);
+    if (record.startsWith('1 ')) {
+      parseOrdinaryChangedEntry(record, staged, modified, deleted);
+      continue;
     }
 
-    // Untracked entries: ? <path>
-    if (line.startsWith('? ')) {
-      const path = line.substring(2);
-      untracked.push({ path });
+    if (record.startsWith('2 ')) {
+      const oldPath = records[index + 1];
+      parseRenamedEntry(record, oldPath, staged, modified, deleted);
+      if (oldPath) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (record.startsWith('? ')) {
+      untracked.push({ path: record.substring(2) });
     }
   }
 
@@ -78,66 +88,86 @@ export function parseStatus(porcelainV2: string): GitStatus {
 }
 
 /**
- * Parses a changed entry line (format 1 or 2).
+ * Parses a regular changed entry line (format 1).
  */
-function parseChangedEntry(
-  line: string,
+function parseOrdinaryChangedEntry(
+  record: string,
   staged: GitFileChange[],
   modified: GitFileChange[],
   deleted: GitFileChange[]
 ): void {
-  const parts = line.split(' ');
+  const parts = record.split(' ');
   const xy = parts[1]; // XY status codes
   if (!xy) {
     return;
   }
 
-  // Extract path (last part for format 1, second-to-last for format 2 renames)
-  let path: string;
-  let oldPath: string | undefined;
-
-  if (line.startsWith('2 ')) {
-    // Rename entry: 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X> <path> <oldPath>
-    const renameParts = line.split(' ');
-    const nextPath = renameParts[renameParts.length - 2];
-    const nextOldPath = renameParts[renameParts.length - 1];
-    if (!nextPath || !nextOldPath) {
-      return;
-    }
-    path = nextPath;
-    oldPath = nextOldPath;
-  } else {
-    // Regular entry: 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
-    const nextPath = parts[parts.length - 1];
-    if (!nextPath) {
-      return;
-    }
-    path = nextPath;
+  const path = parts.slice(8).join(' ');
+  if (!path) {
+    return;
   }
 
-  // Parse XY status codes
-  // X = index status (staged)
-  // Y = worktree status (modified)
+  pushChange({ path }, xy, staged, modified, deleted);
+}
+
+/**
+ * Parses a renamed entry line (format 2). In NUL-delimited mode the old path
+ * is carried in the following record rather than inline.
+ */
+function parseRenamedEntry(
+  record: string,
+  oldPathRecord: string | undefined,
+  staged: GitFileChange[],
+  modified: GitFileChange[],
+  deleted: GitFileChange[]
+): void {
+  const parts = record.split(' ');
+  const xy = parts[1];
+  if (!xy) {
+    return;
+  }
+
+  const pathTokens = parts.slice(9);
+  const pathAndMaybeOldPath = pathTokens.join(' ');
+  const inlinePathParts = pathAndMaybeOldPath.split('\t');
+  const fallbackPath =
+    !oldPathRecord && inlinePathParts.length === 1 && pathTokens.length > 1
+      ? pathTokens.slice(0, -1).join(' ')
+      : undefined;
+  const path = fallbackPath ?? inlinePathParts[0];
+  if (!path) {
+    return;
+  }
+
+  const oldPath =
+    (oldPathRecord && !oldPathRecord.startsWith('#') ? oldPathRecord : undefined) ??
+    inlinePathParts[1] ??
+    (pathTokens.length > 1 ? pathTokens[pathTokens.length - 1] : undefined);
+  pushChange({ path, oldPath }, xy, staged, modified, deleted);
+}
+
+function pushChange(
+  change: GitFileChange,
+  xy: string,
+  staged: GitFileChange[],
+  modified: GitFileChange[],
+  deleted: GitFileChange[]
+): void {
   const indexStatus = xy[0];
   const worktreeStatus = xy[1];
 
-  // Staged changes (index status)
-  if (indexStatus !== '.' && indexStatus !== ' ') {
-    const change: GitFileChange = { path, oldPath };
-    if (indexStatus === 'D') {
-      deleted.push(change);
-    } else {
-      staged.push(change);
-    }
+  if (indexStatus && indexStatus !== '.' && indexStatus !== ' ') {
+    staged.push(change);
   }
 
-  // Modified changes (worktree status)
-  if (worktreeStatus !== '.' && worktreeStatus !== ' ') {
-    const change: GitFileChange = { path };
-    if (worktreeStatus === 'D') {
-      deleted.push(change);
-    } else {
-      modified.push(change);
-    }
+  if (!worktreeStatus || worktreeStatus === '.' || worktreeStatus === ' ') {
+    return;
   }
+
+  if (worktreeStatus === 'D') {
+    deleted.push({ path: change.path });
+    return;
+  }
+
+  modified.push({ path: change.path });
 }
