@@ -17,9 +17,9 @@ const isPublicPath = (path: string) => {
 
   return (
     pathname === '/' ||
-    pathname === '/auth' ||
+    pathname === '/login' ||
     pathname === '/healthz' ||
-    pathname === '/auth/status' ||
+    pathname === '/auth/status' || pathname === '/auth/login' || pathname === '/auth/logout' ||
     pathname.startsWith('/@') ||
     isPublicStaticPath(pathname)
   );
@@ -93,7 +93,7 @@ export const createAuthGuard = (deps: AuthDeps) => {
     }
 
     if (isFrontendNavigationRequest(request, deps)) {
-      return reply.redirect('/auth');
+      return reply.redirect('/login');
     }
 
     reply.status(401).send({

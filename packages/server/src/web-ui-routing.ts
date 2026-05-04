@@ -1,7 +1,7 @@
 import type { FastifyRequest } from 'fastify';
 
-const RESERVED_PREFIXES = ['/api/', '/auth/', '/internal/', '/assets/'];
-const RESERVED_EXACT_PATHS = new Set(['/api', '/assets', '/auth', '/healthz', '/internal', '/ws']);
+const RESERVED_PREFIXES = ['/api/', '/internal/', '/assets/'];
+const RESERVED_EXACT_PATHS = new Set(['/api', '/assets', '/login', '/healthz', '/internal', '/ws']);
 const ROOT_PUBLIC_FILE_PATHS = new Set(['/favicon.ico', '/index.html', '/task-complete.wav']);
 
 export function getRequestPathname(url: string): string {
