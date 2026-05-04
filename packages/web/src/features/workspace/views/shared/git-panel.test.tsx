@@ -451,5 +451,13 @@ describe('GitPanel', () => {
     expect(screen.getByTitle('刷新')).toBeInTheDocument();
     expect(screen.getByTitle('暂存全部')).toBeInTheDocument();
     expect(screen.getByTitle('放弃全部')).toBeInTheDocument();
+
+    const untrackedRow = screen.getByText('supervisor.test.ts').closest('.git-row');
+    expect(untrackedRow).not.toBeNull();
+    expect(within(untrackedRow as HTMLElement).getByText('未跟踪')).toHaveClass(
+      'git-row-status',
+      'git-row-status-end'
+    );
+    expect(within(untrackedRow as HTMLElement).queryByText('tests/')).toHaveClass('git-row-dir');
   });
 });

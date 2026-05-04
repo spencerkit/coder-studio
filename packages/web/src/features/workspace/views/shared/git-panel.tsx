@@ -270,11 +270,15 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
         <File size={14} />
       </span>
 
-      <span className="git-row-name">{fileName}</span>
-
-      {dirName ? <span className="git-row-dir">{dirName}</span> : null}
-
-      <span className={`git-status-badge ${iconTone}`}>{badgeLabel}</span>
+      <div className="git-row-content">
+        <span className="git-row-name">{fileName}</span>
+        <span className="git-row-meta">
+          {dirName ? <span className="git-row-dir">{dirName}</span> : null}
+          <span className={`git-row-status git-row-status-end git-row-status-${iconTone}`}>
+            {badgeLabel}
+          </span>
+        </span>
+      </div>
 
       <div className="git-row-actions">
         <button
