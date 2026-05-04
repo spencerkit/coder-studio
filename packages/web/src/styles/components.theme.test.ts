@@ -93,6 +93,15 @@ describe("components.css theme-sensitive surfaces", () => {
     const xtermViewport = getLastRuleBlock(".xterm-host .xterm-viewport");
     const xtermThumb = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar-thumb");
     const xtermThumbHover = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover");
+    const xtermCustomTrack = getLastRuleBlock(
+      ".xterm-host .xterm .xterm-scrollable-element > .scrollbar"
+    );
+    const xtermCustomSlider = getLastRuleBlock(
+      ".xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider"
+    );
+    const xtermCustomSliderHover = getLastRuleBlock(
+      ".xterm-host .xterm .xterm-scrollable-element > .scrollbar:hover > .slider"
+    );
     const monacoTrack = getLastRuleBlock(
       ".monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar"
     );
@@ -107,6 +116,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermThumb).toContain("var(--scrollbar-thumb)");
     expect(xtermThumb).toContain("var(--radius-full)");
     expect(xtermThumbHover).toContain("var(--border-focus)");
+    expect(xtermCustomTrack).toContain("var(--scrollbar-track)");
+    expect(xtermCustomSlider).toContain("var(--scrollbar-thumb)");
+    expect(xtermCustomSlider).toContain("var(--radius-full)");
+    expect(xtermCustomSliderHover).toContain("var(--border-focus)");
     expect(monacoTrack).toContain("var(--scrollbar-track)");
     expect(monacoSlider).toContain("var(--scrollbar-thumb)");
     expect(monacoSlider).toContain("var(--radius-full)");
