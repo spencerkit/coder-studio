@@ -160,7 +160,7 @@ describe('SettingsPage', () => {
     renderSettingsPage(store);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
+      expect(sendCommand).toHaveBeenCalledWith('settings.get', {}, undefined);
     });
 
     expect(screen.queryByText('选择默认的 Agent Provider')).not.toBeInTheDocument();
@@ -180,7 +180,7 @@ describe('SettingsPage', () => {
     renderSettingsPage(store);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('settings.get', {});
+      expect(sendCommand).toHaveBeenCalledWith('settings.get', {}, undefined);
     });
 
     expect(screen.queryByRole('button', { name: 'MCP Servers' })).not.toBeInTheDocument();
@@ -237,7 +237,7 @@ describe('SettingsPage', () => {
             },
           },
         },
-      });
+      }, undefined);
     });
 
     await waitFor(() => {
@@ -246,7 +246,7 @@ describe('SettingsPage', () => {
         config: {
           additionalArgs: ['--verbose', '--debug', '--print'],
         },
-      });
+      }, undefined);
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
@@ -270,7 +270,7 @@ describe('SettingsPage', () => {
             },
           },
         },
-      });
+      }, undefined);
     });
 
     expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();

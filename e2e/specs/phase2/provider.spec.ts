@@ -1,24 +1,15 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('@phase2 provider acceptance', () => {
-  test('P2P-01 Claude provider shows full capability', async ({ page }) => {
+  test('P2P-01 provider tabs render in settings', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
-    // Check Claude badge shows "Full" capability (Chinese: "完整支持")
-    await expect(page.locator('.settings-provider-capability')).toContainText('完整支持');
+    await expect(page.getByRole('button', { name: 'Claude' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Codex' })).toBeVisible();
   });
 
-  test('P2P-02 Codex provider shows limited capability', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Providers' }).click();
-    await page.getByRole('button', { name: 'Codex' }).click();
-
-    // Check Codex badge shows "Limited" capability (Chinese: "有限支持")
-    await expect(page.locator('.settings-provider-capability')).toContainText('有限支持');
-  });
-
-  test('P2P-03 Claude model selection updates config', async ({ page }) => {
+  test('P2P-02 Claude model selection updates config', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
@@ -29,7 +20,7 @@ test.describe('@phase2 provider acceptance', () => {
     await expect(page.locator('select.input')).toHaveValue('claude-3-opus');
   });
 
-  test('P2P-04 Codex cwd override field exists', async ({ page }) => {
+  test('P2P-03 Codex cwd override field exists', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
     await page.getByRole('button', { name: 'Codex' }).click();
@@ -38,7 +29,7 @@ test.describe('@phase2 provider acceptance', () => {
     await expect(page.getByText('Working Directory Override')).toBeVisible();
   });
 
-  test('P2P-05 hooks inject button works', async ({ page }) => {
+  test('P2P-04 hooks inject button works', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
@@ -50,7 +41,7 @@ test.describe('@phase2 provider acceptance', () => {
     await expect(page.locator('.settings-provider-status')).toBeVisible();
   });
 
-  test('P2P-06 provider tabs switch correctly', async ({ page }) => {
+  test('P2P-05 provider tabs switch correctly', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
@@ -66,7 +57,7 @@ test.describe('@phase2 provider acceptance', () => {
     await expect(page.locator('.settings-provider-tab-active')).toContainText('Claude');
   });
 
-  test('P2P-07 API key field accepts input', async ({ page }) => {
+  test('P2P-06 API key field accepts input', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 

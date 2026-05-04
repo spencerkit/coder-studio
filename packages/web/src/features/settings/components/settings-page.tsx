@@ -27,7 +27,6 @@ import {
 interface ProviderInfo {
   id: string;
   displayName: string;
-  capability: 'full' | 'limited' | 'unsupported';
 }
 
 type SettingsNavigationState =
@@ -95,8 +94,8 @@ export function SettingsPage() {
 
   // Provider settings state (would come from server in real implementation)
   const [providers, setProviders] = useState<ProviderInfo[]>([
-    { id: 'claude', displayName: 'Claude', capability: 'full' },
-    { id: 'codex', displayName: 'Codex', capability: 'limited' },
+    { id: 'claude', displayName: 'Claude' },
+    { id: 'codex', displayName: 'Codex' },
   ]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -649,15 +648,6 @@ function ProviderSettings({
 
       {provider && (
         <div className="settings-provider-content">
-          <div className="settings-provider-card">
-            <div className="settings-provider-header">
-              <span className="settings-provider-badge">{provider.displayName}</span>
-              <span className={`settings-provider-capability settings-capability-${provider.capability}`}>
-                {t(`settings.provider.capability_${provider.capability}`)}
-              </span>
-            </div>
-          </div>
-
           <div className="settings-group">
             <h3 className="settings-group-title">{t('settings.provider.config')}</h3>
             <p className="settings-group-desc">{t('settings.provider.startup_args_hint')}</p>
