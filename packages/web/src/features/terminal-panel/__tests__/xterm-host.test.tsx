@@ -68,6 +68,10 @@ const hydrationCoordinatorMocks = vi.hoisted(() => {
   };
 });
 
+const uploadHookMocks = vi.hoisted(() => ({
+  busy: false,
+}));
+
 vi.mock('../../../hooks/use-viewport', () => ({
   useViewport: () => viewportMocks.viewport,
 }));
@@ -84,6 +88,10 @@ vi.mock('../hydration-coordinator', async () => {
   };
 });
 
+vi.mock('../uploads/use-paste-drop-upload', () => ({
+  usePasteDropUpload: vi.fn(() => ({ busy: uploadHookMocks.busy })),
+}));
+
 function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, lastSeq: number) {
   expect(mock).toHaveBeenCalledWith(
     'terminal.replay',
@@ -94,6 +102,23 @@ function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, la
     {
       timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
     }
+  );
+}
+
+function expectResizeCall(
+  mock: ReturnType<typeof vi.fn>,
+  terminalId: string,
+  cols: number,
+  rows: number
+) {
+  expect(mock).toHaveBeenCalledWith(
+    'terminal.resize',
+    {
+      terminalId,
+      cols,
+      rows,
+    },
+    undefined
   );
 }
 
@@ -130,7 +155,8 @@ const textEncoder = new TextEncoder();
 // Mock xterm.js modules
 vi.mock('@xterm/xterm', () => {
   return {
-    Terminal: vi.fn(function () {
+    Terminal: vi.fn(function (options?: Record<string, unknown>) {
+      mockTerminal.options = { ...(options ?? {}) };
       return mockTerminal;
     }),
   };
@@ -157,6 +183,7 @@ describe('XtermHost', () => {
     hydrationCoordinatorMocks.lastRequest = null;
     hydrationCoordinatorMocks.listeners = new Set();
     hydrationCoordinatorMocks.resolveGranted = () => {};
+    uploadHookMocks.busy = false;
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
@@ -208,6 +235,61 @@ describe('XtermHost', () => {
     // Check that the xterm-host container is rendered
     const hostContainer = container.querySelector('.xterm-host');
     expect(hostContainer).toBeTruthy();
+  });
+
+  it('shows upload overlay and disables stdin while an upload is pending', async () => {
+    uploadHookMocks.busy = true;
+
+    render(
+      <JotaiProvider>
+        <XtermHost terminalId="upload-busy-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    expect(screen.getByText('Uploading…')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: true,
+          cursorBlink: false,
+        })
+      );
+    });
+  });
+
+  it('re-enables stdin when the upload busy state clears', async () => {
+    uploadHookMocks.busy = true;
+
+    const { rerender } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="upload-toggle-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: true,
+        })
+      );
+    });
+
+    uploadHookMocks.busy = false;
+    rerender(
+      <JotaiProvider>
+        <XtermHost terminalId="upload-toggle-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Uploading…')).not.toBeInTheDocument();
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: false,
+          cursorBlink: true,
+        })
+      );
+    });
   });
 
   it('lets the browser handle keyboard paste shortcuts instead of sending Ctrl+V to the PTY', () => {
@@ -1121,11 +1203,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
-        terminalId: 'dedup-terminal',
-        cols: 132,
-        rows: 36,
-      });
+      expectResizeCall(dispatchCommand, 'dedup-terminal', 132, 36);
       expectReplayCall(dispatchCommand, 'dedup-terminal', 0);
     });
 
@@ -2763,11 +2841,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
-        terminalId: 'initial-resize-terminal',
-        cols: 132,
-        rows: 36,
-      });
+      expectResizeCall(dispatchCommand, 'initial-resize-terminal', 132, 36);
       expectReplayCall(dispatchCommand, 'initial-resize-terminal', 0);
     });
 
@@ -2860,11 +2934,7 @@ describe('XtermHost', () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('terminal.resize', {
-        terminalId: 'connect-gated-terminal',
-        cols: 132,
-        rows: 36,
-      });
+      expectResizeCall(sendCommand, 'connect-gated-terminal', 132, 36);
       expectReplayCall(sendCommand, 'connect-gated-terminal', 0);
       expectTerminalWriteData(replayChunk);
     });
@@ -3117,11 +3187,7 @@ describe('XtermHost', () => {
 
     await onResizeCallback?.({ cols: 132, rows: 36 });
 
-    expect(dispatchCommand).toHaveBeenCalledWith('terminal.resize', {
-      terminalId: 'resize-terminal',
-      cols: 132,
-      rows: 36,
-    });
+    expectResizeCall(dispatchCommand, 'resize-terminal', 132, 36);
   });
 
 });

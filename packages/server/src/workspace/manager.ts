@@ -21,6 +21,7 @@ export interface WorkspaceManagerDeps {
   db: Database;
   eventBus: EventBus;
   broadcaster?: Broadcaster;
+  onClose?: (workspaceId: string) => void | Promise<void>;
 }
 
 /**
@@ -168,6 +169,14 @@ export class WorkspaceManager {
 
     // Delete from DB (cascade deletes terminals and sessions)
     this.deps.db.prepare('DELETE FROM workspaces WHERE id = ?').run(workspaceId);
+
+    if (this.deps.onClose) {
+      try {
+        await this.deps.onClose(workspaceId);
+      } catch (err) {
+        console.warn('[workspace] onClose hook failed:', err);
+      }
+    }
 
     // Emit event
     this.deps.eventBus.emit({

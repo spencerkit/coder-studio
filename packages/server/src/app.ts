@@ -5,6 +5,7 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
+import multipart from '@fastify/multipart';
 import websocket, { type WebSocket } from '@fastify/websocket';
 import staticPlugin from '@fastify/static';
 import compress from '@fastify/compress';
@@ -20,6 +21,8 @@ import {
   registerAuthStatusRoute,
 } from './auth/index.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
+import { registerUploadsRoute } from './routes/uploads.js';
+import { MAX_FILE_BYTES, MAX_FILES_PER_BATCH } from './uploads/constants.js';
 import { isFrontendNavigationRequest } from './web-ui-routing.js';
 import type { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
 import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
@@ -83,6 +86,15 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(compress);
 
+  await app.register(multipart, {
+    limits: {
+      fileSize: MAX_FILE_BYTES,
+      files: MAX_FILES_PER_BATCH,
+    },
+    isPartAFile: (fieldName, contentType, fileName) =>
+      fieldName === 'files' || contentType === 'application/octet-stream' || fileName !== undefined,
+  });
+
   // CORS configuration (development mode)
   await app.register(cors, {
     origin: true, // Allow all origins in development
@@ -117,6 +129,11 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // Auth is inherited from the global onRequest cookie guard above, so this
   // only needs its own path-safety and allowlist checks.
   registerFileAssetRoutes(app, {
+    workspaceMgr: deps.workspaceMgr,
+  });
+
+  registerUploadsRoute(app, {
+    uploadsDir: deps.config.uploadsDir,
     workspaceMgr: deps.workspaceMgr,
   });
 

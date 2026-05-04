@@ -19,11 +19,15 @@
  */
 
 import { createReadStream } from 'fs';
-import { stat } from 'fs/promises';
+import { realpath, stat } from 'fs/promises';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkspaceManager } from '../workspace/manager.js';
 import { resolveSafe } from '../fs/file-io.js';
 import { getImageTypeInfo } from '../fs/image.js';
+
+function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
+  return targetPath === rootPath || targetPath.startsWith(`${rootPath}/`);
+}
 
 interface FileAssetQuery {
   workspaceId?: string;
@@ -66,6 +70,19 @@ export function registerFileAssetRoutes(
         absPath = resolveSafe(workspace.path, relPath);
       } catch {
         return reply.status(400).send({ ok: false, error: 'path_escape' });
+      }
+
+      try {
+        const [realWorkspacePath, realAssetPath] = await Promise.all([
+          realpath(workspace.path),
+          realpath(absPath),
+        ]);
+
+        if (!isPathInsideRoot(realWorkspacePath, realAssetPath)) {
+          return reply.status(400).send({ ok: false, error: 'path_escape' });
+        }
+      } catch {
+        return reply.status(404).send({ ok: false, error: 'not_found' });
       }
 
       let fileSize: number;

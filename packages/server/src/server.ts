@@ -42,6 +42,8 @@ import {
   writeRuntimeConfig,
   type RuntimeConfig,
 } from '@coder-studio/core/runtime';
+import { deleteWorkspaceUploads, runStartupGc } from './uploads/cleanup.js';
+import { STARTUP_GC_DELAY_MS } from './uploads/constants.js';
 
 import './commands/index.js';
 
@@ -129,6 +131,10 @@ export async function createServer(
     db,
     eventBus,
     broadcaster: wsHub,
+    onClose: (workspaceId) =>
+      deleteWorkspaceUploads(config.uploadsDir, workspaceId).catch((err) =>
+        console.warn('[uploads] cascade cleanup failed', { wsId: workspaceId, err })
+      ),
   });
 
   const authSessionRepo = new AuthSessionRepo(db);
@@ -216,11 +222,19 @@ export async function createServer(
     writeRuntimeConfig(runtime);
   }
 
+  const gcTimer = setTimeout(() => {
+    runStartupGc(config.uploadsDir, app.log).catch((err) =>
+      app.log.warn({ err }, 'startup GC failed')
+    );
+  }, STARTUP_GC_DELAY_MS);
+  gcTimer.unref();
+
   let stopped = false;
   const stopServer = async () => {
     if (stopped) return;
     stopped = true;
 
+    clearTimeout(gcTimer);
     await app.close();
     supervisorMgr.stop();
     terminalMgr.shutdown();

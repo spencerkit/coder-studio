@@ -35,6 +35,7 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from '../../hydration-coordinator';
+import { usePasteDropUpload } from '../../uploads/use-paste-drop-upload';
 import { XtermPlaceholder } from './xterm-placeholder';
 
 const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
@@ -482,15 +483,6 @@ export function XtermHost({
   }, [isActiveSession, meta?.alive, viewport]);
 
   useEffect(() => {
-    interactiveRef.current = isInteractive;
-
-    if (terminalRef.current) {
-      terminalRef.current.options.disableStdin = !isInteractive;
-      terminalRef.current.options.cursorBlink = isInteractive;
-    }
-  }, [isInteractive]);
-
-  useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.options.theme = getTerminalTheme(uiTheme);
     }
@@ -717,6 +709,29 @@ export function XtermHost({
     [terminalId, dispatch]
   );
 
+  const sendTextToTerminal = useCallback(
+    async (text: string) => {
+      await handleInput(text);
+    },
+    [handleInput]
+  );
+
+  const { busy: uploadBusy } = usePasteDropUpload({
+    containerRef,
+    workspaceId,
+    sendTextToTerminal,
+    enabled: isInteractive,
+  });
+
+  useEffect(() => {
+    interactiveRef.current = isInteractive;
+
+    if (terminalRef.current) {
+      terminalRef.current.options.disableStdin = !isInteractive || uploadBusy;
+      terminalRef.current.options.cursorBlink = isInteractive && !uploadBusy;
+    }
+  }, [isInteractive, uploadBusy]);
+
   // Keep callback refs in sync so the mount effect can call the latest version
   // without listing the callbacks as dependencies.
   useEffect(() => {
@@ -768,9 +783,9 @@ export function XtermHost({
       fontFamily: 'JetBrains Mono, Fira Code, SF Mono, monospace',
       fontSize: 11,
       scrollback: 5000,
-      cursorBlink: interactiveRef.current,
+      cursorBlink: isInteractive && !uploadBusy,
       cursorStyle: 'block',
-      disableStdin: !interactiveRef.current,
+      disableStdin: !isInteractive || uploadBusy,
       allowProposedApi: true,
     });
 
@@ -1346,6 +1361,26 @@ export function XtermHost({
           }
         }}
       />
+      {uploadBusy ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.35)',
+            pointerEvents: 'none',
+            zIndex: 5,
+            fontSize: 12,
+            color: 'var(--text-muted, #ddd)',
+          }}
+        >
+          Uploading…
+        </div>
+      ) : null}
       {viewport !== 'mobile' && hydrationState.kind === 'queued' ? (
         <XtermPlaceholder state="queued" queuePosition={hydrationState.queuePosition} />
       ) : null}

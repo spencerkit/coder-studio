@@ -43,4 +43,47 @@ describe('parseServerConfig', () => {
 
     expect(config.dataDir).toBe(join(homedir(), '.coder-studio', 'data', 'coder-studio.db'));
   });
+
+  it('uses tmpdir/coder-studio-dev/uploads in development', () => {
+    process.env.NODE_ENV = 'development';
+    delete process.env.UPLOADS_DIR;
+
+    const config = parseServerConfig();
+
+    expect(config.uploadsDir).toBe(join(tmpdir(), 'coder-studio-dev', 'uploads'));
+  });
+
+  it('uses a stable temp uploads dir in test mode', () => {
+    process.env.NODE_ENV = 'test';
+    delete process.env.UPLOADS_DIR;
+
+    const a = parseServerConfig();
+    const b = parseServerConfig();
+
+    expect(a.uploadsDir).toBe(b.uploadsDir);
+    expect(a.uploadsDir).toContain('coder-studio-test-uploads-');
+  });
+
+  it('uses ~/.coder-studio/uploads in production', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.UPLOADS_DIR;
+
+    const config = parseServerConfig();
+
+    expect(config.uploadsDir).toBe(join(homedir(), '.coder-studio', 'uploads'));
+  });
+
+  it('honours UPLOADS_DIR env var', () => {
+    process.env.UPLOADS_DIR = '/custom/uploads';
+
+    const config = parseServerConfig();
+
+    expect(config.uploadsDir).toBe('/custom/uploads');
+  });
+
+  it('honours overrides.uploadsDir', () => {
+    const config = parseServerConfig({ uploadsDir: '/explicit' });
+
+    expect(config.uploadsDir).toBe('/explicit');
+  });
 });

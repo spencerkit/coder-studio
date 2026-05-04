@@ -4,6 +4,7 @@ import { Provider, createStore } from 'jotai';
 import type { WorktreeInfo } from '@coder-studio/core';
 import { localeAtom } from '../../../../atoms/app-ui';
 import { wsClientAtom } from '../../../../atoms/connection';
+import { activeWorkspaceIdAtom } from '../../../../atoms/workspaces';
 import { WorktreeModal } from './worktree-modal';
 
 const viewportMocks = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ describe('WorktreeModal', () => {
 
     const store = createStore();
     store.set(localeAtom, 'en');
+    store.set(activeWorkspaceIdAtom, 'ws-1');
     store.set(
       wsClientAtom,
       {
@@ -62,6 +64,7 @@ describe('WorktreeModal', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
+        workspaceId: 'ws-1',
         worktreePath: '/tmp/coder-studio-feature',
       });
     });
@@ -110,6 +113,7 @@ describe('WorktreeModal', () => {
 
     const store = createStore();
     store.set(localeAtom, 'en');
+    store.set(activeWorkspaceIdAtom, 'ws-1');
     store.set(
       wsClientAtom,
       {
@@ -126,6 +130,7 @@ describe('WorktreeModal', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
+        workspaceId: 'ws-1',
         worktreePath: '/tmp/coder-studio-feature',
       });
     });
@@ -137,6 +142,7 @@ describe('WorktreeModal', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.diff', {
+        workspaceId: 'ws-1',
         worktreePath: '/tmp/coder-studio-feature',
       });
     });
@@ -162,6 +168,7 @@ describe('WorktreeModal', () => {
 
     const store = createStore();
     store.set(localeAtom, 'zh');
+    store.set(activeWorkspaceIdAtom, 'ws-1');
     store.set(
       wsClientAtom,
       {
@@ -178,6 +185,7 @@ describe('WorktreeModal', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith('worktree.status', {
+        workspaceId: 'ws-1',
         worktreePath: '/tmp/coder-studio-feature',
       });
     });

@@ -36,6 +36,7 @@ describe('auth login protection', () => {
       host: '127.0.0.1',
       port: 0,
       dataDir: dbPath,
+      uploadsDir: join(tempDir, 'uploads'),
       logLevel: 'info' as const,
       webRoot,
       auth: {

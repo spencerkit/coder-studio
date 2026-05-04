@@ -188,6 +188,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
 export function useWorktreeActions(worktree: WorktreeInfo | null) {
   const wsClient = useAtomValue(wsClientAtom);
+  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const [activeTab, setActiveTab] = useState<TabType>('status');
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [diff, setDiff] = useState('');
@@ -196,7 +197,7 @@ export function useWorktreeActions(worktree: WorktreeInfo | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!worktree || !wsClient) {
+    if (!worktree || !wsClient || !activeWorkspaceId) {
       setStatus(null);
       setDiff('');
       setTree([]);
@@ -210,16 +211,19 @@ export function useWorktreeActions(worktree: WorktreeInfo | null) {
       try {
         if (activeTab === 'status') {
           const result = await wsClient.sendCommand<{ status: GitStatus }>('worktree.status', {
+            workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setStatus(result.status);
         } else if (activeTab === 'diff') {
           const result = await wsClient.sendCommand<{ diff: string }>('worktree.diff', {
+            workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setDiff(result.diff);
         } else if (activeTab === 'tree') {
           const result = await wsClient.sendCommand<{ tree: FileNode[] }>('worktree.tree', {
+            workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setTree(result.tree);
@@ -233,7 +237,7 @@ export function useWorktreeActions(worktree: WorktreeInfo | null) {
     };
 
     void fetchData();
-  }, [activeTab, worktree, wsClient]);
+  }, [activeTab, activeWorkspaceId, worktree, wsClient]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
