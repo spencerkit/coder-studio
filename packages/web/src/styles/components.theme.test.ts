@@ -134,6 +134,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermViewport).not.toContain("touch-action: none");
   });
 
+  it("keeps code editor header actions docked to the right edge", () => {
+    expect(stylesheet).toMatch(
+      /\.code-mode-toggle\s*\{[^}]*display:\s*inline-flex;[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*\}/
+    );
+  });
+
   it("scopes disabled provider card styling to the draft launcher", () => {
     expect(stylesheet).toContain(".agent-draft-launcher .agent-provider-card[disabled]");
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");

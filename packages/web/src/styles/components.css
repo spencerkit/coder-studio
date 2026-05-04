@@ -5313,6 +5313,10 @@ textarea.input {
 }
 
 .code-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
   padding: 2px;
   gap: 2px;
   border-radius: 8px;
