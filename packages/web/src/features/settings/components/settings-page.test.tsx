@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -451,10 +451,15 @@ describe('SettingsPage', () => {
 
     renderSettingsPage(store);
 
+    const pageHeaderLeading = () =>
+      document.querySelector('.settings-header .page-header__leading') as HTMLElement | null;
+
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '快捷键' })).not.toBeInTheDocument();
     expect(screen.queryByText('通知')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+    expect(pageHeaderLeading()).not.toBeNull();
+    expect(within(pageHeaderLeading() as HTMLElement).getByText('设置')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '通用' }));
 
@@ -464,11 +469,13 @@ describe('SettingsPage', () => {
 
     expect(screen.getAllByText('通用')).toHaveLength(1);
     expect(screen.queryByRole('heading', { name: '通用' })).not.toBeInTheDocument();
+    expect(within(pageHeaderLeading() as HTMLElement).getByText('通用')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+    expect(within(pageHeaderLeading() as HTMLElement).getByText('设置')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
 

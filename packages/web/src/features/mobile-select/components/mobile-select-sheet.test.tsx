@@ -206,6 +206,13 @@ describe('MobileSelectSheet', () => {
       />
     );
 
+    const header = document.querySelector('.mobile-inline-sheet__header .page-header');
+    const leading = header?.querySelector('.page-header__leading');
+
+    expect(header).not.toBeNull();
+    expect(leading).not.toBeNull();
+    expect(within(leading as HTMLElement).getByText('Agent Sessions')).toBeInTheDocument();
+
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(onBack).toHaveBeenCalledTimes(1);

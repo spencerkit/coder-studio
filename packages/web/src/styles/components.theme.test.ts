@@ -157,13 +157,14 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps fullscreen mobile sheet headers aligned to a settings-style back and title row", () => {
     const fullscreenHeader = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__header");
-    const headerMain = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__header-main");
-    const backButton = getLastRuleBlock(".mobile-sheet--fullscreen .mobile-sheet__back");
-    const headerActions = getLastRuleBlock(".mobile-sheet__header-actions");
+    const pageHeader = getLastRuleBlock(".mobile-sheet--fullscreen .page-header");
+    const headerLeading = getLastRuleBlock(".page-header__leading");
+    const backButton = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__back");
+    const headerActions = getLastRuleBlock(".page-header__actions");
 
-    expect(fullscreenHeader).toContain("display: flex");
-    expect(fullscreenHeader).toContain("align-items: center");
-    expect(headerMain).toContain("align-items: flex-start");
+    expect(fullscreenHeader).toContain("padding:");
+    expect(pageHeader).toContain("gap: var(--sp-3)");
+    expect(headerLeading).toContain("flex: 1");
     expect(backButton).toContain("background: transparent");
     expect(backButton).not.toContain("border-radius: 999px");
     expect(headerActions).toContain("margin-left: auto");

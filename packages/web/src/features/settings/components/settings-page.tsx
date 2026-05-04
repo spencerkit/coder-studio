@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import { localeAtom, themeAtom } from '../../../atoms/app-ui';
 import { connectionStatusAtom } from '../../../atoms/connection';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
@@ -19,6 +19,7 @@ import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
 import { ProviderSettings, type ProviderInfo } from './provider-settings';
 import { resolveSettingsExitTargetFromBrowserHistory } from './settings-navigation';
+import { PageHeader } from '../../shared/components/page-header';
 import {
   MOBILE_SETTINGS_SECTIONS,
   SETTINGS_SECTIONS,
@@ -301,19 +302,19 @@ export function SettingsPage() {
   );
 
   const shouldShowMobileRoot = isMobile && navigationState.kind === 'root';
+  const headerTitle = isMobile
+    ? t(shouldShowMobileRoot ? 'settings.title' : activeSectionMeta.labelKey)
+    : t('settings.title');
 
   return (
     <div className={`settings-page ${isMobile ? 'settings-page--mobile' : ''}`}>
       <header className="settings-header">
-        <button className="settings-back-btn" onClick={handleBack}>
-          <ArrowLeft size={16} />
-          <span>{t('action.back')}</span>
-        </button>
-        {isMobile ? (
-          <div className="settings-header__title">
-            {t(shouldShowMobileRoot ? 'settings.title' : activeSectionMeta.labelKey)}
-          </div>
-        ) : null}
+        <PageHeader
+          title={headerTitle}
+          titleAs="div"
+          onBack={handleBack}
+          backLabel={t('action.back')}
+        />
       </header>
 
       {shouldShowMobileRoot ? (

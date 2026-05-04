@@ -382,29 +382,86 @@
   background: var(--bg-page);
 }
 
-.settings-header {
+.page-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
-.settings-back-btn {
+.page-header__leading {
   display: flex;
   align-items: center;
+  gap: var(--sp-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.page-header__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-header__kicker {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.page-header__title {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.page-header__back {
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
+  min-height: var(--touch-target-min);
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  border-radius: var(--radius-md);
+  font-weight: 500;
+  flex-shrink: 0;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.settings-back-btn:hover {
+.page-header__back:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+}
+
+.page-header__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  margin-left: auto;
+  min-width: fit-content;
+}
+
+.settings-header {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-body {
@@ -7439,7 +7496,8 @@ textarea.input {
   .mobile-dock__item,
   .mobile-workspace-drawer__item,
   .mobile-workspace-drawer__footer-button,
-  .mobile-sheet__back {
+  .mobile-sheet__back,
+  .page-header__back {
     min-height: var(--touch-target-large);
   }
 
@@ -7652,24 +7710,27 @@ textarea.input {
   }
 
   .mobile-inline-sheet__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--sp-2);
+    display: block;
     padding: 0 var(--sp-1);
   }
 
-  .mobile-inline-sheet__header .mobile-sheet__back {
+  .mobile-inline-sheet__header .page-header {
+    gap: var(--sp-2);
+  }
+
+  .mobile-inline-sheet__header .page-header__leading {
+    gap: var(--sp-2);
+  }
+
+  .mobile-inline-sheet__header .page-header__back {
     min-height: 32px;
     padding: 0;
     font-size: var(--text-xs);
   }
 
-  .mobile-inline-sheet__title {
-    margin: 0;
+  .mobile-inline-sheet__header .page-header__title {
     font-size: var(--text-sm);
     font-weight: var(--font-semibold);
-    color: var(--text-primary);
   }
 
   .mobile-inline-sheet__body {
@@ -8135,22 +8196,8 @@ textarea.input {
 
   .mobile-sheet__header {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--sp-4);
-  }
-
-  .mobile-sheet__kicker {
-    font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-tertiary);
-  }
-
-  .mobile-sheet__title {
-    margin: var(--sp-1) 0 0;
-    font-size: var(--text-2xl);
-    color: var(--text-primary);
+    flex-direction: column;
+    gap: 0;
   }
 
   .mobile-sheet__body {
@@ -8173,9 +8220,6 @@ textarea.input {
   }
 
   .mobile-sheet--fullscreen .mobile-sheet__header {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
     padding:
       var(--sp-1)
       var(--sp-3)
@@ -8184,55 +8228,18 @@ textarea.input {
     border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   }
 
-  .mobile-sheet__header-main {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-    gap: var(--sp-1);
+  .mobile-sheet__header .page-header {
+    width: 100%;
   }
 
-  .mobile-sheet__header-row {
-    display: flex;
-    align-items: center;
+  .mobile-sheet--fullscreen .page-header {
     gap: var(--sp-3);
   }
 
-  .mobile-sheet--fullscreen .mobile-sheet__header-row {
-    gap: var(--sp-2);
-  }
-
-  .mobile-sheet--fullscreen .mobile-sheet__header-main {
-    align-items: flex-start;
-    flex: 1;
-    gap: 2px;
-    text-align: left;
-  }
-
-  .mobile-sheet__back {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-1);
-    min-height: var(--touch-target-min);
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    flex-shrink: 0;
-    font-size: var(--text-sm);
-    font-weight: 500;
-  }
-
-  .mobile-sheet--fullscreen .mobile-sheet__back {
+  .mobile-sheet--fullscreen .page-header__back {
     background: transparent;
     border-radius: 0;
     box-shadow: none;
-  }
-
-  .mobile-sheet__header-spacer {
-    min-width: var(--touch-target-min);
-    min-height: var(--touch-target-min);
-    margin-left: auto;
   }
 
   .mobile-sheet__body {
@@ -8629,7 +8636,7 @@ textarea.input {
     line-height: 1.2;
   }
 
-  .mobile-sheet--fullscreen .mobile-sheet__kicker {
+  .mobile-sheet--fullscreen .page-header__kicker {
     overflow: hidden;
     max-width: 100%;
     text-overflow: ellipsis;
@@ -8637,24 +8644,9 @@ textarea.input {
     letter-spacing: 0.12em;
   }
 
-  .mobile-sheet--fullscreen .mobile-sheet__title {
-    margin-top: 0;
-    width: auto;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-align: left;
-  }
-
-  .mobile-sheet__header-actions {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--sp-2);
-    flex-shrink: 0;
-    margin-left: auto;
-    min-width: fit-content;
+  .mobile-sheet--fullscreen .page-header__title {
+    font-size: var(--text-lg);
+    line-height: 1.2;
   }
 
   .mobile-sheet__action {
@@ -9038,7 +9030,8 @@ textarea.input {
   }
 
   .mobile-topbar__workspace-button,
-  .mobile-sheet__back {
+  .mobile-sheet__back,
+  .page-header__back {
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
       border-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -9055,7 +9048,8 @@ textarea.input {
   .mobile-dock__item:hover,
   .mobile-workspace-drawer__item:hover,
   .mobile-workspace-drawer__footer-button:hover,
-  .mobile-sheet__back:hover {
+  .mobile-sheet__back:hover,
+  .page-header__back:hover {
     transform: translateY(-1px);
   }
 
@@ -9067,7 +9061,8 @@ textarea.input {
   .mobile-dock__item:active,
   .mobile-workspace-drawer__item:active,
   .mobile-workspace-drawer__footer-button:active,
-  .mobile-sheet__back:active {
+  .mobile-sheet__back:active,
+  .page-header__back:active {
     transform: translateY(1px) scale(0.99);
   }
 
@@ -9101,6 +9096,7 @@ textarea.input {
   .mobile-shell[data-motion-mode='reduced'] .mobile-workspace-drawer__item:hover,
   .mobile-shell[data-motion-mode='reduced'] .mobile-workspace-drawer__footer-button:hover,
   .mobile-shell[data-motion-mode='reduced'] .mobile-sheet__back:hover,
+  .mobile-shell[data-motion-mode='reduced'] .page-header__back:hover,
   .mobile-shell[data-motion-mode='reduced'] .mobile-topbar__workspace-button:active,
   .mobile-shell[data-motion-mode='reduced'] .mobile-topbar__icon-button:active,
   .mobile-shell[data-motion-mode='reduced'] .mobile-topbar__session-button:active,
@@ -9110,6 +9106,7 @@ textarea.input {
   .mobile-shell[data-motion-mode='reduced'] .mobile-workspace-drawer__item:active,
   .mobile-shell[data-motion-mode='reduced'] .mobile-workspace-drawer__footer-button:active,
   .mobile-shell[data-motion-mode='reduced'] .mobile-sheet__back:active,
+  .mobile-shell[data-motion-mode='reduced'] .page-header__back:active,
   .mobile-shell[data-motion-mode='reduced'] .mobile-topbar__session-option--active .mobile-topbar__session-dot,
   .mobile-shell[data-motion-mode='reduced'] .mobile-supervisor-badge:hover .mobile-supervisor-badge__icon {
     transform: none;

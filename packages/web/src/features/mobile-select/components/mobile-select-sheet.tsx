@@ -1,7 +1,7 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from '../../../lib/i18n';
 import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
+import { PageHeader } from '../../shared/components/page-header';
 
 export interface MobileSelectItemTrailingAction {
   id: string;
@@ -391,18 +391,12 @@ export function MobileSelectSheet({
       <div className="mobile-inline-sheet" role="dialog" aria-label={title}>
         <div className="mobile-inline-sheet__handle" aria-hidden="true" />
         <div className="mobile-inline-sheet__header">
-          {onBack ? (
-            <button
-              type="button"
-              className="mobile-sheet__back"
-              aria-label={t('action.back')}
-              onClick={onBack}
-            >
-              <ArrowLeft size={16} />
-              <span>{t('action.back')}</span>
-            </button>
-          ) : null}
-          <h3 className="mobile-inline-sheet__title">{title}</h3>
+          <PageHeader
+            title={title}
+            titleAs="h3"
+            onBack={onBack}
+            backLabel={t('action.back')}
+          />
         </div>
         <div className="mobile-inline-sheet__body">
           <div className="mobile-select-sheet mobile-select-sheet--inline">{content}</div>

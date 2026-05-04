@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from '../../../../lib/i18n';
+import { PageHeader } from '../../../shared/components/page-header';
 
 interface MobileSheetProps {
   title: string;
@@ -36,7 +36,6 @@ export function MobileSheet({
   const bodyClasses = ['mobile-sheet__body', bodyClassName].filter(Boolean).join(' ');
   const handleBack = onBack ?? onClose;
   const resolvedBackLabel = backLabel ?? t('action.back');
-  const backAriaLabel = onBack ? resolvedBackLabel : t('action.back');
 
   return (
     <div className="mobile-sheet-layer">
@@ -53,47 +52,13 @@ export function MobileSheet({
       >
         {fullscreen ? null : <div className="mobile-sheet__handle" aria-hidden="true" />}
         <div className="mobile-sheet__header">
-          {fullscreen ? (
-            <>
-              <button
-                type="button"
-                className="mobile-sheet__back"
-                onClick={handleBack}
-                aria-label={backAriaLabel}
-              >
-                <ArrowLeft size={16} />
-                <span>{t('action.back')}</span>
-              </button>
-              <div className="mobile-sheet__header-main">
-                {kicker ? <div className="mobile-sheet__kicker">{kicker}</div> : null}
-                <h2 className="mobile-sheet__title">{title}</h2>
-              </div>
-              {headerAction ? (
-                headerAction
-              ) : (
-                <div className="mobile-sheet__header-spacer" aria-hidden="true" />
-              )}
-            </>
-          ) : (
-            <>
-              <div className="mobile-sheet__header-main">
-                <div className="mobile-sheet__header-row">
-                  <button
-                    type="button"
-                    className="mobile-sheet__back"
-                    onClick={handleBack}
-                    aria-label={backAriaLabel}
-                  >
-                    <ArrowLeft size={16} />
-                    <span>{t('action.back')}</span>
-                  </button>
-                  {kicker ? <div className="mobile-sheet__kicker">{kicker}</div> : null}
-                </div>
-                <h2 className="mobile-sheet__title">{title}</h2>
-              </div>
-              {headerAction}
-            </>
-          )}
+          <PageHeader
+            title={title}
+            kicker={kicker}
+            onBack={handleBack}
+            backLabel={resolvedBackLabel}
+            rightSlot={headerAction}
+          />
         </div>
         <div className={bodyClasses}>{body}</div>
         {footer ? <div className="mobile-sheet__footer">{footer}</div> : null}
