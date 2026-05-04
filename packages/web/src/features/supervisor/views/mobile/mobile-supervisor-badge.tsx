@@ -1,6 +1,7 @@
 import type { SupervisorState } from '@coder-studio/core';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { Eye } from 'lucide-react';
 import { useTranslation } from '../../../../lib/i18n';
 import { supervisorCyclesAtom, supervisorsAtom } from '../../atoms';
 
@@ -23,7 +24,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
     if (!supervisor) {
       return {
         state: 'inactive' as SupervisorState,
-        label: t('supervisor.action.enable'),
+        label: t('supervisor.title'),
       };
     }
 
@@ -53,7 +54,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
       onClick={onOpen}
     >
       <span className="mobile-supervisor-badge__icon" aria-hidden="true">
-        📍
+        <Eye size={13} />
       </span>
       <span className="mobile-supervisor-badge__label">{copy.label}</span>
     </button>

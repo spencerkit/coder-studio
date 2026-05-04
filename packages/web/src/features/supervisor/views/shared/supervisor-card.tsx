@@ -37,9 +37,10 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           className="supervisor-enable-btn"
           onClick={() => openDialog('enable')}
           title={t('supervisor.action.enable')}
+          aria-label={t('supervisor.action.enable')}
         >
           <Eye size={13} />
-          <span>{t('supervisor.action.enable')}</span>
+          <span>{t('supervisor.title')}</span>
         </button>
       </div>
     );

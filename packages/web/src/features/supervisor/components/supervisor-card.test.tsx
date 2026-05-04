@@ -7,6 +7,24 @@ import { supervisorsAtom, supervisorCyclesAtom } from '../atoms';
 import { wsClientAtom } from '../../../atoms/connection';
 
 describe('SupervisorCard', () => {
+  it('shows a unified Supervisor label for the inactive enable button', () => {
+    const store = createStore();
+    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as any);
+    store.set(supervisorsAtom, new Map());
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const button = screen.getByRole('button', { name: 'Enable Supervisor' });
+    expect(button).toHaveTextContent('Supervisor');
+  });
+
   it('shows the latest cycle history and trigger action', () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();

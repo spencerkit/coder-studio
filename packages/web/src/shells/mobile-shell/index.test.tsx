@@ -134,7 +134,14 @@ vi.mock('../../features/workspace/views/shared/git-panel', () => ({
 }));
 
 vi.mock('../../features/workspace/views/shared/git-diff-viewer', () => ({
-  GitDiffViewer: () => <div data-testid="mobile-git-diff-viewer">GitDiffViewer</div>,
+  GitDiffViewer: ({ onClose }: { onClose?: () => void }) => (
+    <div data-testid="mobile-git-diff-viewer">
+      <button type="button" aria-label="关闭" onClick={onClose}>
+        关闭
+      </button>
+      GitDiffViewer
+    </div>
+  ),
 }));
 
 vi.mock('../../features/code-editor/actions/use-code-editor-actions', () => ({
@@ -1478,6 +1485,25 @@ describe('MobileShell Phase 2 workspace', () => {
     expect(screen.getByTestId('mobile-git-diff-viewer')).toBeInTheDocument();
   });
 
+  it('returns to the session content when closing the diff viewer', async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
+    await user.click(screen.getByRole('tab', { name: 'Git' }));
+    await user.click(screen.getByRole('button', { name: 'mock-git-panel' }));
+
+    expect(screen.getByTestId('mobile-git-diff-viewer')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mobile-git-diff-viewer')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('mobile-session-card')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Files sheet' })).not.toBeInTheDocument();
+  });
+
   it('does not navigate into the diff viewer when the git tab auto-hydrates preview state', async () => {
     const user = userEvent.setup();
     const { store } = renderMobileShell();
@@ -1526,6 +1552,7 @@ describe('MobileShell Phase 2 workspace', () => {
 
     const badge = await screen.findByRole('button', { name: 'Open Supervisor sheet' });
     expect(screen.getByTestId('mobile-session-card-header-accessory')).toContainElement(badge);
+    expect(badge).toHaveTextContent('Supervisor');
 
     await user.click(badge);
 

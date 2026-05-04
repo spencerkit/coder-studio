@@ -221,4 +221,28 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(badges).toContain("flex-shrink: 0");
     expect(badges).toContain("max-width: 100%");
   });
+
+  it("keeps supervisor entry icons and labels vertically centered", () => {
+    const desktopButton = getLastRuleBlock(".supervisor-enable-btn");
+    const desktopButtonIcon = getLastRuleBlock(".supervisor-enable-btn > svg");
+    const desktopButtonLabel = getLastRuleBlock(".supervisor-enable-btn > span");
+    const mobileBadge = getLastGroupedRuleBlock(/\.mobile-supervisor-badge\s*\{([^}]*justify-content:[^}]*)\}/g);
+    const mobileBadgeIcon = getLastRuleBlock(".mobile-supervisor-badge__icon");
+    const mobileBadgeIconSvg = getLastRuleBlock(".mobile-supervisor-badge__icon svg");
+    const mobileBadgeLabel = getLastRuleBlock(".mobile-supervisor-badge__label");
+
+    expect(desktopButton).toContain("justify-content: center");
+    expect(desktopButton).toContain("line-height: 1");
+    expect(desktopButtonIcon).toContain("display: block");
+    expect(desktopButtonLabel).toContain("display: inline-flex");
+    expect(desktopButtonLabel).toContain("align-items: center");
+    expect(mobileBadge).toContain("justify-content: center");
+    expect(mobileBadge).toContain("line-height: 1");
+    expect(mobileBadgeIcon).toContain("display: inline-flex");
+    expect(mobileBadgeIcon).toContain("align-items: center");
+    expect(mobileBadgeIconSvg).toContain("display: block");
+    expect(mobileBadgeLabel).toContain("display: inline-flex");
+    expect(mobileBadgeLabel).toContain("align-items: center");
+    expect(mobileBadgeLabel).toContain("line-height: 1");
+  });
 });
