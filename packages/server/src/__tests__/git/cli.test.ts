@@ -2,14 +2,14 @@
  * Tests for git CLI executor.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rmdir, writeFile, rm } from 'fs/promises';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdir, readFile, rmdir, writeFile, rm } from 'fs/promises';
 import { mkdtemp } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { runGit, GitError, runGitPull, runGitPush } from '../../git/cli.js';
+import { classifyGitAuthFailure, runGit, GitError, runGitPull, runGitPush } from '../../git/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -61,6 +61,164 @@ describe('GitError', () => {
     expect(error.name).toBe('GitError');
     expect(error.message).toBe('Command failed');
     expect(error.stderr).toBe('error output');
+  });
+
+  it('classifies missing HTTP credentials for push', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://alice@github.com/openai/demo.git',
+      })
+    ).toEqual({
+      operation: 'push',
+      remote: 'origin',
+      remoteUrl: 'https://github.com/openai/demo.git',
+      remoteLabel: 'origin (github.com)',
+      host: 'github.com',
+      reason: 'missing_credentials',
+      authMode: 'username_password',
+      canPrompt: true,
+      usernameHint: undefined,
+    });
+  });
+
+  it('classifies invalid HTTP credentials after a prompted retry', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'remote: Invalid username or token. fatal: Authentication failed'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://github.com/openai/demo.git',
+        attemptedCredentialAuth: true,
+      })
+    ).toEqual({
+      operation: 'push',
+      remote: 'origin',
+      remoteUrl: 'https://github.com/openai/demo.git',
+      remoteLabel: 'origin (github.com)',
+      host: 'github.com',
+      reason: 'invalid_credentials',
+      authMode: 'username_password',
+      canPrompt: true,
+      usernameHint: undefined,
+    });
+  });
+
+  it('classifies HTTP 403 failures as authorization failures', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'remote: Write access to repository not granted.\nfatal: unable to access \'https://github.com/openai/demo.git/\': The requested URL returned error: 403'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://github.com/openai/demo.git',
+      })
+    ).toEqual({
+      operation: 'push',
+      remote: 'origin',
+      remoteUrl: 'https://github.com/openai/demo.git',
+      remoteLabel: 'origin (github.com)',
+      host: 'github.com',
+      reason: 'authorization_failed',
+      authMode: 'username_password',
+      canPrompt: true,
+      usernameHint: undefined,
+    });
+  });
+
+  it('does not classify HTTPS repository-not-found as an auth failure', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'fatal: repository \'https://github.com/openai/missing.git/\' not found'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://github.com/openai/missing.git',
+      })
+    ).toBeNull();
+  });
+
+  it('does not classify HTTPS repository-not-found after retry as an auth failure', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'fatal: repository \'https://github.com/openai/missing.git/\' not found'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://github.com/openai/missing.git',
+        attemptedCredentialAuth: true,
+      })
+    ).toBeNull();
+  });
+
+  it('does not classify SSH repository-not-found as an in-app auth failure', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'fatal: repository \'git@github.com:openai/missing.git\' not found'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'git@github.com:openai/missing.git',
+      })
+    ).toBeNull();
+  });
+
+  it('classifies SSH publickey failures as unsupported auth', () => {
+    const error = new GitError(
+      'Command failed: git push',
+      'git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.'
+    );
+
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'git@github.com:openai/demo.git',
+      })
+    ).toEqual({
+      operation: 'push',
+      remote: 'origin',
+      remoteUrl: 'git@github.com:openai/demo.git',
+      remoteLabel: 'origin (github.com)',
+      host: 'github.com',
+      reason: 'missing_credentials',
+      authMode: 'unsupported',
+      canPrompt: false,
+      usernameHint: undefined,
+    });
+  });
+
+  it('returns null for non-auth git failures', () => {
+    const error = new GitError('Command failed: git push', 'fatal: not a git repository');
+    expect(
+      classifyGitAuthFailure(error, {
+        operation: 'push',
+        remote: 'origin',
+        remoteUrl: 'https://github.com/openai/demo.git',
+      })
+    ).toBeNull();
   });
 });
 
@@ -412,6 +570,284 @@ describe('runGitPush', () => {
       { cwd: remoteDir }
     );
     expect(remoteOutput).toContain('feature/push-test');
+  });
+
+  it('persists successful HTTP credentials through the configured credential helper', async () => {
+    const helperLog = join(testDir, 'credential-helper.log');
+    const helperScript = join(testDir, 'credential-helper.sh');
+    const wrapperDir = join(testDir, 'bin');
+    const wrapperScript = join(wrapperDir, 'git');
+    await writeFile(
+      helperScript,
+      [
+        '#!/bin/sh',
+        `cat > ${JSON.stringify(helperLog)}`,
+        'exit 0',
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+    await mkdir(wrapperDir, { recursive: true });
+    await writeFile(
+      wrapperScript,
+      [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "push" ]; then',
+        '    exit 0',
+        '  fi',
+        'done',
+        `exec ${JSON.stringify((await execFileAsync('sh', ['-lc', 'command -v git'])).stdout.trim())} "$@"`,
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', 'https://example.com/openai/demo.git'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'credential.helper', helperScript], { cwd: testDir });
+    const originalPath = process.env.PATH ?? '';
+    vi.stubEnv('PATH', `${wrapperDir}:${originalPath}`);
+
+    await runGitPush(testDir, {
+      remote: 'origin',
+      branch: 'main',
+      auth: {
+        username: 'alice',
+        password: 'secret-token',
+      },
+    });
+
+    vi.unstubAllEnvs();
+
+    const helperLogContent = await readFile(helperLog, 'utf8');
+    expect(helperLogContent).toContain('protocol=https');
+    expect(helperLogContent).toContain('host=example.com');
+    expect(helperLogContent).not.toContain('path=openai/demo.git');
+    expect(helperLogContent).toContain('username=alice');
+    expect(helperLogContent).toContain('password=secret-token');
+  });
+
+  it('forces the entered username for the authenticated retry', async () => {
+    const argLog = join(testDir, 'push-args.log');
+    const wrapperDir = join(testDir, 'bin-username');
+    const wrapperScript = join(wrapperDir, 'git');
+    await mkdir(wrapperDir, { recursive: true });
+    await writeFile(
+      wrapperScript,
+      [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "push" ]; then',
+        `    printf "%s\\n" "$@" > ${JSON.stringify(argLog)}`,
+        '    exit 0',
+        '  fi',
+        'done',
+        `exec ${JSON.stringify((await execFileAsync('sh', ['-lc', 'command -v git'])).stdout.trim())} "$@"`,
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', 'https://configured@example.com/openai/demo.git'], { cwd: testDir });
+    const originalPath = process.env.PATH ?? '';
+    vi.stubEnv('PATH', `${wrapperDir}:${originalPath}`);
+
+    await runGitPush(testDir, {
+      remote: 'origin',
+      branch: 'main',
+      auth: {
+        username: 'alice',
+        password: 'secret-token',
+      },
+    });
+
+    vi.unstubAllEnvs();
+
+    const argLogContent = await readFile(argLog, 'utf8');
+    expect(argLogContent).toContain('credential.username=alice');
+  });
+
+  it('includes the HTTP path when credential.useHttpPath is enabled', async () => {
+    const helperLog = join(testDir, 'credential-helper-http-path.log');
+    const helperScript = join(testDir, 'credential-helper-http-path.sh');
+    const wrapperDir = join(testDir, 'bin-http-path');
+    const wrapperScript = join(wrapperDir, 'git');
+    await writeFile(
+      helperScript,
+      [
+        '#!/bin/sh',
+        `cat > ${JSON.stringify(helperLog)}`,
+        'exit 0',
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+    await mkdir(wrapperDir, { recursive: true });
+    await writeFile(
+      wrapperScript,
+      [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "push" ]; then',
+        '    exit 0',
+        '  fi',
+        'done',
+        `exec ${JSON.stringify((await execFileAsync('sh', ['-lc', 'command -v git'])).stdout.trim())} "$@"`,
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', 'https://example.com/openai/demo.git'], { cwd: testDir });
+    await execFileAsync('git', ['config', 'credential.helper', helperScript], { cwd: testDir });
+    await execFileAsync('git', ['config', 'credential.useHttpPath', 'yes'], { cwd: testDir });
+    const originalPath = process.env.PATH ?? '';
+    vi.stubEnv('PATH', `${wrapperDir}:${originalPath}`);
+
+    await runGitPush(testDir, {
+      remote: 'origin',
+      branch: 'main',
+      auth: {
+        username: 'alice',
+        password: 'secret-token',
+      },
+    });
+
+    vi.unstubAllEnvs();
+
+    const helperLogContent = await readFile(helperLog, 'utf8');
+    expect(helperLogContent).toContain('path=openai/demo.git');
+  });
+
+  it('persists credentials when a URL-scoped credential helper is configured', async () => {
+    const helperLog = join(testDir, 'credential-helper-url-scoped.log');
+    const helperScript = join(testDir, 'credential-helper-url-scoped.sh');
+    const wrapperDir = join(testDir, 'bin-url-helper');
+    const wrapperScript = join(wrapperDir, 'git');
+    await writeFile(
+      helperScript,
+      [
+        '#!/bin/sh',
+        `cat > ${JSON.stringify(helperLog)}`,
+        'exit 0',
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+    await mkdir(wrapperDir, { recursive: true });
+    await writeFile(
+      wrapperScript,
+      [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "push" ]; then',
+        '    exit 0',
+        '  fi',
+        'done',
+        `exec ${JSON.stringify((await execFileAsync('sh', ['-lc', 'command -v git'])).stdout.trim())} "$@"`,
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', 'https://example.com/openai/demo.git'], { cwd: testDir });
+    await execFileAsync(
+      'git',
+      ['config', 'credential.https://example.com.helper', helperScript],
+      { cwd: testDir }
+    );
+    const originalPath = process.env.PATH ?? '';
+    vi.stubEnv('PATH', `${wrapperDir}:${originalPath}`);
+
+    await runGitPush(testDir, {
+      remote: 'origin',
+      branch: 'main',
+      auth: {
+        username: 'alice',
+        password: 'secret-token',
+      },
+    });
+
+    vi.unstubAllEnvs();
+
+    const helperLogContent = await readFile(helperLog, 'utf8');
+    expect(helperLogContent).toContain('username=alice');
+    expect(helperLogContent).toContain('password=secret-token');
+  });
+
+  it('includes the HTTP path when URL-scoped credential.useHttpPath is enabled', async () => {
+    const helperLog = join(testDir, 'credential-helper-url-http-path.log');
+    const helperScript = join(testDir, 'credential-helper-url-http-path.sh');
+    const wrapperDir = join(testDir, 'bin-url-http-path');
+    const wrapperScript = join(wrapperDir, 'git');
+    await writeFile(
+      helperScript,
+      [
+        '#!/bin/sh',
+        `cat > ${JSON.stringify(helperLog)}`,
+        'exit 0',
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+    await mkdir(wrapperDir, { recursive: true });
+    await writeFile(
+      wrapperScript,
+      [
+        '#!/bin/sh',
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "push" ]; then',
+        '    exit 0',
+        '  fi',
+        'done',
+        `exec ${JSON.stringify((await execFileAsync('sh', ['-lc', 'command -v git'])).stdout.trim())} "$@"`,
+        '',
+      ].join('\n'),
+      { mode: 0o700 }
+    );
+
+    await writeFile(join(testDir, 'README.md'), 'init\n');
+    await execFileAsync('git', ['add', '.'], { cwd: testDir });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: testDir });
+    await execFileAsync('git', ['remote', 'add', 'origin', 'https://example.com/openai/demo.git'], { cwd: testDir });
+    await execFileAsync(
+      'git',
+      ['config', 'credential.https://example.com/openai/demo.git.helper', helperScript],
+      { cwd: testDir }
+    );
+    await execFileAsync(
+      'git',
+      ['config', 'credential.https://example.com/openai/demo.git.useHttpPath', 'true'],
+      { cwd: testDir }
+    );
+    const originalPath = process.env.PATH ?? '';
+    vi.stubEnv('PATH', `${wrapperDir}:${originalPath}`);
+
+    await runGitPush(testDir, {
+      remote: 'origin',
+      branch: 'main',
+      auth: {
+        username: 'alice',
+        password: 'secret-token',
+      },
+    });
+
+    vi.unstubAllEnvs();
+
+    const helperLogContent = await readFile(helperLog, 'utf8');
+    expect(helperLogContent).toContain('path=openai/demo.git');
   });
 });
 

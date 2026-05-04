@@ -40,7 +40,28 @@ interface GitSyncResult {
   updatedFiles?: string[];
 }
 
+export interface GitAuthFailureDetails {
+  operation: 'push' | 'pull';
+  remote?: string;
+  remoteUrl?: string;
+  remoteLabel: string;
+  host?: string;
+  reason: 'missing_credentials' | 'invalid_credentials' | 'authorization_failed';
+  authMode: 'username_password' | 'unsupported';
+  canPrompt: boolean;
+  usernameHint?: string;
+}
+
+export interface GitSyncAuthPromptState {
+  intent: 'push' | 'pull';
+  details: GitAuthFailureDetails;
+}
+
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
+const GIT_OPERATION_LABELS: Record<'push' | 'pull', string> = {
+  push: 'git.operation_push',
+  pull: 'git.operation_pull',
+};
 
 export function useGitSyncActions(workspaceId: string) {
   const t = useTranslation();
@@ -50,6 +71,29 @@ export function useGitSyncActions(workspaceId: string) {
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const [syncingIntent, setSyncingIntent] = useState<'push' | 'pull' | null>(null);
+  const [authPrompt, setAuthPrompt] = useState<GitSyncAuthPromptState | null>(null);
+
+  const getAuthPromptMessage = useCallback(
+    (details: GitAuthFailureDetails) => {
+      if (!details.canPrompt) {
+        return t('git.auth_failed_unsupported', { remote: details.remoteLabel });
+      }
+
+      if (details.reason === 'invalid_credentials') {
+        return t('git.auth_failed_invalid', { remote: details.remoteLabel });
+      }
+
+      if (details.reason === 'authorization_failed') {
+        return t('git.auth_failed_forbidden', {
+          remote: details.remoteLabel,
+          operation: t(GIT_OPERATION_LABELS[details.operation]),
+        });
+      }
+
+      return t('git.auth_required_message', { remote: details.remoteLabel });
+    },
+    [t]
+  );
 
   const refreshBranchState = useCallback(async () => {
     if (!workspaceId) {
@@ -92,6 +136,10 @@ export function useGitSyncActions(workspaceId: string) {
         fallbackSuccessBody?: string;
         errorTitle: string;
         markFileTreeStale?: boolean;
+        auth?: {
+          username: string;
+          password: string;
+        };
       }
     ) => {
       if (!workspaceId) {
@@ -101,10 +149,40 @@ export function useGitSyncActions(workspaceId: string) {
       setSyncingIntent(op === 'git.push' ? 'push' : 'pull');
 
       try {
-        const result = await dispatch<GitSyncResult>(op, { workspaceId }, { timeoutMs: GIT_SYNC_TIMEOUT_MS });
+        const result = await dispatch<GitSyncResult>(
+          op,
+          {
+            workspaceId,
+            ...(options.auth ? { auth: options.auth } : {}),
+          },
+          { timeoutMs: GIT_SYNC_TIMEOUT_MS }
+        );
 
         if (!result.ok || !result.data?.success) {
           const body = result.error?.message ?? result.data?.message;
+          if (
+            (result.error?.code === 'git_auth_required' || result.error?.code === 'git_auth_failed') &&
+            result.error.details &&
+            typeof result.error.details === 'object'
+          ) {
+            const details = result.error.details as GitAuthFailureDetails;
+            setAuthPrompt({
+              intent: op === 'git.push' ? 'push' : 'pull',
+              details: {
+                ...details,
+                usernameHint:
+                  authPrompt?.intent === (op === 'git.push' ? 'push' : 'pull')
+                    ? authPrompt.details.usernameHint
+                    : details.usernameHint,
+              },
+            });
+            return false;
+          }
+
+          if (options.auth) {
+            setAuthPrompt(null);
+          }
+
           pushToast({
             kind: 'error',
             title: options.errorTitle,
@@ -131,31 +209,37 @@ export function useGitSyncActions(workspaceId: string) {
         setSyncingIntent(null);
       }
     },
-    [dispatch, pushToast, refreshBranchState, setFileTreeStale, workspaceId]
+    [authPrompt, dispatch, pushToast, refreshBranchState, setFileTreeStale, workspaceId]
   );
 
   const handlePush = useCallback(
-    async () =>
+    async (auth?: { username: string; password: string }) =>
       runSyncAction('git.push', {
         successTitle: t('git.push_success_title'),
         fallbackSuccessBody: t('git.push_success_body'),
         errorTitle: t('git.push_failed_title'),
+        auth,
       }),
     [runSyncAction, t]
   );
 
   const handlePull = useCallback(
-    async () =>
+    async (auth?: { username: string; password: string }) =>
       runSyncAction('git.pull', {
         successTitle: t('git.pull_success_title'),
         fallbackSuccessBody: t('git.pull_success_body'),
         errorTitle: t('git.pull_failed_title'),
         markFileTreeStale: true,
+        auth,
       }),
     [runSyncAction, t]
   );
 
   return {
+    authPrompt,
+    clearAuthPrompt: () => setAuthPrompt(null),
+    setAuthPrompt,
+    getAuthPromptMessage,
     handlePull,
     handlePush,
     refreshBranchState,

@@ -18,6 +18,11 @@ import {
 } from '../git/cli.js';
 import { getFileDiff } from '../git/diff.js';
 
+const gitHttpAuthSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+});
+
 // git.status
 registerCommand(
   'git.status',
@@ -130,6 +135,7 @@ registerCommand(
     remote: z.string().optional(),
     branch: z.string().optional(),
     force: z.boolean().optional(),
+    auth: gitHttpAuthSchema.optional(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -141,6 +147,7 @@ registerCommand(
       remote: args.remote,
       branch: args.branch,
       force: args.force,
+      auth: args.auth,
     });
   }
 );
@@ -152,6 +159,7 @@ registerCommand(
     workspaceId: z.string(),
     remote: z.string().optional(),
     branch: z.string().optional(),
+    auth: gitHttpAuthSchema.optional(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -162,6 +170,7 @@ registerCommand(
     return runGitPull(workspace.path, {
       remote: args.remote,
       branch: args.branch,
+      auth: args.auth,
     });
   }
 );
