@@ -22,6 +22,7 @@ export type ConfigType = 'codex' | 'claude';
 interface ConfigEditorProps {
   configType: ConfigType;
   visible?: boolean;
+  fillHeight?: boolean;
 }
 
 interface ConfigReadResult {
@@ -38,7 +39,11 @@ interface ConfigWriteResult {
 
 type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
-export function ConfigEditor({ configType, visible = true }: ConfigEditorProps) {
+export function ConfigEditor({
+  configType,
+  visible = true,
+  fillHeight = false,
+}: ConfigEditorProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
@@ -229,22 +234,23 @@ export function ConfigEditor({ configType, visible = true }: ConfigEditorProps) 
   }
 
   return (
-    <div className="config-card">
+    <div className={`config-card ${fillHeight ? 'config-card--fill-height' : ''}`}>
       {/* Header */}
       <div className="config-card-header" onClick={handleToggle}>
         <div className="config-card-title">
           <FileJson2 size={16} />
-          <span className="config-card-path">{configPath}</span>
+          <span className="config-card-path" title={configPath}>
+            {configPath}
+          </span>
         </div>
         <div className="config-card-header-right">
-          <StatusIndicator />
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
       </div>
 
       {/* Body */}
       {isExpanded && (
-        <div className="config-card-body">
+        <div className={`config-card-body ${fillHeight ? 'config-card-body--fill-height' : ''}`}>
           {!fileExists && (
             <div className="config-empty-state">
               <div className="config-empty-icon">📭</div>
@@ -266,14 +272,7 @@ export function ConfigEditor({ configType, visible = true }: ConfigEditorProps) 
               {/* Actions */}
               <div className="config-card-actions">
                 <div className="config-actions-left">
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleToggle}
-                    title={t('settings.config_files.collapse')}
-                  >
-                    <ChevronDown size={14} />
-                    <span>{t('settings.config_files.collapse')}</span>
-                  </button>
+                  <StatusIndicator />
                 </div>
 
                 <div className="config-actions-right">

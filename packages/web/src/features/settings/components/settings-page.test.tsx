@@ -524,6 +524,9 @@ describe('SettingsPage', () => {
       expect(screen.getByText('Claude 配置')).toBeInTheDocument();
     });
 
+    expect(document.querySelector('.settings-body--mobile.settings-body--fill-height')).not.toBeNull();
+    expect(document.querySelector('.settings-content--fill-height')).not.toBeNull();
+
     fireEvent.click(screen.getByRole('button', { name: '返回基础配置' }));
 
     expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();

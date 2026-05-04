@@ -37,6 +37,8 @@ type SettingsNavigationState =
       section: SettingsSection;
     };
 
+type SettingsContentLayoutMode = 'default' | 'fill-height';
+
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 
 function isStandaloneWebApp(): boolean {
@@ -128,6 +130,7 @@ export function SettingsPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<Record<string, string>>({});
+  const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>('default');
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocale] = useAtom(localeAtom);
@@ -210,6 +213,12 @@ export function SettingsPage() {
     settingsRefreshKey,
   ]);
 
+  useEffect(() => {
+    if (detailSection !== 'providers') {
+      setContentLayoutMode('default');
+    }
+  }, [detailSection]);
+
   const handlePageExit = () => {
     const target = resolveSettingsExitTargetFromBrowserHistory(Boolean(activeWorkspaceId));
 
@@ -260,6 +269,7 @@ export function SettingsPage() {
             additionalArgsById={providerAdditionalArgsById}
             setAdditionalArgsById={setProviderAdditionalArgsById}
             isMobile={isMobile}
+            onLayoutModeChange={setContentLayoutMode}
           />
         );
       case 'shortcuts':
@@ -309,7 +319,9 @@ export function SettingsPage() {
       {shouldShowMobileRoot ? (
         renderMobileRoot()
       ) : (
-        <div className={`settings-body ${isMobile ? 'settings-body--mobile' : ''}`}>
+        <div
+          className={`settings-body ${isMobile ? 'settings-body--mobile' : ''} ${contentLayoutMode === 'fill-height' ? 'settings-body--fill-height' : ''}`}
+        >
           {isMobile ? null : (
             <aside className="settings-sidebar">
               <nav className="settings-nav">
@@ -326,7 +338,9 @@ export function SettingsPage() {
             </aside>
           )}
 
-          <main className={`settings-content ${isMobile ? 'settings-content--mobile' : ''}`}>
+          <main
+            className={`settings-content ${isMobile ? 'settings-content--mobile' : ''} ${contentLayoutMode === 'fill-height' ? 'settings-content--fill-height' : ''}`}
+          >
             {settingsLoadError && (
               <div className="settings-page__notice settings-page__notice--error" role="alert">
                 <div className="settings-page__notice-copy">

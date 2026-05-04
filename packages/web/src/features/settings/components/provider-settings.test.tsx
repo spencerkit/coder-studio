@@ -16,9 +16,11 @@ vi.mock('./config-editor', () => ({
   ConfigEditor: ({
     configType,
     visible = true,
+    fillHeight = false,
   }: {
     configType: 'claude' | 'codex';
     visible?: boolean;
+    fillHeight?: boolean;
   }) => {
     const React = require('react') as typeof import('react');
     React.useEffect(() => {
@@ -29,6 +31,7 @@ vi.mock('./config-editor', () => ({
       <div
         data-testid={`config-editor-${configType}`}
         data-visible={String(visible)}
+        data-fill-height={String(fillHeight)}
       >
         {configType}-editor
       </div>
@@ -247,6 +250,16 @@ describe('ProviderSettings desktop', () => {
     expect(screen.getByTestId('config-editor-claude')).toHaveAttribute('data-visible', 'true');
     expect(editorMountSpy).toHaveBeenCalledTimes(2);
   });
+
+  it('switches the desktop config view into a fill-height editor layout', async () => {
+    const { container } = renderHarness();
+
+    fireEvent.click(screen.getByRole('button', { name: '配置文件' }));
+
+    expect(container.querySelector('.settings-provider-section--config-active')).not.toBeNull();
+    expect(container.querySelector('.settings-section--fill-height')).not.toBeNull();
+    expect(screen.getByTestId('config-editor-claude')).toHaveAttribute('data-fill-height', 'true');
+  });
 });
 
 describe('ProviderSettings mobile', () => {
@@ -266,6 +279,7 @@ describe('ProviderSettings mobile', () => {
     fireEvent.click(screen.getByRole('button', { name: /打开配置文件编辑/ }));
 
     expect(screen.getByTestId('config-editor-claude')).toBeInTheDocument();
+    expect(screen.getByTestId('config-editor-claude')).toHaveAttribute('data-fill-height', 'true');
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '返回基础配置' }));

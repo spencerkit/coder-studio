@@ -14,6 +14,7 @@ interface ProviderSettingsProps {
   additionalArgsById: Record<string, string>;
   setAdditionalArgsById: Dispatch<SetStateAction<Record<string, string>>>;
   isMobile: boolean;
+  onLayoutModeChange?: (mode: 'default' | 'fill-height') => void;
 }
 
 type ProviderDetailView = 'base' | 'config';
@@ -34,6 +35,7 @@ export function ProviderSettings({
   additionalArgsById,
   setAdditionalArgsById,
   isMobile,
+  onLayoutModeChange,
 }: ProviderSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -114,6 +116,11 @@ export function ProviderSettings({
   const showBase = isMobile ? mobileView === 'base' : desktopView === 'base';
   const showConfig = isMobile ? mobileView === 'config' : desktopView === 'config';
   const currentPreview = provider ? previewByProvider[provider.id] ?? '' : '';
+  const useFillHeightLayout = showConfig;
+
+  useEffect(() => {
+    onLayoutModeChange?.(useFillHeightLayout ? 'fill-height' : 'default');
+  }, [onLayoutModeChange, useFillHeightLayout]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') {
@@ -186,7 +193,9 @@ export function ProviderSettings({
   };
 
   return (
-    <div className="settings-section">
+    <div
+      className={`settings-section ${useFillHeightLayout ? 'settings-section--fill-height settings-provider-section--config-active' : ''}`}
+    >
       <div className="settings-provider-tabs">
         {providers.map((entry) => (
           <button
@@ -222,7 +231,9 @@ export function ProviderSettings({
       ) : null}
 
       {provider && showBase ? (
-        <div className="settings-provider-content">
+        <div
+          className={`settings-provider-content ${useFillHeightLayout ? 'settings-provider-content--fill-height' : ''}`}
+        >
           <div className="settings-group">
             <h3 className="settings-group-title">{t('settings.provider.config')}</h3>
             <p className="settings-group-desc">{t('settings.provider.startup_args_hint')}</p>
@@ -276,7 +287,9 @@ export function ProviderSettings({
         </div>
       ) : null}
 
-      <div className="settings-provider-config-stack">
+      <div
+        className={`settings-provider-config-stack ${useFillHeightLayout ? 'settings-provider-config-stack--fill-height' : ''}`}
+      >
         {providers
           .filter((entry) => visitedConfigProviders[entry.id] || (provider?.id === entry.id && showConfig))
           .map((entry) => {
@@ -285,11 +298,15 @@ export function ProviderSettings({
             return (
               <div
                 key={entry.id}
-                className={`settings-provider-config-panel ${visible ? '' : 'settings-provider-config-panel-hidden'}`}
+                className={`settings-provider-config-panel ${useFillHeightLayout ? 'settings-provider-config-panel--fill-height' : ''} ${visible ? '' : 'settings-provider-config-panel-hidden'}`}
                 aria-hidden={!visible}
               >
-                <div className="settings-provider-content">
-                  <div className="settings-group">
+                <div
+                  className={`settings-provider-content ${useFillHeightLayout ? 'settings-provider-content--fill-height' : ''}`}
+                >
+                  <div
+                    className={`settings-group ${useFillHeightLayout ? 'settings-group--fill-height' : ''}`}
+                  >
                     {isMobile ? (
                       <div className="settings-provider-mobile-config-header">
                         <button
@@ -307,7 +324,11 @@ export function ProviderSettings({
                         ? t('settings.config_files.codex_config')
                         : t('settings.config_files.claude_config')}
                     </p>
-                    <ConfigEditor configType={entry.id as ConfigType} visible={visible} />
+                    <ConfigEditor
+                      configType={entry.id as ConfigType}
+                      visible={visible}
+                      fillHeight={useFillHeightLayout}
+                    />
                   </div>
                 </div>
               </div>
