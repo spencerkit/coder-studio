@@ -7,6 +7,7 @@ import { useGitDiffViewerActions } from '../../actions/use-git-actions';
 interface GitDiffViewerProps {
   workspaceId: string;
   onClose?: () => void;
+  showCloseButton?: boolean;
 }
 
 type DiffLineTone = 'meta' | 'added' | 'removed' | 'context';
@@ -40,7 +41,11 @@ function getDiffLineTone(line: string): DiffLineTone {
   return 'context';
 }
 
-export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId, onClose }) => {
+export const GitDiffViewer: FC<GitDiffViewerProps> = ({
+  workspaceId,
+  onClose,
+  showCloseButton = true,
+}) => {
   const t = useTranslation();
   const { preview, closePreview } = useGitDiffViewerActions(workspaceId);
   const handleClose = onClose ?? closePreview;
@@ -65,7 +70,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId, onClose }) 
           <span className="code-file-path">
             {preview?.path ?? 'Select a changed file to inspect'}
           </span>
-          {preview ? (
+          {preview && showCloseButton ? (
             <div className="code-mode-toggle">
               <button
                 type="button"

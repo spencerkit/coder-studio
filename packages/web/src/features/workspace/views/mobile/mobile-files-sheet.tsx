@@ -102,7 +102,11 @@ export function MobileFilesSheet({
           </div>
         ) : null}
         <div className="mobile-files-sheet__detail">
-          <GitDiffViewer workspaceId={workspaceId} onClose={handleCloseDiff} />
+          <GitDiffViewer
+            workspaceId={workspaceId}
+            onClose={handleCloseDiff}
+            showCloseButton={false}
+          />
         </div>
       </div>
     );

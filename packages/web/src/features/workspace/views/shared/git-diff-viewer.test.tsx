@@ -65,4 +65,26 @@ describe('GitDiffViewer', () => {
     expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toBeNull();
     expect(screen.getByText('Git')).toBeInTheDocument();
   });
+
+  it('hides the internal close button when showCloseButton is false', async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(gitDiffPreviewAtomFamily('ws-test'), {
+      path: 'packages/core/src/domain/types.ts',
+      staged: false,
+      diff: [
+        'diff --git a/packages/core/src/domain/types.ts b/packages/core/src/domain/types.ts',
+        '@@ -1,2 +1,3 @@',
+        '+  previewMode: true;',
+      ].join('\n'),
+    });
+
+    render(
+      <Provider store={store}>
+        <GitDiffViewer workspaceId="ws-test" showCloseButton={false} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole('button', { name: /close|关闭/i })).not.toBeInTheDocument();
+  });
 });
