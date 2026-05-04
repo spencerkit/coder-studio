@@ -143,7 +143,7 @@ export function MobileFilesSheet({
             className={`panel-tab ${activeTab === 'git' ? 'active' : ''}`}
             onClick={() => setActiveTab('git')}
           >
-            {t('mobile.files.git_diff')}
+            {t('label.git')}
           </button>
         </div>
         <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />

@@ -49,7 +49,7 @@ export const WorkspaceDesktopView: FC = () => {
 
   const panelKicker = sidebarTab === 'files' ? t('label.file') : t('label.git');
   const panelBranch = gitState?.branch ?? '—';
-  const activeTabLabel = sidebarTab === 'files' ? 'file tree' : 'git diff';
+  const activeTabLabel = sidebarTab === 'files' ? 'file tree' : 'git';
 
   return (
     <div className="workspace-page">
@@ -83,7 +83,7 @@ export const WorkspaceDesktopView: FC = () => {
                         className={`panel-tab ${sidebarTab === 'git' ? 'active' : ''}`}
                         onClick={() => setSidebarTab('git')}
                       >
-                        Git Diff
+                        {t('label.git')}
                       </button>
                     </div>
                     <GitStatusBar workspaceId={workspace.id} gitState={gitState} inline />

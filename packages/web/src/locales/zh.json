@@ -165,7 +165,7 @@
     },
     "files": {
       "tabs": "文件面板标签",
-      "git_diff": "Git 差异",
+      "git_diff": "Git",
       "editor_fallback": "编辑器"
     },
     "workspace_drawer": {

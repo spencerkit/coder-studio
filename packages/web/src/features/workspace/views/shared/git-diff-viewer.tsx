@@ -1,5 +1,7 @@
 import type { FC } from 'react';
 import { useMemo } from 'react';
+import { X } from 'lucide-react';
+import { useTranslation } from '../../../../lib/i18n';
 import { useGitDiffViewerActions } from '../../actions/use-git-actions';
 
 interface GitDiffViewerProps {
@@ -38,7 +40,8 @@ function getDiffLineTone(line: string): DiffLineTone {
 }
 
 export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId }) => {
-  const { preview } = useGitDiffViewerActions(workspaceId);
+  const t = useTranslation();
+  const { preview, closePreview } = useGitDiffViewerActions(workspaceId);
 
   const diffLines = useMemo<DisplayLine[]>(
     () =>
@@ -60,6 +63,19 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId }) => {
           <span className="code-file-path">
             {preview?.path ?? 'Select a changed file to inspect'}
           </span>
+          {preview ? (
+            <div className="code-mode-toggle">
+              <button
+                type="button"
+                className="code-mode-btn"
+                onClick={closePreview}
+                title={t('action.close')}
+                aria-label={t('action.close')}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="code-editor-body">
@@ -77,7 +93,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId }) => {
             </div>
           ) : (
             <div className="git-diff-empty">
-              <p className="git-diff-empty-title">Git Diff</p>
+              <p className="git-diff-empty-title">{t('label.git')}</p>
               <p className="git-diff-empty-body">
                 Select a staged or modified file on the left to inspect its diff.
               </p>

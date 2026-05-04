@@ -165,7 +165,7 @@
     },
     "files": {
       "tabs": "Files sheet tabs",
-      "git_diff": "Git Diff",
+      "git_diff": "Git",
       "editor_fallback": "Editor"
     },
     "workspace_drawer": {

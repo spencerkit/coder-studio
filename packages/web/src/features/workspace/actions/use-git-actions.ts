@@ -555,8 +555,10 @@ export function useGitPanelActions({
 
 export function useGitDiffViewerActions(workspaceId: string) {
   const preview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
+  const setPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
 
   return {
+    closePreview: () => setPreview(null),
     preview,
   };
 }

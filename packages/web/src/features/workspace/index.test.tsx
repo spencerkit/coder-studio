@@ -160,7 +160,7 @@ describe('WorkspacePage', () => {
     });
     fireEvent.click(branchButton);
 
-    expect(screen.getByRole('button', { name: 'Git Diff' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: 'Git' })).toHaveClass('active');
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: 'ws-test',

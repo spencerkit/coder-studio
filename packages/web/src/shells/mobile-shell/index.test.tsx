@@ -1472,7 +1472,7 @@ describe('MobileShell Phase 2 workspace', () => {
     renderMobileShell();
 
     await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
-    await user.click(screen.getByRole('tab', { name: 'Git Diff' }));
+    await user.click(screen.getByRole('tab', { name: 'Git' }));
     await user.click(screen.getByRole('button', { name: 'mock-git-panel' }));
 
     expect(screen.getByTestId('mobile-git-diff-viewer')).toBeInTheDocument();
@@ -1483,7 +1483,7 @@ describe('MobileShell Phase 2 workspace', () => {
     const { store } = renderMobileShell();
 
     await user.click(screen.getByRole('button', { name: 'Open Files sheet' }));
-    await user.click(screen.getByRole('tab', { name: 'Git Diff' }));
+    await user.click(screen.getByRole('tab', { name: 'Git' }));
 
     store.set(gitDiffPreviewAtomFamily('ws-1'), {
       path: 'src/app.tsx',
