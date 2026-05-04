@@ -21,6 +21,7 @@ export type ConfigType = 'codex' | 'claude';
 
 interface ConfigEditorProps {
   configType: ConfigType;
+  visible?: boolean;
 }
 
 interface ConfigReadResult {
@@ -37,7 +38,7 @@ interface ConfigWriteResult {
 
 type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
-export function ConfigEditor({ configType }: ConfigEditorProps) {
+export function ConfigEditor({ configType, visible = true }: ConfigEditorProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
@@ -255,10 +256,11 @@ export function ConfigEditor({ configType }: ConfigEditorProps) {
           {fileExists && (
             <>
               <MonacoHost
-                workspaceId="config-editor"
+                workspaceId={`config-editor-${configType}`}
                 filePath={configPath}
                 content={content}
                 onContentChange={handleContentChange}
+                visible={visible}
               />
 
               {/* Actions */}

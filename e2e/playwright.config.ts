@@ -90,6 +90,9 @@ export default defineConfig({
       timeout: 30000,
       env: {
         ...process.env,
+        // Playwright may inherit NODE_ENV=production from the outer shell,
+        // which breaks the Vite React refresh transform at runtime.
+        NODE_ENV: 'development',
         VITE_BACKEND_HTTP_URL: BACKEND_HTTP_URL,
         VITE_BACKEND_WS_URL: `ws://${HOST}:${SERVER_PORT}/ws`,
       },

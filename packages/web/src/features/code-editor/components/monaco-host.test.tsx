@@ -17,6 +17,7 @@ const {
     dispose: vi.fn(),
     getModel: vi.fn(() => ({})),
     getValue: vi.fn(() => 'export const a = 1;'),
+    layout: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
     addCommand: mockAddCommand,
     setValue: vi.fn(),
@@ -60,6 +61,7 @@ describe('MonacoHost', () => {
     mockAddCommand.mockClear();
     mockEditorInstance.dispose.mockClear();
     mockEditorInstance.getValue.mockClear();
+    mockEditorInstance.layout.mockClear();
     mockEditorInstance.setValue.mockClear();
   });
 
@@ -127,6 +129,35 @@ describe('MonacoHost', () => {
 
     await waitFor(() => {
       expect(mockAddCommand).toHaveBeenCalledWith(2048 | 49, expect.any(Function));
+    });
+  });
+
+  it('calls layout when an existing editor becomes visible again', async () => {
+    const store = createStore();
+    const { rerender } = render(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="config-editor-claude"
+          filePath="config.json"
+          content="{}"
+          visible={false}
+        />
+      </Provider>
+    );
+
+    rerender(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="config-editor-claude"
+          filePath="config.json"
+          content="{}"
+          visible
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.layout).toHaveBeenCalled();
     });
   });
 });

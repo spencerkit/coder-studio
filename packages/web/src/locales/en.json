@@ -405,6 +405,10 @@
       "configure": "Configure",
       "reset": "Reset",
       "config": "Configuration",
+      "base": "Base Settings",
+      "config_file": "Config File",
+      "open_config_file_editor": "Open Config File Editor",
+      "back_to_base": "Back to Base Settings",
       "startup_args": "Startup Command Args",
       "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
       "startup_args_placeholder": "--verbose\n--debug"

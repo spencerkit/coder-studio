@@ -1,8 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { connectionStatusAtom, wsClientAtom } from '../../../atoms/connection';
+import {
+  connectionStatusAtom,
+  type ConnectionStatus,
+  wsClientAtom,
+} from '../../../atoms/connection';
 import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { SettingsPage } from './settings-page';
 
@@ -32,6 +36,12 @@ vi.mock('../../../hooks/use-viewport', () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 
+vi.mock('./config-editor', () => ({
+  ConfigEditor: ({ configType }: { configType: 'claude' | 'codex' }) => (
+    <div data-testid={`config-editor-${configType}`}>{configType}</div>
+  ),
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
@@ -40,10 +50,13 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-function createConnectedStore(sendCommand: ReturnType<typeof vi.fn>) {
+function createConnectedStore(
+  sendCommand: ReturnType<typeof vi.fn>,
+  connectionStatus: ConnectionStatus = 'connected'
+) {
   const store = createStore();
 
-  store.set(connectionStatusAtom, 'connected');
+  store.set(connectionStatusAtom, connectionStatus);
   store.set(
     wsClientAtom,
     {
@@ -351,6 +364,45 @@ describe('SettingsPage', () => {
     expect(screen.queryByLabelText('Working Directory Override')).not.toBeInTheDocument();
   });
 
+  it('retries loading provider settings after websocket becomes connected', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === 'settings.get') {
+        return {
+          'providers.claude.additionalArgs': ['--verbose'],
+        };
+      }
+      if (op === 'settings.previewCommand') {
+        const previewArgs = args as { config: { additionalArgs?: string[] } };
+        return {
+          preview: ['preview', ...(previewArgs.config.additionalArgs ?? [])].join(' '),
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand, 'connecting');
+
+    renderSettingsPage(store);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    expect(sendCommand).not.toHaveBeenCalledWith('settings.get', {}, undefined);
+    expect(screen.queryByText('设置加载失败')).not.toBeInTheDocument();
+
+    act(() => {
+      store.set(connectionStatusAtom, 'connected');
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith('settings.get', {}, undefined);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('启动命令参数')).toHaveValue('--verbose');
+    });
+
+    expect(screen.queryByText('设置加载失败')).not.toBeInTheDocument();
+  });
+
   it('uses shared history-aware exit behavior on desktop', async () => {
     window.history.replaceState({ idx: 0 }, '', '/');
     window.history.pushState({ idx: 1 }, '', '/settings');
@@ -424,10 +476,57 @@ describe('SettingsPage', () => {
       expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();
     });
 
+    expect(screen.queryByRole('button', { name: '配置文件' })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+  });
+
+  it('shows provider base settings first on mobile and enters config files through the secondary action', async () => {
+    viewportMocks.viewport = 'mobile';
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === 'settings.get') {
+        return {
+          'providers.claude.additionalArgs': ['--verbose'],
+        };
+      }
+      if (op === 'settings.previewCommand') {
+        const previewArgs = args as { config: { additionalArgs?: string[] } };
+        return {
+          preview: ['preview', ...(previewArgs.config.additionalArgs ?? [])].join(' '),
+        };
+      }
+      if (op === 'settings.readConfigFile') {
+        return {
+          configPath: '/tmp/claude.json',
+          content: '{}',
+          exists: true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('button', { name: '配置文件' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /打开配置文件编辑/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude 配置')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '返回基础配置' }));
+
+    expect(screen.getByLabelText('启动命令参数')).toBeInTheDocument();
   });
 
   it('keeps the shortcuts section available on desktop', async () => {

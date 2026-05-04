@@ -9,6 +9,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, ArrowLeft } from 'lucide-react';
 import { localeAtom, themeAtom } from '../../../atoms/app-ui';
+import { connectionStatusAtom } from '../../../atoms/connection';
 import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
 import { useViewport } from '../../../hooks/use-viewport';
 import { useTranslation } from '../../../lib/i18n';
@@ -16,7 +17,7 @@ import { dispatchCommandAtom } from '../../../atoms/connection';
 import { notificationPreferencesAtom } from '../../notifications/atoms';
 import { ShortcutsSettings } from './shortcuts-settings';
 import { ConfigDriftBanner } from '../../config-drift-banner';
-import { ConfigEditor } from './config-editor';
+import { ProviderSettings, type ProviderInfo } from './provider-settings';
 import { resolveSettingsExitTargetFromBrowserHistory } from './settings-navigation';
 import {
   MOBILE_SETTINGS_SECTIONS,
@@ -24,14 +25,8 @@ import {
   type SettingsSection,
 } from './settings-sections';
 
-interface ProviderInfo {
-  id: string;
-  displayName: string;
-}
-
 type NotificationCapabilityStatus = 'available' | 'limited' | 'unsupported';
 type NotificationPermissionState = NotificationPermission | 'unavailable';
-
 type SettingsNavigationState =
   | {
       kind: 'root';
@@ -79,13 +74,6 @@ function detectNotificationCapability(): NotificationCapabilityStatus {
   return isStandaloneWebApp() ? 'available' : 'limited';
 }
 
-function parseProviderAdditionalArgs(value: string): string[] {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
 function formatProviderAdditionalArgs(value: unknown): string {
   if (!Array.isArray(value)) {
     return '';
@@ -123,6 +111,7 @@ export function SettingsPage() {
   const viewport = useViewport();
   const isMobile = viewport === 'mobile';
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
     isMobile
@@ -139,7 +128,6 @@ export function SettingsPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<Record<string, string>>({});
-  const [commandPreview, setCommandPreview] = useState('');
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocale] = useAtom(localeAtom);
@@ -168,6 +156,10 @@ export function SettingsPage() {
   }, [isMobile]);
 
   useEffect(() => {
+    if (connectionStatus !== 'connected') {
+      return;
+    }
+
     let cancelled = false;
 
     const loadSettings = async () => {
@@ -209,7 +201,14 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [dispatch, setLocale, setNotificationPreferences, settingsLoadFailedUnknown, settingsRefreshKey]);
+  }, [
+    connectionStatus,
+    dispatch,
+    setLocale,
+    setNotificationPreferences,
+    settingsLoadFailedUnknown,
+    settingsRefreshKey,
+  ]);
 
   const handlePageExit = () => {
     const target = resolveSettingsExitTargetFromBrowserHistory(Boolean(activeWorkspaceId));
@@ -260,8 +259,7 @@ export function SettingsPage() {
             providers={providers}
             additionalArgsById={providerAdditionalArgsById}
             setAdditionalArgsById={setProviderAdditionalArgsById}
-            commandPreview={commandPreview}
-            setCommandPreview={setCommandPreview}
+            isMobile={isMobile}
           />
         );
       case 'shortcuts':
@@ -651,136 +649,6 @@ function AppearanceSettings({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-interface ProviderSettingsProps {
-  providers: ProviderInfo[];
-  additionalArgsById: Record<string, string>;
-  setAdditionalArgsById: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  commandPreview: string;
-  setCommandPreview: (value: string) => void;
-}
-
-function ProviderSettings({
-  providers,
-  additionalArgsById,
-  setAdditionalArgsById,
-  commandPreview,
-  setCommandPreview,
-}: ProviderSettingsProps) {
-  const t = useTranslation();
-  const [selectedProvider, setSelectedProvider] = useState(providers[0]?.id);
-  const dispatch = useAtomValue(dispatchCommandAtom);
-
-  const provider = providers.find((p) => p.id === selectedProvider);
-  const additionalArgsText = provider ? additionalArgsById[provider.id] ?? '' : '';
-  const additionalArgs = parseProviderAdditionalArgs(additionalArgsText);
-
-  useEffect(() => {
-    const loadPreview = async () => {
-      if (!provider) {
-        setCommandPreview('');
-        return;
-      }
-
-      const config = { additionalArgs };
-
-      const result = await dispatch<{ preview: string }>('settings.previewCommand', {
-        providerId: provider.id,
-        config,
-      });
-
-      if (result.ok && result.data) {
-        setCommandPreview(result.data.preview);
-      } else if (result.error?.code === 'no_client' || result.error?.code === 'command_error') {
-        // WebSocket not connected, retry after a short delay
-        setTimeout(() => void loadPreview(), 500);
-      } else {
-        setCommandPreview('Error loading preview');
-      }
-    };
-
-    void loadPreview();
-  }, [additionalArgsText, dispatch, provider, setCommandPreview]);
-
-  const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch('settings.update', { settings });
-  };
-
-  return (
-    <div className="settings-section">
-      <div className="settings-provider-tabs">
-        {providers.map((p) => (
-          <button
-            key={p.id}
-            className={`settings-provider-tab ${selectedProvider === p.id ? 'settings-provider-tab-active' : ''}`}
-            onClick={() => setSelectedProvider(p.id)}
-          >
-            {p.displayName}
-          </button>
-        ))}
-      </div>
-
-      {provider && (
-        <div className="settings-provider-content">
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.provider.config')}</h3>
-            <p className="settings-group-desc">{t('settings.provider.startup_args_hint')}</p>
-
-            <div className="settings-config-field">
-              <label className="settings-config-label" htmlFor="provider-startup-args">
-                {t('settings.provider.startup_args')}
-              </label>
-              <textarea
-                id="provider-startup-args"
-                className="input settings-provider-args-input"
-                rows={4}
-                placeholder={t('settings.provider.startup_args_placeholder')}
-                value={additionalArgsText}
-                onChange={(e) => {
-                  const nextValue = e.target.value;
-                  if (!provider) {
-                    return;
-                  }
-
-                  setAdditionalArgsById((prev) => ({
-                    ...prev,
-                    [provider.id]: nextValue,
-                  }));
-                  void saveSettings({
-                    providers: {
-                      [provider.id]: {
-                        additionalArgs: parseProviderAdditionalArgs(nextValue),
-                      },
-                    },
-                  });
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="settings-group">
-            <h3 className="settings-group-title">Command Preview</h3>
-            <p className="settings-group-desc">Preview of the effective provider command</p>
-            <div className="settings-config-field">
-              <code className="settings-command-preview">{commandPreview}</code>
-            </div>
-          </div>
-
-          {/* Config File Editor */}
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.config_files.title')}</h3>
-            <p className="settings-group-desc">
-              {selectedProvider === 'codex'
-                ? t('settings.config_files.codex_config')
-                : t('settings.config_files.claude_config')}
-            </p>
-            <ConfigEditor configType={selectedProvider as 'codex' | 'claude'} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

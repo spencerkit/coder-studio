@@ -405,6 +405,10 @@
       "configure": "配置",
       "reset": "重置",
       "config": "配置",
+      "base": "基础配置",
+      "config_file": "配置文件",
+      "open_config_file_editor": "打开配置文件编辑",
+      "back_to_base": "返回基础配置",
       "startup_args": "启动命令参数",
       "startup_args_hint": "每行填写一个启动参数，保存后会追加到 Provider 启动命令后面。",
       "startup_args_placeholder": "--verbose\n--debug"

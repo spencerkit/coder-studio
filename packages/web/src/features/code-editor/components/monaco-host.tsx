@@ -34,6 +34,7 @@ interface MonacoHostProps {
   workspaceId: string;
   filePath: string;
   content: string;
+  visible?: boolean;
   onContentChange?: (content: string) => void;
   onSave?: () => void | Promise<void>;
 }
@@ -52,12 +53,14 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   workspaceId: _workspaceId,
   filePath,
   content,
+  visible = true,
   onContentChange,
   onSave,
 }) => {
   const uiTheme = useAtomValue(themeAtom);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const wasVisibleRef = useRef(visible);
   const onContentChangeRef = useRef(onContentChange);
   const onSaveRef = useRef(onSave);
 
@@ -91,18 +94,12 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     const changeDisposable = editor.onDidChangeModelContent(() => {
       onContentChangeRef.current?.(editor.getValue());
     });
-    const saveCommand = editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-      () => {
-        void onSaveRef.current?.();
-      }
-    );
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      void onSaveRef.current?.();
+    });
 
     return () => {
       changeDisposable.dispose();
-      if (typeof saveCommand === 'function') {
-        saveCommand();
-      }
       editor.dispose();
       editorRef.current = null;
     };
@@ -127,6 +124,18 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     if (!editor || editor.getValue() === content) return;
     editor.setValue(content);
   }, [content]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+
+    if (!editor || !visible || wasVisible) {
+      return;
+    }
+
+    editor.layout();
+  }, [visible]);
 
   return <div ref={containerRef} className="monaco-host" />;
 };

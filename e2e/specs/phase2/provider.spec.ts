@@ -1,71 +1,66 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test.describe('@phase2 provider acceptance', () => {
-  test('P2P-01 provider tabs render in settings', async ({ page }) => {
+  test('desktop uses provider sub-navigation and preserves config view across providers', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
     await expect(page.getByRole('button', { name: 'Claude' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Codex' })).toBeVisible();
-  });
+    await expect(page.getByRole('button', { name: '基础配置' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('启动命令参数')).toBeVisible();
 
-  test('P2P-02 Claude model selection updates config', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Providers' }).click();
+    await page.getByRole('button', { name: '配置文件' }).click();
+    await expect(page.getByRole('button', { name: '配置文件' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('Claude 配置')).toBeVisible();
+    await expect(page.getByLabel('启动命令参数')).not.toBeVisible();
 
-    // Select a model
-    await page.locator('select.input').selectOption('claude-3-opus');
-
-    // Verify selection persisted
-    await expect(page.locator('select.input')).toHaveValue('claude-3-opus');
-  });
-
-  test('P2P-03 Codex cwd override field exists', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Providers' }).click();
     await page.getByRole('button', { name: 'Codex' }).click();
+    await expect(page.getByRole('button', { name: '配置文件' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('Codex 配置')).toBeVisible();
+    await expect(page.getByLabel('启动命令参数')).not.toBeVisible();
 
-    // Check cwd override field exists
-    await expect(page.getByText('Working Directory Override')).toBeVisible();
+    await page.getByRole('button', { name: '基础配置' }).click();
+    await expect(page.getByLabel('启动命令参数')).toBeVisible();
   });
 
-  test('P2P-04 hooks inject button works', async ({ page }) => {
+  test('desktop updates startup args per provider and keeps command preview scoped', async ({ page }) => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Providers' }).click();
 
-    // Click inject hooks button
-    const injectButton = page.locator('.settings-provider-content .btn.btn-primary');
-    await injectButton.click();
+    const argsInput = page.getByLabel('启动命令参数');
+    await expect(argsInput).toBeVisible();
 
-    // Verify status changes
-    await expect(page.locator('.settings-provider-status')).toBeVisible();
-  });
+    await argsInput.fill('--verbose\n--print');
+    await expect(page.locator('.settings-command-preview')).toContainText('--print');
 
-  test('P2P-05 provider tabs switch correctly', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Providers' }).click();
-
-    // Verify Claude is selected by default
-    await expect(page.locator('.settings-provider-tab-active')).toContainText('Claude');
-
-    // Switch to Codex
     await page.getByRole('button', { name: 'Codex' }).click();
-    await expect(page.locator('.settings-provider-tab-active')).toContainText('Codex');
-
-    // Switch back to Claude
-    await page.getByRole('button', { name: 'Claude' }).click();
-    await expect(page.locator('.settings-provider-tab-active')).toContainText('Claude');
+    await expect(page.getByLabel('启动命令参数')).not.toHaveValue('--verbose\n--print');
+    await expect(page.locator('.settings-command-preview')).not.toContainText('--print');
   });
 
-  test('P2P-06 API key field accepts input', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Providers' }).click();
+  test('mobile enters config editor through secondary action and returns to base settings', async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: { width: 430, height: 932 },
+    });
+    const page = await context.newPage();
 
-    // Enter API key
-    const apiKeyInput = page.locator('input[type="password"]').first();
-    await apiKeyInput.fill('test-api-key');
+    try {
+      await page.goto('/settings');
+      await page.getByRole('button', { name: 'Providers' }).click();
 
-    // Verify input
-    await expect(apiKeyInput).toHaveValue('test-api-key');
+      await expect(page.getByLabel('启动命令参数')).toBeVisible();
+      await expect(page.locator('.settings-provider-subnav')).toHaveCount(0);
+
+      await page.getByRole('button', { name: /打开配置文件编辑/ }).click();
+      await expect(page.getByRole('button', { name: '返回基础配置' })).toBeVisible();
+      await expect(page.getByText('Claude 配置')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Codex' }).click();
+      await expect(page.getByLabel('启动命令参数')).toBeVisible();
+      await expect(page.getByRole('button', { name: '返回基础配置' })).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
   });
 });
