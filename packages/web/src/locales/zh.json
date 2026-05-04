@@ -450,6 +450,8 @@
   "auth": {
     "description": "输入密码后继续进入当前工作区。",
     "hint": "请输入当前部署配置的访问密码。",
+    "blocked_until": "尝试次数过多，请于 {time} 后再试，或联系管理员解禁。",
+    "blocked_generic": "尝试次数过多，请稍后再试，或联系管理员解禁。",
     "status_title": "访问验证",
     "status_loading": "正在检查当前部署的访问状态。",
     "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",

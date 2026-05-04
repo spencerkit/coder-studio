@@ -4,9 +4,11 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  clearAuthBlockByIp,
   confirmYesNo,
   getServerStatus,
   isInteractiveSession,
+  listAuthBlocks,
   openBrowser,
   readCliConfig,
   startManagedServer,
@@ -14,9 +16,11 @@ const {
   stopRunningServer,
   writeCliConfig,
 } = vi.hoisted(() => ({
+  clearAuthBlockByIp: vi.fn(),
   confirmYesNo: vi.fn(),
   getServerStatus: vi.fn(),
   isInteractiveSession: vi.fn(),
+  listAuthBlocks: vi.fn(),
   openBrowser: vi.fn(),
   readCliConfig: vi.fn(),
   startManagedServer: vi.fn(),
@@ -37,6 +41,11 @@ vi.mock('./pm2-control.js', () => ({
 vi.mock('./server-control.js', () => ({
   getServerStatus,
   stopRunningServer,
+}));
+
+vi.mock('./auth-control.js', () => ({
+  clearAuthBlockByIp,
+  listAuthBlocks,
 }));
 
 vi.mock('./server-runner.js', () => ({
@@ -61,6 +70,8 @@ beforeEach(() => {
   startManagedServer.mockResolvedValue(undefined);
   startServer.mockResolvedValue({ stop: vi.fn() });
   stopRunningServer.mockResolvedValue(false);
+  clearAuthBlockByIp.mockResolvedValue(false);
+  listAuthBlocks.mockResolvedValue([]);
   confirmYesNo.mockResolvedValue(false);
   isInteractiveSession.mockReturnValue(true);
   openBrowser.mockResolvedValue(undefined);
@@ -427,6 +438,35 @@ describe('main', () => {
       });
     }
   });
+
+  it('prints the current auth block list', async () => {
+    listAuthBlocks.mockResolvedValue([
+      {
+        ip: '198.51.100.24',
+        failedCount: 10,
+        firstFailedAt: 1000,
+        lastFailedAt: 2000,
+        blockedUntil: 3000,
+      },
+    ]);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['auth', 'ban-list']);
+
+    expect(listAuthBlocks).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('198.51.100.24'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('blockedUntil'));
+  });
+
+  it('unblocks the given IP from local auth storage', async () => {
+    clearAuthBlockByIp.mockResolvedValue(true);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['auth', 'unblock', '--ip', '198.51.100.24']);
+
+    expect(clearAuthBlockByIp).toHaveBeenCalledWith('198.51.100.24');
+    expect(logSpy).toHaveBeenCalledWith('Unblocked IP: 198.51.100.24');
+  });
 });
 
 describe('parseArgs', () => {
@@ -479,6 +519,21 @@ describe('parseArgs', () => {
   it('parses version command', () => {
     expect(parseArgs(['version'])).toEqual({
       command: 'version',
+    });
+  });
+
+  it('parses auth ban-list command', () => {
+    expect(parseArgs(['auth', 'ban-list'])).toEqual({
+      command: 'auth',
+      authCommand: 'ban-list',
+    });
+  });
+
+  it('parses auth unblock command with ip value', () => {
+    expect(parseArgs(['auth', 'unblock', '--ip', '198.51.100.24'])).toEqual({
+      command: 'auth',
+      authCommand: 'unblock',
+      ip: '198.51.100.24',
     });
   });
 
@@ -626,6 +681,10 @@ describe('parseArgs', () => {
 
   it('rejects unknown positional tokens', () => {
     expect(() => parseArgs(['bogus'])).toThrow('Unknown argument: bogus');
+  });
+
+  it('requires an ip value for auth unblock', () => {
+    expect(() => parseArgs(['auth', 'unblock'])).toThrow('Missing ip value');
   });
 
   it('rejects unknown flags on non-config commands', () => {

@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import type { ServerConfig } from '../config.js';
+import { AuthLoginProtection, resolveClientIp } from './login-protection.js';
+import type { AuthLoginBlockRepo } from '../storage/repositories/auth-login-block-repo.js';
 import type { AuthSessionRepo } from '../storage/repositories/auth-session-repo.js';
 
 const AUTH_COOKIE_NAME = 'coder_studio_auth';
@@ -49,6 +51,7 @@ const decodeAuthCookieValue = (value: string): string => {
 interface AuthDeps {
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
+  authLoginBlockRepo: AuthLoginBlockRepo;
 }
 
 const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
@@ -124,17 +127,34 @@ export const registerAuthStatusRoute = (deps: AuthDeps) => {
 };
 
 export const registerAuthRoutes = (deps: AuthDeps) => {
+  const loginProtection = new AuthLoginProtection(deps.authLoginBlockRepo);
+
   return async (request: FastifyRequest<{ Body: { password?: string } }>, reply: FastifyReply) => {
     if (!deps.config.auth.enabled || !deps.config.auth.password) {
       return reply.send({ ok: true, authEnabled: false, authenticated: true });
     }
 
+    const now = Date.now();
+    const ip = resolveClientIp(request);
+    const activeBlock = loginProtection.getActiveBlock(ip, now);
+    if (activeBlock) {
+      return reply.status(429).send({
+        ok: false,
+        blocked: true,
+        ip,
+        blockedUntil: activeBlock.blockedUntil,
+        error: 'Too many failed attempts',
+      });
+    }
+
     if (request.body?.password !== deps.config.auth.password) {
+      loginProtection.recordFailure(ip, now);
       return reply.status(401).send({ ok: false, error: 'Invalid password' });
     }
 
+    loginProtection.clearFailures(ip);
     const token = randomBytes(32).toString('hex');
-    deps.authSessionRepo.create(token, Date.now());
+    deps.authSessionRepo.create(token, now);
 
     reply.header(
       'Set-Cookie',

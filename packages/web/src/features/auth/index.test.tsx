@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { LoginPage } from './index';
-import { authenticatedAtom } from '../../atoms/app-ui';
+import { authenticatedAtom, localeAtom } from '../../atoms/app-ui';
 import { authEnabledAtom } from '../../atoms/connection';
 
 const originalFetch = globalThis.fetch;
@@ -18,6 +18,7 @@ describe('LoginPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     viewportMocks.viewport = 'desktop';
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -156,6 +157,102 @@ describe('LoginPage', () => {
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
       expect(screen.getByText('Wrong password')).toBeInTheDocument();
       expect(document.querySelector('.auth-status-panel.auth-status-panel-error')).toBeTruthy();
+    });
+  });
+
+  it('shows a clear retry time when login is blocked after too many failures', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({
+          error: 'Too many failed attempts',
+          blocked: true,
+          blockedUntil: new Date('2026-05-05T12:00:00.000Z').getTime(),
+        }),
+      }) as unknown as typeof fetch;
+
+    const store = createStore();
+    store.set(authEnabledAtom, true);
+
+    render(
+      <Provider store={store}>
+        <LoginPage />
+      </Provider>
+    );
+
+    const input = await screen.findByPlaceholderText('密码');
+    fireEvent.change(input, { target: { value: 'bad' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('尝试次数过多，请于 2026/5/5 20:00 后再试，或联系管理员解禁。')).toBeInTheDocument();
+      expect(document.querySelector('.auth-status-panel.auth-status-panel-error')).toBeTruthy();
+    });
+  });
+
+  it('shows the blocked fallback message when blockedUntil is missing', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({
+          error: 'Too many failed attempts',
+          blocked: true,
+        }),
+      }) as unknown as typeof fetch;
+
+    const store = createStore();
+    store.set(authEnabledAtom, true);
+
+    render(
+      <Provider store={store}>
+        <LoginPage />
+      </Provider>
+    );
+
+    const input = await screen.findByPlaceholderText('密码');
+    fireEvent.change(input, { target: { value: 'bad' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('尝试次数过多，请稍后再试，或联系管理员解禁。')).toBeInTheDocument();
+    });
+  });
+
+  it('renders the blocked message in english when the locale is en', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({
+          error: 'Too many failed attempts',
+          blocked: true,
+          blockedUntil: new Date('2026-05-05T12:00:00.000Z').getTime(),
+        }),
+      }) as unknown as typeof fetch;
+
+    const store = createStore();
+    store.set(authEnabledAtom, true);
+    store.set(localeAtom, 'en');
+
+    render(
+      <Provider store={store}>
+        <LoginPage />
+      </Provider>
+    );
+
+    const input = await screen.findByPlaceholderText('Password');
+    fireEvent.change(input, { target: { value: 'bad' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText((content) =>
+          content.startsWith('Too many attempts. Try again after ') &&
+          content.endsWith(', or ask an administrator to unblock access.')
+        )
+      ).toBeInTheDocument();
     });
   });
 

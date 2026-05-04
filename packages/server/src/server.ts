@@ -26,6 +26,7 @@ import { ProviderConfigRepo } from './storage/repositories/provider-config-repo.
 import { rowToSession, type SessionRow } from './storage/repositories/session-repo.js';
 import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-repo.js';
 import { SupervisorRepo } from './storage/repositories/supervisor-repo.js';
+import { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
 import { SupervisorManager } from './supervisor/manager.js';
 import { TerminalManager } from './terminal/manager.js';
 import { NodePtyHost } from './terminal/pty-host.js';
@@ -131,6 +132,7 @@ export async function createServer(
   });
 
   const authSessionRepo = new AuthSessionRepo(db);
+  const authLoginBlockRepo = new AuthLoginBlockRepo(db);
   const codexConfigAudit = createCodexConfigAuditApi();
 
   const app = await buildFastifyApp({
@@ -140,6 +142,7 @@ export async function createServer(
     webRoot: config.webRoot,
     config,
     authSessionRepo,
+    authLoginBlockRepo,
     logger: {
       level: 'info',
       transport: {

@@ -12,6 +12,10 @@ export {
 export { SettingsRepo } from './repositories/settings-repo.js';
 export { ProviderConfigRepo } from './repositories/provider-config-repo.js';
 export {
+  AuthLoginBlockRepo,
+  type AuthLoginBlockRecord,
+} from './repositories/auth-login-block-repo.js';
+export {
   SupervisorRepo,
   type NewSupervisor,
   type SupervisorUpdatePatch,

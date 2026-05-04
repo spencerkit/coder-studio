@@ -193,4 +193,95 @@ describe('runMigrations', () => {
 
     db.close();
   });
+
+  it('migration 007 creates the auth login blocks table and index', async () => {
+    const { runMigrations } = await import('./db');
+    const db = new DatabaseSync(dbPath);
+    runMigrations(db);
+
+    const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_login_blocks'").get() as
+      | { name: string }
+      | undefined;
+    expect(table?.name).toBe('auth_login_blocks');
+
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>;
+    expect(indexes.map((item) => item.name)).toContain('idx_auth_login_blocks_blocked_until');
+
+    db.close();
+  });
+
+  it('migration 008 creates the auth login failures table and index', async () => {
+    const { runMigrations } = await import('./db');
+    const db = new DatabaseSync(dbPath);
+    runMigrations(db);
+
+    const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_login_failures'").get() as
+      | { name: string }
+      | undefined;
+    expect(table?.name).toBe('auth_login_failures');
+
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>;
+    expect(indexes.map((item) => item.name)).toContain('idx_auth_login_failures_ip_failed_at');
+
+    db.close();
+  });
+
+  it('migration 008 backfills existing auth login block counts into failure rows', async () => {
+    const { runMigrations } = await import('./db');
+
+    const db = new DatabaseSync(dbPath);
+    const migrationsDir = join(import.meta.dirname, 'migrations');
+
+    for (const file of [
+      '001_init.sql',
+      '002_transcript_path.sql',
+      '003_supervisors.sql',
+      '004_session_title.sql',
+      '005_auth_sessions.sql',
+      '006_drop_legacy_hook_session_columns.sql',
+      '007_auth_login_blocks.sql',
+    ]) {
+      db.exec(readFileSync(join(migrationsDir, file), 'utf8'));
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        applied_at INTEGER NOT NULL
+      );
+    `);
+
+    for (const [index, name] of [
+      '001_init',
+      '002_transcript_path',
+      '003_supervisors',
+      '004_session_title',
+      '005_auth_sessions',
+      '006_drop_legacy_hook_session_columns',
+      '007_auth_login_blocks',
+    ].entries()) {
+      db.prepare('INSERT INTO _migrations (id, name, applied_at) VALUES (?, ?, ?)').run(index + 1, name, 1000 + index);
+    }
+
+    db.prepare(`
+      INSERT INTO auth_login_blocks (ip, failed_count, first_failed_at, last_failed_at, blocked_until)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('198.51.100.24', 9, 1000, 2000, null);
+
+    runMigrations(db);
+
+    const failures = db.prepare(`
+      SELECT failed_at
+      FROM auth_login_failures
+      WHERE ip = ?
+      ORDER BY failed_at ASC
+    `).all('198.51.100.24') as Array<{ failed_at: number }>;
+
+    expect(failures).toHaveLength(9);
+    expect(failures[0]?.failed_at).toBe(1000);
+    expect(failures[failures.length - 1]?.failed_at).toBe(2000);
+
+    db.close();
+  });
 });

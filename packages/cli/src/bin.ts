@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseArgs } from './parse-args.js';
+import { clearAuthBlockByIp, listAuthBlocks } from './auth-control.js';
 import { readCliConfig, writeCliConfig, type CliConfig } from './config-store.js';
 import { startManagedServer } from './pm2-control.js';
 import { getServerStatus, stopRunningServer, type ServerStatus } from './server-control.js';
@@ -63,6 +64,7 @@ COMMANDS:
   serve    Start the Coder Studio server in background (default)
   server   Alias for serve
   open     Start the server if needed and open Coder Studio in a browser
+  auth     Manage auth login blocks in local server storage
   config   Persist CLI host/port/data-dir/password settings
   stop     Stop the managed Coder Studio server
   status   Show the managed server status
@@ -83,6 +85,8 @@ EXAMPLES:
   coder-studio
   coder-studio serve
   coder-studio server
+  coder-studio auth ban-list
+  coder-studio auth unblock --ip 198.51.100.24
   coder-studio serve --foreground
   coder-studio serve --restart
   coder-studio open
@@ -126,6 +130,14 @@ EXAMPLES:
 function showVersion(): void {
   const version = '0.0.1';
   console.log(`@spencer-kit/coder-studio v${version}`);
+}
+
+function formatAuthBlocks(blocks: Awaited<ReturnType<typeof listAuthBlocks>>): string {
+  if (blocks.length === 0) {
+    return 'No blocked IPs.';
+  }
+
+  return JSON.stringify(blocks, null, 2);
 }
 
 function resolveManagedScriptPath(): string {
@@ -291,6 +303,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (args.command === 'version') {
     showVersion();
     return;
+  }
+
+  if (args.command === 'auth') {
+    if (args.authCommand === 'ban-list') {
+      console.log(formatAuthBlocks(await listAuthBlocks()));
+      return;
+    }
+
+    if (args.authCommand === 'unblock') {
+      const cleared = await clearAuthBlockByIp(args.ip!);
+      console.log(cleared ? `Unblocked IP: ${args.ip}` : `No block found for IP: ${args.ip}`);
+      return;
+    }
   }
 
   if (args.command === 'open') {

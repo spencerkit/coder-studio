@@ -20,6 +20,7 @@ import {
   registerAuthStatusRoute,
 } from './auth/index.js';
 import { registerFileAssetRoutes } from './routes/file-asset.js';
+import type { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
 import type { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
 import type { Database } from './storage/database.js';
 
@@ -30,6 +31,7 @@ interface AppDeps {
   workspaceMgr: WorkspaceManager;
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
+  authLoginBlockRepo: AuthLoginBlockRepo;
   logger?: any;
 }
 
@@ -38,7 +40,7 @@ interface AppDeps {
  */
 export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: deps.logger || {
+    logger: deps.logger ?? {
       level: 'info',
       transport: {
         target: 'pino-pretty',
@@ -75,6 +77,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   app.addHook('onRequest', createAuthGuard({
     config: deps.config,
     authSessionRepo: deps.authSessionRepo,
+    authLoginBlockRepo: deps.authLoginBlockRepo,
   }));
 
   await app.register(compress);
@@ -91,14 +94,17 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/auth/status', registerAuthStatusRoute({
     config: deps.config,
     authSessionRepo: deps.authSessionRepo,
+    authLoginBlockRepo: deps.authLoginBlockRepo,
   }));
   app.post('/auth/login', registerAuthRoutes({
     config: deps.config,
     authSessionRepo: deps.authSessionRepo,
+    authLoginBlockRepo: deps.authLoginBlockRepo,
   }));
   app.post('/auth/logout', registerAuthLogoutRoute({
     config: deps.config,
     authSessionRepo: deps.authSessionRepo,
+    authLoginBlockRepo: deps.authLoginBlockRepo,
   }));
 
   // Health check endpoint

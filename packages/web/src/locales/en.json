@@ -450,6 +450,8 @@
   "auth": {
     "description": "Enter your password to continue to the current workspace.",
     "hint": "Enter the access password configured for this deployment.",
+    "blocked_until": "Too many attempts. Try again after {time}, or ask an administrator to unblock access.",
+    "blocked_generic": "Too many attempts. Try again later, or ask an administrator to unblock access.",
     "status_title": "Access verification",
     "status_loading": "Checking the access state for this deployment.",
     "status_unavailable": "The authentication service is temporarily unavailable. Please try again shortly.",

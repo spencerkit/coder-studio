@@ -1,4 +1,5 @@
-type CliCommand = 'serve' | 'open' | 'config' | 'stop' | 'status' | 'logs' | 'help' | 'version';
+type CliCommand = 'serve' | 'open' | 'config' | 'stop' | 'status' | 'logs' | 'help' | 'version' | 'auth';
+type AuthCommand = 'ban-list' | 'unblock';
 
 export const RUNTIME_CONFIG_ERROR =
   'Host, port, data-dir, password, and auth settings must be configured via the config command';
@@ -7,12 +8,14 @@ export interface CliArgs {
   foreground?: boolean;
   restart?: boolean;
   command?: CliCommand;
+  authCommand?: AuthCommand;
   configHelp?: boolean;
   port?: number;
   host?: string;
   dataDir?: string;
   password?: string;
   noAuth?: boolean;
+  ip?: string;
 }
 
 function getActiveCommand(args: CliArgs): CliCommand {
@@ -28,9 +31,18 @@ function clearConfigArgs(args: CliArgs): void {
   delete args.noAuth;
 }
 
+function clearAuthArgs(args: CliArgs): void {
+  delete args.authCommand;
+  delete args.ip;
+}
+
 function setCommand(args: CliArgs, command: CliCommand): void {
   if (command !== 'config') {
     clearConfigArgs(args);
+  }
+
+  if (command !== 'auth') {
+    clearAuthArgs(args);
   }
 
   if (command !== 'serve') {
@@ -90,6 +102,7 @@ export function parseArgs(argv: string[]): CliArgs {
       case 'status':
       case 'logs':
       case 'version':
+      case 'auth':
         setCommand(args, arg);
         break;
 
@@ -173,6 +186,24 @@ export function parseArgs(argv: string[]): CliArgs {
 
         throwUnknownOption(arg);
 
+      case 'ban-list':
+      case 'unblock':
+        if (getActiveCommand(args) !== 'auth') {
+          throwUnknownArgument(arg);
+        }
+
+        args.authCommand = arg;
+        break;
+
+      case '--ip':
+        if (getActiveCommand(args) !== 'auth' || args.authCommand !== 'unblock') {
+          throwUnknownOption(arg);
+        }
+
+        args.ip = readOptionValue(argv, i + 1, 'ip');
+        i += 1;
+        break;
+
       default:
         if (arg.startsWith('-')) {
           throwUnknownOption(arg);
@@ -184,6 +215,16 @@ export function parseArgs(argv: string[]): CliArgs {
 
   if (args.command === undefined) {
     args.command = 'serve';
+  }
+
+  if (args.command === 'auth') {
+    if (args.authCommand === undefined) {
+      throw new Error('Missing auth subcommand');
+    }
+
+    if (args.authCommand === 'unblock' && args.ip === undefined) {
+      throw new Error('Missing ip value');
+    }
   }
 
   return args;
