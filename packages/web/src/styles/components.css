@@ -2293,8 +2293,15 @@ body.is-resizing-panels * {
   align-items: center;
   justify-content: center;
   color: var(--text-sec);
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
-  transition: background 0.06s;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .topbar-btn:hover {
@@ -6975,12 +6982,25 @@ textarea.input {
 }
 
 /* ========== Topbar Terminal Toggle ========== */
+.topbar-btn--active {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-surface) 78%, var(--blue) 22%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.topbar-btn--active:hover {
+  background: color-mix(in srgb, var(--bg-surface) 70%, var(--blue) 30%);
+}
+
 .topbar-btn--muted {
-  opacity: 0.5;
+  opacity: 0.72;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent 12%);
 }
 
 .topbar-btn--muted:hover {
   opacity: 1;
+  color: var(--text-secondary);
 }
 
 

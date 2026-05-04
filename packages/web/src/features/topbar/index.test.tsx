@@ -5,6 +5,7 @@ import type { Workspace } from '@coder-studio/core';
 import { localeAtom } from '../../atoms/app-ui';
 import { TopBar } from './index';
 import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
+import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from '../workspace/atoms';
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -96,5 +97,39 @@ describe('TopBar', () => {
     expect(screen.getByText('No workspace open')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Quick Actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('marks terminal and files toggles with explicit active and muted states', () => {
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(terminalPanelVisibleAtom, false);
+    store.set(sidebarCollapsedAtom, false);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const terminalButton = screen.getByRole('button', { name: 'Show Terminal' });
+    const filesButton = screen.getByRole('button', { name: 'Hide Files' });
+
+    expect(terminalButton).toHaveClass('topbar-btn--muted');
+    expect(terminalButton).not.toHaveClass('topbar-btn--active');
+    expect(filesButton).toHaveClass('topbar-btn--active');
+    expect(filesButton).not.toHaveClass('topbar-btn--muted');
+
+    store.set(terminalPanelVisibleAtom, true);
+    store.set(sidebarCollapsedAtom, true);
+
+    rerender(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    expect(screen.getByRole('button', { name: 'Hide Terminal' })).toHaveClass('topbar-btn--active');
+    expect(screen.getByRole('button', { name: 'Show Files' })).toHaveClass('topbar-btn--muted');
   });
 });

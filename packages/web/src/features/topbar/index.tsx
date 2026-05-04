@@ -73,7 +73,7 @@ export const TopBar: FC = () => {
           <span className="topbar-btn-label">{t('tooltip.quick_actions')}</span>
         </button>
         <button
-          className={`topbar-btn ${terminalPanelVisible ? '' : 'topbar-btn--muted'}`}
+          className={`topbar-btn ${terminalPanelVisible ? 'topbar-btn--active' : 'topbar-btn--muted'}`}
           onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
           aria-label={terminalPanelVisible ? t('tooltip.hide_terminal') : t('tooltip.show_terminal')}
           title={terminalPanelVisible ? t('tooltip.hide_terminal') : t('tooltip.show_terminal')}
@@ -81,7 +81,7 @@ export const TopBar: FC = () => {
           <PanelBottom size={14} />
         </button>
         <button
-          className={`topbar-btn ${sidebarCollapsed ? 'topbar-btn--muted' : ''}`}
+          className={`topbar-btn ${sidebarCollapsed ? 'topbar-btn--muted' : 'topbar-btn--active'}`}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           aria-label={sidebarCollapsed ? t('tooltip.show_files') : t('tooltip.hide_files')}
           title={sidebarCollapsed ? t('tooltip.show_files') : t('tooltip.hide_files')}
