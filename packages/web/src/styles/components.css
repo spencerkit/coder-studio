@@ -4423,7 +4423,8 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  flex-wrap: wrap;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .session-title {
@@ -4432,6 +4433,11 @@ textarea.input {
   font-weight: var(--font-medium);
   letter-spacing: 0.06em;
   color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
 }
 
 .session-meta {
@@ -6002,6 +6008,8 @@ textarea.input {
   font-size: 10px;
   letter-spacing: 0;
   text-transform: none;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .session-header-actions {
@@ -7710,7 +7718,7 @@ textarea.input {
     align-items: center;
     gap: var(--sp-2);
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .mobile-shell__agent-stage .session-title {

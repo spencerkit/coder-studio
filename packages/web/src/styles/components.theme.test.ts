@@ -206,4 +206,19 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
   });
+
+  it("keeps session header badges on a single line by truncating the title first", () => {
+    const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
+    const title = getLastRuleBlock(".mobile-shell__agent-stage .session-title");
+    const badges = getLastGroupedRuleBlock(
+      /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
+    );
+
+    expect(titleRow).toContain("flex-wrap: nowrap");
+    expect(title).toContain("overflow: hidden");
+    expect(title).toContain("text-overflow: ellipsis");
+    expect(title).toContain("white-space: nowrap");
+    expect(badges).toContain("flex-shrink: 0");
+    expect(badges).toContain("max-width: 100%");
+  });
 });
