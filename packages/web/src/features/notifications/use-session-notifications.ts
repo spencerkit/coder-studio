@@ -56,6 +56,8 @@ import {
   formatDuration,
   formatProviderLabel,
   formatWorkspaceLabel,
+  sanitizeInlineText,
+  stripAnsi,
   summarizeOutput,
 } from './format';
 import { focusSession } from './focus-session';
@@ -362,9 +364,9 @@ export function useSessionNotifications(): void {
       // started before the page was opened).
       const workspace = store.get(workspacesAtom)[session.workspaceId];
       const metaParts: string[] = [];
-      const providerLabel = formatProviderLabel(session.providerId);
+      const providerLabel = sanitizeInlineText(formatProviderLabel(session.providerId));
       if (providerLabel) metaParts.push(providerLabel);
-      const workspaceLabel = formatWorkspaceLabel(workspace ?? null);
+      const workspaceLabel = sanitizeInlineText(formatWorkspaceLabel(workspace ?? null));
       if (workspaceLabel) metaParts.push(workspaceLabel);
       const durationMs = next.activeSince !== null ? Date.now() - next.activeSince : null;
       const durationLabel = durationMs !== null ? formatDuration(durationMs) : '';
@@ -372,7 +374,7 @@ export function useSessionNotifications(): void {
       const metaLine = metaParts.join(' · ');
 
       const tailText = store.get(sessionOutputTailAtom)[session.id] ?? '';
-      const summary = summarizeOutput(tailText);
+      const summary = summarizeOutput(stripAnsi(tailText));
 
       const fallbackHint = curr === 'ended'
         ? t('notification.session_ended_hint')

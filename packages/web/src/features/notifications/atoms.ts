@@ -57,8 +57,9 @@ export const dismissToastAtom = atom(null, (get, set, id: string) => {
  *
  * The notification engine pulls a short text summary from the agent's
  * most recent stdout when firing "turn complete". We keep at most
- * SESSION_OUTPUT_TAIL_BYTES of UTF-8 text per session, already stripped
- * of ANSI escapes and control characters, in this single atom.
+ * SESSION_OUTPUT_TAIL_BYTES of decoded, incrementally sanitized UTF-8 text
+ * per session in this single atom. PTY output is cleaned before it lands
+ * here so tail trimming can never cut through a live ANSI escape sequence.
  *
  * Written by: WS event router in `app/providers.tsx` on every
  *             `workspace.{ws}.terminal.{tid}.output` event whose

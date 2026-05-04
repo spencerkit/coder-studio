@@ -564,10 +564,11 @@ describe('useSessionNotifications', () => {
     seedWorkspace(store, 'ws-1', { name: 'demo-app' });
     seedRunningSession(store, 'sess-1', 'ws-1');
 
-    // Pre-seed the output tail buffer with multi-line content including ANSI
-    // residue (we don't strip here — the router does that before write).
+    // Pre-seed the output tail buffer with raw terminal content; the
+    // notification layer strips ANSI/control bytes when it assembles the
+    // summary so split escape sequences cannot leak through.
     store.set(sessionOutputTailAtom, {
-      'sess-1': 'analysing files...\n\nAll 12 tests passed.\n',
+      'sess-1': 'analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0m\n',
     });
 
     mountAndCompleteTurn(store, () => {
@@ -582,6 +583,34 @@ describe('useSessionNotifications', () => {
     const body = store.get(toastsAtom)[0]?.body ?? '';
     const lines = body.split('\n');
     expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe('> All 12 tests passed.');
+  });
+
+  it('strips ANSI sequences that arrive split across terminal chunks before building the summary', async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, 'disconnected');
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, 'ws-other');
+    store.set(activeWorkspaceIdAtom, 'ws-other');
+    seedWorkspace(store, 'ws-1', { name: 'demo-app' });
+    seedRunningSession(store, 'sess-1', 'ws-1');
+
+    store.set(sessionOutputTailAtom, {
+      'sess-1': 'analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0',
+    });
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+
+    const body = store.get(toastsAtom)[0]?.body ?? '';
+    const lines = body.split('\n');
     expect(lines[1]).toBe('> All 12 tests passed.');
   });
 

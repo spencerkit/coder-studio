@@ -5,13 +5,131 @@
  * the notification engine + (eventually) any other "session summary" UI.
  */
 
+const ESC = 0x1b;
+const BEL = 0x07;
+
+function isRemovableControl(code: number): boolean {
+  return (code >= 0x00 && code <= 0x08)
+    || code === 0x0b
+    || code === 0x0c
+    || (code >= 0x0d && code <= 0x1f)
+    || code === 0x7f;
+}
+
+function findCsiEnd(text: string, start: number): number | null {
+  for (let index = start + 2; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code >= 0x40 && code <= 0x7e) {
+      return index + 1;
+    }
+  }
+  return null;
+}
+
+function findOscEnd(text: string, start: number): number | null {
+  for (let index = start + 2; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code === BEL) {
+      return index + 1;
+    }
+    if (code === ESC) {
+      if (index + 1 >= text.length) {
+        return null;
+      }
+      if (text.charAt(index + 1) === '\\') {
+        return index + 2;
+      }
+    }
+  }
+  return null;
+}
+
+function findStEnd(text: string, start: number): number | null {
+  for (let index = start + 2; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code === ESC) {
+      if (index + 1 >= text.length) {
+        return null;
+      }
+      if (text.charAt(index + 1) === '\\') {
+        return index + 2;
+      }
+    }
+  }
+  return null;
+}
+
+export interface StripAnsiChunkResult {
+  cleaned: string;
+  carry: string;
+}
+
+/**
+ * Incrementally strip ANSI/control sequences from a terminal text stream.
+ *
+ * `carry` stores any incomplete escape sequence from the previous chunk so
+ * callers can safely sanitize websocket/PTTY frames without leaking split
+ * ANSI fragments into user-visible text.
+ */
+export function stripAnsiChunk(input: string, carry = ''): StripAnsiChunkResult {
+  if (!input && !carry) {
+    return { cleaned: '', carry: '' };
+  }
+
+  const text = carry + input;
+  let cleaned = '';
+
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+
+    if (code === ESC) {
+      if (index + 1 >= text.length) {
+        return { cleaned, carry: text.slice(index) };
+      }
+
+      const next = text.charAt(index + 1);
+      let end: number | null = null;
+
+      if (next === '[') {
+        end = findCsiEnd(text, index);
+      } else if (next === ']') {
+        end = findOscEnd(text, index);
+      } else if (next === 'P' || next === 'X' || next === '^' || next === '_') {
+        end = findStEnd(text, index);
+      } else if (next === 'O' || next === 'N') {
+        end = index + 3 <= text.length ? index + 3 : null;
+      } else {
+        const nextCode = text.charCodeAt(index + 1);
+        if ((nextCode >= 0x40 && nextCode <= 0x5f) || (nextCode >= 0x60 && nextCode <= 0x7e)) {
+          end = index + 2;
+        }
+      }
+
+      if (end === null) {
+        return { cleaned, carry: text.slice(index) };
+      }
+
+      index = end - 1;
+      continue;
+    }
+
+    if (isRemovableControl(code)) {
+      continue;
+    }
+
+    cleaned += text.charAt(index);
+  }
+
+  return { cleaned, carry: '' };
+}
+
 /**
  * Strip ANSI escape sequences and most other control bytes from PTY output
  * so the result is something we can safely show in a notification.
  *
  * Covers:
- *   - CSI / OSC / SS3 / SOS / PM / APC / DCS sequences (ESC [ … final byte etc.)
- *   - ESC [@\] etc. introducers
+ *   - CSI / OSC / SS2 / SS3 / SOS / PM / APC / DCS sequences
+ *   - ESC [@\] etc. single-character introducers
  *   - Bell, backspace, vertical tab, form feed, carriage return (kept newlines)
  *   - DEL (0x7f)
  *
@@ -19,18 +137,15 @@
  * survive enough to read.
  */
 export function stripAnsi(input: string): string {
-  if (!input) return '';
-  // ESC sequences. The outer alternation handles all the SGR-style
-  // CSI/OSC/etc. Sequences may end with various final bytes.
-  // eslint-disable-next-line no-control-regex
-  const ansiPattern = /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-_])/g;
-  // Other C0 controls except \t (0x09) and \n (0x0a). 0x0d (\r) is dropped
-  // because PTY uses CRLF and we don't want stray carriage returns.
-  // eslint-disable-next-line no-control-regex
-  const controlPattern = /[\x00-\x08\x0B-\x1F\x7F]/g;
-  return input
-    .replace(ansiPattern, '')
-    .replace(controlPattern, '');
+  return stripAnsiChunk(input).cleaned;
+}
+
+/**
+ * Sanitize text that should render on a single metadata/title line.
+ * Drops ANSI/control bytes, collapses whitespace, trims the result.
+ */
+export function sanitizeInlineText(input: string): string {
+  return stripAnsi(input).replace(/\s+/g, ' ').trim();
 }
 
 /**

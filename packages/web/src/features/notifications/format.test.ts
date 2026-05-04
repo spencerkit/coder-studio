@@ -3,7 +3,9 @@ import {
   formatDuration,
   formatProviderLabel,
   formatWorkspaceLabel,
+  sanitizeInlineText,
   stripAnsi,
+  stripAnsiChunk,
   summarizeOutput,
 } from './format';
 
@@ -24,8 +26,34 @@ describe('stripAnsi', () => {
     expect(stripAnsi('a\x07b\x08c\rd\n\te')).toBe('abcd\n\te');
   });
 
+  it('drops dangling incomplete escape sequences at the end of the buffer', () => {
+    expect(stripAnsi('hello\x1b[31')).toBe('hello');
+    expect(stripAnsi('hello\x1b]0;title')).toBe('hello');
+  });
+
+  it('removes ST-terminated control string payloads', () => {
+    expect(stripAnsi('\x1bP1;2|hidden\x1b\\shown')).toBe('shown');
+    expect(stripAnsi('\x1b_secret\x1b\\shown')).toBe('shown');
+  });
+
   it('returns empty string for empty input', () => {
     expect(stripAnsi('')).toBe('');
+  });
+});
+
+describe('stripAnsiChunk', () => {
+  it('carries incomplete ANSI sequences across chunk boundaries', () => {
+    const first = stripAnsiChunk('\x1b[32');
+    expect(first).toEqual({ cleaned: '', carry: '\x1b[32' });
+
+    const second = stripAnsiChunk('mhello\x1b[0m\n', first.carry);
+    expect(second).toEqual({ cleaned: 'hello\n', carry: '' });
+  });
+});
+
+describe('sanitizeInlineText', () => {
+  it('strips ANSI/control bytes and collapses whitespace for inline labels', () => {
+    expect(sanitizeInlineText(' \x1b[32mDemo\t\tApp\x1b[0m \n')).toBe('Demo App');
   });
 });
 

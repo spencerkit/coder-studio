@@ -39,7 +39,7 @@ import {
   appendSessionOutputAtom,
   clearSessionOutputAtom,
 } from '../features/notifications';
-import { stripAnsi } from '../features/notifications/format';
+import { stripAnsiChunk } from '../features/notifications/format';
 import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
 import type { GitBranch, Supervisor, SupervisorCycle } from '@coder-studio/core';
 import type { Workspace, Session, GitStatus } from '@coder-studio/core';
@@ -50,6 +50,8 @@ import type { Workspace, Session, GitStatus } from '@coder-studio/core';
  */
 let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
+const sessionOutputDecoders = new Map<string, TextDecoder>();
+const sessionOutputAnsiCarry = new Map<string, string>();
 
 interface WorkspaceRefreshHint {
   refreshGit: boolean;
@@ -75,6 +77,8 @@ export function resetAppProvidersSingletonsForTests() {
     pendingDisconnectTimer = null;
   }
   globalWsClient = null;
+  sessionOutputDecoders.clear();
+  sessionOutputAnsiCarry.clear();
 }
 
 function mergeRefreshHints(
@@ -135,9 +139,31 @@ function parseWorkspaceRefreshHint(topic: string, payload: unknown): {
  * Decoding once-per-event is cheap, but keeping the TextDecoder around saves
  * allocations at high stream rates.
  */
-const sessionOutputDecoder = new TextDecoder('utf-8', { fatal: false });
-function decodeTerminalOutputBytes(chunk: Uint8Array): string {
-  return sessionOutputDecoder.decode(chunk);
+function clearTerminalOutputStreamState(terminalId: string): void {
+  sessionOutputDecoders.delete(terminalId);
+  sessionOutputAnsiCarry.delete(terminalId);
+}
+
+function decodeTerminalOutputBytes(terminalId: string, chunk: Uint8Array): string {
+  let decoder = sessionOutputDecoders.get(terminalId);
+  if (!decoder) {
+    decoder = new TextDecoder('utf-8', { fatal: false });
+    sessionOutputDecoders.set(terminalId, decoder);
+  }
+
+  const decoded = decoder.decode(chunk, { stream: true });
+  if (!decoded) {
+    return '';
+  }
+
+  const { cleaned, carry } = stripAnsiChunk(decoded, sessionOutputAnsiCarry.get(terminalId) ?? '');
+  if (carry) {
+    sessionOutputAnsiCarry.set(terminalId, carry);
+  } else {
+    sessionOutputAnsiCarry.delete(terminalId);
+  }
+
+  return cleaned;
 }
 
 interface AppProvidersProps {
@@ -567,6 +593,7 @@ export function routeEventToAtom(
         if (data.event === 'removed') {
           const removedSession = store.get(sessionsAtom)[sessionId];
           if (removedSession?.terminalId) {
+            clearTerminalOutputStreamState(removedSession.terminalId);
             store.set(terminalMetaAtomFamily(removedSession.terminalId), null);
           }
           store.set(clearSessionOutputAtom, sessionId);
@@ -661,6 +688,7 @@ export function routeEventToAtom(
       // workspace.{id}.terminal.{terminalId}.created
       if (terminalSubtopic === 'created') {
         const data = payload as { id: string; kind: string; title?: string; cwd?: string };
+        clearTerminalOutputStreamState(terminalId);
         const atom = terminalMetaAtomFamily(terminalId);
         store.set(atom, {
           id: data.id,
@@ -685,8 +713,10 @@ export function routeEventToAtom(
         const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
         if (!session) return;
 
-        const decoded = decodeTerminalOutputBytes(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
-        const cleaned = stripAnsi(decoded);
+        const cleaned = decodeTerminalOutputBytes(
+          terminalId,
+          new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        );
         if (cleaned) {
           store.set(appendSessionOutputAtom, {
             sessionId: session.id,
@@ -712,6 +742,7 @@ export function routeEventToAtom(
         // to (if any). Avoids unbounded growth across long-lived browser tabs.
         const sessions = store.get(sessionsAtom);
         const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
+        clearTerminalOutputStreamState(terminalId);
         if (session) {
           store.set(clearSessionOutputAtom, session.id);
         }
