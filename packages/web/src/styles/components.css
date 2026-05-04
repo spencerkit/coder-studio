@@ -508,13 +508,6 @@
   max-width: 720px;
 }
 
-.settings-section-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin-bottom: var(--sp-6);
-  color: var(--text-primary);
-}
-
 .settings-group {
   margin-bottom: var(--sp-8);
 }

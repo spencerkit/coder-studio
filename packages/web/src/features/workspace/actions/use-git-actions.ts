@@ -271,7 +271,7 @@ export function useGitPanelActions({
       updatePreview(preview);
       return preview;
     },
-    [dispatch, updatePreview, workspaceId]
+    [dispatch, setDiffPreviewDismissed, updatePreview, workspaceId]
   );
 
   const openDiff = useCallback(
@@ -302,10 +302,12 @@ export function useGitPanelActions({
     if (!result.ok || !result.data) {
       setBranchList((prev) => ({
         ...prev,
+  const diffPreviewDismissed = useAtomValue(gitDiffPreviewDismissedAtomFamily(workspaceId));
         loading: false,
         error: result.error?.message ?? 'Failed to load branches',
       }));
       console.error('Failed to load git branches:', result.error?.message);
+  const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
       return;
     }
 
@@ -356,6 +358,7 @@ export function useGitPanelActions({
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
+      setDiffPreviewDismissed(false);
 
       if (pendingReloadRef.current) {
         pendingReloadRef.current = false;
@@ -364,7 +367,7 @@ export function useGitPanelActions({
         });
       }
     }
-  }, [diffPreview, dispatch, requestDiff, setGitState, updatePreview, workspaceId]);
+  }, [diffPreview, diffPreviewDismissed, dispatch, requestDiff, setGitState, updatePreview, workspaceId]);
 
   useEffect(() => {
     if (!gitState && !isLoadingRef.current) {
@@ -395,7 +398,7 @@ export function useGitPanelActions({
     }
 
     void requestDiff(firstChange.change, firstChange.type);
-  }, [gitState, diffPreview, requestDiff, updatePreview]);
+  }, [diffPreview, diffPreviewDismissed, gitState, requestDiff, updatePreview]);
 
   useEffect(() => {
     if (refreshToken > 0 && !isLoadingRef.current) {
@@ -425,6 +428,11 @@ export function useGitPanelActions({
 
   const handleStageAll = useCallback(async () => {
     const paths = [
+      if (diffPreviewDismissed) {
+        updatePreview(null);
+        return;
+      }
+
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
       ...(gitState?.untracked.map((file) => file.path) ?? []),
@@ -477,6 +485,10 @@ export function useGitPanelActions({
   const handleConfirmDiscard = useCallback(async () => {
     if (!pendingDiscard) {
       return;
+    if (diffPreviewDismissed) {
+      return;
+    }
+
     }
 
     const nextDiscard = pendingDiscard;
@@ -558,7 +570,10 @@ export function useGitDiffViewerActions(workspaceId: string) {
   const setPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
 
   return {
-    closePreview: () => setPreview(null),
+    closePreview: () => {
+      setPreviewDismissed(true);
+      setPreview(null);
+    },
     preview,
   };
 }
@@ -655,6 +670,7 @@ export function useBranchQuickPickActions() {
   const trimmedInput = inputValue.trim();
 
   const filteredBranches = useMemo(
+  const setPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
     () =>
       branchList.branches.filter((branch) =>
         branch.name.toLowerCase().includes(inputValue.toLowerCase())

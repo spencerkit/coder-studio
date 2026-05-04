@@ -79,6 +79,7 @@ export function WorkspaceMobileView() {
                 workspaceId={activeWorkspaceId}
                 route={mobileFilesRoute}
                 onRouteChange={updateMobileFilesRoute}
+                onCloseSheet={closeMobileSheet}
                 detailBackMode="sheet"
                 editorState={mobileEditorState}
               />

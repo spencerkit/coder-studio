@@ -6,6 +6,7 @@ import { useGitDiffViewerActions } from '../../actions/use-git-actions';
 
 interface GitDiffViewerProps {
   workspaceId: string;
+  onClose?: () => void;
 }
 
 type DiffLineTone = 'meta' | 'added' | 'removed' | 'context';
@@ -39,9 +40,10 @@ function getDiffLineTone(line: string): DiffLineTone {
   return 'context';
 }
 
-export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId }) => {
+export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId, onClose }) => {
   const t = useTranslation();
   const { preview, closePreview } = useGitDiffViewerActions(workspaceId);
+  const handleClose = onClose ?? closePreview;
 
   const diffLines = useMemo<DisplayLine[]>(
     () =>
@@ -68,7 +70,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({ workspaceId }) => {
               <button
                 type="button"
                 className="code-mode-btn"
-                onClick={closePreview}
+                onClick={handleClose}
                 title={t('action.close')}
                 aria-label={t('action.close')}
               >

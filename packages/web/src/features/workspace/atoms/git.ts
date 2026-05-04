@@ -46,6 +46,10 @@ export const gitDiffPreviewAtomFamily = atomFamily((workspaceId: string) =>
   atom<GitDiffPreview | null>(null)
 );
 
+export const gitDiffPreviewDismissedAtomFamily = atomFamily((workspaceId: string) =>
+  atom(false)
+);
+
 /**
  * Has changes (derived)
  */

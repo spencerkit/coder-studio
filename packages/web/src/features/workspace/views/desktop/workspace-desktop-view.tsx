@@ -1,10 +1,13 @@
 import type { FC } from 'react';
+import { useSetAtom } from 'jotai';
 import { FilePlus, FolderPlus, GitBranch, RefreshCw } from 'lucide-react';
 import { useTranslation } from '../../../../lib/i18n';
 import { AgentPanes } from '../../../agent-panes';
 import { CodeEditorHost } from '../../../code-editor/views/shared/code-editor-host';
 import { TerminalPanel } from '../../../terminal-panel';
 import { TopBar } from '../../../topbar';
+import { activeFilePathAtomFamily } from '../../atoms';
+import { useGitDiffViewerActions } from '../../actions/use-git-actions';
 import { useWorkspaceScreenModel } from '../../actions/use-workspace-screen-model';
 import { FileTreePanel } from '../shared/file-tree-panel';
 import { GitDiffViewer } from '../shared/git-diff-viewer';
@@ -33,7 +36,10 @@ export const WorkspaceDesktopView: FC = () => {
     terminalPanelVisible,
     workspace,
     bottomPanelHeight,
+    workspaceId,
   } = useWorkspaceScreenModel();
+  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const { closePreview } = useGitDiffViewerActions(workspaceId);
 
   if (!workspace) {
     return (
@@ -50,6 +56,10 @@ export const WorkspaceDesktopView: FC = () => {
   const panelKicker = sidebarTab === 'files' ? t('label.file') : t('label.git');
   const panelBranch = gitState?.branch ?? '—';
   const activeTabLabel = sidebarTab === 'files' ? 'file tree' : 'git';
+  const handleCloseDiff = () => {
+    closePreview();
+    setActiveFilePath(null);
+  };
 
   return (
     <div className="workspace-page">
@@ -146,7 +156,7 @@ export const WorkspaceDesktopView: FC = () => {
 
         <div className="workspace-main-area">
           {mainAreaMode === 'diff' ? (
-            <GitDiffViewer workspaceId={workspace.id} />
+            <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
           ) : mainAreaMode === 'editor' ? (
             <CodeEditorHost />
           ) : (

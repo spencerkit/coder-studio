@@ -7,6 +7,7 @@ import { GitPanel } from './git-panel';
 import { wsClientAtom } from '../../../../atoms/connection';
 import {
   gitBranchListAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
 } from '../../atoms';
@@ -191,6 +192,42 @@ describe('GitPanel', () => {
       staged: true,
     });
     expect(dispatchEventSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-reopen the first diff after the preview is manually dismissed', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === 'git.diff') {
+        return {
+          diff: `diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx\n${JSON.stringify(args)}`,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(gitStateAtomFamily('ws-test'), status);
+    store.set(gitDiffPreviewDismissedAtomFamily('ws-test'), true);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AuthGate.tsx')).toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      'git.diff',
+      expect.objectContaining({
+        workspaceId: 'ws-test',
+      })
+    );
+    expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toBeNull();
   });
 
   it('retries a refresh request after the in-flight git status load finishes', async () => {

@@ -115,8 +115,6 @@ export function ShortcutsSettings() {
 
   return (
     <div className="settings-section">
-      <h2 className="settings-section-title">{t('settings.shortcuts.title')}</h2>
-
       {/* Category Tabs */}
       <div className="shortcuts-category-tabs">
         {(Object.keys(CATEGORY_LABELS) as ShortcutCategory[]).map((category) => (

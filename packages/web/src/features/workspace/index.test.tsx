@@ -7,6 +7,7 @@ import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
+  gitDiffPreviewAtomFamily,
   terminalPanelVisibleAtom,
 } from './atoms';
 import {
@@ -43,7 +44,13 @@ vi.mock('./views/shared/git-panel', () => ({
 }));
 
 vi.mock('./views/shared/git-diff-viewer', () => ({
-  GitDiffViewer: () => <div data-testid="git-diff-viewer" />,
+  GitDiffViewer: ({ onClose }: { onClose?: () => void }) => (
+    <div data-testid="git-diff-viewer">
+      <button type="button" onClick={onClose}>
+        关闭
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../code-editor/views/shared/code-editor-host', () => ({
@@ -318,5 +325,69 @@ describe('WorkspacePage', () => {
 
     expect(screen.getByTestId('agent-panes')).toBeInTheDocument();
     expect(screen.queryByTestId('terminal-panel')).not.toBeInTheDocument();
+  });
+
+  it('returns to the session content when closing the git diff viewer', async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === 'git.status') {
+        return {
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, 'connected');
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      'ws-test': {
+        id: 'ws-test',
+        path: '/home/spencer/workspace/coder-studio',
+        targetRuntime: 'native',
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/workspace']}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Git' }));
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily('ws-test'), {
+        path: 'src/app.tsx',
+        diff: 'diff --git a/src/app.tsx b/src/app.tsx',
+        staged: false,
+      });
+    });
+
+    const closeButton = await screen.findByRole('button', { name: '关闭' });
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-panes')).toBeInTheDocument();
+    });
+    expect(store.get(gitDiffPreviewAtomFamily('ws-test'))).toBeNull();
   });
 });

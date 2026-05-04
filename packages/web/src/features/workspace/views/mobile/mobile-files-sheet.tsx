@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, GitBranch } from 'lucide-react';
 import { useSetAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
+import { useGitDiffViewerActions } from '../../actions/use-git-actions';
 import { branchQuickPickAtom, gitStateAtomFamily } from '../../atoms';
 import type { MobileFilesRoute } from '../../actions/use-workspace-screen-model';
 import { FileTreePanel } from '../shared/file-tree-panel';
@@ -18,6 +19,7 @@ interface MobileFilesSheetProps {
   workspaceId: string;
   route: MobileFilesRoute;
   onRouteChange?: (route: MobileFilesRoute) => void;
+  onCloseSheet?: () => void;
   detailBackMode?: 'sheet' | 'inline';
   editorState?: CodeEditorState;
 }
@@ -26,6 +28,7 @@ export function MobileFilesSheet({
   workspaceId,
   route,
   onRouteChange,
+  onCloseSheet,
   detailBackMode = 'inline',
   editorState,
 }: MobileFilesSheetProps) {
@@ -33,6 +36,7 @@ export function MobileFilesSheet({
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
   const [activeTab, setActiveTab] = useState<'files' | 'git'>('files');
+  const { closePreview } = useGitDiffViewerActions(workspaceId);
   const branchName = gitState?.branch?.trim() || t('git.no_branch');
 
   const handleSelectFile = (path: string) => {
@@ -45,6 +49,11 @@ export function MobileFilesSheet({
 
   const handleBack = () => {
     onRouteChange?.({ kind: 'root' });
+  };
+
+  const handleCloseDiff = () => {
+    closePreview();
+    onCloseSheet?.();
   };
 
   const handleOpenBranchSwitcher = () => {
@@ -93,7 +102,7 @@ export function MobileFilesSheet({
           </div>
         ) : null}
         <div className="mobile-files-sheet__detail">
-          <GitDiffViewer workspaceId={workspaceId} />
+          <GitDiffViewer workspaceId={workspaceId} onClose={handleCloseDiff} />
         </div>
       </div>
     );

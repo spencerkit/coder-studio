@@ -329,6 +329,20 @@ describe('SettingsPage', () => {
     expect(screen.queryByText('通知')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: '通用' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('通用')).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText('通用')).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: '通用' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+
+    expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('启动命令参数')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
 
     await waitFor(() => {

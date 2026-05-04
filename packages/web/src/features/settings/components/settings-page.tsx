@@ -384,8 +384,6 @@ function GeneralSettings({
 
   return (
     <div className="settings-section">
-      <h2 className="settings-section-title">{t('settings.general')}</h2>
-
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.notifications')}</h3>
         <p className="settings-group-desc">{t('settings.notifications_channel_hint')}</p>
@@ -493,8 +491,6 @@ function AppearanceSettings({
 
   return (
     <div className="settings-section">
-      <h2 className="settings-section-title">{t('settings.appearance')}</h2>
-
       <div className="settings-group">
         <h3 className="settings-group-title">{t('settings.theme.title')}</h3>
         <p className="settings-group-desc">{t('settings.theme.hint')}</p>
@@ -632,8 +628,6 @@ function ProviderSettings({
 
   return (
     <div className="settings-section">
-      <h2 className="settings-section-title">{t('settings.providers')}</h2>
-
       <div className="settings-provider-tabs">
         {providers.map((p) => (
           <button
