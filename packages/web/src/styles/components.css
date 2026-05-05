@@ -1348,8 +1348,7 @@
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   background: transparent;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: none;
 }
 
 .xterm-host .xterm-screen {
@@ -1360,43 +1359,54 @@
  * to the shared scrollbar tokens instead of letting their library defaults
  * drift away from the rest of the app. */
 .xterm-host .xterm-viewport::-webkit-scrollbar {
-  width: var(--scrollbar-width);
-  height: var(--scrollbar-width);
+  width: 0;
+  height: 0;
 }
 
-.xterm-host .xterm-viewport::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-.xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: var(--radius-full);
-}
-
-.xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--border-focus);
-}
-
-.xterm-host .xterm .xterm-scrollable-element > .scrollbar.vertical {
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar.vertical,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.vertical {
   width: var(--scrollbar-width) !important;
 }
 
-.xterm-host .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar.horizontal,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.horizontal {
   height: var(--scrollbar-width) !important;
 }
 
-.xterm-host .xterm .xterm-scrollable-element > .scrollbar {
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: var(--scrollbar-width) !important;
+  left: 0 !important;
+}
+
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar.horizontal > .slider {
+  height: var(--scrollbar-width) !important;
+  top: 0 !important;
+}
+
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar {
   background: var(--scrollbar-track) !important;
 }
 
-.xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider {
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider {
   background: var(--scrollbar-thumb) !important;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-full) !important;
 }
 
 .xterm-host .xterm .xterm-scrollable-element > .scrollbar:hover > .slider,
 .xterm-host .xterm .xterm-scrollable-element > .scrollbar.active > .slider,
-.xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+.xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.active > .slider,
+.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.active > .slider,
+.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
   background: var(--border-focus) !important;
 }
 
@@ -5265,36 +5275,6 @@ textarea.input {
 .monaco-host {
   height: 100%;
   width: 100%;
-}
-
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.vertical {
-  width: var(--scrollbar-width) !important;
-}
-
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.horizontal {
-  height: var(--scrollbar-width) !important;
-}
-
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar {
-  background: var(--scrollbar-track) !important;
-}
-
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider {
-  background: var(--scrollbar-thumb) !important;
-  border-radius: var(--radius-full) !important;
-}
-
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar.active > .slider,
-.monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar:hover > .slider,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar.active > .slider,
-.monaco-host .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
-  background: var(--border-focus) !important;
 }
 
 /* Image preview lives inside .code-editor-body, so it gets the same scroll

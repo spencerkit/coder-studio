@@ -94,18 +94,21 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps xterm and monaco scrollbars aligned with shared tokens", () => {
     const xtermViewport = getLastRuleBlock(".xterm-host .xterm-viewport");
-    const xtermThumb = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar-thumb");
-    const xtermThumbHover = getLastRuleBlock(
-      ".xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover"
-    );
+    const xtermWebkitScrollbar = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar");
     const xtermCustomTrack = getLastRuleBlock(
       ".xterm-host .xterm .xterm-scrollable-element > .scrollbar"
+    );
+    const xtermCustomVerticalSlider = getLastRuleBlock(
+      ".xterm-host .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider"
     );
     const xtermCustomSlider = getLastRuleBlock(
       ".xterm-host .xterm .xterm-scrollable-element > .scrollbar > .slider"
     );
     const xtermCustomSliderHover = getLastRuleBlock(
       ".xterm-host .xterm .xterm-scrollable-element > .scrollbar:hover > .slider"
+    );
+    const xtermCustomSliderActive = getLastRuleBlock(
+      ".xterm-host .xterm .xterm-scrollable-element > .scrollbar.active > .slider"
     );
     const monacoTrack = getLastRuleBlock(
       ".monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar"
@@ -117,16 +120,15 @@ describe("components.css theme-sensitive surfaces", () => {
       ".monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar:hover > .slider"
     );
 
-    expect(xtermViewport).toContain(
-      "scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)"
-    );
-    expect(xtermThumb).toContain("var(--scrollbar-thumb)");
-    expect(xtermThumb).toContain("var(--radius-full)");
-    expect(xtermThumbHover).toContain("var(--border-focus)");
+    expect(xtermViewport).toContain("scrollbar-width: none");
+    expect(xtermWebkitScrollbar).toContain("width: 0");
+    expect(xtermWebkitScrollbar).toContain("height: 0");
     expect(xtermCustomTrack).toContain("var(--scrollbar-track)");
+    expect(xtermCustomVerticalSlider).toContain("width: var(--scrollbar-width)");
     expect(xtermCustomSlider).toContain("var(--scrollbar-thumb)");
     expect(xtermCustomSlider).toContain("var(--radius-full)");
     expect(xtermCustomSliderHover).toContain("var(--border-focus)");
+    expect(xtermCustomSliderActive).toContain("var(--border-focus)");
     expect(monacoTrack).toContain("var(--scrollbar-track)");
     expect(monacoSlider).toContain("var(--scrollbar-thumb)");
     expect(monacoSlider).toContain("var(--radius-full)");
@@ -268,7 +270,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const ctrlLocked = getLastRuleBlock(
       '.mobile-terminal-input-bar__ctrl[data-ctrl-mode="locked"]'
     );
-    const shiftArmed = getLastRuleBlock('.mobile-terminal-input-bar__shift[data-shift-armed="true"]');
+    const shiftArmed = getLastRuleBlock(
+      '.mobile-terminal-input-bar__shift[data-shift-armed="true"]'
+    );
 
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");

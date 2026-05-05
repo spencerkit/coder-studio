@@ -859,6 +859,22 @@ describe("XtermHost", () => {
     );
   });
 
+  it("does not enable xterm's overview ruler just to size the scrollbar", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+
+    render(
+      <JotaiProvider>
+        <XtermHost terminalId="test-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        overviewRuler: expect.anything(),
+      })
+    );
+  });
+
   it("forwards utf-8 terminal output bytes to xterm without pre-decoding", async () => {
     const store = createStore();
     const chunk = textEncoder.encode("你好─Codex");
