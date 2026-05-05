@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+interface PerformanceWithMemory extends Performance {
+  memory?: {
+    usedJSHeapSize: number;
+  };
+}
+
 test.describe("@phase4 quality acceptance", () => {
   test("P4-01 light theme tokens defined", async ({ page }) => {
     await page.goto("/");
@@ -77,8 +83,9 @@ test.describe("@phase4 quality acceptance", () => {
     await page.goto("/");
     // Get JS heap size if available
     const metrics = await page.evaluate(() => {
-      if ("memory" in performance) {
-        return (performance as any).memory.usedJSHeapSize;
+      const performanceWithMemory = performance as PerformanceWithMemory;
+      if (performanceWithMemory.memory) {
+        return performanceWithMemory.memory.usedJSHeapSize;
       }
       return null;
     });

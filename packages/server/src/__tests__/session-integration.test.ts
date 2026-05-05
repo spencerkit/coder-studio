@@ -12,11 +12,13 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { DomainEvent, Session } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import { SessionManager } from "../session/manager.js";
+import type { SessionDatabase } from "../session/types.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
@@ -30,6 +32,19 @@ import "../commands/workspace.js";
 import "../commands/session.js";
 import "../commands/terminal.js";
 import "../commands/provider.js";
+
+type MutableSessionManager = SessionManager & {
+  sessions: Map<string, Session & { state: string }>;
+};
+
+type MockSessionDatabase = SessionDatabase & {
+  insert: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+  findById: ReturnType<typeof vi.fn>;
+  findByWorkspaceId: ReturnType<typeof vi.fn>;
+  listHydratable: ReturnType<typeof vi.fn>;
+};
 
 /**
  * Mock PtyHost for testing without spawning real processes
@@ -118,11 +133,7 @@ describe("Session Integration", () => {
   let triggerDataForProcessIndex: (processIndex: number, data: string) => void;
   let broadcastEvents: Array<{ topic: string; payload: unknown }>;
   let spawnCalls: Array<{ argv: string[]; options: unknown }>;
-  let sessionDb: {
-    insert: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-  };
+  let sessionDb: MockSessionDatabase;
   let testDir: string;
 
   beforeEach(() => {
@@ -169,6 +180,9 @@ describe("Session Integration", () => {
     sessionDb = {
       insert: vi.fn(),
       update: vi.fn(),
+      findById: vi.fn(),
+      findByWorkspaceId: vi.fn().mockReturnValue([]),
+      listHydratable: vi.fn().mockReturnValue([]),
       delete: vi.fn(),
     };
 
@@ -176,7 +190,7 @@ describe("Session Integration", () => {
     sessionMgr = new SessionManager({
       terminalMgr,
       eventBus,
-      db: sessionDb as any,
+      db: sessionDb,
       broadcaster: mockBroadcaster,
       providerRegistry,
       providerConfigRepo: new ProviderConfigRepo(db),
@@ -191,8 +205,8 @@ describe("Session Integration", () => {
       eventBus,
       broadcaster: mockBroadcaster,
       providerRegistry,
-      fencingMgr: {} as any,
-      supervisorMgr: {} as any,
+      fencingMgr: {} as CommandContext["fencingMgr"],
+      supervisorMgr: {} as CommandContext["supervisorMgr"],
       providerRuntimeDeps: {
         commandExists: async () => true,
       },
@@ -446,9 +460,12 @@ describe("Session Integration", () => {
     it("should emit state change events when session is created", async () => {
       // Track events via session.state.changed
       const stateChanges: Array<{ from: string; to: string }> = [];
-      eventBus.on("session.state.changed", (event: any) => {
-        stateChanges.push({ from: event.from, to: event.to });
-      });
+      eventBus.on(
+        "session.state.changed",
+        (event: Extract<DomainEvent, { type: "session.state.changed" }>) => {
+          stateChanges.push({ from: event.from, to: event.to });
+        }
+      );
 
       // Open workspace
       const openResult = await dispatch(
@@ -746,7 +763,11 @@ describe("Session Integration", () => {
     });
 
     it("does not move an idle session back to running on typing input", async () => {
-      const internalSession = (sessionMgr as any).sessions.get(sessionId);
+      const internalSession = (sessionMgr as MutableSessionManager).sessions.get(sessionId);
+      expect(internalSession).toBeDefined();
+      if (!internalSession) {
+        throw new Error(`Expected session ${sessionId} to exist`);
+      }
       internalSession.state = "idle";
 
       const result = await dispatch(
@@ -768,7 +789,11 @@ describe("Session Integration", () => {
     });
 
     it("moves an idle session back to running when the user submits input", async () => {
-      const internalSession = (sessionMgr as any).sessions.get(sessionId);
+      const internalSession = (sessionMgr as MutableSessionManager).sessions.get(sessionId);
+      expect(internalSession).toBeDefined();
+      if (!internalSession) {
+        throw new Error(`Expected session ${sessionId} to exist`);
+      }
       internalSession.state = "idle";
 
       const result = await dispatch(
