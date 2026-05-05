@@ -87,6 +87,22 @@ pnpm acceptance:phase1
 pnpm build:cli
 ```
 
+### 代码质量
+
+```bash
+# 检查 lint 诊断
+pnpm lint
+
+# 自动修复安全的 lint 问题
+pnpm lint:fix
+
+# 统一格式化代码
+pnpm format
+
+# 运行聚合检查（格式、lint、imports）
+pnpm check
+```
+
 ## 架构
 
 > **贡献者参考**：以下技术栈信息面向代码贡献者，普通用户无需了解。
