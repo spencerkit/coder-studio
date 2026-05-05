@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../../../atoms/app-ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -10,6 +10,7 @@ import { ConfigDriftBanner } from "../../../config-drift-banner";
 import { MobileSupervisorBadge } from "../../../supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../../supervisor/views/mobile/mobile-supervisor-sheet";
 import { TerminalPanel } from "../../../terminal-panel";
+import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { WorkspaceLaunchModal } from "../shared/workspace-launch-modal";
 import { useMobileLayoutMode } from "./hooks/use-mobile-layout-mode";
@@ -23,6 +24,8 @@ import { MobileTopBar } from "./mobile-topbar";
 import { MobileWorkspaceDrawer } from "./mobile-workspace-drawer";
 
 export function WorkspaceMobileView() {
+  const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
   const navigate = useNavigate();
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
@@ -139,6 +142,7 @@ export function WorkspaceMobileView() {
 
   return (
     <div
+      ref={fullscreenRootRef}
       className={`mobile-shell mobile-shell--${layoutMode} mobile-shell--motion-${motionMode}`}
       data-testid="mobile-shell"
       data-layout-mode={layoutMode}
@@ -147,6 +151,7 @@ export function WorkspaceMobileView() {
       <MobileTopBar
         activeWorkspace={workspace}
         drawerOpen={drawerOpen}
+        fullscreenController={fullscreenController}
         onOpenSettings={() => {
           setAgentSheetOpen(false);
           navigate("/settings");

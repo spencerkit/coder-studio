@@ -1,10 +1,13 @@
 import type { Workspace } from "@coder-studio/core";
 import { Menu, Settings2 } from "lucide-react";
 import { useTranslation } from "../../../../lib/i18n";
+import type { WorkspaceFullscreenController } from "../../actions/use-workspace-fullscreen";
+import { WorkspaceFullscreenButton } from "../../components/workspace-fullscreen-button";
 
 interface MobileTopBarProps {
   activeWorkspace: Workspace | null;
   drawerOpen: boolean;
+  fullscreenController?: WorkspaceFullscreenController;
   onOpenSettings: () => void;
   onToggleDrawer: () => void;
 }
@@ -12,6 +15,7 @@ interface MobileTopBarProps {
 export function MobileTopBar({
   activeWorkspace,
   drawerOpen,
+  fullscreenController,
   onOpenSettings,
   onToggleDrawer,
 }: MobileTopBarProps) {
@@ -53,6 +57,12 @@ export function MobileTopBar({
         >
           <Settings2 size={18} />
         </button>
+        <WorkspaceFullscreenButton
+          controller={fullscreenController}
+          className="mobile-topbar__icon-button"
+          iconSize={18}
+          dataTestId="mobile-fullscreen-toggle"
+        />
       </div>
     </header>
   );

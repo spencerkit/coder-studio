@@ -269,6 +269,65 @@ function installVisualViewport(height: number, offsetTop = 0) {
   return visualViewport;
 }
 
+function installFullscreenApiForMobileShell() {
+  let fullscreenElement: Element | null = null;
+
+  const requestFullscreen = vi.fn().mockImplementation(function (this: HTMLElement) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+
+  const exitFullscreen = vi.fn().mockImplementation(async () => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+  });
+
+  Object.defineProperty(document, "fullscreenEnabled", {
+    configurable: true,
+    value: true,
+  });
+
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+
+  return { requestFullscreen, exitFullscreen };
+}
+
+function removeFullscreenApiForMobileShell() {
+  Object.defineProperty(document, "fullscreenEnabled", {
+    configurable: true,
+    value: false,
+  });
+
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => null,
+  });
+
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: undefined,
+  });
+
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: undefined,
+  });
+}
+
 function installMatchMediaMock(predicate: (query: string) => boolean) {
   const originalMatchMedia = window.matchMedia;
   const listeners = new Map<string, Set<(event: MediaQueryListEvent) => void>>();
@@ -702,6 +761,37 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Open settings" }));
 
     expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+  });
+
+  it("shows a fullscreen toggle to the right of settings when the browser supports fullscreen", async () => {
+    installFullscreenApiForMobileShell();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    const settingsButton = screen.getByRole("button", { name: "Open settings" });
+    const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
+
+    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+  });
+
+  it("hides the fullscreen toggle on mobile when the browser does not support fullscreen", async () => {
+    removeFullscreenApiForMobileShell();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enter Fullscreen" })).toBeNull();
+  });
+
+  it("switches the mobile fullscreen button to exit mode after entering fullscreen", async () => {
+    const api = installFullscreenApiForMobileShell();
+    const user = userEvent.setup();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    await user.click(await screen.findByRole("button", { name: "Enter Fullscreen" }));
+
+    await waitFor(() => {
+      expect(api.requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Exit Fullscreen" })).toBeInTheDocument();
+    });
   });
 
   it("keeps welcome route as full-page content outside the workspace scaffold", () => {

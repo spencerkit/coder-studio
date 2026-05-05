@@ -7706,6 +7706,9 @@ textarea.input {
 
   .mobile-topbar__actions {
     position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
   }
 
   .mobile-shell__recovery-strip {
