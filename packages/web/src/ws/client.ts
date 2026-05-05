@@ -692,10 +692,15 @@ export class WsClient {
  * In development, connect directly to backend server
  */
 export function resolveWsUrl(): string {
-  // In development mode, prefer the explicitly configured backend.
-  if (import.meta.env.DEV) {
-    const configuredUrl = import.meta.env.VITE_BACKEND_WS_URL;
-    return normalizeWsUrl(configuredUrl || 'ws://127.0.0.1:4173/ws');
+  const configuredUrl = import.meta.env.VITE_BACKEND_WS_URL;
+  if (configuredUrl) {
+    return normalizeWsUrl(configuredUrl);
+  }
+
+  // In development mode, default to the local backend even when no browser
+  // location object is available, such as in node-based tests.
+  if (import.meta.env.DEV || typeof window === 'undefined') {
+    return 'ws://127.0.0.1:4173/ws';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;

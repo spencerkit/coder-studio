@@ -1268,4 +1268,10 @@ describe('web WsClient', () => {
 
     expect(resolveWsUrl()).toBe('ws://127.0.0.1:43173/ws');
   });
+
+  it('falls back to the local backend URL when window is unavailable', () => {
+    vi.stubGlobal('window', undefined);
+
+    expect(resolveWsUrl()).toBe('ws://127.0.0.1:4173/ws');
+  });
 });
