@@ -9,27 +9,27 @@
  */
 
 import type {
-  DomainEvent,
-  ServerToClient,
   ClientToServer,
   Command,
+  DomainEvent,
+  ServerToClient,
   TerminalInputBinaryArgs,
-} from '@coder-studio/core';
-import { Topics, encodeTerminalOutputFrame } from '@coder-studio/core';
-import type WebSocket from 'ws';
-import type { FastifyRequest, FastifyBaseLogger } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
-import { EventBus } from '../bus/event-bus.js';
-import { clearPendingTerminalInput, registerPendingTerminalInput } from '../commands/terminal.js';
-import { WsClient, ClientId } from './client.js';
-import { dispatch, type CommandContext } from './dispatch.js';
-import type { ServerConfig } from '../config.js';
-import type { FencingManager } from './fencing.js';
-import { isStreamTopic } from './topic-class.js';
+} from "@coder-studio/core";
+import { encodeTerminalOutputFrame, Topics } from "@coder-studio/core";
+import type { FastifyBaseLogger, FastifyRequest } from "fastify";
+import { v4 as uuidv4 } from "uuid";
+import type WebSocket from "ws";
+import { EventBus } from "../bus/event-bus.js";
+import { clearPendingTerminalInput, registerPendingTerminalInput } from "../commands/terminal.js";
+import type { ServerConfig } from "../config.js";
+import { ClientId, WsClient } from "./client.js";
+import { type CommandContext, dispatch } from "./dispatch.js";
+import type { FencingManager } from "./fencing.js";
+import { isStreamTopic } from "./topic-class.js";
 
 interface WsHubDeps {
   eventBus: EventBus;
-  commandContext: CommandContext;
+  commandContext: CommandContext | null;
   config: ServerConfig;
   fencingMgr: FencingManager;
   logger?: FastifyBaseLogger;
@@ -45,10 +45,10 @@ interface BinaryWaiter {
 
 const isBinaryTerminalInputArgs = (args: unknown): args is TerminalInputBinaryArgs => {
   return (
-    typeof args === 'object' &&
+    typeof args === "object" &&
     args !== null &&
-    'transport' in args &&
-    (args as { transport?: unknown }).transport === 'binary'
+    "transport" in args &&
+    (args as { transport?: unknown }).transport === "binary"
   );
 };
 
@@ -81,6 +81,10 @@ export class WsHub implements Broadcaster {
     this.deps.logger = logger;
   }
 
+  setCommandContext(commandContext: CommandContext): void {
+    this.deps.commandContext = commandContext;
+  }
+
   /**
    * Handle a new WebSocket connection
    */
@@ -89,8 +93,8 @@ export class WsHub implements Broadcaster {
     this.clients.set(client.id, client);
 
     // Send connection ready (controller status determined later by fencing.request command)
-    client.sendEvent('connection.status', {
-      status: 'connected',
+    client.sendEvent("connection.status", {
+      status: "connected",
       clientId: client.id,
       authEnabled: this.deps.config.auth.enabled,
       binaryTerminalTransport: true,
@@ -111,17 +115,18 @@ export class WsHub implements Broadcaster {
     }
 
     switch (msg.kind) {
-      case 'subscribe':
+      case "subscribe":
         client.subscribe(msg.topics);
         break;
 
-      case 'unsubscribe':
+      case "unsubscribe":
         client.unsubscribe(msg.topics);
         break;
 
-      case 'command': {
+      case "command": {
+        const commandContext = this.getCommandContext();
         let pendingBinaryStreamId: number | null = null;
-        if (msg.op === 'terminal.input' && isBinaryTerminalInputArgs(msg.args)) {
+        if (msg.op === "terminal.input" && isBinaryTerminalInputArgs(msg.args)) {
           // The JSON command arrives one frame ahead of its binary payload.
           // Wait for the payload before dispatching so the handler can decode
           // synchronously by streamId.
@@ -131,25 +136,25 @@ export class WsHub implements Broadcaster {
             pendingBinaryStreamId = msg.args.streamId;
           } catch (error) {
             client.send({
-              kind: 'result',
+              kind: "result",
               id: msg.id,
               ok: false,
               error: {
-                code: 'terminal_input_binary_timeout',
+                code: "terminal_input_binary_timeout",
                 message:
                   error instanceof Error
                     ? error.message
-                    : 'Timeout waiting for terminal input binary payload',
+                    : "Timeout waiting for terminal input binary payload",
               },
             });
             break;
           }
         }
-        const result = await dispatch(msg as Command, this.deps.commandContext, client.id);
+        const result = await dispatch(msg as Command, commandContext, client.id);
         if (
           pendingBinaryStreamId !== null &&
           !result.ok &&
-          result.error?.code === 'validation_error'
+          result.error?.code === "validation_error"
         ) {
           clearPendingTerminalInput(pendingBinaryStreamId);
         }
@@ -157,7 +162,7 @@ export class WsHub implements Broadcaster {
         break;
       }
 
-      case 'resync':
+      case "resync":
         this.handleResync(client, msg.lastSeen);
         break;
     }
@@ -174,7 +179,7 @@ export class WsHub implements Broadcaster {
         if (waiters.length === 0) {
           this.pendingBinaryWaiters.delete(clientId);
         }
-        reject(new Error('Timeout waiting for terminal input binary payload'));
+        reject(new Error("Timeout waiting for terminal input binary payload"));
       }, BINARY_PAYLOAD_TIMEOUT_MS);
 
       const waiter: BinaryWaiter = { resolve, reject, timer };
@@ -206,7 +211,7 @@ export class WsHub implements Broadcaster {
     this.pendingBinaryWaiters.delete(clientId);
     for (const waiter of queue) {
       clearTimeout(waiter.timer);
-      waiter.reject(new Error('Client disconnected before binary payload arrived'));
+      waiter.reject(new Error("Client disconnected before binary payload arrived"));
     }
   }
 
@@ -214,14 +219,15 @@ export class WsHub implements Broadcaster {
    * Handle resync request
    */
   private handleResync(client: WsClient, lastSeen: Record<string, number>): void {
-    const workspaces = this.deps.commandContext.workspaceMgr.list();
+    const commandContext = this.getCommandContext();
+    const workspaces = commandContext.workspaceMgr.list();
     for (const workspace of workspaces) {
       const workspaceTopic = Topics.workspaceMeta(workspace.id);
       if (client.subscribesTo(workspaceTopic)) {
         client.sendEvent(workspaceTopic, workspace);
       }
 
-      const sessions = this.deps.commandContext.sessionMgr.getForWorkspace(workspace.id);
+      const sessions = commandContext.sessionMgr.getForWorkspace(workspace.id);
       for (const session of sessions) {
         const sessionTopic = Topics.sessionState(workspace.id, session.id);
         if (!client.subscribesTo(sessionTopic)) {
@@ -231,8 +237,8 @@ export class WsHub implements Broadcaster {
       }
     }
 
-    client.sendEvent('connection.status', {
-      status: 'resynced',
+    client.sendEvent("connection.status", {
+      status: "resynced",
       topics: Object.keys(lastSeen),
     });
   }
@@ -328,15 +334,15 @@ export class WsHub implements Broadcaster {
    */
   private subscribeToEvents(): void {
     // Subscribe to all domain event types
-    const eventTypes: DomainEvent['type'][] = [
-      'session.state.changed',
-      'session.lifecycle',
-      'workspace.meta.changed',
-      'git.state.changed',
-      'fs.dirty',
-      'terminal.created',
-      'terminal.output',
-      'terminal.exited',
+    const eventTypes: DomainEvent["type"][] = [
+      "session.state.changed",
+      "session.lifecycle",
+      "workspace.meta.changed",
+      "git.state.changed",
+      "fs.dirty",
+      "terminal.created",
+      "terminal.output",
+      "terminal.exited",
     ];
 
     for (const type of eventTypes) {
@@ -351,7 +357,7 @@ export class WsHub implements Broadcaster {
    * Convert domain event to WebSocket event and broadcast
    */
   private handleDomainEvent(event: DomainEvent): void {
-    if (event.type === 'terminal.output') {
+    if (event.type === "terminal.output") {
       const topic = Topics.terminalOutput(event.workspaceId, event.terminalId);
       for (const client of this.clients.values()) {
         if (!client.subscribesTo(topic)) continue;
@@ -364,18 +370,18 @@ export class WsHub implements Broadcaster {
     let data: unknown;
 
     switch (event.type) {
-      case 'session.state.changed':
+      case "session.state.changed":
         if (!event.workspaceId) {
           return;
         }
         topic = Topics.sessionState(event.workspaceId, event.sessionId);
-        data = (event as any).session ?? {
+        data = event.session ?? {
           state: event.to,
           from: event.from,
         };
         break;
 
-      case 'session.lifecycle':
+      case "session.lifecycle":
         if (!event.workspaceId) {
           return;
         }
@@ -385,12 +391,12 @@ export class WsHub implements Broadcaster {
         };
         break;
 
-      case 'workspace.meta.changed':
+      case "workspace.meta.changed":
         topic = Topics.workspaceMeta(event.workspaceId);
         data = event.patch;
         break;
 
-      case 'git.state.changed':
+      case "git.state.changed":
         topic = Topics.workspaceGitState(event.workspaceId);
         data = {
           treeChanged: Boolean(event.treeChanged),
@@ -399,12 +405,12 @@ export class WsHub implements Broadcaster {
         };
         break;
 
-      case 'fs.dirty':
+      case "fs.dirty":
         topic = Topics.workspaceFsDirty(event.workspaceId);
         data = { reason: event.reason };
         break;
 
-      case 'terminal.created':
+      case "terminal.created":
         topic = Topics.terminalCreated(event.workspaceId, event.terminalId);
         data = {
           id: event.terminalId,
@@ -415,7 +421,7 @@ export class WsHub implements Broadcaster {
         };
         break;
 
-      case 'terminal.exited':
+      case "terminal.exited":
         topic = Topics.terminalExit(event.workspaceId, event.terminalId);
         data = {
           code: event.exitCode,
@@ -433,17 +439,14 @@ export class WsHub implements Broadcaster {
     client: WsClient,
     topic: string,
     payload: Buffer,
-    seq: number,
+    seq: number
   ): void {
     const streamId = this.allocateStreamId();
     client.sendStream(
       topic,
       Buffer.from(
-        encodeTerminalOutputFrame(
-          { topic, seq, streamId, payloadSize: payload.length },
-          payload,
-        ),
-      ),
+        encodeTerminalOutputFrame({ topic, seq, streamId, payloadSize: payload.length }, payload)
+      )
     );
   }
 
@@ -451,6 +454,13 @@ export class WsHub implements Broadcaster {
     const id = this.nextStreamId;
     this.nextStreamId += 1;
     return id;
+  }
+
+  private getCommandContext(): CommandContext {
+    if (!this.deps.commandContext) {
+      throw new Error("WebSocket command context has not been initialized");
+    }
+    return this.deps.commandContext;
   }
 
   /**

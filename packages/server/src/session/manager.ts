@@ -6,24 +6,24 @@
  */
 
 import type {
+  DomainEvent,
+  ProviderDefinition,
   Session,
   SessionState,
-  ProviderDefinition,
-  DomainEvent,
   TerminalInputActivity,
-} from '@coder-studio/core';
-import { deriveSessionTitle } from '@coder-studio/core';
-import type { EventBus, Unsubscribe } from '../bus/event-bus.js';
-import type { TerminalManager } from '../terminal/manager.js';
-import type { TerminalSpec } from '../terminal/types.js';
-import type { SessionDatabase } from './types.js';
-import type { Broadcaster } from '../ws/hub.js';
-import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
-import { sessionToRow, type SessionRow } from '../storage/repositories/session-repo.js';
-import { mergeProviderLaunchConfig } from '../provider-config.js';
-import type { RenderOptions } from '../terminal/snapshot-render.js';
-import { PtyStateDetector } from './pty-state-detector.js';
-import { createShadowComparator, type ShadowComparator } from './state-shadow-comparator.js';
+} from "@coder-studio/core";
+import { deriveSessionTitle } from "@coder-studio/core";
+import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
+import { mergeProviderLaunchConfig } from "../provider-config.js";
+import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { type SessionRow, sessionToRow } from "../storage/repositories/session-repo.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { RenderOptions } from "../terminal/snapshot-render.js";
+import type { TerminalSpec } from "../terminal/types.js";
+import type { Broadcaster } from "../ws/hub.js";
+import { PtyStateDetector } from "./pty-state-detector.js";
+import { createShadowComparator, type ShadowComparator } from "./state-shadow-comparator.js";
+import type { SessionDatabase } from "./types.js";
 
 export interface CreateSessionRequest {
   workspaceId: string;
@@ -64,8 +64,8 @@ const NOOP_SESSION_LOGGER: SessionLogger = {
   warn: () => {},
 };
 
-type TerminalExitedEvent = Extract<DomainEvent, { type: 'terminal.exited' }>;
-type TerminalOutputEvent = Extract<DomainEvent, { type: 'terminal.output' }>;
+type TerminalExitedEvent = Extract<DomainEvent, { type: "terminal.exited" }>;
+type TerminalOutputEvent = Extract<DomainEvent, { type: "terminal.output" }>;
 
 export class SessionManager {
   private sessions = new Map<string, ActiveSession>();
@@ -78,7 +78,7 @@ export class SessionManager {
   constructor(private readonly deps: SessionManagerDeps) {
     this.logger = deps.logger ?? NOOP_SESSION_LOGGER;
 
-    this.deps.eventBus.on('terminal.exited', (event: TerminalExitedEvent) => {
+    this.deps.eventBus.on("terminal.exited", (event: TerminalExitedEvent) => {
       this.onTerminalExit(event.terminalId, event.exitCode);
     });
   }
@@ -99,7 +99,7 @@ export class SessionManager {
     // Create terminal spec
     const terminalSpec: TerminalSpec = {
       workspaceId: req.workspaceId,
-      kind: 'agent',
+      kind: "agent",
       argv: cmd.argv,
       cwd: cmd.cwd,
       env: {
@@ -120,7 +120,7 @@ export class SessionManager {
       providerId: req.providerId,
       terminalId: terminal.id,
       capability: req.provider.capability,
-      state: 'starting',
+      state: "starting",
       draft: req.draft,
     });
 
@@ -135,7 +135,7 @@ export class SessionManager {
 
     // Emit the initial `starting` snapshot so clients can latch session
     // creation before any optimistic transition fires.
-    this.emitStateChanged(active, null, 'starting');
+    this.emitStateChanged(active, null, "starting");
 
     return active.toDTO();
   }
@@ -149,7 +149,7 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (session.state === 'ended') {
+    if (session.state === "ended") {
       this.terminalToSession.delete(session.terminalId);
       this.cleanupDetector(session.id);
       return;
@@ -157,7 +157,7 @@ export class SessionManager {
 
     await this.deps.terminalMgr.close(session.terminalId);
 
-    if (session.state !== 'ended') {
+    if (session.state !== "ended") {
       this.finishSession(session, this.terminalToSession.has(session.terminalId) ? undefined : 0);
     }
   }
@@ -196,8 +196,8 @@ export class SessionManager {
   }
 
   private resolveHydratedState(session: Session): SessionState {
-    if (session.state === 'draft') {
-      return 'draft';
+    if (session.state === "draft") {
+      return "draft";
     }
 
     const activeTerminal = this.deps.terminalMgr.get(session.terminalId);
@@ -205,11 +205,11 @@ export class SessionManager {
       return session.state;
     }
 
-    if (session.state === 'ended') {
+    if (session.state === "ended") {
       return session.state;
     }
 
-    return 'ended';
+    return "ended";
   }
 
   private getLaunchConfig(providerId: string, provider: ProviderDefinition) {
@@ -238,7 +238,7 @@ export class SessionManager {
     );
 
     for (const session of sessions) {
-      if (session.state === 'ended') {
+      if (session.state === "ended") {
         this.terminalToSession.delete(session.terminalId);
         this.cleanupDetector(session.id);
         continue;
@@ -250,7 +250,7 @@ export class SessionManager {
 
   deleteEndedForWorkspace(workspaceId: string): void {
     const endedSessions = Array.from(this.sessions.values()).filter(
-      (session) => session.workspaceId === workspaceId && session.state === 'ended'
+      (session) => session.workspaceId === workspaceId && session.state === "ended"
     );
 
     for (const session of endedSessions) {
@@ -271,7 +271,7 @@ export class SessionManager {
    */
   onTerminalInput(
     terminalId: string,
-    activity: TerminalInputActivity = 'typing',
+    activity: TerminalInputActivity = "typing",
     text?: string
   ): void {
     const sessionId = this.terminalToSession.get(terminalId);
@@ -280,26 +280,26 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    if (activity === 'control' || activity === 'typing') {
+    if (activity === "control" || activity === "typing") {
       return;
     }
 
-    if (activity === 'internal_submit') {
+    if (activity === "internal_submit") {
       session.awaitingTurnCompletion = true;
       const prev = session.state;
-      if (session.state !== 'running') {
-        session.state = 'running';
+      if (session.state !== "running") {
+        session.state = "running";
         session.lastActiveAt = Date.now();
         this.deps.db.update(session.id, {
-          state: 'running',
+          state: "running",
           lastActiveAt: session.lastActiveAt,
         });
-        this.emitStateChanged(session, prev, 'running');
+        this.emitStateChanged(session, prev, "running");
       }
       return;
     }
 
-    if (activity !== 'submit') return;
+    if (activity !== "submit") return;
 
     const submittedText = text;
     if (submittedText?.trim()) {
@@ -313,20 +313,18 @@ export class SessionManager {
     const titleChanged = this.maybeAssignTitle(session, submittedText);
 
     const prev = session.state;
-    const shouldResume =
-      session.state === 'idle' ||
-      session.state === 'starting';
+    const shouldResume = session.state === "idle" || session.state === "starting";
 
     if (shouldResume) {
-      session.state = 'running';
+      session.state = "running";
       session.lastActiveAt = Date.now();
 
       this.deps.db.update(session.id, {
-        state: 'running',
+        state: "running",
         lastActiveAt: session.lastActiveAt,
       });
 
-      this.emitStateChanged(session, prev, 'running');
+      this.emitStateChanged(session, prev, "running");
     } else if (titleChanged) {
       // State stayed the same, but the DTO changed (title added) and the UI
       // subscribes via state.changed broadcasts — fire a no-op transition so
@@ -341,7 +339,7 @@ export class SessionManager {
   sendInput(
     sessionId: string,
     bytes: Buffer,
-    activity: TerminalInputActivity = 'typing',
+    activity: TerminalInputActivity = "typing",
     submittedText?: string
   ): void {
     const session = this.sessions.get(sessionId);
@@ -351,8 +349,8 @@ export class SessionManager {
 
     this.deps.terminalMgr.write(session.terminalId, bytes);
     const text =
-      activity === 'submit' || activity === 'internal_submit'
-        ? (submittedText ?? bytes.toString('utf-8'))
+      activity === "submit" || activity === "internal_submit"
+        ? (submittedText ?? bytes.toString("utf-8"))
         : undefined;
     this.onTerminalInput(session.terminalId, activity, text);
   }
@@ -387,7 +385,7 @@ export class SessionManager {
   async getRenderedSnapshot(sessionId: string, options: RenderOptions): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      return '';
+      return "";
     }
 
     return this.deps.terminalMgr.getRenderedSnapshot(session.terminalId, options);
@@ -447,7 +445,7 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (session.state !== 'ended') {
+    if (session.state !== "ended") {
       throw new Error(`Cannot delete session in state: ${session.state}`);
     }
 
@@ -461,25 +459,31 @@ export class SessionManager {
 
     // Emit removed event
     this.deps.eventBus.emit({
-      type: 'session.lifecycle', workspaceId: session.workspaceId,
+      type: "session.lifecycle",
+      workspaceId: session.workspaceId,
       sessionId,
-      event: 'removed',
+      event: "removed",
     } as DomainEvent);
   }
 
   /**
    * Emit state changed event
    */
-  private emitStateChanged(session: ActiveSession, from: SessionState | null, to: SessionState): void {
+  private emitStateChanged(
+    session: ActiveSession,
+    from: SessionState | null,
+    to: SessionState
+  ): void {
     this.comparators.get(session.id)?.observeHookState(session.state);
-    this.deps.eventBus.emit({
-      type: 'session.state.changed',
+    const event: Extract<DomainEvent, { type: "session.state.changed" }> = {
+      type: "session.state.changed",
       sessionId: session.id,
       workspaceId: session.workspaceId,
-      from: from ?? 'draft',
+      from: from ?? "draft",
       to,
       session: session.toDTO(),
-    } as any);
+    };
+    this.deps.eventBus.emit(event);
   }
   private attachShadowDetector(session: ActiveSession, provider: ProviderDefinition): void {
     if (!provider.idleHeuristics) {
@@ -494,7 +498,7 @@ export class SessionManager {
           terminalId: session.terminalId,
           providerId: session.providerId,
         },
-        '[SessionManager] PTY shadow state divergence'
+        "[SessionManager] PTY shadow state divergence"
       );
     });
 
@@ -507,36 +511,36 @@ export class SessionManager {
         }
 
         const prev = activeSession.state;
-        if (state === 'running' && prev !== 'running') {
-          activeSession.state = 'running';
+        if (state === "running" && prev !== "running") {
+          activeSession.state = "running";
           activeSession.lastActiveAt = Date.now();
           if (!activeSession.startedAt) {
             activeSession.startedAt = activeSession.lastActiveAt;
           }
           this.deps.db.update(session.id, {
-            state: 'running',
+            state: "running",
             startedAt: activeSession.startedAt,
             lastActiveAt: activeSession.lastActiveAt,
           });
-          this.emitStateChanged(activeSession, prev, 'running');
-        } else if (state === 'idle' && (prev === 'running' || prev === 'starting')) {
+          this.emitStateChanged(activeSession, prev, "running");
+        } else if (state === "idle" && (prev === "running" || prev === "starting")) {
           const shouldEmitTurnCompleted = activeSession.awaitingTurnCompletion;
-          activeSession.state = 'idle';
+          activeSession.state = "idle";
           activeSession.awaitingTurnCompletion = false;
           if (!activeSession.startedAt) {
             activeSession.startedAt = Date.now();
           }
           this.deps.db.update(session.id, {
-            state: 'idle',
+            state: "idle",
             startedAt: activeSession.startedAt,
           });
-          this.emitStateChanged(activeSession, prev, 'idle');
+          this.emitStateChanged(activeSession, prev, "idle");
           if (shouldEmitTurnCompleted) {
             this.deps.eventBus.emit({
-              type: 'session.lifecycle',
+              type: "session.lifecycle",
               workspaceId: activeSession.workspaceId,
               sessionId: activeSession.id,
-              event: 'turn_completed',
+              event: "turn_completed",
             } as DomainEvent);
           }
         }
@@ -545,7 +549,7 @@ export class SessionManager {
       },
     });
 
-    const unsubscribe = this.deps.eventBus.on('terminal.output', (event: TerminalOutputEvent) => {
+    const unsubscribe = this.deps.eventBus.on("terminal.output", (event: TerminalOutputEvent) => {
       if (event.terminalId !== session.terminalId) {
         return;
       }
@@ -568,18 +572,18 @@ export class SessionManager {
 
   private finishSession(session: ActiveSession, exitCode: number | undefined): void {
     const prev = session.state;
-    session.state = 'ended';
+    session.state = "ended";
     session.endedAt = Date.now();
     session.exitCode = exitCode;
     this.terminalToSession.delete(session.terminalId);
     this.cleanupDetector(session.id);
 
     this.deps.db.update(session.id, {
-      state: 'ended',
+      state: "ended",
       endedAt: session.endedAt,
     });
 
-    this.emitStateChanged(session, prev, 'ended');
+    this.emitStateChanged(session, prev, "ended");
   }
 }
 
@@ -592,7 +596,7 @@ class ActiveSession {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  capability: 'full' | 'limited' | 'unsupported';
+  capability: "full" | "limited" | "unsupported";
   startedAt?: number;
   lastActiveAt: number;
   endedAt?: number;
@@ -609,7 +613,7 @@ class ActiveSession {
     workspaceId: string;
     providerId: string;
     terminalId: string;
-    capability: 'full' | 'limited' | 'unsupported';
+    capability: "full" | "limited" | "unsupported";
     state: SessionState;
     draft?: string;
     title?: string;

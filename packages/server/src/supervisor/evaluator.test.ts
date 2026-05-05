@@ -1,64 +1,103 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SupervisorEvaluator } from './evaluator.js';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { ProviderDefinition, Supervisor } from "@coder-studio/core";
+import type { FastifyBaseLogger } from "fastify";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { SupervisorEvaluationContext } from "./context-builder.js";
+import { SupervisorEvaluator } from "./evaluator.js";
 
 function nodeEchoCommand(stdout: string) {
   return {
-    argv: [
-      'node',
-      '-e',
-      `process.stdout.write(${JSON.stringify(stdout)})`,
-    ],
+    argv: ["node", "-e", `process.stdout.write(${JSON.stringify(stdout)})`],
     cwd: process.cwd(),
     env: {},
   };
 }
 
-function makeEvaluator(stdout: string, providerId = 'codex', config?: { guidanceMaxChars?: number }) {
+function createProvider(
+  providerId: string,
+  stdout: string,
+  options?: { defaultConfig?: Record<string, unknown> }
+): ProviderDefinition {
+  return {
+    id: providerId,
+    buildSupervisorEvalCommand: vi.fn(() => nodeEchoCommand(stdout)),
+    defaultConfig: options?.defaultConfig,
+  } as unknown as ProviderDefinition;
+}
+
+function createProviderConfigRepo(
+  config: Record<string, unknown> | undefined = { additionalArgs: [], envVars: {} }
+): ProviderConfigRepo {
+  return {
+    get: vi.fn(() => config),
+  } as unknown as ProviderConfigRepo;
+}
+
+type MockLogger = FastifyBaseLogger & {
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+};
+
+function createLogger(): MockLogger {
+  const logger = {
+    child: () => logger,
+    debug: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    info: vi.fn(),
+    level: "info",
+    silent: vi.fn(),
+    trace: vi.fn(),
+    warn: vi.fn(),
+  } as unknown as MockLogger;
+  return logger;
+}
+
+function makeEvaluator(
+  stdout: string,
+  providerId = "codex",
+  config?: { guidanceMaxChars?: number }
+) {
   return new SupervisorEvaluator({
-    providerRegistry: [
-      {
-        id: providerId,
-        buildSupervisorEvalCommand: vi.fn(() => nodeEchoCommand(stdout)),
-      },
-    ] as any,
-    providerConfigRepo: {
-      get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
-    } as any,
+    providerRegistry: [createProvider(providerId, stdout)],
+    providerConfigRepo: createProviderConfigRepo(),
     timeoutMs: 5000,
-    config: config ? { guidanceMaxChars: config.guidanceMaxChars ?? 2000, guidanceDedupeWindow: 2 } : undefined,
+    config: config
+      ? { guidanceMaxChars: config.guidanceMaxChars ?? 2000, guidanceDedupeWindow: 2 }
+      : undefined,
   });
 }
 
-function makeSupervisor(evaluatorProviderId = 'codex') {
+function makeSupervisor(evaluatorProviderId = "codex"): Supervisor {
   return {
-    id: 'sup-1',
-    sessionId: 'sess-1',
-    workspaceId: 'ws-1',
-    state: 'idle',
-    objective: 'obj',
+    id: "sup-1",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
+    state: "idle",
+    objective: "obj",
     evaluatorProviderId,
     cycles: [],
     createdAt: 1,
     updatedAt: 1,
-  } as any;
+  };
 }
 
-function makeContext() {
+function makeContext(): SupervisorEvaluationContext {
   return {
-    objective: 'obj',
-    sessionId: 'sess-1',
-    workspaceId: 'ws-1',
+    objective: "obj",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
     workspacePath: process.cwd(),
-    sessionProviderId: 'claude',
-    evaluatorProviderId: 'codex',
-    sessionState: 'running',
-    evidenceSource: 'headless_snapshot',
-    terminalExcerpt: 'build passes',
-    latestUserInput: 'run the tests',
-  } as any;
+    sessionProviderId: "claude",
+    evaluatorProviderId: "codex",
+    sessionState: "running",
+    evidenceSource: "headless_snapshot",
+    terminalExcerpt: "build passes",
+    latestUserInput: "run the tests",
+  };
 }
 
 function isPidAlive(pid: number): boolean {
@@ -70,184 +109,154 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-describe('SupervisorEvaluator', () => {
+describe("SupervisorEvaluator", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('uses supervisor.evaluatorProviderId instead of the session provider', async () => {
+  it("uses supervisor.evaluatorProviderId instead of the session provider", async () => {
     const evaluator = new SupervisorEvaluator({
-      providerRegistry: [
-        {
-          id: 'codex',
-          buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: ['node', '-e', 'process.stdout.write("next step: run tests")'],
-            cwd: process.cwd(),
-            env: {},
-          })),
-        },
-      ] as any,
-      providerConfigRepo: {
-        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
-      } as any,
+      providerRegistry: [createProvider("codex", "next step: run tests")],
+      providerConfigRepo: createProviderConfigRepo(),
       timeoutMs: 5000,
     });
 
     const result = await evaluator.evaluate(
       {
-        id: 'sup-1',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
-        state: 'idle',
-        objective: 'Finish the evaluator runner',
-        evaluatorProviderId: 'codex',
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        state: "idle",
+        objective: "Finish the evaluator runner",
+        evaluatorProviderId: "codex",
         cycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
       {
-        objective: 'Finish the evaluator runner',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
+        objective: "Finish the evaluator runner",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
         workspacePath: process.cwd(),
-        sessionProviderId: 'claude',
-        evaluatorProviderId: 'codex',
-        sessionState: 'running',
-        evidenceSource: 'headless_snapshot',
-        terminalExcerpt: 'build passes',
-        latestUserInput: 'run the tests',
+        sessionProviderId: "claude",
+        evaluatorProviderId: "codex",
+        sessionState: "running",
+        evidenceSource: "headless_snapshot",
+        terminalExcerpt: "build passes",
+        latestUserInput: "run the tests",
       }
     );
 
-    expect(result.message).toBe('next step: run tests');
+    expect(result.message).toBe("next step: run tests");
   });
 
-  it('falls back to provider.defaultConfig when evaluator config is missing', async () => {
+  it("falls back to provider.defaultConfig when evaluator config is missing", async () => {
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [
-        {
-          id: 'claude',
-          defaultConfig: { model: 'claude-sonnet-4-6', additionalArgs: [], envVars: {} },
-          buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: ['node', '-e', 'process.stdout.write("proceed with review")'],
-            cwd: process.cwd(),
-            env: {},
-          })),
-        },
-      ] as any,
-      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+        createProvider("claude", "proceed with review", {
+          defaultConfig: { model: "claude-sonnet-4-6", additionalArgs: [], envVars: {} },
+        }),
+      ],
+      providerConfigRepo: createProviderConfigRepo(undefined),
       timeoutMs: 5000,
     });
 
     const result = await evaluator.evaluate(
       {
-        id: 'sup-1',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
-        state: 'idle',
-        objective: 'Finish the evaluator runner',
-        evaluatorProviderId: 'claude',
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        state: "idle",
+        objective: "Finish the evaluator runner",
+        evaluatorProviderId: "claude",
         cycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
       {
-        objective: 'Finish the evaluator runner',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
+        objective: "Finish the evaluator runner",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
         workspacePath: process.cwd(),
-        sessionProviderId: 'codex',
-        evaluatorProviderId: 'claude',
-        sessionState: 'running',
-        evidenceSource: 'headless_snapshot',
-        terminalExcerpt: 'build passes',
-        latestUserInput: 'run the tests',
+        sessionProviderId: "codex",
+        evaluatorProviderId: "claude",
+        sessionState: "running",
+        evidenceSource: "headless_snapshot",
+        terminalExcerpt: "build passes",
+        latestUserInput: "run the tests",
       }
     );
 
-    expect(result.message).toBe('proceed with review');
+    expect(result.message).toBe("proceed with review");
   });
 
-  it('builds a natural language prompt matching the develop supervisor pattern', async () => {
-    const logger = { warn: vi.fn(), error: vi.fn() } as any;
+  it("builds a natural language prompt matching the develop supervisor pattern", async () => {
+    const logger = createLogger();
     const evaluator = new SupervisorEvaluator({
-      providerRegistry: [
-        {
-          id: 'codex',
-          buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: ['node', '-e', 'process.stdout.write("")'],
-            cwd: process.cwd(),
-            env: {},
-          })),
-        },
-      ] as any,
-      providerConfigRepo: {
-        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
-      } as any,
+      providerRegistry: [createProvider("codex", "")],
+      providerConfigRepo: createProviderConfigRepo(),
       timeoutMs: 5000,
       logger,
     });
 
     await expect(
-      evaluator.evaluate(makeSupervisor('codex'), {
+      evaluator.evaluate(makeSupervisor("codex"), {
         ...makeContext(),
-        objective: 'Ship the fix',
-        terminalExcerpt: 'latest output',
+        objective: "Ship the fix",
+        terminalExcerpt: "latest output",
       })
     ).rejects.toThrow();
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
-    expect(prompt).toContain('You are the supervisor for a business agent terminal session.');
-    expect(prompt).toContain('generate the next concrete task');
-    expect(prompt).toContain('Current objective:');
-    expect(prompt).toContain('Ship the fix');
-    expect(prompt).toContain('Latest user input:');
-    expect(prompt).toContain('run the tests');
-    expect(prompt).toContain('Latest business agent output:');
-    expect(prompt).toContain('latest output');
-    expect(prompt).toContain('[objective complete]');
-    expect(prompt).toContain('Your response must be one of');
+    expect(prompt).toContain("You are the supervisor for a business agent terminal session.");
+    expect(prompt).toContain("generate the next concrete task");
+    expect(prompt).toContain("Current objective:");
+    expect(prompt).toContain("Ship the fix");
+    expect(prompt).toContain("Latest user input:");
+    expect(prompt).toContain("run the tests");
+    expect(prompt).toContain("Latest business agent output:");
+    expect(prompt).toContain("latest output");
+    expect(prompt).toContain("[objective complete]");
+    expect(prompt).toContain("Your response must be one of");
   });
 
-  it('aborts the evaluator process group when the signal is cancelled', async () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'supervisor-evaluator-'));
-    const pidFile = path.join(tempDir, 'pids.json');
+  it("aborts the evaluator process group when the signal is cancelled", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "supervisor-evaluator-"));
+    const pidFile = path.join(tempDir, "pids.json");
     const script = [
       'const { spawn } = require("node:child_process");',
       'const fs = require("node:fs");',
       `const pidFile = ${JSON.stringify(pidFile)};`,
       'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });',
-      'fs.writeFileSync(pidFile, JSON.stringify({ parent: process.pid, child: child.pid }));',
-      'setInterval(() => {}, 1000);',
-    ].join(' ');
+      "fs.writeFileSync(pidFile, JSON.stringify({ parent: process.pid, child: child.pid }));",
+      "setInterval(() => {}, 1000);",
+    ].join(" ");
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [
         {
-          id: 'codex',
+          id: "codex",
           buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: [process.execPath, '-e', script],
+            argv: [process.execPath, "-e", script],
             cwd: process.cwd(),
             env: {},
           })),
-        },
-      ] as any,
-      providerConfigRepo: {
-        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
-      } as any,
+        } as unknown as ProviderDefinition,
+      ],
+      providerConfigRepo: createProviderConfigRepo(),
       timeoutMs: 5000,
     });
     const controller = new AbortController();
 
     let pids: { parent: number; child: number } | null = null;
     try {
-      const evaluation = evaluator.evaluate(makeSupervisor('codex'), makeContext(), {
+      const evaluation = evaluator.evaluate(makeSupervisor("codex"), makeContext(), {
         signal: controller.signal,
       });
 
       await waitFor(() => {
         expect(existsSync(pidFile)).toBe(true);
       });
-      pids = JSON.parse(readFileSync(pidFile, 'utf8')) as {
+      pids = JSON.parse(readFileSync(pidFile, "utf8")) as {
         parent: number;
         child: number;
       };
@@ -255,7 +264,7 @@ describe('SupervisorEvaluator', () => {
       controller.abort();
 
       await expect(evaluation).rejects.toMatchObject({
-        code: 'supervisor_eval_aborted',
+        code: "supervisor_eval_aborted",
       });
 
       await waitFor(() => {
@@ -265,138 +274,144 @@ describe('SupervisorEvaluator', () => {
     } finally {
       if (pids?.parent && isPidAlive(pids.parent)) {
         try {
-          process.kill(-pids.parent, 'SIGKILL');
+          process.kill(-pids.parent, "SIGKILL");
         } catch {
-          process.kill(pids.parent, 'SIGKILL');
+          process.kill(pids.parent, "SIGKILL");
         }
       }
       if (pids?.child && isPidAlive(pids.child)) {
-        process.kill(pids.child, 'SIGKILL');
+        process.kill(pids.child, "SIGKILL");
       }
       rmSync(tempDir, { force: true, recursive: true });
     }
   });
 
-  describe('message extraction', () => {
-    it('parses agent_message text from codex JSONL stream', async () => {
+  describe("message extraction", () => {
+    it("parses agent_message text from codex JSONL stream", async () => {
       const jsonl = [
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
-        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i1', type: 'agent_message', text: 'Run pnpm vitest to verify' },
+          type: "item.completed",
+          item: { id: "i1", type: "agent_message", text: "Run pnpm vitest to verify" },
         }),
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 20 } }),
-      ].join('\n');
+        JSON.stringify({ type: "turn.completed", usage: { output_tokens: 20 } }),
+      ].join("\n");
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+      const evaluator = makeEvaluator(jsonl, "codex");
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe('Run pnpm vitest to verify');
+      expect(result.message).toBe("Run pnpm vitest to verify");
     });
 
-    it('falls back to reasoning text when agent_message is missing', async () => {
+    it("falls back to reasoning text when agent_message is missing", async () => {
       const jsonl = [
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
-        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i0', type: 'reasoning', text: 'Continue with the tests' },
+          type: "item.completed",
+          item: { id: "i0", type: "reasoning", text: "Continue with the tests" },
         }),
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 50 } }),
-      ].join('\n');
+        JSON.stringify({ type: "turn.completed", usage: { output_tokens: 50 } }),
+      ].join("\n");
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+      const evaluator = makeEvaluator(jsonl, "codex");
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe('Continue with the tests');
+      expect(result.message).toBe("Continue with the tests");
     });
 
-    it('accepts assistant_message (older codex builds)', async () => {
+    it("accepts assistant_message (older codex builds)", async () => {
       const jsonl = [
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
         JSON.stringify({
-          type: 'item.completed',
-          item: { id: 'i0', item_type: 'assistant_message', text: 'All good' },
+          type: "item.completed",
+          item: { id: "i0", item_type: "assistant_message", text: "All good" },
         }),
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 40 } }),
-      ].join('\n');
+        JSON.stringify({ type: "turn.completed", usage: { output_tokens: 40 } }),
+      ].join("\n");
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+      const evaluator = makeEvaluator(jsonl, "codex");
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe('All good');
+      expect(result.message).toBe("All good");
     });
 
-    it('strips markdown code fence from agent_message text', async () => {
-      const fenced = '```json\nRun the tests\n```';
+    it("strips markdown code fence from agent_message text", async () => {
+      const fenced = "```json\nRun the tests\n```";
       const jsonl = [
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
-        JSON.stringify({ type: 'turn.started' }),
-        JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: fenced } }),
-        JSON.stringify({ type: 'turn.completed', usage: {} }),
-      ].join('\n');
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "item.completed",
+          item: { id: "i1", type: "agent_message", text: fenced },
+        }),
+        JSON.stringify({ type: "turn.completed", usage: {} }),
+      ].join("\n");
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
-      const result = await evaluator.evaluate(makeSupervisor('codex'), makeContext());
+      const evaluator = makeEvaluator(jsonl, "codex");
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe('Run the tests');
+      expect(result.message).toBe("Run the tests");
     });
 
-    it('parses claude --output-format json envelope (result field)', async () => {
+    it("parses claude --output-format json envelope (result field)", async () => {
       const claudeEnvelope = JSON.stringify({
-        type: 'result',
-        subtype: 'success',
+        type: "result",
+        subtype: "success",
         is_error: false,
         duration_ms: 42,
-        result: 'Proceed to the next step',
-        session_id: 'uuid',
+        result: "Proceed to the next step",
+        session_id: "uuid",
       });
 
-      const evaluator = makeEvaluator(claudeEnvelope, 'claude');
-      const result = await evaluator.evaluate(makeSupervisor('claude'), makeContext());
+      const evaluator = makeEvaluator(claudeEnvelope, "claude");
+      const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
-      expect(result.message).toBe('Proceed to the next step');
+      expect(result.message).toBe("Proceed to the next step");
     });
 
-    it('surfaces codex turn.failed error details', async () => {
+    it("surfaces codex turn.failed error details", async () => {
       const jsonl = JSON.stringify({
-        type: 'turn.failed',
-        error: { message: 'context length exceeded' },
+        type: "turn.failed",
+        error: { message: "context length exceeded" },
       });
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
+      const evaluator = makeEvaluator(jsonl, "codex");
 
-      await expect(
-        evaluator.evaluate(makeSupervisor('codex'), makeContext())
-      ).rejects.toThrow('context length exceeded');
+      await expect(evaluator.evaluate(makeSupervisor("codex"), makeContext())).rejects.toThrow(
+        "context length exceeded"
+      );
     });
 
-    it('raises when codex stream has no agent_message or reasoning', async () => {
+    it("raises when codex stream has no agent_message or reasoning", async () => {
       const jsonl =
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.started' }) +
-        '\n' +
-        JSON.stringify({ type: 'turn.completed', usage: { output_tokens: 191 } });
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }) +
+        "\n" +
+        JSON.stringify({ type: "turn.started" }) +
+        "\n" +
+        JSON.stringify({ type: "turn.completed", usage: { output_tokens: 191 } });
 
-      const evaluator = makeEvaluator(jsonl, 'codex');
+      const evaluator = makeEvaluator(jsonl, "codex");
 
-      await expect(
-        evaluator.evaluate(makeSupervisor('codex'), makeContext())
-      ).rejects.toThrow(/completed without returning a message/i);
+      await expect(evaluator.evaluate(makeSupervisor("codex"), makeContext())).rejects.toThrow(
+        /completed without returning a message/i
+      );
     });
 
-    it('truncates message to guidanceMaxChars', async () => {
-      const longMessage = 'A'.repeat(500);
+    it("truncates message to guidanceMaxChars", async () => {
+      const longMessage = "A".repeat(500);
       const jsonl = [
-        JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
-        JSON.stringify({ type: 'turn.started' }),
-        JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: longMessage } }),
-        JSON.stringify({ type: 'turn.completed', usage: {} }),
-      ].join('\n');
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "item.completed",
+          item: { id: "i1", type: "agent_message", text: longMessage },
+        }),
+        JSON.stringify({ type: "turn.completed", usage: {} }),
+      ].join("\n");
 
-      const evaluator = makeEvaluator(jsonl, 'codex', { guidanceMaxChars: 100 });
+      const evaluator = makeEvaluator(jsonl, "codex", { guidanceMaxChars: 100 });
       const result = await evaluator.evaluate(makeSupervisor(), makeContext());
 
       expect(result.message).toHaveLength(100);
@@ -404,10 +419,7 @@ describe('SupervisorEvaluator', () => {
   });
 });
 
-async function waitFor(
-  fn: () => void,
-  { timeoutMs = 3000, intervalMs = 20 } = {}
-): Promise<void> {
+async function waitFor(fn: () => void, { timeoutMs = 3000, intervalMs = 20 } = {}): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
@@ -419,5 +431,5 @@ async function waitFor(
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('waitFor timed out');
+  throw lastError instanceof Error ? lastError : new Error("waitFor timed out");
 }
