@@ -211,6 +211,12 @@ describe("XtermHost", () => {
         Math.min(mockTerminal.buffer.active.baseY, nextViewportY)
       );
     });
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(),
+      },
+    });
   });
 
   afterEach(() => {
@@ -1411,7 +1417,8 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];    await act(async () => {
+    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await act(async () => {
       await firstOnDataCallback?.("f");
       await firstOnDataCallback?.("o");
       await firstOnDataCallback?.("o");
@@ -1532,7 +1539,8 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");
+    await onDataCallback?.("f");
     await onDataCallback?.("i");
     await onDataCallback?.("x");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -1569,7 +1577,8 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");
+    await onDataCallback?.("f");
     await onDataCallback?.("i");
     await onDataCallback?.("x");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -1606,7 +1615,8 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");
+    await onDataCallback?.("f");
     await onDataCallback?.("o");
     await onDataCallback?.("o");
     await onDataCallback?.(" ");
@@ -1646,7 +1656,8 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("n");
+    expect(onDataCallback).toBeTypeOf("function");
+    await onDataCallback?.("n");
     await onDataCallback?.("p");
     await onDataCallback?.("m");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -3378,9 +3389,9 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(
-        mockTerminal.write.mock.calls.some(([written]) => written === reconnectSnapshot)
-      ).toBe(true);
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === reconnectSnapshot)).toBe(
+        true
+      );
     });
     expect(snapshotCount).toBe(2);
     expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
@@ -4074,6 +4085,90 @@ describe("XtermHost", () => {
     const replayIndex = ops.indexOf("terminal.replay");
     expect(resizeIndex).toBeGreaterThanOrEqual(0);
     expect(replayIndex).toBeGreaterThan(resizeIndex);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("waits for fonts to settle before the initial replay sync", async () => {
+    const store = createStore();
+    let resolveFontsReady: (() => void) | undefined;
+    const fontsReady = new Promise<void>((resolve) => {
+      resolveFontsReady = resolve;
+    });
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        ready: fontsReady,
+      },
+    });
+
+    const dispatchCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.replay") {
+        return Promise.resolve({ ok: true, data: { status: "ok", seq: 200 } });
+      }
+
+      return Promise.resolve({ ok: true, data: { status: "ok" } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand: dispatchCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="font-ready-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(dispatchCommand).not.toHaveBeenCalledWith("terminal.replay", {
+      terminalId: "font-ready-terminal",
+      lastSeq: 0,
+    });
+    expect(mockFitAddon.fit).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFontsReady?.();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(32);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockFitAddon.fit).toHaveBeenCalledTimes(2);
+      expectResizeCall(dispatchCommand, "font-ready-terminal", 132, 36);
+      expectReplayCall(dispatchCommand, "font-ready-terminal", 0);
+    });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

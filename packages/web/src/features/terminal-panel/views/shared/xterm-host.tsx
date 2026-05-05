@@ -302,6 +302,22 @@ function isTerminalTraceEnabled() {
   }
 }
 
+function waitForDocumentFontsReady(): Promise<void> {
+  if (typeof document === "undefined") {
+    return Promise.resolve();
+  }
+
+  const fontSet = document.fonts;
+  if (!fontSet?.ready) {
+    return Promise.resolve();
+  }
+
+  return fontSet.ready.then(
+    () => undefined,
+    () => undefined
+  );
+}
+
 function countOccurrences(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
@@ -1070,6 +1086,21 @@ export function XtermHost({
     fitAddonRef.current = fitAddon;
     scheduleFit();
     const initialFitReady = waitForNextFit();
+    if (viewport !== "mobile") {
+      void initialFitReady
+        .then(async () => {
+          await waitForDocumentFontsReady();
+          if (disposed || !mountedRef.current) {
+            return;
+          }
+
+          scheduleFit();
+        })
+        .catch(() => {
+          // Keep the initial terminal boot resilient even if the Font Loading
+          // API is unavailable or a browser rejects the readiness promise.
+        });
+    }
 
     const waitForConnected = async () => {
       if (!wsClient) {
