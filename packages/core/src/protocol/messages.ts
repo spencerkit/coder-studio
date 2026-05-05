@@ -55,11 +55,10 @@ export const TERMINAL_INPUT_ACTIVITIES = [
 ] as const;
 
 export type TerminalInputActivity = (typeof TERMINAL_INPUT_ACTIVITIES)[number];
-export type LegacyTerminalInputActivity = TerminalInputActivity | 'system';
 
 export interface TerminalInputBinaryArgs {
   terminalId: string;
-  activity?: LegacyTerminalInputActivity;
+  activity?: TerminalInputActivity;
   submittedText?: string;
   transport: 'binary';
   streamId: number;
@@ -69,7 +68,7 @@ export interface TerminalInputBinaryArgs {
 export interface TerminalInputBase64Args {
   terminalId: string;
   bytes: string;
-  activity?: LegacyTerminalInputActivity;
+  activity?: TerminalInputActivity;
   submittedText?: string;
 }
 

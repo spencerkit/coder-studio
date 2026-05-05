@@ -16,15 +16,7 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
-const TerminalInputActivitySchema = z
-  .enum([...TERMINAL_INPUT_ACTIVITIES, 'system'])
-  .optional()
-  .transform((activity): TerminalInputActivity | undefined => {
-    if (activity === 'system') {
-      return 'internal_submit';
-    }
-    return activity;
-  });
+const TerminalInputActivitySchema = z.enum(TERMINAL_INPUT_ACTIVITIES).optional();
 
 const TerminalInputSchema = z.union([
   z.object({

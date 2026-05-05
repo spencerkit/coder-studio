@@ -513,7 +513,7 @@ describe('terminal commands', () => {
     expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('\x1b[I'), 'control', undefined);
   });
 
-  it('maps legacy system activity to internal_submit for session-owned terminal.input', async () => {
+  it('rejects legacy system activity for session-owned terminal.input', async () => {
     const ctx = createContext({
       sessionMgr: {
         findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
@@ -536,13 +536,11 @@ describe('terminal commands', () => {
       ctx
     );
 
-    expect(result.ok).toBe(true);
-    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith(
-      'sess-1',
-      Buffer.from('legacy'),
-      'internal_submit',
-      undefined
-    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: 'validation_error',
+    });
+    expect(ctx.sessionMgr.sendInput).not.toHaveBeenCalled();
   });
 
   it('falls back to terminalMgr.write for terminal.input when no session owns the terminal', async () => {
