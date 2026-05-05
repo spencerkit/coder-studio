@@ -12,19 +12,19 @@ const SOFT_KEY_LAYOUT: Array<{ id: SoftTerminalKeyId; text: string }> = [
   { id: "escape", text: "Esc" },
   { id: "tab", text: "Tab" },
   { id: "arrow_up", text: "↑" },
-  { id: "enter", text: "Enter" },
   { id: "arrow_left", text: "←" },
   { id: "arrow_down", text: "↓" },
   { id: "arrow_right", text: "→" },
+  { id: "enter", text: "Enter" },
 ];
 
 export interface MobileTerminalInputBarLabels {
-  expand: string;
-  collapse: string;
   shortcuts: string;
   ctrl: string;
   ctrlArmed: string;
   ctrlLocked: string;
+  shift: string;
+  shiftArmed: string;
   escape: string;
   tab: string;
   enter: string;
@@ -35,14 +35,14 @@ export interface MobileTerminalInputBarLabels {
 }
 
 interface MobileTerminalInputBarProps {
-  expanded: boolean;
   ctrlMode: CtrlMode;
+  shiftArmed: boolean;
   disabled?: boolean;
   labels: MobileTerminalInputBarLabels;
-  onToggleExpanded: () => void;
   onKeyPress: (key: SoftTerminalKeyId) => void;
   onCtrlTap: () => void;
   onCtrlLongPress: () => void;
+  onShiftTap: () => void;
 }
 
 function getKeyAriaLabel(key: SoftTerminalKeyId, labels: MobileTerminalInputBarLabels): string {
@@ -65,14 +65,14 @@ function getKeyAriaLabel(key: SoftTerminalKeyId, labels: MobileTerminalInputBarL
 }
 
 export function MobileTerminalInputBar({
-  expanded,
   ctrlMode,
+  shiftArmed,
   disabled = false,
   labels,
-  onToggleExpanded,
   onKeyPress,
   onCtrlTap,
   onCtrlLongPress,
+  onShiftTap,
 }: MobileTerminalInputBarProps) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -169,56 +169,58 @@ export function MobileTerminalInputBar({
       : ctrlMode === "armed"
         ? labels.ctrlArmed
         : labels.ctrl;
+  const shiftLabel = shiftArmed ? labels.shiftArmed : labels.shift;
 
   return (
     <div
       className="mobile-terminal-input-bar"
-      data-expanded={expanded ? "true" : "false"}
+      data-expanded="true"
       data-disabled={disabled ? "true" : "false"}
     >
-      <button
-        type="button"
-        className="mobile-terminal-input-bar__toggle"
-        aria-label={expanded ? labels.collapse : labels.expand}
-        onClick={onToggleExpanded}
-      >
-        <span className="mobile-terminal-input-bar__toggle-pill" aria-hidden="true" />
-      </button>
+      <div className="mobile-terminal-input-bar__keys" role="group" aria-label={labels.shortcuts}>
+        <button
+          type="button"
+          className="mobile-terminal-input-bar__key mobile-terminal-input-bar__ctrl"
+          data-ctrl-mode={ctrlMode}
+          aria-pressed={ctrlMode !== "off"}
+          aria-label={ctrlLabel}
+          aria-keyshortcuts="Alt+Enter Alt+Space"
+          disabled={commandKeysDisabled}
+          onPointerDown={startCtrlGesture}
+          onPointerUp={finishCtrlGesture}
+          onPointerCancel={cancelCtrlGesture}
+          onPointerLeave={cancelCtrlGesture}
+          onClick={handleCtrlClick}
+          onKeyDown={handleCtrlKeyDown}
+        >
+          Ctrl
+        </button>
 
-      {expanded ? (
-        <div className="mobile-terminal-input-bar__keys" role="group" aria-label={labels.shortcuts}>
+        <button
+          type="button"
+          className="mobile-terminal-input-bar__key mobile-terminal-input-bar__shift"
+          data-shift-armed={shiftArmed ? "true" : "false"}
+          aria-pressed={shiftArmed}
+          aria-label={shiftLabel}
+          disabled={commandKeysDisabled}
+          onClick={onShiftTap}
+        >
+          Shift
+        </button>
+
+        {SOFT_KEY_LAYOUT.map((key) => (
           <button
+            key={key.id}
             type="button"
-            className="mobile-terminal-input-bar__key mobile-terminal-input-bar__ctrl"
-            data-ctrl-mode={ctrlMode}
-            aria-pressed={ctrlMode !== "off"}
-            aria-label={ctrlLabel}
-            aria-keyshortcuts="Alt+Enter Alt+Space"
+            className="mobile-terminal-input-bar__key"
+            aria-label={getKeyAriaLabel(key.id, labels)}
             disabled={commandKeysDisabled}
-            onPointerDown={startCtrlGesture}
-            onPointerUp={finishCtrlGesture}
-            onPointerCancel={cancelCtrlGesture}
-            onPointerLeave={cancelCtrlGesture}
-            onClick={handleCtrlClick}
-            onKeyDown={handleCtrlKeyDown}
+            onClick={() => onKeyPress(key.id)}
           >
-            Ctrl
+            {key.text}
           </button>
-
-          {SOFT_KEY_LAYOUT.map((key) => (
-            <button
-              key={key.id}
-              type="button"
-              className="mobile-terminal-input-bar__key"
-              aria-label={getKeyAriaLabel(key.id, labels)}
-              disabled={commandKeysDisabled}
-              onClick={() => onKeyPress(key.id)}
-            >
-              {key.text}
-            </button>
-          ))}
-        </div>
-      ) : null}
+        ))}
+      </div>
     </div>
   );
 }

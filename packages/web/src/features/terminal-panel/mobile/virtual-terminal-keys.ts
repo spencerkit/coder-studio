@@ -21,9 +21,24 @@ const SOFT_TERMINAL_INPUT_BYTES: Record<SoftTerminalKeyId, string> = {
   arrow_right: "\x1b[C",
 };
 
+const SHIFTED_SOFT_TERMINAL_INPUT_BYTES: Partial<Record<SoftTerminalKeyId, string>> = {
+  tab: "\x1b[Z",
+  arrow_up: "\x1b[1;2A",
+  arrow_down: "\x1b[1;2B",
+  arrow_left: "\x1b[1;2D",
+  arrow_right: "\x1b[1;2C",
+};
+
 const CONTROL_ACTIVITY: TerminalInputActivity = "control";
 
-export function getSoftTerminalInputBytes(key: SoftTerminalKeyId): string {
+export function getSoftTerminalInputBytes(
+  key: SoftTerminalKeyId,
+  options?: { shift?: boolean }
+): string {
+  if (options?.shift) {
+    return SHIFTED_SOFT_TERMINAL_INPUT_BYTES[key] ?? SOFT_TERMINAL_INPUT_BYTES[key];
+  }
+
   return SOFT_TERMINAL_INPUT_BYTES[key];
 }
 

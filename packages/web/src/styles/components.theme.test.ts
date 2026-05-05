@@ -263,28 +263,30 @@ describe("components.css theme-sensitive surfaces", () => {
     const shellWithMobileInput = getLastRuleBlock(".xterm-host-shell--mobile-input");
     const host = getLastRuleBlock(".xterm-host");
     const keybar = getLastRuleBlock(".mobile-terminal-input-bar");
-    const toggle = getLastRuleBlock(".mobile-terminal-input-bar__toggle");
     const keys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
     const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
     const ctrlLocked = getLastRuleBlock(
       '.mobile-terminal-input-bar__ctrl[data-ctrl-mode="locked"]'
     );
+    const shiftArmed = getLastRuleBlock('.mobile-terminal-input-bar__shift[data-shift-armed="true"]');
 
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");
     expect(shell).toContain("min-height: 0");
-    expect(shellWithMobileInput).toContain("gap: var(--sp-2)");
+    expect(shellWithMobileInput).toContain("gap: var(--sp-1)");
     expect(host).toContain("position: relative");
     expect(host).toContain("flex: 1 1 auto");
     expect(host).toContain("min-height: 0");
     expect(keybar).toContain("flex-shrink: 0");
     expect(keybar).not.toContain("position: absolute");
+    expect(keybar).toContain("min-width: 0");
     expect(keybar).toContain("padding:");
-    expect(toggle).toContain("min-height: var(--touch-target-min)");
-    expect(toggle).toContain("var(--bg-surface)");
-    expect(keys).toContain("display: grid");
-    expect(keys).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
+    expect(keys).toContain("display: flex");
+    expect(keys).toContain("overflow: hidden");
+    expect(key).toContain("min-height: 28px");
+    expect(key).toContain("flex: 1 1 0");
     expect(key).toContain("var(--bg-surface)");
     expect(ctrlLocked).toContain("var(--accent-blue)");
+    expect(shiftArmed).toContain("var(--accent-blue)");
   });
 });

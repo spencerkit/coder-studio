@@ -227,12 +227,12 @@
       "indexed": "Terminal {index}"
     },
     "mobile_input": {
-      "expand": "Expand terminal keys",
-      "collapse": "Collapse terminal keys",
       "shortcuts": "Terminal shortcut keys",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl armed",
       "ctrl_locked": "Ctrl locked",
+      "shift": "Shift",
+      "shift_armed": "Shift armed",
       "escape": "Escape",
       "tab": "Tab",
       "enter": "Enter",

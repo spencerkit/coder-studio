@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileTerminalInputBar } from "./mobile-terminal-input-bar";
 
 const labels = {
-  expand: "Expand terminal keys",
-  collapse: "Collapse terminal keys",
   shortcuts: "Terminal shortcut keys",
   ctrl: "Ctrl",
   ctrlArmed: "Ctrl armed",
   ctrlLocked: "Ctrl locked",
+  shift: "Shift",
+  shiftArmed: "Shift armed",
   escape: "Escape",
   tab: "Tab",
   enter: "Enter",
@@ -27,47 +27,16 @@ describe("MobileTerminalInputBar", () => {
     vi.useRealTimers();
   });
 
-  it("renders only the handle while collapsed and shows the key grid when expanded", async () => {
-    const onToggleExpanded = vi.fn();
-
+  it("always renders the keybar without an expand-collapse toggle", () => {
     const { container, rerender } = render(
       <MobileTerminalInputBar
-        expanded={false}
         ctrlMode="off"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={onToggleExpanded}
         onKeyPress={vi.fn()}
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
-      />
-    );
-
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "false"
-    );
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-disabled",
-      "false"
-    );
-    expect(screen.getByRole("button", { name: labels.expand })).toHaveClass(
-      "mobile-terminal-input-bar__toggle"
-    );
-    expect(container.querySelector(".mobile-terminal-input-bar__toggle-pill")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: labels.escape })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: labels.expand }));
-    expect(onToggleExpanded).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <MobileTerminalInputBar
-        expanded
-        ctrlMode="armed"
-        labels={labels}
-        onToggleExpanded={onToggleExpanded}
-        onKeyPress={vi.fn()}
-        onCtrlTap={vi.fn()}
-        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -75,37 +44,56 @@ describe("MobileTerminalInputBar", () => {
       "data-expanded",
       "true"
     );
-    expect(screen.getByRole("button", { name: labels.collapse })).toBeInTheDocument();
+    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
+      "data-disabled",
+      "false"
+    );
+    expect(container.querySelector(".mobile-terminal-input-bar__meta")).toBeNull();
     expect(screen.getByRole("group", { name: labels.shortcuts })).toHaveClass(
       "mobile-terminal-input-bar__keys"
     );
-    expect(screen.getByRole("button", { name: labels.escape })).toHaveClass(
-      "mobile-terminal-input-bar__key"
+    expect(screen.getByRole("button", { name: labels.escape })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: labels.shift })).toHaveAttribute(
+      "data-shift-armed",
+      "false"
     );
-    expect(screen.getByRole("button", { name: labels.up })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: labels.ctrlArmed })).toHaveClass(
-      "mobile-terminal-input-bar__key",
-      "mobile-terminal-input-bar__ctrl"
+
+    rerender(
+      <MobileTerminalInputBar
+        ctrlMode="armed"
+        shiftArmed
+        labels={labels}
+        onKeyPress={vi.fn()}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+      />
     );
+
     expect(screen.getByRole("button", { name: labels.ctrlArmed })).toHaveAttribute(
       "data-ctrl-mode",
       "armed"
     );
+    expect(screen.getByRole("button", { name: labels.shiftArmed })).toHaveAttribute(
+      "data-shift-armed",
+      "true"
+    );
   });
 
-  it("dispatches key taps and ctrl tap callbacks", async () => {
+  it("dispatches key taps and modifier tap callbacks", () => {
     const onKeyPress = vi.fn();
     const onCtrlTap = vi.fn();
+    const onShiftTap = vi.fn();
 
     render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={onKeyPress}
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={vi.fn()}
+        onShiftTap={onShiftTap}
       />
     );
 
@@ -119,6 +107,8 @@ describe("MobileTerminalInputBar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: labels.ctrl }));
     expect(onCtrlTap).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: labels.shift }));
+    expect(onShiftTap).toHaveBeenCalledTimes(1);
   });
 
   it("locks ctrl on long press and switches ctrl labels by mode", () => {
@@ -127,13 +117,13 @@ describe("MobileTerminalInputBar", () => {
 
     const { rerender } = render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -149,13 +139,13 @@ describe("MobileTerminalInputBar", () => {
 
     rerender(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="locked"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -170,13 +160,13 @@ describe("MobileTerminalInputBar", () => {
 
     const { rerender } = render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={vi.fn()}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -184,14 +174,14 @@ describe("MobileTerminalInputBar", () => {
 
     rerender(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed={false}
         disabled
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={vi.fn()}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -208,13 +198,13 @@ describe("MobileTerminalInputBar", () => {
 
     render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="armed"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -234,16 +224,16 @@ describe("MobileTerminalInputBar", () => {
     expect(onCtrlTap).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the shortcuts label for the expanded key group semantics", () => {
+  it("uses the shortcuts label for the key group semantics", () => {
     render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed={false}
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
       />
     );
 
@@ -252,28 +242,28 @@ describe("MobileTerminalInputBar", () => {
     );
   });
 
-  it("ignores command-key callbacks when disabled but still allows toggling", () => {
-    const onToggleExpanded = vi.fn();
+  it("ignores command-key callbacks when disabled", () => {
     const onCtrlTap = vi.fn();
     const onCtrlLongPress = vi.fn();
     const onKeyPress = vi.fn();
+    const onShiftTap = vi.fn();
 
     const { container } = render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="locked"
+        shiftArmed
         disabled
         labels={labels}
-        onToggleExpanded={onToggleExpanded}
         onKeyPress={onKeyPress}
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={onShiftTap}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: labels.collapse }));
     fireEvent.click(screen.getByRole("button", { name: labels.escape }));
     const ctrlButton = screen.getByRole("button", { name: labels.ctrlLocked });
+    fireEvent.click(screen.getByRole("button", { name: labels.shiftArmed }));
     fireEvent.pointerDown(ctrlButton);
     act(() => {
       vi.advanceTimersByTime(450);
@@ -285,27 +275,58 @@ describe("MobileTerminalInputBar", () => {
       "true"
     );
     expect(screen.getByRole("button", { name: labels.escape })).toBeDisabled();
-    expect(onToggleExpanded).toHaveBeenCalledTimes(1);
     expect(onKeyPress).not.toHaveBeenCalled();
     expect(onCtrlTap).not.toHaveBeenCalled();
     expect(onCtrlLongPress).not.toHaveBeenCalled();
+    expect(onShiftTap).not.toHaveBeenCalled();
   });
 
-  it("keeps the expand toggle enabled while command keys are disabled", () => {
+  it("keeps the full keybar visible while command keys are disabled", () => {
     render(
       <MobileTerminalInputBar
-        expanded
         ctrlMode="off"
+        shiftArmed
         disabled
         labels={labels}
-        onToggleExpanded={vi.fn()}
         onKeyPress={vi.fn()}
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
       />
     );
 
-    expect(screen.getByRole("button", { name: labels.collapse })).toBeEnabled();
+    expect(screen.getByRole("group", { name: labels.shortcuts })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: labels.escape })).toBeDisabled();
+    expect(screen.getByRole("button", { name: labels.shiftArmed })).toBeDisabled();
+  });
+
+  it("keeps direction keys adjacent and before enter", () => {
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={vi.fn()}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+      />
+    );
+
+    const buttons = screen
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+
+    expect(buttons).toEqual([
+      labels.ctrl,
+      labels.shift,
+      labels.escape,
+      labels.tab,
+      labels.up,
+      labels.left,
+      labels.down,
+      labels.right,
+      labels.enter,
+    ]);
   });
 });

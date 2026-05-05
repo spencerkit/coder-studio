@@ -1077,10 +1077,9 @@ describe("XtermHost", () => {
     );
   });
 
-  it("shows a collapsed mobile soft-key handle for interactive terminals and expands it on tap", async () => {
+  it("shows the mobile soft-key bar above interactive terminals", () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
-    const user = userEvent.setup();
 
     store.set(localeAtom, "en");
     store.set(wsClientAtom, {
@@ -1097,23 +1096,15 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    const toggle = await screen.findByRole("button", { name: "Expand terminal keys" });
-    expect(toggle).toBeInTheDocument();
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "false"
-    );
     expect(container.querySelector(".xterm-host-shell")?.firstElementChild).toBe(
       container.querySelector(".mobile-terminal-input-bar")
     );
-
-    await user.click(toggle);
-
     expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
       "data-expanded",
       "true"
     );
     expect(screen.getByRole("button", { name: "Escape" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Shift" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ctrl" })).toBeInTheDocument();
   });
 
@@ -1135,7 +1126,7 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    expect(screen.queryByRole("button", { name: "Expand terminal keys" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Escape" })).not.toBeInTheDocument();
   });
 
   it("routes soft-key presses through sendTerminalInput and refocuses the xterm instance", async () => {
@@ -1159,7 +1150,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Escape" }));
 
     await waitFor(() => {
@@ -1194,7 +1184,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
@@ -1241,7 +1230,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
     await act(async () => {
@@ -1253,25 +1241,54 @@ describe("XtermHost", () => {
 
     const ctrlButton = container.querySelector(".mobile-terminal-input-bar__ctrl");
     const escapeButton = screen.getByRole("button", { name: "Escape" });
-    const toggleButton = screen.getByRole("button", { name: "Collapse terminal keys" });
     const callCountBeforeDisabledClick = sendTerminalInput.mock.calls.length;
 
     expect(ctrlButton).toHaveAttribute("data-ctrl-mode", "armed");
     expect(escapeButton).toBeDisabled();
-    expect(toggleButton).toBeEnabled();
-    await user.click(toggleButton);
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "false"
-    );
-    await user.click(screen.getByRole("button", { name: "Expand terminal keys" }));
-    const reexpandedEscapeButton = screen.getByRole("button", { name: "Escape" });
-    expect(reexpandedEscapeButton).toBeDisabled();
-    await user.click(reexpandedEscapeButton);
+    await user.click(escapeButton);
     expect(sendTerminalInput).toHaveBeenCalledTimes(callCountBeforeDisabledClick);
   });
 
-  it("resets expanded state and ctrl mode when the terminal instance changes", async () => {
+  it("applies one-shot shift to the next soft key and then resets", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-shift-soft-key-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Shift" }));
+    await user.click(screen.getByRole("button", { name: "Tab" }));
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenLastCalledWith(
+        "mobile-shift-soft-key-terminal",
+        new TextEncoder().encode("\x1b[Z"),
+        "typing",
+        undefined
+      );
+    });
+
+    expect(container.querySelector(".mobile-terminal-input-bar__shift")).toHaveAttribute(
+      "data-shift-armed",
+      "false"
+    );
+  });
+
+  it("resets ctrl mode when the terminal instance changes", async () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
     const user = userEvent.setup();
@@ -1292,13 +1309,7 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
-
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "true"
-    );
     expect(container.querySelector(".mobile-terminal-input-bar__ctrl")).toHaveAttribute(
       "data-ctrl-mode",
       "armed"
@@ -1310,13 +1321,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "false"
-    );
-    expect(container.querySelector(".mobile-terminal-input-bar__ctrl")).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Expand terminal keys" }));
     expect(container.querySelector(".mobile-terminal-input-bar__ctrl")).toHaveAttribute(
       "data-ctrl-mode",
       "off"
@@ -1345,7 +1349,6 @@ describe("XtermHost", () => {
     );
 
     const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await act(async () => {
       await firstOnDataCallback?.("f");
       await firstOnDataCallback?.("o");
@@ -1392,9 +1395,7 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
-    await act(async () => {
+    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];    await act(async () => {
       await firstOnDataCallback?.("f");
       await firstOnDataCallback?.("o");
       await firstOnDataCallback?.("o");
@@ -1515,10 +1516,7 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
-    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
     await onDataCallback?.("i");
     await onDataCallback?.("x");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -1555,10 +1553,7 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
-    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
     await onDataCallback?.("i");
     await onDataCallback?.("x");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -1595,10 +1590,7 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
-    await onDataCallback?.("f");
+    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("f");
     await onDataCallback?.("o");
     await onDataCallback?.("o");
     await onDataCallback?.(" ");
@@ -1638,10 +1630,7 @@ describe("XtermHost", () => {
     );
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
-    await onDataCallback?.("n");
+    expect(onDataCallback).toBeTypeOf("function");    await onDataCallback?.("n");
     await onDataCallback?.("p");
     await onDataCallback?.("m");
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
@@ -1679,7 +1668,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     const ctrlButton = screen.getByRole("button", { name: "Ctrl" });
     ctrlButton.focus();
 
@@ -1738,7 +1726,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
@@ -1807,7 +1794,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
 
     const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
@@ -1882,7 +1868,6 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    await user.click(await screen.findByRole("button", { name: "Expand terminal keys" }));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
     const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
     let firstInputPromise: Promise<void> | undefined;
@@ -1895,13 +1880,6 @@ describe("XtermHost", () => {
         <XtermHost terminalId="mobile-cross-terminal-b" workspaceId="test-workspace" />
       </Provider>
     );
-
-    expect(container.querySelector(".mobile-terminal-input-bar")).toHaveAttribute(
-      "data-expanded",
-      "false"
-    );
-
-    await user.click(screen.getByRole("button", { name: "Expand terminal keys" }));
     const secondOnDataCallback = mockTerminal.onData.mock.calls.at(-1)?.[0];
     await act(async () => {
       await secondOnDataCallback?.("\r");

@@ -441,9 +441,10 @@ export function XtermHost({
   const [hydrationState, setHydrationState] = useState<
     { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
   >(viewport === "mobile" ? { kind: "granted" } : { kind: "idle" });
-  const [mobileInputExpanded, setMobileInputExpanded] = useState(false);
   const [ctrlMode, setCtrlMode] = useState<CtrlMode>("off");
+  const [shiftArmed, setShiftArmed] = useState(false);
   const ctrlModeRef = useRef<CtrlMode>("off");
+  const shiftArmedRef = useRef(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
     if (!wsClient || typeof wsClient.getStatus !== "function") {
       return "disconnected";
@@ -673,6 +674,11 @@ export function XtermHost({
     setCtrlMode(nextCtrlMode);
   }, []);
 
+  const updateShiftArmed = useCallback((nextShiftArmed: boolean) => {
+    shiftArmedRef.current = nextShiftArmed;
+    setShiftArmed(nextShiftArmed);
+  }, []);
+
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
   }, []);
@@ -824,11 +830,11 @@ export function XtermHost({
   }, [wsClient]);
 
   useLayoutEffect(() => {
-    setMobileInputExpanded(false);
     updateCtrlMode("off");
+    updateShiftArmed(false);
     inputDraftRef.current = "";
     inputRevisionRef.current += 1;
-  }, [terminalId, updateCtrlMode]);
+  }, [terminalId, updateCtrlMode, updateShiftArmed]);
 
   // Keep callback refs in sync so the mount effect can call the latest version
   // without listing the callbacks as dependencies.
@@ -1433,12 +1439,12 @@ export function XtermHost({
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
   const mobileInputLabels = {
-    expand: t("terminal.mobile_input.expand"),
-    collapse: t("terminal.mobile_input.collapse"),
     shortcuts: t("terminal.mobile_input.shortcuts"),
     ctrl: t("terminal.mobile_input.ctrl"),
     ctrlArmed: t("terminal.mobile_input.ctrl_armed"),
     ctrlLocked: t("terminal.mobile_input.ctrl_locked"),
+    shift: t("terminal.mobile_input.shift"),
+    shiftArmed: t("terminal.mobile_input.shift_armed"),
     escape: t("terminal.mobile_input.escape"),
     tab: t("terminal.mobile_input.tab"),
     enter: t("terminal.mobile_input.enter"),
@@ -1451,9 +1457,13 @@ export function XtermHost({
   const handleSoftKeyPress = useCallback(
     async (key: SoftTerminalKeyId) => {
       focusTerminal();
-      await handleInput(getSoftTerminalInputBytes(key));
+      const nextShiftArmed = shiftArmedRef.current;
+      if (nextShiftArmed) {
+        updateShiftArmed(false);
+      }
+      await handleInput(getSoftTerminalInputBytes(key, { shift: nextShiftArmed }));
     },
-    [focusTerminal, handleInput]
+    [focusTerminal, handleInput, updateShiftArmed]
   );
 
   const handleCtrlTap = useCallback(() => {
@@ -1465,6 +1475,11 @@ export function XtermHost({
     focusTerminal();
     updateCtrlMode(lockCtrlMode());
   }, [focusTerminal, updateCtrlMode]);
+
+  const handleShiftTap = useCallback(() => {
+    focusTerminal();
+    updateShiftArmed(!shiftArmedRef.current);
+  }, [focusTerminal, updateShiftArmed]);
 
   const showReplayOverlay =
     replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");
@@ -1498,19 +1513,16 @@ export function XtermHost({
     >
       {showMobileInputBar ? (
         <MobileTerminalInputBar
-          expanded={mobileInputExpanded}
           ctrlMode={ctrlMode}
+          shiftArmed={shiftArmed}
           disabled={mobileInputDisabled}
           labels={mobileInputLabels}
-          onToggleExpanded={() => {
-            focusTerminal();
-            setMobileInputExpanded((value) => !value);
-          }}
           onKeyPress={(key) => {
             void handleSoftKeyPress(key);
           }}
           onCtrlTap={handleCtrlTap}
           onCtrlLongPress={handleCtrlLongPress}
+          onShiftTap={handleShiftTap}
         />
       ) : null}
       <div

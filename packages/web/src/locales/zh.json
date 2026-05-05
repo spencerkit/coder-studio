@@ -227,12 +227,12 @@
       "indexed": "终端 {index}"
     },
     "mobile_input": {
-      "expand": "展开终端按键",
-      "collapse": "收起终端按键",
       "shortcuts": "终端快捷按键",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl 已待命",
       "ctrl_locked": "Ctrl 已锁定",
+      "shift": "Shift",
+      "shift_armed": "Shift 已待命",
       "escape": "Esc",
       "tab": "Tab",
       "enter": "Enter",

@@ -22,6 +22,24 @@ describe("getSoftTerminalInputBytes", () => {
   it.each(keyCases)("maps %s to terminal bytes", (key, expected) => {
     expect(getSoftTerminalInputBytes(key)).toBe(expected);
   });
+
+  it.each([
+    ["tab", "\x1b[Z"],
+    ["arrow_up", "\x1b[1;2A"],
+    ["arrow_down", "\x1b[1;2B"],
+    ["arrow_right", "\x1b[1;2C"],
+    ["arrow_left", "\x1b[1;2D"],
+  ] satisfies Array<[SoftTerminalKeyId, string]>)(
+    "maps shifted %s to modified terminal bytes",
+    (key, expected) => {
+      expect(getSoftTerminalInputBytes(key, { shift: true })).toBe(expected);
+    }
+  );
+
+  it("keeps escape and enter unchanged when shift is armed", () => {
+    expect(getSoftTerminalInputBytes("escape", { shift: true })).toBe("\x1b");
+    expect(getSoftTerminalInputBytes("enter", { shift: true })).toBe("\r");
+  });
 });
 
 describe("ctrl mode helpers", () => {
