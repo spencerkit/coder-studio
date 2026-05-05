@@ -7,7 +7,7 @@ export type {
   ProviderInstallStepSnapshot,
   ProviderRuntimeStatusEntry,
   ProviderRuntimeStatusResponse,
-} from './provider-install';
+} from "./provider-install";
 
 export interface Workspace {
   name?: string;
@@ -15,7 +15,7 @@ export interface Workspace {
   unreadCount?: number;
   id: string;
   path: string;
-  targetRuntime: 'native' | 'wsl';
+  targetRuntime: "native" | "wsl";
   wslDistro?: string;
   openedAt: number;
   lastActiveAt: number;
@@ -24,9 +24,9 @@ export interface Workspace {
 
 export interface WorkspacePaneNode {
   id: string;
-  type: 'leaf' | 'split';
+  type: "leaf" | "split";
   sessionId?: string;
-  direction?: 'horizontal' | 'vertical';
+  direction?: "horizontal" | "vertical";
   children?: WorkspacePaneNode[];
 }
 
@@ -41,7 +41,7 @@ export interface UiState {
 export interface Terminal {
   id: string;
   workspaceId: string;
-  kind: 'agent' | 'shell';
+  kind: "agent" | "shell";
   title: string;
   cwd: string;
   argv: string[];
@@ -60,7 +60,7 @@ export interface Session {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  capability: 'full' | 'limited' | 'unsupported';
+  capability: "full" | "limited" | "unsupported";
   startedAt: number;
   lastActiveAt: number;
   endedAt?: number;
@@ -82,12 +82,7 @@ export interface Session {
  */
 export const SESSION_TITLE_MAX_LENGTH = 10;
 
-export type SessionState =
-  | 'draft'
-  | 'starting'
-  | 'running'
-  | 'idle'
-  | 'ended';
+export type SessionState = "draft" | "starting" | "running" | "idle" | "ended";
 
 export interface GitStatus {
   branch: string;
@@ -114,10 +109,10 @@ export interface GitFileChange {
 }
 
 export interface GitBranch {
-  name: string;        // Branch name (e.g., "main", "origin/feature")
-  isRemote: boolean;   // Whether it's a remote branch
-  isCurrent: boolean;  // Whether it's the current branch
-  remote?: string;     // Remote name (e.g., "origin")
+  name: string; // Branch name (e.g., "main", "origin/feature")
+  isRemote: boolean; // Whether it's a remote branch
+  isCurrent: boolean; // Whether it's the current branch
+  remote?: string; // Remote name (e.g., "origin")
 }
 
 export interface WorktreeInfo {
@@ -125,13 +120,13 @@ export interface WorktreeInfo {
   path: string;
   branch: string;
   commit: string;
-  status: 'clean' | 'dirty';
+  status: "clean" | "dirty";
 }
 
 export interface FileNode {
   name: string;
   path: string;
-  kind: 'file' | 'dir';
+  kind: "file" | "dir";
   children?: FileNode[];
   size?: number;
   mtime?: number;
@@ -144,9 +139,9 @@ export interface Settings {
     soundEnabled: boolean;
   };
   appearance: {
-    theme: 'dark';
-    terminalRenderer: 'standard' | 'compatibility';
-    locale: 'zh' | 'en';
+    theme: "dark";
+    terminalRenderer: "standard" | "compatibility";
+    locale: "zh" | "en";
   };
   providerConfigs: Record<string, ProviderConfig>;
 }
@@ -168,7 +163,7 @@ export interface ProviderConfig {
  *     SESSION_TITLE_MAX_LENGTH.
  */
 export function deriveSessionTitle(raw: string): string | undefined {
-  const normalized = raw.replace(/\s+/g, ' ').trim();
+  const normalized = raw.replace(/\s+/g, " ").trim();
   if (!normalized) return undefined;
 
   if (normalized.length <= SESSION_TITLE_MAX_LENGTH) {
@@ -176,5 +171,5 @@ export function deriveSessionTitle(raw: string): string | undefined {
   }
 
   // Reserve the last slot for the ellipsis so we stay within the budget.
-  return normalized.slice(0, SESSION_TITLE_MAX_LENGTH - 1) + '…';
+  return normalized.slice(0, SESSION_TITLE_MAX_LENGTH - 1) + "…";
 }

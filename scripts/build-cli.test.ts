@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -23,9 +23,7 @@ describe("build-cli", () => {
   });
 
   it("declares every bundled production dependency in the CLI package manifest", async () => {
-    const pkg = JSON.parse(
-      await readFile(join(CLI_DIR, "package.json"), "utf8")
-    ) as {
+    const pkg = JSON.parse(await readFile(join(CLI_DIR, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
     };
 

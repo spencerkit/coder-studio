@@ -1,29 +1,29 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   deleteRuntimeConfig,
   getRuntimeDir,
   getRuntimePath,
+  type RuntimeConfig,
   readRuntimeConfig,
   writeRuntimeConfig,
-  type RuntimeConfig,
-} from './runtime.js';
+} from "./runtime.js";
 
-describe('runtime config', () => {
+describe("runtime config", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
   let testHomeDir: string;
 
   beforeEach(() => {
-    testHomeDir = mkdtempSync(join(tmpdir(), 'cs-runtime-home-'));
+    testHomeDir = mkdtempSync(join(tmpdir(), "cs-runtime-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
   });
 
   afterEach(() => {
-    const runtimePath = join(homedir(), '.coder-studio', 'runtime.json');
+    const runtimePath = join(homedir(), ".coder-studio", "runtime.json");
     if (existsSync(runtimePath)) {
       rmSync(runtimePath);
     }
@@ -42,9 +42,9 @@ describe('runtime config', () => {
     }
   });
 
-  it('prefers explicit runtime dir and path overrides', () => {
-    const runtimeDir = join(testHomeDir, 'custom-runtime');
-    const runtimePath = join(runtimeDir, 'alt-runtime.json');
+  it("prefers explicit runtime dir and path overrides", () => {
+    const runtimeDir = join(testHomeDir, "custom-runtime");
+    const runtimePath = join(runtimeDir, "alt-runtime.json");
     process.env.CODER_STUDIO_RUNTIME_DIR = runtimeDir;
     process.env.CODER_STUDIO_RUNTIME_JSON_PATH = runtimePath;
 
@@ -55,26 +55,26 @@ describe('runtime config', () => {
     delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
   });
 
-  it('writes, reads, and deletes the runtime file', () => {
+  it("writes, reads, and deletes the runtime file", () => {
     const config: RuntimeConfig = {
-      host: '127.0.0.1',
+      host: "127.0.0.1",
       port: 4173,
       pid: 1234,
-      token: 'token',
-      serverInstanceId: 'server-1',
+      token: "token",
+      serverInstanceId: "server-1",
       startedAt: 1,
     };
 
     expect(readRuntimeConfig()).toBeNull();
     writeRuntimeConfig(config);
     expect(readRuntimeConfig()).toEqual(config);
-    expect(getRuntimePath()).toBe(join(homedir(), '.coder-studio', 'runtime.json'));
+    expect(getRuntimePath()).toBe(join(homedir(), ".coder-studio", "runtime.json"));
     deleteRuntimeConfig();
     expect(readRuntimeConfig()).toBeNull();
   });
 
-  it('defaults host to localhost when reading a legacy runtime file', () => {
-    const runtimeDir = join(homedir(), '.coder-studio');
+  it("defaults host to localhost when reading a legacy runtime file", () => {
+    const runtimeDir = join(homedir(), ".coder-studio");
     if (!existsSync(runtimeDir)) {
       mkdirSync(runtimeDir, { recursive: true });
     }
@@ -84,19 +84,19 @@ describe('runtime config', () => {
       JSON.stringify({
         port: 4173,
         pid: 1234,
-        token: 'token',
-        serverInstanceId: 'server-1',
+        token: "token",
+        serverInstanceId: "server-1",
         startedAt: 1,
       }),
-      'utf-8'
+      "utf-8"
     );
 
     expect(readRuntimeConfig()).toEqual({
-      host: 'localhost',
+      host: "localhost",
       port: 4173,
       pid: 1234,
-      token: 'token',
-      serverInstanceId: 'server-1',
+      token: "token",
+      serverInstanceId: "server-1",
       startedAt: 1,
     });
   });

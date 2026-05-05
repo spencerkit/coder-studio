@@ -2,8 +2,8 @@
 
 export const Topics = {
   // Connection-level
-  connectionStatus: 'connection.status',
-  connectionReady: 'connection.ready',
+  connectionStatus: "connection.status",
+  connectionReady: "connection.ready",
 
   // Workspace-level
   workspaceMeta: (id: string) => `workspace.${id}.meta`,
@@ -30,7 +30,7 @@ export const Topics = {
   terminalsAll: (workspaceId: string) => `workspace.${workspaceId}.terminal.*`,
 
   // Notification
-  notificationToast: 'notification.toast',
+  notificationToast: "notification.toast",
 
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>

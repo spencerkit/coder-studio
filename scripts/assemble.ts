@@ -4,37 +4,37 @@
  */
 
 import {
+  copyDir,
+  ensureDir,
+  error,
+  exists,
   HOOK_BRIDGE_SRC,
+  info,
+  log,
   RUNTIME_DIR,
   RUNTIME_HOOKS_DIR,
-  log,
-  info,
-  success,
-  error,
   step,
-  ensureDir,
-  copyDir,
-  exists,
-} from './shared/index.js';
+  success,
+} from "./shared/index.js";
 
 async function assemble(): Promise<void> {
-  step('ASSEMBLE', 'Assembling runtime artifacts...\n');
+  step("ASSEMBLE", "Assembling runtime artifacts...\n");
 
   // Ensure runtime directory exists
   await ensureDir(RUNTIME_DIR);
   info(`Runtime directory: ${RUNTIME_DIR}`);
 
   // Copy hook-bridge scripts
-  info('Copying hook-bridge scripts...');
+  info("Copying hook-bridge scripts...");
   if (await exists(HOOK_BRIDGE_SRC)) {
     await ensureDir(RUNTIME_HOOKS_DIR);
     await copyDir(HOOK_BRIDGE_SRC, RUNTIME_HOOKS_DIR);
     success(`Hook scripts deployed to: ${RUNTIME_HOOKS_DIR}`);
   } else {
-    error('Warning: hook-bridge source not found');
+    error("Warning: hook-bridge source not found");
   }
 
-  log('\n✓ Assembly complete.\n');
+  log("\n✓ Assembly complete.\n");
 }
 
 // Run if called directly

@@ -1,23 +1,12 @@
 // Supervisor domain types (PRD §16)
 
-export type SupervisorState =
-  | 'inactive'
-  | 'idle'
-  | 'evaluating'
-  | 'injecting'
-  | 'paused'
-  | 'error';
+export type SupervisorState = "inactive" | "idle" | "evaluating" | "injecting" | "paused" | "error";
 
-export type CycleStatus =
-  | 'queued'
-  | 'evaluating'
-  | 'completed'
-  | 'injected'
-  | 'failed';
+export type CycleStatus = "queued" | "evaluating" | "completed" | "injected" | "failed";
 
-export type CycleTrigger = 'turn_completed' | 'manual';
+export type CycleTrigger = "turn_completed" | "manual";
 
-export type EvidenceSource = 'headless_snapshot' | 'transcript' | 'terminal_fallback';
+export type EvidenceSource = "headless_snapshot" | "transcript" | "terminal_fallback";
 
 export interface SupervisorCycle {
   id: string;

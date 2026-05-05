@@ -23,7 +23,7 @@ export interface McpServerStatus {
   /** Server name */
   name: string;
   /** Connection status */
-  status: 'connected' | 'disconnected' | 'error' | 'starting';
+  status: "connected" | "disconnected" | "error" | "starting";
   /** Last error message */
   error?: string;
   /** Available tools from this server */

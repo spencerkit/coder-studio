@@ -1,13 +1,10 @@
-import type { ZodSchema } from 'zod';
-import type {
-  ProviderConfig,
-  ProviderInstallDocUrls,
-} from '../domain/types';
-import type { IdleHeuristics } from './idle-heuristics';
+import type { ZodSchema } from "zod";
+import type { ProviderConfig, ProviderInstallDocUrls } from "../domain/types";
+import type { IdleHeuristics } from "./idle-heuristics";
 
 export interface ProviderInstallStrategy {
   id: string;
-  kind: 'prerequisite' | 'provider';
+  kind: "prerequisite" | "provider";
   targetCommand: string;
   requiresCommands: string[];
   command: string;
@@ -39,11 +36,14 @@ export interface ProviderDefinition {
    * Declarative label for UI badges and docs only.
    * Runtime behavior must read hooks/events directly.
    */
-  capability: 'full' | 'limited' | 'unsupported';
+  capability: "full" | "limited" | "unsupported";
   install: ProviderInstallMetadata;
 
   // Command construction
-  buildCommand(config: ProviderConfig, ctx: LaunchContext): {
+  buildCommand(
+    config: ProviderConfig,
+    ctx: LaunchContext
+  ): {
     argv: string[];
     env: Record<string, string>;
     cwd: string;

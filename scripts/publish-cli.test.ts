@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -149,9 +149,7 @@ describe("publish-cli", () => {
       })
     );
 
-    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow(
-      "@xterm/addon-serialize"
-    );
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("@xterm/addon-serialize");
   });
 
   it("rejects a real publish from a dirty worktree unless explicitly allowed", async () => {
