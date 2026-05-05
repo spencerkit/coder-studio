@@ -12,6 +12,10 @@ const BACKEND_HTTP_URL = `http://${HOST}:${SERVER_PORT}`;
 const BASE_URL = `http://${HOST}:${WEB_PORT}`;
 const INTERRUPTED_SESSION_ID = "sess-hydrate-interrupted";
 const UNAVAILABLE_SESSION_ID = "sess-hydrate-unavailable";
+type TerminalTraceEntry = {
+  terminalId?: string;
+  event?: string;
+};
 let sandboxDir: string;
 let workspaceDir: string;
 let dbPath: string;
@@ -190,6 +194,65 @@ test.describe("session hydrate refresh acceptance", () => {
     await expect(unavailableCard.getByRole("button", { name: "Start" })).toHaveCount(0);
     await expect(interruptedTextarea).toHaveAttribute("readonly", "");
     await expect(unavailableTextarea).toHaveAttribute("readonly", "");
+  });
+
+  test("desktop terminals refit once per terminal after rapid viewport resize", async ({
+    page,
+  }) => {
+    const traces: TerminalTraceEntry[] = [];
+
+    page.on("console", (message) => {
+      if (message.type() !== "debug") {
+        return;
+      }
+
+      void Promise.all(message.args().map((arg) => arg.jsonValue().catch(() => undefined))).then(
+        (args) => {
+          if (args[0] !== "[terminal-trace]") {
+            return;
+          }
+
+          const entry = args[1];
+          if (entry && typeof entry === "object") {
+            traces.push(entry as TerminalTraceEntry);
+          }
+        }
+      );
+    });
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem("coderStudio.terminalTrace", "1");
+    });
+
+    await page.goto("/workspace");
+    await expect(page.getByTestId("workspace-resolving-shell")).toHaveCount(0, { timeout: 20000 });
+    await expect(page.locator(".session-card.agent-pane")).toHaveCount(2, { timeout: 20000 });
+
+    await expect
+      .poll(() => new Set(traces.map((entry) => entry.terminalId).filter(Boolean)).size)
+      .toBe(2);
+
+    await page.waitForTimeout(300);
+
+    const terminalCount = new Set(traces.map((entry) => entry.terminalId).filter(Boolean)).size;
+    const initialFitCount = traces.filter((entry) => entry.event === "fit").length;
+    const initialObserverCount = traces.filter((entry) => entry.event === "resize-observer").length;
+
+    await page.setViewportSize({ width: 1180, height: 800 });
+    await page.setViewportSize({ width: 1020, height: 800 });
+
+    await expect
+      .poll(() => traces.filter((entry) => entry.event === "resize-observer").length)
+      .toBeGreaterThan(initialObserverCount);
+
+    await expect
+      .poll(() => traces.filter((entry) => entry.event === "fit").length)
+      .toBe(initialFitCount + terminalCount);
+
+    await page.waitForTimeout(250);
+    expect(traces.filter((entry) => entry.event === "fit")).toHaveLength(
+      initialFitCount + terminalCount
+    );
   });
 
   test("mobile restores the server-backed active session after refresh", async ({ browser }) => {

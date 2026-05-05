@@ -4174,6 +4174,175 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it("attaches the resize observer after desktop hydration is granted", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.resolve({ status: "ok", seq: 0 });
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const originalResizeObserver = global.ResizeObserver;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    hydrationCoordinatorMocks.autoGrant = false;
+    mockTerminal.cols = 120;
+    mockTerminal.rows = 32;
+
+    class ResizeObserverMock {
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = disconnect;
+
+      constructor(_callback: ResizeObserverCallback) {}
+    }
+
+    global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="hydration-resize-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(mockTerminal.open).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+
+    await act(async () => {
+      hydrationCoordinatorMocks.resolveGranted();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.open).toHaveBeenCalledTimes(1);
+    });
+
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    global.ResizeObserver = originalResizeObserver;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("debounces resize-observer fits until resize settles", async () => {
+    const store = createStore();
+    const fontsReady = new Promise<void>(() => {});
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        ready: fontsReady,
+      },
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.resolve({ status: "ok", seq: 0 });
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const originalResizeObserver = global.ResizeObserver;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let resizeObserverCallback: ResizeObserverCallback | null = null;
+
+    hydrationCoordinatorMocks.autoGrant = false;
+    mockTerminal.cols = 120;
+    mockTerminal.rows = 32;
+
+    class ResizeObserverMock {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+
+      constructor(callback: ResizeObserverCallback) {
+        resizeObserverCallback = callback;
+      }
+    }
+
+    global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(16);
+      return 1;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="debounced-resize-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      hydrationCoordinatorMocks.resolveGranted();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(resizeObserverCallback).toBeTypeOf("function");
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    mockFitAddon.fit.mockClear();
+
+    act(() => {
+      resizeObserverCallback?.([], {} as ResizeObserver);
+      resizeObserverCallback?.([], {} as ResizeObserver);
+      resizeObserverCallback?.([], {} as ResizeObserver);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(149);
+    });
+
+    expect(mockFitAddon.fit).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(mockFitAddon.fit).toHaveBeenCalledTimes(1);
+
+    global.ResizeObserver = originalResizeObserver;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.useRealTimers();
+  });
+
   it("waits for websocket connection before initial resize sync and snapshot recovery", async () => {
     const store = createStore();
     const snapshotChunk = new TextEncoder().encode("snapshot after connect\n");

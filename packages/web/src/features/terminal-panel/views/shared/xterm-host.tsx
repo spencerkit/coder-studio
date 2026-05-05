@@ -1612,7 +1612,7 @@ export function XtermHost({
         resizeDebounceRef.current = null;
       }
     };
-  }, [scheduleFit, terminalId]);
+  }, [hydrationState.kind, scheduleFit, terminalId]);
 
   /**
    * Focus terminal when it becomes active
