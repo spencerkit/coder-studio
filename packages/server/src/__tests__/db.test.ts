@@ -14,7 +14,7 @@ describe('Database', () => {
   });
 
   afterEach(() => {
-    if (db) {
+    if (db?.isOpen) {
       closeDatabase(db);
     }
     rmSync(tempDir, { recursive: true, force: true });
@@ -42,43 +42,41 @@ describe('Database', () => {
       db = openDatabase(dbPath);
 
       const result = db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check: string }>;
-      expect(result[0].integrity_check).toBe('ok');
+      expect(result[0]?.integrity_check).toBe('ok');
     });
 
-    it('should create the migrations table', () => {
+    it('should not create the migrations table', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
       const result = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'").get();
-
-      expect(result).toBeDefined();
+      expect(result).toBeUndefined();
     });
 
-    it('should run initial migration', () => {
-      const dbPath = join(tempDir, 'test.db');
-      db = openDatabase(dbPath);
-
-      const migration = db.prepare('SELECT * FROM _migrations WHERE name = ?').get('001_init') as
-        | { name: string }
-        | undefined;
-
-      expect(migration).toBeDefined();
-      expect(migration?.name).toBe('001_init');
-    });
-
-    it('should not re-run migrations on subsequent opens', () => {
+    it('should keep the schema stable on subsequent opens', () => {
       const dbPath = join(tempDir, 'test.db');
 
-      // Open and close
       db = openDatabase(dbPath);
       closeDatabase(db);
 
-      // Reopen
       db = openDatabase(dbPath);
 
-      // Should only have one migration record
-      const migrations = db.prepare('SELECT COUNT(*) as count FROM _migrations').get() as { count: number };
-      expect(migrations.count).toBeGreaterThanOrEqual(1);
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{ name: string }>;
+      expect(tables.map((table) => table.name)).toEqual(
+        expect.arrayContaining([
+          'auth_login_blocks',
+          'auth_login_failures',
+          'auth_sessions',
+          'provider_configs',
+          'sessions',
+          'supervisor_cycles',
+          'supervisors',
+          'terminals',
+          'user_settings',
+          'workspaces',
+        ])
+      );
+      expect(tables.map((table) => table.name)).not.toContain('_migrations');
     });
 
     it('should create all required tables', () => {
@@ -88,14 +86,22 @@ describe('Database', () => {
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         .all() as { name: string }[];
-      const tableNames = tables.map(t => t.name);
+      const tableNames = tables.map((table) => table.name);
 
-      expect(tableNames).toContain('workspaces');
-      expect(tableNames).toContain('terminals');
-      expect(tableNames).toContain('sessions');
-      expect(tableNames).toContain('provider_configs');
-      expect(tableNames).toContain('user_settings');
-      expect(tableNames).toContain('auth_sessions');
+      expect(tableNames).toEqual(
+        expect.arrayContaining([
+          'workspaces',
+          'terminals',
+          'sessions',
+          'provider_configs',
+          'user_settings',
+          'auth_sessions',
+          'supervisors',
+          'supervisor_cycles',
+          'auth_login_blocks',
+          'auth_login_failures',
+        ])
+      );
     });
 
     it('should create required indexes', () => {
@@ -105,19 +111,31 @@ describe('Database', () => {
       const indexes = db
         .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name")
         .all() as { name: string }[];
-      const indexNames = indexes.map(i => i.name);
+      const indexNames = indexes.map((index) => index.name);
 
-      expect(indexNames).toContain('idx_terminals_workspace');
-      expect(indexNames).toContain('idx_terminals_kind');
-      expect(indexNames).toContain('idx_sessions_workspace');
-      expect(indexNames).toContain('idx_sessions_terminal');
+      expect(indexNames).toEqual(
+        expect.arrayContaining([
+          'idx_terminals_workspace',
+          'idx_terminals_kind',
+          'idx_sessions_workspace',
+          'idx_sessions_terminal',
+          'idx_sessions_id_workspace',
+          'idx_auth_sessions_last_seen_at',
+          'idx_supervisors_workspace',
+          'idx_supervisors_session',
+          'idx_supervisors_id_session',
+          'idx_supervisor_cycles_supervisor',
+          'idx_supervisor_cycles_session',
+          'idx_auth_login_blocks_blocked_until',
+          'idx_auth_login_failures_ip_failed_at',
+        ])
+      );
     });
 
     it('should support foreign key constraints', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
-      // Create a workspace
       db.prepare('INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)').run(
         'ws-1',
         '/path',
@@ -127,7 +145,6 @@ describe('Database', () => {
         '{}'
       );
 
-      // Try to create a terminal with non-existent workspace (should fail)
       expect(() => {
         db.prepare('INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
           't-1',
@@ -146,7 +163,6 @@ describe('Database', () => {
       const dbPath = join(tempDir, 'test.db');
       db = openDatabase(dbPath);
 
-      // Create workspace and terminal
       db.prepare('INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)').run(
         'ws-1',
         '/path',
@@ -167,10 +183,8 @@ describe('Database', () => {
         Date.now()
       );
 
-      // Delete workspace
       db.prepare('DELETE FROM workspaces WHERE id = ?').run('ws-1');
 
-      // Verify terminal was deleted
       const terminal = db.prepare('SELECT * FROM terminals WHERE id = ?').get('t-1');
       expect(terminal).toBeUndefined();
     });
@@ -182,7 +196,6 @@ describe('Database', () => {
       db = openDatabase(dbPath);
       closeDatabase(db);
 
-      // Trying to use a closed database should throw
       expect(() => {
         db.prepare('SELECT 1').get();
       }).toThrow();
