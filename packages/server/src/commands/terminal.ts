@@ -4,7 +4,6 @@
 
 import {
   TERMINAL_INPUT_ACTIVITIES,
-  type TerminalInputActivity,
   TerminalInputBase64Args,
   TerminalInputBinaryArgs,
   TerminalSnapshotBinaryResult,

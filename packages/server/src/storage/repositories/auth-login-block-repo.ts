@@ -89,7 +89,7 @@ export class AuthLoginBlockRepo {
           MAX(failed_at) AS last_failed_at
         FROM auth_login_failures
         WHERE ip = ?
-      `).get(ip) as AuthLoginFailureStatsRow;
+      `).get(ip) as unknown as AuthLoginFailureStatsRow;
 
       const record: AuthLoginBlockRecord = {
         ip,
@@ -107,7 +107,7 @@ export class AuthLoginBlockRepo {
     return withTransaction(this.db, () => {
       const blockResult = this.db.prepare('DELETE FROM auth_login_blocks WHERE ip = ?').run(ip);
       const failureResult = this.db.prepare('DELETE FROM auth_login_failures WHERE ip = ?').run(ip);
-      return blockResult.changes + failureResult.changes > 0;
+      return Number(blockResult.changes) + Number(failureResult.changes) > 0;
     });
   }
 
@@ -117,7 +117,7 @@ export class AuthLoginBlockRepo {
       FROM auth_login_blocks
       WHERE blocked_until IS NOT NULL AND blocked_until > ?
       ORDER BY blocked_until DESC, ip ASC
-    `).all(now) as AuthLoginBlockRow[];
+    `).all(now) as unknown as AuthLoginBlockRow[];
 
     return rows.map(toRecord);
   }
