@@ -25,7 +25,7 @@ describe('Terminal Events', () => {
       onExit: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
-      kill: vi.fn(),
+      kill: vi.fn().mockResolvedValue(undefined),
     }
 
     // Create mock PTY host

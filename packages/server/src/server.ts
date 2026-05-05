@@ -127,10 +127,18 @@ export async function createServer(
     providerConfigRepo,
   });
 
+  let supervisorMgr: SupervisorManager | undefined;
+
   const workspaceMgr = new WorkspaceManager({
     db,
     eventBus,
     broadcaster: wsHub,
+    teardown: async (workspaceId) => {
+      await supervisorMgr?.deleteForWorkspace(workspaceId);
+      await sessionMgr.stopForWorkspace(workspaceId);
+      await terminalMgr.closeForWorkspace(workspaceId);
+      sessionMgr.deleteEndedForWorkspace(workspaceId);
+    },
     onClose: (workspaceId) =>
       deleteWorkspaceUploads(config.uploadsDir, workspaceId).catch((err) =>
         console.warn('[uploads] cascade cleanup failed', { wsId: workspaceId, err })
@@ -166,7 +174,7 @@ export async function createServer(
 
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
-  const supervisorMgr = new SupervisorManager({
+  supervisorMgr = new SupervisorManager({
     eventBus,
     broadcaster: wsHub,
     terminalMgr,

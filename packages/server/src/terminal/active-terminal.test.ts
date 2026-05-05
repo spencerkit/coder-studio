@@ -11,7 +11,7 @@ describe('ActiveTerminal', () => {
     onExit: () => {},
     write: () => {},
     resize: () => {},
-    kill: () => {},
+    kill: async () => {},
   }
 
   const spec: TerminalSpec = {

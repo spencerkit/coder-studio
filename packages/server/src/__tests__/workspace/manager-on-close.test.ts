@@ -73,4 +73,30 @@ describe('WorkspaceManager.close — onClose callback', () => {
     await expect(manager.close(workspace.id)).resolves.toBeUndefined();
     expect(manager.get(workspace.id)).toBeUndefined();
   });
+
+  it('runs runtime teardown before deleting the workspace row and post-close cleanup after', async () => {
+    let manager!: WorkspaceManager;
+    const callOrder: string[] = [];
+    const teardown = vi.fn(async (workspaceId: string) => {
+      callOrder.push(`teardown:${workspaceId}`);
+      expect(manager.get(workspaceId)).toBeDefined();
+    });
+    const onClose = vi.fn(async (workspaceId: string) => {
+      callOrder.push(`cleanup:${workspaceId}`);
+      expect(manager.get(workspaceId)).toBeUndefined();
+    });
+    const eventBus = {
+      emit: () => {},
+      on: () => () => {},
+    };
+
+    manager = new WorkspaceManager({ db, eventBus, onClose, teardown });
+
+    const workspace = await manager.open({ path: rootDir });
+    await manager.close(workspace.id);
+
+    expect(teardown).toHaveBeenCalledWith(workspace.id);
+    expect(onClose).toHaveBeenCalledWith(workspace.id);
+    expect(callOrder).toEqual([`teardown:${workspace.id}`, `cleanup:${workspace.id}`]);
+  });
 });

@@ -149,20 +149,17 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Kill terminal (TerminalManager handles cleanup)
-    this.deps.terminalMgr.kill(session.terminalId);
+    if (session.state === 'ended') {
+      this.terminalToSession.delete(session.terminalId);
+      this.cleanupDetector(session.id);
+      return;
+    }
 
-    // Update state
-    const prev = session.state;
-    session.state = 'ended';
-    session.endedAt = Date.now();
+    await this.deps.terminalMgr.close(session.terminalId);
 
-    this.deps.db.update(sessionId, {
-      state: 'ended',
-      endedAt: session.endedAt,
-    });
-
-    this.emitStateChanged(session, prev, 'ended');
+    if (session.state !== 'ended') {
+      this.finishSession(session, this.terminalToSession.has(session.terminalId) ? undefined : 0);
+    }
   }
 
   async hydrate(): Promise<void> {
@@ -233,6 +230,34 @@ export class SessionManager {
     return Array.from(this.sessions.values())
       .filter((s) => s.workspaceId === workspaceId)
       .map((s) => s.toDTO());
+  }
+
+  async stopForWorkspace(workspaceId: string): Promise<void> {
+    const sessions = Array.from(this.sessions.values()).filter(
+      (session) => session.workspaceId === workspaceId
+    );
+
+    for (const session of sessions) {
+      if (session.state === 'ended') {
+        this.terminalToSession.delete(session.terminalId);
+        this.cleanupDetector(session.id);
+        continue;
+      }
+
+      await this.stop(session.id);
+    }
+  }
+
+  deleteEndedForWorkspace(workspaceId: string): void {
+    const endedSessions = Array.from(this.sessions.values()).filter(
+      (session) => session.workspaceId === workspaceId && session.state === 'ended'
+    );
+
+    for (const session of endedSessions) {
+      this.sessions.delete(session.id);
+      this.terminalToSession.delete(session.terminalId);
+      this.cleanupDetector(session.id);
+    }
   }
 
   /**
@@ -409,19 +434,7 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    const prev = session.state;
-    session.state = 'ended';
-    session.endedAt = Date.now();
-    session.exitCode = exitCode;
-    this.terminalToSession.delete(terminalId);
-    this.cleanupDetector(sessionId);
-
-    this.deps.db.update(session.id, {
-      state: 'ended',
-      endedAt: session.endedAt,
-    });
-
-    this.emitStateChanged(session, prev, 'ended');
+    this.finishSession(session, exitCode);
   }
 
   /**
@@ -551,6 +564,22 @@ export class SessionManager {
     this.detectors.get(sessionId)?.dispose();
     this.detectors.delete(sessionId);
     this.comparators.delete(sessionId);
+  }
+
+  private finishSession(session: ActiveSession, exitCode: number | undefined): void {
+    const prev = session.state;
+    session.state = 'ended';
+    session.endedAt = Date.now();
+    session.exitCode = exitCode;
+    this.terminalToSession.delete(session.terminalId);
+    this.cleanupDetector(session.id);
+
+    this.deps.db.update(session.id, {
+      state: 'ended',
+      endedAt: session.endedAt,
+    });
+
+    this.emitStateChanged(session, prev, 'ended');
   }
 }
 

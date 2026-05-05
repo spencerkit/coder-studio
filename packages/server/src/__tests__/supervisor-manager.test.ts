@@ -376,6 +376,69 @@ describe('SupervisorManager cycle triggers', () => {
       'Supervisor evaluation failed before cycle creation'
     );
   });
+
+  it('aborts in-flight evaluation during workspace teardown without persisting an error state', async () => {
+    const supervisor = await manager.create({
+      sessionId: 'sess-close',
+      workspaceId: 'ws-1',
+      objective: 'Ship the fix',
+      evaluatorProviderId: 'codex',
+    });
+
+    const evaluate = vi
+      .spyOn((manager as any).evaluator, 'evaluate')
+      .mockImplementation(
+        async (
+          _supervisor: any,
+          _context: any,
+          options?: { signal?: AbortSignal }
+        ) =>
+          await new Promise((resolve, reject) => {
+            const signal = options?.signal;
+            const abort = () =>
+              reject({
+                code: 'supervisor_eval_aborted',
+                message: 'Supervisor evaluator aborted',
+              });
+
+            if (!signal) {
+              reject(new Error('Missing abort signal'));
+              return;
+            }
+            if (signal.aborted) {
+              abort();
+              return;
+            }
+
+            signal.addEventListener('abort', abort, { once: true });
+          })
+      );
+
+    const runEvaluation = (manager as any).runEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    });
+
+    const deleteWorkspace = manager.deleteForWorkspace('ws-1');
+
+    await expect(runEvaluation).resolves.toMatchObject({
+      supervisorId: supervisor.id,
+      status: 'failed',
+      errorReason: 'Supervisor evaluator aborted',
+    });
+    await expect(deleteWorkspace).resolves.toBeUndefined();
+
+    expect(manager.get(supervisor.id)).toBeUndefined();
+    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith(supervisor.id);
+    expect(
+      deps.supervisorRepo.update.mock.calls.some(
+        ([id, patch]: [string, { state?: string }]) =>
+          id === supervisor.id && patch.state === 'error'
+      )
+    ).toBe(false);
+    expect(deps.logger.error).not.toHaveBeenCalled();
+  });
 });
 
 async function waitFor(

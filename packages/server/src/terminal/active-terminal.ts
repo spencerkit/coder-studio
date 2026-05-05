@@ -11,6 +11,7 @@ import type { HeadlessSnapshotBuffer } from './terminal-snapshot-buffer'
 export class ActiveTerminal {
   public alive = true
   public exitCode?: number
+  public cleanupTimer: NodeJS.Timeout | null = null
   // Track current PTY dimensions so TerminalManager.resize() can skip
   // redundant pty.resize() calls. Each unnecessary pty.resize() sends
   // SIGWINCH to the child process (e.g. codex), which triggers a full

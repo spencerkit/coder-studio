@@ -22,7 +22,7 @@ describe('TerminalManager', () => {
       onExit: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
-      kill: vi.fn(),
+      kill: vi.fn().mockResolvedValue(undefined),
     }
 
     // Create mock PTY host
@@ -526,6 +526,36 @@ describe('TerminalManager', () => {
       manager.kill('nonexistent')
     })
 
+    it('kills only live terminals that belong to the target workspace', () => {
+      const first = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+      const second = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+      manager.create({
+        workspaceId: 'ws-999',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/other',
+      })
+
+      manager.get(second.id)!.alive = false
+      ;(mockPty.kill as Mock).mockClear()
+
+      manager.killForWorkspace('ws-123')
+
+      expect(mockPty.kill).toHaveBeenCalledTimes(1)
+      expect(mockPty.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(manager.get(first.id)?.spec.workspaceId).toBe('ws-123')
+    })
+
     it('does not dispose the snapshot buffer before the PTY exit cleanup window', () => {
       const terminal = manager.create({
         workspaceId: 'ws-123',
@@ -540,6 +570,243 @@ describe('TerminalManager', () => {
 
       expect(mockPty.kill).toHaveBeenCalledWith('SIGTERM')
       expect(disposeSpy).not.toHaveBeenCalled()
+    })
+
+    it('waits for PTY exit before resolving an explicit close', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+
+      const closePromise = manager.close(terminal.id)
+      let resolved = false
+      void closePromise.then(() => {
+        resolved = true
+      })
+
+      await Promise.resolve()
+
+      expect(mockPty.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(resolved).toBe(false)
+
+      const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+      onExitCallback({ exitCode: 0 })
+
+      await closePromise
+
+      expect(resolved).toBe(true)
+    })
+
+    it('waits for PTY kill cleanup to finish before resolving an explicit close', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+
+      let releaseKill: (() => void) | undefined
+      ;(mockPty.kill as Mock).mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseKill = resolve
+          })
+      )
+
+      const closePromise = manager.close(terminal.id)
+      let resolved = false
+      void closePromise.then(() => {
+        resolved = true
+      })
+
+      const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+      onExitCallback({ exitCode: 0 })
+      await Promise.resolve()
+
+      expect(resolved).toBe(false)
+
+      releaseKill?.()
+      await closePromise
+
+      expect(resolved).toBe(true)
+    })
+
+    it('disposes the snapshot buffer and removes the terminal immediately after explicit close exit', async () => {
+      vi.useFakeTimers()
+
+      try {
+        const terminal = manager.create({
+          workspaceId: 'ws-123',
+          kind: 'agent',
+          argv: ['node', 'agent.js'],
+          cwd: '/home/user',
+        })
+
+        const activeTerminal = manager.get(terminal.id)!
+        const disposeSpy = vi.spyOn(activeTerminal.snapshotBuffer!, 'dispose')
+        const closePromise = manager.close(terminal.id)
+        const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+
+        onExitCallback({ exitCode: 0 })
+        await closePromise
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1)
+        expect(manager.get(terminal.id)).toBeUndefined()
+
+        await vi.advanceTimersByTimeAsync(1000)
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('immediately cleans up an already-exited terminal when explicitly closed during replay grace', async () => {
+      vi.useFakeTimers()
+
+      try {
+        const terminal = manager.create({
+          workspaceId: 'ws-123',
+          kind: 'agent',
+          argv: ['node', 'agent.js'],
+          cwd: '/home/user',
+        })
+
+        const activeTerminal = manager.get(terminal.id)!
+        const disposeSpy = vi.spyOn(activeTerminal.snapshotBuffer!, 'dispose')
+        const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+
+        onExitCallback({ exitCode: 0 })
+        expect(manager.get(terminal.id)).toBeDefined()
+        expect(disposeSpy).not.toHaveBeenCalled()
+
+        await manager.close(terminal.id)
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1)
+        expect(manager.get(terminal.id)).toBeUndefined()
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not hang the original explicit close when a second close arrives after exit', async () => {
+      const terminal = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+
+      let releaseKill: (() => void) | undefined
+      ;(mockPty.kill as Mock).mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseKill = resolve
+          })
+      )
+
+      const firstClose = manager.close(terminal.id)
+      const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0]
+      onExitCallback({ exitCode: 0 })
+
+      const secondClose = manager.close(terminal.id)
+      let firstResolved = false
+      void firstClose.then(() => {
+        firstResolved = true
+      })
+      let secondResolved = false
+      void secondClose.then(() => {
+        secondResolved = true
+      })
+
+      await Promise.resolve()
+      expect(firstResolved).toBe(false)
+      expect(secondResolved).toBe(false)
+
+      releaseKill?.()
+      await secondClose
+      await firstClose
+
+      expect(firstResolved).toBe(true)
+      expect(secondResolved).toBe(true)
+    })
+
+    it('waits for all matching terminals to finish explicit workspace close', async () => {
+      const first = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/user',
+      })
+      const second = manager.create({
+        workspaceId: 'ws-123',
+        kind: 'agent',
+        argv: ['node', 'agent.js'],
+        cwd: '/home/user',
+      })
+      manager.create({
+        workspaceId: 'ws-999',
+        kind: 'shell',
+        argv: ['bash'],
+        cwd: '/home/other',
+      })
+
+      const closePromise = manager.closeForWorkspace('ws-123')
+      let resolved = false
+      void closePromise.then(() => {
+        resolved = true
+      })
+
+      await Promise.resolve()
+
+      expect(mockPty.kill).toHaveBeenCalledTimes(2)
+      expect(resolved).toBe(false)
+
+      const onExitCallbacks = (mockPty.onExit as Mock).mock.calls.map((call) => call[0])
+      onExitCallbacks[0]({ exitCode: 0 })
+      await Promise.resolve()
+      expect(resolved).toBe(false)
+
+      onExitCallbacks[1]({ exitCode: 0 })
+      await closePromise
+
+      expect(resolved).toBe(true)
+      expect(manager.get(first.id)).toBeUndefined()
+      expect(manager.get(second.id)).toBeUndefined()
+    })
+
+    it('cleans up already-exited workspace terminals that are still in replay grace', async () => {
+      vi.useFakeTimers()
+
+      try {
+        const terminal = manager.create({
+          workspaceId: 'ws-123',
+          kind: 'agent',
+          argv: ['node', 'agent.js'],
+          cwd: '/home/user',
+        })
+        const otherWorkspace = manager.create({
+          workspaceId: 'ws-999',
+          kind: 'agent',
+          argv: ['node', 'other.js'],
+          cwd: '/home/other',
+        })
+
+        const disposeSpy = vi.spyOn(manager.get(terminal.id)!.snapshotBuffer!, 'dispose')
+        const onExitCallbacks = (mockPty.onExit as Mock).mock.calls.map((call) => call[0])
+        onExitCallbacks[0]({ exitCode: 0 })
+
+        await manager.closeForWorkspace('ws-123')
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1)
+        expect(manager.get(terminal.id)).toBeUndefined()
+        expect(manager.get(otherWorkspace.id)).toBeDefined()
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

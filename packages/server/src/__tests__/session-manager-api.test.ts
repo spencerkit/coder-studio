@@ -29,7 +29,7 @@ describe('SessionManager session-level API', () => {
       resize: vi.fn((cols: number, rows: number) => {
         ptyResizes.push([cols, rows]);
       }),
-      kill: vi.fn(),
+      kill: vi.fn().mockResolvedValue(undefined),
     };
 
     const ptyHost: PtyHost = {

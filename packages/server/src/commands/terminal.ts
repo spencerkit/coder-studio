@@ -243,7 +243,7 @@ registerCommand(
     terminalId: z.string(),
   }),
   async (args, ctx) => {
-    ctx.terminalMgr.kill(args.terminalId);
+    await ctx.terminalMgr.close(args.terminalId);
   }
 );
 

@@ -106,4 +106,40 @@ describe('SupervisorManager', () => {
       expect.objectContaining({ state: 'idle', errorReason: null })
     );
   });
+
+  it('drops workspace supervisors from memory during workspace teardown', async () => {
+    deps.supervisorRepo.listAll.mockReturnValue([
+      {
+        id: 'sup-1',
+        sessionId: 'sess-1',
+        workspaceId: 'ws-1',
+        state: 'idle',
+        objective: 'Persist supervisors',
+        evaluatorProviderId: 'claude',
+        cycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: 'sup-2',
+        sessionId: 'sess-2',
+        workspaceId: 'ws-2',
+        state: 'idle',
+        objective: 'Leave this one alone',
+        evaluatorProviderId: 'claude',
+        cycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    const manager = new SupervisorManager(deps);
+    await manager.hydrate();
+
+    await manager.deleteForWorkspace('ws-1');
+
+    expect(manager.get('sup-1')).toBeUndefined();
+    expect(manager.get('sup-2')).toBeDefined();
+    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith('sup-1');
+  });
 });

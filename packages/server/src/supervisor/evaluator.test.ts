@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SupervisorEvaluator } from './evaluator.js';
 
@@ -56,6 +59,15 @@ function makeContext() {
     terminalExcerpt: 'build passes',
     latestUserInput: 'run the tests',
   } as any;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe('SupervisorEvaluator', () => {
@@ -197,6 +209,74 @@ describe('SupervisorEvaluator', () => {
     expect(prompt).toContain('Your response must be one of');
   });
 
+  it('aborts the evaluator process group when the signal is cancelled', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'supervisor-evaluator-'));
+    const pidFile = path.join(tempDir, 'pids.json');
+    const script = [
+      'const { spawn } = require("node:child_process");',
+      'const fs = require("node:fs");',
+      `const pidFile = ${JSON.stringify(pidFile)};`,
+      'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });',
+      'fs.writeFileSync(pidFile, JSON.stringify({ parent: process.pid, child: child.pid }));',
+      'setInterval(() => {}, 1000);',
+    ].join(' ');
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [
+        {
+          id: 'codex',
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: [process.execPath, '-e', script],
+            cwd: process.cwd(),
+            env: {},
+          })),
+        },
+      ] as any,
+      providerConfigRepo: {
+        get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
+      } as any,
+      timeoutMs: 5000,
+    });
+    const controller = new AbortController();
+
+    let pids: { parent: number; child: number } | null = null;
+    try {
+      const evaluation = evaluator.evaluate(makeSupervisor('codex'), makeContext(), {
+        signal: controller.signal,
+      });
+
+      await waitFor(() => {
+        expect(existsSync(pidFile)).toBe(true);
+      });
+      pids = JSON.parse(readFileSync(pidFile, 'utf8')) as {
+        parent: number;
+        child: number;
+      };
+
+      controller.abort();
+
+      await expect(evaluation).rejects.toMatchObject({
+        code: 'supervisor_eval_aborted',
+      });
+
+      await waitFor(() => {
+        expect(isPidAlive(pids.parent)).toBe(false);
+        expect(isPidAlive(pids.child)).toBe(false);
+      });
+    } finally {
+      if (pids?.parent && isPidAlive(pids.parent)) {
+        try {
+          process.kill(-pids.parent, 'SIGKILL');
+        } catch {
+          process.kill(pids.parent, 'SIGKILL');
+        }
+      }
+      if (pids?.child && isPidAlive(pids.child)) {
+        process.kill(pids.child, 'SIGKILL');
+      }
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
   describe('message extraction', () => {
     it('parses agent_message text from codex JSONL stream', async () => {
       const jsonl = [
@@ -323,3 +403,21 @@ describe('SupervisorEvaluator', () => {
     });
   });
 });
+
+async function waitFor(
+  fn: () => void,
+  { timeoutMs = 3000, intervalMs = 20 } = {}
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      fn();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('waitFor timed out');
+}

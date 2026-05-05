@@ -24,6 +24,7 @@ describe('SessionManager.delete', () => {
   let mockTerminalMgr: {
     create: vi.Mock;
     kill: vi.Mock;
+    close: vi.Mock;
   };
 
   beforeEach(() => {
@@ -49,6 +50,7 @@ describe('SessionManager.delete', () => {
         kind: 'agent',
       }),
       kill: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
     };
 
     const deps: SessionManagerDeps = {
@@ -171,5 +173,96 @@ describe('SessionManager.delete', () => {
     expect((sessionMgr as any).detectors.has(session.id)).toBe(false);
     expect((sessionMgr as any).comparators.has(session.id)).toBe(false);
     expect((sessionMgr as any).detectorUnsubscribes.has(session.id)).toBe(false);
+  });
+
+  it('stops and removes all workspace sessions during workspace teardown', async () => {
+    mockDb.insert.mockImplementation(() => {});
+    mockDb.update.mockImplementation(() => {});
+
+    const first = await sessionMgr.create({
+      workspaceId: 'ws-1',
+      workspacePath: '/test/path',
+      providerId: 'test-provider',
+      provider: {
+        id: 'test-provider',
+        displayName: 'Test Provider',
+        capability: 'full',
+        buildCommand: () => ({ argv: ['test'], cwd: '/test' }),
+      } as any,
+    });
+    const second = await sessionMgr.create({
+      workspaceId: 'ws-1',
+      workspacePath: '/test/path',
+      providerId: 'test-provider',
+      provider: {
+        id: 'test-provider',
+        displayName: 'Test Provider',
+        capability: 'full',
+        buildCommand: () => ({ argv: ['test'], cwd: '/test' }),
+      } as any,
+    });
+    const otherWorkspace = await sessionMgr.create({
+      workspaceId: 'ws-2',
+      workspacePath: '/test/path-2',
+      providerId: 'test-provider',
+      provider: {
+        id: 'test-provider',
+        displayName: 'Test Provider',
+        capability: 'full',
+        buildCommand: () => ({ argv: ['test'], cwd: '/test' }),
+      } as any,
+    });
+
+    await sessionMgr.stopForWorkspace('ws-1');
+    sessionMgr.deleteEndedForWorkspace('ws-1');
+
+    expect(mockTerminalMgr.close).toHaveBeenCalledTimes(2);
+    expect(mockTerminalMgr.close).toHaveBeenNthCalledWith(1, 'terminal-1');
+    expect(mockTerminalMgr.close).toHaveBeenNthCalledWith(2, 'terminal-1');
+    expect(sessionMgr.get(first.id)).toBeUndefined();
+    expect(sessionMgr.get(second.id)).toBeUndefined();
+    expect(sessionMgr.get(otherWorkspace.id)).toBeDefined();
+  });
+
+  it('awaits terminal close completion before stopForWorkspace resolves', async () => {
+    mockDb.insert.mockImplementation(() => {});
+    mockDb.update.mockImplementation(() => {});
+
+    let resolveClose: (() => void) | undefined;
+    mockTerminalMgr.close.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        })
+    );
+
+    const session = await sessionMgr.create({
+      workspaceId: 'ws-1',
+      workspacePath: '/test/path',
+      providerId: 'test-provider',
+      provider: {
+        id: 'test-provider',
+        displayName: 'Test Provider',
+        capability: 'full',
+        buildCommand: () => ({ argv: ['test'], cwd: '/test' }),
+      } as any,
+    });
+
+    const stopPromise = sessionMgr.stopForWorkspace('ws-1');
+    let resolved = false;
+    void stopPromise.then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+
+    expect(mockTerminalMgr.close).toHaveBeenCalledWith('terminal-1');
+    expect(resolved).toBe(false);
+
+    resolveClose?.();
+    await stopPromise;
+
+    expect(resolved).toBe(true);
+    expect(sessionMgr.get(session.id)?.state).toBe('ended');
   });
 });

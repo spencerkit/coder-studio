@@ -47,6 +47,7 @@ function createMockPtyHost(
       spawn: (argv: string[], options) => {
         spawnCalls.push({ argv, options });
         const id = `mock-pty-${Date.now()}`;
+        const state = { onDataCallbacks: [] as Array<(data: string) => void>, onExitCallbacks: [] as Array<(event: { exitCode: number }) => void> };
 
         const pty: PtyProcess = {
           onData: (callback) => {
@@ -59,10 +60,18 @@ function createMockPtyHost(
           },
           write: vi.fn(),
           resize: vi.fn(),
-          kill: vi.fn(),
+          kill: vi.fn(async () => {
+            const term = terminals.get(id);
+            if (!term) {
+              return;
+            }
+            for (const cb of term.onExitCallbacks) {
+              cb({ exitCode: 0 });
+            }
+          }),
         };
 
-        terminals.set(id, { onDataCallbacks: [], onExitCallbacks: [] });
+        terminals.set(id, state);
 
         // Simulate startup output
         setTimeout(() => {

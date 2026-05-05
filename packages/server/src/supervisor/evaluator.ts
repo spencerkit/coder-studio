@@ -9,6 +9,7 @@ import {
 import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
 import type { SupervisorEvaluationContext } from './context-builder.js';
 import { mergeProviderLaunchConfig } from '../provider-config.js';
+import { escalateKillWithPolling } from '../terminal/pty-host.js';
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -30,6 +31,10 @@ export interface SupervisorResult {
   message: string;
 }
 
+interface EvaluateOptions {
+  signal?: AbortSignal;
+}
+
 export class SupervisorEvaluator {
   private readonly config: SupervisorConfig;
   private readonly logger: FastifyBaseLogger;
@@ -49,7 +54,8 @@ export class SupervisorEvaluator {
 
   async evaluate(
     supervisor: Supervisor,
-    context: SupervisorEvaluationContext
+    context: SupervisorEvaluationContext,
+    options: EvaluateOptions = {}
   ): Promise<SupervisorResult> {
     const provider = this.deps.providerRegistry.find(
       (item) => item.id === supervisor.evaluatorProviderId
@@ -78,7 +84,7 @@ export class SupervisorEvaluator {
       };
     }
 
-    const stdout = await runCommand(command, this.deps.timeoutMs ?? 30_000);
+    const stdout = await runCommand(command, this.deps.timeoutMs ?? 30_000, options);
 
     let message: string;
     try {
@@ -134,35 +140,97 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
 
 async function runCommand(
   command: { argv: string[]; cwd?: string; env?: Record<string, string> },
-  timeoutMs: number
+  timeoutMs: number,
+  options: EvaluateOptions = {}
 ): Promise<string> {
+  if (options.signal?.aborted) {
+    throw createSupervisorEvalAbortedError();
+  }
+
   return await new Promise((resolve, reject) => {
     const child = spawn(command.argv[0]!, command.argv.slice(1), {
       cwd: command.cwd,
+      detached: process.platform !== 'win32',
       env: { ...process.env, ...command.env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
+    let settled = false;
+    let terminationError:
+      | { code: 'supervisor_eval_timeout' | 'supervisor_eval_aborted'; message: string }
+      | null = null;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+    };
+
+    const settleReject = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const settleResolve = (value: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const terminate = (
+      error: { code: 'supervisor_eval_timeout' | 'supervisor_eval_aborted'; message: string }
+    ) => {
+      if (terminationError) {
+        return;
+      }
+      terminationError = error;
+
+      if (typeof child.pid !== 'number' || child.pid <= 0) {
+        settleReject(error);
+        return;
+      }
+
+      void escalateKillWithPolling(child.pid, 'SIGTERM').catch(() => {
+        // Best-effort only. The exit/error event still decides final settlement.
+      });
+    };
+
+    const onAbort = () => {
+      terminate(createSupervisorEvalAbortedError());
+    };
+
     const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      reject({
+      terminate({
         code: 'supervisor_eval_timeout',
         message: `Supervisor evaluator timed out after ${timeoutMs}ms`,
       });
     }, timeoutMs);
 
+    options.signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout?.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr?.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
     child.on('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
+      if (terminationError) {
+        settleReject(terminationError);
+        return;
+      }
+      settleReject(error);
     });
     child.on('exit', (code) => {
-      clearTimeout(timer);
+      if (terminationError) {
+        settleReject(terminationError);
+        return;
+      }
       if (code !== 0) {
-        reject({
+        settleReject({
           code: 'supervisor_eval_failed',
           message:
             Buffer.concat(stderr).toString('utf8').trim() ||
@@ -171,9 +239,19 @@ async function runCommand(
         return;
       }
 
-      resolve(Buffer.concat(stdout).toString('utf8'));
+      settleResolve(Buffer.concat(stdout).toString('utf8'));
     });
   });
+}
+
+function createSupervisorEvalAbortedError(): {
+  code: 'supervisor_eval_aborted';
+  message: string;
+} {
+  return {
+    code: 'supervisor_eval_aborted',
+    message: 'Supervisor evaluator aborted',
+  };
 }
 
 /**

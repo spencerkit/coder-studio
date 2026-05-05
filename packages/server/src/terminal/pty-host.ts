@@ -226,7 +226,7 @@ export class NodePtyHost implements PtyHost {
       resize: (cols, rows) => {
         ptyProcess.resize(cols, rows);
       },
-      kill: (signal: NodeJS.Signals = 'SIGTERM') => {
+      kill: async (signal: NodeJS.Signals = 'SIGTERM') => {
         const pid = ptyProcess.pid;
 
         if (pid > 0) {
@@ -239,9 +239,11 @@ export class NodePtyHost implements PtyHost {
 
           // Also send to process group to ensure child processes are terminated
           // This handles cases where shell spawns child processes
-          escalateKillWithPolling(pid, signal).catch(() => {
+          try {
+            await escalateKillWithPolling(pid, signal);
+          } catch {
             // Silently ignore errors from escalation polling
-          });
+          }
         }
       },
     };

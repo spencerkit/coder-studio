@@ -10,7 +10,7 @@ describe('TerminalManager.getRingBufferTail', () => {
       onExit: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
-      kill: vi.fn(),
+      kill: vi.fn().mockResolvedValue(undefined),
     };
 
     const ptyHost: PtyHost = {

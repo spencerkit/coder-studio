@@ -21,6 +21,7 @@ export interface WorkspaceManagerDeps {
   db: Database;
   eventBus: EventBus;
   broadcaster?: Broadcaster;
+  teardown?: (workspaceId: string) => void | Promise<void>;
   onClose?: (workspaceId: string) => void | Promise<void>;
 }
 
@@ -165,6 +166,10 @@ export class WorkspaceManager {
     if (watcher) {
       await watcher.close();
       this.watchers.delete(workspaceId);
+    }
+
+    if (this.deps.teardown) {
+      await this.deps.teardown(workspaceId);
     }
 
     // Delete from DB (cascade deletes terminals and sessions)

@@ -51,6 +51,11 @@ interface StartedCycle {
   context: SupervisorEvaluationContext;
 }
 
+interface DeferredCompletion {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
 export interface SupervisorManagerDeps {
   eventBus: EventBus;
   broadcaster: Broadcaster;
@@ -75,6 +80,14 @@ export interface CreateSupervisorRequest {
 export interface UpdateSupervisorRequest {
   objective?: string;
   evaluatorProviderId?: string;
+}
+
+function createDeferredCompletion(): DeferredCompletion {
+  let resolve = () => {};
+  const promise = new Promise<void>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }
 
 function generateSupervisorId(): string {
@@ -112,6 +125,8 @@ export class SupervisorManager {
   private readonly supervisorsBySession = new Map<string, string>();
   private readonly inFlight = new Set<string>();
   private readonly pendingDeletes = new Set<string>();
+  private readonly evaluationAbortControllers = new Map<string, AbortController>();
+  private readonly inFlightCompletions = new Map<string, DeferredCompletion>();
   private readonly scheduler: SupervisorScheduler;
   private readonly contextBuilder: SupervisorContextBuilder;
   private readonly evaluator: SupervisorEvaluator;
@@ -239,6 +254,34 @@ export class SupervisorManager {
     return supervisorId ? this.supervisors.get(supervisorId) : undefined;
   }
 
+  async deleteForWorkspace(workspaceId: string): Promise<void> {
+    const supervisorIds = Array.from(this.supervisors.values())
+      .filter((supervisor) => supervisor.workspaceId === workspaceId)
+      .map((supervisor) => supervisor.id);
+    const pending: Promise<void>[] = [];
+
+    for (const supervisorId of supervisorIds) {
+      const supervisor = this.supervisors.get(supervisorId);
+      if (!supervisor) {
+        continue;
+      }
+
+      this.pendingDeletes.add(supervisorId);
+      if (!this.inFlight.has(supervisorId)) {
+        this.deleteNow(supervisor);
+        continue;
+      }
+
+      this.evaluationAbortControllers.get(supervisorId)?.abort();
+      const completion = this.inFlightCompletions.get(supervisorId);
+      if (completion) {
+        pending.push(completion.promise);
+      }
+    }
+
+    await Promise.all(pending);
+  }
+
   async create(req: CreateSupervisorRequest): Promise<Supervisor> {
     const session = this.deps.sessionMgr.get(req.sessionId);
     if (!session) {
@@ -344,6 +387,8 @@ export class SupervisorManager {
 
     if (this.inFlight.has(id)) {
       this.pendingDeletes.add(id);
+      this.evaluationAbortControllers.get(id)?.abort();
+      await this.inFlightCompletions.get(id)?.promise;
       return;
     }
 
@@ -457,6 +502,8 @@ export class SupervisorManager {
     }
 
     this.inFlight.add(id);
+    this.evaluationAbortControllers.set(id, new AbortController());
+    this.inFlightCompletions.set(id, createDeferredCompletion());
 
     try {
       const context = await this.contextBuilder.build(supervisor);
@@ -465,7 +512,7 @@ export class SupervisorManager {
         context.lastTurnId &&
         context.lastTurnId === supervisor.lastEvaluatedTurnId
       ) {
-        this.inFlight.delete(id);
+        this.releaseInFlight(id);
         return null;
       }
 
@@ -498,7 +545,7 @@ export class SupervisorManager {
       // Error happened BEFORE we created a cycle (usually contextBuilder or
       // the state→evaluating write). Make sure we don't leave the
       // supervisor stuck and release inFlight ourselves.
-      this.inFlight.delete(id);
+      this.releaseInFlight(id);
       this.markSupervisorError(id, error);
       throw error;
     }
@@ -517,7 +564,9 @@ export class SupervisorManager {
       const supervisorForEval =
         this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
 
-      const evaluation = await this.evaluator.evaluate(supervisorForEval, context);
+      const evaluation = await this.evaluator.evaluate(supervisorForEval, context, {
+        signal: this.evaluationAbortControllers.get(supervisorId)?.signal,
+      });
 
       let injected = false;
       let injectedText: string | undefined;
@@ -615,6 +664,45 @@ export class SupervisorManager {
 
       return finishedCycle;
     } catch (error: unknown) {
+      if (isSupervisorEvalAborted(error)) {
+        const abortedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+          status: 'failed',
+          errorReason: messageOf(error, 'Supervisor evaluator aborted'),
+          completedAt: Date.now(),
+        });
+
+        const currentSupervisor =
+          this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
+
+        if (this.pendingDeletes.has(supervisorId)) {
+          this.broadcastCycle(currentSupervisor, abortedCycle, 'updated');
+          this.pendingDeletes.delete(supervisorId);
+          this.deleteNow(currentSupervisor);
+          return abortedCycle;
+        }
+
+        const latestState = this.supervisors.get(supervisorId)?.state;
+        const nextState: SupervisorState =
+          latestState === 'paused' ? 'paused' : 'idle';
+        const recoveredSupervisor = this.attachCycles(
+          this.deps.supervisorRepo.update(supervisorId, {
+            state: nextState,
+            errorReason: null,
+            updatedAt: Date.now(),
+          })
+        );
+
+        this.storeSnapshot(recoveredSupervisor);
+        this.broadcastCycle(recoveredSupervisor, abortedCycle, 'updated');
+        this.broadcastState(recoveredSupervisor, 'state_changed');
+        this.deps.cycleRepo.pruneOldest(
+          supervisorId,
+          this.config.maxCyclesPerSession
+        );
+
+        return abortedCycle;
+      }
+
       logFailure(
         this.logger,
         error,
@@ -646,7 +734,7 @@ export class SupervisorManager {
 
       throw error;
     } finally {
-      this.inFlight.delete(supervisorId);
+      this.releaseInFlight(supervisorId);
     }
   }
 
@@ -731,12 +819,19 @@ export class SupervisorManager {
     this.supervisors.delete(supervisor.id);
     this.supervisorsBySession.delete(supervisor.sessionId);
     this.pendingDeletes.delete(supervisor.id);
-    this.inFlight.delete(supervisor.id);
+    this.releaseInFlight(supervisor.id);
 
     this.deps.broadcaster.broadcast(
       Topics.supervisorState(supervisor.workspaceId, supervisor.sessionId),
       { supervisorId: supervisor.id, event: 'deleted' }
     );
+  }
+
+  private releaseInFlight(supervisorId: string): void {
+    this.inFlight.delete(supervisorId);
+    this.evaluationAbortControllers.delete(supervisorId);
+    this.inFlightCompletions.get(supervisorId)?.resolve();
+    this.inFlightCompletions.delete(supervisorId);
   }
 
   private requireSupervisor(id: string): Supervisor {
@@ -770,4 +865,11 @@ export class SupervisorManager {
       { cycle, event }
     );
   }
+}
+
+function isSupervisorEvalAborted(error: unknown): error is {
+  code: 'supervisor_eval_aborted';
+  message: string;
+} {
+  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === 'supervisor_eval_aborted';
 }

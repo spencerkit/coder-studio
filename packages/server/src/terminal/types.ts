@@ -72,7 +72,7 @@ export interface PtyProcess {
   onExit(callback: (event: { exitCode: number }) => void): void
   write(data: Buffer | string): void
   resize(cols: number, rows: number): void
-  kill(signal?: NodeJS.Signals): void
+  kill(signal?: NodeJS.Signals): Promise<void>
 }
 
 /**

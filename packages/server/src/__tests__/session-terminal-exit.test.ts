@@ -48,7 +48,7 @@ function createMockPtyHost(): {
         },
         write: vi.fn(),
         resize: vi.fn(),
-        kill: vi.fn(),
+        kill: vi.fn().mockResolvedValue(undefined),
       };
 
       processes.push({ onDataCallbacks: [], onExitCallbacks: [] });

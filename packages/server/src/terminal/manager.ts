@@ -72,6 +72,17 @@ function generateId(): string {
  */
 export class TerminalManager {
   private terminals = new Map<TerminalId, ActiveTerminal>()
+  private explicitCloseWaiters = new Map<
+    TerminalId,
+    {
+      signal: NodeJS.Signals
+      killCompleted: Promise<void>
+      markKillCompleted: () => void
+      finalized: boolean
+      promise: Promise<void>
+      resolve: () => void
+    }
+  >()
 
   constructor(
     private readonly deps: {
@@ -211,15 +222,35 @@ export class TerminalManager {
       } satisfies DomainEvent
       this.deps.eventBus.emit(event)
 
-      // Keep ActiveTerminal object for 1s to allow replay, then cleanup
-      setTimeout(() => {
-        active.snapshotBuffer?.dispose()
-        this.terminals.delete(id)
-      }, 1000)
+      const explicitClose = this.explicitCloseWaiters.get(id)
+      if (explicitClose) {
+        void explicitClose.killCompleted.finally(() => {
+          if (!explicitClose.finalized) {
+            explicitClose.finalized = true
+            this.finalizeTerminal(active)
+          }
+          this.explicitCloseWaiters.delete(id)
+          explicitClose.resolve()
+        })
+      } else {
+        // Keep ActiveTerminal object for 1s to allow replay, then cleanup
+        active.cleanupTimer = setTimeout(() => {
+          this.finalizeTerminal(active)
+        }, 1000)
+      }
 
       // Mark as ended in database
       this.deps.db.markEnded(id, Date.now(), exitCode)
     })
+  }
+
+  private finalizeTerminal(active: ActiveTerminal): void {
+    if (active.cleanupTimer) {
+      clearTimeout(active.cleanupTimer)
+      active.cleanupTimer = null
+    }
+    active.snapshotBuffer?.dispose()
+    this.terminals.delete(active.id)
   }
 
   /**
@@ -288,8 +319,90 @@ export class TerminalManager {
   kill(terminalId: TerminalId, signal: NodeJS.Signals = 'SIGTERM'): void {
     const terminal = this.terminals.get(terminalId)
     if (terminal) {
-      terminal.pty.kill(signal)
+      void terminal.pty.kill(signal)
     }
+  }
+
+  close(terminalId: TerminalId, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
+    const terminal = this.terminals.get(terminalId)
+    if (!terminal) {
+      return Promise.resolve()
+    }
+
+    if (!terminal.alive) {
+      const existing = this.explicitCloseWaiters.get(terminalId)
+      if (existing) {
+        if (!existing.finalized) {
+          existing.finalized = true
+          this.finalizeTerminal(terminal)
+        }
+        return existing.promise
+      }
+
+      this.finalizeTerminal(terminal)
+      return Promise.resolve()
+    }
+
+    const existing = this.explicitCloseWaiters.get(terminalId)
+    if (existing) {
+      if (existing.signal !== signal) {
+        terminal.pty.kill(signal)
+      }
+      return existing.promise
+    }
+
+    let resolve = () => {}
+    const promise = new Promise<void>((innerResolve) => {
+      resolve = innerResolve
+    })
+    let markKillCompleted = () => {}
+    const killCompleted = new Promise<void>((innerResolve) => {
+      markKillCompleted = innerResolve
+    })
+    this.explicitCloseWaiters.set(terminalId, {
+      signal,
+      killCompleted,
+      markKillCompleted,
+      finalized: false,
+      promise,
+      resolve,
+    })
+    void terminal.pty.kill(signal).finally(() => {
+      const waiter = this.explicitCloseWaiters.get(terminalId)
+      if (!waiter) {
+        return
+      }
+
+      waiter.markKillCompleted()
+    })
+    return promise
+  }
+
+  killForWorkspace(workspaceId: string, signal: NodeJS.Signals = 'SIGTERM'): void {
+    for (const terminal of this.terminals.values()) {
+      if (terminal.spec.workspaceId !== workspaceId || !terminal.alive) {
+        continue
+      }
+
+      void terminal.pty.kill(signal)
+    }
+  }
+
+  async closeForWorkspace(
+    workspaceId: string,
+    signal: NodeJS.Signals = 'SIGTERM'
+  ): Promise<void> {
+    const closes: Promise<void>[] = []
+
+    for (const terminal of this.terminals.values()) {
+      if (terminal.spec.workspaceId !== workspaceId) {
+        continue
+      }
+
+      closes.push(this.close(terminal.id, signal))
+    }
+
+    await Promise.all(closes)
   }
 
   /**
@@ -384,11 +497,16 @@ export class TerminalManager {
    * Clean up all terminals (for graceful shutdown)
    */
   shutdown(): void {
+    for (const waiter of this.explicitCloseWaiters.values()) {
+      waiter.resolve()
+    }
+    this.explicitCloseWaiters.clear()
+
     for (const terminal of this.terminals.values()) {
       if (terminal.alive) {
-        terminal.pty.kill('SIGTERM')
+        void terminal.pty.kill('SIGTERM')
       }
-      terminal.snapshotBuffer?.dispose()
+      this.finalizeTerminal(terminal)
     }
     this.terminals.clear()
   }

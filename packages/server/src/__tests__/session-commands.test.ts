@@ -35,7 +35,8 @@ describe('Session Commands', () => {
     sessionMgr = new SessionManager({
       terminalMgr: {
         create: () => ({ id: 'terminal-1' }),
-        kill: () => {},
+        kill: async () => {},
+        close: async () => {},
       } as any,
       eventBus,
       db: {

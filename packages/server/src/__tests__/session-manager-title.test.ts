@@ -27,6 +27,7 @@ describe('SessionManager title derivation', () => {
   let mockTerminalMgr: {
     create: ReturnType<typeof vi.fn>;
     kill: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -52,6 +53,7 @@ describe('SessionManager title derivation', () => {
         kind: 'agent',
       }),
       kill: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
     };
 
     const deps: SessionManagerDeps = {
