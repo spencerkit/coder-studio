@@ -2,13 +2,13 @@
  * Git CLI operations - Wrapper around git commands.
  */
 
-import { execFile } from 'child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import type { GitStatus, GitBranch } from '@coder-studio/core';
-import { GIT_COMMON_REMOTES } from '../constants/git.js';
-import { parseStatus } from './status-parser.js';
+import type { GitBranch, GitStatus } from "@coder-studio/core";
+import { execFile } from "child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
+import os from "os";
+import path from "path";
+import { GIT_COMMON_REMOTES } from "../constants/git.js";
+import { parseStatus } from "./status-parser.js";
 
 export interface GitCommandResult {
   stdout: string;
@@ -35,13 +35,13 @@ export interface GitHttpAuth {
 }
 
 export interface GitAuthFailureDetails {
-  operation: 'push' | 'pull';
+  operation: "push" | "pull";
   remote?: string;
   remoteUrl?: string;
   remoteLabel: string;
   host?: string;
-  reason: 'missing_credentials' | 'invalid_credentials' | 'authorization_failed';
-  authMode: 'username_password' | 'unsupported';
+  reason: "missing_credentials" | "invalid_credentials" | "authorization_failed";
+  authMode: "username_password" | "unsupported";
   canPrompt: boolean;
   usernameHint?: string;
 }
@@ -62,22 +62,22 @@ export async function runGit(
 ): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
     const gitArgs = [
-      ...(options.config?.flatMap(([key, value]) => ['-c', `${key}=${value}`]) ?? []),
+      ...(options.config?.flatMap(([key, value]) => ["-c", `${key}=${value}`]) ?? []),
       ...args,
     ];
 
     const child = execFile(
-      'git',
+      "git",
       gitArgs,
       {
         cwd,
         env: {
           ...process.env,
-          GIT_TERMINAL_PROMPT: '0',
+          GIT_TERMINAL_PROMPT: "0",
           // Force C locale so prompt detection (e.g. askpass `grep "username"`)
           // and parsers do not break on systems running git in another language.
-          LC_ALL: 'C',
-          LANG: 'C',
+          LC_ALL: "C",
+          LANG: "C",
           ...options.env,
         },
         maxBuffer: 10 * 1024 * 1024,
@@ -93,7 +93,7 @@ export async function runGit(
     );
 
     if (options.stdin !== undefined && child.stdin) {
-      child.stdin.on('error', () => {});
+      child.stdin.on("error", () => {});
       child.stdin.end(options.stdin);
     }
   });
@@ -108,7 +108,7 @@ export class GitError extends Error {
     public readonly stderr: string
   ) {
     super(message);
-    this.name = 'GitError';
+    this.name = "GitError";
   }
 }
 
@@ -119,18 +119,18 @@ export class GitError extends Error {
 export class GitAuthError extends Error {
   constructor(
     message: string,
-    public readonly code: 'git_auth_required' | 'git_auth_failed',
+    public readonly code: "git_auth_required" | "git_auth_failed",
     public readonly details: GitAuthFailureDetails
   ) {
     super(message);
-    this.name = 'GitAuthError';
+    this.name = "GitAuthError";
   }
 }
 
 interface GitAuthContext {
   remote?: string;
   remoteUrl?: string;
-  operation: 'push' | 'pull';
+  operation: "push" | "pull";
   attemptedCredentialAuth?: boolean;
 }
 
@@ -153,11 +153,11 @@ interface PreparedGitAuthExecution {
  */
 export async function getGitStatus(cwd: string): Promise<GitStatus> {
   const { stdout: statusOutput } = await runGit(cwd, [
-    'status',
-    '--porcelain=v2',
-    '-z',
-    '--branch',
-    '--untracked-files=all',
+    "status",
+    "--porcelain=v2",
+    "-z",
+    "--branch",
+    "--untracked-files=all",
   ]);
   const status = parseStatus(statusOutput);
 
@@ -165,7 +165,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
     return status;
   }
 
-  const { stdout: headSubjectOutput } = await runGit(cwd, ['show', '-s', '--format=%s', 'HEAD']);
+  const { stdout: headSubjectOutput } = await runGit(cwd, ["show", "-s", "--format=%s", "HEAD"]);
   return {
     ...status,
     headSubject: headSubjectOutput.trim(),
@@ -176,7 +176,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
  * Get compact git status text for supervisor evaluation prompts.
  */
 export async function getGitStatusSummary(cwd: string): Promise<string> {
-  const { stdout } = await runGit(cwd, ['status', '--short']);
+  const { stdout } = await runGit(cwd, ["status", "--short"]);
   return stdout.trim();
 }
 
@@ -184,7 +184,7 @@ export async function getGitStatusSummary(cwd: string): Promise<string> {
  * Get compact git diff stats for supervisor evaluation prompts.
  */
 export async function getGitDiffStatSummary(cwd: string): Promise<string> {
-  const { stdout } = await runGit(cwd, ['diff', '--stat']);
+  const { stdout } = await runGit(cwd, ["diff", "--stat"]);
   return stdout.trim();
 }
 
@@ -193,7 +193,7 @@ export async function getGitDiffStatSummary(cwd: string): Promise<string> {
  */
 export async function stageFiles(cwd: string, paths: string[]): Promise<void> {
   if (paths.length === 0) return;
-  await runGit(cwd, ['add', ...paths]);
+  await runGit(cwd, ["add", ...paths]);
 }
 
 /**
@@ -201,7 +201,7 @@ export async function stageFiles(cwd: string, paths: string[]): Promise<void> {
  */
 export async function unstageFiles(cwd: string, paths: string[]): Promise<void> {
   if (paths.length === 0) return;
-  await runGit(cwd, ['reset', 'HEAD', '--', ...paths]);
+  await runGit(cwd, ["reset", "HEAD", "--", ...paths]);
 }
 
 /**
@@ -215,7 +215,7 @@ export async function discardChanges(cwd: string, paths: string[]): Promise<void
 
   for (const path of paths) {
     try {
-      await runGit(cwd, ['ls-files', '--error-unmatch', '--', path]);
+      await runGit(cwd, ["ls-files", "--error-unmatch", "--", path]);
       trackedPaths.push(path);
     } catch {
       untrackedPaths.push(path);
@@ -223,11 +223,11 @@ export async function discardChanges(cwd: string, paths: string[]): Promise<void
   }
 
   if (trackedPaths.length > 0) {
-    await runGit(cwd, ['restore', '--staged', '--worktree', '--', ...trackedPaths]);
+    await runGit(cwd, ["restore", "--staged", "--worktree", "--", ...trackedPaths]);
   }
 
   if (untrackedPaths.length > 0) {
-    await runGit(cwd, ['clean', '-fd', '--', ...untrackedPaths]);
+    await runGit(cwd, ["clean", "-fd", "--", ...untrackedPaths]);
   }
 }
 
@@ -235,11 +235,11 @@ export async function discardChanges(cwd: string, paths: string[]): Promise<void
  * Create a commit.
  */
 export async function commitChanges(cwd: string, message: string): Promise<{ sha: string }> {
-  const { stdout } = await runGit(cwd, ['commit', '-m', message]);
+  const { stdout } = await runGit(cwd, ["commit", "-m", message]);
 
   // Extract SHA from output
   const match = stdout.match(/\[.* ([a-f0-9]+)\]/);
-  const sha = match?.[1] ?? '';
+  const sha = match?.[1] ?? "";
 
   return { sha };
 }
@@ -256,28 +256,28 @@ export async function runGitPush(
     auth?: GitHttpAuth;
   }
 ): Promise<{ success: boolean; message: string }> {
-  const args = ['push'];
+  const args = ["push"];
   let remote = options?.remote;
   let branch = options?.branch;
 
   if (options?.force) {
-    args.push('--force');
+    args.push("--force");
   }
 
   if (!remote || !branch) {
-    const pushTarget = await resolveRemoteBranchTarget(cwd, 'push');
+    const pushTarget = await resolveRemoteBranchTarget(cwd, "push");
     remote = remote ?? pushTarget?.remote;
     branch = branch ?? pushTarget?.branch;
   }
 
   if (!remote || !branch) {
-    const upstreamTarget = await resolveRemoteBranchTarget(cwd, 'upstream');
+    const upstreamTarget = await resolveRemoteBranchTarget(cwd, "upstream");
     remote = remote ?? upstreamTarget?.remote;
     branch = branch ?? upstreamTarget?.branch;
   }
 
   if (!remote && branch) {
-    remote = (await getPreferredRemote(cwd)) ?? 'origin';
+    remote = (await getPreferredRemote(cwd)) ?? "origin";
   }
 
   if (!remote) {
@@ -287,7 +287,7 @@ export async function runGitPush(
   if (remote && branch) {
     args.push(remote, `HEAD:${branch}`);
   } else if (remote) {
-    args.push('--set-upstream', remote, 'HEAD');
+    args.push("--set-upstream", remote, "HEAD");
   }
   const remoteUrl = remote ? await getRemoteUrl(cwd, remote) : null;
   const remoteMetadata = parseRemoteUrlMetadata(remoteUrl ?? undefined);
@@ -305,12 +305,12 @@ export async function runGitPush(
     }
 
     // Combine output for message
-    const message = stdout || stderr || 'Push completed successfully';
+    const message = stdout || stderr || "Push completed successfully";
 
     return { success: true, message };
   } catch (error) {
     throw normalizeGitAuthFailure(error, {
-      operation: 'push',
+      operation: "push",
       remote,
       remoteUrl: remoteMetadata.sanitizedUrl ?? remoteUrl ?? undefined,
       attemptedCredentialAuth: Boolean(options?.auth),
@@ -331,18 +331,18 @@ export async function runGitPull(
     auth?: GitHttpAuth;
   }
 ): Promise<{ success: boolean; message: string; updatedFiles?: string[] }> {
-  const args = ['pull'];
+  const args = ["pull"];
   let remote = options?.remote;
   let branch = options?.branch;
 
   if (!remote || !branch) {
-    const upstreamTarget = await resolveRemoteBranchTarget(cwd, 'upstream');
+    const upstreamTarget = await resolveRemoteBranchTarget(cwd, "upstream");
     remote = remote ?? upstreamTarget?.remote;
     branch = branch ?? upstreamTarget?.branch;
   }
 
   if (!remote && branch) {
-    remote = (await getPreferredRemote(cwd)) ?? 'origin';
+    remote = (await getPreferredRemote(cwd)) ?? "origin";
   }
 
   if (remote && branch) {
@@ -365,10 +365,12 @@ export async function runGitPull(
 
     // Parse updated files from output
     const updatedFiles: string[] = [];
-    const fileMatches = stdout.matchAll(/Updating\s+([a-f0-9]+)\.\.\.([a-f0-9]+)\nFast-forward\n([\s\S]*)/g);
+    const fileMatches = stdout.matchAll(
+      /Updating\s+([a-f0-9]+)\.\.\.([a-f0-9]+)\nFast-forward\n([\s\S]*)/g
+    );
     for (const match of fileMatches) {
-      const filesSection = match[3] ?? '';
-      const fileLines = filesSection.split('\n').filter(line => line.trim());
+      const filesSection = match[3] ?? "";
+      const fileLines = filesSection.split("\n").filter((line) => line.trim());
       for (const line of fileLines) {
         const fileMatch = line.match(/^\s+\S+\s+(\S+)/);
         if (fileMatch && fileMatch[1]) {
@@ -377,12 +379,12 @@ export async function runGitPull(
       }
     }
 
-    const message = stdout || stderr || 'Pull completed successfully';
+    const message = stdout || stderr || "Pull completed successfully";
 
     return { success: true, message, updatedFiles };
   } catch (error) {
     throw normalizeGitAuthFailure(error, {
-      operation: 'pull',
+      operation: "pull",
       remote,
       remoteUrl: remoteMetadata.sanitizedUrl ?? remoteUrl ?? undefined,
       attemptedCredentialAuth: Boolean(options?.auth),
@@ -402,25 +404,25 @@ export async function runGitCheckout(
     createBranch?: boolean;
   }
 ): Promise<{ success: boolean; message: string; branch?: string }> {
-  const args = ['checkout'];
+  const args = ["checkout"];
 
   // Detect remote branch refs by querying actual configured remotes
   let isRemoteRef = false;
   try {
-    const { stdout: remoteList } = await runGit(cwd, ['remote']);
-    const remotes = remoteList.trim().split('\n').filter(Boolean);
+    const { stdout: remoteList } = await runGit(cwd, ["remote"]);
+    const remotes = remoteList.trim().split("\n").filter(Boolean);
     // Check if ref starts with any configured remote (e.g., 'origin/main')
-    isRemoteRef = remotes.some(remote => ref.startsWith(`${remote}/`));
+    isRemoteRef = remotes.some((remote) => ref.startsWith(`${remote}/`));
   } catch {
     // Fall back to common remotes if git remote fails
-    isRemoteRef = GIT_COMMON_REMOTES.some(remote => ref.startsWith(remote));
+    isRemoteRef = GIT_COMMON_REMOTES.some((remote) => ref.startsWith(remote));
   }
 
   // If remote branch ref, auto-create tracking branch
   if (isRemoteRef && !options?.createBranch) {
-    const remoteSeparatorIndex = ref.indexOf('/');
+    const remoteSeparatorIndex = ref.indexOf("/");
     const branchName = remoteSeparatorIndex >= 0 ? ref.slice(remoteSeparatorIndex + 1) : ref;
-    args.push('-b', branchName, ref);
+    args.push("-b", branchName, ref);
 
     try {
       const { stdout, stderr } = await runGit(cwd, args);
@@ -428,16 +430,16 @@ export async function runGitCheckout(
 
       // For remote branch checkout, we know the branch name from the ref
       return { success: true, message, branch: branchName };
-    } catch (error) {
+    } catch {
       return {
         success: false,
-        message: `Failed to checkout remote branch '${ref}'`
+        message: `Failed to checkout remote branch '${ref}'`,
       };
     }
   } else {
     // Original logic for local branches and createBranch flag
     if (options?.createBranch) {
-      args.push('-b');
+      args.push("-b");
     }
     args.push(ref);
 
@@ -451,10 +453,10 @@ export async function runGitCheckout(
       const message = stdout || stderr || `Checkout to ${ref} completed`;
 
       return { success: true, message, branch };
-    } catch (error) {
+    } catch {
       return {
         success: false,
-        message: `Failed to checkout '${ref}'`
+        message: `Failed to checkout '${ref}'`,
       };
     }
   }
@@ -470,7 +472,7 @@ export async function runGitCreateBranch(
     startPoint?: string;
   }
 ): Promise<{ success: boolean; message: string; branch: string }> {
-  const args = ['branch', branchName];
+  const args = ["branch", branchName];
 
   if (options?.startPoint) {
     args.push(options.startPoint);
@@ -495,26 +497,26 @@ export async function runGitListBranches(cwd: string): Promise<{
   current: string;
 }> {
   // Get local branches
-  const { stdout: localOutput } = await runGit(cwd, ['branch', '--list']);
+  const { stdout: localOutput } = await runGit(cwd, ["branch", "--list"]);
 
   // Get remote branches
-  const { stdout: remoteOutput } = await runGit(cwd, ['branch', '-r']);
+  const { stdout: remoteOutput } = await runGit(cwd, ["branch", "-r"]);
 
   const branches: GitBranch[] = [];
-  let current = '';
+  let current = "";
 
   // Parse local branches
-  const localLines = localOutput.split('\n').filter(line => line.trim());
+  const localLines = localOutput.split("\n").filter((line) => line.trim());
   for (const line of localLines) {
-    const isCurrent = line.startsWith('*');
-    const name = line.replace(/^\*?\s+/, '').trim();
+    const isCurrent = line.startsWith("*");
+    const name = line.replace(/^\*?\s+/, "").trim();
 
     // Skip detached HEAD indicator
-    if (name.startsWith('(HEAD detached')) {
+    if (name.startsWith("(HEAD detached")) {
       if (isCurrent) {
-        current = '';  // Empty string indicates detached state
+        current = ""; // Empty string indicates detached state
       }
-      continue;  // Don't add to branches array
+      continue; // Don't add to branches array
     }
 
     branches.push({
@@ -528,16 +530,16 @@ export async function runGitListBranches(cwd: string): Promise<{
   }
 
   // Parse remote branches
-  const remoteLines = remoteOutput.split('\n').filter(line => line.trim());
+  const remoteLines = remoteOutput.split("\n").filter((line) => line.trim());
   for (const line of remoteLines) {
     const fullName = line.trim();
-    if (fullName.includes(' -> ')) {
+    if (fullName.includes(" -> ")) {
       continue;
     }
 
-    const [remote] = fullName.split('/');
+    const [remote] = fullName.split("/");
     branches.push({
-      name: fullName,  // Show full name "origin/main"
+      name: fullName, // Show full name "origin/main"
       isRemote: true,
       isCurrent: false,
       remote,
@@ -549,18 +551,23 @@ export async function runGitListBranches(cwd: string): Promise<{
 
 async function resolveRemoteBranchTarget(
   cwd: string,
-  mode: 'push' | 'upstream'
+  mode: "push" | "upstream"
 ): Promise<GitRemoteBranchTarget | null> {
-  const symbolicRef = mode === 'push' ? '@{push}' : '@{upstream}';
+  const symbolicRef = mode === "push" ? "@{push}" : "@{upstream}";
 
   try {
-    const { stdout } = await runGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', symbolicRef]);
+    const { stdout } = await runGit(cwd, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      symbolicRef,
+    ]);
     const fullRef = stdout.trim();
     if (!fullRef) {
       return null;
     }
 
-    const remoteSeparatorIndex = fullRef.indexOf('/');
+    const remoteSeparatorIndex = fullRef.indexOf("/");
     if (remoteSeparatorIndex <= 0 || remoteSeparatorIndex === fullRef.length - 1) {
       return null;
     }
@@ -576,9 +583,9 @@ async function resolveRemoteBranchTarget(
 
 async function getPreferredRemote(cwd: string): Promise<string | null> {
   try {
-    const { stdout } = await runGit(cwd, ['remote']);
+    const { stdout } = await runGit(cwd, ["remote"]);
     const remotes = stdout
-      .split('\n')
+      .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
 
@@ -586,7 +593,7 @@ async function getPreferredRemote(cwd: string): Promise<string | null> {
       return null;
     }
 
-    return remotes.includes('origin') ? 'origin' : (remotes[0] ?? null);
+    return remotes.includes("origin") ? "origin" : (remotes[0] ?? null);
   } catch {
     return null;
   }
@@ -594,7 +601,7 @@ async function getPreferredRemote(cwd: string): Promise<string | null> {
 
 async function getRemoteUrl(cwd: string, remote: string): Promise<string | null> {
   try {
-    const { stdout } = await runGit(cwd, ['remote', 'get-url', remote]);
+    const { stdout } = await runGit(cwd, ["remote", "get-url", remote]);
     const value = stdout.trim();
     return value || null;
   } catch {
@@ -612,23 +619,23 @@ async function prepareGitAuthExecution(
     };
   }
 
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'coder-studio-git-auth-'));
-  const hooksDir = path.join(tempDir, 'hooks');
-  const askPassPath = path.join(tempDir, 'askpass.sh');
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "coder-studio-git-auth-"));
+  const hooksDir = path.join(tempDir, "hooks");
+  const askPassPath = path.join(tempDir, "askpass.sh");
 
   await mkdir(hooksDir, { recursive: true, mode: 0o700 });
   await writeFile(
     askPassPath,
     [
-      '#!/bin/sh',
+      "#!/bin/sh",
       'prompt=$(printf "%s" "$1" | tr "[:upper:]" "[:lower:]")',
       `if printf "%s" "$prompt" | grep -q "username"; then`,
       '  printf "%s" "$CODER_STUDIO_GIT_AUTH_USERNAME"',
-      'else',
+      "else",
       '  printf "%s" "$CODER_STUDIO_GIT_AUTH_PASSWORD"',
-      'fi',
-      '',
-    ].join('\n'),
+      "fi",
+      "",
+    ].join("\n"),
     { mode: 0o700 }
   );
 
@@ -636,14 +643,14 @@ async function prepareGitAuthExecution(
     env: {
       GIT_ASKPASS: askPassPath,
       SSH_ASKPASS: askPassPath,
-      GCM_INTERACTIVE: 'never',
+      GCM_INTERACTIVE: "never",
       CODER_STUDIO_GIT_AUTH_USERNAME: auth.username,
       CODER_STUDIO_GIT_AUTH_PASSWORD: auth.password,
     },
     config: [
-      ['core.hooksPath', hooksDir],
-      ['credential.helper', ''],
-      ['credential.username', auth.username],
+      ["core.hooksPath", hooksDir],
+      ["credential.helper", ""],
+      ["credential.username", auth.username],
     ],
     cleanup: async () => {
       await rm(tempDir, { recursive: true, force: true });
@@ -665,21 +672,25 @@ async function persistGitHttpCredentials(
     if (remoteMetadata.sanitizedUrl) {
       const { stdout } = await runGit(
         cwd,
-        ['config', '--get-urlmatch', 'credential.helper', remoteMetadata.sanitizedUrl],
+        ["config", "--get-urlmatch", "credential.helper", remoteMetadata.sanitizedUrl],
         {
           timeoutMs: 30000,
         }
       );
       helperConfigured = stdout
-        .split('\n')
+        .split("\n")
         .map((line) => line.trim())
         .some(Boolean);
     } else {
-      const { stdout } = await runGit(cwd, ['config', '--get-regexp', '^credential(\\..+)?\\.helper$'], {
-        timeoutMs: 30000,
-      });
+      const { stdout } = await runGit(
+        cwd,
+        ["config", "--get-regexp", "^credential(\\..+)?\\.helper$"],
+        {
+          timeoutMs: 30000,
+        }
+      );
       helperConfigured = stdout
-        .split('\n')
+        .split("\n")
         .map((line) => line.trim())
         .some(Boolean);
     }
@@ -694,8 +705,8 @@ async function persistGitHttpCredentials(
   let useHttpPath = false;
   try {
     const configArgs = remoteMetadata.sanitizedUrl
-      ? ['config', '--get-urlmatch', 'credential.useHttpPath', remoteMetadata.sanitizedUrl]
-      : ['config', '--get', 'credential.useHttpPath'];
+      ? ["config", "--get-urlmatch", "credential.useHttpPath", remoteMetadata.sanitizedUrl]
+      : ["config", "--get", "credential.useHttpPath"];
     const { stdout } = await runGit(cwd, configArgs, {
       timeoutMs: 30000,
     });
@@ -705,17 +716,17 @@ async function persistGitHttpCredentials(
   }
 
   const credentialInput = [
-    `protocol=${remoteMetadata.protocol ?? 'https'}`,
+    `protocol=${remoteMetadata.protocol ?? "https"}`,
     `host=${remoteMetadata.host}`,
     ...(useHttpPath ? [`path=${remoteMetadata.path}`] : []),
     `username=${auth.username}`,
     `password=${auth.password}`,
-    '',
-    '',
-  ].join('\n');
+    "",
+    "",
+  ].join("\n");
 
   try {
-    await runGit(cwd, ['credential', 'approve'], {
+    await runGit(cwd, ["credential", "approve"], {
       stdin: credentialInput,
       timeoutMs: 30000,
     });
@@ -734,7 +745,7 @@ function normalizeGitAuthFailure(error: unknown, context: GitAuthContext): unkno
     return error;
   }
 
-  const code = details.canPrompt ? 'git_auth_required' : 'git_auth_failed';
+  const code = details.canPrompt ? "git_auth_required" : "git_auth_failed";
   return new GitAuthError(formatGitAuthFailureMessage(details), code, details);
 }
 
@@ -745,21 +756,21 @@ export function classifyGitAuthFailure(
   const output = `${error.message}\n${error.stderr}`.toLowerCase();
   const remoteMetadata = describeRemote(context.remote, context.remoteUrl);
   const authPatterns = [
-    'terminal prompts disabled',
-    'could not read username',
-    'could not read password',
-    'authentication failed',
-    'http basic: access denied',
-    'invalid username or password',
-    'invalid username or token',
-    'support for password authentication was removed',
-    'requested url returned error: 401',
-    'requested url returned error: 403',
-    'write access to repository not granted',
-    'access denied',
-    'authentication required',
-    'permission denied (publickey)',
-    'could not read from remote repository',
+    "terminal prompts disabled",
+    "could not read username",
+    "could not read password",
+    "authentication failed",
+    "http basic: access denied",
+    "invalid username or password",
+    "invalid username or token",
+    "support for password authentication was removed",
+    "requested url returned error: 401",
+    "requested url returned error: 403",
+    "write access to repository not granted",
+    "access denied",
+    "authentication required",
+    "permission denied (publickey)",
+    "could not read from remote repository",
   ];
 
   if (!authPatterns.some((pattern) => output.includes(pattern))) {
@@ -767,16 +778,17 @@ export function classifyGitAuthFailure(
   }
 
   const attemptedCredentialAuth = context.attemptedCredentialAuth ?? false;
-  const reason = output.includes('requested url returned error: 403') ||
-    output.includes('write access to repository not granted')
-      ? 'authorization_failed'
-      : output.includes('terminal prompts disabled') ||
-          output.includes('could not read username') ||
-          output.includes('could not read password')
-        ? 'missing_credentials'
-        : attemptedCredentialAuth || output.includes('access denied')
-          ? 'invalid_credentials'
-          : 'missing_credentials';
+  const reason =
+    output.includes("requested url returned error: 403") ||
+    output.includes("write access to repository not granted")
+      ? "authorization_failed"
+      : output.includes("terminal prompts disabled") ||
+          output.includes("could not read username") ||
+          output.includes("could not read password")
+        ? "missing_credentials"
+        : attemptedCredentialAuth || output.includes("access denied")
+          ? "invalid_credentials"
+          : "missing_credentials";
 
   return {
     operation: context.operation,
@@ -785,7 +797,7 @@ export function classifyGitAuthFailure(
     remoteLabel: remoteMetadata.remoteLabel,
     host: remoteMetadata.host,
     reason,
-    authMode: remoteMetadata.canPrompt ? 'username_password' : 'unsupported',
+    authMode: remoteMetadata.canPrompt ? "username_password" : "unsupported",
     canPrompt: remoteMetadata.canPrompt,
     usernameHint: remoteMetadata.usernameHint,
   };
@@ -796,11 +808,11 @@ function formatGitAuthFailureMessage(details: GitAuthFailureDetails): string {
     return `Authentication failed for ${details.remoteLabel}. Configure SSH keys or a credential helper, then try again.`;
   }
 
-  if (details.reason === 'authorization_failed') {
+  if (details.reason === "authorization_failed") {
     return `Credentials for ${details.remoteLabel} were accepted, but this account is not allowed to ${details.operation}.`;
   }
 
-  if (details.reason === 'invalid_credentials') {
+  if (details.reason === "invalid_credentials") {
     return `Credentials for ${details.remoteLabel} were rejected. Enter a valid username and password or personal access token to continue.`;
   }
 
@@ -809,7 +821,9 @@ function formatGitAuthFailureMessage(details: GitAuthFailureDetails): string {
 
 function describeRemote(remote: string | undefined, remoteUrl: string | undefined) {
   const metadata = parseRemoteUrlMetadata(remoteUrl);
-  const remoteLabel = metadata.host ? `${remote ?? 'remote'} (${metadata.host})` : remote ?? 'remote';
+  const remoteLabel = metadata.host
+    ? `${remote ?? "remote"} (${metadata.host})`
+    : (remote ?? "remote");
 
   return {
     remoteUrl: metadata.sanitizedUrl ?? remoteUrl,
@@ -829,24 +843,24 @@ function parseRemoteUrlMetadata(remoteUrl: string | undefined): RemoteUrlMetadat
 
   try {
     const parsed = new URL(remoteUrl);
-    const pathName = parsed.pathname.replace(/^\/+/, '');
+    const pathName = parsed.pathname.replace(/^\/+/, "");
     const sanitized = new URL(remoteUrl);
-    sanitized.username = '';
-    sanitized.password = '';
+    sanitized.username = "";
+    sanitized.password = "";
     return {
-      protocol: parsed.protocol.replace(/:$/, ''),
+      protocol: parsed.protocol.replace(/:$/, ""),
       host: parsed.host || undefined,
       path: pathName || undefined,
       sanitizedUrl: sanitized.toString(),
-      canPrompt: parsed.protocol === 'http:' || parsed.protocol === 'https:',
+      canPrompt: parsed.protocol === "http:" || parsed.protocol === "https:",
     };
   } catch {
     const sshMatch = remoteUrl.match(/^(?<user>[^@]+)@(?<host>[^:]+):.+$/);
     if (sshMatch?.groups?.host) {
       return {
-        protocol: 'ssh',
+        protocol: "ssh",
         host: sshMatch.groups.host,
-        path: remoteUrl.split(':').slice(1).join(':') || undefined,
+        path: remoteUrl.split(":").slice(1).join(":") || undefined,
         sanitizedUrl: remoteUrl,
         canPrompt: false,
       };
@@ -860,5 +874,5 @@ function parseRemoteUrlMetadata(remoteUrl: string | undefined): RemoteUrlMetadat
 }
 
 function isGitBooleanTrue(value: string): boolean {
-  return ['true', 'yes', 'on', '1'].includes(value.trim().toLowerCase());
+  return ["true", "yes", "on", "1"].includes(value.trim().toLowerCase());
 }

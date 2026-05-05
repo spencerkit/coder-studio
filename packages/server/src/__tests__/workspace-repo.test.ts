@@ -1,19 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { openDatabase, closeDatabase, WorkspaceRepo, type NewWorkspace } from '../storage/index.js';
-import type { Database } from '../storage/database.js';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Database } from "../storage/database.js";
+import { closeDatabase, type NewWorkspace, openDatabase, WorkspaceRepo } from "../storage/index.js";
 
-describe('WorkspaceRepo', () => {
+describe("WorkspaceRepo", () => {
   let db: Database;
   let repo: WorkspaceRepo;
   let tempDir: string;
 
   beforeEach(() => {
     // Create a temporary directory for the test database
-    tempDir = mkdtempSync(join(tmpdir(), 'workspace-repo-test-'));
-    const dbPath = join(tempDir, 'test.db');
+    tempDir = mkdtempSync(join(tmpdir(), "workspace-repo-test-"));
+    const dbPath = join(tempDir, "test.db");
     db = openDatabase(dbPath);
     repo = new WorkspaceRepo(db);
   });
@@ -23,12 +23,12 @@ describe('WorkspaceRepo', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  describe('create', () => {
-    it('should create a new workspace', () => {
+  describe("create", () => {
+    it("should create a new workspace", () => {
       const newWorkspace: NewWorkspace = {
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: {
@@ -46,12 +46,12 @@ describe('WorkspaceRepo', () => {
       expect(result.uiState.leftPanelWidth).toBe(250);
     });
 
-    it('should support WSL workspaces', () => {
+    it("should support WSL workspaces", () => {
       const newWorkspace: NewWorkspace = {
-        id: 'ws-2',
-        path: '\\\\wsl$\\Ubuntu\\home\\user\\project',
-        targetRuntime: 'wsl',
-        wslDistro: 'Ubuntu',
+        id: "ws-2",
+        path: "\\\\wsl$\\Ubuntu\\home\\user\\project",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: {
@@ -63,15 +63,15 @@ describe('WorkspaceRepo', () => {
 
       const result = repo.create(newWorkspace);
 
-      expect(result.targetRuntime).toBe('wsl');
-      expect(result.wslDistro).toBe('Ubuntu');
+      expect(result.targetRuntime).toBe("wsl");
+      expect(result.wslDistro).toBe("Ubuntu");
     });
 
-    it('persists pane layout in ui state', () => {
+    it("persists pane layout in ui state", () => {
       const newWorkspace: NewWorkspace = {
-        id: 'ws-pane',
-        path: '/path/to/pane-workspace',
-        targetRuntime: 'native',
+        id: "ws-pane",
+        path: "/path/to/pane-workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: {
@@ -79,19 +79,19 @@ describe('WorkspaceRepo', () => {
           bottomPanelHeight: 180,
           focusMode: false,
           paneLayout: {
-            id: 'root',
-            type: 'split',
-            direction: 'horizontal',
+            id: "root",
+            type: "split",
+            direction: "horizontal",
             children: [
               {
-                id: 'left',
-                type: 'leaf',
-                sessionId: 'sess-1',
+                id: "left",
+                type: "leaf",
+                sessionId: "sess-1",
               },
               {
-                id: 'right',
-                type: 'leaf',
-                sessionId: 'sess-2',
+                id: "right",
+                type: "leaf",
+                sessionId: "sess-2",
               },
             ],
           },
@@ -104,22 +104,22 @@ describe('WorkspaceRepo', () => {
     });
   });
 
-  describe('list', () => {
-    it('should list all workspaces', () => {
+  describe("list", () => {
+    it("should list all workspaces", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/1',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/1",
+        targetRuntime: "native",
         openedAt: 1000,
         lastActiveAt: 2000,
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
       repo.create({
-        id: 'ws-2',
-        path: '/path/2',
-        targetRuntime: 'wsl',
-        wslDistro: 'Ubuntu',
+        id: "ws-2",
+        path: "/path/2",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu",
         openedAt: 3000,
         lastActiveAt: 4000,
         uiState: { leftPanelWidth: 300, bottomPanelHeight: 200, focusMode: true },
@@ -128,183 +128,181 @@ describe('WorkspaceRepo', () => {
       const workspaces = repo.list();
 
       expect(workspaces).toHaveLength(2);
-      expect(workspaces.map(w => w.id)).toEqual(expect.arrayContaining(['ws-1', 'ws-2']));
+      expect(workspaces.map((w) => w.id)).toEqual(expect.arrayContaining(["ws-1", "ws-2"]));
     });
 
-    it('should return empty array when no workspaces exist', () => {
+    it("should return empty array when no workspaces exist", () => {
       const workspaces = repo.list();
       expect(workspaces).toHaveLength(0);
     });
   });
 
-  describe('findById', () => {
-    it('should find a workspace by ID', () => {
+  describe("findById", () => {
+    it("should find a workspace by ID", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      const result = repo.findById('ws-1');
+      const result = repo.findById("ws-1");
 
       expect(result).toBeDefined();
-      expect(result?.id).toBe('ws-1');
+      expect(result?.id).toBe("ws-1");
     });
 
-    it('should return undefined for non-existent ID', () => {
-      const result = repo.findById('non-existent');
+    it("should return undefined for non-existent ID", () => {
+      const result = repo.findById("non-existent");
       expect(result).toBeUndefined();
     });
   });
 
-  describe('findByPath', () => {
-    it('should find a workspace by path', () => {
+  describe("findByPath", () => {
+    it("should find a workspace by path", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      const result = repo.findByPath('/path/to/workspace');
+      const result = repo.findByPath("/path/to/workspace");
 
       expect(result).toBeDefined();
-      expect(result?.id).toBe('ws-1');
+      expect(result?.id).toBe("ws-1");
     });
 
-    it('should return undefined for non-existent path', () => {
-      const result = repo.findByPath('/non/existent/path');
+    it("should return undefined for non-existent path", () => {
+      const result = repo.findByPath("/non/existent/path");
       expect(result).toBeUndefined();
     });
   });
 
-  describe('updateUiState', () => {
-    it('should update UI state for a workspace', () => {
+  describe("updateUiState", () => {
+    it("should update UI state for a workspace", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      repo.updateUiState('ws-1', {
+      repo.updateUiState("ws-1", {
         leftPanelWidth: 300,
         bottomPanelHeight: 200,
         focusMode: true,
-        activeSessionId: 'session-1',
+        activeSessionId: "session-1",
       });
 
-      const result = repo.findById('ws-1');
+      const result = repo.findById("ws-1");
       expect(result?.uiState.leftPanelWidth).toBe(300);
       expect(result?.uiState.focusMode).toBe(true);
-      expect(result?.uiState.activeSessionId).toBe('session-1');
+      expect(result?.uiState.activeSessionId).toBe("session-1");
     });
 
-    it('updates pane layout inside ui state', () => {
+    it("updates pane layout inside ui state", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      repo.updateUiState('ws-1', {
+      repo.updateUiState("ws-1", {
         leftPanelWidth: 300,
         bottomPanelHeight: 220,
         focusMode: false,
         paneLayout: {
-          id: 'root',
-          type: 'split',
-          direction: 'vertical',
+          id: "root",
+          type: "split",
+          direction: "vertical",
           children: [
-            { id: 'top', type: 'leaf', sessionId: 'sess-top' },
-            { id: 'bottom', type: 'leaf' },
+            { id: "top", type: "leaf", sessionId: "sess-top" },
+            { id: "bottom", type: "leaf" },
           ],
         },
       });
 
-      const result = repo.findById('ws-1');
+      const result = repo.findById("ws-1");
       expect(result?.uiState.paneLayout).toEqual({
-        id: 'root',
-        type: 'split',
-        direction: 'vertical',
+        id: "root",
+        type: "split",
+        direction: "vertical",
         children: [
-          { id: 'top', type: 'leaf', sessionId: 'sess-top' },
-          { id: 'bottom', type: 'leaf' },
+          { id: "top", type: "leaf", sessionId: "sess-top" },
+          { id: "bottom", type: "leaf" },
         ],
       });
     });
   });
 
-  describe('updateLastActive', () => {
-    it('should update last active timestamp', () => {
-      const created = repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+  describe("updateLastActive", () => {
+    it("should update last active timestamp", () => {
+      repo.create({
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: 1000,
         lastActiveAt: 1000,
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
       const newTime = Date.now();
-      repo.updateLastActive('ws-1', newTime);
+      repo.updateLastActive("ws-1", newTime);
 
-      const result = repo.findById('ws-1');
+      const result = repo.findById("ws-1");
       expect(result?.lastActiveAt).toBe(newTime);
     });
   });
 
-  describe('delete', () => {
-    it('should delete a workspace by ID', () => {
+  describe("delete", () => {
+    it("should delete a workspace by ID", () => {
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      repo.delete('ws-1');
+      repo.delete("ws-1");
 
-      const result = repo.findById('ws-1');
+      const result = repo.findById("ws-1");
       expect(result).toBeUndefined();
     });
 
-    it('should cascade delete related terminals and sessions', () => {
+    it("should cascade delete related terminals and sessions", () => {
       // Create workspace
       repo.create({
-        id: 'ws-1',
-        path: '/path/to/workspace',
-        targetRuntime: 'native',
+        id: "ws-1",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
         openedAt: Date.now(),
         lastActiveAt: Date.now(),
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
       // Create terminal
-      db
-        .prepare(
-          `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
+      db.prepare(
+        `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run('t-1', 'ws-1', 'agent', '/path', '[]', 80, 24, Date.now());
+      ).run("t-1", "ws-1", "agent", "/path", "[]", 80, 24, Date.now());
 
       // Delete workspace
-      repo.delete('ws-1');
+      repo.delete("ws-1");
 
       // Verify terminal was deleted
-      const terminal = db.prepare('SELECT * FROM terminals WHERE id = ?').get('t-1');
+      const terminal = db.prepare("SELECT * FROM terminals WHERE id = ?").get("t-1");
       expect(terminal).toBeUndefined();
     });
   });

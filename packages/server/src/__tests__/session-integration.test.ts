@@ -9,45 +9,52 @@
  * 5. Test terminal input/output
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { dispatch } from '../ws/dispatch.js';
-import type { CommandContext } from '../ws/dispatch.js';
-import { openDatabase, runMigrations } from '../storage/db.js';
-import { WorkspaceManager } from '../workspace/manager.js';
-import { SessionManager } from '../session/manager.js';
-import { TerminalManager } from '../terminal/manager.js';
-import { EventBus } from '../bus/event-bus.js';
-import type { PtyHost, PtyProcess, Broadcaster } from '../terminal/types.js';
-import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
-import { providerRegistry } from '@coder-studio/providers';
-import { tmpdir } from 'node:os';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { ProviderInstallManager } from '../provider-runtime/install-manager.js';
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { providerRegistry } from "@coder-studio/providers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
+import { ProviderInstallManager } from "../provider-runtime/install-manager.js";
+import { SessionManager } from "../session/manager.js";
+import { openDatabase, runMigrations } from "../storage/db.js";
+import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { TerminalManager } from "../terminal/manager.js";
+import type { Broadcaster, PtyHost, PtyProcess } from "../terminal/types.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import { dispatch } from "../ws/dispatch.js";
 
 // Import command handlers to register them
-import '../commands/workspace.js';
-import '../commands/session.js';
-import '../commands/terminal.js';
-import '../commands/provider.js';
+import "../commands/workspace.js";
+import "../commands/session.js";
+import "../commands/terminal.js";
+import "../commands/provider.js";
 
 /**
  * Mock PtyHost for testing without spawning real processes
  */
-function createMockPtyHost(
-  spawnCalls: Array<{ argv: string[]; options: unknown }>
-): {
+function createMockPtyHost(spawnCalls: Array<{ argv: string[]; options: unknown }>): {
   ptyHost: PtyHost;
   triggerDataForProcessIndex: (processIndex: number, data: string) => void;
 } {
-  const terminals = new Map<string, { onDataCallbacks: Array<(data: string) => void>; onExitCallbacks: Array<(event: { exitCode: number }) => void> }>();
+  const terminals = new Map<
+    string,
+    {
+      onDataCallbacks: Array<(data: string) => void>;
+      onExitCallbacks: Array<(event: { exitCode: number }) => void>;
+    }
+  >();
 
   return {
     ptyHost: {
       spawn: (argv: string[], options) => {
         spawnCalls.push({ argv, options });
         const id = `mock-pty-${Date.now()}`;
-        const state = { onDataCallbacks: [] as Array<(data: string) => void>, onExitCallbacks: [] as Array<(event: { exitCode: number }) => void> };
+        const state = {
+          onDataCallbacks: [] as Array<(data: string) => void>,
+          onExitCallbacks: [] as Array<(event: { exitCode: number }) => void>,
+        };
 
         const pty: PtyProcess = {
           onData: (callback) => {
@@ -78,7 +85,7 @@ function createMockPtyHost(
           const term = terminals.get(id);
           if (term) {
             for (const cb of term.onDataCallbacks) {
-              cb('\x1b[32mMock Agent Started\x1b[0m\n');
+              cb("\x1b[32mMock Agent Started\x1b[0m\n");
             }
           }
         }, 50);
@@ -100,7 +107,7 @@ function createMockPtyHost(
   };
 }
 
-describe('Session Integration', () => {
+describe("Session Integration", () => {
   let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
@@ -120,7 +127,7 @@ describe('Session Integration', () => {
 
   beforeEach(() => {
     // Create in-memory database
-    db = openDatabase(':memory:');
+    db = openDatabase(":memory:");
     runMigrations(db);
 
     // Create event bus
@@ -156,8 +163,8 @@ describe('Session Integration', () => {
     // Create test directory with .git folder
     testDir = join(tmpdir(), `coder-studio-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    mkdirSync(join(testDir, '.git'), { recursive: true });
-    writeFileSync(join(testDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    mkdirSync(join(testDir, ".git"), { recursive: true });
+    writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
 
     sessionDb = {
       insert: vi.fn(),
@@ -202,47 +209,47 @@ describe('Session Integration', () => {
     }
   });
 
-  it('exposes provider.runtimeStatus and provider.install.get via dispatch', async () => {
+  it("exposes provider.runtimeStatus and provider.install.get via dispatch", async () => {
     ctx.providerRuntimeDeps = {
-      commandExists: async (command: string) => command === 'winget',
+      commandExists: async (command: string) => command === "winget",
     };
     ctx.providerInstallMgr = new ProviderInstallManager(providerRegistry, {
-      platform: 'win32',
-      commandExists: async (command: string) => command === 'winget',
-      execFile: async () => ({ stdout: '', stderr: '' }),
+      platform: "win32",
+      commandExists: async (command: string) => command === "winget",
+      execFile: async () => ({ stdout: "", stderr: "" }),
     });
 
     const status = await dispatch(
       {
-        kind: 'command',
-        id: 'provider-status',
-        op: 'provider.runtimeStatus',
+        kind: "command",
+        id: "provider-status",
+        op: "provider.runtimeStatus",
         args: {},
       },
       ctx
     );
 
     expect(status.ok).toBe(true);
-    expect(status.data).toHaveProperty('providers');
+    expect(status.data).toHaveProperty("providers");
 
     const start = await dispatch(
       {
-        kind: 'command',
-        id: 'install-start',
-        op: 'provider.install.start',
-        args: { providerId: 'codex' },
+        kind: "command",
+        id: "install-start",
+        op: "provider.install.start",
+        args: { providerId: "codex" },
       },
       ctx
     );
 
     expect(start.ok).toBe(true);
-    expect(start.data?.providerId).toBe('codex');
+    expect(start.data?.providerId).toBe("codex");
 
     const get = await dispatch(
       {
-        kind: 'command',
-        id: 'install-get',
-        op: 'provider.install.get',
+        kind: "command",
+        id: "install-get",
+        op: "provider.install.get",
         args: { jobId: (start.data as { jobId: string }).jobId },
       },
       ctx
@@ -252,14 +259,14 @@ describe('Session Integration', () => {
     expect(get.data?.jobId).toBe((start.data as { jobId: string }).jobId);
   });
 
-  describe('Complete workflow: workspace.open -> session.create', () => {
-    it('should open workspace and create session successfully', async () => {
+  describe("Complete workflow: workspace.open -> session.create", () => {
+    it("should open workspace and create session successfully", async () => {
       // Step 1: Open workspace
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-1',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-1",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -275,9 +282,9 @@ describe('Session Integration', () => {
       // Step 2: List workspaces to verify
       const listResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-2',
-          op: 'workspace.list',
+          kind: "command",
+          id: "test-2",
+          op: "workspace.list",
           args: {},
         },
         ctx
@@ -290,12 +297,12 @@ describe('Session Integration', () => {
       // Step 3: Create session with claude provider
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-3',
-          op: 'session.create',
+          kind: "command",
+          id: "test-3",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
@@ -305,39 +312,39 @@ describe('Session Integration', () => {
       expect(sessionResult.data).toBeDefined();
       expect(sessionResult.data?.id).toBeDefined();
       expect(sessionResult.data?.workspaceId).toBe(workspaceId);
-      expect(sessionResult.data?.providerId).toBe('claude');
-      expect(sessionResult.data?.state).toBe('starting');
+      expect(sessionResult.data?.providerId).toBe("claude");
+      expect(sessionResult.data?.state).toBe("starting");
 
       // Verify terminal was created
       expect(sessionResult.data?.terminalId).toBeDefined();
-      expect(sessionResult.data?.terminalId).not.toBe('');
+      expect(sessionResult.data?.terminalId).not.toBe("");
     });
 
-    it('should fail session.create if workspace does not exist', async () => {
+    it("should fail session.create if workspace does not exist", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-4',
-          op: 'session.create',
+          kind: "command",
+          id: "test-4",
+          op: "session.create",
           args: {
-            workspaceId: 'non-existent-workspace',
-            providerId: 'claude',
+            workspaceId: "non-existent-workspace",
+            providerId: "claude",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('workspace_not_found');
+      expect(result.error?.code).toBe("workspace_not_found");
     });
 
-    it('should fail session.create if provider does not exist', async () => {
+    it("should fail session.create if provider does not exist", async () => {
       // First open workspace
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-5',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-5",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -348,30 +355,32 @@ describe('Session Integration', () => {
       // Try to create session with invalid provider
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-6',
-          op: 'session.create',
+          kind: "command",
+          id: "test-6",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'non-existent-provider',
+            providerId: "non-existent-provider",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('unknown_provider');
+      expect(result.error?.code).toBe("unknown_provider");
     });
 
-    it('should use saved provider config when creating a session', async () => {
-      db.prepare('INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)')
-        .run('claude', '{"additionalArgs":["--verbose"]}');
+    it("should use saved provider config when creating a session", async () => {
+      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
+        "claude",
+        '{"additionalArgs":["--verbose"]}'
+      );
 
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-provider-config-open',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-provider-config-open",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -381,30 +390,32 @@ describe('Session Integration', () => {
 
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-provider-config-create',
-          op: 'session.create',
+          kind: "command",
+          id: "test-provider-config-create",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
       );
 
       expect(sessionResult.ok).toBe(true);
-      expect(spawnCalls.at(-1)?.argv).toContain('--verbose');
+      expect(spawnCalls.at(-1)?.argv).toContain("--verbose");
     });
 
-    it('should ignore legacy provider cwd overrides when creating a codex session', async () => {
-      db.prepare('INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)')
-        .run('codex', '{"additionalArgs":["--sandbox"],"cwd":"/tmp/legacy-cwd"}');
+    it("should ignore legacy provider cwd overrides when creating a codex session", async () => {
+      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
+        "codex",
+        '{"additionalArgs":["--sandbox"],"cwd":"/tmp/legacy-cwd"}'
+      );
 
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-provider-config-codex-open',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-provider-config-codex-open",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -414,37 +425,37 @@ describe('Session Integration', () => {
 
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-provider-config-codex-create',
-          op: 'session.create',
+          kind: "command",
+          id: "test-provider-config-codex-create",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'codex',
+            providerId: "codex",
           },
         },
         ctx
       );
 
       expect(sessionResult.ok).toBe(true);
-      expect(spawnCalls.at(-1)?.argv).toContain('--sandbox');
+      expect(spawnCalls.at(-1)?.argv).toContain("--sandbox");
       expect((spawnCalls.at(-1)?.options as { cwd?: string } | undefined)?.cwd).toBe(testDir);
     });
   });
 
-  describe('Session state transitions', () => {
-    it('should emit state change events when session is created', async () => {
+  describe("Session state transitions", () => {
+    it("should emit state change events when session is created", async () => {
       // Track events via session.state.changed
       const stateChanges: Array<{ from: string; to: string }> = [];
-      eventBus.on('session.state.changed', (event: any) => {
+      eventBus.on("session.state.changed", (event: any) => {
         stateChanges.push({ from: event.from, to: event.to });
       });
 
       // Open workspace
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-7',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-7",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -455,12 +466,12 @@ describe('Session Integration', () => {
       // Create session
       await dispatch(
         {
-          kind: 'command',
-          id: 'test-8',
-          op: 'session.create',
+          kind: "command",
+          id: "test-8",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
@@ -468,22 +479,21 @@ describe('Session Integration', () => {
 
       // Verify state change event was emitted
       expect(stateChanges.length).toBeGreaterThan(0);
-      expect(stateChanges[0]).toEqual({ from: 'draft', to: 'starting' });
+      expect(stateChanges[0]).toEqual({ from: "draft", to: "starting" });
     });
   });
 
-  describe('Terminal operations', () => {
+  describe("Terminal operations", () => {
     let workspaceId: string;
-    let sessionId: string;
     let terminalId: string;
 
     beforeEach(async () => {
       // Setup: open workspace and create session
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-1',
-          op: 'workspace.open',
+          kind: "command",
+          id: "setup-1",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -493,31 +503,30 @@ describe('Session Integration', () => {
 
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-2',
-          op: 'session.create',
+          kind: "command",
+          id: "setup-2",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
       );
 
-      sessionId = sessionResult.data!.id;
       terminalId = sessionResult.data!.terminalId;
     });
 
-    it('should handle terminal.input command', async () => {
+    it("should handle terminal.input command", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-9',
-          op: 'terminal.input',
+          kind: "command",
+          id: "test-9",
+          op: "terminal.input",
           args: {
             terminalId,
-            bytes: btoa('Hello Agent\n'),
-            activity: 'submit',
+            bytes: btoa("Hello Agent\n"),
+            activity: "submit",
           },
         },
         ctx
@@ -526,12 +535,12 @@ describe('Session Integration', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('should handle terminal.resize command', async () => {
+    it("should handle terminal.resize command", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-10',
-          op: 'terminal.resize',
+          kind: "command",
+          id: "test-10",
+          op: "terminal.resize",
           args: {
             terminalId,
             cols: 120,
@@ -544,16 +553,16 @@ describe('Session Integration', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('should fail terminal.input for non-existent terminal', async () => {
+    it("should fail terminal.input for non-existent terminal", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-11',
-          op: 'terminal.input',
+          kind: "command",
+          id: "test-11",
+          op: "terminal.input",
           args: {
-            terminalId: 'non-existent-terminal',
-            bytes: btoa('test\n'),
-            activity: 'submit',
+            terminalId: "non-existent-terminal",
+            bytes: btoa("test\n"),
+            activity: "submit",
           },
         },
         ctx
@@ -563,7 +572,7 @@ describe('Session Integration', () => {
     });
   });
 
-  describe('Session stop and resume', () => {
+  describe("Session stop and resume", () => {
     let workspaceId: string;
     let sessionId: string;
 
@@ -571,9 +580,9 @@ describe('Session Integration', () => {
       // Setup
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-3',
-          op: 'workspace.open',
+          kind: "command",
+          id: "setup-3",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -583,12 +592,12 @@ describe('Session Integration', () => {
 
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-4',
-          op: 'session.create',
+          kind: "command",
+          id: "setup-4",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
@@ -597,12 +606,12 @@ describe('Session Integration', () => {
       sessionId = sessionResult.data!.id;
     });
 
-    it('should stop session successfully', async () => {
+    it("should stop session successfully", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-12',
-          op: 'session.stop',
+          kind: "command",
+          id: "test-12",
+          op: "session.stop",
           args: { sessionId },
         },
         ctx
@@ -612,16 +621,16 @@ describe('Session Integration', () => {
 
       // Verify session state changed to ended
       const session = sessionMgr.get(sessionId);
-      expect(session?.state).toBe('ended');
+      expect(session?.state).toBe("ended");
     });
 
-    it('should fail session.stop for non-existent session', async () => {
+    it("should fail session.stop for non-existent session", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-13',
-          op: 'session.stop',
-          args: { sessionId: 'non-existent-session' },
+          kind: "command",
+          id: "test-13",
+          op: "session.stop",
+          args: { sessionId: "non-existent-session" },
         },
         ctx
       );
@@ -629,7 +638,7 @@ describe('Session Integration', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('rejects session.resume because the command has been removed', async () => {
+    it("rejects session.resume because the command has been removed", async () => {
       const sessions = sessionMgr.getForWorkspace(workspaceId);
       const activeSession = sessions.find((s) => s.id === sessionId);
       expect(activeSession).toBeDefined();
@@ -637,9 +646,9 @@ describe('Session Integration', () => {
       // Stop the session
       await dispatch(
         {
-          kind: 'command',
-          id: 'test-14',
-          op: 'session.stop',
+          kind: "command",
+          id: "test-14",
+          op: "session.stop",
           args: { sessionId },
         },
         ctx
@@ -648,20 +657,20 @@ describe('Session Integration', () => {
       // Resume the session
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-15',
-          op: 'session.resume',
+          kind: "command",
+          id: "test-15",
+          op: "session.resume",
           args: { sessionId },
         },
         ctx
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('unknown_op');
+      expect(result.error?.code).toBe("unknown_op");
     });
   });
 
-  describe('Idle state transitions', () => {
+  describe("Idle state transitions", () => {
     let workspaceId: string;
     let sessionId: string;
     let terminalId: string;
@@ -670,9 +679,9 @@ describe('Session Integration', () => {
       vi.useFakeTimers();
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-idle-1',
-          op: 'workspace.open',
+          kind: "command",
+          id: "setup-idle-1",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -682,12 +691,12 @@ describe('Session Integration', () => {
 
       const sessionResult = await dispatch(
         {
-          kind: 'command',
-          id: 'setup-idle-2',
-          op: 'session.create',
+          kind: "command",
+          id: "setup-idle-2",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'codex',
+            providerId: "codex",
           },
         },
         ctx
@@ -697,156 +706,156 @@ describe('Session Integration', () => {
       terminalId = sessionResult.data!.terminalId;
     });
 
-    it('moves a session to idle when PTY output goes quiet after startup', () => {
+    it("moves a session to idle when PTY output goes quiet after startup", () => {
       vi.advanceTimersByTime(3050);
 
       const session = sessionMgr.get(sessionId);
-      expect(session?.state).toBe('idle');
+      expect(session?.state).toBe("idle");
     });
 
-    it('keeps Codex-style sessions in starting until PTY output settles', () => {
-      expect(sessionMgr.get(sessionId)?.state).toBe('starting');
+    it("keeps Codex-style sessions in starting until PTY output settles", () => {
+      expect(sessionMgr.get(sessionId)?.state).toBe("starting");
 
       vi.advanceTimersByTime(3050);
 
-      expect(sessionMgr.get(sessionId)?.state).toBe('idle');
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
     });
 
-    it('moves a session to idle when a submitted turn quiets down after output', async () => {
+    it("moves a session to idle when a submitted turn quiets down after output", async () => {
       vi.advanceTimersByTime(3050);
 
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'idle-test-cycle-submit',
-          op: 'terminal.input',
+          kind: "command",
+          id: "idle-test-cycle-submit",
+          op: "terminal.input",
           args: {
             terminalId,
-            bytes: btoa('next turn\n'),
-            activity: 'submit',
+            bytes: btoa("next turn\n"),
+            activity: "submit",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(true);
-      triggerDataForProcessIndex(0, 'assistant working\n');
+      triggerDataForProcessIndex(0, "assistant working\n");
       vi.advanceTimersByTime(3000);
       const session = sessionMgr.get(sessionId);
-      expect(session?.state).toBe('idle');
+      expect(session?.state).toBe("idle");
     });
 
-    it('does not move an idle session back to running on typing input', async () => {
+    it("does not move an idle session back to running on typing input", async () => {
       const internalSession = (sessionMgr as any).sessions.get(sessionId);
-      internalSession.state = 'idle';
+      internalSession.state = "idle";
 
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'idle-test-input',
-          op: 'terminal.input',
+          kind: "command",
+          id: "idle-test-input",
+          op: "terminal.input",
           args: {
             terminalId,
-            bytes: btoa('next turn\n'),
-            activity: 'typing',
+            bytes: btoa("next turn\n"),
+            activity: "typing",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(true);
-      expect(sessionMgr.get(sessionId)?.state).toBe('idle');
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
     });
 
-    it('moves an idle session back to running when the user submits input', async () => {
+    it("moves an idle session back to running when the user submits input", async () => {
       const internalSession = (sessionMgr as any).sessions.get(sessionId);
-      internalSession.state = 'idle';
+      internalSession.state = "idle";
 
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'idle-test-submit',
-          op: 'terminal.input',
+          kind: "command",
+          id: "idle-test-submit",
+          op: "terminal.input",
           args: {
             terminalId,
-            bytes: btoa('next turn\n'),
-            activity: 'submit',
+            bytes: btoa("next turn\n"),
+            activity: "submit",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(true);
-      expect(sessionMgr.get(sessionId)?.state).toBe('running');
+      expect(sessionMgr.get(sessionId)?.state).toBe("running");
     });
   });
 
-  describe('Session hydration', () => {
-    it('marks persisted stale sessions as ended when hydrating without a live terminal', async () => {
+  describe("Session hydration", () => {
+    it("marks persisted stale sessions as ended when hydrating without a live terminal", async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
-          id: 'sess-hydrate-1',
-          workspaceId: 'ws-1',
-          terminalId: 'term-stale',
-          providerId: 'claude',
-          state: 'running',
-          capability: 'full',
+          id: "sess-hydrate-1",
+          workspaceId: "ws-1",
+          terminalId: "term-stale",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
           startedAt: 100,
           lastActiveAt: 200,
-          title: 'resume me',
+          title: "resume me",
         },
       ]);
 
       await sessionMgr.hydrate();
 
-      expect(sessionMgr.get('sess-hydrate-1')).toEqual(
+      expect(sessionMgr.get("sess-hydrate-1")).toEqual(
         expect.objectContaining({
-          id: 'sess-hydrate-1',
-          terminalId: 'term-stale',
-          state: 'ended',
-          title: 'resume me',
+          id: "sess-hydrate-1",
+          terminalId: "term-stale",
+          state: "ended",
+          title: "resume me",
         })
       );
-      expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-1', {
-        state: 'ended',
+      expect(sessionDb.update).toHaveBeenCalledWith("sess-hydrate-1", {
+        state: "ended",
       });
     });
 
-    it('preserves persisted error reason when hydrating a stale session', async () => {
+    it("preserves persisted error reason when hydrating a stale session", async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
-          id: 'sess-hydrate-error',
-          workspaceId: 'ws-1',
-          terminalId: 'term-stale',
-          providerId: 'claude',
-          state: 'running',
-          capability: 'full',
+          id: "sess-hydrate-error",
+          workspaceId: "ws-1",
+          terminalId: "term-stale",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
           startedAt: 100,
           lastActiveAt: 200,
-          errorReason: 'Orphaned before restart',
+          errorReason: "Orphaned before restart",
         },
       ]);
 
       await sessionMgr.hydrate();
 
-      expect(sessionMgr.get('sess-hydrate-error')).toEqual(
+      expect(sessionMgr.get("sess-hydrate-error")).toEqual(
         expect.objectContaining({
-          id: 'sess-hydrate-error',
-          state: 'ended',
-          errorReason: 'Orphaned before restart',
+          id: "sess-hydrate-error",
+          state: "ended",
+          errorReason: "Orphaned before restart",
         })
       );
     });
 
-    it('marks persisted non-resumable sessions as ended when hydrating without a live terminal', async () => {
+    it("marks persisted non-resumable sessions as ended when hydrating without a live terminal", async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
-          id: 'sess-hydrate-2',
-          workspaceId: 'ws-1',
-          terminalId: 'term-dead',
-          providerId: 'codex',
-          state: 'idle',
-          capability: 'full',
+          id: "sess-hydrate-2",
+          workspaceId: "ws-1",
+          terminalId: "term-dead",
+          providerId: "codex",
+          state: "idle",
+          capability: "full",
           startedAt: 100,
           lastActiveAt: 200,
         },
@@ -854,51 +863,51 @@ describe('Session Integration', () => {
 
       await sessionMgr.hydrate();
 
-      expect(sessionMgr.get('sess-hydrate-2')).toEqual(
+      expect(sessionMgr.get("sess-hydrate-2")).toEqual(
         expect.objectContaining({
-          id: 'sess-hydrate-2',
-          terminalId: 'term-dead',
-          state: 'ended',
+          id: "sess-hydrate-2",
+          terminalId: "term-dead",
+          state: "ended",
         })
       );
-      expect(sessionDb.update).toHaveBeenCalledWith('sess-hydrate-2', {
-        state: 'ended',
+      expect(sessionDb.update).toHaveBeenCalledWith("sess-hydrate-2", {
+        state: "ended",
       });
     });
 
-    it('keeps hydrated ended sessions bound to their persisted terminal id', async () => {
+    it("keeps hydrated ended sessions bound to their persisted terminal id", async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {
-          id: 'sess-hydrate-3',
-          workspaceId: 'ws-1',
-          terminalId: 'term-old',
-          providerId: 'claude',
-          state: 'running',
-          capability: 'full',
+          id: "sess-hydrate-3",
+          workspaceId: "ws-1",
+          terminalId: "term-old",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
           startedAt: 100,
           lastActiveAt: 200,
         },
       ]);
 
       await sessionMgr.hydrate();
-      expect(sessionMgr.get('sess-hydrate-3')).toEqual(
+      expect(sessionMgr.get("sess-hydrate-3")).toEqual(
         expect.objectContaining({
-          id: 'sess-hydrate-3',
-          terminalId: 'term-old',
-          state: 'ended',
+          id: "sess-hydrate-3",
+          terminalId: "term-old",
+          state: "ended",
         })
       );
     });
   });
 
-  describe('Multiple sessions', () => {
-    it('should support creating multiple sessions in same workspace', async () => {
+  describe("Multiple sessions", () => {
+    it("should support creating multiple sessions in same workspace", async () => {
       // Open workspace
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'test-16',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-16",
+          op: "workspace.open",
           args: { path: testDir },
         },
         ctx
@@ -909,12 +918,12 @@ describe('Session Integration', () => {
       // Create first session
       const session1Result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-17',
-          op: 'session.create',
+          kind: "command",
+          id: "test-17",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'claude',
+            providerId: "claude",
           },
         },
         ctx
@@ -923,12 +932,12 @@ describe('Session Integration', () => {
       // Create second session
       const session2Result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-18',
-          op: 'session.create',
+          kind: "command",
+          id: "test-18",
+          op: "session.create",
           args: {
             workspaceId,
-            providerId: 'codex',
+            providerId: "codex",
           },
         },
         ctx
@@ -943,23 +952,19 @@ describe('Session Integration', () => {
     }, 10000);
   });
 
-  describe('Provider command construction', () => {
-    it('should build correct command for claude provider', async () => {
-      const claudeProvider = providerRegistry.find((p) => p.id === 'claude');
+  describe("Provider command construction", () => {
+    it("should build correct command for claude provider", async () => {
+      const claudeProvider = providerRegistry.find((p) => p.id === "claude");
       expect(claudeProvider).toBeDefined();
 
-      const cmd = claudeProvider!.buildCommand(
-        claudeProvider!.defaultConfig,
-        {
-          workspacePath: testDir,
-          sessionId: 'test-session-123',
-        }
-      );
+      const cmd = claudeProvider!.buildCommand(claudeProvider!.defaultConfig, {
+        workspacePath: testDir,
+        sessionId: "test-session-123",
+      });
 
-      expect(cmd.argv[0]).toBe('claude');
+      expect(cmd.argv[0]).toBe("claude");
       expect(cmd.cwd).toBe(testDir);
-      expect(cmd.env.CODER_STUDIO_SESSION_ID).toBe('test-session-123');
+      expect(cmd.env.CODER_STUDIO_SESSION_ID).toBe("test-session-123");
     });
-
   });
 });

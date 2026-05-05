@@ -4,85 +4,87 @@
  * Configuration page for provider, appearance, and notifications.
  */
 
-import { useState, useEffect } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useNavigate } from 'react-router-dom';
-import { Check, ChevronRight } from 'lucide-react';
-import { localeAtom, themeAtom } from '../../../atoms/app-ui';
-import { connectionStatusAtom } from '../../../atoms/connection';
-import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { useViewport } from '../../../hooks/use-viewport';
-import { useTranslation } from '../../../lib/i18n';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { notificationPreferencesAtom } from '../../notifications/atoms';
-import { ShortcutsSettings } from './shortcuts-settings';
-import { ConfigDriftBanner } from '../../config-drift-banner';
-import { ProviderSettings, type ProviderInfo } from './provider-settings';
-import { resolveSettingsExitTargetFromBrowserHistory } from './settings-navigation';
-import { PageHeader } from '../../shared/components/page-header';
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { Check, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { localeAtom, themeAtom } from "../../../atoms/app-ui";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { useViewport } from "../../../hooks/use-viewport";
+import { useTranslation } from "../../../lib/i18n";
+import { ConfigDriftBanner } from "../../config-drift-banner";
+import { notificationPreferencesAtom } from "../../notifications/atoms";
+import { PageHeader } from "../../shared/components/page-header";
+import { type ProviderInfo, ProviderSettings } from "./provider-settings";
+import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
   MOBILE_SETTINGS_SECTIONS,
   SETTINGS_SECTIONS,
   type SettingsSection,
-} from './settings-sections';
+} from "./settings-sections";
+import { ShortcutsSettings } from "./shortcuts-settings";
 
-type NotificationCapabilityStatus = 'available' | 'limited' | 'unsupported';
-type NotificationPermissionState = NotificationPermission | 'unavailable';
+type NotificationCapabilityStatus = "available" | "limited" | "unsupported";
+type NotificationPermissionState = NotificationPermission | "unavailable";
 type SettingsNavigationState =
   | {
-      kind: 'root';
+      kind: "root";
       lastSection: SettingsSection;
     }
   | {
-      kind: 'detail';
+      kind: "detail";
       section: SettingsSection;
     };
 
-type SettingsContentLayoutMode = 'default' | 'fill-height';
+type SettingsContentLayoutMode = "default" | "fill-height";
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 
 function isStandaloneWebApp(): boolean {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return false;
   }
 
   const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
 
-  return window.matchMedia?.('(display-mode: standalone)').matches === true
-    || navigatorWithStandalone.standalone === true;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    navigatorWithStandalone.standalone === true
+  );
 }
 
 function isMobileUserAgent(): boolean {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return false;
   }
 
-  const { userAgent = '', maxTouchPoints = 0, platform = '' } = window.navigator;
+  const { userAgent = "", maxTouchPoints = 0, platform = "" } = window.navigator;
   const ua = userAgent.toLowerCase();
 
-  return /android|iphone|ipad|ipod|mobile/.test(ua)
-    || (platform === 'MacIntel' && maxTouchPoints > 1);
+  return (
+    /android|iphone|ipad|ipod|mobile/.test(ua) || (platform === "MacIntel" && maxTouchPoints > 1)
+  );
 }
 
 function detectNotificationCapability(): NotificationCapabilityStatus {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
-    return 'unsupported';
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return "unsupported";
   }
 
   if (!isMobileUserAgent()) {
-    return 'available';
+    return "available";
   }
 
-  return isStandaloneWebApp() ? 'available' : 'limited';
+  return isStandaloneWebApp() ? "available" : "limited";
 }
 
 function formatProviderAdditionalArgs(value: unknown): string {
   if (!Array.isArray(value)) {
-    return '';
+    return "";
   }
 
-  return value.filter((item): item is string => typeof item === 'string').join('\n');
+  return value.filter((item): item is string => typeof item === "string").join("\n");
 }
 
 function loadProviderAdditionalArgs(
@@ -109,38 +111,40 @@ function loadProviderAdditionalArgs(
  */
 export function SettingsPage() {
   const t = useTranslation();
-  const settingsLoadFailedUnknown = t('settings.load_failed_unknown');
+  const settingsLoadFailedUnknown = t("settings.load_failed_unknown");
   const navigate = useNavigate();
   const viewport = useViewport();
-  const isMobile = viewport === 'mobile';
+  const isMobile = viewport === "mobile";
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
     isMobile
-      ? { kind: 'root', lastSection: DEFAULT_SETTINGS_SECTION }
-      : { kind: 'detail', section: DEFAULT_SETTINGS_SECTION }
+      ? { kind: "root", lastSection: DEFAULT_SETTINGS_SECTION }
+      : { kind: "detail", section: DEFAULT_SETTINGS_SECTION }
   );
 
   // Provider settings state (would come from server in real implementation)
-  const [providers, setProviders] = useState<ProviderInfo[]>([
-    { id: 'claude', displayName: 'Claude' },
-    { id: 'codex', displayName: 'Codex' },
+  const [providers] = useState<ProviderInfo[]>([
+    { id: "claude", displayName: "Claude" },
+    { id: "codex", displayName: "Codex" },
   ]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [terminalRenderer, setTerminalRenderer] = useState<'standard' | 'compatibility'>('standard');
-  const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<Record<string, string>>({});
-  const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>('default');
+  const [terminalRenderer, setTerminalRenderer] = useState<"standard" | "compatibility">(
+    "standard"
+  );
+  const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
+    Record<string, string>
+  >({});
+  const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>("default");
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const detailSection =
-    navigationState.kind === 'detail'
-      ? navigationState.section
-      : navigationState.lastSection;
+    navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
   const activeSectionMeta =
     availableSections.find((section) => section.id === detailSection) ?? availableSections[0];
@@ -148,26 +152,22 @@ export function SettingsPage() {
   useEffect(() => {
     setNavigationState((state) => {
       if (isMobile) {
-        return state.kind === 'root'
-          ? state
-          : { kind: 'root', lastSection: state.section };
+        return state.kind === "root" ? state : { kind: "root", lastSection: state.section };
       }
 
-      return state.kind === 'detail'
-        ? state
-        : { kind: 'detail', section: state.lastSection };
+      return state.kind === "detail" ? state : { kind: "detail", section: state.lastSection };
     });
   }, [isMobile]);
 
   useEffect(() => {
-    if (connectionStatus !== 'connected') {
+    if (connectionStatus !== "connected") {
       return;
     }
 
     let cancelled = false;
 
     const loadSettings = async () => {
-      const result = await dispatch<Record<string, unknown>>('settings.get', {});
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (!result.ok || !result.data) {
         if (!cancelled) {
           setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknown);
@@ -178,25 +178,30 @@ export function SettingsPage() {
       const settings = result.data;
       if (cancelled) return;
       setSettingsLoadError(null);
-      if (typeof settings['notifications.enabled'] === 'boolean') {
-        setNotificationsEnabled(settings['notifications.enabled']);
+      if (typeof settings["notifications.enabled"] === "boolean") {
+        setNotificationsEnabled(settings["notifications.enabled"]);
       }
-      if (typeof settings['notifications.soundEnabled'] === 'boolean') {
-        setSoundEnabled(settings['notifications.soundEnabled']);
+      if (typeof settings["notifications.soundEnabled"] === "boolean") {
+        setSoundEnabled(settings["notifications.soundEnabled"]);
       }
       setNotificationPreferences({
-        enabled: typeof settings['notifications.enabled'] === 'boolean'
-          ? settings['notifications.enabled']
-          : true,
-        soundEnabled: typeof settings['notifications.soundEnabled'] === 'boolean'
-          ? settings['notifications.soundEnabled']
-          : true,
+        enabled:
+          typeof settings["notifications.enabled"] === "boolean"
+            ? settings["notifications.enabled"]
+            : true,
+        soundEnabled:
+          typeof settings["notifications.soundEnabled"] === "boolean"
+            ? settings["notifications.soundEnabled"]
+            : true,
       });
-      if (settings['appearance.terminalRenderer'] === 'standard' || settings['appearance.terminalRenderer'] === 'compatibility') {
-        setTerminalRenderer(settings['appearance.terminalRenderer']);
+      if (
+        settings["appearance.terminalRenderer"] === "standard" ||
+        settings["appearance.terminalRenderer"] === "compatibility"
+      ) {
+        setTerminalRenderer(settings["appearance.terminalRenderer"]);
       }
-      if (settings['appearance.locale'] === 'zh' || settings['appearance.locale'] === 'en') {
-        setLocale(settings['appearance.locale']);
+      if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
+        setLocale(settings["appearance.locale"]);
       }
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
@@ -215,15 +220,15 @@ export function SettingsPage() {
   ]);
 
   useEffect(() => {
-    if (detailSection !== 'providers') {
-      setContentLayoutMode('default');
+    if (detailSection !== "providers") {
+      setContentLayoutMode("default");
     }
   }, [detailSection]);
 
   const handlePageExit = () => {
     const target = resolveSettingsExitTargetFromBrowserHistory(Boolean(activeWorkspaceId));
 
-    if (target === 'history') {
+    if (target === "history") {
       navigate(-1);
       return;
     }
@@ -232,8 +237,8 @@ export function SettingsPage() {
   };
 
   const handleBack = () => {
-    if (isMobile && navigationState.kind === 'detail') {
-      setNavigationState({ kind: 'root', lastSection: navigationState.section });
+    if (isMobile && navigationState.kind === "detail") {
+      setNavigationState({ kind: "root", lastSection: navigationState.section });
       return;
     }
 
@@ -243,7 +248,7 @@ export function SettingsPage() {
   // Render content based on active section
   const renderContent = () => {
     switch (detailSection) {
-      case 'general':
+      case "general":
         return (
           <GeneralSettings
             notificationsEnabled={notificationsEnabled}
@@ -252,7 +257,7 @@ export function SettingsPage() {
             setSoundEnabled={setSoundEnabled}
           />
         );
-      case 'appearance':
+      case "appearance":
         return (
           <AppearanceSettings
             locale={locale}
@@ -263,7 +268,7 @@ export function SettingsPage() {
             setTheme={setTheme}
           />
         );
-      case 'providers':
+      case "providers":
         return (
           <ProviderSettings
             providers={providers}
@@ -273,7 +278,7 @@ export function SettingsPage() {
             onLayoutModeChange={setContentLayoutMode}
           />
         );
-      case 'shortcuts':
+      case "shortcuts":
         return isMobile ? null : <ShortcutsSettings />;
       default:
         return null;
@@ -288,7 +293,7 @@ export function SettingsPage() {
             key={id}
             type="button"
             className="settings-mobile-item"
-            onClick={() => setNavigationState({ kind: 'detail', section: id })}
+            onClick={() => setNavigationState({ kind: "detail", section: id })}
           >
             <span className="settings-mobile-item__icon">
               <Icon size={18} />
@@ -301,19 +306,19 @@ export function SettingsPage() {
     </main>
   );
 
-  const shouldShowMobileRoot = isMobile && navigationState.kind === 'root';
+  const shouldShowMobileRoot = isMobile && navigationState.kind === "root";
   const headerTitle = isMobile
-    ? t(shouldShowMobileRoot ? 'settings.title' : activeSectionMeta.labelKey)
-    : t('settings.title');
+    ? t(shouldShowMobileRoot ? "settings.title" : activeSectionMeta.labelKey)
+    : t("settings.title");
 
   return (
-    <div className={`settings-page ${isMobile ? 'settings-page--mobile' : ''}`}>
+    <div className={`settings-page ${isMobile ? "settings-page--mobile" : ""}`}>
       <header className="settings-header">
         <PageHeader
           title={headerTitle}
           titleAs="div"
           onBack={handleBack}
-          backLabel={t('action.back')}
+          backLabel={t("action.back")}
         />
       </header>
 
@@ -321,7 +326,7 @@ export function SettingsPage() {
         renderMobileRoot()
       ) : (
         <div
-          className={`settings-body ${isMobile ? 'settings-body--mobile' : ''} ${contentLayoutMode === 'fill-height' ? 'settings-body--fill-height' : ''}`}
+          className={`settings-body ${isMobile ? "settings-body--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-body--fill-height" : ""}`}
         >
           {isMobile ? null : (
             <aside className="settings-sidebar">
@@ -332,7 +337,7 @@ export function SettingsPage() {
                     icon={<Icon size={16} />}
                     label={t(labelKey)}
                     active={detailSection === id}
-                    onClick={() => setNavigationState({ kind: 'detail', section: id })}
+                    onClick={() => setNavigationState({ kind: "detail", section: id })}
                   />
                 ))}
               </nav>
@@ -340,12 +345,12 @@ export function SettingsPage() {
           )}
 
           <main
-            className={`settings-content ${isMobile ? 'settings-content--mobile' : ''} ${contentLayoutMode === 'fill-height' ? 'settings-content--fill-height' : ''}`}
+            className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
               <div className="settings-page__notice settings-page__notice--error" role="alert">
                 <div className="settings-page__notice-copy">
-                  <span className="settings-page__notice-title">{t('settings.load_failed')}</span>
+                  <span className="settings-page__notice-title">{t("settings.load_failed")}</span>
                   <span className="settings-page__notice-message">{settingsLoadError}</span>
                 </div>
                 <button
@@ -353,7 +358,7 @@ export function SettingsPage() {
                   className="settings-link"
                   onClick={() => setSettingsRefreshKey((value) => value + 1)}
                 >
-                  {t('action.refresh')}
+                  {t("action.refresh")}
                 </button>
               </div>
             )}
@@ -363,8 +368,8 @@ export function SettingsPage() {
         </div>
       )}
 
-      <footer className={`settings-footer ${isMobile ? 'settings-footer--mobile' : ''}`}>
-        <span className="settings-autosave">{t('settings.autosave_hint')}</span>
+      <footer className={`settings-footer ${isMobile ? "settings-footer--mobile" : ""}`}>
+        <span className="settings-autosave">{t("settings.autosave_hint")}</span>
         <span className="settings-version">v0.2.6</span>
       </footer>
     </div>
@@ -381,7 +386,7 @@ interface SettingsNavItemProps {
 function SettingsNavItem({ icon, label, active, onClick }: SettingsNavItemProps) {
   return (
     <button
-      className={`settings-nav-item ${active ? 'settings-nav-item-active' : ''}`}
+      className={`settings-nav-item ${active ? "settings-nav-item-active" : ""}`}
       onClick={onClick}
     >
       <span className="settings-nav-icon">{icon}</span>
@@ -407,33 +412,32 @@ function GeneralSettings({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>('unavailable');
-  const [notificationCapability, setNotificationCapability] = useState<NotificationCapabilityStatus>('unsupported');
+  const [notificationPermission, setNotificationPermission] =
+    useState<NotificationPermissionState>("unavailable");
+  const [notificationCapability, setNotificationCapability] =
+    useState<NotificationCapabilityStatus>("unsupported");
 
   const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch('settings.update', { settings });
+    await dispatch("settings.update", { settings });
   };
 
-  const syncNotificationPreferences = (next: {
-    enabled: boolean;
-    soundEnabled: boolean;
-  }) => {
+  const syncNotificationPreferences = (next: { enabled: boolean; soundEnabled: boolean }) => {
     setNotificationPreferences(next);
   };
 
   useEffect(() => {
     setNotificationCapability(detectNotificationCapability());
 
-    if ('Notification' in window) {
+    if ("Notification" in window) {
       setNotificationPermission(Notification.permission);
       return;
     }
 
-    setNotificationPermission('unavailable');
+    setNotificationPermission("unavailable");
   }, []);
 
   const requestNotificationPermission = async () => {
-    if ('Notification' in window) {
+    if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
     }
@@ -442,13 +446,13 @@ function GeneralSettings({
   return (
     <div className="settings-section">
       <div className="settings-group">
-        <h3 className="settings-group-title">{t('settings.notifications')}</h3>
-        <p className="settings-group-desc">{t('settings.notifications_channel_hint')}</p>
+        <h3 className="settings-group-title">{t("settings.notifications")}</h3>
+        <p className="settings-group-desc">{t("settings.notifications_channel_hint")}</p>
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t('settings.notifications_enabled')}</span>
-            <span className="settings-toggle-desc">{t('settings.notifications_enabled_hint')}</span>
+            <span className="settings-toggle-label">{t("settings.notifications_enabled")}</span>
+            <span className="settings-toggle-desc">{t("settings.notifications_enabled_hint")}</span>
           </div>
           <label className="settings-toggle">
             <input
@@ -470,8 +474,8 @@ function GeneralSettings({
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t('settings.notification_sound')}</span>
-            <span className="settings-toggle-desc">{t('settings.notification_sound_hint')}</span>
+            <span className="settings-toggle-label">{t("settings.notification_sound")}</span>
+            <span className="settings-toggle-desc">{t("settings.notification_sound_hint")}</span>
           </div>
           <label className="settings-toggle">
             <input
@@ -493,22 +497,22 @@ function GeneralSettings({
         </div>
 
         <div className="settings-info-row">
-          <span className="settings-info-label">{t('settings.notification_status')}</span>
+          <span className="settings-info-label">{t("settings.notification_status")}</span>
           <span className={`settings-info-value settings-capability-${notificationCapability}`}>
-            {notificationCapability === 'available' && t('settings.notification_status_available')}
-            {notificationCapability === 'limited' && (
+            {notificationCapability === "available" && t("settings.notification_status_available")}
+            {notificationCapability === "limited" && (
               <>
-                {t('settings.notification_status_limited')}
+                {t("settings.notification_status_limited")}
                 <span className="settings-status-hint">
-                  {t('settings.notification_status_limited_hint')}
+                  {t("settings.notification_status_limited_hint")}
                 </span>
               </>
             )}
-            {notificationCapability === 'unsupported' && (
+            {notificationCapability === "unsupported" && (
               <>
-                {t('settings.notification_status_unsupported')}
+                {t("settings.notification_status_unsupported")}
                 <span className="settings-status-hint">
-                  {t('settings.notification_status_unsupported_hint')}
+                  {t("settings.notification_status_unsupported_hint")}
                 </span>
               </>
             )}
@@ -516,35 +520,33 @@ function GeneralSettings({
         </div>
 
         <div className="settings-info-row">
-          <span className="settings-info-label">{t('settings.notification_permission')}</span>
+          <span className="settings-info-label">{t("settings.notification_permission")}</span>
           <span className={`settings-info-value settings-permission-${notificationPermission}`}>
-            {notificationPermission === 'granted' && t('settings.permission_granted')}
-            {notificationPermission === 'denied' && (
+            {notificationPermission === "granted" && t("settings.permission_granted")}
+            {notificationPermission === "denied" && (
               <>
-                {t('settings.permission_denied')}
-                <span className="settings-status-hint">
-                  {t('settings.permission_denied_hint')}
-                </span>
+                {t("settings.permission_denied")}
+                <span className="settings-status-hint">{t("settings.permission_denied_hint")}</span>
               </>
             )}
-            {notificationPermission === 'default' && notificationCapability === 'available' && (
+            {notificationPermission === "default" && notificationCapability === "available" && (
               <button className="settings-link" onClick={requestNotificationPermission}>
-                {t('settings.permission_request')}
+                {t("settings.permission_request")}
               </button>
             )}
-            {notificationPermission === 'default' && notificationCapability === 'limited' && (
+            {notificationPermission === "default" && notificationCapability === "limited" && (
               <>
-                {t('settings.permission_unavailable')}
+                {t("settings.permission_unavailable")}
                 <span className="settings-status-hint">
-                  {t('settings.permission_limited_hint')}
+                  {t("settings.permission_limited_hint")}
                 </span>
               </>
             )}
-            {notificationPermission === 'unavailable' && (
+            {notificationPermission === "unavailable" && (
               <>
-                {t('settings.permission_unavailable')}
+                {t("settings.permission_unavailable")}
                 <span className="settings-status-hint">
-                  {t('settings.permission_unavailable_hint')}
+                  {t("settings.permission_unavailable_hint")}
                 </span>
               </>
             )}
@@ -557,11 +559,11 @@ function GeneralSettings({
 
 interface AppearanceSettingsProps {
   locale: string;
-  setLocale: (value: 'zh' | 'en') => void;
-  terminalRenderer: 'standard' | 'compatibility';
-  setTerminalRenderer: (value: 'standard' | 'compatibility') => void;
-  theme: 'dark' | 'light';
-  setTheme: (value: 'dark' | 'light') => void;
+  setLocale: (value: "zh" | "en") => void;
+  terminalRenderer: "standard" | "compatibility";
+  setTerminalRenderer: (value: "standard" | "compatibility") => void;
+  theme: "dark" | "light";
+  setTheme: (value: "dark" | "light") => void;
 }
 
 function AppearanceSettings({
@@ -576,91 +578,91 @@ function AppearanceSettings({
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch('settings.update', { settings });
+    await dispatch("settings.update", { settings });
   };
 
-  const handleThemeChange = (newTheme: 'dark' | 'light') => {
+  const handleThemeChange = (newTheme: "dark" | "light") => {
     setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
     void saveSettings({ appearance: { theme: newTheme } });
   };
 
   return (
     <div className="settings-section">
       <div className="settings-group">
-        <h3 className="settings-group-title">{t('settings.theme.title')}</h3>
-        <p className="settings-group-desc">{t('settings.theme.hint')}</p>
+        <h3 className="settings-group-title">{t("settings.theme.title")}</h3>
+        <p className="settings-group-desc">{t("settings.theme.hint")}</p>
 
         <div className="settings-pills">
           <button
-            className={`settings-pill ${theme === 'dark' ? 'settings-pill-active' : ''}`}
-            onClick={() => handleThemeChange('dark')}
+            className={`settings-pill ${theme === "dark" ? "settings-pill-active" : ""}`}
+            onClick={() => handleThemeChange("dark")}
           >
-            {theme === 'dark' && <Check size={12} />}
-            <span>{t('settings.theme.dark')}</span>
+            {theme === "dark" && <Check size={12} />}
+            <span>{t("settings.theme.dark")}</span>
           </button>
           <button
-            className={`settings-pill ${theme === 'light' ? 'settings-pill-active' : ''}`}
-            onClick={() => handleThemeChange('light')}
+            className={`settings-pill ${theme === "light" ? "settings-pill-active" : ""}`}
+            onClick={() => handleThemeChange("light")}
           >
-            {theme === 'light' && <Check size={12} />}
-            <span>{t('settings.theme.light')}</span>
+            {theme === "light" && <Check size={12} />}
+            <span>{t("settings.theme.light")}</span>
           </button>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t('settings.terminal_renderer')}</h3>
-        <p className="settings-group-desc">{t('settings.terminal_renderer_hint')}</p>
+        <h3 className="settings-group-title">{t("settings.terminal_renderer")}</h3>
+        <p className="settings-group-desc">{t("settings.terminal_renderer_hint")}</p>
 
         <div className="settings-pills">
           <button
-            className={`settings-pill ${terminalRenderer === 'standard' ? 'settings-pill-active' : ''}`}
+            className={`settings-pill ${terminalRenderer === "standard" ? "settings-pill-active" : ""}`}
             onClick={() => {
-              setTerminalRenderer('standard');
-              void saveSettings({ appearance: { terminalRenderer: 'standard' } });
+              setTerminalRenderer("standard");
+              void saveSettings({ appearance: { terminalRenderer: "standard" } });
             }}
           >
-            {terminalRenderer === 'standard' && <Check size={12} />}
-            <span>{t('settings.terminal_standard')}</span>
+            {terminalRenderer === "standard" && <Check size={12} />}
+            <span>{t("settings.terminal_standard")}</span>
           </button>
           <button
-            className={`settings-pill ${terminalRenderer === 'compatibility' ? 'settings-pill-active' : ''}`}
+            className={`settings-pill ${terminalRenderer === "compatibility" ? "settings-pill-active" : ""}`}
             onClick={() => {
-              setTerminalRenderer('compatibility');
-              void saveSettings({ appearance: { terminalRenderer: 'compatibility' } });
+              setTerminalRenderer("compatibility");
+              void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
             }}
           >
-            {terminalRenderer === 'compatibility' && <Check size={12} />}
-            <span>{t('settings.terminal_compatibility')}</span>
+            {terminalRenderer === "compatibility" && <Check size={12} />}
+            <span>{t("settings.terminal_compatibility")}</span>
           </button>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t('settings.language.title')}</h3>
-        <p className="settings-group-desc">{t('settings.language.hint')}</p>
+        <h3 className="settings-group-title">{t("settings.language.title")}</h3>
+        <p className="settings-group-desc">{t("settings.language.hint")}</p>
 
         <div className="settings-pills">
           <button
-            className={`settings-pill ${locale === 'zh' ? 'settings-pill-active' : ''}`}
+            className={`settings-pill ${locale === "zh" ? "settings-pill-active" : ""}`}
             onClick={() => {
-              setLocale('zh');
-              void saveSettings({ appearance: { locale: 'zh' } });
+              setLocale("zh");
+              void saveSettings({ appearance: { locale: "zh" } });
             }}
           >
-            {locale === 'zh' && <Check size={12} />}
-            <span>{t('settings.language.zh')}</span>
+            {locale === "zh" && <Check size={12} />}
+            <span>{t("settings.language.zh")}</span>
           </button>
           <button
-            className={`settings-pill ${locale === 'en' ? 'settings-pill-active' : ''}`}
+            className={`settings-pill ${locale === "en" ? "settings-pill-active" : ""}`}
             onClick={() => {
-              setLocale('en');
-              void saveSettings({ appearance: { locale: 'en' } });
+              setLocale("en");
+              void saveSettings({ appearance: { locale: "en" } });
             }}
           >
-            {locale === 'en' && <Check size={12} />}
-            <span>{t('settings.language.en')}</span>
+            {locale === "en" && <Check size={12} />}
+            <span>{t("settings.language.en")}</span>
           </button>
         </div>
       </div>
