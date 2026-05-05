@@ -12,10 +12,16 @@ import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
 import { useTranslation } from "../../lib/i18n";
+import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
+import { WorkspaceFullscreenButton } from "../workspace/components/workspace-fullscreen-button";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 import { ConnectionStatus } from "./components/connection-status";
 import { WorkspaceTab } from "./components/tab";
+
+interface TopBarProps {
+  fullscreenController?: WorkspaceFullscreenController;
+}
 
 /**
  * TopBar Component
@@ -25,7 +31,7 @@ import { WorkspaceTab } from "./components/tab";
  *   - Left: Workspace tabs + Add button
  *   - Right: ConnectionStatus, Quick Actions, Terminal toggle, Files toggle, Settings
  */
-export const TopBar: FC = () => {
+export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
   const t = useTranslation();
   const navigate = useNavigate();
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
@@ -95,6 +101,12 @@ export const TopBar: FC = () => {
         >
           <Settings size={14} />
         </button>
+        <WorkspaceFullscreenButton
+          controller={fullscreenController}
+          className="topbar-btn"
+          iconSize={14}
+          dataTestId="workspace-fullscreen-open"
+        />
       </div>
       {workspaceLaunchOpen ? (
         <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />

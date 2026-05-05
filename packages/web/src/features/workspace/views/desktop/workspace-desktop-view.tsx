@@ -1,12 +1,13 @@
 import { useSetAtom } from "jotai";
 import { FilePlus, FolderPlus, GitBranch, RefreshCw } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useRef } from "react";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
+import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { activeFilePathAtomFamily } from "../../atoms";
 import { FileTreePanel } from "../shared/file-tree-panel";
@@ -15,6 +16,8 @@ import { GitPanel } from "../shared/git-panel";
 import { GitStatusBar } from "../shared/git-status-bar";
 
 export const WorkspaceDesktopView: FC = () => {
+  const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
   const {
     createRequest,
@@ -62,8 +65,8 @@ export const WorkspaceDesktopView: FC = () => {
   };
 
   return (
-    <div className="workspace-page">
-      <TopBar />
+    <div ref={fullscreenRootRef} className="workspace-page">
+      <TopBar fullscreenController={fullscreenController} />
 
       <div className="workspace-body">
         {!focusMode && !sidebarCollapsed && (

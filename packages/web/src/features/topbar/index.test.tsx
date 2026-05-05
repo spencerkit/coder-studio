@@ -130,4 +130,51 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Hide Terminal" })).toHaveClass("topbar-btn--active");
     expect(screen.getByRole("button", { name: "Show Files" })).toHaveClass("topbar-btn--muted");
   });
+
+  it("renders the fullscreen toggle immediately to the right of settings when supported", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar
+          fullscreenController={{
+            supported: true,
+            isFullscreen: false,
+            enterFullscreen: vi.fn(),
+            exitFullscreen: vi.fn(),
+            toggleFullscreen: vi.fn(),
+          }}
+        />
+      </Provider>
+    );
+
+    const settingsButton = screen.getByTestId("settings-open");
+    const fullscreenButton = screen.getByRole("button", { name: "Enter Fullscreen" });
+
+    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+  });
+
+  it("hides the fullscreen toggle when the controller reports unsupported", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar
+          fullscreenController={{
+            supported: false,
+            isFullscreen: false,
+            enterFullscreen: vi.fn(),
+            exitFullscreen: vi.fn(),
+            toggleFullscreen: vi.fn(),
+          }}
+        />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Enter Fullscreen" })).toBeNull();
+  });
 });

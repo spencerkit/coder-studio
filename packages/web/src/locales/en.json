@@ -636,6 +636,8 @@
     "close_pane": "Close panel",
     "new_workspace": "New workspace",
     "quick_actions": "Quick Actions",
+    "enter_fullscreen": "Enter Fullscreen",
+    "exit_fullscreen": "Exit Fullscreen",
     "show_terminal": "Show Terminal",
     "hide_terminal": "Hide Terminal",
     "show_files": "Show Files",
