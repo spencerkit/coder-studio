@@ -8,14 +8,22 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { DomainEvent, Session } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionManager } from "../session/manager.js";
+import type { SessionDatabase } from "../session/types.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
 import type { Broadcaster, PtyHost, PtyProcess } from "../terminal/types.js";
+
+type MutableSessionManager = SessionManager & {
+  detectors: Map<string, unknown>;
+  comparators: Map<string, unknown>;
+  detectorUnsubscribes: Map<string, unknown>;
+};
 
 /**
  * Mock PtyHost that allows triggering exit programmatically
@@ -146,7 +154,7 @@ describe("Session Terminal Exit", () => {
     sessionMgr = new SessionManager({
       terminalMgr,
       eventBus,
-      db: sessionDb as any,
+      db: sessionDb as unknown as SessionDatabase,
       broadcaster: mockBroadcaster,
       providerRegistry,
       providerConfigRepo: new ProviderConfigRepo(db),
@@ -219,9 +227,12 @@ describe("Session Terminal Exit", () => {
       vi.useFakeTimers();
       // Track state change events
       const stateChanges: Array<{ from: string; to: string }> = [];
-      eventBus.on("session.state.changed", (event: any) => {
-        stateChanges.push({ from: event.from, to: event.to });
-      });
+      eventBus.on(
+        "session.state.changed",
+        (event: Extract<DomainEvent, { type: "session.state.changed" }>) => {
+          stateChanges.push({ from: event.from, to: event.to });
+        }
+      );
 
       // Create session (this will spawn process at index 0)
       await sessionMgr.create({
@@ -252,15 +263,19 @@ describe("Session Terminal Exit", () => {
         provider: providerRegistry.find((p) => p.id === "codex")!,
       });
 
-      expect((sessionMgr as any).detectors.get(session.id)).toBeDefined();
-      expect((sessionMgr as any).comparators.get(session.id)).toBeDefined();
-      expect((sessionMgr as any).detectorUnsubscribes.get(session.id)).toBeTypeOf("function");
+      expect((sessionMgr as MutableSessionManager).detectors.get(session.id)).toBeDefined();
+      expect((sessionMgr as MutableSessionManager).comparators.get(session.id)).toBeDefined();
+      expect((sessionMgr as MutableSessionManager).detectorUnsubscribes.get(session.id)).toBeTypeOf(
+        "function"
+      );
 
       triggerExitForProcessIndex(0, 0);
 
-      expect((sessionMgr as any).detectors.has(session.id)).toBe(false);
-      expect((sessionMgr as any).comparators.has(session.id)).toBe(false);
-      expect((sessionMgr as any).detectorUnsubscribes.has(session.id)).toBe(false);
+      expect((sessionMgr as MutableSessionManager).detectors.has(session.id)).toBe(false);
+      expect((sessionMgr as MutableSessionManager).comparators.has(session.id)).toBe(false);
+      expect((sessionMgr as MutableSessionManager).detectorUnsubscribes.has(session.id)).toBe(
+        false
+      );
     });
   });
 });

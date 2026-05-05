@@ -1,15 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { dispatch, type CommandContext } from '../ws/dispatch.js';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type CommandContext, dispatch } from "../ws/dispatch.js";
 
-import '../commands/supervisor.js';
+import "../commands/supervisor.js";
 
-describe('supervisor commands', () => {
+describe("supervisor commands", () => {
   const supervisorMgr = {
     create: vi.fn(async (input) => ({
-      id: 'sup-1',
+      id: "sup-1",
       sessionId: input.sessionId,
       workspaceId: input.workspaceId,
-      state: 'idle',
+      state: "idle",
       objective: input.objective,
       evaluatorProviderId: input.evaluatorProviderId,
       cycles: [],
@@ -19,11 +19,11 @@ describe('supervisor commands', () => {
     getBySession: vi.fn(() => null),
     update: vi.fn(async (id, patch) => ({
       id,
-      sessionId: 'sess-1',
-      workspaceId: 'ws-1',
-      state: 'idle',
-      objective: patch.objective ?? 'existing objective',
-      evaluatorProviderId: patch.evaluatorProviderId ?? 'claude',
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: patch.objective ?? "existing objective",
+      evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
       cycles: [],
       createdAt: 1,
       updatedAt: 2,
@@ -39,29 +39,29 @@ describe('supervisor commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ctx = {
-      db: {} as any,
-      workspaceMgr: {} as any,
-      sessionMgr: {} as any,
-      terminalMgr: {} as any,
-      eventBus: {} as any,
-      broadcaster: { broadcast: vi.fn() } as any,
+      db: {},
+      workspaceMgr: {},
+      sessionMgr: {},
+      terminalMgr: {},
+      eventBus: {},
+      broadcaster: { broadcast: vi.fn() },
       providerRegistry: [],
-      fencingMgr: {} as any,
-      supervisorMgr: supervisorMgr as any,
-    };
+      fencingMgr: {},
+      supervisorMgr,
+    } as unknown as CommandContext;
   });
 
-  it('passes evaluatorProviderId through supervisor.create', async () => {
+  it("passes evaluatorProviderId through supervisor.create", async () => {
     const result = await dispatch(
       {
-        kind: 'command',
-        id: 'cmd-1',
-        op: 'supervisor.create',
+        kind: "command",
+        id: "cmd-1",
+        op: "supervisor.create",
         args: {
-          sessionId: 'sess-1',
-          workspaceId: 'ws-1',
-          objective: 'Ship supervisor persistence',
-          evaluatorProviderId: 'codex',
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Ship supervisor persistence",
+          evaluatorProviderId: "codex",
         },
       },
       ctx
@@ -69,21 +69,21 @@ describe('supervisor commands', () => {
 
     expect(result.ok).toBe(true);
     expect(supervisorMgr.create).toHaveBeenCalledWith(
-      expect.objectContaining({ evaluatorProviderId: 'codex' })
+      expect.objectContaining({ evaluatorProviderId: "codex" })
     );
   });
 
-  it('rejects legacy intervalMs on supervisor.create', async () => {
+  it("rejects legacy intervalMs on supervisor.create", async () => {
     const result = await dispatch(
       {
-        kind: 'command',
-        id: 'cmd-2',
-        op: 'supervisor.create',
+        kind: "command",
+        id: "cmd-2",
+        op: "supervisor.create",
         args: {
-          sessionId: 'sess-1',
-          workspaceId: 'ws-1',
-          objective: 'Ship supervisor persistence',
-          evaluatorProviderId: 'claude',
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Ship supervisor persistence",
+          evaluatorProviderId: "claude",
           intervalMs: 60000,
         },
       },
@@ -91,55 +91,55 @@ describe('supervisor commands', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe('validation_error');
+    expect(result.error?.code).toBe("validation_error");
   });
 
-  it('passes evaluatorProviderId through supervisor.update', async () => {
+  it("passes evaluatorProviderId through supervisor.update", async () => {
     const result = await dispatch(
       {
-        kind: 'command',
-        id: 'cmd-3',
-        op: 'supervisor.update',
+        kind: "command",
+        id: "cmd-3",
+        op: "supervisor.update",
         args: {
-          id: 'sup-1',
-          evaluatorProviderId: 'codex',
+          id: "sup-1",
+          evaluatorProviderId: "codex",
         },
       },
       ctx
     );
 
     expect(result.ok).toBe(true);
-    expect(supervisorMgr.update).toHaveBeenCalledWith('sup-1', {
-      evaluatorProviderId: 'codex',
+    expect(supervisorMgr.update).toHaveBeenCalledWith("sup-1", {
+      evaluatorProviderId: "codex",
       objective: undefined,
     });
   });
 
-  it('rejects supervisor.update with no patch fields', async () => {
+  it("rejects supervisor.update with no patch fields", async () => {
     const result = await dispatch(
       {
-        kind: 'command',
-        id: 'cmd-4',
-        op: 'supervisor.update',
+        kind: "command",
+        id: "cmd-4",
+        op: "supervisor.update",
         args: {
-          id: 'sup-1',
+          id: "sup-1",
         },
       },
       ctx
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe('validation_error');
+    expect(result.error?.code).toBe("validation_error");
   });
 
-  it('rejects legacy intervalMs on supervisor.update', async () => {
+  it("rejects legacy intervalMs on supervisor.update", async () => {
     const result = await dispatch(
       {
-        kind: 'command',
-        id: 'cmd-5',
-        op: 'supervisor.update',
+        kind: "command",
+        id: "cmd-5",
+        op: "supervisor.update",
         args: {
-          id: 'sup-1',
+          id: "sup-1",
           intervalMs: 60000,
         },
       },
@@ -147,6 +147,6 @@ describe('supervisor commands', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe('validation_error');
+    expect(result.error?.code).toBe("validation_error");
   });
 });
