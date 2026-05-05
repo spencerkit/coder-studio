@@ -20,6 +20,7 @@ import { useTranslation } from '../../../../lib/i18n';
 import { Topics, type TerminalInputActivity } from '@coder-studio/core';
 import type { OutputBuffer } from '../../atoms';
 import type {
+  ConnectionStatus,
   TerminalBinaryPayload,
   TerminalReplayPayload,
   TerminalSnapshotPayload,
@@ -35,6 +36,15 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from '../../hydration-coordinator';
+import { MobileTerminalInputBar } from '../../mobile/mobile-terminal-input-bar';
+import {
+  applyCtrlModeToInput,
+  getSoftTerminalInputBytes,
+  lockCtrlMode,
+  toggleCtrlMode,
+  type CtrlMode,
+  type SoftTerminalKeyId,
+} from '../../mobile/virtual-terminal-keys';
 import { usePasteDropUpload } from '../../uploads/use-paste-drop-upload';
 import { XtermPlaceholder } from './xterm-placeholder';
 
@@ -54,7 +64,7 @@ function isReplayGeneratedTerminalResponse(data: string): boolean {
 
 function classifyTerminalInput(data: string): TerminalInputActivity {
   if (TERMINAL_FOCUS_REPORTING_BYTES.has(data)) {
-    return 'control';
+    return 'system';
   }
 
   if (data.includes('\r') || data.includes('\n')) {
@@ -64,12 +74,34 @@ function classifyTerminalInput(data: string): TerminalInputActivity {
   return 'typing';
 }
 
+function dropLastWordFromDraft(draft: string): string {
+  let truncateIndex = draft.length;
+
+  while (truncateIndex > 0) {
+    const previousChar = draft[truncateIndex - 1];
+    if (!previousChar || !/\s/.test(previousChar)) {
+      break;
+    }
+    truncateIndex -= 1;
+  }
+
+  while (truncateIndex > 0) {
+    const previousChar = draft[truncateIndex - 1];
+    if (!previousChar || /\s/.test(previousChar)) {
+      break;
+    }
+    truncateIndex -= 1;
+  }
+
+  return draft.slice(0, truncateIndex);
+}
+
 function consumeTerminalInputDraft(
   draft: string,
   data: string,
   activity: TerminalInputActivity
 ): TerminalInputDraftState {
-  if (activity === 'control') {
+  if (activity === 'system') {
     return { nextDraft: draft };
   }
 
@@ -97,6 +129,17 @@ function consumeTerminalInputDraft(
 
     if (char === '\u0015') {
       nextDraft = '';
+      continue;
+    }
+
+    if (char === '\u0017') {
+      nextDraft = dropLastWordFromDraft(nextDraft);
+      continue;
+    }
+
+    if (char === '\u0003') {
+      nextDraft = '';
+      submittedText = undefined;
       continue;
     }
 
@@ -381,6 +424,7 @@ export function XtermHost({
   const replayWriteGenerationRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
   const inputDraftRef = useRef('');
+  const inputRevisionRef = useRef(0);
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
   const hydrationReleasedRef = useRef(false);
   const reconnectRecoveryTriggerRef = useRef<(() => void) | null>(null);
@@ -400,6 +444,16 @@ export function XtermHost({
     | { kind: 'queued'; queuePosition: number }
     | { kind: 'granted' }
   >(viewport === 'mobile' ? { kind: 'granted' } : { kind: 'idle' });
+  const [mobileInputExpanded, setMobileInputExpanded] = useState(false);
+  const [ctrlMode, setCtrlMode] = useState<CtrlMode>('off');
+  const ctrlModeRef = useRef<CtrlMode>('off');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
+    if (!wsClient || typeof wsClient.getStatus !== 'function') {
+      return 'disconnected';
+    }
+
+    return wsClient.getStatus();
+  });
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -623,23 +677,25 @@ export function XtermHost({
     });
   }, []);
 
+  const updateCtrlMode = useCallback((nextCtrlMode: CtrlMode) => {
+    ctrlModeRef.current = nextCtrlMode;
+    setCtrlMode(nextCtrlMode);
+  }, []);
+
+  const focusTerminal = useCallback(() => {
+    terminalRef.current?.focus();
+  }, []);
+
   /**
    * Handle user input - dispatch to server
    */
   const handleInput = useCallback(
-    async (data: string) => {
+    async (data: string, activityOverride?: TerminalInputActivity) => {
       if (
         replayWriteDepthRef.current > 0 &&
         isReplayGeneratedTerminalResponse(data)
       ) {
         traceTerminal(terminalId, 'input.suppressed-replay-response', {
-          summary: summarizeTerminalData(data),
-        });
-        return;
-      }
-
-      if (TERMINAL_FOCUS_REPORTING_BYTES.has(data)) {
-        traceTerminal(terminalId, 'input.suppressed-focus-report', {
           summary: summarizeTerminalData(data),
         });
         return;
@@ -654,30 +710,50 @@ export function XtermHost({
         return;
       }
 
+      const inputRevision = inputRevisionRef.current + 1;
+      inputRevisionRef.current = inputRevision;
+      const previousCtrlMode = ctrlModeRef.current;
+      const previousDraft = inputDraftRef.current;
+      const normalized = applyCtrlModeToInput(data, previousCtrlMode);
+      const activity =
+        normalized.activity ?? activityOverride ?? classifyTerminalInput(normalized.data);
+      const { nextDraft, submittedText } = consumeTerminalInputDraft(
+        previousDraft,
+        normalized.data,
+        activity
+      );
+
       try {
-        const activity = classifyTerminalInput(data);
+        if (normalized.nextCtrlMode !== previousCtrlMode) {
+          updateCtrlMode(normalized.nextCtrlMode);
+        }
+
         traceTerminal(terminalId, 'input', {
           activity,
-          summary: summarizeTerminalData(data),
+          summary: summarizeTerminalData(normalized.data),
         });
-        const { nextDraft, submittedText } = consumeTerminalInputDraft(
-          inputDraftRef.current,
-          data,
-          activity
-        );
         inputDraftRef.current = nextDraft;
 
         await wsClient.sendTerminalInput(
           terminalId,
-          terminalInputEncoder.encode(data),
+          terminalInputEncoder.encode(normalized.data),
           activity,
           submittedText
         );
       } catch (error) {
+        if (inputRevisionRef.current === inputRevision) {
+          inputDraftRef.current = previousDraft;
+          if (
+            normalized.nextCtrlMode !== previousCtrlMode &&
+            ctrlModeRef.current === normalized.nextCtrlMode
+          ) {
+            updateCtrlMode(previousCtrlMode);
+          }
+        }
         console.error('Failed to send terminal input:', error);
       }
     },
-    [terminalId, wsClient]
+    [terminalId, updateCtrlMode, wsClient]
   );
 
   const handleResize = useCallback(
@@ -737,6 +813,34 @@ export function XtermHost({
       terminalRef.current.options.cursorBlink = isInteractive && !uploadBusy;
     }
   }, [isInteractive, uploadBusy]);
+
+  useEffect(() => {
+    if (!wsClient) {
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    if (typeof wsClient.getStatus === 'function') {
+      setConnectionStatus(wsClient.getStatus());
+    } else {
+      setConnectionStatus('connected');
+    }
+
+    if (typeof wsClient.onStatus !== 'function') {
+      return;
+    }
+
+    return wsClient.onStatus((status) => {
+      setConnectionStatus(status);
+    });
+  }, [wsClient]);
+
+  useLayoutEffect(() => {
+    setMobileInputExpanded(false);
+    updateCtrlMode('off');
+    inputDraftRef.current = '';
+    inputRevisionRef.current += 1;
+  }, [terminalId, updateCtrlMode]);
 
   // Keep callback refs in sync so the mount effect can call the latest version
   // without listing the callbacks as dependencies.
@@ -1320,6 +1424,42 @@ export function XtermHost({
     }
   }, [meta?.alive]);
 
+  const showMobileInputBar = viewport === 'mobile' && isInteractive;
+  const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== 'connected';
+  const mobileInputLabels = {
+    expand: t('terminal.mobile_input.expand'),
+    collapse: t('terminal.mobile_input.collapse'),
+    shortcuts: t('terminal.mobile_input.shortcuts'),
+    ctrl: t('terminal.mobile_input.ctrl'),
+    ctrlArmed: t('terminal.mobile_input.ctrl_armed'),
+    ctrlLocked: t('terminal.mobile_input.ctrl_locked'),
+    escape: t('terminal.mobile_input.escape'),
+    tab: t('terminal.mobile_input.tab'),
+    enter: t('terminal.mobile_input.enter'),
+    up: t('terminal.mobile_input.up'),
+    down: t('terminal.mobile_input.down'),
+    left: t('terminal.mobile_input.left'),
+    right: t('terminal.mobile_input.right'),
+  };
+
+  const handleSoftKeyPress = useCallback(
+    async (key: SoftTerminalKeyId) => {
+      focusTerminal();
+      await handleInput(getSoftTerminalInputBytes(key));
+    },
+    [focusTerminal, handleInput]
+  );
+
+  const handleCtrlTap = useCallback(() => {
+    focusTerminal();
+    updateCtrlMode(toggleCtrlMode(ctrlModeRef.current));
+  }, [focusTerminal, updateCtrlMode]);
+
+  const handleCtrlLongPress = useCallback(() => {
+    focusTerminal();
+    updateCtrlMode(lockCtrlMode());
+  }, [focusTerminal, updateCtrlMode]);
+
   const showReplayOverlay =
     replayUiState.kind !== 'ready' && (viewport === 'mobile' || hydrationState.kind === 'granted');
 
@@ -1347,13 +1487,13 @@ export function XtermHost({
   }
 
   return (
-    <div className="xterm-host-shell">
+    <div className={`xterm-host-shell${showMobileInputBar ? ' xterm-host-shell--mobile-input' : ''}`}>
       <div
         ref={containerRef}
         className="xterm-host"
         style={{
           width: '100%',
-          height: '100%',
+          minHeight: 0,
           overflow: 'hidden',
         }}
         onFocusCapture={() => {
@@ -1367,6 +1507,23 @@ export function XtermHost({
           }
         }}
       />
+      {showMobileInputBar ? (
+        <MobileTerminalInputBar
+          expanded={mobileInputExpanded}
+          ctrlMode={ctrlMode}
+          disabled={mobileInputDisabled}
+          labels={mobileInputLabels}
+          onToggleExpanded={() => {
+            focusTerminal();
+            setMobileInputExpanded((value) => !value);
+          }}
+          onKeyPress={(key) => {
+            void handleSoftKeyPress(key);
+          }}
+          onCtrlTap={handleCtrlTap}
+          onCtrlLongPress={handleCtrlLongPress}
+        />
+      ) : null}
       {uploadBusy ? (
         <div
           role="status"

@@ -1097,7 +1097,7 @@ describe('web WsClient', () => {
     await expect(inputPromise).resolves.toBeUndefined();
   });
 
-  it('supports control activity terminal input metadata', async () => {
+  it('includes control activity metadata for ctrl-modified terminal input', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const connectPromise = client.connect();
     const socket = MockWebSocket.instances[0]!;
@@ -1106,7 +1106,7 @@ describe('web WsClient', () => {
 
     const inputPromise = client.sendTerminalInput(
       'term_1',
-      new TextEncoder().encode('\x1b[I'),
+      new TextEncoder().encode('\x03'),
       'control',
     );
 
@@ -1122,6 +1122,7 @@ describe('web WsClient', () => {
         activity: 'control',
       },
     });
+    expect(command.args).not.toHaveProperty('submittedText');
 
     socket.triggerMessage({
       kind: 'result',

@@ -486,7 +486,7 @@ describe('terminal commands', () => {
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
-  it('accepts control activity for session-owned terminal.input', async () => {
+  it('delegates ctrl-modified terminal.input to sessionMgr.sendInput as control activity', async () => {
     const ctx = createContext({
       sessionMgr: {
         findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
@@ -494,6 +494,18 @@ describe('terminal commands', () => {
         resize: vi.fn(),
       } as never,
     });
+    const bytes = Buffer.from('\x03');
+
+    registerPendingTerminalInput(
+      {
+        terminalId: 'term-1',
+        transport: 'binary',
+        streamId: 77,
+        size: bytes.length,
+        activity: 'control',
+      },
+      bytes,
+    );
 
     const result = await dispatch(
       {
@@ -502,18 +514,21 @@ describe('terminal commands', () => {
         op: 'terminal.input',
         args: {
           terminalId: 'term-1',
-          bytes: Buffer.from('\x1b[I').toString('base64'),
+          transport: 'binary',
+          streamId: 77,
+          size: bytes.length,
           activity: 'control',
         },
       },
-      ctx
+      ctx,
     );
 
     expect(result.ok).toBe(true);
-    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('\x1b[I'), 'control', undefined);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', bytes, 'control', undefined);
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
-  it('rejects legacy system activity for session-owned terminal.input', async () => {
+  it('accepts system activity for session-owned terminal.input', async () => {
     const ctx = createContext({
       sessionMgr: {
         findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
@@ -525,22 +540,20 @@ describe('terminal commands', () => {
     const result = await dispatch(
       {
         kind: 'command',
-        id: 'terminal-input-legacy-system-1',
+        id: 'terminal-input-system-1',
         op: 'terminal.input',
         args: {
           terminalId: 'term-1',
-          bytes: Buffer.from('legacy').toString('base64'),
+          bytes: Buffer.from('\x1b[I').toString('base64'),
           activity: 'system',
         },
       },
-      ctx
+      ctx,
     );
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatchObject({
-      code: 'validation_error',
-    });
-    expect(ctx.sessionMgr.sendInput).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('\x1b[I'), 'system', undefined);
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
   it('falls back to terminalMgr.write for terminal.input when no session owns the terminal', async () => {

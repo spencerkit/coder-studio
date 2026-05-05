@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -245,5 +246,33 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileBadgeLabel).toContain("display: inline-flex");
     expect(mobileBadgeLabel).toContain("align-items: center");
     expect(mobileBadgeLabel).toContain("line-height: 1");
+  });
+
+  it("keeps the mobile terminal keybar flow-positioned and token-driven", () => {
+    const shell = getLastRuleBlock(".xterm-host-shell");
+    const shellWithMobileInput = getLastRuleBlock(".xterm-host-shell--mobile-input");
+    const host = getLastRuleBlock(".xterm-host");
+    const keybar = getLastRuleBlock(".mobile-terminal-input-bar");
+    const toggle = getLastRuleBlock(".mobile-terminal-input-bar__toggle");
+    const keys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
+    const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
+    const ctrlLocked = getLastRuleBlock(".mobile-terminal-input-bar__ctrl[data-ctrl-mode='locked']");
+
+    expect(shell).toContain("display: flex");
+    expect(shell).toContain("flex-direction: column");
+    expect(shell).toContain("min-height: 0");
+    expect(shellWithMobileInput).toContain("gap: var(--sp-2)");
+    expect(host).toContain("position: relative");
+    expect(host).toContain("flex: 1 1 auto");
+    expect(host).toContain("min-height: 0");
+    expect(keybar).toContain("flex-shrink: 0");
+    expect(keybar).not.toContain("position: absolute");
+    expect(keybar).toContain("padding:");
+    expect(toggle).toContain("min-height: var(--touch-target-min)");
+    expect(toggle).toContain("var(--bg-surface)");
+    expect(keys).toContain("display: grid");
+    expect(keys).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
+    expect(key).toContain("var(--bg-surface)");
+    expect(ctrlLocked).toContain("var(--accent-blue)");
   });
 });

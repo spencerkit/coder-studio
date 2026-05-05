@@ -697,9 +697,9 @@ export function resolveWsUrl(): string {
     return normalizeWsUrl(configuredUrl);
   }
 
-  // In development mode, default to the local backend even when no browser
-  // location object is available, such as in node-based tests.
-  if (import.meta.env.DEV || typeof window === 'undefined') {
+  // Development and test environments connect directly to the backend, and
+  // node-based tests may not provide a browser location object at all.
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test' || typeof window === 'undefined') {
     return 'ws://127.0.0.1:4173/ws';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

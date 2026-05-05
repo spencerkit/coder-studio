@@ -324,7 +324,7 @@ describe('SessionManager session-level API', () => {
     expect(lifecycleEvents).toEqual(['turn_completed']);
   });
 
-  it('ignores control input for session state and turn completion', async () => {
+  it('does not arm turn completion for control input or overwrite latest submitted user input', async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -355,11 +355,20 @@ describe('SessionManager session-level API', () => {
     const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
     onData?.('booting up\n');
     vi.advanceTimersByTime(3000);
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', 'fix the build');
+    onData?.('working...\n');
+    vi.advanceTimersByTime(3000);
     lifecycleEvents.length = 0;
 
-    sessionMgr.sendInput(session.id, Buffer.from('\x1b[I'), 'control');
+    sessionMgr.sendInput(session.id, Buffer.from('\x03'), 'control');
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+
+    onData?.('interrupted\n');
+    vi.advanceTimersByTime(3000);
 
     expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
     expect(lifecycleEvents).toEqual([]);
   });
 

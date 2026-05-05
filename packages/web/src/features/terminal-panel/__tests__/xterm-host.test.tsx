@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
 import { Topics } from '@coder-studio/core';
 import type { TerminalReplayPayload, TerminalSnapshotPayload } from '../../../ws/client';
@@ -974,7 +975,7 @@ describe('XtermHost', () => {
     );
   });
 
-  it('suppresses focus reporting bytes instead of dispatching them', async () => {
+  it('dispatches focus reporting bytes as system activity without buffering them', async () => {
     const store = createStore();
     const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
@@ -994,7 +995,12 @@ describe('XtermHost', () => {
 
     await onDataCallback?.('\x1b[I');
 
-    expect(sendTerminalInput).not.toHaveBeenCalled();
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'focus-terminal',
+      new TextEncoder().encode('\x1b[I'),
+      'system',
+      undefined
+    );
   });
 
   it('marks enter key input as submit activity before dispatching', async () => {
@@ -1050,6 +1056,341 @@ describe('XtermHost', () => {
       new TextEncoder().encode('fix the build\r'),
       'submit',
       'fix the build'
+    );
+  });
+
+  it('shows a collapsed mobile soft-key handle for interactive terminals and expands it on tap', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-soft-key-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Expand terminal keys' });
+    expect(toggle).toBeInTheDocument();
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'false');
+
+    await user.click(toggle);
+
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Escape' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ctrl' })).toBeInTheDocument();
+  });
+
+  it('does not render the mobile soft-key handle when the terminal is read-only', () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-readonly-terminal" workspaceId="test-workspace" readOnly />
+      </Provider>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Expand terminal keys' })).not.toBeInTheDocument();
+  });
+
+  it('routes soft-key presses through sendTerminalInput and refocuses the xterm instance', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-escape-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Escape' }));
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenLastCalledWith(
+        'mobile-escape-terminal',
+        new TextEncoder().encode('\x1b'),
+        'typing',
+        undefined
+      );
+    });
+    expect(mockTerminal.focus).toHaveBeenCalled();
+  });
+
+  it('applies one-shot ctrl to the next single Latin letter and then resets to off', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-ctrl-armed-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await act(async () => {
+      await onDataCallback?.('c');
+    });
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'mobile-ctrl-armed-terminal',
+      new TextEncoder().encode('\x03'),
+      'control',
+      undefined
+    );
+    await waitFor(() => {
+      expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+        'data-ctrl-mode',
+        'off'
+      );
+    });
+  });
+
+  it('keeps ctrl armed across non-letter input and disables soft keys while disconnected', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const statusListeners: Array<(status: 'connected' | 'disconnected') => void> = [];
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn((listener) => {
+        statusListeners.push(listener);
+        return () => {};
+      }),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-disconnected-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    await act(async () => {
+      await onDataCallback?.('\t');
+    });
+    await act(async () => {
+      statusListeners[0]?.('disconnected');
+    });
+
+    const ctrlButton = container.querySelector('.mobile-terminal-input-bar__ctrl');
+    const escapeButton = screen.getByRole('button', { name: 'Escape' });
+    const toggleButton = screen.getByRole('button', { name: 'Collapse terminal keys' });
+    const callCountBeforeDisabledClick = sendTerminalInput.mock.calls.length;
+
+    expect(ctrlButton).toHaveAttribute('data-ctrl-mode', 'armed');
+    expect(escapeButton).toBeDisabled();
+    expect(toggleButton).toBeEnabled();
+    await user.click(toggleButton);
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: 'Expand terminal keys' }));
+    const reexpandedEscapeButton = screen.getByRole('button', { name: 'Escape' });
+    expect(reexpandedEscapeButton).toBeDisabled();
+    await user.click(reexpandedEscapeButton);
+    expect(sendTerminalInput).toHaveBeenCalledTimes(callCountBeforeDisabledClick);
+  });
+
+  it('resets expanded state and ctrl mode when the terminal instance changes', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container, rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-reset-terminal-a" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'true');
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'armed'
+    );
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-reset-terminal-b" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'false');
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Expand terminal keys' }));
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'off'
+    );
+  });
+
+  it('clears buffered submitted text when the terminal instance changes', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-draft-reset-terminal-a" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await act(async () => {
+      await firstOnDataCallback?.('f');
+      await firstOnDataCallback?.('o');
+      await firstOnDataCallback?.('o');
+    });
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-draft-reset-terminal-b" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const secondOnDataCallback = mockTerminal.onData.mock.calls.at(-1)?.[0];
+    await act(async () => {
+      await secondOnDataCallback?.('\r');
+    });
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'mobile-draft-reset-terminal-b',
+      new TextEncoder().encode('\r'),
+      'submit',
+      undefined
+    );
+  });
+
+  it('preserves buffered draft and one-shot ctrl state across viewport changes for the same terminal', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-viewport-stable-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await act(async () => {
+      await firstOnDataCallback?.('f');
+      await firstOnDataCallback?.('o');
+      await firstOnDataCallback?.('o');
+    });
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+
+    viewportMocks.viewport = 'desktop';
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-viewport-stable-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const secondOnDataCallback = mockTerminal.onData.mock.calls.at(-1)?.[0];
+    await act(async () => {
+      await secondOnDataCallback?.('d');
+      await secondOnDataCallback?.('\r');
+    });
+
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      4,
+      'mobile-viewport-stable-terminal',
+      new TextEncoder().encode('\x04'),
+      'control',
+      undefined
+    );
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      5,
+      'mobile-viewport-stable-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'foo'
     );
   });
 
@@ -1113,6 +1454,445 @@ describe('XtermHost', () => {
       new TextEncoder().encode('\r'),
       'submit',
       'fix'
+    );
+  });
+
+  it('keeps buffered submitted text in sync when mobile ctrl sends backspace', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="ctrl-backspace-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await onDataCallback?.('f');
+    await onDataCallback?.('i');
+    await onDataCallback?.('x');
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    await onDataCallback?.('h');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'ctrl-backspace-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'fi'
+    );
+  });
+
+  it('clears the buffered submitted text when mobile ctrl-u clears the line', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="ctrl-clear-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await onDataCallback?.('f');
+    await onDataCallback?.('i');
+    await onDataCallback?.('x');
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    await onDataCallback?.('u');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'ctrl-clear-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      undefined
+    );
+  });
+
+  it('drops the last word from buffered submitted text when mobile ctrl-w is used', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="ctrl-word-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await onDataCallback?.('f');
+    await onDataCallback?.('o');
+    await onDataCallback?.('o');
+    await onDataCallback?.(' ');
+    await onDataCallback?.('b');
+    await onDataCallback?.('a');
+    await onDataCallback?.('r');
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    await onDataCallback?.('w');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'ctrl-word-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'foo '
+    );
+  });
+
+  it('starts a fresh buffered submitted text after mobile ctrl-c interrupts the line', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="ctrl-interrupt-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf('function');
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await onDataCallback?.('n');
+    await onDataCallback?.('p');
+    await onDataCallback?.('m');
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    await onDataCallback?.('c');
+    await onDataCallback?.('l');
+    await onDataCallback?.('s');
+    await onDataCallback?.('\r');
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      'ctrl-interrupt-terminal',
+      new TextEncoder().encode('\r'),
+      'submit',
+      'ls'
+    );
+  });
+
+  it('locks ctrl from the keyboard shortcut path and keeps applying control input', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-ctrl-keyboard-lock-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    const ctrlButton = screen.getByRole('button', { name: 'Ctrl' });
+    ctrlButton.focus();
+
+    fireEvent.keyDown(ctrlButton, { key: 'Enter', altKey: true });
+
+    expect(ctrlButton).toHaveAttribute('data-ctrl-mode', 'locked');
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await act(async () => {
+      await onDataCallback?.('c');
+      await onDataCallback?.('d');
+    });
+
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      1,
+      'mobile-ctrl-keyboard-lock-terminal',
+      new TextEncoder().encode('\x03'),
+      'control',
+      undefined
+    );
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      2,
+      'mobile-ctrl-keyboard-lock-terminal',
+      new TextEncoder().encode('\x04'),
+      'control',
+      undefined
+    );
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'locked'
+    );
+  });
+
+  it('restores one-shot ctrl mode when sending the control byte fails', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    const sendTerminalInput = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket dropped'))
+      .mockResolvedValueOnce(undefined);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-ctrl-send-failure-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    await act(async () => {
+      await onDataCallback?.('c');
+    });
+
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'armed'
+    );
+
+    await act(async () => {
+      await onDataCallback?.('d');
+    });
+
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      1,
+      'mobile-ctrl-send-failure-terminal',
+      new TextEncoder().encode('\x03'),
+      'control',
+      undefined
+    );
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      2,
+      'mobile-ctrl-send-failure-terminal',
+      new TextEncoder().encode('\x04'),
+      'control',
+      undefined
+    );
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'off'
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to send terminal input:',
+      expect.any(Error)
+    );
+  });
+
+  it('does not re-arm one-shot ctrl after a later keystroke already consumed the local state', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    let rejectFirstSend: ((error: Error) => void) | null = null;
+    const sendTerminalInput = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirstSend = reject;
+          })
+      )
+      .mockResolvedValueOnce(undefined);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-ctrl-overlap-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    let firstInputPromise: Promise<void> | undefined;
+    await act(async () => {
+      firstInputPromise = onDataCallback?.('c');
+    });
+
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'off'
+    );
+
+    await act(async () => {
+      await onDataCallback?.('d');
+    });
+
+    rejectFirstSend?.(new Error('socket dropped'));
+    await act(async () => {
+      await firstInputPromise;
+    });
+
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      1,
+      'mobile-ctrl-overlap-terminal',
+      new TextEncoder().encode('\x03'),
+      'control',
+      undefined
+    );
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      2,
+      'mobile-ctrl-overlap-terminal',
+      new TextEncoder().encode('d'),
+      'typing',
+      undefined
+    );
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'off'
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to send terminal input:',
+      expect.any(Error)
+    );
+  });
+
+  it('does not restore prior terminal draft or ctrl state after a delayed send failure on terminal switch', async () => {
+    viewportMocks.viewport = 'mobile';
+    const store = createStore();
+    const user = userEvent.setup();
+    let rejectFirstSend: ((error: Error) => void) | null = null;
+    const sendTerminalInput = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirstSend = reject;
+          })
+      )
+      .mockResolvedValueOnce(undefined);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    store.set(localeAtom, 'en');
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: 'ok' }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => 'connected'),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const { container, rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-cross-terminal-a" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand terminal keys' }));
+    await user.click(screen.getByRole('button', { name: 'Ctrl' }));
+    const firstOnDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    let firstInputPromise: Promise<void> | undefined;
+    await act(async () => {
+      firstInputPromise = firstOnDataCallback?.('c');
+    });
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-cross-terminal-b" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Expand terminal keys' }));
+    const secondOnDataCallback = mockTerminal.onData.mock.calls.at(-1)?.[0];
+    await act(async () => {
+      await secondOnDataCallback?.('\r');
+    });
+
+    rejectFirstSend?.(new Error('socket dropped'));
+    await act(async () => {
+      await firstInputPromise;
+    });
+
+    expect(sendTerminalInput).toHaveBeenNthCalledWith(
+      2,
+      'mobile-cross-terminal-b',
+      new TextEncoder().encode('\r'),
+      'submit',
+      undefined
+    );
+    expect(container.querySelector('.mobile-terminal-input-bar__ctrl')).toHaveAttribute(
+      'data-ctrl-mode',
+      'off'
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to send terminal input:',
+      expect.any(Error)
     );
   });
 

@@ -51,6 +51,7 @@ export const TERMINAL_INPUT_ACTIVITIES = [
   'typing',
   'submit',
   'internal_submit',
+  'system',
   'control',
 ] as const;
 

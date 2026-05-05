@@ -10,6 +10,7 @@ import {
   TERMINAL_BINARY_PROTOCOL_VERSION,
   TerminalBinaryFrameType,
   encodeTerminalBinaryFrame,
+  type TerminalInputActivity,
 } from '@coder-studio/core';
 import { basename } from 'node:path';
 import { z } from 'zod';
@@ -48,6 +49,10 @@ function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinary
   }
   pendingTerminalInput.delete(args.streamId);
   return pending.payload;
+}
+
+function normalizeTerminalInputActivity(activity: TerminalInputActivity | undefined): TerminalInputActivity | undefined {
+  return activity;
 }
 
 export function registerPendingTerminalInput(args: TerminalInputBinaryArgs, payload: Buffer): void {
@@ -250,7 +255,12 @@ registerCommand(
     const buffer = decodeTerminalInput(args);
     const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
     if (sessionId) {
-      ctx.sessionMgr.sendInput(sessionId, buffer, args.activity, args.submittedText);
+      ctx.sessionMgr.sendInput(
+        sessionId,
+        buffer,
+        normalizeTerminalInputActivity(args.activity),
+        args.submittedText
+      );
       return;
     }
 

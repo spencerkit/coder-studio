@@ -1178,14 +1178,105 @@
 
 .xterm-host-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
 .xterm-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   width: 100%;
-  height: 100%;
+}
+
+.xterm-host-shell--mobile-input {
+  gap: var(--sp-2);
+}
+
+.mobile-terminal-input-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+
+.mobile-terminal-input-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  min-width: 72px;
+  min-height: var(--touch-target-min);
+  padding: 0 var(--sp-2);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.mobile-terminal-input-bar__toggle-pill {
+  width: 28px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--text-tertiary);
+}
+
+.mobile-terminal-input-bar__keys {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.mobile-terminal-input-bar__key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 var(--sp-2);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.mobile-terminal-input-bar__ctrl[data-ctrl-mode='armed'] {
+  border-color: color-mix(in srgb, var(--accent-blue) 46%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-surface));
+}
+
+.mobile-terminal-input-bar__ctrl[data-ctrl-mode='locked'] {
+  border-color: color-mix(in srgb, var(--accent-blue) 56%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
+  color: var(--accent-blue);
+}
+
+.mobile-terminal-input-bar__key:disabled,
+.mobile-terminal-input-bar__toggle:disabled {
+  opacity: 0.52;
+}
+
+.mobile-shell__agent-stage .mobile-terminal-input-bar {
+  padding:
+    0
+    calc(var(--mobile-safe-right) + var(--sp-3))
+    var(--sp-3)
+    calc(var(--mobile-safe-left) + var(--sp-3));
+}
+
+.bottom-terminal--mobile-fullscreen .mobile-terminal-input-bar {
+  padding:
+    0
+    var(--sp-3)
+    calc(var(--sp-2) + var(--mobile-safe-bottom))
+    var(--sp-3);
 }
 
 .xterm-replay-overlay {
