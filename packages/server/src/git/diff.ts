@@ -2,15 +2,14 @@
  * Git diff operations.
  */
 
-import { mkdtemp, rm } from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { runGit } from './cli.js';
-import { GitError } from './cli.js';
+import { mkdtemp, rm } from "fs/promises";
+import os from "os";
+import path from "path";
+import { GitError, runGit } from "./cli.js";
 
 async function isTrackedPath(cwd: string, filePath: string): Promise<boolean> {
   try {
-    await runGit(cwd, ['ls-files', '--error-unmatch', '--', filePath]);
+    await runGit(cwd, ["ls-files", "--error-unmatch", "--", filePath]);
     return true;
   } catch {
     return false;
@@ -18,12 +17,12 @@ async function isTrackedPath(cwd: string, filePath: string): Promise<boolean> {
 }
 
 async function getUntrackedFileDiff(cwd: string, filePath: string): Promise<string> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'coder-studio-git-diff-'));
-  const tempIndex = path.join(tempDir, 'index');
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "coder-studio-git-diff-"));
+  const tempIndex = path.join(tempDir, "index");
 
   try {
     try {
-      await runGit(cwd, ['read-tree', 'HEAD'], {
+      await runGit(cwd, ["read-tree", "HEAD"], {
         env: { GIT_INDEX_FILE: tempIndex },
       });
     } catch (error) {
@@ -33,16 +32,16 @@ async function getUntrackedFileDiff(cwd: string, filePath: string): Promise<stri
 
       // Fresh repositories may not have HEAD yet; an empty temporary index is
       // sufficient for intent-to-add diffs in that case.
-      await runGit(cwd, ['read-tree', '--empty'], {
+      await runGit(cwd, ["read-tree", "--empty"], {
         env: { GIT_INDEX_FILE: tempIndex },
       });
     }
 
-    await runGit(cwd, ['add', '-N', '--', filePath], {
+    await runGit(cwd, ["add", "-N", "--", filePath], {
       env: { GIT_INDEX_FILE: tempIndex },
     });
 
-    const result = await runGit(cwd, ['diff', '--', filePath], {
+    const result = await runGit(cwd, ["diff", "--", filePath], {
       env: { GIT_INDEX_FILE: tempIndex },
     });
     return result.stdout;
@@ -64,7 +63,7 @@ export async function getFileDiff(cwd: string, path: string, staged = false): Pr
     return getUntrackedFileDiff(cwd, path);
   }
 
-  const args = staged ? ['diff', '--staged', '--', path] : ['diff', '--', path];
+  const args = staged ? ["diff", "--staged", "--", path] : ["diff", "--", path];
   const result = await runGit(cwd, args);
   return result.stdout;
 }
@@ -77,7 +76,7 @@ export async function getFileDiff(cwd: string, path: string, staged = false): Pr
  * @returns Diff output
  */
 export async function getDiff(cwd: string, staged = false): Promise<string> {
-  const args = staged ? ['diff', '--staged'] : ['diff'];
+  const args = staged ? ["diff", "--staged"] : ["diff"];
   const result = await runGit(cwd, args);
   return result.stdout;
 }

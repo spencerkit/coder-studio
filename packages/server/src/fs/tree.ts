@@ -3,10 +3,10 @@
  * Returns only direct children of a directory (no recursion).
  */
 
-import { readdir, stat } from 'fs/promises';
-import { join, relative } from 'path';
-import type { FileNode } from '@coder-studio/core';
-import { createGitignoreFilter } from './gitignore.js';
+import type { FileNode } from "@coder-studio/core";
+import { readdir, stat } from "fs/promises";
+import { join, relative } from "path";
+import { createGitignoreFilter } from "./gitignore.js";
 
 export interface ReadTreeResult {
   path: string;
@@ -41,7 +41,7 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
       nodes.push({
         name: entry.name,
         path: relPath,
-        kind: 'dir',
+        kind: "dir",
         children: undefined, // Not loaded yet - client will request on expand
       });
     } else if (entry.isFile()) {
@@ -49,7 +49,7 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
       nodes.push({
         name: entry.name,
         path: relPath,
-        kind: 'file',
+        kind: "file",
         size: stats.size,
         mtime: stats.mtimeMs,
       });
@@ -59,13 +59,13 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
   // Sort: directories first, then files, alphabetically within each group
   nodes.sort((a, b) => {
     if (a.kind !== b.kind) {
-      return a.kind === 'dir' ? -1 : 1;
+      return a.kind === "dir" ? -1 : 1;
     }
     return a.name.localeCompare(b.name);
   });
 
   return {
-    path: subdir || '.',
+    path: subdir || ".",
     children: nodes,
   };
 }
@@ -132,7 +132,7 @@ export async function searchFiles(
         return nameCompare;
       }
 
-      const depthCompare = a.path.split('/').length - b.path.split('/').length;
+      const depthCompare = a.path.split("/").length - b.path.split("/").length;
       if (depthCompare !== 0) {
         return depthCompare;
       }
@@ -144,7 +144,7 @@ export async function searchFiles(
     files.push({
       name: match.name,
       path: match.path,
-      kind: 'file',
+      kind: "file",
       size: stats.size,
       mtime: stats.mtimeMs,
     });
@@ -155,7 +155,7 @@ export async function searchFiles(
 
 function scoreFilenameMatch(name: string, query: string): number | null {
   const normalizedName = name.toLowerCase();
-  const baseName = normalizedName.replace(/\.[^.]+$/, '');
+  const baseName = normalizedName.replace(/\.[^.]+$/, "");
 
   if (normalizedName === query) {
     return 0;

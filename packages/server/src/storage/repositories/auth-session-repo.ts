@@ -1,4 +1,4 @@
-import type { Database } from '../database.js';
+import type { Database } from "../database.js";
 
 export interface AuthSession {
   token: string;
@@ -10,10 +10,12 @@ export class AuthSessionRepo {
   constructor(private readonly db: Database) {}
 
   create(token: string, now: number): AuthSession {
-    this.db.prepare(`
+    this.db
+      .prepare(`
       INSERT INTO auth_sessions (token, created_at, last_seen_at)
       VALUES (?, ?, ?)
-    `).run(token, now, now);
+    `)
+      .run(token, now, now);
 
     return {
       token,
@@ -23,16 +25,18 @@ export class AuthSessionRepo {
   }
 
   touch(token: string, now: number): boolean {
-    const result = this.db.prepare(`
+    const result = this.db
+      .prepare(`
       UPDATE auth_sessions
       SET last_seen_at = ?
       WHERE token = ?
-    `).run(now, token);
+    `)
+      .run(now, token);
 
     return result.changes > 0;
   }
 
   delete(token: string): void {
-    this.db.prepare('DELETE FROM auth_sessions WHERE token = ?').run(token);
+    this.db.prepare("DELETE FROM auth_sessions WHERE token = ?").run(token);
   }
 }

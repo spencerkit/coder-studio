@@ -2,16 +2,16 @@
  * Tests for WorkspaceManager.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rmdir } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { DatabaseSync } from 'node:sqlite';
-import { WorkspaceManager } from '../../workspace/manager.js';
-import type { DomainEvent } from '@coder-studio/core';
-import type { Database } from '../../storage/database.js';
+import { DatabaseSync } from "node:sqlite";
+import type { DomainEvent } from "@coder-studio/core";
+import { mkdir, rmdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Database } from "../../storage/database.js";
+import { WorkspaceManager } from "../../workspace/manager.js";
 
-describe('WorkspaceManager', () => {
+describe("WorkspaceManager", () => {
   let testDir: string;
   let db: Database;
   let manager: WorkspaceManager;
@@ -23,9 +23,9 @@ describe('WorkspaceManager', () => {
     await mkdir(testDir);
 
     // Create in-memory database
-    db = new DatabaseSync(':memory:');
-    db.exec('PRAGMA journal_mode = WAL');
-    db.exec('PRAGMA foreign_keys = ON');
+    db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA foreign_keys = ON");
 
     // Create tables
     db.exec(`
@@ -61,8 +61,8 @@ describe('WorkspaceManager', () => {
     }
   });
 
-  describe('open', () => {
-    it('should open a valid workspace', async () => {
+  describe("open", () => {
+    it("should open a valid workspace", async () => {
       const workspace = await manager.open({
         path: testDir,
       });
@@ -73,24 +73,24 @@ describe('WorkspaceManager', () => {
       expect(workspace.uiState).toBeDefined();
     });
 
-    it('should emit workspace.meta.changed event', async () => {
+    it("should emit workspace.meta.changed event", async () => {
       await manager.open({
         path: testDir,
       });
 
       expect(events).toHaveLength(1);
-      expect(events[0].type).toBe('workspace.meta.changed');
+      expect(events[0].type).toBe("workspace.meta.changed");
     });
 
-    it('should reject non-existent path', async () => {
+    it("should reject non-existent path", async () => {
       await expect(
         manager.open({
-          path: join(testDir, 'nonexistent'),
+          path: join(testDir, "nonexistent"),
         })
       ).rejects.toThrow();
     });
 
-    it('should return existing workspace for duplicate paths (idempotent open)', async () => {
+    it("should return existing workspace for duplicate paths (idempotent open)", async () => {
       const first = await manager.open({
         path: testDir,
       });
@@ -104,7 +104,7 @@ describe('WorkspaceManager', () => {
       expect(second.path).toBe(first.path);
     });
 
-    it('does not start file watchers when broadcaster is omitted', async () => {
+    it("does not start file watchers when broadcaster is omitted", async () => {
       await manager.open({
         path: testDir,
       });
@@ -113,8 +113,8 @@ describe('WorkspaceManager', () => {
     });
   });
 
-  describe('list', () => {
-    it('should list all workspaces', async () => {
+  describe("list", () => {
+    it("should list all workspaces", async () => {
       await manager.open({ path: testDir });
 
       const workspaces = manager.list();
@@ -122,14 +122,14 @@ describe('WorkspaceManager', () => {
       expect(workspaces[0].path).toBe(testDir);
     });
 
-    it('should return empty array when no workspaces', () => {
+    it("should return empty array when no workspaces", () => {
       const workspaces = manager.list();
       expect(workspaces).toHaveLength(0);
     });
   });
 
-  describe('get', () => {
-    it('should get workspace by id', async () => {
+  describe("get", () => {
+    it("should get workspace by id", async () => {
       const created = await manager.open({ path: testDir });
       const workspace = manager.get(created.id);
 
@@ -137,14 +137,14 @@ describe('WorkspaceManager', () => {
       expect(workspace?.id).toBe(created.id);
     });
 
-    it('should return undefined for non-existent workspace', () => {
-      const workspace = manager.get('nonexistent');
+    it("should return undefined for non-existent workspace", () => {
+      const workspace = manager.get("nonexistent");
       expect(workspace).toBeUndefined();
     });
   });
 
-  describe('close', () => {
-    it('should close workspace', async () => {
+  describe("close", () => {
+    it("should close workspace", async () => {
       const workspace = await manager.open({ path: testDir });
       await manager.close(workspace.id);
 
@@ -152,13 +152,13 @@ describe('WorkspaceManager', () => {
       expect(workspaces).toHaveLength(0);
     });
 
-    it('should throw for non-existent workspace', async () => {
-      await expect(manager.close('nonexistent')).rejects.toThrow();
+    it("should throw for non-existent workspace", async () => {
+      await expect(manager.close("nonexistent")).rejects.toThrow();
     });
   });
 
-  describe('touch', () => {
-    it('should update last active timestamp', async () => {
+  describe("touch", () => {
+    it("should update last active timestamp", async () => {
       const workspace = await manager.open({ path: testDir });
       const originalLastActive = workspace.lastActiveAt;
 
@@ -172,37 +172,37 @@ describe('WorkspaceManager', () => {
     });
   });
 
-  describe('updateUiState', () => {
-    it('updates workspace pane layout and emits workspace meta changed', async () => {
+  describe("updateUiState", () => {
+    it("updates workspace pane layout and emits workspace meta changed", async () => {
       const workspace = await manager.open({ path: testDir });
       events.length = 0;
 
       manager.updateUiState(workspace.id, {
         ...workspace.uiState,
         paneLayout: {
-          id: 'root',
-          type: 'split',
-          direction: 'horizontal',
+          id: "root",
+          type: "split",
+          direction: "horizontal",
           children: [
-            { id: 'left', type: 'leaf', sessionId: 'sess-left' },
-            { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+            { id: "left", type: "leaf", sessionId: "sess-left" },
+            { id: "right", type: "leaf", sessionId: "sess-right" },
           ],
         },
       });
 
       const updated = manager.get(workspace.id);
       expect(updated?.uiState.paneLayout).toEqual({
-        id: 'root',
-        type: 'split',
-        direction: 'horizontal',
+        id: "root",
+        type: "split",
+        direction: "horizontal",
         children: [
-          { id: 'left', type: 'leaf', sessionId: 'sess-left' },
-          { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+          { id: "left", type: "leaf", sessionId: "sess-left" },
+          { id: "right", type: "leaf", sessionId: "sess-right" },
         ],
       });
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
-        type: 'workspace.meta.changed',
+        type: "workspace.meta.changed",
         workspaceId: workspace.id,
         patch: {
           uiState: updated?.uiState,

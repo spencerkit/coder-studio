@@ -1,15 +1,15 @@
-import { spawn } from 'node:child_process';
-import type { FastifyBaseLogger } from 'fastify';
+import { spawn } from "node:child_process";
 import {
   DEFAULT_SUPERVISOR_CONFIG,
   type ProviderDefinition,
   type Supervisor,
   type SupervisorConfig,
-} from '@coder-studio/core';
-import type { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
-import type { SupervisorEvaluationContext } from './context-builder.js';
-import { mergeProviderLaunchConfig } from '../provider-config.js';
-import { escalateKillWithPolling } from '../terminal/pty-host.js';
+} from "@coder-studio/core";
+import type { FastifyBaseLogger } from "fastify";
+import { mergeProviderLaunchConfig } from "../provider-config.js";
+import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { escalateKillWithPolling } from "../terminal/pty-host.js";
+import type { SupervisorEvaluationContext } from "./context-builder.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -17,7 +17,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   error: () => {},
   fatal: () => {},
   info: () => {},
-  level: 'silent',
+  level: "silent",
   silent: () => {},
   trace: () => {},
   warn: () => {},
@@ -62,25 +62,28 @@ export class SupervisorEvaluator {
     );
     if (!provider?.buildSupervisorEvalCommand) {
       throw {
-        code: 'supervisor_invalid_evaluator_provider',
-        message: 'Evaluator provider does not support headless eval',
+        code: "supervisor_invalid_evaluator_provider",
+        message: "Evaluator provider does not support headless eval",
       };
     }
 
-    const config = mergeProviderLaunchConfig(provider, this.deps.providerConfigRepo.get(provider.id));
+    const config = mergeProviderLaunchConfig(
+      provider,
+      this.deps.providerConfigRepo.get(provider.id)
+    );
 
     const prompt = buildPrompt(context);
     const command = provider.buildSupervisorEvalCommand(config, {
       prompt,
       sessionId: supervisor.sessionId,
       workspacePath: context.workspacePath,
-      model: typeof config.model === 'string' ? config.model : undefined,
+      model: typeof config.model === "string" ? config.model : undefined,
     });
 
     if (!command) {
       throw {
-        code: 'supervisor_invalid_evaluator_provider',
-        message: 'Evaluator provider returned null command',
+        code: "supervisor_invalid_evaluator_provider",
+        message: "Evaluator provider returned null command",
       };
     }
 
@@ -108,34 +111,34 @@ export class SupervisorEvaluator {
 }
 
 function buildPrompt(context: SupervisorEvaluationContext): string {
-  const agentOutput = context.transcriptExcerpt ?? context.terminalExcerpt ?? '';
-  const userInput = context.latestUserInput?.trim() ?? '';
+  const agentOutput = context.transcriptExcerpt ?? context.terminalExcerpt ?? "";
+  const userInput = context.latestUserInput?.trim() ?? "";
 
   const lines: string[] = [
-    'You are the supervisor for a business agent terminal session.',
-    'Your job is to analyze the current objective and the business agent\'s latest output, then generate the next concrete task for the agent to execute.',
+    "You are the supervisor for a business agent terminal session.",
+    "Your job is to analyze the current objective and the business agent's latest output, then generate the next concrete task for the agent to execute.",
     'If the objective is complete, respond with "[objective complete]".',
-    'If more work is needed, respond with a clear, actionable instruction for the next step.',
-    '',
-    'Current objective:',
+    "If more work is needed, respond with a clear, actionable instruction for the next step.",
+    "",
+    "Current objective:",
     context.objective,
   ];
 
   if (userInput) {
-    lines.push('', 'Latest user input:', userInput);
+    lines.push("", "Latest user input:", userInput);
   }
 
   lines.push(
-    '',
-    'Latest business agent output:',
-    agentOutput || '(no output yet)',
-    '',
-    'Your response must be one of:',
+    "",
+    "Latest business agent output:",
+    agentOutput || "(no output yet)",
+    "",
+    "Your response must be one of:",
     '1. A concrete next task (e.g., "Run the tests to verify the fix", "Review the error in logs/main.log")',
-    '2. "[objective complete]" if the objective has been fully achieved',
+    '2. "[objective complete]" if the objective has been fully achieved'
   );
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 async function runCommand(
@@ -150,21 +153,22 @@ async function runCommand(
   return await new Promise((resolve, reject) => {
     const child = spawn(command.argv[0]!, command.argv.slice(1), {
       cwd: command.cwd,
-      detached: process.platform !== 'win32',
+      detached: process.platform !== "win32",
       env: { ...process.env, ...command.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let settled = false;
-    let terminationError:
-      | { code: 'supervisor_eval_timeout' | 'supervisor_eval_aborted'; message: string }
-      | null = null;
+    let terminationError: {
+      code: "supervisor_eval_timeout" | "supervisor_eval_aborted";
+      message: string;
+    } | null = null;
 
     const cleanup = () => {
       clearTimeout(timer);
-      options.signal?.removeEventListener('abort', onAbort);
+      options.signal?.removeEventListener("abort", onAbort);
     };
 
     const settleReject = (error: unknown) => {
@@ -185,20 +189,21 @@ async function runCommand(
       resolve(value);
     };
 
-    const terminate = (
-      error: { code: 'supervisor_eval_timeout' | 'supervisor_eval_aborted'; message: string }
-    ) => {
+    const terminate = (error: {
+      code: "supervisor_eval_timeout" | "supervisor_eval_aborted";
+      message: string;
+    }) => {
       if (terminationError) {
         return;
       }
       terminationError = error;
 
-      if (typeof child.pid !== 'number' || child.pid <= 0) {
+      if (typeof child.pid !== "number" || child.pid <= 0) {
         settleReject(error);
         return;
       }
 
-      void escalateKillWithPolling(child.pid, 'SIGTERM').catch(() => {
+      void escalateKillWithPolling(child.pid, "SIGTERM").catch(() => {
         // Best-effort only. The exit/error event still decides final settlement.
       });
     };
@@ -209,48 +214,47 @@ async function runCommand(
 
     const timer = setTimeout(() => {
       terminate({
-        code: 'supervisor_eval_timeout',
+        code: "supervisor_eval_timeout",
         message: `Supervisor evaluator timed out after ${timeoutMs}ms`,
       });
     }, timeoutMs);
 
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-    child.stdout?.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
-    child.stderr?.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
-    child.on('error', (error) => {
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    child.stdout?.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr?.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on("error", (error) => {
       if (terminationError) {
         settleReject(terminationError);
         return;
       }
       settleReject(error);
     });
-    child.on('exit', (code) => {
+    child.on("exit", (code) => {
       if (terminationError) {
         settleReject(terminationError);
         return;
       }
       if (code !== 0) {
         settleReject({
-          code: 'supervisor_eval_failed',
+          code: "supervisor_eval_failed",
           message:
-            Buffer.concat(stderr).toString('utf8').trim() ||
-            `Evaluator exited with code ${code}`,
+            Buffer.concat(stderr).toString("utf8").trim() || `Evaluator exited with code ${code}`,
         });
         return;
       }
 
-      settleResolve(Buffer.concat(stdout).toString('utf8'));
+      settleResolve(Buffer.concat(stdout).toString("utf8"));
     });
   });
 }
 
 function createSupervisorEvalAbortedError(): {
-  code: 'supervisor_eval_aborted';
+  code: "supervisor_eval_aborted";
   message: string;
 } {
   return {
-    code: 'supervisor_eval_aborted',
-    message: 'Supervisor evaluator aborted',
+    code: "supervisor_eval_aborted",
+    message: "Supervisor evaluator aborted",
   };
 }
 
@@ -263,7 +267,7 @@ function stripCodeFence(text: string): string {
 }
 
 type CodexCompletedCandidate = {
-  sourceType: 'agent_message' | 'assistant_message' | 'command_execution' | 'reasoning';
+  sourceType: "agent_message" | "assistant_message" | "command_execution" | "reasoning";
   content: string;
 };
 
@@ -300,61 +304,61 @@ function scanCodexStream(lines: string[]): CodexStreamScan {
     } catch {
       continue;
     }
-    if (!event || typeof event !== 'object') {
+    if (!event || typeof event !== "object") {
       continue;
     }
     const record = event as Record<string, unknown>;
     const type = record.type;
 
     if (
-      type === 'thread.started' ||
-      type === 'turn.started' ||
-      type === 'turn.completed' ||
-      type === 'turn.failed' ||
-      type === 'item.started' ||
-      type === 'item.updated' ||
-      type === 'item.completed'
+      type === "thread.started" ||
+      type === "turn.started" ||
+      type === "turn.completed" ||
+      type === "turn.failed" ||
+      type === "item.started" ||
+      type === "item.updated" ||
+      type === "item.completed"
     ) {
       scan.isCodexStream = true;
     }
 
-    if (type === 'turn.completed') {
+    if (type === "turn.completed") {
       scan.turnCompleted = true;
       const usage = record.usage;
       if (
         usage &&
-        typeof usage === 'object' &&
-        typeof (usage as Record<string, unknown>).output_tokens === 'number'
+        typeof usage === "object" &&
+        typeof (usage as Record<string, unknown>).output_tokens === "number"
       ) {
         scan.outputTokens = (usage as Record<string, unknown>).output_tokens as number;
       }
     }
 
-    if (type === 'turn.failed') {
+    if (type === "turn.failed") {
       const error = record.error;
       if (
         error &&
-        typeof error === 'object' &&
-        typeof (error as Record<string, unknown>).message === 'string'
+        typeof error === "object" &&
+        typeof (error as Record<string, unknown>).message === "string"
       ) {
         scan.turnFailure = (error as Record<string, unknown>).message as string;
       } else {
-        scan.turnFailure = 'codex turn failed';
+        scan.turnFailure = "codex turn failed";
       }
     }
 
-    if (type === 'item.completed') {
+    if (type === "item.completed") {
       const item = record.item;
-      if (!item || typeof item !== 'object') {
+      if (!item || typeof item !== "object") {
         continue;
       }
       const itemRecord = item as Record<string, unknown>;
       const itemType = itemRecord.type ?? itemRecord.item_type;
       if (
-        (itemType === 'agent_message' ||
-          itemType === 'assistant_message' ||
-          itemType === 'reasoning') &&
-        typeof itemRecord.text === 'string'
+        (itemType === "agent_message" ||
+          itemType === "assistant_message" ||
+          itemType === "reasoning") &&
+        typeof itemRecord.text === "string"
       ) {
         scan.completedItemCandidates.push({
           sourceType: itemType,
@@ -362,9 +366,9 @@ function scanCodexStream(lines: string[]): CodexStreamScan {
         });
         continue;
       }
-      if (itemType === 'command_execution' && typeof itemRecord.aggregated_output === 'string') {
+      if (itemType === "command_execution" && typeof itemRecord.aggregated_output === "string") {
         scan.completedItemCandidates.push({
-          sourceType: 'command_execution',
+          sourceType: "command_execution",
           content: itemRecord.aggregated_output,
         });
       }
@@ -375,7 +379,9 @@ function scanCodexStream(lines: string[]): CodexStreamScan {
 }
 
 function buildStdoutPreview(output: string, maxChars = 4000): string {
-  return output.length <= maxChars ? output : `${output.slice(0, maxChars)}\n…[truncated ${output.length - maxChars} chars]`;
+  return output.length <= maxChars
+    ? output
+    : `${output.slice(0, maxChars)}\n…[truncated ${output.length - maxChars} chars]`;
 }
 
 function debugCodexUnparseableOutput(
@@ -407,7 +413,7 @@ function debugCodexUnparseableOutput(
       prompt,
       rawStdout: buildStdoutPreview(output),
     },
-    'Supervisor evaluator debug: codex output was not parseable'
+    "Supervisor evaluator debug: codex output was not parseable"
   );
 }
 
@@ -422,12 +428,12 @@ function debugCodexUnparseableOutput(
 function extractSupervisorMessage(output: string, providerId: string): string {
   const trimmed = output.trim();
   if (!trimmed) {
-    throw new Error('Supervisor returned empty output');
+    throw new Error("Supervisor returned empty output");
   }
 
   const lines = trimmed.split(/\r?\n/).filter(Boolean);
 
-  if (providerId === 'codex') {
+  if (providerId === "codex") {
     const scan = scanCodexStream(lines);
 
     if (scan.turnFailure) {
@@ -439,9 +445,9 @@ function extractSupervisorMessage(output: string, providerId: string): string {
     for (let i = scan.completedItemCandidates.length - 1; i >= 0; i--) {
       const candidate = scan.completedItemCandidates[i]!;
       if (
-        candidate.sourceType === 'agent_message' ||
-        candidate.sourceType === 'reasoning' ||
-        candidate.sourceType === 'assistant_message'
+        candidate.sourceType === "agent_message" ||
+        candidate.sourceType === "reasoning" ||
+        candidate.sourceType === "assistant_message"
       ) {
         const stripped = stripCodeFence(candidate.content).trim();
         if (stripped) {
@@ -454,7 +460,7 @@ function extractSupervisorMessage(output: string, providerId: string): string {
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i]!;
       // Skip obvious JSON/event lines
-      if (line.startsWith('{') || line.startsWith('[')) {
+      if (line.startsWith("{") || line.startsWith("[")) {
         continue;
       }
       const text = line.trim();
@@ -465,10 +471,8 @@ function extractSupervisorMessage(output: string, providerId: string): string {
     }
 
     // Codex stream but no agent_message found
-    const tokenHint = scan.outputTokens !== null ? ` (${scan.outputTokens} output tokens)` : '';
-    throw new Error(
-      'Supervisor (codex) completed without returning a message' + tokenHint
-    );
+    const tokenHint = scan.outputTokens !== null ? ` (${scan.outputTokens} output tokens)` : "";
+    throw new Error("Supervisor (codex) completed without returning a message" + tokenHint);
   }
 
   // Claude path: try result envelope, then plain text
@@ -476,9 +480,9 @@ function extractSupervisorMessage(output: string, providerId: string): string {
     const line = lines[i]!;
     try {
       const parsed = JSON.parse(line);
-      if (typeof parsed === 'object' && parsed !== null && 'result' in parsed) {
+      if (typeof parsed === "object" && parsed !== null && "result" in parsed) {
         const result = (parsed as Record<string, unknown>).result;
-        if (typeof result === 'string') {
+        if (typeof result === "string") {
           return stripCodeFence(result).trim();
         }
       }
@@ -495,5 +499,5 @@ function extractSupervisorMessage(output: string, providerId: string): string {
     }
   }
 
-  throw new Error('Supervisor did not return a recognizable message');
+  throw new Error("Supervisor did not return a recognizable message");
 }

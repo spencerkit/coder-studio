@@ -1,29 +1,29 @@
-import { lstat, mkdir } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import path from 'node:path';
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir } from "node:fs/promises";
+import path from "node:path";
 
 const MAX_FILENAME_LENGTH = 64;
 const KEEP_FILENAME_CHAR = /[a-zA-Z0-9._一-鿿 \-]/;
 const WORKSPACE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
 export function sanitizeOriginalName(input: string): string {
-  let sanitized = '';
+  let sanitized = "";
 
   for (const char of input.trim()) {
-    sanitized += KEEP_FILENAME_CHAR.test(char) ? char : '_';
+    sanitized += KEEP_FILENAME_CHAR.test(char) ? char : "_";
   }
 
-  sanitized = sanitized.replace(/^\.+/, '');
+  sanitized = sanitized.replace(/^\.+/, "");
 
   if (sanitized.length === 0 || /^[_\s]*$/.test(sanitized)) {
-    return 'file';
+    return "file";
   }
 
   if (sanitized.length <= MAX_FILENAME_LENGTH) {
     return sanitized;
   }
 
-  const lastDot = sanitized.lastIndexOf('.');
+  const lastDot = sanitized.lastIndexOf(".");
   if (lastDot > 0 && sanitized.length - lastDot <= 16) {
     const ext = sanitized.slice(lastDot);
     const stem = sanitized.slice(0, MAX_FILENAME_LENGTH - ext.length);
@@ -53,10 +53,7 @@ export interface GenerateBucketPathResult {
   sanitizedName: string;
 }
 
-export async function assertNoSymlinkInPath(
-  rootDir: string,
-  targetDir: string
-): Promise<void> {
+export async function assertNoSymlinkInPath(rootDir: string, targetDir: string): Promise<void> {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedTarget = path.resolve(targetDir);
 
@@ -79,7 +76,7 @@ export async function assertNoSymlinkInPath(
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') {
+      if (code === "ENOENT") {
         continue;
       }
       throw error;
@@ -97,10 +94,7 @@ async function assertDirectorySegmentSafe(segmentPath: string): Promise<void> {
   }
 }
 
-export async function ensureSafeUploadDir(
-  rootDir: string,
-  targetDir: string
-): Promise<void> {
+export async function ensureSafeUploadDir(rootDir: string, targetDir: string): Promise<void> {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedTarget = path.resolve(targetDir);
 
@@ -112,7 +106,7 @@ export async function ensureSafeUploadDir(
     await assertDirectorySegmentSafe(resolvedRoot);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') {
+    if (code !== "ENOENT") {
       throw error;
     }
     await mkdir(resolvedRoot, { recursive: true });
@@ -133,7 +127,7 @@ export async function ensureSafeUploadDir(
       continue;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
+      if (code !== "ENOENT") {
         throw error;
       }
     }
@@ -142,7 +136,7 @@ export async function ensureSafeUploadDir(
       await mkdir(current);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'EEXIST') {
+      if (code !== "EEXIST") {
         throw error;
       }
     }
@@ -151,16 +145,14 @@ export async function ensureSafeUploadDir(
   }
 }
 
-export function generateBucketPath(
-  input: GenerateBucketPathInput
-): GenerateBucketPathResult {
+export function generateBucketPath(input: GenerateBucketPathInput): GenerateBucketPathResult {
   validateWorkspaceId(input.workspaceId);
 
   const now = input.now ?? new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const dir = path.join(input.uploadsDir, input.workspaceId, dateStr);
   const sanitizedName = sanitizeOriginalName(input.originalName);
-  const uuid8 = randomUUID().replace(/-/g, '').slice(0, 8);
+  const uuid8 = randomUUID().replace(/-/g, "").slice(0, 8);
   const absolutePath = path.resolve(dir, `${uuid8}-${sanitizedName}`);
   const uploadsRoot = `${path.resolve(input.uploadsDir)}${path.sep}`;
 

@@ -2,21 +2,21 @@
  * Session Commands
  */
 
-import type { ProviderDefinition } from '@coder-studio/core';
-import { z } from 'zod';
-import { registerCommand } from '../ws/dispatch.js';
-import { buildProviderRuntimeStatus } from '../provider-runtime/runtime-status.js';
+import type { ProviderDefinition } from "@coder-studio/core";
+import { z } from "zod";
+import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
+import { registerCommand } from "../ws/dispatch.js";
 
 function getProviderFromRegistry(
   providerId: string,
-  registry: ProviderDefinition[],
+  registry: ProviderDefinition[]
 ): ProviderDefinition | undefined {
   return registry.find((provider) => provider.id === providerId);
 }
 
 // session.list
 registerCommand(
-  'session.list',
+  "session.list",
   z.object({
     workspaceId: z.string(),
   }),
@@ -27,7 +27,7 @@ registerCommand(
 
 // session.create
 registerCommand(
-  'session.create',
+  "session.create",
   z.object({
     workspaceId: z.string(),
     providerId: z.string(),
@@ -37,12 +37,12 @@ registerCommand(
     // Get workspace
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const provider = getProviderFromRegistry(args.providerId, ctx.providerRegistry);
     if (!provider) {
-      throw { code: 'unknown_provider', message: `Provider not found: ${args.providerId}` };
+      throw { code: "unknown_provider", message: `Provider not found: ${args.providerId}` };
     }
 
     const runtimeStatus = await buildProviderRuntimeStatus([provider], ctx.providerRuntimeDeps);
@@ -50,8 +50,8 @@ registerCommand(
 
     if (!providerStatus?.available) {
       throw {
-        code: 'provider_cli_missing',
-        message: 'Provider CLI is not installed',
+        code: "provider_cli_missing",
+        message: "Provider CLI is not installed",
         details: {
           providerId: provider.id,
           missingCommands: providerStatus?.missingCommands ?? provider.requiredCommands,
@@ -71,7 +71,7 @@ registerCommand(
 
 // session.stop
 registerCommand(
-  'session.stop',
+  "session.stop",
   z.object({
     sessionId: z.string(),
   }),
@@ -82,18 +82,18 @@ registerCommand(
 
 // session.remove
 registerCommand(
-  'session.remove',
+  "session.remove",
   z.object({
     sessionId: z.string(),
   }),
   async (args, ctx) => {
     const session = ctx.sessionMgr.get(args.sessionId);
     if (!session) {
-      throw { code: 'session_not_found', message: `Session not found: ${args.sessionId}` };
+      throw { code: "session_not_found", message: `Session not found: ${args.sessionId}` };
     }
 
-    if (session.state !== 'ended') {
-      throw { code: 'invalid_state', message: `Cannot remove session in state: ${session.state}` };
+    if (session.state !== "ended") {
+      throw { code: "invalid_state", message: `Cannot remove session in state: ${session.state}` };
     }
 
     ctx.sessionMgr.delete(args.sessionId);

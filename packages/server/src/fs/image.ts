@@ -13,7 +13,7 @@
  *     trip and complicate the "is this text?" path.
  */
 
-import { extname } from 'path';
+import { extname } from "path";
 
 export interface ImageTypeInfo {
   mime: string;
@@ -26,14 +26,14 @@ export interface ImageTypeInfo {
 }
 
 const IMAGE_MIME_BY_EXT: Record<string, ImageTypeInfo> = {
-  '.png': { mime: 'image/png', isTextBacked: false },
-  '.jpg': { mime: 'image/jpeg', isTextBacked: false },
-  '.jpeg': { mime: 'image/jpeg', isTextBacked: false },
-  '.gif': { mime: 'image/gif', isTextBacked: false },
-  '.webp': { mime: 'image/webp', isTextBacked: false },
-  '.bmp': { mime: 'image/bmp', isTextBacked: false },
-  '.ico': { mime: 'image/x-icon', isTextBacked: false },
-  '.svg': { mime: 'image/svg+xml', isTextBacked: true },
+  ".png": { mime: "image/png", isTextBacked: false },
+  ".jpg": { mime: "image/jpeg", isTextBacked: false },
+  ".jpeg": { mime: "image/jpeg", isTextBacked: false },
+  ".gif": { mime: "image/gif", isTextBacked: false },
+  ".webp": { mime: "image/webp", isTextBacked: false },
+  ".bmp": { mime: "image/bmp", isTextBacked: false },
+  ".ico": { mime: "image/x-icon", isTextBacked: false },
+  ".svg": { mime: "image/svg+xml", isTextBacked: true },
 };
 
 export function getImageTypeInfo(filePath: string): ImageTypeInfo | null {

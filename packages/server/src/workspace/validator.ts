@@ -2,8 +2,8 @@
  * Workspace path validation and permission checks.
  */
 
-import { access, stat } from 'fs/promises';
-import { constants } from 'fs';
+import { constants } from "fs";
+import { access, stat } from "fs/promises";
 
 export interface ValidationResult {
   valid: boolean;
@@ -20,7 +20,7 @@ export async function validatePath(path: string): Promise<ValidationResult> {
 
     // Check if it's a directory
     if (!stats.isDirectory()) {
-      return { valid: false, error: 'Path is not a directory' };
+      return { valid: false, error: "Path is not a directory" };
     }
 
     // Check read permissions
@@ -31,11 +31,11 @@ export async function validatePath(path: string): Promise<ValidationResult> {
 
     return { valid: true };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { valid: false, error: 'Path does not exist' };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { valid: false, error: "Path does not exist" };
     }
-    if ((error as NodeJS.ErrnoException).code === 'EACCES') {
-      return { valid: false, error: 'Permission denied' };
+    if ((error as NodeJS.ErrnoException).code === "EACCES") {
+      return { valid: false, error: "Permission denied" };
     }
     return { valid: false, error: `Validation failed: ${(error as Error).message}` };
   }

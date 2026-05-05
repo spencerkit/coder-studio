@@ -7,13 +7,13 @@
  * - Used for session state changes, workspace metadata, git state, fs dirty
  */
 
-import type { DomainEvent } from '@coder-studio/core';
+import type { DomainEvent } from "@coder-studio/core";
 
 export type Unsubscribe = () => void;
 export type EventHandler<E extends DomainEvent = DomainEvent> = (event: E) => void;
 
 export class EventBus {
-  private handlers = new Map<DomainEvent['type'], Set<EventHandler>>();
+  private handlers = new Map<DomainEvent["type"], Set<EventHandler>>();
 
   /**
    * Emit a domain event to all subscribers
@@ -37,10 +37,7 @@ export class EventBus {
    * Subscribe to a specific event type
    * Returns unsubscribe function
    */
-  on<E extends DomainEvent>(
-    type: E['type'],
-    handler: EventHandler<E>
-  ): Unsubscribe {
+  on<E extends DomainEvent>(type: E["type"], handler: EventHandler<E>): Unsubscribe {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());
     }

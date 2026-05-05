@@ -7,12 +7,12 @@
  * - Timestamped backups before modifications
  */
 
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, basename } from 'node:path';
-import { resolveCodexConfigPath } from './codex-config-audit.js';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
+import { resolveCodexConfigPath } from "./codex-config-audit.js";
 
-export type ConfigType = 'codex' | 'claude';
+export type ConfigType = "codex" | "claude";
 
 export interface ConfigReadResult {
   /** Absolute path to the config file */
@@ -45,20 +45,20 @@ export interface ConfigWriteResult {
  * 2. ~/.claude (default)
  */
 export function resolveConfigPath(configType: ConfigType): string {
-  if (configType === 'codex') {
+  if (configType === "codex") {
     const testHome = process.env.CODER_STUDIO_CODEX_HOME;
     if (testHome && testHome.trim()) {
-      return join(testHome, 'config.toml');
+      return join(testHome, "config.toml");
     }
     return resolveCodexConfigPath();
   }
 
-  if (configType === 'claude') {
+  if (configType === "claude") {
     const testHome = process.env.CODER_STUDIO_CLAUDE_HOME;
     if (testHome && testHome.trim()) {
-      return join(testHome, 'settings.json');
+      return join(testHome, "settings.json");
     }
-    return join(homedir(), '.claude', 'settings.json');
+    return join(homedir(), ".claude", "settings.json");
   }
 
   throw new Error(`Unknown config type: ${configType}`);
@@ -74,14 +74,14 @@ export function readConfigFile(configType: ConfigType): ConfigReadResult {
   const configPath = resolveConfigPath(configType);
 
   if (!existsSync(configPath)) {
-    return { configPath, content: '', exists: false };
+    return { configPath, content: "", exists: false };
   }
 
   try {
-    const content = readFileSync(configPath, 'utf-8');
+    const content = readFileSync(configPath, "utf-8");
     return { configPath, content, exists: true };
   } catch {
-    return { configPath, content: '', exists: false };
+    return { configPath, content: "", exists: false };
   }
 }
 
@@ -92,10 +92,7 @@ export function readConfigFile(configType: ConfigType): ConfigReadResult {
  * - Creates timestamped backup before overwrite
  * - Atomic write via .tmp file + rename
  */
-export function writeConfigFile(
-  configType: ConfigType,
-  content: string
-): ConfigWriteResult {
+export function writeConfigFile(configType: ConfigType, content: string): ConfigWriteResult {
   try {
     const configPath = resolveConfigPath(configType);
 
@@ -113,7 +110,7 @@ export function writeConfigFile(
 
     // Atomic write
     const tempPath = `${configPath}.tmp`;
-    writeFileSync(tempPath, content, 'utf-8');
+    writeFileSync(tempPath, content, "utf-8");
     renameSync(tempPath, configPath);
 
     return { success: true, backupPath };
@@ -132,16 +129,16 @@ export function writeConfigFile(
  * Format: <basename>.bak.<YYYYMMDD-HHmmss>.<ext>
  */
 function createBackup(filePath: string): string {
-  const original = readFileSync(filePath, 'utf-8');
+  const original = readFileSync(filePath, "utf-8");
 
-  const ext = filePath.split('.').pop() ?? '';
+  const ext = filePath.split(".").pop() ?? "";
   const base = basename(filePath, `.${ext}`);
   const dir = dirname(filePath);
 
   const ts = formatTimestamp(new Date());
   const backupPath = join(dir, `${base}.bak.${ts}.${ext}`);
 
-  writeFileSync(backupPath, original, 'utf-8');
+  writeFileSync(backupPath, original, "utf-8");
   return backupPath;
 }
 
@@ -151,7 +148,7 @@ function createBackup(filePath: string): string {
  * Format: YYYYMMDD-HHmmss
  */
 function formatTimestamp(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
     `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`

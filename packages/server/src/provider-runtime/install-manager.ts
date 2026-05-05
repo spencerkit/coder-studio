@@ -1,17 +1,17 @@
-import { execFile as nodeExecFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { promisify } from 'node:util';
+import { execFile as nodeExecFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 import type {
   ProviderDefinition,
   ProviderInstallFailure,
   ProviderInstallJobSnapshot,
   ProviderInstallStepSnapshot,
-} from '@coder-studio/core';
+} from "@coder-studio/core";
 import {
-  checkCommandAvailable,
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
-} from './command-check.js';
+  checkCommandAvailable,
+} from "./command-check.js";
 
 const execFileAsync = promisify(nodeExecFile);
 const EXCERPT_LIMIT = 400;
@@ -69,13 +69,13 @@ export class ProviderInstallManager {
   private async prepareAndStart(providerId: string): Promise<ProviderInstallJobSnapshot> {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw { code: 'unknown_provider', message: `Provider not found: ${providerId}` };
+      throw { code: "unknown_provider", message: `Provider not found: ${providerId}` };
     }
 
     const job = await this.prepare(provider);
     this.jobs.set(job.jobId, job);
 
-    if (job.status === 'queued') {
+    if (job.status === "queued") {
       this.activeJobIdsByProviderId.set(provider.id, job.jobId);
       void this.runPreparedJob(provider, job);
     }
@@ -90,21 +90,21 @@ export class ProviderInstallManager {
 
     const missingProviderCommands = await this.collectMissing(
       provider.requiredCommands,
-      availableCommands,
+      availableCommands
     );
     if (missingProviderCommands.length === 0) {
       return {
         jobId: randomUUID(),
         providerId: provider.id,
         strategyIds: [],
-        status: 'succeeded',
+        status: "succeeded",
         steps: [],
       };
     }
 
     const missingPrerequisites = await this.collectMissing(
       provider.install.prerequisites,
-      availableCommands,
+      availableCommands
     );
 
     const dependencyCommands = new Set<string>();
@@ -139,27 +139,31 @@ export class ProviderInstallManager {
         }
 
         const requiresMet = strategy.requiresCommands.every((command) =>
-          reachableCommands.has(command),
+          reachableCommands.has(command)
         );
         if (!requiresMet) {
           continue;
         }
 
         if (
-          strategy.kind === 'prerequisite' &&
+          strategy.kind === "prerequisite" &&
           remainingPrerequisites.has(strategy.targetCommand)
         ) {
           selectedStrategyIds.add(strategy.id);
-          selectedSteps.push(this.createInstallStep(strategy.kind, strategy.targetCommand, strategy));
+          selectedSteps.push(
+            this.createInstallStep(strategy.kind, strategy.targetCommand, strategy)
+          );
           remainingPrerequisites.delete(strategy.targetCommand);
           reachableCommands.add(strategy.targetCommand);
           progressed = true;
           continue;
         }
 
-        if (strategy.kind === 'provider' && remainingProviderCommands.has(strategy.targetCommand)) {
+        if (strategy.kind === "provider" && remainingProviderCommands.has(strategy.targetCommand)) {
           selectedStrategyIds.add(strategy.id);
-          selectedSteps.push(this.createInstallStep(strategy.kind, strategy.targetCommand, strategy));
+          selectedSteps.push(
+            this.createInstallStep(strategy.kind, strategy.targetCommand, strategy)
+          );
           remainingProviderCommands.delete(strategy.targetCommand);
           reachableCommands.add(strategy.targetCommand);
           progressed = true;
@@ -170,44 +174,44 @@ export class ProviderInstallManager {
     const jobId = randomUUID();
     if (remainingPrerequisites.size > 0) {
       const failedStep = this.createCheckStep(
-        'prerequisite',
-        [...remainingPrerequisites][0] ?? '',
-        'provider.install.step.prerequisite.missing',
+        "prerequisite",
+        [...remainingPrerequisites][0] ?? "",
+        "provider.install.step.prerequisite.missing"
       );
       return {
         jobId,
         providerId: provider.id,
         strategyIds: [...selectedStrategyIds],
-        status: 'failed',
+        status: "failed",
         steps: [...selectedSteps, failedStep],
         failure: this.createFailure(
           provider,
           failedStep,
-          'missing_prerequisite',
-          `Missing prerequisite commands: ${[...remainingPrerequisites].join(', ')}`,
-          [...remainingPrerequisites],
+          "missing_prerequisite",
+          `Missing prerequisite commands: ${[...remainingPrerequisites].join(", ")}`,
+          [...remainingPrerequisites]
         ),
       };
     }
 
     if (remainingProviderCommands.size > 0) {
       const failedStep = this.createCheckStep(
-        'provider',
-        [...remainingProviderCommands][0] ?? '',
-        'provider.install.step.provider.unsupported',
+        "provider",
+        [...remainingProviderCommands][0] ?? "",
+        "provider.install.step.provider.unsupported"
       );
       return {
         jobId,
         providerId: provider.id,
         strategyIds: [...selectedStrategyIds],
-        status: 'failed',
+        status: "failed",
         steps: [...selectedSteps, failedStep],
         failure: this.createFailure(
           provider,
           failedStep,
-          'unsupported_platform',
-          `No supported install strategy for commands: ${[...remainingProviderCommands].join(', ')}`,
-          [...remainingProviderCommands],
+          "unsupported_platform",
+          `No supported install strategy for commands: ${[...remainingProviderCommands].join(", ")}`,
+          [...remainingProviderCommands]
         ),
       };
     }
@@ -215,17 +219,17 @@ export class ProviderInstallManager {
     selectedSteps.push({
       id: `verify-provider-${provider.id}`,
       titleKey: `provider.install.step.verify.${provider.id}`,
-      kind: 'verify',
+      kind: "verify",
       command: provider.requiredCommands[0] ?? provider.id,
-      args: ['--version'],
-      status: 'pending',
+      args: ["--version"],
+      status: "pending",
     });
 
     return {
       jobId,
       providerId: provider.id,
       strategyIds: [...selectedStrategyIds],
-      status: 'queued',
+      status: "queued",
       currentStepId: selectedSteps[0]?.id,
       steps: selectedSteps,
     };
@@ -233,33 +237,33 @@ export class ProviderInstallManager {
 
   private async runPreparedJob(
     provider: ProviderDefinition,
-    job: ProviderInstallJobSnapshot,
+    job: ProviderInstallJobSnapshot
   ): Promise<void> {
     const execFile =
       this.deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
 
-    job.status = 'running';
+    job.status = "running";
     this.jobs.set(job.jobId, job);
 
     for (const step of job.steps) {
       job.currentStepId = step.id;
-      step.status = 'running';
+      step.status = "running";
       step.startedAt = Date.now();
       this.jobs.set(job.jobId, job);
 
       try {
-        if (step.kind === 'verify') {
+        if (step.kind === "verify") {
           const available = await this.commandExists(step.command);
           if (!available) {
-            step.status = 'failed';
+            step.status = "failed";
             step.finishedAt = Date.now();
-            job.status = 'failed';
+            job.status = "failed";
             job.failure = this.createFailure(
               provider,
               step,
-              'verification_failed',
+              "verification_failed",
               `Verification failed for command: ${step.command}`,
-              [step.command],
+              [step.command]
             );
             this.clearActiveJob(provider.id, job.jobId);
             this.jobs.set(job.jobId, job);
@@ -271,18 +275,18 @@ export class ProviderInstallManager {
           step.stderrExcerpt = excerpt(result.stderr);
         }
 
-        step.status = 'succeeded';
+        step.status = "succeeded";
         step.exitCode = 0;
         step.finishedAt = Date.now();
         this.jobs.set(job.jobId, job);
       } catch (error) {
         const details = getErrorDetails(error);
-        step.status = 'failed';
+        step.status = "failed";
         step.finishedAt = Date.now();
         step.exitCode = details.exitCode;
         step.stdoutExcerpt = excerpt(details.stdout);
         step.stderrExcerpt = excerpt(details.stderr || details.message);
-        job.status = 'failed';
+        job.status = "failed";
         job.failure = this.normalizeFailure(provider, step, error);
         this.clearActiveJob(provider.id, job.jobId);
         this.jobs.set(job.jobId, job);
@@ -290,7 +294,7 @@ export class ProviderInstallManager {
       }
     }
 
-    job.status = 'succeeded';
+    job.status = "succeeded";
     job.currentStepId = undefined;
     this.clearActiveJob(provider.id, job.jobId);
     this.jobs.set(job.jobId, job);
@@ -298,7 +302,7 @@ export class ProviderInstallManager {
 
   private async collectMissing(
     commands: string[],
-    availableCommands?: Set<string>,
+    availableCommands?: Set<string>
   ): Promise<string[]> {
     const missing: string[] = [];
 
@@ -315,31 +319,32 @@ export class ProviderInstallManager {
 
   private async commandExists(command: string): Promise<boolean> {
     const commandExists =
-      this.deps.commandExists ?? ((candidate: string) => checkCommandAvailable(candidate, this.deps));
+      this.deps.commandExists ??
+      ((candidate: string) => checkCommandAvailable(candidate, this.deps));
     return commandExists(command);
   }
 
   private normalizeFailure(
     provider: ProviderDefinition,
     step: ProviderInstallStepSnapshot,
-    error: unknown,
+    error: unknown
   ): ProviderInstallFailure {
     const details = getErrorDetails(error);
     const haystack = `${details.message}\n${details.stderr}\n${details.stdout}`.toLowerCase();
 
-    let code: ProviderInstallFailure['code'] = 'command_failed';
+    let code: ProviderInstallFailure["code"] = "command_failed";
     if (
-      haystack.includes('permission denied') ||
-      haystack.includes('eacces') ||
-      haystack.includes('eperm')
+      haystack.includes("permission denied") ||
+      haystack.includes("eacces") ||
+      haystack.includes("eperm")
     ) {
-      code = 'permission_denied';
+      code = "permission_denied";
     } else if (
-      haystack.includes('not found') ||
-      haystack.includes('is not recognized') ||
-      haystack.includes('enoent')
+      haystack.includes("not found") ||
+      haystack.includes("is not recognized") ||
+      haystack.includes("enoent")
     ) {
-      code = 'command_not_found';
+      code = "command_not_found";
     }
 
     return this.createFailure(
@@ -352,16 +357,16 @@ export class ProviderInstallManager {
       },
       code,
       details.message || `Install step failed: ${step.command}`,
-      [],
+      []
     );
   }
 
   private createFailure(
     provider: ProviderDefinition,
     step: ProviderInstallStepSnapshot,
-    code: ProviderInstallFailure['code'],
+    code: ProviderInstallFailure["code"],
     message: string,
-    missingCommands: string[],
+    missingCommands: string[]
   ): ProviderInstallFailure {
     return {
       code,
@@ -380,35 +385,35 @@ export class ProviderInstallManager {
   }
 
   private createInstallStep(
-    kind: 'prerequisite' | 'provider',
+    kind: "prerequisite" | "provider",
     targetCommand: string,
     strategy: {
       command: string;
       args: string[];
-    },
+    }
   ): ProviderInstallStepSnapshot {
     return {
       id: `install-${kind}-${targetCommand}`,
       titleKey: `provider.install.step.${kind}.${targetCommand}`,
-      kind: 'install',
+      kind: "install",
       command: strategy.command,
       args: strategy.args,
-      status: 'pending',
+      status: "pending",
     };
   }
 
   private createCheckStep(
-    kind: 'prerequisite' | 'provider',
+    kind: "prerequisite" | "provider",
     targetCommand: string,
-    titleKey: string,
+    titleKey: string
   ): ProviderInstallStepSnapshot {
     return {
       id: `install-${kind}-${targetCommand}`,
       titleKey,
-      kind: 'check',
+      kind: "check",
       command: targetCommand,
       args: [],
-      status: 'failed',
+      status: "failed",
     };
   }
 
@@ -425,7 +430,7 @@ export class ProviderInstallManager {
     }
 
     const activeJob = this.jobs.get(activeJobId);
-    if (activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')) {
+    if (activeJob && (activeJob.status === "queued" || activeJob.status === "running")) {
       return activeJob;
     }
 
@@ -450,28 +455,28 @@ function getErrorDetails(error: unknown): {
     return {
       message: error.message,
       exitCode:
-        typeof record.exitCode === 'number'
+        typeof record.exitCode === "number"
           ? record.exitCode
-          : typeof record.code === 'number'
+          : typeof record.code === "number"
             ? record.code
             : undefined,
-      stdout: record.stdout ?? '',
-      stderr: record.stderr ?? '',
+      stdout: record.stdout ?? "",
+      stderr: record.stderr ?? "",
     };
   }
 
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return {
       message: error,
-      stdout: '',
-      stderr: '',
+      stdout: "",
+      stderr: "",
     };
   }
 
   return {
-    message: 'Unknown install failure',
-    stdout: '',
-    stderr: '',
+    message: "Unknown install failure",
+    stdout: "",
+    stderr: "",
   };
 }
 

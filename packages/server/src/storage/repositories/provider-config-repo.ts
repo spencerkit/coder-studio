@@ -1,5 +1,5 @@
-import type { Database } from '../database.js';
-import type { ProviderConfig } from '@coder-studio/core';
+import type { ProviderConfig } from "@coder-studio/core";
+import type { Database } from "../database.js";
 
 /**
  * Provider configuration repository
@@ -11,9 +11,9 @@ export class ProviderConfigRepo {
    * Gets a provider configuration by provider ID
    */
   get(providerId: string): ProviderConfig | undefined {
-    const row = this.db.prepare('SELECT config FROM provider_configs WHERE provider_id = ?').get(providerId) as
-      | { config: string }
-      | undefined;
+    const row = this.db
+      .prepare("SELECT config FROM provider_configs WHERE provider_id = ?")
+      .get(providerId) as { config: string } | undefined;
 
     return row ? (JSON.parse(row.config) as ProviderConfig) : undefined;
   }
@@ -36,7 +36,7 @@ export class ProviderConfigRepo {
    * Deletes a provider configuration by provider ID
    */
   delete(providerId: string): void {
-    const stmt = this.db.prepare('DELETE FROM provider_configs WHERE provider_id = ?');
+    const stmt = this.db.prepare("DELETE FROM provider_configs WHERE provider_id = ?");
     stmt.run(providerId);
   }
 
@@ -44,15 +44,17 @@ export class ProviderConfigRepo {
    * Lists all provider IDs that have configurations
    */
   listProviderIds(): string[] {
-    const rows = this.db.prepare('SELECT provider_id FROM provider_configs').all() as { provider_id: string }[];
-    return rows.map(row => row.provider_id);
+    const rows = this.db.prepare("SELECT provider_id FROM provider_configs").all() as {
+      provider_id: string;
+    }[];
+    return rows.map((row) => row.provider_id);
   }
 
   /**
    * Gets all provider configurations as a key-value object
    */
   getAll(): Record<string, ProviderConfig> {
-    const rows = this.db.prepare('SELECT provider_id, config FROM provider_configs').all() as {
+    const rows = this.db.prepare("SELECT provider_id, config FROM provider_configs").all() as {
       provider_id: string;
       config: string;
     }[];

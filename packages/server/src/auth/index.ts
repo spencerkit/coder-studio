@@ -3,4 +3,4 @@ export {
   registerAuthLogoutRoute,
   registerAuthRoutes,
   registerAuthStatusRoute,
-} from './plugin.js';
+} from "./plugin.js";

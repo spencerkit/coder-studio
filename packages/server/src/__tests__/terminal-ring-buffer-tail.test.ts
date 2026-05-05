@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
-import { EventBus } from '../bus/event-bus.js';
-import { TerminalManager } from '../terminal/manager.js';
-import type { PtyHost, PtyProcess, TerminalDatabase, TerminalSpec } from '../terminal/types.js';
+import { describe, expect, it, vi } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
+import { TerminalManager } from "../terminal/manager.js";
+import type { PtyHost, PtyProcess, TerminalDatabase, TerminalSpec } from "../terminal/types.js";
 
-describe('TerminalManager.getRingBufferTail', () => {
-  it('returns the last N bytes from the terminal ring buffer', () => {
+describe("TerminalManager.getRingBufferTail", () => {
+  it("returns the last N bytes from the terminal ring buffer", () => {
     const mockPty: PtyProcess = {
       onData: vi.fn(),
       onExit: vi.fn(),
@@ -29,18 +29,18 @@ describe('TerminalManager.getRingBufferTail', () => {
     });
 
     const spec: TerminalSpec = {
-      workspaceId: 'ws-tail',
-      kind: 'shell',
-      argv: ['bash'],
-      cwd: '/tmp',
+      workspaceId: "ws-tail",
+      kind: "shell",
+      argv: ["bash"],
+      cwd: "/tmp",
     };
 
     const terminal = manager.create(spec);
     const onData = vi.mocked(mockPty.onData).mock.calls[0]?.[0];
-    expect(onData).toBeTypeOf('function');
+    expect(onData).toBeTypeOf("function");
 
-    onData?.('abcdefghij');
+    onData?.("abcdefghij");
 
-    expect(manager.getRingBufferTail(terminal.id, 4).toString()).toBe('ghij');
+    expect(manager.getRingBufferTail(terminal.id, 4).toString()).toBe("ghij");
   });
 });

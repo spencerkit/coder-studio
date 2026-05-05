@@ -1,4 +1,4 @@
-import type { Database } from '../database.js';
+import type { Database } from "../database.js";
 
 /**
  * Settings repository for key-value storage
@@ -12,7 +12,7 @@ export class SettingsRepo {
    * @returns The parsed JSON value, or undefined if not found
    */
   get<T = unknown>(key: string): T | undefined {
-    const row = this.db.prepare('SELECT value FROM user_settings WHERE key = ?').get(key) as
+    const row = this.db.prepare("SELECT value FROM user_settings WHERE key = ?").get(key) as
       | { value: string }
       | undefined;
 
@@ -37,7 +37,7 @@ export class SettingsRepo {
    * Deletes a setting by key
    */
   delete(key: string): void {
-    const stmt = this.db.prepare('DELETE FROM user_settings WHERE key = ?');
+    const stmt = this.db.prepare("DELETE FROM user_settings WHERE key = ?");
     stmt.run(key);
   }
 
@@ -45,15 +45,18 @@ export class SettingsRepo {
    * Lists all settings keys
    */
   listKeys(): string[] {
-    const rows = this.db.prepare('SELECT key FROM user_settings').all() as { key: string }[];
-    return rows.map(row => row.key);
+    const rows = this.db.prepare("SELECT key FROM user_settings").all() as { key: string }[];
+    return rows.map((row) => row.key);
   }
 
   /**
    * Gets all settings as a key-value object
    */
   getAll(): Record<string, unknown> {
-    const rows = this.db.prepare('SELECT key, value FROM user_settings').all() as { key: string; value: string }[];
+    const rows = this.db.prepare("SELECT key, value FROM user_settings").all() as {
+      key: string;
+      value: string;
+    }[];
 
     const result: Record<string, unknown> = {};
     for (const row of rows) {

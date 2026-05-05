@@ -1,5 +1,5 @@
-import type { Database } from '../database.js';
-import type { Session, SessionState } from '@coder-studio/core';
+import type { Session, SessionState } from "@coder-studio/core";
+import type { Database } from "../database.js";
 
 /**
  * Database row representation for Session table
@@ -9,7 +9,7 @@ export interface SessionRow {
   workspace_id: string;
   terminal_id: string;
   provider_id: string;
-  capability: 'full' | 'limited' | 'unsupported';
+  capability: "full" | "limited" | "unsupported";
   state: SessionState;
   started_at: number | null;
   ended_at: number | null;
@@ -67,7 +67,7 @@ export interface NewSession {
   terminalId: string;
   providerId: string;
   state: SessionState;
-  capability: 'full' | 'limited' | 'unsupported';
+  capability: "full" | "limited" | "unsupported";
   startedAt: number;
   lastActiveAt: number;
   completionPercent?: number;
@@ -85,7 +85,7 @@ export class SessionRepo {
    */
   listByWorkspace(workspaceId: string): Session[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC')
+      .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
       .all(workspaceId) as unknown as SessionRow[];
     return rows.map(rowToSession);
   }
@@ -94,7 +94,9 @@ export class SessionRepo {
    * Finds a session by ID
    */
   findById(id: string): Session | undefined {
-    const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+    const row = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
+      | SessionRow
+      | undefined;
     return row ? rowToSession(row) : undefined;
   }
 
@@ -102,7 +104,9 @@ export class SessionRepo {
    * Finds a session by terminal ID (1:1 relationship)
    */
   findByTerminalId(terminalId: string): Session | undefined {
-    const row = this.db.prepare('SELECT * FROM sessions WHERE terminal_id = ?').get(terminalId) as SessionRow | undefined;
+    const row = this.db.prepare("SELECT * FROM sessions WHERE terminal_id = ?").get(terminalId) as
+      | SessionRow
+      | undefined;
     return row ? rowToSession(row) : undefined;
   }
 
@@ -111,7 +115,9 @@ export class SessionRepo {
    */
   listActiveByWorkspace(workspaceId: string): Session[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC')
+      .prepare(
+        "SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC"
+      )
       .all(workspaceId) as unknown as SessionRow[];
     return rows.map(rowToSession);
   }
@@ -145,7 +151,7 @@ export class SessionRepo {
    * Updates session state
    */
   updateState(id: string, state: SessionState): void {
-    const stmt = this.db.prepare('UPDATE sessions SET state = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE sessions SET state = ? WHERE id = ?");
     stmt.run(state, id);
   }
 
@@ -153,7 +159,7 @@ export class SessionRepo {
    * Updates last active timestamp
    */
   updateLastActive(id: string, lastActiveAt: number): void {
-    const stmt = this.db.prepare('UPDATE sessions SET last_active_at = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE sessions SET last_active_at = ? WHERE id = ?");
     stmt.run(lastActiveAt, id);
   }
 
@@ -161,15 +167,15 @@ export class SessionRepo {
    * Marks a session as ended
    */
   markEnded(id: string, endedAt: number): void {
-    const stmt = this.db.prepare('UPDATE sessions SET ended_at = ?, state = ? WHERE id = ?');
-    stmt.run(endedAt, 'ended', id);
+    const stmt = this.db.prepare("UPDATE sessions SET ended_at = ?, state = ? WHERE id = ?");
+    stmt.run(endedAt, "ended", id);
   }
 
   /**
    * Updates completion percent (for full capability sessions)
    */
   updateCompletionPercent(id: string, completionPercent: number): void {
-    const stmt = this.db.prepare('UPDATE sessions SET completion_percent = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE sessions SET completion_percent = ? WHERE id = ?");
     stmt.run(completionPercent, id);
   }
 
@@ -177,7 +183,7 @@ export class SessionRepo {
    * Sets error reason
    */
   setError(id: string, errorReason: string): void {
-    const stmt = this.db.prepare('UPDATE sessions SET error_reason = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE sessions SET error_reason = ? WHERE id = ?");
     stmt.run(errorReason, id);
   }
 
@@ -185,7 +191,7 @@ export class SessionRepo {
    * Archives a session
    */
   archive(id: string): void {
-    const stmt = this.db.prepare('UPDATE sessions SET archived = 1 WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE sessions SET archived = 1 WHERE id = ?");
     stmt.run(id);
   }
 
@@ -193,7 +199,7 @@ export class SessionRepo {
    * Deletes a session by ID
    */
   delete(id: string): void {
-    const stmt = this.db.prepare('DELETE FROM sessions WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM sessions WHERE id = ?");
     stmt.run(id);
   }
 }

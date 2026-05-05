@@ -1,10 +1,11 @@
-import type { ProviderDefinition, SessionState, Supervisor } from '@coder-studio/core';
-import type { FastifyBaseLogger } from 'fastify';
-import type { SessionManager } from '../session/manager.js';
-import type { TerminalManager } from '../terminal/manager.js';
-import type { WorkspaceManager } from '../workspace/manager.js';
-import { getGitDiffStatSummary, getGitStatusSummary } from '../git/cli.js';
-export { stripAnsi } from '../terminal/snapshot-render.js';
+import type { ProviderDefinition, SessionState, Supervisor } from "@coder-studio/core";
+import type { FastifyBaseLogger } from "fastify";
+import { getGitDiffStatSummary, getGitStatusSummary } from "../git/cli.js";
+import type { SessionManager } from "../session/manager.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { WorkspaceManager } from "../workspace/manager.js";
+
+export { stripAnsi } from "../terminal/snapshot-render.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -12,7 +13,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   error: () => {},
   fatal: () => {},
   info: () => {},
-  level: 'silent',
+  level: "silent",
   silent: () => {},
   trace: () => {},
   warn: () => {},
@@ -35,7 +36,7 @@ export interface SupervisorEvaluationContext {
   gitStatusSummary?: string;
   gitDiffStat?: string;
   lastTurnId?: string;
-  evidenceSource: 'headless_snapshot' | 'transcript' | 'terminal_fallback';
+  evidenceSource: "headless_snapshot" | "transcript" | "terminal_fallback";
   /** Latest user input from the current turn (for supervisor context) */
   latestUserInput?: string;
 }
@@ -65,12 +66,12 @@ export class SupervisorContextBuilder {
 
     if (!session || !workspace) {
       throw {
-        code: 'supervisor_not_found',
-        message: 'Supervisor session context is unavailable',
+        code: "supervisor_not_found",
+        message: "Supervisor session context is unavailable",
       };
     }
 
-    let renderedSnapshot = '';
+    let renderedSnapshot = "";
     try {
       renderedSnapshot = await this.deps.sessionMgr.getRenderedSnapshot(session.id, {
         maxLines: TERMINAL_MAX_LINES,
@@ -79,7 +80,7 @@ export class SupervisorContextBuilder {
     } catch (error) {
       this.logger.warn(
         { err: error, sessionId: session.id },
-        'Supervisor headless snapshot read failed'
+        "Supervisor headless snapshot read failed"
       );
     }
 
@@ -91,31 +92,31 @@ export class SupervisorContextBuilder {
       .catch((error) => {
         this.logger.warn(
           { err: error, workspaceId: workspace.id },
-          'Supervisor git status read failed'
+          "Supervisor git status read failed"
         );
-        return '';
+        return "";
       });
     const gitDiffStat = await getDiffStatSummary(workspace.path)
       .then((value) => value.slice(-GIT_SUMMARY_MAX_CHARS))
       .catch((error) => {
         this.logger.warn(
           { err: error, workspaceId: workspace.id },
-          'Supervisor git diff read failed'
+          "Supervisor git diff read failed"
         );
-        return '';
+        return "";
       });
 
     const latestUserInput = this.deps.sessionMgr.getLatestSubmittedUserInput(session.id);
 
     this.logger.info(
       {
-        metric: 'supervisor.evidence.built',
+        metric: "supervisor.evidence.built",
         sessionId: session.id,
         workspaceId: workspace.id,
-        evidenceSource: 'headless_snapshot',
+        evidenceSource: "headless_snapshot",
         terminalCharCount: renderedSnapshot.length,
       },
-      'supervisor evidence built'
+      "supervisor evidence built"
     );
 
     return {
@@ -131,7 +132,7 @@ export class SupervisorContextBuilder {
       gitStatusSummary,
       gitDiffStat,
       lastTurnId: undefined,
-      evidenceSource: 'headless_snapshot',
+      evidenceSource: "headless_snapshot",
       latestUserInput,
     };
   }

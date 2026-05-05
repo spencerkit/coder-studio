@@ -5,7 +5,7 @@
  * Only one tab can be the Controller with write access.
  */
 
-import type { FastifyRequest } from 'fastify';
+import type { FastifyRequest } from "fastify";
 
 export interface FencingToken {
   /** Unique client ID */
@@ -34,10 +34,10 @@ export interface FencingManagerOptions {
 }
 
 const DEFAULT_OPTIONS: FencingManagerOptions = {
-  visibleHeartbeatMs: 10000,  // 10 seconds
-  hiddenHeartbeatMs: 20000,   // 20 seconds
-  tokenExpirationMs: 30000,   // 30 seconds
-  refreshGraceMs: 3000,       // 3 seconds
+  visibleHeartbeatMs: 10000, // 10 seconds
+  hiddenHeartbeatMs: 20000, // 20 seconds
+  tokenExpirationMs: 30000, // 30 seconds
+  refreshGraceMs: 3000, // 3 seconds
 };
 
 /**
@@ -50,12 +50,15 @@ export class FencingManager {
   // clientId -> last heartbeat timestamp
   private heartbeats = new Map<string, number>();
   // workspaceId -> { clientId, closedAt, ip, ua } (for grace period)
-  private lastWriter = new Map<string, {
-    clientId: string;
-    closedAt: number;
-    ip: string;
-    userAgent: string;
-  }>();
+  private lastWriter = new Map<
+    string,
+    {
+      clientId: string;
+      closedAt: number;
+      ip: string;
+      userAgent: string;
+    }
+  >();
 
   constructor(options?: Partial<FencingManagerOptions>) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -73,7 +76,7 @@ export class FencingManager {
   ): { isController: boolean; reason?: string } {
     const now = Date.now();
     const ip = request.ip;
-    const userAgent = request.headers['user-agent'] ?? '';
+    const userAgent = request.headers["user-agent"] ?? "";
 
     // Check if there's an existing controller
     const existing = this.tokens.get(workspaceId);
@@ -90,7 +93,7 @@ export class FencingManager {
         // Another client is controller
         return {
           isController: false,
-          reason: 'another_tab_active',
+          reason: "another_tab_active",
         };
       }
     }
@@ -196,7 +199,7 @@ export class FencingManager {
     if (!this.isControllerUnresponsive(workspaceId)) {
       return {
         success: false,
-        reason: 'controller_responsive',
+        reason: "controller_responsive",
       };
     }
 
@@ -205,7 +208,7 @@ export class FencingManager {
 
     // Issue new token
     const ip = request.ip;
-    const userAgent = request.headers['user-agent'] ?? '';
+    const userAgent = request.headers["user-agent"] ?? "";
     const result = this.issueToken(workspaceId, clientId, tabId, ip, userAgent);
 
     return { success: result.isController };

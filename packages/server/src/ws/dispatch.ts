@@ -4,23 +4,23 @@
  * Routes commands to handlers and validates input
  */
 
-import type { Command, Result, ProviderDefinition } from '@coder-studio/core';
-import { z } from 'zod';
-import type { WorkspaceManager } from '../workspace/manager.js';
-import type { SessionManager } from '../session/manager.js';
-import type { TerminalManager } from '../terminal/manager.js';
-import type { EventBus } from '../bus/event-bus.js';
-import type { Broadcaster } from './hub.js';
-import type { FencingManager } from './fencing.js';
-import type { SupervisorManager } from '../supervisor/manager.js';
-import type { RuntimeStatusDeps } from '../provider-runtime/runtime-status.js';
-import type { ProviderInstallManager } from '../provider-runtime/install-manager.js';
-import type { Database } from '../storage/database.js';
+import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
+import { z } from "zod";
+import type { EventBus } from "../bus/event-bus.js";
 import type {
-  CodexConfigAudit,
   CodexAuditFindingType,
   CodexCleanupResult,
-} from '../config/codex-config-audit.js';
+  CodexConfigAudit,
+} from "../config/codex-config-audit.js";
+import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
+import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
+import type { SessionManager } from "../session/manager.js";
+import type { Database } from "../storage/database.js";
+import type { SupervisorManager } from "../supervisor/manager.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { WorkspaceManager } from "../workspace/manager.js";
+import type { FencingManager } from "./fencing.js";
+import type { Broadcaster } from "./hub.js";
 
 /**
  * Command context - injected dependencies for handlers
@@ -85,11 +85,7 @@ const DEBOUNCE_GIT_STATUS_MS = 500;
  * invocation waits and the new one replaces the timer. The result
  * from the final (post-debounce) execution is delivered to all waiters.
  */
-async function debounce<R>(
-  key: string,
-  op: () => Promise<R>,
-  windowMs: number
-): Promise<R> {
+async function debounce<R>(key: string, op: () => Promise<R>, windowMs: number): Promise<R> {
   let entry = debounceMap.get(key) as DebounceEntry<R> | undefined;
   if (entry) {
     clearTimeout(entry.timer);
@@ -149,11 +145,11 @@ export async function dispatch(
 
   if (!handler) {
     return {
-      kind: 'result',
+      kind: "result",
       id: msg.id,
       ok: false,
       error: {
-        code: 'unknown_op',
+        code: "unknown_op",
         message: `Unknown operation: ${msg.op}`,
       },
     };
@@ -172,7 +168,7 @@ export async function dispatch(
     const data = await executeWithDebounce(msg.op, args, ctx, clientId);
 
     return {
-      kind: 'result',
+      kind: "result",
       id: msg.id,
       ok: true,
       data,
@@ -182,7 +178,7 @@ export async function dispatch(
     const normalizedError = normalizeError(error);
 
     return {
-      kind: 'result',
+      kind: "result",
       id: msg.id,
       ok: false,
       error: normalizedError,
@@ -202,7 +198,7 @@ async function executeWithDebounce(
 ): Promise<unknown> {
   const handler = handlers.get(op)!;
 
-  if (op === 'git.status') {
+  if (op === "git.status") {
     const workspaceId = getWorkspaceId(args);
     const key = workspaceId ? `git.status:${workspaceId}` : op;
     return debounce(key, () => handler(args, ctx, clientId), DEBOUNCE_GIT_STATUS_MS);
@@ -212,18 +208,18 @@ async function executeWithDebounce(
 }
 
 function getWorkspaceId(args: unknown): string | undefined {
-  if (typeof args !== 'object' || args === null || !('workspaceId' in args)) {
+  if (typeof args !== "object" || args === null || !("workspaceId" in args)) {
     return undefined;
   }
 
   const workspaceId = (args as { workspaceId: unknown }).workspaceId;
-  return typeof workspaceId === 'string' ? workspaceId : undefined;
+  return typeof workspaceId === "string" ? workspaceId : undefined;
 }
 
 /**
  * Normalize error to protocol format
  */
-function normalizeError(error: unknown): Result['error'] {
+function normalizeError(error: unknown): Result["error"] {
   const candidate = error as {
     name?: string;
     code?: string;
@@ -233,10 +229,10 @@ function normalizeError(error: unknown): Result['error'] {
   };
 
   // Zod validation error
-  if (candidate.name === 'ZodError') {
+  if (candidate.name === "ZodError") {
     return {
-      code: 'validation_error',
-      message: 'Invalid arguments',
+      code: "validation_error",
+      message: "Invalid arguments",
       details: candidate.errors,
     };
   }
@@ -252,8 +248,8 @@ function normalizeError(error: unknown): Result['error'] {
 
   // Generic error
   return {
-    code: 'internal_error',
-    message: candidate.message || 'An internal error occurred',
+    code: "internal_error",
+    message: candidate.message || "An internal error occurred",
   };
 }
 

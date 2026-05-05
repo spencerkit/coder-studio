@@ -2,7 +2,7 @@
  * Git commit operations.
  */
 
-import { runGit } from './cli.js';
+import { runGit } from "./cli.js";
 
 /**
  * Stages files for commit.
@@ -11,7 +11,7 @@ import { runGit } from './cli.js';
  * @param paths - File paths to stage
  */
 export async function stageFiles(cwd: string, paths: string[]): Promise<void> {
-  await runGit(cwd, ['add', ...paths]);
+  await runGit(cwd, ["add", ...paths]);
 }
 
 /**
@@ -21,7 +21,7 @@ export async function stageFiles(cwd: string, paths: string[]): Promise<void> {
  * @param paths - File paths to unstage
  */
 export async function unstageFiles(cwd: string, paths: string[]): Promise<void> {
-  await runGit(cwd, ['reset', 'HEAD', '--', ...paths]);
+  await runGit(cwd, ["reset", "HEAD", "--", ...paths]);
 }
 
 /**
@@ -31,7 +31,7 @@ export async function unstageFiles(cwd: string, paths: string[]): Promise<void> 
  * @param paths - File paths to discard
  */
 export async function discardChanges(cwd: string, paths: string[]): Promise<void> {
-  await runGit(cwd, ['checkout', '--', ...paths]);
+  await runGit(cwd, ["checkout", "--", ...paths]);
 }
 
 /**
@@ -42,9 +42,9 @@ export async function discardChanges(cwd: string, paths: string[]): Promise<void
  * @returns Commit SHA
  */
 export async function createCommit(cwd: string, message: string): Promise<{ sha: string }> {
-  await runGit(cwd, ['commit', '-m', message]);
+  await runGit(cwd, ["commit", "-m", message]);
 
   // Get the commit SHA
-  const result = await runGit(cwd, ['rev-parse', 'HEAD']);
+  const result = await runGit(cwd, ["rev-parse", "HEAD"]);
   return { sha: result.stdout.trim() };
 }

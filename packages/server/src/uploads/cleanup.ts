@@ -1,7 +1,7 @@
-import { readdir, rm, rmdir, stat, unlink } from 'node:fs/promises';
-import path from 'node:path';
-import { UPLOAD_BUCKET_MAX_BYTES, UPLOAD_TTL_HOURS } from './constants.js';
-import { validateWorkspaceId } from './paths.js';
+import { readdir, rm, rmdir, stat, unlink } from "node:fs/promises";
+import path from "node:path";
+import { UPLOAD_BUCKET_MAX_BYTES, UPLOAD_TTL_HOURS } from "./constants.js";
+import { validateWorkspaceId } from "./paths.js";
 
 interface UploadLogger {
   warn(ctx: Record<string, unknown>, message: string): void;
@@ -16,11 +16,11 @@ interface FileEntry {
 const WORKSPACE_ID_RE_FOR_GC = /^[a-zA-Z0-9_-]+$/;
 
 async function listFilesRecursive(root: string): Promise<FileEntry[]> {
-  let entries: import('node:fs').Dirent[];
+  let entries: import("node:fs").Dirent[];
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }
     throw error;
@@ -50,11 +50,11 @@ async function listFilesRecursive(root: string): Promise<FileEntry[]> {
 }
 
 async function pruneEmptyDirectories(root: string): Promise<void> {
-  let entries: import('node:fs').Dirent[];
+  let entries: import("node:fs").Dirent[];
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return;
     }
     throw error;
@@ -111,7 +111,7 @@ export async function enforceBucketCap(
     } catch (error) {
       logger?.warn(
         { err: error, file: file.absPath },
-        'failed to evict file during bucket cap enforcement'
+        "failed to evict file during bucket cap enforcement"
       );
     }
   }
@@ -119,20 +119,17 @@ export async function enforceBucketCap(
   await pruneEmptyDirectories(bucket);
 }
 
-export async function runStartupGc(
-  uploadsDir: string,
-  logger?: UploadLogger
-): Promise<void> {
+export async function runStartupGc(uploadsDir: string, logger?: UploadLogger): Promise<void> {
   const cutoffMs = Date.now() - UPLOAD_TTL_HOURS * 3_600_000;
 
-  let workspaceEntries: import('node:fs').Dirent[];
+  let workspaceEntries: import("node:fs").Dirent[];
   try {
     workspaceEntries = await readdir(uploadsDir, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return;
     }
-    logger?.warn({ err: error, uploadsDir }, 'startup gc: failed to list root');
+    logger?.warn({ err: error, uploadsDir }, "startup gc: failed to list root");
     return;
   }
 
@@ -143,7 +140,7 @@ export async function runStartupGc(
 
     const workspaceDir = path.join(uploadsDir, workspaceEntry.name);
     const dateEntries = await readdir(workspaceDir, { withFileTypes: true }).catch(
-      () => [] as import('node:fs').Dirent[]
+      () => [] as import("node:fs").Dirent[]
     );
 
     for (const dateEntry of dateEntries) {
@@ -162,7 +159,7 @@ export async function runStartupGc(
         try {
           await unlink(file.absPath);
         } catch (error) {
-          logger?.warn({ err: error, filePath: file.absPath }, 'startup gc: failed on file');
+          logger?.warn({ err: error, filePath: file.absPath }, "startup gc: failed on file");
         }
       }
 

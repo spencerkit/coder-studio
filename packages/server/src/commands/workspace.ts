@@ -2,24 +2,20 @@
  * Workspace Commands
  */
 
-import { z } from 'zod';
-import { registerCommand } from '../ws/dispatch.js';
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { z } from "zod";
+import { registerCommand } from "../ws/dispatch.js";
 
 // workspace.list
-registerCommand(
-  'workspace.list',
-  z.object({}),
-  async (_args, ctx) => {
-    return ctx.workspaceMgr.list();
-  }
-);
+registerCommand("workspace.list", z.object({}), async (_args, ctx) => {
+  return ctx.workspaceMgr.list();
+});
 
 // workspace.browse - List directories for path selection
 registerCommand(
-  'workspace.browse',
+  "workspace.browse",
   z.object({
     path: z.string().optional(),
   }),
@@ -37,7 +33,7 @@ registerCommand(
 
     return {
       currentPath: basePath,
-      parentPath: basePath !== '/' ? join(basePath, '..') : null,
+      parentPath: basePath !== "/" ? join(basePath, "..") : null,
       directories,
     };
   }
@@ -45,7 +41,7 @@ registerCommand(
 
 // workspace.open
 registerCommand(
-  'workspace.open',
+  "workspace.open",
   z.object({
     path: z.string(),
   }),
@@ -58,7 +54,7 @@ registerCommand(
 
 // workspace.close
 registerCommand(
-  'workspace.close',
+  "workspace.close",
   z.object({
     id: z.string(),
   }),
@@ -68,7 +64,7 @@ registerCommand(
 );
 
 registerCommand(
-  'workspace.uiState.set',
+  "workspace.uiState.set",
   z.object({
     workspaceId: z.string(),
     uiState: z.object({
@@ -79,20 +75,22 @@ registerCommand(
       paneLayout: z
         .object({
           id: z.string(),
-          type: z.enum(['leaf', 'split']),
+          type: z.enum(["leaf", "split"]),
           sessionId: z.string().optional(),
-          direction: z.enum(['horizontal', 'vertical']).optional(),
-          children: z.lazy(() =>
-            z.array(
-              z.object({
-                id: z.string(),
-                type: z.enum(['leaf', 'split']),
-                sessionId: z.string().optional(),
-                direction: z.enum(['horizontal', 'vertical']).optional(),
-                children: z.any().optional(),
-              })
+          direction: z.enum(["horizontal", "vertical"]).optional(),
+          children: z
+            .lazy(() =>
+              z.array(
+                z.object({
+                  id: z.string(),
+                  type: z.enum(["leaf", "split"]),
+                  sessionId: z.string().optional(),
+                  direction: z.enum(["horizontal", "vertical"]).optional(),
+                  children: z.any().optional(),
+                })
+              )
             )
-          ).optional(),
+            .optional(),
         })
         .optional(),
     }),
@@ -101,7 +99,7 @@ registerCommand(
     ctx.workspaceMgr.updateUiState(args.workspaceId, args.uiState);
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
     return workspace;
   }

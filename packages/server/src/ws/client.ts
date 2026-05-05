@@ -7,15 +7,15 @@
  * - Backpressure handling
  */
 
-import type { ServerToClient, ClientToServer, Event } from '@coder-studio/core';
-import WebSocket from 'ws';
+import type { ClientToServer, Event, ServerToClient } from "@coder-studio/core";
+import WebSocket from "ws";
 import {
-  StreamBuffer,
-  STREAM_BUFFER_DEFAULTS,
   type Frame,
+  STREAM_BUFFER_DEFAULTS,
+  StreamBuffer,
   type StreamBufferDropOldestEvent,
   type StreamBufferEvictTopicEvent,
-} from './stream-buffer.js';
+} from "./stream-buffer.js";
 
 const HIGH_WATER = 1024 * 1024;
 const LOW_WATER = 256 * 1024;
@@ -65,7 +65,7 @@ export class WsClient {
   }
 
   private setupSocketHandlers(): void {
-    this.socket.on('message', (data: Buffer, isBinary: boolean) => {
+    this.socket.on("message", (data: Buffer, isBinary: boolean) => {
       if (isBinary) {
         this.messageHandler?.(data);
         return;
@@ -79,14 +79,14 @@ export class WsClient {
       }
     });
 
-    this.socket.on('close', () => {
+    this.socket.on("close", () => {
       this.isAlive = false;
       this.clearFlushTimer();
       this.streamBuffer.destroy();
       this.closeHandler?.();
     });
 
-    this.socket.on('pong', () => {
+    this.socket.on("pong", () => {
       this.isAlive = true;
     });
   }
@@ -170,7 +170,7 @@ export class WsClient {
    */
   sendEventStream(topic: string, data: unknown, seq: number = 0): void {
     const event: Event = {
-      kind: 'event',
+      kind: "event",
       topic,
       seq,
       timestamp: Date.now(),
@@ -190,7 +190,7 @@ export class WsClient {
     const data = JSON.stringify(msg);
     return {
       data,
-      size: Buffer.byteLength(data, 'utf8'),
+      size: Buffer.byteLength(data, "utf8"),
     };
   }
 
@@ -254,33 +254,36 @@ export class WsClient {
   private handleStreamBufferDrop(event: StreamBufferDropOldestEvent): void {
     this.droppedFramesSinceLastWarn += 1;
     this.droppedBytesSinceLastWarn += event.frameSize;
-    this.warnStreamBufferPressure('topic-cap', event.topic);
+    this.warnStreamBufferPressure("topic-cap", event.topic);
   }
 
   private handleStreamBufferEviction(event: StreamBufferEvictTopicEvent): void {
     this.evictedTopicsSinceLastWarn += 1;
     this.evictedFramesSinceLastWarn += event.frames;
     this.evictedBytesSinceLastWarn += event.bytes;
-    this.warnStreamBufferPressure('topic-lru', event.topic);
+    this.warnStreamBufferPressure("topic-lru", event.topic);
   }
 
-  private warnStreamBufferPressure(reason: 'topic-cap' | 'topic-lru', topic: string): void {
+  private warnStreamBufferPressure(reason: "topic-cap" | "topic-lru", topic: string): void {
     const now = Date.now();
     if (now - this.lastStreamBufferWarnAt < STREAM_BUFFER_WARN_INTERVAL_MS) {
       return;
     }
 
-    this.logger.warn({
-      reason,
-      clientId: this.id,
-      topic,
-      bufferedAmount: this.socket.bufferedAmount ?? 0,
-      droppedFrames: this.droppedFramesSinceLastWarn,
-      droppedBytes: this.droppedBytesSinceLastWarn,
-      evictedTopics: this.evictedTopicsSinceLastWarn,
-      evictedFrames: this.evictedFramesSinceLastWarn,
-      evictedBytes: this.evictedBytesSinceLastWarn,
-    }, 'Stream buffer pressure');
+    this.logger.warn(
+      {
+        reason,
+        clientId: this.id,
+        topic,
+        bufferedAmount: this.socket.bufferedAmount ?? 0,
+        droppedFrames: this.droppedFramesSinceLastWarn,
+        droppedBytes: this.droppedBytesSinceLastWarn,
+        evictedTopics: this.evictedTopicsSinceLastWarn,
+        evictedFrames: this.evictedFramesSinceLastWarn,
+        evictedBytes: this.evictedBytesSinceLastWarn,
+      },
+      "Stream buffer pressure"
+    );
 
     this.lastStreamBufferWarnAt = now;
     this.droppedFramesSinceLastWarn = 0;
@@ -295,7 +298,7 @@ export class WsClient {
    */
   sendEvent(topic: string, data: unknown, seq: number = 0): boolean {
     const event: Event = {
-      kind: 'event',
+      kind: "event",
       topic,
       seq,
       timestamp: Date.now(),
@@ -364,18 +367,18 @@ export class WsClient {
    */
   private matchTopic(pattern: string, topic: string): boolean {
     if (pattern === topic) return true;
-    if (pattern === '*') return true;
+    if (pattern === "*") return true;
 
     // Split pattern and topic into parts
-    const patternParts = pattern.split('.');
-    const topicParts = topic.split('.');
+    const patternParts = pattern.split(".");
+    const topicParts = topic.split(".");
 
     // Match each part
     for (let i = 0; i < patternParts.length; i++) {
       const pp = patternParts[i];
 
       // * matches any single part
-      if (pp === '*') {
+      if (pp === "*") {
         // If this is the last part in pattern, match everything
         if (i === patternParts.length - 1) {
           return true;

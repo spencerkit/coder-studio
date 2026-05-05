@@ -2,10 +2,9 @@
  * WorkspaceManager - Manages workspace lifecycle (open/close/list).
  */
 
-import type { Workspace } from '@coder-studio/core';
-import type { DomainEvent } from '@coder-studio/core';
-import { WorkspaceValidator } from './validator.js';
-import type { Database } from '../storage/database.js';
+import type { DomainEvent, Workspace } from "@coder-studio/core";
+import type { Database } from "../storage/database.js";
+import { WorkspaceValidator } from "./validator.js";
 
 export interface OpenWorkspaceRequest {
   path: string;
@@ -14,7 +13,7 @@ export interface OpenWorkspaceRequest {
 
 export interface EventBus {
   emit(event: DomainEvent): void;
-  on(type: DomainEvent['type'], handler: (event: DomainEvent) => void): () => void;
+  on(type: DomainEvent["type"], handler: (event: DomainEvent) => void): () => void;
 }
 
 export interface WorkspaceManagerDeps {
@@ -54,18 +53,18 @@ export class WorkspaceManager {
     );
   }
 
-  updateUiState(workspaceId: string, uiState: Workspace['uiState']): void {
+  updateUiState(workspaceId: string, uiState: Workspace["uiState"]): void {
     const workspace = this.get(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
     }
 
     this.deps.db
-      .prepare('UPDATE workspaces SET ui_state = ? WHERE id = ?')
+      .prepare("UPDATE workspaces SET ui_state = ? WHERE id = ?")
       .run(JSON.stringify(uiState), workspaceId);
 
     this.deps.eventBus.emit({
-      type: 'workspace.meta.changed',
+      type: "workspace.meta.changed",
       workspaceId,
       patch: { uiState },
     });
@@ -96,7 +95,7 @@ export class WorkspaceManager {
       this.startWatcher(existing.id, existing.path);
 
       this.deps.eventBus.emit({
-        type: 'workspace.meta.changed',
+        type: "workspace.meta.changed",
         workspaceId: existing.id,
         patch: { lastActiveAt: Date.now() },
       });
@@ -107,7 +106,7 @@ export class WorkspaceManager {
     const workspace: Workspace = {
       id: generateWorkspaceId(),
       path: req.path,
-      targetRuntime: 'native',
+      targetRuntime: "native",
       wslDistro: req.wslDistro,
       openedAt: Date.now(),
       lastActiveAt: Date.now(),
@@ -116,8 +115,8 @@ export class WorkspaceManager {
         bottomPanelHeight: 200,
         focusMode: false,
         paneLayout: {
-          id: 'root',
-          type: 'leaf',
+          id: "root",
+          type: "leaf",
         },
       },
     };
@@ -130,7 +129,7 @@ export class WorkspaceManager {
       .run(
         workspace.id,
         workspace.path,
-        'native',
+        "native",
         workspace.wslDistro ?? null,
         workspace.openedAt,
         workspace.lastActiveAt,
@@ -139,7 +138,7 @@ export class WorkspaceManager {
 
     // 3. Emit event
     this.deps.eventBus.emit({
-      type: 'workspace.meta.changed',
+      type: "workspace.meta.changed",
       workspaceId: workspace.id,
       patch: workspace,
     });
@@ -173,19 +172,19 @@ export class WorkspaceManager {
     }
 
     // Delete from DB (cascade deletes terminals and sessions)
-    this.deps.db.prepare('DELETE FROM workspaces WHERE id = ?').run(workspaceId);
+    this.deps.db.prepare("DELETE FROM workspaces WHERE id = ?").run(workspaceId);
 
     if (this.deps.onClose) {
       try {
         await this.deps.onClose(workspaceId);
       } catch (err) {
-        console.warn('[workspace] onClose hook failed:', err);
+        console.warn("[workspace] onClose hook failed:", err);
       }
     }
 
     // Emit event
     this.deps.eventBus.emit({
-      type: 'workspace.meta.changed',
+      type: "workspace.meta.changed",
       workspaceId: workspaceId,
       patch: { lastActiveAt: Date.now() },
     });
@@ -216,7 +215,7 @@ export class WorkspaceManager {
     return rows.map((row) => ({
       id: row.id,
       path: row.path,
-      targetRuntime: row.target_runtime as 'native' | 'wsl',
+      targetRuntime: row.target_runtime as "native" | "wsl",
       wslDistro: row.wsl_distro ?? undefined,
       openedAt: row.opened_at,
       lastActiveAt: row.last_active_at,
@@ -237,22 +236,24 @@ export class WorkspaceManager {
          FROM workspaces
          WHERE id = ?`
       )
-      .get(workspaceId) as {
-      id: string;
-      path: string;
-      target_runtime: string;
-      wsl_distro: string | null;
-      opened_at: number;
-      last_active_at: number;
-      ui_state: string;
-    } | undefined;
+      .get(workspaceId) as
+      | {
+          id: string;
+          path: string;
+          target_runtime: string;
+          wsl_distro: string | null;
+          opened_at: number;
+          last_active_at: number;
+          ui_state: string;
+        }
+      | undefined;
 
     if (!row) return undefined;
 
     return {
       id: row.id,
       path: row.path,
-      targetRuntime: row.target_runtime as 'native' | 'wsl',
+      targetRuntime: row.target_runtime as "native" | "wsl",
       wslDistro: row.wsl_distro ?? undefined,
       openedAt: row.opened_at,
       lastActiveAt: row.last_active_at,
@@ -273,22 +274,24 @@ export class WorkspaceManager {
          FROM workspaces
          WHERE path = ?`
       )
-      .get(path) as {
-      id: string;
-      path: string;
-      target_runtime: string;
-      wsl_distro: string | null;
-      opened_at: number;
-      last_active_at: number;
-      ui_state: string;
-    } | undefined;
+      .get(path) as
+      | {
+          id: string;
+          path: string;
+          target_runtime: string;
+          wsl_distro: string | null;
+          opened_at: number;
+          last_active_at: number;
+          ui_state: string;
+        }
+      | undefined;
 
     if (!row) return undefined;
 
     return {
       id: row.id,
       path: row.path,
-      targetRuntime: row.target_runtime as 'native' | 'wsl',
+      targetRuntime: row.target_runtime as "native" | "wsl",
       wslDistro: row.wsl_distro ?? undefined,
       openedAt: row.opened_at,
       lastActiveAt: row.last_active_at,
@@ -303,11 +306,13 @@ export class WorkspaceManager {
    */
   touch(workspaceId: string): void {
     const now = Date.now();
-    this.deps.db.prepare('UPDATE workspaces SET last_active_at = ? WHERE id = ?').run(now, workspaceId);
+    this.deps.db
+      .prepare("UPDATE workspaces SET last_active_at = ? WHERE id = ?")
+      .run(now, workspaceId);
   }
 }
 
-import { WorkspaceWatcher } from '../fs/watcher.js';
+import { WorkspaceWatcher } from "../fs/watcher.js";
 
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;

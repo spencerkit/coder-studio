@@ -1,24 +1,30 @@
-import type { ProviderConfig, ProviderDefinition } from '@coder-studio/core';
-import { z } from 'zod';
+import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
+import { z } from "zod";
 
-export const SUPPORTED_PROVIDER_IDS = ['claude', 'codex'] as const;
+export const SUPPORTED_PROVIDER_IDS = ["claude", "codex"] as const;
 
 const supportedProviderIds = new Set<string>(SUPPORTED_PROVIDER_IDS);
 
-export const ProviderLaunchConfigInputSchema = z.object({
-  additionalArgs: z.array(z.string()).optional(),
-}).strict();
+export const ProviderLaunchConfigInputSchema = z
+  .object({
+    additionalArgs: z.array(z.string()).optional(),
+  })
+  .strict();
 
-export const ProviderSettingsSchema = z.object({
-  claude: ProviderLaunchConfigInputSchema.optional(),
-  codex: ProviderLaunchConfigInputSchema.optional(),
-}).strict();
+export const ProviderSettingsSchema = z
+  .object({
+    claude: ProviderLaunchConfigInputSchema.optional(),
+    codex: ProviderLaunchConfigInputSchema.optional(),
+  })
+  .strict();
 
 const ProviderLaunchConfigSchema = z.object({
   additionalArgs: z.array(z.string()).default([]),
 });
 
-export function isSupportedProviderId(providerId: string): providerId is (typeof SUPPORTED_PROVIDER_IDS)[number] {
+export function isSupportedProviderId(
+  providerId: string
+): providerId is (typeof SUPPORTED_PROVIDER_IDS)[number] {
   return supportedProviderIds.has(providerId);
 }
 

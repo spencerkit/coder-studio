@@ -7,12 +7,12 @@
  * experimental behavior that changes CLI semantics.
  */
 
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
-export type CodexAuditFindingType = 'toml_notify' | 'toml_codex_hooks';
-export type CodexAuditSeverity = 'warn' | 'info';
+export type CodexAuditFindingType = "toml_notify" | "toml_codex_hooks";
+export type CodexAuditSeverity = "warn" | "info";
 
 export interface CodexAuditFinding {
   id: CodexAuditFindingType;
@@ -44,9 +44,9 @@ export interface CodexCleanupResult {
 export function resolveCodexConfigPath(): string {
   const codexHome = process.env.CODEX_HOME;
   if (codexHome && codexHome.trim()) {
-    return join(codexHome, 'config.toml');
+    return join(codexHome, "config.toml");
   }
-  return join(homedir(), '.codex', 'config.toml');
+  return join(homedir(), ".codex", "config.toml");
 }
 
 export function auditCodexConfigToml(configPath?: string): CodexConfigAudit {
@@ -58,7 +58,7 @@ export function auditCodexConfigToml(configPath?: string): CodexConfigAudit {
 
   let content: string;
   try {
-    content = readFileSync(path, 'utf-8');
+    content = readFileSync(path, "utf-8");
   } catch {
     return { configPath: path, exists: false, findings: [] };
   }
@@ -93,7 +93,7 @@ export function cleanupCodexConfigToml(
     return { removed: [], backupPath: null, noop: true };
   }
 
-  const original = readFileSync(configPath, 'utf-8');
+  const original = readFileSync(configPath, "utf-8");
   const backupPath = writeBackup(configPath, original, opts.backupDir);
 
   const linesToDrop = new Set<number>();
@@ -112,7 +112,7 @@ export function cleanupCodexConfigToml(
   }
 
   const cleaned = collapseBlankRunsNearDeletions(kept);
-  const output = cleaned.join('\n');
+  const output = cleaned.join("\n");
 
   atomicWrite(configPath, output);
 
@@ -141,11 +141,11 @@ function detectTopLevelNotify(lines: string[]): CodexAuditFinding | null {
     const m = trimmed.match(notifyRegex);
     if (!m) continue;
 
-    const rhs = (m[1] ?? '').trim();
-    if (rhs.startsWith('[') && rhs.endsWith(']') && countBrackets(rhs) === 0) {
+    const rhs = (m[1] ?? "").trim();
+    if (rhs.startsWith("[") && rhs.endsWith("]") && countBrackets(rhs) === 0) {
       return makeNotifyFinding(lines, i, i);
     }
-    if (rhs.startsWith('[')) {
+    if (rhs.startsWith("[")) {
       let depth = countBrackets(rhs);
       for (let j = i + 1; j < lines.length; j++) {
         depth += countBrackets(lines[j]!);
@@ -160,20 +160,16 @@ function detectTopLevelNotify(lines: string[]): CodexAuditFinding | null {
   return null;
 }
 
-function makeNotifyFinding(
-  lines: string[],
-  startIdx: number,
-  endIdx: number
-): CodexAuditFinding {
+function makeNotifyFinding(lines: string[], startIdx: number, endIdx: number): CodexAuditFinding {
   return {
-    id: 'toml_notify',
-    type: 'toml_notify',
-    severity: 'warn',
+    id: "toml_notify",
+    type: "toml_notify",
+    severity: "warn",
     startLine: startIdx + 1,
     endLine: endIdx + 1,
-    snippet: lines.slice(startIdx, endIdx + 1).join('\n'),
+    snippet: lines.slice(startIdx, endIdx + 1).join("\n"),
     message:
-      'config.toml 顶层设置了 notify，会与 Coder Studio 的启动参数注入冲突，可能导致 session 状态不同步。',
+      "config.toml 顶层设置了 notify，会与 Coder Studio 的启动参数注入冲突，可能导致 session 状态不同步。",
   };
 }
 
@@ -189,18 +185,18 @@ function detectCodexHooksFlag(lines: string[]): CodexAuditFinding | null {
       currentSection = headerMatch[1]!.trim();
       continue;
     }
-    if (currentSection !== 'features') continue;
+    if (currentSection !== "features") continue;
     if (!codexHooksRegex.test(line)) continue;
 
     return {
-      id: 'toml_codex_hooks',
-      type: 'toml_codex_hooks',
-      severity: 'info',
+      id: "toml_codex_hooks",
+      type: "toml_codex_hooks",
+      severity: "info",
       startLine: i + 1,
       endLine: i + 1,
       snippet: line,
       message:
-        '[features] codex_hooks = true 启用了 Codex CLI 的实验性 hook 引擎，可能影响 notify 的行为。若不主动使用该特性，建议关闭。',
+        "[features] codex_hooks = true 启用了 Codex CLI 的实验性 hook 引擎，可能影响 notify 的行为。若不主动使用该特性，建议关闭。",
     };
   }
   return null;
@@ -209,43 +205,36 @@ function detectCodexHooksFlag(lines: string[]): CodexAuditFinding | null {
 function countBrackets(s: string): number {
   let n = 0;
   for (const ch of s) {
-    if (ch === '[') n++;
-    else if (ch === ']') n--;
+    if (ch === "[") n++;
+    else if (ch === "]") n--;
   }
   return n;
 }
 
-function writeBackup(
-  configPath: string,
-  original: string,
-  backupDir: string | undefined
-): string {
+function writeBackup(configPath: string, original: string, backupDir: string | undefined): string {
   const dir = backupDir ?? dirname(configPath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
   const ts = formatTimestamp(new Date());
-  const backupPath = join(
-    dir,
-    `${basenameNoTomlExt(configPath)}.bak.${ts}.toml`
-  );
-  writeFileSync(backupPath, original, 'utf-8');
+  const backupPath = join(dir, `${basenameNoTomlExt(configPath)}.bak.${ts}.toml`);
+  writeFileSync(backupPath, original, "utf-8");
   return backupPath;
 }
 
 function atomicWrite(configPath: string, contents: string): void {
   const tempPath = `${configPath}.tmp`;
-  writeFileSync(tempPath, contents, 'utf-8');
+  writeFileSync(tempPath, contents, "utf-8");
   renameSync(tempPath, configPath);
 }
 
 function basenameNoTomlExt(p: string): string {
-  const base = p.split(/[\\/]/).pop() ?? 'config.toml';
-  return base.replace(/\.toml$/i, '');
+  const base = p.split(/[\\/]/).pop() ?? "config.toml";
+  return base.replace(/\.toml$/i, "");
 }
 
 function formatTimestamp(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
     `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
@@ -256,7 +245,7 @@ function collapseBlankRunsNearDeletions(lines: string[]): string[] {
   const out: string[] = [];
   let blankRun = 0;
   for (const line of lines) {
-    if (line.trim() === '') {
+    if (line.trim() === "") {
       blankRun++;
       if (blankRun <= 2) out.push(line);
     } else {

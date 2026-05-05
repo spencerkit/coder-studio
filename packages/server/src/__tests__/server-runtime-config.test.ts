@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createServer, type Server, type ServerRuntimeOptions } from '../server.js';
-import type { ServerConfig } from '../config.js';
-import { getRuntimePath, readRuntimeConfig } from '@coder-studio/core/runtime';
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { getRuntimePath, readRuntimeConfig } from "@coder-studio/core/runtime";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ServerConfig } from "../config.js";
+import { createServer, type Server, type ServerRuntimeOptions } from "../server.js";
 
-describe('server runtime config', () => {
+describe("server runtime config", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
   let testHomeDir: string;
@@ -17,7 +17,7 @@ describe('server runtime config', () => {
   ): Promise<Server> => createServer(overrides);
 
   beforeEach(() => {
-    testHomeDir = mkdtempSync(join(tmpdir(), 'cs-server-runtime-home-'));
+    testHomeDir = mkdtempSync(join(tmpdir(), "cs-server-runtime-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
   });
@@ -28,7 +28,7 @@ describe('server runtime config', () => {
       server = undefined;
     }
 
-    const runtimePath = join(homedir(), '.coder-studio', 'runtime.json');
+    const runtimePath = join(homedir(), ".coder-studio", "runtime.json");
     if (existsSync(runtimePath)) {
       rmSync(runtimePath);
     }
@@ -48,22 +48,22 @@ describe('server runtime config', () => {
     }
   });
 
-  it('writes runtime config on startup and clears it on stop', async () => {
+  it("writes runtime config on startup and clears it on stop", async () => {
     server = await createRuntimeServer({
-      dataDir: join(testHomeDir, 'server.db'),
-      host: '127.0.0.1',
+      dataDir: join(testHomeDir, "server.db"),
+      host: "127.0.0.1",
       port: 0,
       writeRuntimeConfig: true,
     });
 
     expect(readRuntimeConfig()).toEqual(
       expect.objectContaining({
-        host: '127.0.0.1',
+        host: "127.0.0.1",
         pid: process.pid,
       })
     );
     expect(getRuntimePath()).toBe(
-      process.env.CODER_STUDIO_RUNTIME_JSON_PATH ?? join(homedir(), '.coder-studio', 'runtime.json')
+      process.env.CODER_STUDIO_RUNTIME_JSON_PATH ?? join(homedir(), ".coder-studio", "runtime.json")
     );
 
     await server.stop();

@@ -2,8 +2,8 @@
  * Session types
  */
 
-import type { Session } from '@coder-studio/core';
-import type { SessionRow } from '../storage/repositories/session-repo.js';
+import type { Session } from "@coder-studio/core";
+import type { SessionRow } from "../storage/repositories/session-repo.js";
 
 /**
  * Whitelisted fields that can be passed to SessionDatabase.update()
