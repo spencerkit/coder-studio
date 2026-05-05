@@ -1,66 +1,103 @@
 # Coder Studio
 
-> Agent-First Development Environment
+> Agent-First Development Environment — 把 AI Agent、代码编辑、Git 和终端放进同一个浏览器界面
 
-本地优先的 AI 编码工作台，将 AI Agent、代码编辑器、Git 和终端整合到统一界面中。
+## 这是什么
 
-## 特性
+Coder Studio 是一个**本地优先的 AI 编码工作台**。你在本机运行服务，通过浏览器访问统一的开发界面，直接与 Claude 或 Codex Agent 协作完成编码任务。
 
-- 🤖 **多Agent支持**: Claude、Codex 并行运行
-- 📝 **代码编辑**: Monaco Editor + 文件树
-- 🔀 **Git集成**: 状态、差异、提交
-- 💻 **终端**: xterm.js + PTY
-- 🎨 **主题**: 浅色/深色主题切换
-- ⌨️ **快捷键**: 自定义快捷键配置
-- 🌐 **国际化**: 中文/英文支持
+它不是在线 IDE，也不绑定任何 SaaS 平台——所有代码和数据都留在你的电脑上。
+
+## 浏览器访问，不限制设备和地点
+
+Coder Studio 的界面运行在标准浏览器中，不依赖任何客户端应用。只要本机服务在运行，**任何能连到网络的设备都可以随时打开同一个工作台**：
+
+- **电脑、平板、手机通用**：任何现代浏览器都能访问，不需要安装桌面客户端
+- **随时查看，不受地点限制**：通勤路上用手机浏览器查看 Agent 进度、咖啡厅用平板审阅代码变更、客厅沙发上用笔记本继续操作——同一个工作台，随时打开即用
+- **对移动端友好**：响应式界面设计，手机上可以流畅地浏览文件树、查看 Agent 对话和 Git 变更
+- **团队协作共享**：同一局域网内的同事可以通过浏览器直接查看 Agent 的工作状态
+
+### 典型使用场景
+
+| 场景 | 怎么做 |
+|------|--------|
+| 通勤路上查进度 | 出门前启动服务，手机浏览器打开同一工作台查看 Agent 跑到了哪一步 |
+| 咖啡厅轻量操作 | 用平板浏览器浏览文件、审阅 Git 变更、查看终端输出 |
+| 沙发上继续编码 | 笔记本合上了，手机浏览器打开界面继续和 Agent 对话 |
+| 团队共享查看 | 同事通过浏览器访问同一工作台，无需远程控制你的电脑 |
+
+## 核心优势
+
+- **一站式工作流**：Agent 对话、代码编辑、文件树、Git 状态、终端集中在同一个浏览器标签页中
+- **多 Agent 并行**：同时连接 Claude Code 和 OpenAI Codex，按任务选择最合适的引擎
+- **本地优先，数据可控**：服务运行在本地，代码不会上传到第三方云编辑器；会话记录存储在本地 SQLite
+- **开箱即用**：一条命令安装，一条命令启动，浏览器自动打开；配合 Provider CLI 即可开始工作
+
+## 它适合谁
+
+- 希望在一个界面中同时与 AI 对话、看代码、跑命令的开发者
+- 想在本地保留所有代码和会话数据、不依赖云端编辑器的团队
+- 需要在手机、平板等设备上随时查看 Agent 进度的开发者
+- 希望团队能通过浏览器共享查看工作状态的协作者
+- 使用 Claude Code 或 OpenAI Codex 并想要图形化管理界面的用户
 
 ## 快速开始
 
-### 1. 确认 Node.js
+只需几步即可开始：
+
+### 前置要求
+
+| 依赖 | 说明 |
+|------|------|
+| Node.js >= 24.0.0 | 运行 Coder Studio 服务 |
+| Claude Code CLI 或 OpenAI Codex CLI | Agent 引擎（可选，但创建会话需要） |
+
+### 安装与启动
 
 ```bash
-node --version  # 需要 >= 24.0.0
-```
-
-### 2. 安装
-
-```bash
+# 1. 全局安装
 npm install -g @spencer-kit/coder-studio
-```
 
-### 3. 打开 Coder Studio
-
-```bash
+# 2. 启动并自动在浏览器中打开
 coder-studio open
 ```
 
-这会自动启动服务（如果未运行）并在浏览器中打开界面。
+如果浏览器未自动弹出，可手动访问终端输出的 URL（通常为 `http://localhost:4173`）。
 
-### 4. 打开工作区并创建第一个会话
+### 创建第一个会话
 
+1. 在浏览器界面点击 **"打开工作区"**，选择你的项目目录
+2. 点击 **"创建会话"**，选择 Claude 或 Codex
+3. 开始与 Agent 对话、查看文件、执行命令
 
 ![工作区界面](docs/help/assets/screenshot-workspace.png)
-在浏览器中选择你的项目目录，然后点击"创建会话"选择 Claude 或 Codex 即可开始。
 
-更多细节请参考[快速开始指南](docs/help/quick-start.md)。
+> 没有安装 Provider CLI 也能先打开界面浏览文件和终端，稍后再安装即可。详细安装步骤见 [Provider 配置指南](docs/help/providers.md)。
+### 界面预览
 
-## 你可以用它做什么
+**PC 端工作区**
 
-- 打开本地项目作为工作区
-- 启动 Claude 或 Codex Agent 会话
-- 查看和编辑代码文件
-- 浏览 Git 状态和变更
-- 在工作区内使用终端
-- 通过手机浏览器访问
+![PC 端工作区](docs/help/assets/screenshot-pc.png)
 
-## 文档入口
+**移动端工作区**
 
-### 帮助文档
-- [快速开始](docs/help/quick-start.md) — 第一次使用指南
-- [App 功能总览](docs/help/app-overview.md) — 核心概念与能力
+![移动端工作区](docs/help/assets/screenshot-mobile.png)
+
+## 常用操作
+
+- **切换主题**：设置页可切换浅色 / 深色主题
+- **切换语言**：设置页支持中文 / 英文切换
+- **查看 Git 状态**：工作区内直接浏览变更文件和 diff
+- **终端**：底部面板可打开 Shell 终端运行命令
+- **移动端访问**：同一局域网内用其他设备浏览器访问本机 IP + 端口
+
+## 文档
+
+- [快速开始](docs/help/quick-start.md) — 从零到第一次使用的完整流程
+- [App 功能总览](docs/help/app-overview.md) — 核心概念与能力说明
 - [桌面端使用指南](docs/help/desktop-guide.md) — PC 端界面与操作
-- [移动端使用指南](docs/help/mobile-guide.md) — 手机端操作指南
-- [Provider 配置](docs/help/providers.md) — Claude / Codex 安装与配置
+- [移动端使用指南](docs/help/mobile-guide.md) — 手机/平板操作指南
+- [Provider 配置](docs/help/providers.md) — Claude Code / Codex CLI 安装与配置
 - [常见工作流](docs/help/workflows.md) — 任务式操作指南
 - [排障指南](docs/help/troubleshooting.md) — 常见问题与排查
 - [CLI 参考](docs/help/cli.md) — 命令行命令速查
