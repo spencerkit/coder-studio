@@ -89,19 +89,14 @@ pnpm build:cli
 
 ### 代码质量
 
-```bash
-# 检查 lint 诊断
-pnpm lint
-
-# 自动修复安全的 lint 问题
-pnpm lint:fix
-
-# 统一格式化代码
-pnpm format
-
-# 运行聚合检查（格式、lint、imports）
-pnpm check
-```
+- `pnpm lint`
+  用于先查看当前改动的 lint 诊断，不会改写文件。
+- `pnpm lint:fix`
+  用于在修完代码后应用 Biome 可安全自动修复的 lint 修改，再检查生成的 diff。
+- `pnpm format`
+  用于在提交前统一格式，确保本次改动的代码风格一致。
+- `pnpm check`
+  用于在发起 PR 或做阶段性验收前运行聚合检查，一次验证格式、lint 和 imports。
 
 ## 架构
 
