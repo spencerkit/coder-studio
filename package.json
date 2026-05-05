@@ -15,7 +15,9 @@
     "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
     "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
     "lint": "biome lint .",
-    "format": "biome format --write ."
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check ."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
