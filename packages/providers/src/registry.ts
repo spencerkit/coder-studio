@@ -1,7 +1,7 @@
-import type { ProviderDefinition } from '@coder-studio/core';
+import type { ProviderDefinition } from "@coder-studio/core";
 
-import { claudeDefinition } from './claude/definition.js';
-import { codexDefinition } from './codex/definition.js';
+import { claudeDefinition } from "./claude/definition.js";
+import { codexDefinition } from "./codex/definition.js";
 
 /**
  * Static registry of all available providers
@@ -13,10 +13,7 @@ import { codexDefinition } from './codex/definition.js';
  * 3. Import and add to this array
  * 4. Frontend automatically receives updated list via provider.list command
  */
-export const providerRegistry: ProviderDefinition[] = [
-  claudeDefinition,
-  codexDefinition,
-];
+export const providerRegistry: ProviderDefinition[] = [claudeDefinition, codexDefinition];
 
 /**
  * Get provider by ID
@@ -43,7 +40,7 @@ export function getAllProviderIds(): string[] {
  * Get providers by capability level
  */
 export function getProvidersByCapability(
-  capability: 'full' | 'limited' | 'unsupported'
+  capability: "full" | "limited" | "unsupported"
 ): ProviderDefinition[] {
   return providerRegistry.filter((provider) => provider.capability === capability);
 }

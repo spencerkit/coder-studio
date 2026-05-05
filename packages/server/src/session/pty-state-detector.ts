@@ -1,64 +1,66 @@
-import type { IdleHeuristics } from '@coder-studio/core'
+import type { IdleHeuristics } from "@coder-studio/core";
 
-export type PtyDerivedState = 'running' | 'idle'
+export type PtyDerivedState = "running" | "idle";
 
 export interface PtyStateDetectorOptions {
-  heuristics: IdleHeuristics
-  onStateChange: (state: PtyDerivedState) => void
+  heuristics: IdleHeuristics;
+  onStateChange: (state: PtyDerivedState) => void;
 }
 
-const RECENT_BUFFER_LIMIT = 4096
+const RECENT_BUFFER_LIMIT = 4096;
 
 export class PtyStateDetector {
-  private currentState: PtyDerivedState | null = null
-  private idleTimer: NodeJS.Timeout | null = null
-  private recentBuffer = ''
+  private currentState: PtyDerivedState | null = null;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private recentBuffer = "";
 
   constructor(private readonly options: PtyStateDetectorOptions) {}
 
   feed(chunk: Buffer): void {
-    this.transitionTo('running')
-    this.recentBuffer = `${this.recentBuffer}${chunk.toString('utf8')}`.slice(-RECENT_BUFFER_LIMIT)
+    this.transitionTo("running");
+    this.recentBuffer = `${this.recentBuffer}${chunk.toString("utf8")}`.slice(-RECENT_BUFFER_LIMIT);
 
     if (this.matchesIdlePrompt()) {
-      this.clearIdleTimer()
-      this.transitionTo('idle')
-      return
+      this.clearIdleTimer();
+      this.transitionTo("idle");
+      return;
     }
 
-    this.scheduleIdleDebounce()
+    this.scheduleIdleDebounce();
   }
 
   dispose(): void {
-    this.clearIdleTimer()
+    this.clearIdleTimer();
   }
 
   private transitionTo(state: PtyDerivedState): void {
     if (this.currentState === state) {
-      return
+      return;
     }
 
-    this.currentState = state
-    this.options.onStateChange(state)
+    this.currentState = state;
+    this.options.onStateChange(state);
   }
 
   private matchesIdlePrompt(): boolean {
-    return this.options.heuristics.idlePromptPatterns.some((pattern) => pattern.test(this.recentBuffer))
+    return this.options.heuristics.idlePromptPatterns.some((pattern) =>
+      pattern.test(this.recentBuffer)
+    );
   }
 
   private scheduleIdleDebounce(): void {
-    this.clearIdleTimer()
+    this.clearIdleTimer();
     this.idleTimer = setTimeout(() => {
-      this.transitionTo('idle')
-    }, this.options.heuristics.idleDebounceMs)
+      this.transitionTo("idle");
+    }, this.options.heuristics.idleDebounceMs);
   }
 
   private clearIdleTimer(): void {
     if (this.idleTimer === null) {
-      return
+      return;
     }
 
-    clearTimeout(this.idleTimer)
-    this.idleTimer = null
+    clearTimeout(this.idleTimer);
+    this.idleTimer = null;
   }
 }

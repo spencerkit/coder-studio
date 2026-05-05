@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const TERMINAL_BINARY_PROTOCOL_VERSION = 1;
 export const TERMINAL_BINARY_HEADER_SIZE = 16;
@@ -23,36 +23,36 @@ export interface TerminalBinaryFrameHeader {
 }
 
 export interface TerminalBinaryEventData {
-  transport: 'binary';
+  transport: "binary";
   streamId: number;
   size: number;
 }
 
 export interface TerminalReplayBinaryResult {
-  status: 'ok';
-  transport: 'binary';
+  status: "ok";
+  transport: "binary";
   streamId: number;
   size: number;
   seq: number;
 }
 
 export interface TerminalSnapshotBinaryResult {
-  status: 'ok';
-  transport: 'binary';
+  status: "ok";
+  transport: "binary";
   streamId: number;
   size: number;
   seq: number;
   rows: number;
   cols: number;
-  source: 'headless';
+  source: "headless";
 }
 
 export const TERMINAL_INPUT_ACTIVITIES = [
-  'typing',
-  'submit',
-  'internal_submit',
-  'system',
-  'control',
+  "typing",
+  "submit",
+  "internal_submit",
+  "system",
+  "control",
 ] as const;
 
 export type TerminalInputActivity = (typeof TERMINAL_INPUT_ACTIVITIES)[number];
@@ -61,7 +61,7 @@ export interface TerminalInputBinaryArgs {
   terminalId: string;
   activity?: TerminalInputActivity;
   submittedText?: string;
-  transport: 'binary';
+  transport: "binary";
   streamId: number;
   size: number;
 }
@@ -75,10 +75,10 @@ export interface TerminalInputBase64Args {
 
 export const encodeTerminalBinaryFrame = (
   header: TerminalBinaryFrameHeader,
-  payload: Uint8Array,
+  payload: Uint8Array
 ): Uint8Array => {
   if (payload.byteLength !== header.payloadSize) {
-    throw new Error('Terminal binary payload size does not match header');
+    throw new Error("Terminal binary payload size does not match header");
   }
 
   const frame = new Uint8Array(TERMINAL_BINARY_HEADER_SIZE + payload.byteLength);
@@ -94,14 +94,14 @@ export const encodeTerminalBinaryFrame = (
 };
 
 export const decodeTerminalBinaryFrame = (
-  frame: ArrayBuffer | Uint8Array,
+  frame: ArrayBuffer | Uint8Array
 ): {
   header: TerminalBinaryFrameHeader;
   payload: Uint8Array;
 } => {
   const bytes = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
   if (bytes.byteLength < TERMINAL_BINARY_HEADER_SIZE) {
-    throw new Error('Terminal binary frame is too short');
+    throw new Error("Terminal binary frame is too short");
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -116,7 +116,7 @@ export const decodeTerminalBinaryFrame = (
 
   const payload = bytes.subarray(TERMINAL_BINARY_HEADER_SIZE);
   if (payload.byteLength !== header.payloadSize) {
-    throw new Error('Terminal binary frame payload length mismatch');
+    throw new Error("Terminal binary frame payload length mismatch");
   }
 
   return { header, payload };
@@ -140,14 +140,16 @@ export interface DecodedTerminalOutputFrame {
 
 export const encodeTerminalOutputFrame = (
   header: TerminalOutputFrameHeader,
-  payload: Uint8Array,
+  payload: Uint8Array
 ): Uint8Array => {
   if (payload.byteLength !== header.payloadSize) {
-    throw new Error('Terminal output payload size does not match header');
+    throw new Error("Terminal output payload size does not match header");
   }
 
   const topicBytes = new TextEncoder().encode(header.topic);
-  const frame = new Uint8Array(TERMINAL_BINARY_HEADER_SIZE + topicBytes.length + payload.byteLength);
+  const frame = new Uint8Array(
+    TERMINAL_BINARY_HEADER_SIZE + topicBytes.length + payload.byteLength
+  );
   const view = new DataView(frame.buffer);
   view.setUint8(0, TERMINAL_BINARY_OUTPUT_VERSION);
   view.setUint8(1, TerminalBinaryFrameType.Output);
@@ -161,18 +163,18 @@ export const encodeTerminalOutputFrame = (
 };
 
 export const decodeTerminalOutputFrame = (
-  frame: ArrayBuffer | Uint8Array,
+  frame: ArrayBuffer | Uint8Array
 ): DecodedTerminalOutputFrame => {
   const bytes = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
   if (bytes.byteLength < TERMINAL_BINARY_HEADER_SIZE) {
-    throw new Error('Terminal output frame is too short');
+    throw new Error("Terminal output frame is too short");
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint8(0);
   if (version !== TERMINAL_BINARY_OUTPUT_VERSION) {
     throw new Error(
-      `Expected output frame version ${TERMINAL_BINARY_OUTPUT_VERSION}, got ${version}`,
+      `Expected output frame version ${TERMINAL_BINARY_OUTPUT_VERSION}, got ${version}`
     );
   }
 
@@ -181,15 +183,15 @@ export const decodeTerminalOutputFrame = (
   const streamId = view.getUint32(8, false);
   const payloadSize = view.getUint32(12, false);
   if (bytes.byteLength < TERMINAL_BINARY_HEADER_SIZE + topicLength) {
-    throw new Error('Terminal output frame topic is truncated');
+    throw new Error("Terminal output frame topic is truncated");
   }
 
   const topic = new TextDecoder().decode(
-    bytes.subarray(TERMINAL_BINARY_HEADER_SIZE, TERMINAL_BINARY_HEADER_SIZE + topicLength),
+    bytes.subarray(TERMINAL_BINARY_HEADER_SIZE, TERMINAL_BINARY_HEADER_SIZE + topicLength)
   );
   const payload = bytes.subarray(TERMINAL_BINARY_HEADER_SIZE + topicLength);
   if (payload.byteLength !== payloadSize) {
-    throw new Error('Terminal output frame payload length mismatch');
+    throw new Error("Terminal output frame payload length mismatch");
   }
 
   return { topic, seq, streamId, payload };
@@ -197,7 +199,7 @@ export const decodeTerminalOutputFrame = (
 
 // Command: client → server, expects Result
 export const CommandMessage = z.object({
-  kind: z.literal('command'),
+  kind: z.literal("command"),
   id: z.string().uuid(),
   op: z.string(),
   args: z.unknown(),
@@ -205,7 +207,7 @@ export const CommandMessage = z.object({
 
 // Result: server → client, response to Command
 export const ResultMessage = z.object({
-  kind: z.literal('result'),
+  kind: z.literal("result"),
   id: z.string().uuid(),
   ok: z.boolean(),
   data: z.unknown().optional(),
@@ -220,7 +222,7 @@ export const ResultMessage = z.object({
 
 // Event: server → client, unsolicited state change
 export const EventMessage = z.object({
-  kind: z.literal('event'),
+  kind: z.literal("event"),
   topic: z.string(),
   seq: z.number().int().nonnegative(),
   timestamp: z.number().int().positive(),
@@ -229,24 +231,24 @@ export const EventMessage = z.object({
 
 // Subscribe: client → server, declare interest in topics
 export const SubscribeMessage = z.object({
-  kind: z.literal('subscribe'),
+  kind: z.literal("subscribe"),
   topics: z.array(z.string()),
 });
 
 // Unsubscribe: client → server, cancel interest
 export const UnsubscribeMessage = z.object({
-  kind: z.literal('unsubscribe'),
+  kind: z.literal("unsubscribe"),
   topics: z.array(z.string()),
 });
 
 // Resync: client → server, request missed events after reconnect
 export const ResyncMessage = z.object({
-  kind: z.literal('resync'),
+  kind: z.literal("resync"),
   lastSeen: z.record(z.string(), z.number()),
 });
 
 // Client → Server messages
-export const ClientMessage = z.discriminatedUnion('kind', [
+export const ClientMessage = z.discriminatedUnion("kind", [
   CommandMessage,
   SubscribeMessage,
   UnsubscribeMessage,
@@ -254,7 +256,7 @@ export const ClientMessage = z.discriminatedUnion('kind', [
 ]);
 
 // Server → Client messages
-export const ServerMessage = z.discriminatedUnion('kind', [ResultMessage, EventMessage]);
+export const ServerMessage = z.discriminatedUnion("kind", [ResultMessage, EventMessage]);
 
 // Type exports
 export type Command = z.infer<typeof CommandMessage>;

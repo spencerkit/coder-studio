@@ -1,26 +1,28 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import { randomBytes } from 'node:crypto';
-import type { ServerConfig } from '../config.js';
-import { AuthLoginProtection, resolveClientIp } from './login-protection.js';
-import type { AuthLoginBlockRepo } from '../storage/repositories/auth-login-block-repo.js';
-import type { AuthSessionRepo } from '../storage/repositories/auth-session-repo.js';
+import { randomBytes } from "node:crypto";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import type { ServerConfig } from "../config.js";
+import type { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
+import type { AuthSessionRepo } from "../storage/repositories/auth-session-repo.js";
 import {
   getRequestPathname,
   isFrontendNavigationRequest as isFrontendNavigationRequestForWebUi,
   isPublicStaticPath,
-} from '../web-ui-routing.js';
+} from "../web-ui-routing.js";
+import { AuthLoginProtection, resolveClientIp } from "./login-protection.js";
 
-const AUTH_COOKIE_NAME = 'coder_studio_auth';
+const AUTH_COOKIE_NAME = "coder_studio_auth";
 
 const isPublicPath = (path: string) => {
   const pathname = getRequestPathname(path);
 
   return (
-    pathname === '/' ||
-    pathname === '/login' ||
-    pathname === '/healthz' ||
-    pathname === '/auth/status' || pathname === '/auth/login' || pathname === '/auth/logout' ||
-    pathname.startsWith('/@') ||
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/healthz" ||
+    pathname === "/auth/status" ||
+    pathname === "/auth/login" ||
+    pathname === "/auth/logout" ||
+    pathname.startsWith("/@") ||
     isPublicStaticPath(pathname)
   );
 };
@@ -31,15 +33,15 @@ const parseCookies = (cookieHeader?: string) => {
   }
 
   return cookieHeader
-    .split(';')
+    .split(";")
     .map((part) => part.trim())
     .filter(Boolean)
     .reduce<Record<string, string>>((acc, part) => {
-      const [key, ...rest] = part.split('=');
+      const [key, ...rest] = part.split("=");
       if (!key) {
         return acc;
       }
-      acc[key] = rest.join('=');
+      acc[key] = rest.join("=");
       return acc;
     }, {});
 };
@@ -84,7 +86,12 @@ const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolea
 
 export const createAuthGuard = (deps: AuthDeps) => {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!deps.config.auth.enabled || isPublicPath(request.url) || request.url === '/auth/login' || request.url === '/auth/logout') {
+    if (
+      !deps.config.auth.enabled ||
+      isPublicPath(request.url) ||
+      request.url === "/auth/login" ||
+      request.url === "/auth/logout"
+    ) {
       return;
     }
 
@@ -93,12 +100,12 @@ export const createAuthGuard = (deps: AuthDeps) => {
     }
 
     if (isFrontendNavigationRequest(request, deps)) {
-      return reply.redirect('/login');
+      return reply.redirect("/login");
     }
 
     reply.status(401).send({
       ok: false,
-      error: 'Authentication required',
+      error: "Authentication required",
     });
   };
 };
@@ -130,21 +137,21 @@ export const registerAuthRoutes = (deps: AuthDeps) => {
         blocked: true,
         ip,
         blockedUntil: activeBlock.blockedUntil,
-        error: 'Too many failed attempts',
+        error: "Too many failed attempts",
       });
     }
 
     if (request.body?.password !== deps.config.auth.password) {
       loginProtection.recordFailure(ip, now);
-      return reply.status(401).send({ ok: false, error: 'Invalid password' });
+      return reply.status(401).send({ ok: false, error: "Invalid password" });
     }
 
     loginProtection.clearFailures(ip);
-    const token = randomBytes(32).toString('hex');
+    const token = randomBytes(32).toString("hex");
     deps.authSessionRepo.create(token, now);
 
     reply.header(
-      'Set-Cookie',
+      "Set-Cookie",
       `${AUTH_COOKIE_NAME}=${encodeAuthCookieValue(token)}; HttpOnly; Path=/; SameSite=Lax`
     );
     return reply.send({ ok: true, authEnabled: true, authenticated: true });
@@ -160,10 +167,7 @@ export const registerAuthLogoutRoute = (deps: AuthDeps) => {
       deps.authSessionRepo.delete(decodeAuthCookieValue(authCookie));
     }
 
-    reply.header(
-      'Set-Cookie',
-      `${AUTH_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`
-    );
+    reply.header("Set-Cookie", `${AUTH_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`);
 
     return reply.send({
       ok: true,

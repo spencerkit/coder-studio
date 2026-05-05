@@ -3,8 +3,8 @@ import {
   closeDatabase,
   openDatabase,
   parseServerConfig,
-} from '@coder-studio/server';
-import { readCliConfig } from './config-store.js';
+} from "@coder-studio/server";
+import { readCliConfig } from "./config-store.js";
 
 export interface CliAuthBlock {
   ip: string;

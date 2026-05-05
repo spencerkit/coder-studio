@@ -2,7 +2,7 @@
  * Git status parser for porcelain=v2 format.
  */
 
-import type { GitStatus, GitFileChange } from '@coder-studio/core';
+import type { GitFileChange, GitStatus } from "@coder-studio/core";
 
 /**
  * Parses git status --porcelain=v2 --branch output.
@@ -13,7 +13,7 @@ import type { GitStatus, GitFileChange } from '@coder-studio/core';
  * @returns Structured git status
  */
 export function parseStatus(porcelainV2: string): GitStatus {
-  let branch = '';
+  let branch = "";
   let ahead = 0;
   let behind = 0;
   let headSha: string | undefined;
@@ -21,9 +21,9 @@ export function parseStatus(porcelainV2: string): GitStatus {
   const modified: GitFileChange[] = [];
   const untracked: GitFileChange[] = [];
   const deleted: GitFileChange[] = [];
-  const records = porcelainV2.includes('\0')
-    ? porcelainV2.split('\0').filter((record) => record.length > 0)
-    : porcelainV2.split('\n').filter((record) => record.length > 0);
+  const records = porcelainV2.includes("\0")
+    ? porcelainV2.split("\0").filter((record) => record.length > 0)
+    : porcelainV2.split("\n").filter((record) => record.length > 0);
 
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
@@ -31,20 +31,20 @@ export function parseStatus(porcelainV2: string): GitStatus {
       continue;
     }
 
-    if (record.startsWith('# branch.oid ')) {
-      const oid = record.substring('# branch.oid '.length);
-      if (oid && oid !== '(initial)') {
+    if (record.startsWith("# branch.oid ")) {
+      const oid = record.substring("# branch.oid ".length);
+      if (oid && oid !== "(initial)") {
         headSha = oid;
       }
       continue;
     }
 
-    if (record.startsWith('# branch.head ')) {
-      branch = record.substring('# branch.head '.length);
+    if (record.startsWith("# branch.head ")) {
+      branch = record.substring("# branch.head ".length);
       continue;
     }
 
-    if (record.startsWith('# branch.ab ')) {
+    if (record.startsWith("# branch.ab ")) {
       const match = record.match(/# branch\.ab \+(\d+) -(\d+)/);
       const nextAhead = match?.[1];
       const nextBehind = match?.[2];
@@ -55,12 +55,12 @@ export function parseStatus(porcelainV2: string): GitStatus {
       continue;
     }
 
-    if (record.startsWith('1 ')) {
+    if (record.startsWith("1 ")) {
       parseOrdinaryChangedEntry(record, staged, modified, deleted);
       continue;
     }
 
-    if (record.startsWith('2 ')) {
+    if (record.startsWith("2 ")) {
       const oldPath = records[index + 1];
       parseRenamedEntry(record, oldPath, staged, modified, deleted);
       if (oldPath) {
@@ -69,7 +69,7 @@ export function parseStatus(porcelainV2: string): GitStatus {
       continue;
     }
 
-    if (record.startsWith('? ')) {
+    if (record.startsWith("? ")) {
       untracked.push({ path: record.substring(2) });
     }
   }
@@ -96,13 +96,13 @@ function parseOrdinaryChangedEntry(
   modified: GitFileChange[],
   deleted: GitFileChange[]
 ): void {
-  const parts = record.split(' ');
+  const parts = record.split(" ");
   const xy = parts[1]; // XY status codes
   if (!xy) {
     return;
   }
 
-  const path = parts.slice(8).join(' ');
+  const path = parts.slice(8).join(" ");
   if (!path) {
     return;
   }
@@ -121,18 +121,18 @@ function parseRenamedEntry(
   modified: GitFileChange[],
   deleted: GitFileChange[]
 ): void {
-  const parts = record.split(' ');
+  const parts = record.split(" ");
   const xy = parts[1];
   if (!xy) {
     return;
   }
 
   const pathTokens = parts.slice(9);
-  const pathAndMaybeOldPath = pathTokens.join(' ');
-  const inlinePathParts = pathAndMaybeOldPath.split('\t');
+  const pathAndMaybeOldPath = pathTokens.join(" ");
+  const inlinePathParts = pathAndMaybeOldPath.split("\t");
   const fallbackPath =
     !oldPathRecord && inlinePathParts.length === 1 && pathTokens.length > 1
-      ? pathTokens.slice(0, -1).join(' ')
+      ? pathTokens.slice(0, -1).join(" ")
       : undefined;
   const path = fallbackPath ?? inlinePathParts[0];
   if (!path) {
@@ -140,7 +140,7 @@ function parseRenamedEntry(
   }
 
   const oldPath =
-    (oldPathRecord && !oldPathRecord.startsWith('#') ? oldPathRecord : undefined) ??
+    (oldPathRecord && !oldPathRecord.startsWith("#") ? oldPathRecord : undefined) ??
     inlinePathParts[1] ??
     (pathTokens.length > 1 ? pathTokens[pathTokens.length - 1] : undefined);
   pushChange({ path, oldPath }, xy, staged, modified, deleted);
@@ -156,15 +156,15 @@ function pushChange(
   const indexStatus = xy[0];
   const worktreeStatus = xy[1];
 
-  if (indexStatus && indexStatus !== '.' && indexStatus !== ' ') {
+  if (indexStatus && indexStatus !== "." && indexStatus !== " ") {
     staged.push(change);
   }
 
-  if (!worktreeStatus || worktreeStatus === '.' || worktreeStatus === ' ') {
+  if (!worktreeStatus || worktreeStatus === "." || worktreeStatus === " ") {
     return;
   }
 
-  if (worktreeStatus === 'D') {
+  if (worktreeStatus === "D") {
     deleted.push({ path: change.path });
     return;
   }

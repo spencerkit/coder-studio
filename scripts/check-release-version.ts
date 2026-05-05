@@ -61,9 +61,7 @@ export async function assertReleaseTagMatchesPackage({
 
   if (pkg.version !== tagVersion) {
     throw new Error(
-      `Release tag ${tag} does not match packages/cli/package.json version ${String(
-        pkg.version
-      )}`
+      `Release tag ${tag} does not match packages/cli/package.json version ${String(pkg.version)}`
     );
   }
 

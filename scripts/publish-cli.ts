@@ -36,11 +36,7 @@ export interface ExecResult {
   stderr: string;
 }
 
-export type ExecFn = (
-  command: string,
-  args: string[],
-  options: ExecOptions
-) => Promise<ExecResult>;
+export type ExecFn = (command: string, args: string[], options: ExecOptions) => Promise<ExecResult>;
 
 export interface RunPublishCliInput {
   cliDir?: string;
@@ -146,9 +142,7 @@ export async function assertCliPublishArtifacts(
   if (!hasRecordValue(pkg.bin, "coder-studio", "./dist/bin.js")) {
     throw new Error('CLI package.json bin must point "coder-studio" to "./dist/bin.js"');
   }
-  if (
-    !hasNestedRecordValue(pkg.exports, ".", "import", "./dist/esm/index.mjs")
-  ) {
+  if (!hasNestedRecordValue(pkg.exports, ".", "import", "./dist/esm/index.mjs")) {
     throw new Error('CLI package.json exports must point "." import to "./dist/esm/index.mjs"');
   }
 
@@ -160,7 +154,11 @@ export async function assertCliPublishArtifacts(
   await assertDirectoryHasFile(resolve(cliDir, "dist/esm/migrations"), ".sql");
   assertBundleRuntimeDependenciesDeclared(
     pkg.dependencies,
-    await collectBareImports(resolve(cliDir, "dist/esm"), ["bin.mjs", "index.mjs", "server-runner.mjs"]),
+    await collectBareImports(resolve(cliDir, "dist/esm"), [
+      "bin.mjs",
+      "index.mjs",
+      "server-runner.mjs",
+    ]),
     packageJsonPath
   );
 
@@ -345,7 +343,12 @@ function extractBareImports(content: string): string[] {
 
   for (const match of content.matchAll(importPattern)) {
     const specifier = match[1] ?? match[2];
-    if (!specifier || isNodeBuiltinImport(specifier) || specifier.startsWith(".") || specifier.startsWith("/")) {
+    if (
+      !specifier ||
+      isNodeBuiltinImport(specifier) ||
+      specifier.startsWith(".") ||
+      specifier.startsWith("/")
+    ) {
       continue;
     }
     specifiers.add(specifier);

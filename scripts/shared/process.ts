@@ -2,12 +2,12 @@
  * Process utilities for running child processes
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess, spawn } from "child_process";
 
 export interface ProcessOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  stdio?: 'inherit' | 'pipe' | 'ignore';
+  stdio?: "inherit" | "pipe" | "ignore";
 }
 
 /**
@@ -22,11 +22,11 @@ export function run(
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env ?? process.env,
-      stdio: options.stdio ?? 'inherit',
+      stdio: options.stdio ?? "inherit",
       shell: true,
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       if (code === 0) {
         resolve();
       } else {
@@ -34,7 +34,7 @@ export function run(
       }
     });
 
-    child.on('error', (err) => {
+    child.on("error", (err) => {
       reject(err);
     });
   });
@@ -51,7 +51,7 @@ export function runBackground(
   const child = spawn(command, args, {
     cwd: options.cwd,
     env: options.env ?? process.env,
-    stdio: options.stdio ?? 'inherit',
+    stdio: options.stdio ?? "inherit",
     shell: true,
   });
 
@@ -61,14 +61,12 @@ export function runBackground(
 /**
  * Wait for all child processes to exit
  */
-export async function waitForProcesses(
-  processes: ChildProcess[]
-): Promise<void> {
+export async function waitForProcesses(processes: ChildProcess[]): Promise<void> {
   await Promise.all(
     processes.map(
       (p) =>
         new Promise<void>((resolve) => {
-          p.on('close', () => resolve());
+          p.on("close", () => resolve());
         })
     )
   );

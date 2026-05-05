@@ -6,15 +6,15 @@
  * - desktop -> DesktopShell
  */
 
-import { BrowserRouter } from 'react-router-dom';
-import { DesktopShell } from './shells/desktop-shell';
-import { MobileShell } from './shells/mobile-shell';
-import { useViewport } from './hooks/use-viewport';
+import { BrowserRouter } from "react-router-dom";
+import { useViewport } from "./hooks/use-viewport";
+import { DesktopShell } from "./shells/desktop-shell";
+import { MobileShell } from "./shells/mobile-shell";
 
 function ShellSwitch() {
   const viewport = useViewport();
 
-  return viewport === 'mobile' ? <MobileShell /> : <DesktopShell />;
+  return viewport === "mobile" ? <MobileShell /> : <DesktopShell />;
 }
 
 function App() {

@@ -4,10 +4,10 @@
  * Shows WebSocket connection status in the topbar.
  */
 
-import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
-import { connectionStatusAtom } from '../../../atoms/connection';
-import { useTranslation } from '../../../lib/i18n';
+import { useAtomValue } from "jotai";
+import type { FC } from "react";
+import { connectionStatusAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
 
 /**
  * Connection Status Indicator
@@ -19,7 +19,7 @@ export const ConnectionStatus: FC = () => {
   const t = useTranslation();
   const status = useAtomValue(connectionStatusAtom);
 
-  if (status === 'connected') {
+  if (status === "connected") {
     return null;
   }
 

@@ -5,10 +5,10 @@
  * consumed by the ToastContainer component.
  */
 
-import { atom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
 
-export type ToastKind = 'success' | 'error' | 'warning' | 'info';
+export type ToastKind = "success" | "error" | "warning" | "info";
 
 export interface NotificationPreferences {
   enabled: boolean;
@@ -16,7 +16,7 @@ export interface NotificationPreferences {
 }
 
 export const notificationPreferencesAtom = atomWithStorage<NotificationPreferences>(
-  'ui.notificationPreferences',
+  "ui.notificationPreferences",
   {
     enabled: true,
     soundEnabled: true,
@@ -41,7 +41,7 @@ export interface Toast {
 export const toastsAtom = atom<Toast[]>([]);
 
 /** Push a toast */
-export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, 'id' | 'createdAt'>) => {
+export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, "id" | "createdAt">) => {
   const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const entry: Toast = { ...toast, id, createdAt: Date.now() };
   set(toastsAtom, (prev) => [...prev.slice(-4), entry]);
@@ -80,23 +80,21 @@ export const appendSessionOutputAtom = atom(
   null,
   (get, set, payload: { sessionId: string; text: string }) => {
     if (!payload.text) return;
-    const current = get(sessionOutputTailAtom)[payload.sessionId] ?? '';
+    const current = get(sessionOutputTailAtom)[payload.sessionId] ?? "";
     const merged = current + payload.text;
-    const trimmed = merged.length > SESSION_OUTPUT_TAIL_BYTES
-      ? merged.slice(merged.length - SESSION_OUTPUT_TAIL_BYTES)
-      : merged;
+    const trimmed =
+      merged.length > SESSION_OUTPUT_TAIL_BYTES
+        ? merged.slice(merged.length - SESSION_OUTPUT_TAIL_BYTES)
+        : merged;
     set(sessionOutputTailAtom, (prev) => ({ ...prev, [payload.sessionId]: trimmed }));
   }
 );
 
 /** Drop a session's tail buffer (call when the session is removed). */
-export const clearSessionOutputAtom = atom(
-  null,
-  (get, set, sessionId: string) => {
-    const current = get(sessionOutputTailAtom);
-    if (!(sessionId in current)) return;
-    const next = { ...current };
-    delete next[sessionId];
-    set(sessionOutputTailAtom, next);
-  }
-);
+export const clearSessionOutputAtom = atom(null, (get, set, sessionId: string) => {
+  const current = get(sessionOutputTailAtom);
+  if (!(sessionId in current)) return;
+  const next = { ...current };
+  delete next[sessionId];
+  set(sessionOutputTailAtom, next);
+});

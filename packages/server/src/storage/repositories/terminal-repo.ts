@@ -1,5 +1,5 @@
-import type { Database } from '../database.js';
-import type { Terminal } from '@coder-studio/core';
+import type { Terminal } from "@coder-studio/core";
+import type { Database } from "../database.js";
 
 /**
  * Database row representation for Terminal table
@@ -7,7 +7,7 @@ import type { Terminal } from '@coder-studio/core';
 export interface TerminalRow {
   id: string;
   workspace_id: string;
-  kind: 'agent' | 'shell';
+  kind: "agent" | "shell";
   cwd: string;
   argv: string; // JSON string
   env: string | null; // JSON string
@@ -25,7 +25,7 @@ export interface TerminalRow {
 export interface NewTerminal {
   id: string;
   workspaceId: string;
-  kind: 'agent' | 'shell';
+  kind: "agent" | "shell";
   cwd: string;
   argv: string[];
   env?: Record<string, string>;
@@ -46,16 +46,18 @@ export class TerminalRepo {
    */
   listByWorkspace(workspaceId: string): Terminal[] {
     const rows = this.db
-      .prepare('SELECT * FROM terminals WHERE workspace_id = ? ORDER BY created_at DESC')
+      .prepare("SELECT * FROM terminals WHERE workspace_id = ? ORDER BY created_at DESC")
       .all(workspaceId) as unknown as TerminalRow[];
-    return rows.map(row => this.rowToTerminal(row));
+    return rows.map((row) => this.rowToTerminal(row));
   }
 
   /**
    * Finds a terminal by ID
    */
   findById(id: string): Terminal | undefined {
-    const row = this.db.prepare('SELECT * FROM terminals WHERE id = ?').get(id) as TerminalRow | undefined;
+    const row = this.db.prepare("SELECT * FROM terminals WHERE id = ?").get(id) as
+      | TerminalRow
+      | undefined;
     return row ? this.rowToTerminal(row) : undefined;
   }
 
@@ -64,9 +66,11 @@ export class TerminalRepo {
    */
   listActiveByWorkspace(workspaceId: string): Terminal[] {
     const rows = this.db
-      .prepare('SELECT * FROM terminals WHERE workspace_id = ? AND ended_at IS NULL ORDER BY created_at DESC')
+      .prepare(
+        "SELECT * FROM terminals WHERE workspace_id = ? AND ended_at IS NULL ORDER BY created_at DESC"
+      )
       .all(workspaceId) as unknown as TerminalRow[];
-    return rows.map(row => this.rowToTerminal(row));
+    return rows.map((row) => this.rowToTerminal(row));
   }
 
   /**
@@ -98,7 +102,7 @@ export class TerminalRepo {
    * Marks a terminal as ended
    */
   markEnded(id: string, endedAt: number, exitCode: number): void {
-    const stmt = this.db.prepare('UPDATE terminals SET ended_at = ?, exit_code = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE terminals SET ended_at = ?, exit_code = ? WHERE id = ?");
     stmt.run(endedAt, exitCode, id);
   }
 
@@ -106,7 +110,7 @@ export class TerminalRepo {
    * Updates terminal dimensions
    */
   updateDimensions(id: string, cols: number, rows: number): void {
-    const stmt = this.db.prepare('UPDATE terminals SET cols = ?, rows = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE terminals SET cols = ?, rows = ? WHERE id = ?");
     stmt.run(cols, rows, id);
   }
 
@@ -114,7 +118,7 @@ export class TerminalRepo {
    * Updates terminal title
    */
   updateTitle(id: string, title: string): void {
-    const stmt = this.db.prepare('UPDATE terminals SET title = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE terminals SET title = ? WHERE id = ?");
     stmt.run(title, id);
   }
 
@@ -122,7 +126,7 @@ export class TerminalRepo {
    * Deletes a terminal by ID
    */
   delete(id: string): void {
-    const stmt = this.db.prepare('DELETE FROM terminals WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM terminals WHERE id = ?");
     stmt.run(id);
   }
 
@@ -142,7 +146,7 @@ export class TerminalRepo {
       createdAt: row.created_at,
       endedAt: row.ended_at ?? undefined,
       exitCode: row.exit_code ?? undefined,
-      title: row.title ?? '',
+      title: row.title ?? "",
       env: row.env ? (JSON.parse(row.env) as Record<string, string>) : undefined,
     };
   }

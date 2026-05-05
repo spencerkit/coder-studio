@@ -1,8 +1,8 @@
-import type { FastifyRequest } from 'fastify';
+import type { FastifyRequest } from "fastify";
 import {
-  AuthLoginBlockRepo,
   type AuthLoginBlockRecord,
-} from '../storage/repositories/auth-login-block-repo.js';
+  AuthLoginBlockRepo,
+} from "../storage/repositories/auth-login-block-repo.js";
 
 export const LOGIN_FAILURE_LIMIT = 10;
 export const LOGIN_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -21,15 +21,15 @@ function parseForwardedIp(rawHeader: string | string[] | undefined): string | nu
   }
 
   const clientIp = headerValue
-    .split(',')
+    .split(",")
     .map((entry) => entry.trim())
     .find(Boolean);
 
   return clientIp ?? null;
 }
 
-export function resolveClientIp(request: Pick<FastifyRequest, 'headers' | 'ip'>): string {
-  return parseForwardedIp(request.headers['x-forwarded-for']) ?? request.ip;
+export function resolveClientIp(request: Pick<FastifyRequest, "headers" | "ip">): string {
+  return parseForwardedIp(request.headers["x-forwarded-for"]) ?? request.ip;
 }
 
 export class AuthLoginProtection {

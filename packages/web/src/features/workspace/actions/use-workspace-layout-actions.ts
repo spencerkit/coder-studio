@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
-import { useAtom } from 'jotai';
-import { bottomPanelHeightAtom, leftPanelWidthAtom } from '../atoms';
+import { useAtom } from "jotai";
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef } from "react";
+import { bottomPanelHeightAtom, leftPanelWidthAtom } from "../atoms";
 
 const DEFAULT_LEFT_WIDTH = 280;
 const MIN_LEFT_WIDTH = 220;
@@ -43,12 +43,12 @@ export function useWorkspaceLayoutActions() {
 
       const onMouseUp = () => {
         leftMouseDown.current = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
       };
 
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     },
     [leftPanelWidth, setLeftPanelWidth]
   );
@@ -78,12 +78,12 @@ export function useWorkspaceLayoutActions() {
 
       const onMouseUp = () => {
         bottomMouseDown.current = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
       };
 
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     },
     [bottomPanelHeight, setBottomPanelHeight]
   );

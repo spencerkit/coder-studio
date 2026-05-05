@@ -1,16 +1,16 @@
-import { existsSync, readFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { parseArgs } from './parse-args.js';
-import { clearAuthBlockByIp, listAuthBlocks } from './auth-control.js';
-import { readCliConfig, writeCliConfig, type CliConfig } from './config-store.js';
-import { startManagedServer } from './pm2-control.js';
-import { getServerStatus, stopRunningServer, type ServerStatus } from './server-control.js';
-import { startServer } from './server-runner.js';
-import { openBrowser } from './browser.js';
-import { confirmYesNo, isInteractiveSession } from './prompts.js';
-import { getBrowserUrl, getListenIp, getListenUrl } from './server-url.js';
-import { assertSupportedNodeVersion } from './node-version.js';
+import { existsSync, readFileSync } from "fs";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
+import { clearAuthBlockByIp, listAuthBlocks } from "./auth-control.js";
+import { openBrowser } from "./browser.js";
+import { type CliConfig, readCliConfig, writeCliConfig } from "./config-store.js";
+import { assertSupportedNodeVersion } from "./node-version.js";
+import { parseArgs } from "./parse-args.js";
+import { startManagedServer } from "./pm2-control.js";
+import { confirmYesNo, isInteractiveSession } from "./prompts.js";
+import { getServerStatus, type ServerStatus, stopRunningServer } from "./server-control.js";
+import { startServer } from "./server-runner.js";
+import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 
 const MANAGED_SERVER_WAIT_MS = 5000;
 
@@ -19,23 +19,23 @@ function formatConfig(config: CliConfig | null): string {
 }
 
 function formatStatus(status: ServerStatus): string {
-  const listenUrl = getListenUrl(status) ?? 'n/a';
-  const browserUrl = getBrowserUrl(status) ?? 'n/a';
-  const startedAt = status.startedAt === null ? 'n/a' : new Date(status.startedAt).toISOString();
+  const listenUrl = getListenUrl(status) ?? "n/a";
+  const browserUrl = getBrowserUrl(status) ?? "n/a";
+  const startedAt = status.startedAt === null ? "n/a" : new Date(status.startedAt).toISOString();
 
   return [
     `Status: ${status.status}`,
-    `Listen host: ${status.host ?? 'n/a'}`,
-    `Listen IP: ${getListenIp(status) ?? 'n/a'}`,
-    `Port: ${status.port ?? 'n/a'}`,
+    `Listen host: ${status.host ?? "n/a"}`,
+    `Listen IP: ${getListenIp(status) ?? "n/a"}`,
+    `Port: ${status.port ?? "n/a"}`,
     `Listen URL: ${listenUrl}`,
     `Local URL: ${browserUrl}`,
-    `PID: ${status.pid ?? 'n/a'}`,
+    `PID: ${status.pid ?? "n/a"}`,
     `Started: ${startedAt}`,
     `Restarts: ${status.restartCount}`,
     `Out log: ${status.outFile}`,
     `Error log: ${status.errFile}`,
-  ].join('\n');
+  ].join("\n");
 }
 
 function showLogs(status: ServerStatus): void {
@@ -46,11 +46,11 @@ function showLogs(status: ServerStatus): void {
         return [];
       }
 
-      const content = readFileSync(path, 'utf-8').trim();
+      const content = readFileSync(path, "utf-8").trim();
       return content ? [content] : [];
     });
 
-  console.log(contents.length === 0 ? 'No logs available.' : contents.join('\n'));
+  console.log(contents.length === 0 ? "No logs available." : contents.join("\n"));
 }
 
 function showHelp(): void {
@@ -128,13 +128,13 @@ EXAMPLES:
 }
 
 function showVersion(): void {
-  const version = '0.0.1';
+  const version = "0.0.1";
   console.log(`@spencer-kit/coder-studio v${version}`);
 }
 
 function formatAuthBlocks(blocks: Awaited<ReturnType<typeof listAuthBlocks>>): string {
   if (blocks.length === 0) {
-    return 'No blocked IPs.';
+    return "No blocked IPs.";
   }
 
   return JSON.stringify(blocks, null, 2);
@@ -144,14 +144,14 @@ function resolveManagedScriptPath(): string {
   const currentFile = fileURLToPath(import.meta.url);
   const currentDir = dirname(currentFile);
   const candidates = [
-    join(currentDir, 'server-runner.js'),
-    join(currentDir, 'server-runner.mjs'),
-    join(currentDir, '../src/server-runner.ts'),
+    join(currentDir, "server-runner.js"),
+    join(currentDir, "server-runner.mjs"),
+    join(currentDir, "../src/server-runner.ts"),
   ];
 
   const scriptPath = candidates.find((candidate) => existsSync(candidate));
   if (!scriptPath) {
-    throw new Error('Unable to locate the managed server entry script');
+    throw new Error("Unable to locate the managed server entry script");
   }
 
   return scriptPath;
@@ -167,15 +167,15 @@ function isCliEntrypoint(): boolean {
   const entryScript = resolve(process.argv[1]);
   const entryCandidates = new Set([
     currentFile,
-    join(currentDir, '../bin.js'),
-    join(currentDir, '../dist/bin.js'),
+    join(currentDir, "../bin.js"),
+    join(currentDir, "../dist/bin.js"),
   ]);
 
   return entryCandidates.has(entryScript);
 }
 
 function isRunningStatus(status: ServerStatus): boolean {
-  return status.status === 'running' || status.status === 'starting';
+  return status.status === "running" || status.status === "starting";
 }
 
 interface ManagedStartupDecision {
@@ -184,7 +184,7 @@ interface ManagedStartupDecision {
 }
 
 async function shouldRestartRunningServer(status: ServerStatus): Promise<boolean> {
-  const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? 'the existing server';
+  const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? "the existing server";
 
   if (!isInteractiveSession()) {
     return false;
@@ -204,9 +204,11 @@ async function prepareManagedStartup(forceRestart = false): Promise<ManagedStart
 
   const restart = forceRestart ? true : await shouldRestartRunningServer(status);
   if (!restart) {
-    const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? 'n/a';
+    const currentUrl = getBrowserUrl(status) ?? getListenUrl(status) ?? "n/a";
     if (!isInteractiveSession()) {
-      console.log(`Coder Studio is already running at ${currentUrl}. Service already exists and was not restarted.`);
+      console.log(
+        `Coder Studio is already running at ${currentUrl}. Service already exists and was not restarted.`
+      );
     } else {
       console.log(`Leaving the existing Coder Studio server running at ${currentUrl}.`);
     }
@@ -216,7 +218,7 @@ async function prepareManagedStartup(forceRestart = false): Promise<ManagedStart
     };
   }
 
-  console.log('Restarting the managed Coder Studio server...');
+  console.log("Restarting the managed Coder Studio server...");
   return {
     existingStatus: null,
     restartRequested: true,
@@ -236,7 +238,7 @@ async function openManagedServerInBrowser(existingStatus?: ServerStatus | null):
   const browserUrl = getBrowserUrl(status);
 
   if (browserUrl === null) {
-    throw new Error('Unable to determine the running Coder Studio URL.');
+    throw new Error("Unable to determine the running Coder Studio URL.");
   }
 
   console.log(`Opening Coder Studio in your browser: ${browserUrl}`);
@@ -247,7 +249,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   assertSupportedNodeVersion();
   const args = parseArgs(argv);
 
-  if (args.command === 'config') {
+  if (args.command === "config") {
     if (args.configHelp) {
       showConfigHelp();
       return;
@@ -266,7 +268,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const savedConfig = readCliConfig();
     const nextConfig: CliConfig = {
       ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
-      ...(savedConfig?.port !== undefined && savedConfig.port > 0 ? { port: savedConfig.port } : {}),
+      ...(savedConfig?.port !== undefined && savedConfig.port > 0
+        ? { port: savedConfig.port }
+        : {}),
       ...(savedConfig?.dataDir !== undefined ? { dataDir: savedConfig.dataDir } : {}),
       ...(savedConfig?.password !== undefined ? { password: savedConfig.password } : {}),
       ...(args.host !== undefined ? { host: args.host } : {}),
@@ -279,46 +283,46 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  if (args.command === 'stop') {
+  if (args.command === "stop") {
     const stopped = await stopRunningServer();
-    console.log(stopped ? 'Stopped Coder Studio server.' : 'No running Coder Studio server found.');
+    console.log(stopped ? "Stopped Coder Studio server." : "No running Coder Studio server found.");
     return;
   }
 
-  if (args.command === 'status') {
+  if (args.command === "status") {
     console.log(formatStatus(await getServerStatus()));
     return;
   }
 
-  if (args.command === 'logs') {
+  if (args.command === "logs") {
     showLogs(await getServerStatus());
     return;
   }
 
-  if (args.command === 'help') {
+  if (args.command === "help") {
     showHelp();
     return;
   }
 
-  if (args.command === 'version') {
+  if (args.command === "version") {
     showVersion();
     return;
   }
 
-  if (args.command === 'auth') {
-    if (args.authCommand === 'ban-list') {
+  if (args.command === "auth") {
+    if (args.authCommand === "ban-list") {
       console.log(formatAuthBlocks(await listAuthBlocks()));
       return;
     }
 
-    if (args.authCommand === 'unblock') {
+    if (args.authCommand === "unblock") {
       const cleared = await clearAuthBlockByIp(args.ip!);
       console.log(cleared ? `Unblocked IP: ${args.ip}` : `No block found for IP: ${args.ip}`);
       return;
     }
   }
 
-  if (args.command === 'open') {
+  if (args.command === "open") {
     const startup = await prepareManagedStartup(args.restart);
     if (startup.existingStatus === null) {
       await startManagedServerFlow();
@@ -338,7 +342,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       await stopRunningServer();
     }
 
-    console.log('Starting Coder Studio Server in foreground...');
+    console.log("Starting Coder Studio Server in foreground...");
     await startServer();
     return;
   }
@@ -350,14 +354,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
   await startManagedServerFlow();
 
-  console.log('Coder Studio server started in background.');
-  console.log('Run `coder-studio status` to inspect the server.');
+  console.log("Coder Studio server started in background.");
+  console.log("Run `coder-studio status` to inspect the server.");
 }
 
 if (isCliEntrypoint()) {
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    console.error('CLI error:', message);
+    console.error("CLI error:", message);
     process.exit(1);
   });
 }

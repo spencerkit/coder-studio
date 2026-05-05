@@ -1,21 +1,18 @@
-import { mkdirSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-import {
-  deleteRuntimeConfig,
-  readRuntimeConfig,
-} from '@coder-studio/core/runtime';
+import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runtime";
+import { mkdirSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
-export const MANAGED_SERVER_NAME = 'coder-studio-server';
+export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
-const PM2_MIN_UPTIME = '5s';
+const PM2_MIN_UPTIME = "5s";
 const PM2_MAX_RESTARTS = 10;
 const STARTUP_POLL_INTERVAL_MS = 100;
 const STARTUP_FAILURE_GUIDANCE =
-  'Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging.';
+  "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging.";
 
 export interface ManagedServerStatus {
-  status: 'running' | 'starting' | 'stopped' | 'errored';
+  status: "running" | "starting" | "stopped" | "errored";
   pm2Pid: number | null;
   restartCount: number;
 }
@@ -50,8 +47,10 @@ const isPm2BrokenStateError = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
     return false;
   }
-  return error.message.includes('ProcessContainerFork') ||
-         (error.message.includes('Cannot find module') && error.message.includes('pm2'));
+  return (
+    error.message.includes("ProcessContainerFork") ||
+    (error.message.includes("Cannot find module") && error.message.includes("pm2"))
+  );
 };
 
 type Pm2Module = {
@@ -72,11 +71,11 @@ async function loadPm2(): Promise<Pm2Module> {
 
   let pm2Module: Pm2Module;
   try {
-    const pm2 = await import('pm2');
+    const pm2 = await import("pm2");
     pm2Module = pm2.default as Pm2Module;
-  } catch (error) {
+  } catch {
     throw new Error(
-      'pm2 is not installed. Run `npm install -g pm2` to use background server management.'
+      "pm2 is not installed. Run `npm install -g pm2` to use background server management."
     );
   }
 
@@ -104,9 +103,7 @@ const sleep = async (ms: number): Promise<void> =>
   });
 
 const createStartupError = (reason: string): Error =>
-  new Error(
-    `Coder Studio failed to start in background: ${reason}. ${STARTUP_FAILURE_GUIDANCE}`
-  );
+  new Error(`Coder Studio failed to start in background: ${reason}. ${STARTUP_FAILURE_GUIDANCE}`);
 
 const disconnectPm2 = async (): Promise<void> => {
   const pm2 = await loadPm2();
@@ -163,7 +160,7 @@ const connectWithRecovery = async (): Promise<void> => {
     await connectPm2();
   } catch (error) {
     if (isPm2BrokenStateError(error)) {
-      console.warn('PM2 daemon is in a stale state. Killing and reconnecting...');
+      console.warn("PM2 daemon is in a stale state. Killing and reconnecting...");
       try {
         await killPm2Daemon();
       } catch {
@@ -200,11 +197,11 @@ const waitForRuntimeReady = async (waitMs: number): Promise<void> => {
     const processes = await describeManagedServer();
     const process = processes[0];
     if (!process) {
-      throw createStartupError('the managed process exited before runtime data was written');
+      throw createStartupError("the managed process exited before runtime data was written");
     }
 
     const status = process.pm2_env?.status;
-    if (status === 'errored' || status === 'stopped') {
+    if (status === "errored" || status === "stopped") {
       throw createStartupError(`the managed process entered the ${status} state`);
     }
 
@@ -231,17 +228,19 @@ const waitForManagedServerExit = async (): Promise<void> => {
 };
 
 const ensureLogDirectory = (): void => {
-  mkdirSync(join(homedir(), '.coder-studio', 'logs'), { recursive: true });
+  mkdirSync(join(homedir(), ".coder-studio", "logs"), { recursive: true });
 };
 
 export const getLogPaths = () => ({
-  outFile: join(homedir(), '.coder-studio', 'logs', 'server.out.log'),
-  errFile: join(homedir(), '.coder-studio', 'logs', 'server.err.log'),
+  outFile: join(homedir(), ".coder-studio", "logs", "server.out.log"),
+  errFile: join(homedir(), ".coder-studio", "logs", "server.err.log"),
 });
 
-export const deleteManagedServer = async (
-  { ignoreMissing = false }: { ignoreMissing?: boolean } = {}
-): Promise<boolean> =>
+export const deleteManagedServer = async ({
+  ignoreMissing = false,
+}: {
+  ignoreMissing?: boolean;
+} = {}): Promise<boolean> =>
   withPm2Connection(async () => {
     const processes = await describeManagedServer();
     if (processes.length === 0) {
@@ -260,18 +259,23 @@ export const deleteManagedServer = async (
     }
   });
 
-export const startManagedServer = async ({ script, cwd, waitMs, args }: StartManagedServerOptions): Promise<void> => {
+export const startManagedServer = async ({
+  script,
+  cwd,
+  waitMs,
+  args,
+}: StartManagedServerOptions): Promise<void> => {
   // First try to delete any existing managed server
   await deleteManagedServer({ ignoreMissing: true });
-  
+
   // Wait for the old process to actually exit
   await withPm2Connection(waitForManagedServerExit);
-  
+
   // Clear stale runtime config
   if (readRuntimeConfig()) {
     deleteRuntimeConfig();
   }
-  
+
   ensureLogDirectory();
   const { outFile, errFile } = getLogPaths();
   const pm2 = await loadPm2();
@@ -286,7 +290,7 @@ export const startManagedServer = async ({ script, cwd, waitMs, args }: StartMan
           ...(args !== undefined ? { args } : {}),
           env: {
             ...process.env,
-            NODE_ENV: 'production',
+            NODE_ENV: "production",
           },
           autorestart: true,
           restart_delay: PM2_RESTART_DELAY_MS,
@@ -317,7 +321,7 @@ export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>
 
     if (!process) {
       return {
-        status: 'stopped',
+        status: "stopped",
         pm2Pid: null,
         restartCount: 0,
       };
@@ -327,32 +331,32 @@ export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>
     const restartCount = process.pm2_env?.restart_time ?? 0;
     const pm2Pid = process.pid ?? null;
 
-    if (status === 'online') {
+    if (status === "online") {
       return {
-        status: 'running',
+        status: "running",
         pm2Pid,
         restartCount,
       };
     }
 
-    if (status === 'launching') {
+    if (status === "launching") {
       return {
-        status: 'starting',
+        status: "starting",
         pm2Pid,
         restartCount,
       };
     }
 
-    if (status === 'stopped') {
+    if (status === "stopped") {
       return {
-        status: 'stopped',
+        status: "stopped",
         pm2Pid: null,
         restartCount,
       };
     }
 
     return {
-      status: 'errored',
+      status: "errored",
       pm2Pid,
       restartCount,
     };

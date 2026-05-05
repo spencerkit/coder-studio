@@ -1,13 +1,13 @@
-import type { Database } from '../database.js';
-import type { SupervisorCycle } from '@coder-studio/core';
+import type { SupervisorCycle } from "@coder-studio/core";
+import type { Database } from "../database.js";
 
 interface SupervisorCycleRow {
   id: string;
   supervisor_id: string;
   session_id: string;
-  status: SupervisorCycle['status'];
-  trigger: SupervisorCycle['trigger'];
-  evidence_source: SupervisorCycle['evidenceSource'];
+  status: SupervisorCycle["status"];
+  trigger: SupervisorCycle["trigger"];
+  evidence_source: SupervisorCycle["evidenceSource"];
   objective: string;
   evaluator_provider_id: string;
   turn_id: string | null;
@@ -20,7 +20,7 @@ interface SupervisorCycleRow {
 }
 
 export interface SupervisorCycleUpdatePatch {
-  status?: SupervisorCycle['status'];
+  status?: SupervisorCycle["status"];
   progress?: number | null;
   result?: string | null;
   injectedGuidance?: string | null;
@@ -32,39 +32,45 @@ export class SupervisorCycleRepo {
   constructor(private readonly db: Database) {}
 
   create(input: SupervisorCycle): SupervisorCycle {
-    this.db.prepare(
-      `INSERT INTO supervisor_cycles (id, supervisor_id, session_id, status, trigger, evidence_source, objective, evaluator_provider_id, turn_id, progress, result, injected_guidance, error_reason, created_at, completed_at)
+    this.db
+      .prepare(
+        `INSERT INTO supervisor_cycles (id, supervisor_id, session_id, status, trigger, evidence_source, objective, evaluator_provider_id, turn_id, progress, result, injected_guidance, error_reason, created_at, completed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      input.id,
-      input.supervisorId,
-      input.sessionId,
-      input.status,
-      input.trigger,
-      input.evidenceSource,
-      input.objective,
-      input.evaluatorProviderId,
-      input.turnId ?? null,
-      input.progress ?? null,
-      input.result ?? null,
-      input.injectedGuidance ?? null,
-      input.errorReason ?? null,
-      input.createdAt,
-      input.completedAt ?? null
-    );
+      )
+      .run(
+        input.id,
+        input.supervisorId,
+        input.sessionId,
+        input.status,
+        input.trigger,
+        input.evidenceSource,
+        input.objective,
+        input.evaluatorProviderId,
+        input.turnId ?? null,
+        input.progress ?? null,
+        input.result ?? null,
+        input.injectedGuidance ?? null,
+        input.errorReason ?? null,
+        input.createdAt,
+        input.completedAt ?? null
+      );
 
     return this.findById(input.id)!;
   }
 
   findById(id: string): SupervisorCycle | undefined {
-    const row = this.db.prepare('SELECT * FROM supervisor_cycles WHERE id = ?').get(id) as SupervisorCycleRow | undefined;
+    const row = this.db.prepare("SELECT * FROM supervisor_cycles WHERE id = ?").get(id) as
+      | SupervisorCycleRow
+      | undefined;
     return row ? this.rowToCycle(row) : undefined;
   }
 
   listRecentForSupervisor(supervisorId: string, limit: number): SupervisorCycle[] {
-    const rows = this.db.prepare(
-      'SELECT * FROM supervisor_cycles WHERE supervisor_id = ? ORDER BY created_at DESC LIMIT ?'
-    ).all(supervisorId, limit) as unknown as SupervisorCycleRow[];
+    const rows = this.db
+      .prepare(
+        "SELECT * FROM supervisor_cycles WHERE supervisor_id = ? ORDER BY created_at DESC LIMIT ?"
+      )
+      .all(supervisorId, limit) as unknown as SupervisorCycleRow[];
     return rows.map((row) => this.rowToCycle(row));
   }
 
@@ -73,27 +79,27 @@ export class SupervisorCycleRepo {
     const params: Record<string, number | string | null> = { id };
 
     if (patch.status !== undefined) {
-      assignments.push('status = @status');
+      assignments.push("status = @status");
       params.status = patch.status;
     }
     if (patch.progress !== undefined) {
-      assignments.push('progress = @progress');
+      assignments.push("progress = @progress");
       params.progress = patch.progress;
     }
     if (patch.result !== undefined) {
-      assignments.push('result = @result');
+      assignments.push("result = @result");
       params.result = patch.result;
     }
     if (patch.injectedGuidance !== undefined) {
-      assignments.push('injected_guidance = @injectedGuidance');
+      assignments.push("injected_guidance = @injectedGuidance");
       params.injectedGuidance = patch.injectedGuidance;
     }
     if (patch.errorReason !== undefined) {
-      assignments.push('error_reason = @errorReason');
+      assignments.push("error_reason = @errorReason");
       params.errorReason = patch.errorReason;
     }
     if (patch.completedAt !== undefined) {
-      assignments.push('completed_at = @completedAt');
+      assignments.push("completed_at = @completedAt");
       params.completedAt = patch.completedAt;
     }
 
@@ -105,7 +111,9 @@ export class SupervisorCycleRepo {
       return existing;
     }
 
-    const result = this.db.prepare(`UPDATE supervisor_cycles SET ${assignments.join(', ')} WHERE id = @id`).run(params);
+    const result = this.db
+      .prepare(`UPDATE supervisor_cycles SET ${assignments.join(", ")} WHERE id = @id`)
+      .run(params);
 
     if (result.changes === 0) {
       throw new Error(`Supervisor cycle not found: ${id}`);
@@ -115,15 +123,17 @@ export class SupervisorCycleRepo {
   }
 
   pruneOldest(supervisorId: string, keep: number): void {
-    this.db.prepare(
-      `DELETE FROM supervisor_cycles
+    this.db
+      .prepare(
+        `DELETE FROM supervisor_cycles
        WHERE id IN (
          SELECT id FROM supervisor_cycles
          WHERE supervisor_id = ?
          ORDER BY created_at DESC
          LIMIT -1 OFFSET ?
        )`
-    ).run(supervisorId, keep);
+      )
+      .run(supervisorId, keep);
   }
 
   private rowToCycle(row: SupervisorCycleRow): SupervisorCycle {

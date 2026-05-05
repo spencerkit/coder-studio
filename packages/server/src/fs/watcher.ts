@@ -3,10 +3,10 @@
  * Uses .gitignore for ignore rules.
  */
 
-import { Topics } from '@coder-studio/core';
-import type { FSWatcher } from 'chokidar';
-import chokidar from 'chokidar';
-import { createWatcherIgnoreFilter } from './gitignore.js';
+import { Topics } from "@coder-studio/core";
+import type { FSWatcher } from "chokidar";
+import chokidar from "chokidar";
+import { createWatcherIgnoreFilter } from "./gitignore.js";
 
 export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
@@ -21,7 +21,7 @@ export class WorkspaceWatcher {
   private chokidar: FSWatcher;
   private dirtyTimer: NodeJS.Timeout | null = null;
   private firstDirtyTime: number | null = null;
-  private pendingReason: 'fs_change' | 'git_metadata' | null = null;
+  private pendingReason: "fs_change" | "git_metadata" | null = null;
   private readonly DEBOUNCE_MS = 200;
   private readonly MAX_WAIT_MS = 1_000;
 
@@ -38,7 +38,7 @@ export class WorkspaceWatcher {
       persistent: true,
     });
 
-    this.chokidar.on('all', (_eventName, changedPath) => this.markDirty(changedPath));
+    this.chokidar.on("all", (_eventName, changedPath) => this.markDirty(changedPath));
   }
 
   /**
@@ -53,11 +53,11 @@ export class WorkspaceWatcher {
     }
 
     if (changedPath && !this.isGitMetadataPath(changedPath)) {
-      this.pendingReason = 'fs_change';
-    } else if (changedPath && this.pendingReason !== 'fs_change') {
-      this.pendingReason = 'git_metadata';
+      this.pendingReason = "fs_change";
+    } else if (changedPath && this.pendingReason !== "fs_change") {
+      this.pendingReason = "git_metadata";
     } else if (this.pendingReason === null) {
-      this.pendingReason = 'fs_change';
+      this.pendingReason = "fs_change";
     }
 
     const elapsed = now - this.firstDirtyTime;
@@ -72,7 +72,7 @@ export class WorkspaceWatcher {
 
   private flushDirty(): void {
     this.broadcaster?.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-      reason: this.pendingReason ?? 'fs_change',
+      reason: this.pendingReason ?? "fs_change",
     });
     this.dirtyTimer = null;
     this.firstDirtyTime = null;
@@ -80,7 +80,7 @@ export class WorkspaceWatcher {
   }
 
   private isGitMetadataPath(changedPath: string): boolean {
-    return changedPath.replace(/\\/g, '/').includes('/.git/');
+    return changedPath.replace(/\\/g, "/").includes("/.git/");
   }
 
   /**

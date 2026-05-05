@@ -1,18 +1,18 @@
-import type { FC } from 'react';
-import { useSetAtom } from 'jotai';
-import { FilePlus, FolderPlus, GitBranch, RefreshCw } from 'lucide-react';
-import { useTranslation } from '../../../../lib/i18n';
-import { AgentPanes } from '../../../agent-panes';
-import { CodeEditorHost } from '../../../code-editor/views/shared/code-editor-host';
-import { TerminalPanel } from '../../../terminal-panel';
-import { TopBar } from '../../../topbar';
-import { activeFilePathAtomFamily } from '../../atoms';
-import { useGitDiffViewerActions } from '../../actions/use-git-actions';
-import { useWorkspaceScreenModel } from '../../actions/use-workspace-screen-model';
-import { FileTreePanel } from '../shared/file-tree-panel';
-import { GitDiffViewer } from '../shared/git-diff-viewer';
-import { GitPanel } from '../shared/git-panel';
-import { GitStatusBar } from '../shared/git-status-bar';
+import { useSetAtom } from "jotai";
+import { FilePlus, FolderPlus, GitBranch, RefreshCw } from "lucide-react";
+import type { FC } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { AgentPanes } from "../../../agent-panes";
+import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
+import { TerminalPanel } from "../../../terminal-panel";
+import { TopBar } from "../../../topbar";
+import { useGitDiffViewerActions } from "../../actions/use-git-actions";
+import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
+import { activeFilePathAtomFamily } from "../../atoms";
+import { FileTreePanel } from "../shared/file-tree-panel";
+import { GitDiffViewer } from "../shared/git-diff-viewer";
+import { GitPanel } from "../shared/git-panel";
+import { GitStatusBar } from "../shared/git-status-bar";
 
 export const WorkspaceDesktopView: FC = () => {
   const t = useTranslation();
@@ -46,16 +46,16 @@ export const WorkspaceDesktopView: FC = () => {
       <div className="workspace-page workspace-page-empty">
         <div className="workspace-empty-content">
           <div className="workspace-empty-inner">
-            <p>{t('workspace.no_workspace')}</p>
+            <p>{t("workspace.no_workspace")}</p>
           </div>
         </div>
       </div>
     );
   }
 
-  const panelKicker = sidebarTab === 'files' ? t('label.file') : t('label.git');
-  const panelBranch = gitState?.branch ?? '—';
-  const activeTabLabel = sidebarTab === 'files' ? 'file tree' : 'git';
+  const panelKicker = sidebarTab === "files" ? t("label.file") : t("label.git");
+  const panelBranch = gitState?.branch ?? "—";
+  const activeTabLabel = sidebarTab === "files" ? "file tree" : "git";
   const handleCloseDiff = () => {
     closePreview();
     setActiveFilePath(null);
@@ -84,36 +84,36 @@ export const WorkspaceDesktopView: FC = () => {
                   <div className="panel-tabs-row">
                     <div className="panel-tabs">
                       <button
-                        className={`panel-tab ${sidebarTab === 'files' ? 'active' : ''}`}
-                        onClick={() => setSidebarTab('files')}
+                        className={`panel-tab ${sidebarTab === "files" ? "active" : ""}`}
+                        onClick={() => setSidebarTab("files")}
                       >
                         Files
                       </button>
                       <button
-                        className={`panel-tab ${sidebarTab === 'git' ? 'active' : ''}`}
-                        onClick={() => setSidebarTab('git')}
+                        className={`panel-tab ${sidebarTab === "git" ? "active" : ""}`}
+                        onClick={() => setSidebarTab("git")}
                       >
-                        {t('label.git')}
+                        {t("label.git")}
                       </button>
                     </div>
                     <GitStatusBar workspaceId={workspace.id} gitState={gitState} inline />
                   </div>
                 </div>
 
-                {sidebarTab === 'files' ? (
+                {sidebarTab === "files" ? (
                   <div className="panel-toolbar">
                     <button
                       className="panel-toolbar-btn"
-                      title={t('file.new_file')}
-                      aria-label={t('file.new_file')}
+                      title={t("file.new_file")}
+                      aria-label={t("file.new_file")}
                       onClick={handleOpenFileCreate}
                     >
                       <FilePlus size={14} />
                     </button>
                     <button
                       className="panel-toolbar-btn"
-                      title={t('file.new_folder')}
-                      aria-label={t('file.new_folder')}
+                      title={t("file.new_folder")}
+                      aria-label={t("file.new_folder")}
                       onClick={handleOpenFolderCreate}
                     >
                       <FolderPlus size={14} />
@@ -130,7 +130,7 @@ export const WorkspaceDesktopView: FC = () => {
                 ) : null}
 
                 <div className="panel-body">
-                  {sidebarTab === 'files' ? (
+                  {sidebarTab === "files" ? (
                     <FileTreePanel
                       workspaceId={workspace.id}
                       refreshToken={panelRefreshToken}
@@ -155,9 +155,9 @@ export const WorkspaceDesktopView: FC = () => {
         )}
 
         <div className="workspace-main-area">
-          {mainAreaMode === 'diff' ? (
+          {mainAreaMode === "diff" ? (
             <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
-          ) : mainAreaMode === 'editor' ? (
+          ) : mainAreaMode === "editor" ? (
             <CodeEditorHost />
           ) : (
             <div className="agent-panes">

@@ -7,16 +7,16 @@
  * - Respects notification settings from Settings → General
  */
 
-export { useSessionNotifications } from './use-session-notifications';
-export { ToastContainer } from './toast-container';
-export { focusSession, type FocusSessionOptions } from './focus-session';
 export {
-  toastsAtom,
-  pushToastAtom,
-  dismissToastAtom,
-  sessionOutputTailAtom,
   appendSessionOutputAtom,
   clearSessionOutputAtom,
+  dismissToastAtom,
+  pushToastAtom,
+  sessionOutputTailAtom,
   type Toast,
   type ToastKind,
-} from './atoms';
+  toastsAtom,
+} from "./atoms";
+export { type FocusSessionOptions, focusSession } from "./focus-session";
+export { ToastContainer } from "./toast-container";
+export { useSessionNotifications } from "./use-session-notifications";

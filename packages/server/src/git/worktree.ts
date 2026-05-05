@@ -4,19 +4,16 @@
  * Wrapper around git worktree commands.
  */
 
-import path from 'node:path';
-import { runGit, GitError } from './cli.js';
-import type { GitStatus, FileNode, WorktreeInfo } from '@coder-studio/core';
-import { parseStatus } from './status-parser.js';
+import path from "node:path";
+import type { FileNode, GitStatus, WorktreeInfo } from "@coder-studio/core";
+import { GitError, runGit } from "./cli.js";
+import { parseStatus } from "./status-parser.js";
 
 function normalizeWorktreePath(worktreePath: string): string {
   return path.resolve(worktreePath);
 }
 
-export async function resolveWorktreePath(
-  repoPath: string,
-  worktreePath: string
-): Promise<string> {
+export async function resolveWorktreePath(repoPath: string, worktreePath: string): Promise<string> {
   const normalizedRequested = normalizeWorktreePath(worktreePath);
   const worktrees = await listWorktrees(repoPath);
   const matched = worktrees.find(
@@ -25,7 +22,7 @@ export async function resolveWorktreePath(
 
   if (!matched) {
     throw {
-      code: 'worktree_not_found',
+      code: "worktree_not_found",
       message: `Worktree not found for repository: ${worktreePath}`,
     };
   }
@@ -41,28 +38,28 @@ export async function resolveWorktreePath(
  */
 export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
   try {
-    const { stdout } = await runGit(repoPath, ['worktree', 'list', '--porcelain']);
+    const { stdout } = await runGit(repoPath, ["worktree", "list", "--porcelain"]);
 
     const worktrees: WorktreeInfo[] = [];
-    const lines = stdout.split('\n');
+    const lines = stdout.split("\n");
 
     let current: Partial<WorktreeInfo> = {};
 
     for (const line of lines) {
-      if (line.startsWith('worktree ')) {
+      if (line.startsWith("worktree ")) {
         if (current.path) {
           worktrees.push(current as WorktreeInfo);
         }
         current = { path: line.substring(9) };
-      } else if (line.startsWith('HEAD ')) {
+      } else if (line.startsWith("HEAD ")) {
         current.commit = line.substring(5).substring(0, 7);
-      } else if (line.startsWith('branch ')) {
+      } else if (line.startsWith("branch ")) {
         const branch = line.substring(7);
         current.branch = branch;
-        current.name = branch.split('/').pop() || branch;
-      } else if (line === 'detached') {
-        current.branch = 'detached HEAD';
-      } else if (line === '') {
+        current.name = branch.split("/").pop() || branch;
+      } else if (line === "detached") {
+        current.branch = "detached HEAD";
+      } else if (line === "") {
         // Empty line might indicate end of record
         if (current.path) {
           // Check if dirty by running status
@@ -86,10 +83,10 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
           status.modified.length > 0 ||
           status.untracked.length > 0 ||
           status.deleted.length > 0
-            ? 'dirty'
-            : 'clean';
+            ? "dirty"
+            : "clean";
       } catch {
-        wt.status = 'clean';
+        wt.status = "clean";
       }
     }
 
@@ -110,11 +107,11 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
  */
 export async function getWorktreeStatus(worktreePath: string): Promise<GitStatus> {
   const { stdout } = await runGit(worktreePath, [
-    'status',
-    '--porcelain=v2',
-    '-z',
-    '--branch',
-    '--untracked-files=all',
+    "status",
+    "--porcelain=v2",
+    "-z",
+    "--branch",
+    "--untracked-files=all",
   ]);
   return parseStatus(stdout);
 }
@@ -127,9 +124,9 @@ export async function getWorktreeStatus(worktreePath: string): Promise<GitStatus
  * @returns Diff output as string
  */
 export async function getWorktreeDiff(worktreePath: string, staged = false): Promise<string> {
-  const args = ['diff'];
+  const args = ["diff"];
   if (staged) {
-    args.push('--staged');
+    args.push("--staged");
   }
   const { stdout } = await runGit(worktreePath, args);
   return stdout;
@@ -143,20 +140,20 @@ export async function getWorktreeDiff(worktreePath: string, staged = false): Pro
  * @returns File tree structure
  */
 export async function getWorktreeTree(worktreePath: string): Promise<FileNode[]> {
-  const { stdout } = await runGit(worktreePath, ['ls-tree', '-l', '--name-only', 'HEAD']);
+  const { stdout } = await runGit(worktreePath, ["ls-tree", "-l", "--name-only", "HEAD"]);
 
   const nodes: FileNode[] = [];
-  const lines = stdout.split('\n').filter(Boolean);
+  const lines = stdout.split("\n").filter(Boolean);
 
   for (const line of lines) {
-    const isDir = line.endsWith('/');
+    const isDir = line.endsWith("/");
     const name = isDir ? line.slice(0, -1) : line;
     const path = `${worktreePath}/${name}`;
 
     nodes.push({
       name,
       path,
-      kind: isDir ? 'dir' : 'file',
+      kind: isDir ? "dir" : "file",
     });
   }
 
@@ -176,13 +173,13 @@ export async function createWorktree(
   branch: string,
   path: string
 ): Promise<WorktreeInfo> {
-  await runGit(repoPath, ['worktree', 'add', path, branch]);
+  await runGit(repoPath, ["worktree", "add", path, branch]);
 
   const worktrees = await listWorktrees(repoPath);
   const created = worktrees.find((wt) => wt.path === path);
 
   if (!created) {
-    throw new Error('Failed to find created worktree');
+    throw new Error("Failed to find created worktree");
   }
 
   return created;
@@ -200,9 +197,9 @@ export async function removeWorktree(
   worktreePath: string,
   force = false
 ): Promise<void> {
-  const args = ['worktree', 'remove', worktreePath];
+  const args = ["worktree", "remove", worktreePath];
   if (force) {
-    args.push('--force');
+    args.push("--force");
   }
   await runGit(repoPath, args);
 }

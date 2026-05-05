@@ -1,6 +1,8 @@
-import { useCallback } from 'react';
-import { useSetAtom, useStore } from 'jotai';
-import { paneLayoutAtomFamily } from '../atoms/pane-layout';
+import { useSetAtom, useStore } from "jotai";
+import { useCallback } from "react";
+import { useWorkspaceUiStatePersistence } from "../../workspace/actions/use-workspace-ui-state-persistence";
+import type { PaneNode } from "../atoms/pane-layout";
+import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import {
   appendSessionToLayout,
   assignSessionToPane,
@@ -8,9 +10,7 @@ import {
   closePaneBySessionId,
   splitPaneByPaneId,
   splitPaneBySessionId,
-} from '../pane-layout-tree';
-import { useWorkspaceUiStatePersistence } from '../../workspace/actions/use-workspace-ui-state-persistence';
-import type { PaneNode } from '../atoms/pane-layout';
+} from "../pane-layout-tree";
 
 export function usePaneActions(workspaceId: string) {
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
@@ -20,7 +20,7 @@ export function usePaneActions(workspaceId: string) {
   const applyLayout = useCallback(
     (update: PaneNode | ((current: PaneNode) => PaneNode)) => {
       const current = store.get(paneLayoutAtomFamily(workspaceId));
-      const next = typeof update === 'function' ? update(current) : update;
+      const next = typeof update === "function" ? update(current) : update;
       setPaneLayout(next);
       void persistUiState({ paneLayout: next });
       return next;
@@ -29,14 +29,14 @@ export function usePaneActions(workspaceId: string) {
   );
 
   const splitSessionPane = useCallback(
-    (sessionId: string, direction: 'horizontal' | 'vertical') => {
+    (sessionId: string, direction: "horizontal" | "vertical") => {
       applyLayout((current) => splitPaneBySessionId(current, sessionId, direction));
     },
     [applyLayout]
   );
 
   const splitDraftPane = useCallback(
-    (paneId: string, direction: 'horizontal' | 'vertical') => {
+    (paneId: string, direction: "horizontal" | "vertical") => {
       applyLayout((current) => splitPaneByPaneId(current, paneId, direction));
     },
     [applyLayout]
@@ -66,8 +66,8 @@ export function usePaneActions(workspaceId: string) {
   const replaceWithSession = useCallback(
     (sessionId: string) => {
       applyLayout({
-        id: 'root',
-        type: 'leaf',
+        id: "root",
+        type: "leaf",
         sessionId,
       });
     },
@@ -78,9 +78,11 @@ export function usePaneActions(workspaceId: string) {
     (
       sessionId: string,
       anchorSessionId?: string | null,
-      direction: 'horizontal' | 'vertical' = 'horizontal'
+      direction: "horizontal" | "vertical" = "horizontal"
     ) => {
-      applyLayout((current) => appendSessionToLayout(current, sessionId, anchorSessionId, direction));
+      applyLayout((current) =>
+        appendSessionToLayout(current, sessionId, anchorSessionId, direction)
+      );
     },
     [applyLayout]
   );

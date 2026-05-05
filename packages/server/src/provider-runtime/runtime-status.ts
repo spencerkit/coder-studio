@@ -1,12 +1,9 @@
-import type {
-  ProviderDefinition,
-  ProviderRuntimeStatusResponse,
-} from '@coder-studio/core';
+import type { ProviderDefinition, ProviderRuntimeStatusResponse } from "@coder-studio/core";
 import {
-  checkCommandAvailable,
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
-} from './command-check.js';
+  checkCommandAvailable,
+} from "./command-check.js";
 
 export interface RuntimeStatusDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
@@ -17,7 +14,7 @@ function canAutoInstall(
   platform: NodeJS.Platform,
   missingCommands: string[],
   missingPrerequisites: string[],
-  availableCommands: Set<string>,
+  availableCommands: Set<string>
 ): boolean {
   const strategies = provider.install.strategies[platform] ?? [];
   const remainingCommands = new Set(missingCommands);
@@ -30,11 +27,11 @@ function canAutoInstall(
 
     for (const strategy of strategies) {
       const requiresMet = strategy.requiresCommands.every((command) =>
-        reachableCommands.has(command),
+        reachableCommands.has(command)
       );
 
       if (
-        strategy.kind === 'prerequisite' &&
+        strategy.kind === "prerequisite" &&
         remainingPrerequisites.has(strategy.targetCommand) &&
         requiresMet
       ) {
@@ -45,7 +42,7 @@ function canAutoInstall(
       }
 
       if (
-        strategy.kind === 'provider' &&
+        strategy.kind === "provider" &&
         remainingCommands.has(strategy.targetCommand) &&
         requiresMet
       ) {
@@ -61,7 +58,7 @@ function canAutoInstall(
 
 export async function buildProviderRuntimeStatus(
   providers: ProviderDefinition[],
-  deps: RuntimeStatusDeps = {},
+  deps: RuntimeStatusDeps = {}
 ): Promise<ProviderRuntimeStatusResponse> {
   const platform = deps.platform ?? process.platform;
   const commandExists =
@@ -111,7 +108,7 @@ export async function buildProviderRuntimeStatus(
       platform,
       missingCommands,
       missingPrerequisites,
-      availableCommands,
+      availableCommands
     );
     const available = missingCommands.length === 0;
 
@@ -122,12 +119,12 @@ export async function buildProviderRuntimeStatus(
       missingPrerequisites,
       autoInstallSupported,
       installReadiness: available
-        ? 'ready'
+        ? "ready"
         : autoInstallSupported
           ? missingPrerequisites.length === 0
-            ? 'ready'
-            : 'missing_prerequisite'
-          : 'unsupported_platform',
+            ? "ready"
+            : "missing_prerequisite"
+          : "unsupported_platform",
       manualGuideKeys: provider.install.manualGuideKeys,
       docUrls: provider.install.docUrls,
     };

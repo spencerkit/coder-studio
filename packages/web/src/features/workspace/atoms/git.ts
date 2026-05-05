@@ -4,9 +4,9 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
-import type { GitBranch, GitStatus } from '@coder-studio/core';
+import type { GitBranch, GitStatus } from "@coder-studio/core";
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
 
 /**
  * Git branch list state per workspace
@@ -32,9 +32,7 @@ export interface BranchQuickPickState {
  * Git state by workspace (server state projection)
  * Written by: WS event handler for workspace.*.git.state
  */
-export const gitStateAtomFamily = atomFamily((workspaceId: string) =>
-  atom<GitStatus | null>(null)
-);
+export const gitStateAtomFamily = atomFamily((workspaceId: string) => atom<GitStatus | null>(null));
 
 export interface GitDiffPreview {
   path: string;
@@ -46,9 +44,7 @@ export const gitDiffPreviewAtomFamily = atomFamily((workspaceId: string) =>
   atom<GitDiffPreview | null>(null)
 );
 
-export const gitDiffPreviewDismissedAtomFamily = atomFamily((workspaceId: string) =>
-  atom(false)
-);
+export const gitDiffPreviewDismissedAtomFamily = atomFamily((workspaceId: string) => atom(false));
 
 /**
  * Has changes (derived)
@@ -92,7 +88,7 @@ export const gitChangeCountAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const gitBranchListAtomFamily = atomFamily((workspaceId: string) =>
   atom<GitBranchList>({
-    current: '',
+    current: "",
     branches: [],
     loading: false,
   })
@@ -103,5 +99,5 @@ export const gitBranchListAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const branchQuickPickAtom = atom<BranchQuickPickState>({
   visible: false,
-  inputValue: '',
+  inputValue: "",
 });

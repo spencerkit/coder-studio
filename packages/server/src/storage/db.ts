@@ -1,7 +1,7 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { DatabaseSync } from 'node:sqlite';
-import { withTransaction, type Database } from './database.js';
+import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { type Database, withTransaction } from "./database.js";
 
 interface IntegrityCheckRow {
   integrity_check: string;
@@ -29,14 +29,14 @@ interface SchemaEntry {
   sql: string;
 }
 
-const SCHEMA_PATH = join(import.meta.dirname, 'migrations', '001_init.sql');
-const SCHEMA_SQL = readFileSync(SCHEMA_PATH, 'utf-8');
+const SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sql");
+const SCHEMA_SQL = readFileSync(SCHEMA_PATH, "utf-8");
 
-const LEGACY_TABLES = ['hook_registrations', '_migrations'] as const;
-const LEGACY_SESSION_COLUMNS = ['resume_id', 'transcript_path'] as const;
+const LEGACY_TABLES = ["hook_registrations", "_migrations"] as const;
+const LEGACY_SESSION_COLUMNS = ["resume_id", "transcript_path"] as const;
 
 function normalizeSql(sql: string | null): string {
-  return (sql ?? '').replace(/\s+/g, ' ').trim();
+  return (sql ?? "").replace(/\s+/g, " ").trim();
 }
 
 function listSchemaEntries(db: Database): SchemaEntry[] {
@@ -61,7 +61,7 @@ function listSchemaEntries(db: Database): SchemaEntry[] {
 }
 
 function buildExpectedSchemaEntries(): SchemaEntry[] {
-  const db = new DatabaseSync(':memory:');
+  const db = new DatabaseSync(":memory:");
   try {
     db.exec(SCHEMA_SQL);
     return listSchemaEntries(db);
@@ -73,18 +73,18 @@ function buildExpectedSchemaEntries(): SchemaEntry[] {
 const EXPECTED_SCHEMA_ENTRIES = buildExpectedSchemaEntries();
 
 function hasTable(db: Database, tableName: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tableName) as
-    | TableNameRow
-    | undefined;
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+    .get(tableName) as TableNameRow | undefined;
   return row?.name === tableName;
 }
 
 function getSessionColumns(db: Database): Set<string> {
-  if (!hasTable(db, 'sessions')) {
+  if (!hasTable(db, "sessions")) {
     return new Set();
   }
 
-  const rows = db.prepare('PRAGMA table_info(sessions)').all() as unknown as ColumnInfoRow[];
+  const rows = db.prepare("PRAGMA table_info(sessions)").all() as unknown as ColumnInfoRow[];
   return new Set(rows.map((row) => row.name));
 }
 
@@ -122,8 +122,8 @@ function assertNoLegacySchema(db: Database, dbPath: string): void {
   }
 
   throw new Error(
-    `Legacy database schema detected at ${dbPath}: ${reasons.join(', ')}. ` +
-      'This build no longer supports automatic database upgrades. Delete the local database file and restart.'
+    `Legacy database schema detected at ${dbPath}: ${reasons.join(", ")}. ` +
+      "This build no longer supports automatic database upgrades. Delete the local database file and restart."
   );
 }
 
@@ -137,7 +137,7 @@ function describeSchemaMismatch(expected: SchemaEntry[], actual: SchemaEntry[]):
     const actualEntry = actualByName.get(key);
 
     if (!expectedEntry) {
-      return `unexpected ${actualEntry?.type ?? 'schema object'} ${actualEntry?.name ?? key}`;
+      return `unexpected ${actualEntry?.type ?? "schema object"} ${actualEntry?.name ?? key}`;
     }
 
     if (!actualEntry) {
@@ -149,7 +149,7 @@ function describeSchemaMismatch(expected: SchemaEntry[], actual: SchemaEntry[]):
     }
   }
 
-  return 'unknown schema drift';
+  return "unknown schema drift";
 }
 
 function assertSchemaMatchesBaseline(db: Database, dbPath: string): void {
@@ -167,7 +167,7 @@ function assertSchemaMatchesBaseline(db: Database, dbPath: string): void {
   const mismatch = describeSchemaMismatch(EXPECTED_SCHEMA_ENTRIES, actualEntries);
   throw new Error(
     `Database schema mismatch detected at ${dbPath}: ${mismatch}. ` +
-      'This build requires the current baseline schema. Delete the local database file and restart.'
+      "This build requires the current baseline schema. Delete the local database file and restart."
   );
 }
 
@@ -200,11 +200,13 @@ export function openDatabase(dbPath: string): Database {
   const db = new DatabaseSync(dbPath);
 
   try {
-    db.exec('PRAGMA journal_mode = WAL');
-    db.exec('PRAGMA foreign_keys = ON');
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA foreign_keys = ON");
 
-    const integrityResult = db.prepare('PRAGMA integrity_check').all() as unknown as IntegrityCheckRow[];
-    if (integrityResult[0]?.integrity_check !== 'ok') {
+    const integrityResult = db
+      .prepare("PRAGMA integrity_check")
+      .all() as unknown as IntegrityCheckRow[];
+    if (integrityResult[0]?.integrity_check !== "ok") {
       throw new Error(`Database integrity check failed: ${JSON.stringify(integrityResult)}`);
     }
 
@@ -229,7 +231,7 @@ export function openDatabase(dbPath: string): Database {
  * databases explicitly before wiring command handlers.
  */
 export function runMigrations(db: Database): void {
-  initializeOrValidateSchema(db, ':memory:');
+  initializeOrValidateSchema(db, ":memory:");
 }
 
 /**

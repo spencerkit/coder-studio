@@ -1,7 +1,7 @@
-import { useAtomValue } from 'jotai';
-import { useCallback, useState } from 'react';
-import { fencingStateAtom } from '../../../../atoms/fencing';
-import { useFencing } from '../../../../hooks/use-fencing';
+import { useAtomValue } from "jotai";
+import { useCallback, useState } from "react";
+import { fencingStateAtom } from "../../../../atoms/fencing";
+import { useFencing } from "../../../../hooks/use-fencing";
 
 interface ObserverBannerProps {
   workspaceId: string;
@@ -31,7 +31,7 @@ export function ObserverBanner({ workspaceId }: ObserverBannerProps) {
       <span className="observer-banner-icon">👁</span>
       <span className="observer-banner-text">只读模式 — 另一个标签页正在控制</span>
       <button className="btn btn-secondary btn-sm" onClick={handleTakeover} disabled={takingOver}>
-        {takingOver ? '接管中...' : '接管控制'}
+        {takingOver ? "接管中..." : "接管控制"}
       </button>
     </div>
   );

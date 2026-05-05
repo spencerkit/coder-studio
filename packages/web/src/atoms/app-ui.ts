@@ -4,20 +4,20 @@
  * Shared app-level UI state that is not owned by a single feature.
  */
 
-import { atom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
+import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
 
 /**
  * Theme preference
  * Persisted: ui.theme
  */
-export const themeAtom = atomWithStorage<'dark' | 'light'>('ui.theme', 'dark');
+export const themeAtom = atomWithStorage<"dark" | "light">("ui.theme", "dark");
 
 /**
  * Locale preference
  * Persisted: ui.locale
  */
-export const localeAtom = atomWithStorage<string>('ui.locale', 'zh');
+export const localeAtom = atomWithStorage<string>("ui.locale", "zh");
 
 /**
  * Auth state

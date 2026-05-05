@@ -1,94 +1,77 @@
-import type {
-  ProviderDefinition,
-  ProviderConfig,
-} from '@coder-studio/core';
+import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
 
-import { codexConfigSchema, type CodexConfig } from './config-schema.js';
-import {
-  idleDebounceMs,
-  idlePromptPatterns,
-  sessionIdPatterns,
-} from './stdout-heuristics.js';
-import { buildCodexSupervisorEvalCommand } from './supervisor-eval.js';
+import { type CodexConfig, codexConfigSchema } from "./config-schema.js";
+import { idleDebounceMs, idlePromptPatterns, sessionIdPatterns } from "./stdout-heuristics.js";
+import { buildCodexSupervisorEvalCommand } from "./supervisor-eval.js";
 
 export const codexInstallMetadata = {
-  prerequisites: ['npm'],
-  manualGuideKeys: [
-    'provider.install.nodejs.manual',
-    'provider.install.codex.manual',
-  ],
+  prerequisites: ["npm"],
+  manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
   docUrls: {
-    provider:
-      'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+    provider: "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
     prerequisites: {
-      npm: 'https://nodejs.org/en/download',
+      npm: "https://nodejs.org/en/download",
     },
   },
   strategies: {
     win32: [
       {
-        id: 'winget-nodejs-lts',
-        kind: 'prerequisite',
-        targetCommand: 'npm',
-        requiresCommands: ['winget'],
-        command: 'winget',
-        args: [
-          'install',
-          '--id',
-          'OpenJS.NodeJS.LTS',
-          '--exact',
-          '--silent',
-        ],
+        id: "winget-nodejs-lts",
+        kind: "prerequisite",
+        targetCommand: "npm",
+        requiresCommands: ["winget"],
+        command: "winget",
+        args: ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
       },
       {
-        id: 'npm-install-codex',
-        kind: 'provider',
-        targetCommand: 'codex',
-        requiresCommands: ['npm'],
-        command: 'npm',
-        args: ['install', '-g', '@openai/codex'],
+        id: "npm-install-codex",
+        kind: "provider",
+        targetCommand: "codex",
+        requiresCommands: ["npm"],
+        command: "npm",
+        args: ["install", "-g", "@openai/codex"],
       },
     ],
     darwin: [
       {
-        id: 'brew-node',
-        kind: 'prerequisite',
-        targetCommand: 'npm',
-        requiresCommands: ['brew'],
-        command: 'brew',
-        args: ['install', 'node'],
+        id: "brew-node",
+        kind: "prerequisite",
+        targetCommand: "npm",
+        requiresCommands: ["brew"],
+        command: "brew",
+        args: ["install", "node"],
       },
       {
-        id: 'npm-install-codex',
-        kind: 'provider',
-        targetCommand: 'codex',
-        requiresCommands: ['npm'],
-        command: 'npm',
-        args: ['install', '-g', '@openai/codex'],
+        id: "npm-install-codex",
+        kind: "provider",
+        targetCommand: "codex",
+        requiresCommands: ["npm"],
+        command: "npm",
+        args: ["install", "-g", "@openai/codex"],
       },
     ],
     linux: [
       {
-        id: 'npm-install-codex',
-        kind: 'provider',
-        targetCommand: 'codex',
-        requiresCommands: ['npm'],
-        command: 'npm',
-        args: ['install', '-g', '@openai/codex'],
+        id: "npm-install-codex",
+        kind: "provider",
+        targetCommand: "codex",
+        requiresCommands: ["npm"],
+        command: "npm",
+        args: ["install", "-g", "@openai/codex"],
       },
     ],
   },
-} satisfies ProviderDefinition['install'];
+} satisfies ProviderDefinition["install"];
 
 /**
  * Codex provider definition.
  */
 export const codexDefinition: ProviderDefinition = {
   // ===== Metadata =====
-  id: 'codex',
-  displayName: 'Codex',
-  badge: 'Codex',
-  capability: 'full',
+  id: "codex",
+  displayName: "Codex",
+  badge: "Codex",
+  capability: "full",
   install: codexInstallMetadata,
 
   // ===== Command construction =====
@@ -96,7 +79,7 @@ export const codexDefinition: ProviderDefinition = {
     const cfg = codexConfigSchema.parse(config);
 
     return {
-      argv: ['codex', ...cfg.additionalArgs],
+      argv: ["codex", ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -116,7 +99,7 @@ export const codexDefinition: ProviderDefinition = {
   } satisfies CodexConfig,
 
   // ===== Runtime requirements =====
-  requiredCommands: ['codex'],
+  requiredCommands: ["codex"],
   idleHeuristics: {
     sessionIdPatterns,
     idlePromptPatterns,

@@ -4,18 +4,18 @@
  * WebSocket connection status and client singleton.
  */
 
-import { atom } from 'jotai';
-import { CommandResultError, type WsClient } from '../ws/client';
+import { atom } from "jotai";
+import { CommandResultError, type WsClient } from "../ws/client";
 
 /**
  * Connection status enum
  */
 export type ConnectionStatus =
-  | 'connecting'
-  | 'connected'
-  | 'disconnected'
-  | 'reconnecting'
-  | 'rejected';
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "reconnecting"
+  | "rejected";
 
 /**
  * WebSocket client singleton
@@ -27,7 +27,7 @@ export const wsClientAtom = atom<WsClient | null>(null);
  * Connection status (updated by WsClient event handlers)
  * Written by: WsClient internal state machine
  */
-export const connectionStatusAtom = atom<ConnectionStatus>('connecting');
+export const connectionStatusAtom = atom<ConnectionStatus>("connecting");
 
 /**
  * Connection error message (if any)
@@ -108,8 +108,8 @@ export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
       return {
         ok: false,
         error: {
-          code: 'no_client',
-          message: 'WebSocket client not initialized',
+          code: "no_client",
+          message: "WebSocket client not initialized",
         },
       };
     }
@@ -129,11 +129,11 @@ export const dispatchCommandAtom = atom<DispatchCommand>((get) => {
         };
       }
 
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         ok: false,
         error: {
-          code: 'command_error',
+          code: "command_error",
           message,
         },
       };

@@ -34,24 +34,21 @@
  *  actually fires.
  */
 
-import { useEffect, useRef } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
-import { sessionsAtom } from '../../atoms/sessions';
+import type { SessionState } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useEffect, useRef } from "react";
+import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../atoms/app-ui";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../atoms/connection";
+import { sessionsAtom } from "../../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   resolvedActiveWorkspaceIdAtom,
   workspacesAtom,
-} from '../../atoms/workspaces';
-import {
-  pendingFocusSessionAtom,
-  visibleMobileSessionIdAtom,
-} from '../../atoms/app-ui';
-import {
-  notificationPreferencesAtom,
-  pushToastAtom,
-  sessionOutputTailAtom,
-} from './atoms';
+} from "../../atoms/workspaces";
+import { useViewport } from "../../hooks/use-viewport";
+import { useTranslation } from "../../lib/i18n";
+import { notificationPreferencesAtom, pushToastAtom, sessionOutputTailAtom } from "./atoms";
+import { focusSession } from "./focus-session";
 import {
   formatDuration,
   formatProviderLabel,
@@ -59,13 +56,9 @@ import {
   sanitizeInlineText,
   stripAnsi,
   summarizeOutput,
-} from './format';
-import { focusSession } from './focus-session';
-import { useTranslation } from '../../lib/i18n';
-import type { SessionState } from '@coder-studio/core';
-import { useViewport } from '../../hooks/use-viewport';
+} from "./format";
 
-type NotificationChannel = 'none' | 'toast' | 'system';
+type NotificationChannel = "none" | "toast" | "system";
 
 /**
  * Turns shorter than this (active → idle/ended) are not worth interrupting
@@ -89,12 +82,10 @@ interface SessionTrace {
 // tracks provider-CLI boot, not a user-submitted turn — otherwise the first
 // SessionStart→idle transition after boot would fire a bogus
 // "session completed" toast before the user has done anything.
-const ACTIVE_STATES: ReadonlySet<SessionState> = new Set([
-  'running',
-]);
+const ACTIVE_STATES: ReadonlySet<SessionState> = new Set(["running"]);
 
 /** Terminal states for our purposes — these are the ones that trigger a check. */
-const COMPLETION_STATES: ReadonlySet<SessionState> = new Set(['idle', 'ended']);
+const COMPLETION_STATES: ReadonlySet<SessionState> = new Set(["idle", "ended"]);
 
 /**
  * Decide whether a visible-page completion should stay silent because the user
@@ -104,13 +95,13 @@ function shouldSuppressVisibleNotification(
   sessionWorkspaceId: string,
   sessionId: string,
   activeWorkspaceId: string | null,
-  viewport: 'mobile' | 'desktop',
-  visibleMobileSessionId: string | null,
+  viewport: "mobile" | "desktop",
+  visibleMobileSessionId: string | null
 ): boolean {
   if (activeWorkspaceId !== sessionWorkspaceId) {
     return false;
   }
-  if (viewport !== 'mobile') {
+  if (viewport !== "mobile") {
     return true;
   }
   return visibleMobileSessionId === sessionId;
@@ -125,16 +116,16 @@ function shouldSuppressVisibleNotification(
  */
 function selectChannel(hidden: boolean, suppressed: boolean): NotificationChannel {
   if (hidden) {
-    return 'system';
+    return "system";
   }
   if (suppressed) {
-    return 'none';
+    return "none";
   }
-  return 'toast';
+  return "toast";
 }
 
 function isDocumentHidden(): boolean {
-  if (typeof document !== 'undefined' && document.hidden) {
+  if (typeof document !== "undefined" && document.hidden) {
     return true;
   }
   return false;
@@ -147,7 +138,7 @@ function isDocumentHidden(): boolean {
  */
 async function playCompletionSound(): Promise<void> {
   try {
-    const audio = new Audio('/task-complete.wav');
+    const audio = new Audio("/task-complete.wav");
     audio.volume = 0.75;
     await audio.play();
     return;
@@ -156,8 +147,9 @@ async function playCompletionSound(): Promise<void> {
   }
 
   try {
-    const AudioContextCtor = window.AudioContext
-      || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return;
     const ctx = new AudioContextCtor();
     const now = ctx.currentTime;
@@ -165,7 +157,7 @@ async function playCompletionSound(): Promise<void> {
     // First tone — higher pitch
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
-    osc1.type = 'sine';
+    osc1.type = "sine";
     osc1.frequency.value = 880;
     gain1.gain.setValueAtTime(0.25, now);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
@@ -176,7 +168,7 @@ async function playCompletionSound(): Promise<void> {
     // Second tone — lower pitch, delayed
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
-    osc2.type = 'sine';
+    osc2.type = "sine";
     osc2.frequency.value = 660;
     gain2.gain.setValueAtTime(0.25, now + 0.15);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
@@ -203,8 +195,8 @@ interface BrowserNotificationOptions {
 }
 
 function showBrowserNotification(opts: BrowserNotificationOptions): void {
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
 
   try {
     // `silent: true` keeps the OS chime off — we already play our own
@@ -266,25 +258,27 @@ export function useSessionNotifications(): void {
   const tracesRef = useRef<Map<string, SessionTrace>>(new Map());
 
   useEffect(() => {
-    if (connectionStatus !== 'connected') {
+    if (connectionStatus !== "connected") {
       return;
     }
 
     let cancelled = false;
 
     const loadSettings = async () => {
-      const result = await dispatch<Record<string, unknown>>('settings.get', {});
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (cancelled || !result.ok || !result.data) {
         return;
       }
 
       setNotificationPreferences({
-        enabled: typeof result.data['notifications.enabled'] === 'boolean'
-          ? result.data['notifications.enabled']
-          : true,
-        soundEnabled: typeof result.data['notifications.soundEnabled'] === 'boolean'
-          ? result.data['notifications.soundEnabled']
-          : true,
+        enabled:
+          typeof result.data["notifications.enabled"] === "boolean"
+            ? result.data["notifications.enabled"]
+            : true,
+        soundEnabled:
+          typeof result.data["notifications.soundEnabled"] === "boolean"
+            ? result.data["notifications.soundEnabled"]
+            : true,
       });
     };
 
@@ -311,10 +305,10 @@ export function useSessionNotifications(): void {
         state: curr,
         activeSince: enteringActive
           ? Date.now()
-          : trace?.activeSince ?? (ACTIVE_STATES.has(curr) ? Date.now() : null),
+          : (trace?.activeSince ?? (ACTIVE_STATES.has(curr) ? Date.now() : null)),
         // Re-entering an active state begins a new turn → reset the flag so
         // the next active→idle/ended transition can fire again.
-        notifiedForTurn: enteringActive ? false : trace?.notifiedForTurn ?? false,
+        notifiedForTurn: enteringActive ? false : (trace?.notifiedForTurn ?? false),
       };
       traces.set(session.id, next);
 
@@ -327,7 +321,7 @@ export function useSessionNotifications(): void {
       // Suppress trivial-length turns — but only for the running→idle path.
       // If the session actually `ended`, the user almost certainly cares
       // (a long task crashed, the CLI quit, etc.) regardless of duration.
-      if (curr === 'idle' && next.activeSince !== null) {
+      if (curr === "idle" && next.activeSince !== null) {
         const duration = Date.now() - next.activeSince;
         if (duration < MIN_NOTIFY_DURATION_MS) {
           // Mark as handled so we don't fire on a later, unrelated render of
@@ -347,12 +341,12 @@ export function useSessionNotifications(): void {
             session.id,
             activeWorkspaceId,
             viewport,
-            visibleMobileSessionId,
+            visibleMobileSessionId
           );
       const channel = selectChannel(hidden, suppressed);
-      if (channel === 'none') continue;
+      if (channel === "none") continue;
 
-      const title = t('notification.session_completed_title', {
+      const title = t("notification.session_completed_title", {
         session: formatSessionLabel(session.id),
       });
 
@@ -369,16 +363,17 @@ export function useSessionNotifications(): void {
       const workspaceLabel = sanitizeInlineText(formatWorkspaceLabel(workspace ?? null));
       if (workspaceLabel) metaParts.push(workspaceLabel);
       const durationMs = next.activeSince !== null ? Date.now() - next.activeSince : null;
-      const durationLabel = durationMs !== null ? formatDuration(durationMs) : '';
+      const durationLabel = durationMs !== null ? formatDuration(durationMs) : "";
       if (durationLabel) metaParts.push(durationLabel);
-      const metaLine = metaParts.join(' · ');
+      const metaLine = metaParts.join(" · ");
 
-      const tailText = store.get(sessionOutputTailAtom)[session.id] ?? '';
+      const tailText = store.get(sessionOutputTailAtom)[session.id] ?? "";
       const summary = summarizeOutput(stripAnsi(tailText));
 
-      const fallbackHint = curr === 'ended'
-        ? t('notification.session_ended_hint')
-        : t('notification.session_turn_completed');
+      const fallbackHint =
+        curr === "ended"
+          ? t("notification.session_ended_hint")
+          : t("notification.session_turn_completed");
 
       const bodyLines: string[] = [];
       if (metaLine) bodyLines.push(metaLine);
@@ -389,16 +384,16 @@ export function useSessionNotifications(): void {
       } else {
         bodyLines.push(fallbackHint);
       }
-      const body = bodyLines.join('\n');
+      const body = bodyLines.join("\n");
 
       if (notificationPreferences.soundEnabled) {
         void playCompletionSound();
       }
 
-      if (channel === 'system') {
+      if (channel === "system") {
         // Tag scopes the notification to "this turn" so a later turn can
         // replace it instead of stacking.
-        const tag = `session-${session.id}-${next.activeSince ?? 'unknown'}`;
+        const tag = `session-${session.id}-${next.activeSince ?? "unknown"}`;
         showBrowserNotification({
           title,
           body,
@@ -410,7 +405,7 @@ export function useSessionNotifications(): void {
         });
       } else {
         pushToast({
-          kind: 'success',
+          kind: "success",
           title,
           body,
           workspaceId: session.workspaceId,
@@ -444,7 +439,7 @@ export function useSessionNotifications(): void {
 function formatSessionLabel(sessionId: string): string {
   const numericId = sessionId.match(/(\d+)/)?.[1];
   if (numericId) {
-    return `SESSION-${numericId.slice(-2).padStart(2, '0')}`;
+    return `SESSION-${numericId.slice(-2).padStart(2, "0")}`;
   }
-  return sessionId.replace(/[_-]/g, ' ').toUpperCase();
+  return sessionId.replace(/[_-]/g, " ").toUpperCase();
 }

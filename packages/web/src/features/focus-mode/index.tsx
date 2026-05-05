@@ -1,1 +1,1 @@
-export { FocusMode } from './components/focus-mode';
+export { FocusMode } from "./components/focus-mode";

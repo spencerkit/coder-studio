@@ -5,13 +5,13 @@
  * Displays product info, "Open Workspace" button, and feature highlights.
  */
 
-import type { FC } from 'react';
-import { Plus, Settings, Terminal, Zap, GitBranch } from 'lucide-react';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useViewport } from '../../hooks/use-viewport';
-import { useTranslation } from '../../lib/i18n';
-import { WorkspaceLaunchModal } from '../workspace/views/shared/workspace-launch-modal';
+import { GitBranch, Plus, Settings, Terminal, Zap } from "lucide-react";
+import type { FC } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useViewport } from "../../hooks/use-viewport";
+import { useTranslation } from "../../lib/i18n";
+import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 
 interface FeatureItem {
   icon: React.ReactNode;
@@ -32,22 +32,22 @@ export const WelcomePage: FC = () => {
   const t = useTranslation();
   const navigate = useNavigate();
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
-  const isMobile = useViewport() === 'mobile';
+  const isMobile = useViewport() === "mobile";
   const features: FeatureItem[] = [
     {
       icon: <Zap size={18} />,
-      title: t('welcome.features.agent_first.title'),
-      description: t('welcome.features.agent_first.description'),
+      title: t("welcome.features.agent_first.title"),
+      description: t("welcome.features.agent_first.description"),
     },
     {
       icon: <GitBranch size={18} />,
-      title: t('welcome.features.git_tools.title'),
-      description: t('welcome.features.git_tools.description'),
+      title: t("welcome.features.git_tools.title"),
+      description: t("welcome.features.git_tools.description"),
     },
     {
       icon: <Terminal size={18} />,
-      title: t('welcome.features.terminals.title'),
-      description: t('welcome.features.terminals.description'),
+      title: t("welcome.features.terminals.title"),
+      description: t("welcome.features.terminals.description"),
     },
   ];
 
@@ -56,23 +56,23 @@ export const WelcomePage: FC = () => {
   };
 
   const handleOpenSettings = () => {
-    navigate('/settings');
+    navigate("/settings");
   };
 
   return (
     <>
-      <div className={`welcome-container ${isMobile ? 'welcome-container--mobile' : ''}`}>
-        <div className={`welcome-card ${isMobile ? 'welcome-card--mobile' : ''}`}>
-          <div className="welcome-kicker">{t('welcome.kicker')}</div>
-          <h1 className="welcome-title">{t('welcome.title')}</h1>
-          <p className="welcome-body">{t('welcome.description')}</p>
+      <div className={`welcome-container ${isMobile ? "welcome-container--mobile" : ""}`}>
+        <div className={`welcome-card ${isMobile ? "welcome-card--mobile" : ""}`}>
+          <div className="welcome-kicker">{t("welcome.kicker")}</div>
+          <h1 className="welcome-title">{t("welcome.title")}</h1>
+          <p className="welcome-body">{t("welcome.description")}</p>
           <button className="welcome-btn" onClick={handleOpenWorkspace}>
             <Plus size={18} />
-            <span>{t('action.open_workspace')}</span>
+            <span>{t("action.open_workspace")}</span>
           </button>
           <button className="welcome-link" onClick={handleOpenSettings}>
             <Settings size={14} />
-            <span>{t('action.settings')}</span>
+            <span>{t("action.settings")}</span>
           </button>
 
           <div className="welcome-divider" />

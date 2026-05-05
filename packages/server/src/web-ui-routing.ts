@@ -1,11 +1,11 @@
-import type { FastifyRequest } from 'fastify';
+import type { FastifyRequest } from "fastify";
 
-const RESERVED_PREFIXES = ['/api/', '/internal/', '/assets/'];
-const RESERVED_EXACT_PATHS = new Set(['/api', '/assets', '/login', '/healthz', '/internal', '/ws']);
-const ROOT_PUBLIC_FILE_PATHS = new Set(['/favicon.ico', '/index.html', '/task-complete.wav']);
+const RESERVED_PREFIXES = ["/api/", "/internal/", "/assets/"];
+const RESERVED_EXACT_PATHS = new Set(["/api", "/assets", "/login", "/healthz", "/internal", "/ws"]);
+const ROOT_PUBLIC_FILE_PATHS = new Set(["/favicon.ico", "/index.html", "/task-complete.wav"]);
 
 export function getRequestPathname(url: string): string {
-  return url.split('?', 1)[0] || '/';
+  return url.split("?", 1)[0] || "/";
 }
 
 export function isFileLikePath(pathname: string): boolean {
@@ -13,17 +13,20 @@ export function isFileLikePath(pathname: string): boolean {
 }
 
 export function isReservedWebPath(pathname: string): boolean {
-  return RESERVED_EXACT_PATHS.has(pathname) || RESERVED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return (
+    RESERVED_EXACT_PATHS.has(pathname) ||
+    RESERVED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
 }
 
 export function isPublicStaticPath(pathname: string): boolean {
-  return pathname.startsWith('/assets/') || ROOT_PUBLIC_FILE_PATHS.has(pathname);
+  return pathname.startsWith("/assets/") || ROOT_PUBLIC_FILE_PATHS.has(pathname);
 }
 
 export function isFrontendNavigationRequest(
-  request: Pick<FastifyRequest, 'method' | 'url' | 'headers'>
+  request: Pick<FastifyRequest, "method" | "url" | "headers">
 ): boolean {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
+  if (request.method !== "GET" && request.method !== "HEAD") {
     return false;
   }
 
@@ -32,6 +35,6 @@ export function isFrontendNavigationRequest(
     return false;
   }
 
-  const accept = request.headers.accept ?? '';
-  return accept.includes('text/html');
+  const accept = request.headers.accept ?? "";
+  return accept.includes("text/html");
 }

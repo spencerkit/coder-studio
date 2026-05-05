@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { useSetAtom } from 'jotai';
-import { pushToastAtom } from '../../notifications/atoms';
-import { quoteShellSingle } from './quote-shell.js';
-import { UploadError, uploadFiles } from './upload-files.js';
+import { useSetAtom } from "jotai";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { pushToastAtom } from "../../notifications/atoms";
+import { quoteShellSingle } from "./quote-shell.js";
+import { UploadError, uploadFiles } from "./upload-files.js";
 
 interface Options {
   containerRef: RefObject<HTMLElement | null>;
@@ -60,14 +60,14 @@ export function usePasteDropUpload(opts: Options): { busy: boolean } {
           return;
         }
 
-        const text = `${uploaded.map((file) => quoteShellSingle(file.path)).join(' ')} `;
+        const text = `${uploaded.map((file) => quoteShellSingle(file.path)).join(" ")} `;
         await settleSequence(sequence, text);
       } catch (error) {
         await settleSequence(sequence, null);
-        const code = error instanceof UploadError ? error.code : 'unknown';
+        const code = error instanceof UploadError ? error.code : "unknown";
         pushToast({
-          kind: 'error',
-          title: 'Upload failed',
+          kind: "error",
+          title: "Upload failed",
           body: `Could not upload file(s): ${code}`,
           duration: 5_000,
         });
@@ -109,19 +109,19 @@ export function usePasteDropUpload(opts: Options): { busy: boolean } {
 
     const onDragOver = (event: DragEvent) => {
       const types = Array.from(event.dataTransfer?.types ?? []);
-      if (types.includes('Files')) {
+      if (types.includes("Files")) {
         event.preventDefault();
       }
     };
 
-    element.addEventListener('paste', onPaste, { capture: true });
-    element.addEventListener('drop', onDrop, { capture: true });
-    element.addEventListener('dragover', onDragOver, { capture: true });
+    element.addEventListener("paste", onPaste, { capture: true });
+    element.addEventListener("drop", onDrop, { capture: true });
+    element.addEventListener("dragover", onDragOver, { capture: true });
 
     return () => {
-      element.removeEventListener('paste', onPaste, { capture: true });
-      element.removeEventListener('drop', onDrop, { capture: true });
-      element.removeEventListener('dragover', onDragOver, { capture: true });
+      element.removeEventListener("paste", onPaste, { capture: true });
+      element.removeEventListener("drop", onDrop, { capture: true });
+      element.removeEventListener("dragover", onDragOver, { capture: true });
     };
   }, [containerRef, enabled, handleFiles]);
 

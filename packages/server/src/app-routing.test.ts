@@ -1,19 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { FastifyInstance } from 'fastify';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { buildFastifyApp } from './app.js';
-import { EventBus } from './bus/event-bus.js';
-import { openDatabase } from './storage/db.js';
-import type { Database } from './storage/database.js';
-import { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
-import { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
-import { WorkspaceManager } from './workspace/manager.js';
-import { FencingManager } from './ws/fencing.js';
-import { WsHub } from './ws/hub.js';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { FastifyInstance } from "fastify";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildFastifyApp } from "./app.js";
+import { EventBus } from "./bus/event-bus.js";
+import type { Database } from "./storage/database.js";
+import { openDatabase } from "./storage/db.js";
+import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
+import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { WorkspaceManager } from "./workspace/manager.js";
+import { FencingManager } from "./ws/fencing.js";
+import { WsHub } from "./ws/hub.js";
 
-describe('app routing', () => {
+describe("app routing", () => {
   let tempDir: string;
   let dbPath: string;
   let db: Database;
@@ -21,14 +21,17 @@ describe('app routing', () => {
   let webRoot: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'coder-studio-app-'));
-    webRoot = join(tempDir, 'web');
-    dbPath = join(tempDir, 'app.db');
+    tempDir = mkdtempSync(join(tmpdir(), "coder-studio-app-"));
+    webRoot = join(tempDir, "web");
+    dbPath = join(tempDir, "app.db");
 
-    mkdirSync(join(webRoot, 'assets'), { recursive: true });
-    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><body><div id="root">shell</div></body></html>');
-    writeFileSync(join(webRoot, 'assets', 'app.js'), 'console.log("asset-loaded");');
-    writeFileSync(join(webRoot, 'task-complete.wav'), 'fake-wave');
+    mkdirSync(join(webRoot, "assets"), { recursive: true });
+    writeFileSync(
+      join(webRoot, "index.html"),
+      '<!doctype html><html><body><div id="root">shell</div></body></html>'
+    );
+    writeFileSync(join(webRoot, "assets", "app.js"), 'console.log("asset-loaded");');
+    writeFileSync(join(webRoot, "task-complete.wav"), "fake-wave");
 
     db = openDatabase(dbPath);
   });
@@ -47,15 +50,15 @@ describe('app routing', () => {
     const eventBus = new EventBus();
     const fencingMgr = new FencingManager();
     const config = {
-      host: '127.0.0.1',
+      host: "127.0.0.1",
       port: 0,
       dataDir: dbPath,
-      uploadsDir: join(tempDir, 'uploads'),
-      logLevel: 'info' as const,
+      uploadsDir: join(tempDir, "uploads"),
+      logLevel: "info" as const,
       webRoot,
       auth: {
         enabled: authEnabled,
-        password: authEnabled ? 'sekrit' : undefined,
+        password: authEnabled ? "sekrit" : undefined,
       },
     };
     const wsHub = new WsHub({
@@ -79,120 +82,120 @@ describe('app routing', () => {
     return app;
   };
 
-  it('serves existing asset files as JavaScript modules', async () => {
+  it("serves existing asset files as JavaScript modules", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/assets/app.js',
+      method: "GET",
+      url: "/assets/app.js",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('javascript');
-    expect(response.body).toContain('asset-loaded');
+    expect(response.headers["content-type"]).toContain("javascript");
+    expect(response.body).toContain("asset-loaded");
   });
 
-  it('returns 404 instead of index.html for a missing asset file', async () => {
+  it("returns 404 instead of index.html for a missing asset file", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/assets/missing.js',
+      method: "GET",
+      url: "/assets/missing.js",
       headers: {
-        accept: 'application/javascript',
+        accept: "application/javascript",
       },
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.body).not.toContain('<!doctype html>');
+    expect(response.body).not.toContain("<!doctype html>");
   });
 
-  it('returns 404 instead of index.html for the bare /assets namespace', async () => {
+  it("returns 404 instead of index.html for the bare /assets namespace", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/assets',
+      method: "GET",
+      url: "/assets",
       headers: {
-        accept: 'text/html',
+        accept: "text/html",
       },
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.body).not.toContain('<!doctype html>');
+    expect(response.body).not.toContain("<!doctype html>");
   });
 
-  it('serves index.html for frontend navigation requests', async () => {
+  it("serves index.html for frontend navigation requests", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/workspaces/demo',
+      method: "GET",
+      url: "/workspaces/demo",
       headers: {
-        accept: 'text/html',
+        accept: "text/html",
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers["content-type"]).toContain("text/html");
     expect(response.body).toContain('<div id="root">shell</div>');
   });
 
-  it('serves the built entrypoint when requesting /index.html directly', async () => {
+  it("serves the built entrypoint when requesting /index.html directly", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/index.html',
+      method: "GET",
+      url: "/index.html",
       headers: {
-        accept: 'text/html',
+        accept: "text/html",
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers["content-type"]).toContain("text/html");
     expect(response.body).toContain('<div id="root">shell</div>');
   });
 
-  it('serves headers for the built entrypoint on HEAD /index.html', async () => {
+  it("serves headers for the built entrypoint on HEAD /index.html", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'HEAD',
-      url: '/index.html',
+      method: "HEAD",
+      url: "/index.html",
       headers: {
-        accept: 'text/html',
+        accept: "text/html",
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers["content-type"]).toContain("text/html");
   });
 
-  it('does not fall back to index.html for file-like unknown paths', async () => {
+  it("does not fall back to index.html for file-like unknown paths", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/missing.js',
+      method: "GET",
+      url: "/missing.js",
       headers: {
-        accept: 'text/html',
+        accept: "text/html",
       },
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.body).not.toContain('<!doctype html>');
+    expect(response.body).not.toContain("<!doctype html>");
   });
 
-  it('treats root static files as public even when auth is enabled', async () => {
+  it("treats root static files as public even when auth is enabled", async () => {
     const instance = await createApp(true);
 
     const response = await instance.inject({
-      method: 'GET',
-      url: '/task-complete.wav',
+      method: "GET",
+      url: "/task-complete.wav",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toBe('fake-wave');
+    expect(response.body).toBe("fake-wave");
   });
 });

@@ -3,12 +3,12 @@
  * Runs build:web then build:cli
  */
 
-import { buildWeb } from './build-web.js';
-import { buildCli } from './build-cli.js';
-import { log, info, success, error, step } from './shared/index.js';
+import { buildCli } from "./build-cli.js";
+import { buildWeb } from "./build-web.js";
+import { error, info, log, step, success } from "./shared/index.js";
 
 async function build(): Promise<void> {
-  step('BUILD', 'Running full production build...\n');
+  step("BUILD", "Running full production build...\n");
 
   // Step 1: Build web
   await buildWeb();
@@ -16,7 +16,7 @@ async function build(): Promise<void> {
   // Step 2: Build CLI (includes assembling web assets)
   await buildCli();
 
-  log('\n✓ Full production build complete.\n');
+  log("\n✓ Full production build complete.\n");
 }
 
 // Run if called directly

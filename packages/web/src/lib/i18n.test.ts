@@ -1,10 +1,11 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import zh from '../locales/zh.json';
+// @vitest-environment node
+import fs from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import zh from "../locales/zh.json";
 
-function flattenKeys(value: unknown, prefix = ''): string[] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+function flattenKeys(value: unknown, prefix = ""): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return prefix ? [prefix] : [];
   }
 
@@ -19,7 +20,7 @@ function collectSourceFiles(dir: string): string[] {
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      if (entry.name === 'locales' || entry.name === '__tests__' || entry.name === 'test-utils') {
+      if (entry.name === "locales" || entry.name === "__tests__" || entry.name === "test-utils") {
         return [];
       }
 
@@ -34,15 +35,15 @@ function collectSourceFiles(dir: string): string[] {
   });
 }
 
-describe('i18n coverage', () => {
-  it('resolves every static translation key used in source files', () => {
+describe("i18n coverage", () => {
+  it("resolves every static translation key used in source files", () => {
     const localeKeys = new Set(flattenKeys(zh));
-    const sourceRoot = path.resolve(__dirname, '..');
+    const sourceRoot = path.resolve(__dirname, "..");
     const translationCall = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g;
     const missing: Array<{ file: string; line: number; key: string }> = [];
 
     for (const file of collectSourceFiles(sourceRoot)) {
-      const content = fs.readFileSync(file, 'utf8');
+      const content = fs.readFileSync(file, "utf8");
       let match: RegExpExecArray | null;
 
       while ((match = translationCall.exec(content)) !== null) {
@@ -54,7 +55,7 @@ describe('i18n coverage', () => {
 
         missing.push({
           file: path.relative(process.cwd(), file),
-          line: content.slice(0, match.index).split('\n').length,
+          line: content.slice(0, match.index).split("\n").length,
           key,
         });
       }

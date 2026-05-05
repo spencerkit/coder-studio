@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import type { GitStatus } from '@coder-studio/core';
-import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { activeWorkspaceAtom } from '../../../atoms/workspaces';
-import { collectSessionIds } from '../../agent-panes/pane-layout-tree';
-import { useWorkspaceSessions } from '../../agent-panes/actions/use-workspace-sessions';
+import type { GitStatus } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import {
+  activeWorkspaceAtom,
+  orderedWorkspacesAtom,
+  resolvedActiveWorkspaceIdAtom,
+} from "../../../atoms/workspaces";
+import { usePaneActions } from "../../agent-panes/actions/use-pane-actions";
+import { useSessionActions } from "../../agent-panes/actions/use-session-actions";
+import { useWorkspaceSessions } from "../../agent-panes/actions/use-workspace-sessions";
+import { collectSessionIds } from "../../agent-panes/pane-layout-tree";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -14,29 +19,27 @@ import {
   gitStateAtomFamily,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
-} from '../atoms';
-import { useWorkspaceLayoutActions } from './use-workspace-layout-actions';
-import { usePaneActions } from '../../agent-panes/actions/use-pane-actions';
-import { useSessionActions } from '../../agent-panes/actions/use-session-actions';
-import { useWorkspaceUiStatePersistence } from './use-workspace-ui-state-persistence';
+} from "../atoms";
+import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
-export type WorkspaceSidebarTab = 'files' | 'git';
-export type WorkspaceMainAreaMode = 'agent' | 'editor' | 'diff';
-export type MobileWorkspaceSheetKind = 'files' | 'terminal' | 'supervisor' | null;
+export type WorkspaceSidebarTab = "files" | "git";
+export type WorkspaceMainAreaMode = "agent" | "editor" | "diff";
+export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
 export type MobileFilesRoute =
-  | { kind: 'root' }
-  | { kind: 'editor'; path: string }
-  | { kind: 'diff'; path: string };
+  | { kind: "root" }
+  | { kind: "editor"; path: string }
+  | { kind: "diff"; path: string };
 
 export interface WorkspaceCreateRequest {
   id: number;
-  mode: 'file' | 'folder';
+  mode: "file" | "folder";
   baseDir: string | null;
 }
 
 export function useWorkspaceScreenModel() {
   const workspace = useAtomValue(activeWorkspaceAtom);
-  const workspaceId = workspace?.id ?? '__workspace_placeholder__';
+  const workspaceId = workspace?.id ?? "__workspace_placeholder__";
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
@@ -54,11 +57,11 @@ export function useWorkspaceScreenModel() {
   const sessionActions = useSessionActions();
   const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
-  const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>('files');
+  const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
   const [panelRefreshToken, setPanelRefreshToken] = useState(0);
   const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
-  const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: 'root' });
+  const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: "root" });
   const [mobileActiveSessionId, setMobileActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export function useWorkspaceScreenModel() {
 
     let cancelled = false;
 
-    dispatch<GitStatus>('git.status', { workspaceId: workspace.id })
+    dispatch<GitStatus>("git.status", { workspaceId: workspace.id })
       .then((result) => {
         if (cancelled || !result.ok || !result.data) {
           return;
@@ -78,7 +81,7 @@ export function useWorkspaceScreenModel() {
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('Failed to load git status:', error);
+          console.error("Failed to load git status:", error);
         }
       });
 
@@ -92,18 +95,18 @@ export function useWorkspaceScreenModel() {
       return;
     }
 
-    setSidebarTab('git');
+    setSidebarTab("git");
     setBranchQuickPick({
       visible: true,
       workspaceId: workspace.id,
-      inputValue: '',
+      inputValue: "",
     });
   }, [setBranchQuickPick, workspace]);
 
   const handleOpenFileCreate = useCallback(() => {
     setCreateRequest((previous) => ({
       id: (previous?.id ?? 0) + 1,
-      mode: 'file',
+      mode: "file",
       baseDir: null,
     }));
   }, []);
@@ -111,7 +114,7 @@ export function useWorkspaceScreenModel() {
   const handleOpenFolderCreate = useCallback(() => {
     setCreateRequest((previous) => ({
       id: (previous?.id ?? 0) + 1,
-      mode: 'folder',
+      mode: "folder",
       baseDir: null,
     }));
   }, []);
@@ -138,7 +141,10 @@ export function useWorkspaceScreenModel() {
       return;
     }
 
-    if (preferredSessionId && orderedSessions.some((session) => session.id === preferredSessionId)) {
+    if (
+      preferredSessionId &&
+      orderedSessions.some((session) => session.id === preferredSessionId)
+    ) {
       setMobileActiveSessionId(preferredSessionId);
       return;
     }
@@ -175,7 +181,7 @@ export function useWorkspaceScreenModel() {
 
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
-      paneActions.appendSession(sessionId, mobileActiveSessionId, 'vertical');
+      paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, paneActions]
@@ -200,14 +206,14 @@ export function useWorkspaceScreenModel() {
 
   const openMobileSheet = useCallback((sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
     setMobileSheet(sheet);
-    if (sheet !== 'files') {
-      setMobileFilesRoute({ kind: 'root' });
+    if (sheet !== "files") {
+      setMobileFilesRoute({ kind: "root" });
     }
   }, []);
 
   const closeMobileSheet = useCallback(() => {
     setMobileSheet(null);
-    setMobileFilesRoute({ kind: 'root' });
+    setMobileFilesRoute({ kind: "root" });
   }, []);
 
   const updateMobileFilesRoute = useCallback((route: MobileFilesRoute) => {
@@ -215,7 +221,7 @@ export function useWorkspaceScreenModel() {
   }, []);
 
   const mainAreaMode: WorkspaceMainAreaMode =
-    sidebarTab === 'git' && diffPreview ? 'diff' : activeFilePath ? 'editor' : 'agent';
+    sidebarTab === "git" && diffPreview ? "diff" : activeFilePath ? "editor" : "agent";
 
   return {
     activeSession,

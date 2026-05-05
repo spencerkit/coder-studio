@@ -2,4 +2,4 @@
  * Constants barrel export
  */
 
-export * from './git.js';
+export * from "./git.js";

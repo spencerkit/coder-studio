@@ -1,7 +1,7 @@
-import type { FC } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { GitBranch } from 'lucide-react';
-import { branchQuickPickAtom, gitBranchListAtomFamily } from '../../atoms';
+import { useAtomValue, useSetAtom } from "jotai";
+import { GitBranch } from "lucide-react";
+import type { FC } from "react";
+import { branchQuickPickAtom, gitBranchListAtomFamily } from "../../atoms";
 
 interface BranchPickerButtonProps {
   workspaceId: string;
@@ -15,7 +15,7 @@ export const BranchPickerButton: FC<BranchPickerButtonProps> = ({ workspaceId })
     setQuickPick({
       visible: true,
       workspaceId,
-      inputValue: '',
+      inputValue: "",
     });
   };
 
@@ -27,7 +27,7 @@ export const BranchPickerButton: FC<BranchPickerButtonProps> = ({ workspaceId })
       type="button"
     >
       <GitBranch size={14} />
-      <span className="branch-name">{branchList.current || 'No branch'}</span>
+      <span className="branch-name">{branchList.current || "No branch"}</span>
     </button>
   );
 };

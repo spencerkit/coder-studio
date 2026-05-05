@@ -4,9 +4,9 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
-import type { FileNode } from '@coder-studio/core';
+import type { FileNode } from "@coder-studio/core";
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
 
 /**
  * File tree by workspace (server state projection)
@@ -27,9 +27,7 @@ export const fileTreeAtomFamily = atomFamily((workspaceId: string) =>
  * File tree stale flag (used to trigger refresh)
  * Written by: WS event handler for workspace.*.fs.dirty
  */
-export const fileTreeStaleAtomFamily = atomFamily((workspaceId: string) =>
-  atom<boolean>(false)
-);
+export const fileTreeStaleAtomFamily = atomFamily((workspaceId: string) => atom<boolean>(false));
 
 /**
  * Loaded directories tracking (UI local state)
@@ -44,24 +42,24 @@ export const loadedDirsAtomFamily = atomFamily((workspaceId: string) =>
  * Open file atom family (UI local state).
  */
 export interface OpenTextFile {
-  kind: 'text';
+  kind: "text";
   path: string;
   content: string;
   baseHash: string;
   isDirty: boolean;
   language?: string;
   viewingTextBackedImageAsText?: boolean;
-  externalState?: 'modified' | 'deleted';
+  externalState?: "modified" | "deleted";
 }
 
 export interface OpenImageFile {
-  kind: 'image';
+  kind: "image";
   path: string;
   mime: string;
   url: string;
   size: number;
   isTextBacked: boolean;
-  externalState?: 'modified' | 'deleted';
+  externalState?: "modified" | "deleted";
 }
 
 export type OpenFile = OpenTextFile | OpenImageFile;
@@ -81,9 +79,7 @@ export const activeFilePathAtomFamily = atomFamily((workspaceId: string) =>
  * Incremented when external workspace activity means open editor buffers
  * may need to reconcile with disk state.
  */
-export const editorRefreshTokenAtomFamily = atomFamily((workspaceId: string) =>
-  atom<number>(0)
-);
+export const editorRefreshTokenAtomFamily = atomFamily((workspaceId: string) => atom<number>(0));
 
 /**
  * Active file (derived)

@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createCodexConfigAuditApi,
   logCodexConfigFindings,
   type ServerWarnLogger,
-} from '../server.js';
+} from "../server.js";
 
-describe('server startup logging', () => {
+describe("server startup logging", () => {
   const logger: ServerWarnLogger = {
     warn: vi.fn(),
   };
@@ -14,12 +14,12 @@ describe('server startup logging', () => {
     vi.mocked(logger.warn).mockReset();
   });
 
-  it('logs codex audit findings through the structured logger', async () => {
+  it("logs codex audit findings through the structured logger", async () => {
     const auditApi = {
       audit: vi.fn().mockReturnValue({
         codex: {
-          configPath: '/tmp/config.toml',
-          findings: [{ startLine: 12, message: 'remove notify override' }],
+          configPath: "/tmp/config.toml",
+          findings: [{ startLine: 12, message: "remove notify override" }],
         },
       }),
     };
@@ -28,18 +28,18 @@ describe('server startup logging', () => {
 
     expect(logger.warn).toHaveBeenCalledWith(
       {
-        configPath: '/tmp/config.toml',
+        configPath: "/tmp/config.toml",
         startLine: 12,
-        findingMessage: 'remove notify override',
+        findingMessage: "remove notify override",
       },
-      'Codex config finding'
+      "Codex config finding"
     );
   });
 
-  it('logs audit failures as non-fatal warnings', async () => {
+  it("logs audit failures as non-fatal warnings", async () => {
     const auditApi = {
       audit: vi.fn(() => {
-        throw new Error('boom');
+        throw new Error("boom");
       }),
     };
 
@@ -49,13 +49,13 @@ describe('server startup logging', () => {
       expect.objectContaining({
         err: expect.any(Error),
       }),
-      'Codex config audit failed (non-fatal)'
+      "Codex config audit failed (non-fatal)"
     );
   });
 
-  it('creates an audit api wired to the codex config helpers', () => {
+  it("creates an audit api wired to the codex config helpers", () => {
     const auditApi = createCodexConfigAuditApi();
-    expect(typeof auditApi.audit).toBe('function');
-    expect(typeof auditApi.cleanup).toBe('function');
+    expect(typeof auditApi.audit).toBe("function");
+    expect(typeof auditApi.cleanup).toBe("function");
   });
 });

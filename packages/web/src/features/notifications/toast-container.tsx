@@ -6,21 +6,21 @@
  * Clicking a toast navigates to the relevant workspace/session.
  */
 
-import { useEffect, useCallback } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useNavigate } from 'react-router-dom';
-import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from 'lucide-react';
-import { toastsAtom, dismissToastAtom, type Toast, type ToastKind } from './atoms';
-import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
-import { pendingFocusSessionAtom } from '../../atoms/app-ui';
-import { useViewport } from '../../hooks/use-viewport';
-import { focusSession } from './focus-session';
+import { useAtomValue, useSetAtom } from "jotai";
+import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from "lucide-react";
+import { useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { pendingFocusSessionAtom } from "../../atoms/app-ui";
+import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
+import { useViewport } from "../../hooks/use-viewport";
+import { dismissToastAtom, type Toast, type ToastKind, toastsAtom } from "./atoms";
+import { focusSession } from "./focus-session";
 
 const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: string }> = {
-  success: { icon: CheckCircle, className: 'toast--success' },
-  error:   { icon: AlertCircle,  className: 'toast--error' },
-  warning: { icon: AlertTriangle, className: 'toast--warning' },
-  info:    { icon: Info,          className: 'toast--info' },
+  success: { icon: CheckCircle, className: "toast--success" },
+  error: { icon: AlertCircle, className: "toast--error" },
+  warning: { icon: AlertTriangle, className: "toast--warning" },
+  info: { icon: Info, className: "toast--info" },
 };
 
 function ToastItem({ toast }: { toast: Toast }) {
@@ -54,19 +54,26 @@ function ToastItem({ toast }: { toast: Toast }) {
       });
     } else if (toast.workspaceId) {
       setActiveWorkspaceId(toast.workspaceId);
-      if (window.location.pathname !== '/workspace') {
-        navigate('/workspace');
+      if (window.location.pathname !== "/workspace") {
+        navigate("/workspace");
       }
     }
     dismiss(toast.id);
-  }, [toast.workspaceId, toast.sessionId, navigate, dismiss, setActiveWorkspaceId, setPendingFocus]);
+  }, [
+    toast.workspaceId,
+    toast.sessionId,
+    navigate,
+    dismiss,
+    setActiveWorkspaceId,
+    setPendingFocus,
+  ]);
 
   return (
     <div
       className={`toast ${config.className}`}
       role="alert"
       onClick={handleClick}
-      style={{ cursor: toast.workspaceId ? 'pointer' : 'default' }}
+      style={{ cursor: toast.workspaceId ? "pointer" : "default" }}
     >
       <Icon size={16} className="toast__icon" />
       <div className="toast__content">
@@ -75,7 +82,10 @@ function ToastItem({ toast }: { toast: Toast }) {
       </div>
       <button
         className="toast__close"
-        onClick={(e) => { e.stopPropagation(); dismiss(toast.id); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          dismiss(toast.id);
+        }}
         aria-label="Dismiss"
       >
         <X size={14} />
@@ -86,16 +96,13 @@ function ToastItem({ toast }: { toast: Toast }) {
 
 export function ToastContainer() {
   const toasts = useAtomValue(toastsAtom);
-  const isMobile = useViewport() === 'mobile';
+  const isMobile = useViewport() === "mobile";
 
   if (toasts.length === 0) return null;
 
-  const containerClassName = [
-    'toast-container',
-    isMobile ? 'toast-container--mobile' : '',
-  ]
+  const containerClassName = ["toast-container", isMobile ? "toast-container--mobile" : ""]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className={containerClassName} aria-live="polite">

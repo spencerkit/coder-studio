@@ -1,41 +1,39 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { Provider, createStore } from 'jotai';
-import { localeAtom } from '../../../atoms/app-ui';
-import { TerminalPanel } from '../views/shared/terminal-panel';
-import { wsClientAtom } from '../../../atoms/connection';
-import { bottomPanelHeightAtom } from '../../workspace/atoms';
-import {
-  terminalMetaAtomFamily,
-  terminalOutputAtomFamily,
-  type TerminalMeta,
-} from '../atoms';
-import { toastsAtom } from '../../notifications';
-import { seedReadyWorkspaceState } from '../../../test-utils/workspace-state';
-import { Topics } from '@coder-studio/core';
-import { MemoryRouter } from 'react-router-dom';
+import { Topics } from "@coder-studio/core";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { createStore, Provider } from "jotai";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
+import { wsClientAtom } from "../../../atoms/connection";
+import { seedReadyWorkspaceState } from "../../../test-utils/workspace-state";
+import { toastsAtom } from "../../notifications";
+import { bottomPanelHeightAtom } from "../../workspace/atoms";
+import { type TerminalMeta, terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
+import { TerminalPanel } from "../views/shared/terminal-panel";
 
 const mockXtermHost = vi.fn(
-  ({ terminalId, terminalKind }: { terminalId: string; terminalKind?: 'agent' | 'shell' }) => (
-    <div data-testid="xterm-host" data-terminal-kind={terminalKind}>{terminalId}</div>
-  ),
+  ({ terminalId, terminalKind }: { terminalId: string; terminalKind?: "agent" | "shell" }) => (
+    <div data-testid="xterm-host" data-terminal-kind={terminalKind}>
+      {terminalId}
+    </div>
+  )
 );
 
-vi.mock('../views/shared/xterm-host', () => ({
-  XtermHost: (props: { terminalId: string; terminalKind?: 'agent' | 'shell' }) =>
+vi.mock("../views/shared/xterm-host", () => ({
+  XtermHost: (props: { terminalId: string; terminalKind?: "agent" | "shell" }) =>
     mockXtermHost(props),
 }));
 
 type EventHandler = (topic: string, payload: unknown, seq: number) => void;
 
-describe('TerminalPanel', () => {
+describe("TerminalPanel", () => {
   let handlers: EventHandler[];
 
   beforeEach(() => {
     handlers = [];
     mockXtermHost.mockClear();
-    window.localStorage.setItem('ui.locale', JSON.stringify('en'));
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
   });
 
   afterEach(() => {
@@ -43,12 +41,12 @@ describe('TerminalPanel', () => {
   });
 
   function setEnglishLocale(store: ReturnType<typeof createStore>) {
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
   }
 
-  it('keeps rendering when the first terminal is created after mount', async () => {
+  it("keeps rendering when the first terminal is created after mount", async () => {
     const store = createStore();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
@@ -56,15 +54,15 @@ describe('TerminalPanel', () => {
       };
     });
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'terminal.list') {
+      if (op === "terminal.list") {
         return Promise.resolve([
           {
-            id: 'term_1',
-            workspaceId: 'ws-test',
-            kind: 'shell',
-            title: 'Workspace Shell',
-            cwd: '/tmp/ws-test',
-            argv: ['/bin/bash'],
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
             cols: 120,
             rows: 30,
             alive: true,
@@ -77,10 +75,10 @@ describe('TerminalPanel', () => {
     });
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -95,13 +93,13 @@ describe('TerminalPanel', () => {
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
 
     const terminalMeta: TerminalMeta = {
-      id: 'term_1',
-      workspaceId: 'ws-test',
-      kind: 'shell',
+      id: "term_1",
+      workspaceId: "ws-test",
+      kind: "shell",
       alive: true,
-      title: 'Workspace Shell',
+      title: "Workspace Shell",
     };
-    store.set(terminalMetaAtomFamily('term_1'), terminalMeta);
+    store.set(terminalMetaAtomFamily("term_1"), terminalMeta);
 
     render(
       <Provider store={store}>
@@ -109,30 +107,27 @@ describe('TerminalPanel', () => {
       </Provider>
     );
 
-    expect(screen.getByText('No terminals')).toBeInTheDocument();
-    expect(subscribe).toHaveBeenCalledWith(
-      [Topics.terminalsAll('ws-test')],
-      expect.any(Function)
-    );
+    expect(screen.getByText("No terminals")).toBeInTheDocument();
+    expect(subscribe).toHaveBeenCalledWith([Topics.terminalsAll("ws-test")], expect.any(Function));
 
     await act(async () => {
       handlers[0]?.(
-        'workspace.ws-test.terminal.term_1.created',
-        { id: 'term_1', kind: 'shell' },
+        "workspace.ws-test.terminal.term_1.created",
+        { id: "term_1", kind: "shell" },
         1
       );
     });
 
     await waitFor(() => {
-      expect(screen.getAllByText('Workspace Shell').length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Workspace Shell").length).toBeGreaterThan(0);
     });
-    expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_1');
+    expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it('renders the new terminal immediately from terminal.create result before the created event arrives', async () => {
+  it("renders the new terminal immediately from terminal.create result before the created event arrives", async () => {
     const store = createStore();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
@@ -140,18 +135,18 @@ describe('TerminalPanel', () => {
       };
     });
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'terminal.list') {
+      if (op === "terminal.list") {
         return Promise.resolve([]);
       }
 
-      if (op === 'terminal.create') {
+      if (op === "terminal.create") {
         return Promise.resolve({
-          id: 'term_2',
-          workspaceId: 'ws-test',
-          kind: 'shell',
-          title: 'Workspace Shell',
-          cwd: '/tmp/ws-test',
-          argv: ['/bin/bash'],
+          id: "term_2",
+          workspaceId: "ws-test",
+          kind: "shell",
+          title: "Workspace Shell",
+          cwd: "/tmp/ws-test",
+          argv: ["/bin/bash"],
           cols: 120,
           rows: 30,
           alive: true,
@@ -163,10 +158,10 @@ describe('TerminalPanel', () => {
     });
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -187,22 +182,22 @@ describe('TerminalPanel', () => {
     );
 
     await act(async () => {
-      screen.getAllByRole('button', { name: 'New Terminal' })[0]?.click();
+      screen.getAllByRole("button", { name: "New Terminal" })[0]?.click();
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_2');
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
     });
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term_2',
-        terminalKind: 'shell',
+        terminalId: "term_2",
+        terminalKind: "shell",
       })
     );
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it('shows an error toast when terminal creation fails', async () => {
+  it("shows an error toast when terminal creation fails", async () => {
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
@@ -211,22 +206,22 @@ describe('TerminalPanel', () => {
       };
     });
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'terminal.list') {
+      if (op === "terminal.list") {
         return Promise.resolve([]);
       }
 
-      if (op === 'terminal.create') {
-        return Promise.reject(new Error('Terminal spawn failed: posix_spawnp failed.'));
+      if (op === "terminal.create") {
+        return Promise.reject(new Error("Terminal spawn failed: posix_spawnp failed."));
       }
 
       return Promise.resolve(undefined);
     });
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -247,21 +242,21 @@ describe('TerminalPanel', () => {
     );
 
     await act(async () => {
-      screen.getAllByRole('button', { name: 'New Terminal' })[0]?.click();
+      screen.getAllByRole("button", { name: "New Terminal" })[0]?.click();
     });
 
     await waitFor(() => {
       expect(store.get(toastsAtom)[0]).toMatchObject({
-        kind: 'error',
-        title: 'Could not create terminal',
-        body: 'Terminal spawn failed: posix_spawnp failed.',
+        kind: "error",
+        title: "Could not create terminal",
+        body: "Terminal spawn failed: posix_spawnp failed.",
       });
     });
   });
 
-  it('ignores agent terminals and keeps the shell panel empty', async () => {
+  it("ignores agent terminals and keeps the shell panel empty", async () => {
     const store = createStore();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
@@ -271,10 +266,10 @@ describe('TerminalPanel', () => {
     const sendCommand = vi.fn().mockResolvedValue([]);
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -296,20 +291,20 @@ describe('TerminalPanel', () => {
 
     await act(async () => {
       handlers[0]?.(
-        'workspace.ws-test.terminal.term_agent.created',
-        { id: 'term_agent', kind: 'agent' },
+        "workspace.ws-test.terminal.term_agent.created",
+        { id: "term_agent", kind: "agent" },
         1
       );
     });
 
-    expect(screen.getByText('No terminals')).toBeInTheDocument();
-    expect(screen.queryByTestId('xterm-host')).not.toBeInTheDocument();
+    expect(screen.getByText("No terminals")).toBeInTheDocument();
+    expect(screen.queryByTestId("xterm-host")).not.toBeInTheDocument();
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it('caches terminal output to atom for shell terminals before xterm-host subscribes', async () => {
+  it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {
     const store = createStore();
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
@@ -319,10 +314,10 @@ describe('TerminalPanel', () => {
     const sendCommand = vi.fn().mockResolvedValue([]);
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -338,13 +333,13 @@ describe('TerminalPanel', () => {
 
     // Set terminal meta before output arrives
     const terminalMeta: TerminalMeta = {
-      id: 'term_output',
-      workspaceId: 'ws-test',
-      kind: 'shell',
+      id: "term_output",
+      workspaceId: "ws-test",
+      kind: "shell",
       alive: true,
-      title: 'Shell',
+      title: "Shell",
     };
-    store.set(terminalMetaAtomFamily('term_output'), terminalMeta);
+    store.set(terminalMetaAtomFamily("term_output"), terminalMeta);
 
     render(
       <Provider store={store}>
@@ -353,17 +348,17 @@ describe('TerminalPanel', () => {
     );
 
     // Simulate output event arriving before xterm-host subscribes
-    const outputBytes = new TextEncoder().encode('hello from shell\n');
+    const outputBytes = new TextEncoder().encode("hello from shell\n");
     await act(async () => {
       handlers[0]?.(
-        'workspace.ws-test.terminal.term_output.output',
-        { transport: 'binary', streamId: 1, size: outputBytes.length, bytes: outputBytes },
+        "workspace.ws-test.terminal.term_output.output",
+        { transport: "binary", streamId: 1, size: outputBytes.length, bytes: outputBytes },
         18
       );
     });
 
     // Verify output is cached in the atom
-    const outputState = store.get(terminalOutputAtomFamily('term_output'));
+    const outputState = store.get(terminalOutputAtomFamily("term_output"));
     expect(outputState.chunks).toHaveLength(1);
     expect(outputState.chunks[0]).toEqual(outputBytes);
     expect(outputState.lastSeq).toBe(18);
@@ -371,7 +366,7 @@ describe('TerminalPanel', () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it('renders a lighter mobile fullscreen terminal toolbar when requested by the mobile sheet', async () => {
+  it("renders a lighter mobile fullscreen terminal toolbar when requested by the mobile sheet", async () => {
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
@@ -382,10 +377,10 @@ describe('TerminalPanel', () => {
     const sendCommand = vi.fn().mockResolvedValue([]);
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -398,12 +393,12 @@ describe('TerminalPanel', () => {
     store.set(bottomPanelHeightAtom, 240);
     setEnglishLocale(store);
     store.set(wsClientAtom, { subscribe, sendCommand } as never);
-    store.set(terminalMetaAtomFamily('term_1'), {
-      id: 'term_1',
-      workspaceId: 'ws-test',
-      kind: 'shell',
+    store.set(terminalMetaAtomFamily("term_1"), {
+      id: "term_1",
+      workspaceId: "ws-test",
+      kind: "shell",
       alive: true,
-      title: 'Workspace Shell',
+      title: "Workspace Shell",
     });
 
     render(
@@ -416,12 +411,12 @@ describe('TerminalPanel', () => {
       </Provider>
     );
 
-    expect(screen.queryByText('TERMINAL')).not.toBeInTheDocument();
-    expect(screen.queryByText('Workspace Shell')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'New Terminal' }).length).toBeGreaterThan(0);
+    expect(screen.queryByText("TERMINAL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Workspace Shell")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New Terminal" }).length).toBeGreaterThan(0);
   });
 
-  it('keeps only one terminal switcher in mobile fullscreen mode', async () => {
+  it("keeps only one terminal switcher in mobile fullscreen mode", async () => {
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
       handlers.push(handler);
@@ -430,27 +425,27 @@ describe('TerminalPanel', () => {
       };
     });
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'terminal.list') {
+      if (op === "terminal.list") {
         return Promise.resolve([
           {
-            id: 'term_1',
-            workspaceId: 'ws-test',
-            kind: 'shell',
-            title: 'Workspace Shell',
-            cwd: '/tmp/ws-test',
-            argv: ['/bin/bash'],
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
             cols: 120,
             rows: 30,
             alive: true,
             createdAt: 1,
           },
           {
-            id: 'term_2',
-            workspaceId: 'ws-test',
-            kind: 'shell',
-            title: 'Workspace Shell 2',
-            cwd: '/tmp/ws-test',
-            argv: ['/bin/bash'],
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
             cols: 120,
             rows: 30,
             alive: true,
@@ -463,10 +458,10 @@ describe('TerminalPanel', () => {
     });
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -491,14 +486,14 @@ describe('TerminalPanel', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_1');
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     });
 
-    expect(document.querySelectorAll('.terminal-selector-btn')).toHaveLength(1);
-    expect(document.querySelector('.bottom-terminal-tabs')).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".terminal-selector-btn")).toHaveLength(1);
+    expect(document.querySelector(".bottom-terminal-tabs")).not.toBeInTheDocument();
   });
 
-  it('uses MobileSelectSheet for the mobile terminal selector', async () => {
+  it("uses MobileSelectSheet for the mobile terminal selector", async () => {
     const user = userEvent.setup();
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
@@ -508,27 +503,27 @@ describe('TerminalPanel', () => {
       };
     });
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'terminal.list') {
+      if (op === "terminal.list") {
         return Promise.resolve([
           {
-            id: 'term_1',
-            workspaceId: 'ws-test',
-            kind: 'shell',
-            title: 'Workspace Shell',
-            cwd: '/tmp/ws-test',
-            argv: ['/bin/bash'],
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
             cols: 120,
             rows: 30,
             alive: true,
             createdAt: 1,
           },
           {
-            id: 'term_2',
-            workspaceId: 'ws-test',
-            kind: 'shell',
-            title: 'Workspace Shell 2',
-            cwd: '/tmp/ws-test',
-            argv: ['/bin/bash'],
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
             cols: 120,
             rows: 30,
             alive: true,
@@ -541,10 +536,10 @@ describe('TerminalPanel', () => {
     });
 
     seedReadyWorkspaceState(store, {
-      'ws-test': {
-        id: 'ws-test',
-        path: '/tmp/ws-test',
-        targetRuntime: 'native',
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
         openedAt: 1,
         lastActiveAt: 1,
         uiState: {
@@ -569,24 +564,24 @@ describe('TerminalPanel', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('xterm-host')).toHaveTextContent('term_1');
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     });
 
-    await user.click(screen.getByRole('button', { name: 'Switch terminal' }));
+    await user.click(screen.getByRole("button", { name: "Switch terminal" }));
 
-    expect(screen.getByRole('region', { name: 'Terminal Sessions sheet' })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Terminal Sessions sheet" })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', {
-        name: 'Workspace Shell',
-        description: 'Current terminal',
+      screen.getByRole("button", {
+        name: "Workspace Shell",
+        description: "Current terminal",
       })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', {
-        name: 'Workspace Shell 2',
-        description: 'Terminal 2',
+      screen.getByRole("button", {
+        name: "Workspace Shell 2",
+        description: "Terminal 2",
       })
     ).toBeInTheDocument();
-    expect(document.querySelector('.terminal-selector-dropdown')).not.toBeInTheDocument();
+    expect(document.querySelector(".terminal-selector-dropdown")).not.toBeInTheDocument();
   });
 });

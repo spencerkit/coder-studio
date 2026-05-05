@@ -1,40 +1,38 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import type { Workspace } from '@coder-studio/core';
-import { localeAtom } from '../../atoms/app-ui';
-import { TopBar } from './index';
-import { workspaceOrderAtom, workspacesAtom, workspacesLoadStateAtom } from '../../atoms/workspaces';
-import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from '../workspace/atoms';
+import type { Workspace } from "@coder-studio/core";
+import { render, screen } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../atoms/app-ui";
+import {
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../../atoms/workspaces";
+import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
+import { TopBar } from "./index";
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
     useNavigate: () => routerMocks.navigate,
   };
 });
 
-vi.mock('./components/connection-status', () => ({
+vi.mock("./components/connection-status", () => ({
   ConnectionStatus: () => <div data-testid="connection-status" />,
 }));
 
-vi.mock('../workspace/views/shared/workspace-launch-modal', () => ({
+vi.mock("../workspace/views/shared/workspace-launch-modal", () => ({
   WorkspaceLaunchModal: () => null,
 }));
 
-vi.mock('./components/tab', () => ({
-  WorkspaceTab: ({
-    workspace,
-    isActive,
-  }: {
-    workspace: Workspace;
-    isActive: boolean;
-  }) => (
+vi.mock("./components/tab", () => ({
+  WorkspaceTab: ({ workspace, isActive }: { workspace: Workspace; isActive: boolean }) => (
     <div data-testid="workspace-tab" data-active={String(isActive)}>
       {workspace.id}
     </div>
@@ -45,7 +43,7 @@ function createWorkspace(id: string, path: string): Workspace {
   return {
     id,
     path,
-    targetRuntime: 'native',
+    targetRuntime: "native",
     openedAt: 1,
     lastActiveAt: 1,
     uiState: {
@@ -56,19 +54,19 @@ function createWorkspace(id: string, path: string): Workspace {
   };
 }
 
-describe('TopBar', () => {
+describe("TopBar", () => {
   beforeEach(() => {
     routerMocks.navigate.mockReset();
   });
 
-  it('renders tabs in workspace order and highlights the resolved active workspace', () => {
+  it("renders tabs in workspace order and highlights the resolved active workspace", () => {
     const store = createStore();
     store.set(workspacesAtom, {
-      'ws-a': createWorkspace('ws-a', '/tmp/a'),
-      'ws-b': createWorkspace('ws-b', '/tmp/b'),
+      "ws-a": createWorkspace("ws-a", "/tmp/a"),
+      "ws-b": createWorkspace("ws-b", "/tmp/b"),
     });
-    store.set(workspaceOrderAtom, ['ws-b', 'ws-a']);
-    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(workspaceOrderAtom, ["ws-b", "ws-a"]);
+    store.set(workspacesLoadStateAtom, "ready");
 
     render(
       <Provider store={store}>
@@ -76,17 +74,17 @@ describe('TopBar', () => {
       </Provider>
     );
 
-    const tabs = screen.getAllByTestId('workspace-tab');
+    const tabs = screen.getAllByTestId("workspace-tab");
 
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['ws-b', 'ws-a']);
-    expect(tabs[0]?.getAttribute('data-active')).toBe('true');
-    expect(tabs[1]?.getAttribute('data-active')).toBe('false');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["ws-b", "ws-a"]);
+    expect(tabs[0]?.getAttribute("data-active")).toBe("true");
+    expect(tabs[1]?.getAttribute("data-active")).toBe("false");
   });
 
-  it('uses translated labels when locale is set to en', () => {
+  it("uses translated labels when locale is set to en", () => {
     const store = createStore();
-    store.set(localeAtom, 'en');
-    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
 
     render(
       <Provider store={store}>
@@ -94,15 +92,15 @@ describe('TopBar', () => {
       </Provider>
     );
 
-    expect(screen.getByText('No workspace open')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Quick Actions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText("No workspace open")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
-  it('marks terminal and files toggles with explicit active and muted states', () => {
+  it("marks terminal and files toggles with explicit active and muted states", () => {
     const store = createStore();
-    store.set(localeAtom, 'en');
-    store.set(workspacesLoadStateAtom, 'ready');
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
     store.set(terminalPanelVisibleAtom, false);
     store.set(sidebarCollapsedAtom, false);
 
@@ -112,13 +110,13 @@ describe('TopBar', () => {
       </Provider>
     );
 
-    const terminalButton = screen.getByRole('button', { name: 'Show Terminal' });
-    const filesButton = screen.getByRole('button', { name: 'Hide Files' });
+    const terminalButton = screen.getByRole("button", { name: "Show Terminal" });
+    const filesButton = screen.getByRole("button", { name: "Hide Files" });
 
-    expect(terminalButton).toHaveClass('topbar-btn--muted');
-    expect(terminalButton).not.toHaveClass('topbar-btn--active');
-    expect(filesButton).toHaveClass('topbar-btn--active');
-    expect(filesButton).not.toHaveClass('topbar-btn--muted');
+    expect(terminalButton).toHaveClass("topbar-btn--muted");
+    expect(terminalButton).not.toHaveClass("topbar-btn--active");
+    expect(filesButton).toHaveClass("topbar-btn--active");
+    expect(filesButton).not.toHaveClass("topbar-btn--muted");
 
     store.set(terminalPanelVisibleAtom, true);
     store.set(sidebarCollapsedAtom, true);
@@ -129,7 +127,7 @@ describe('TopBar', () => {
       </Provider>
     );
 
-    expect(screen.getByRole('button', { name: 'Hide Terminal' })).toHaveClass('topbar-btn--active');
-    expect(screen.getByRole('button', { name: 'Show Files' })).toHaveClass('topbar-btn--muted');
+    expect(screen.getByRole("button", { name: "Hide Terminal" })).toHaveClass("topbar-btn--active");
+    expect(screen.getByRole("button", { name: "Show Files" })).toHaveClass("topbar-btn--muted");
   });
 });

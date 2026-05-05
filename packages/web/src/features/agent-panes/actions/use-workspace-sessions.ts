@@ -1,18 +1,22 @@
-import { useEffect } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import type { Session, Workspace } from '@coder-studio/core';
-import { activeWorkspaceAtom } from '../../../atoms/workspaces';
-import { connectionStatusAtom, dispatchCommandAtom } from '../../../atoms/connection';
-import { sessionsAtom, sessionsByWorkspaceAtomFamily } from '../../../atoms/sessions';
-import { useWorkspaceUiStatePersistence } from '../../workspace/actions/use-workspace-ui-state-persistence';
+import type { Session, Workspace } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useEffect } from "react";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import { sessionsAtom, sessionsByWorkspaceAtomFamily } from "../../../atoms/sessions";
+import { activeWorkspaceAtom } from "../../../atoms/workspaces";
+import { useWorkspaceUiStatePersistence } from "../../workspace/actions/use-workspace-ui-state-persistence";
 import {
   clearLegacyPaneLayout,
   defaultPaneLayout,
+  type PaneNode,
   paneLayoutAtomFamily,
   readLegacyPaneLayout,
-  type PaneNode,
-} from '../atoms/pane-layout';
-import { collectSessionIds, createFallbackPaneLayout, sanitizePaneLayout } from '../pane-layout-tree';
+} from "../atoms/pane-layout";
+import {
+  collectSessionIds,
+  createFallbackPaneLayout,
+  sanitizePaneLayout,
+} from "../pane-layout-tree";
 
 interface UseWorkspaceSessionsOptions {
   disabled?: boolean;
@@ -24,7 +28,7 @@ export function useWorkspaceSessions(
 ) {
   const workspaceFromAtom = useAtomValue(activeWorkspaceAtom);
   const workspace = workspaceOverride === undefined ? workspaceFromAtom : workspaceOverride;
-  const workspaceId = workspace?.id ?? '__workspace_empty__';
+  const workspaceId = workspace?.id ?? "__workspace_empty__";
   const disabled = options?.disabled ?? false;
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -44,16 +48,16 @@ export function useWorkspaceSessions(
       return;
     }
 
-    if (connectionStatus !== 'connected') {
+    if (connectionStatus !== "connected") {
       return;
     }
 
     let cancelled = false;
 
-    dispatch<Session[]>('session.list', { workspaceId: workspace.id })
+    dispatch<Session[]>("session.list", { workspaceId: workspace.id })
       .then((result) => {
         if (cancelled || !result.ok || !result.data) {
-          console.error('Failed to fetch sessions:', result.error?.message);
+          console.error("Failed to fetch sessions:", result.error?.message);
           return;
         }
 
@@ -74,14 +78,13 @@ export function useWorkspaceSessions(
         const currentLayout = store.get(paneLayoutAtomFamily(workspaceId));
         const workspacePaneLayout = normalizePaneLayout(workspace?.uiState.paneLayout);
         const legacyPaneLayout = workspacePaneLayout ? null : readLegacyPaneLayout(workspace.id);
-        const baseLayout = workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
+        const baseLayout =
+          workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
         const displayableSessionIds = new Set(
-          nextSessions
-            .filter((session) => session.state !== 'draft')
-            .map((session) => session.id)
+          nextSessions.filter((session) => session.state !== "draft").map((session) => session.id)
         );
 
-        const displayableSessions = nextSessions.filter((session) => session.state !== 'draft');
+        const displayableSessions = nextSessions.filter((session) => session.state !== "draft");
         const sanitized = sanitizePaneLayout(baseLayout, displayableSessionIds);
         let nextLayout = sanitized;
         if (sanitized !== currentLayout) {
@@ -110,7 +113,7 @@ export function useWorkspaceSessions(
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('Failed to fetch sessions:', error);
+          console.error("Failed to fetch sessions:", error);
         }
       });
 
@@ -138,7 +141,7 @@ export function useWorkspaceSessions(
   };
 }
 
-function normalizePaneLayout(layout: Workspace['uiState']['paneLayout']): PaneNode | null {
+function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode | null {
   if (!layout) {
     return null;
   }

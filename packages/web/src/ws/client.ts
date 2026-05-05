@@ -6,18 +6,18 @@
  */
 
 import {
+  type ClientToServer,
   decodeTerminalBinaryFrame,
   decodeTerminalOutputFrame,
+  type ServerToClient,
   TERMINAL_BINARY_OUTPUT_VERSION,
+  type TerminalBinaryEventData,
   TerminalBinaryFrameType,
   type TerminalInputActivity,
-  type ClientToServer,
-  type ServerToClient,
-  type TerminalBinaryEventData,
   type TerminalReplayBinaryResult,
   type TerminalSnapshotBinaryResult,
-} from '@coder-studio/core';
-import { topicMatches } from './subscription';
+} from "@coder-studio/core";
+import { topicMatches } from "./subscription";
 
 export type TerminalBinaryPayload = TerminalBinaryEventData & { bytes: Uint8Array };
 export type TerminalReplayPayload = TerminalReplayBinaryResult & { bytes: Uint8Array };
@@ -26,11 +26,11 @@ type TerminalCommandBinaryResult = TerminalReplayBinaryResult | TerminalSnapshot
 type TerminalCommandBinaryPayload = TerminalReplayPayload | TerminalSnapshotPayload;
 
 export type ConnectionStatus =
-  | 'connecting'
-  | 'connected'
-  | 'disconnected'
-  | 'reconnecting'
-  | 'rejected';
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "reconnecting"
+  | "rejected";
 
 export type EventListener = (topic: string, payload: unknown, seq: number) => void;
 export type StatusListener = (status: ConnectionStatus) => void;
@@ -41,7 +41,7 @@ export class CommandResultError extends Error {
 
   constructor(error: { code: string; message: string; details?: unknown }) {
     super(error.message);
-    this.name = 'CommandResultError';
+    this.name = "CommandResultError";
     this.code = error.code;
     this.details = error.details;
   }
@@ -74,7 +74,7 @@ const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
 const COMMAND_TIMEOUT_MS = 30000;
 
 const createCommandId = (): string => {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
   }
 
@@ -83,18 +83,18 @@ const createCommandId = (): string => {
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   return [
     hex.slice(0, 8),
     hex.slice(8, 12),
     hex.slice(12, 16),
     hex.slice(16, 20),
     hex.slice(20),
-  ].join('-');
+  ].join("-");
 };
 
 const normalizeWsUrl = (url: string): string => {
-  return url.endsWith('/ws') ? url : `${url.replace(/\/+$/, '')}/ws`;
+  return url.endsWith("/ws") ? url : `${url.replace(/\/+$/, "")}/ws`;
 };
 
 export class WsClient {
@@ -124,14 +124,11 @@ export class WsClient {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isManualClose = false;
-  private status: ConnectionStatus = 'disconnected';
+  private status: ConnectionStatus = "disconnected";
   private url: string;
   private reconnectConfig: ReconnectConfig;
 
-  constructor(
-    url: string,
-    reconnectConfig: Partial<ReconnectConfig> = {}
-  ) {
+  constructor(url: string, reconnectConfig: Partial<ReconnectConfig> = {}) {
     this.url = url;
     this.reconnectConfig = { ...DEFAULT_RECONNECT_CONFIG, ...reconnectConfig };
   }
@@ -140,7 +137,7 @@ export class WsClient {
    * Connect to WebSocket server
    */
   async connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN && this.status === 'connected') {
+    if (this.ws?.readyState === WebSocket.OPEN && this.status === "connected") {
       return Promise.resolve();
     }
 
@@ -149,7 +146,7 @@ export class WsClient {
     }
 
     this.isManualClose = false;
-    this.setStatus('connecting');
+    this.setStatus("connecting");
 
     let resolveConnect!: () => void;
     let rejectConnect!: (error: Error) => void;
@@ -166,19 +163,19 @@ export class WsClient {
     try {
       const socket = new WebSocket(this.url);
       this.ws = socket;
-      socket.binaryType = 'arraybuffer';
+      socket.binaryType = "arraybuffer";
 
       socket.onopen = () => {
         if (this.ws !== socket) {
           return;
         }
 
-        this.setStatus('connected');
+        this.setStatus("connected");
         this.reconnectAttempts = 0;
 
         const subscribedTopics = Array.from(this.eventListeners.keys());
         if (subscribedTopics.length > 0) {
-          const msg: ClientToServer = { kind: 'subscribe', topics: subscribedTopics };
+          const msg: ClientToServer = { kind: "subscribe", topics: subscribedTopics };
           socket.send(JSON.stringify(msg));
         }
 
@@ -196,7 +193,7 @@ export class WsClient {
         }
 
         try {
-          if (typeof event.data === 'string') {
+          if (typeof event.data === "string") {
             const msg = JSON.parse(event.data) as ServerToClient;
             this.handleMessage(msg);
             return;
@@ -207,9 +204,9 @@ export class WsClient {
             return;
           }
 
-          console.error('Unsupported WebSocket message type:', typeof event.data);
+          console.error("Unsupported WebSocket message type:", typeof event.data);
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+          console.error("Failed to parse WebSocket message:", err);
         }
       };
 
@@ -227,7 +224,7 @@ export class WsClient {
           return;
         }
 
-        console.error('WebSocket error:', err);
+        console.error("WebSocket error:", err);
       };
     } catch (err) {
       this.rejectConnectDeferred(err instanceof Error ? err : new Error(String(err)));
@@ -246,21 +243,23 @@ export class WsClient {
       this.reconnectTimer = null;
     }
 
-    this.rejectConnectDeferred(new Error('WebSocket disconnected'));
-    this.rejectPendingCommands(new Error('WebSocket disconnected'));
+    this.rejectConnectDeferred(new Error("WebSocket disconnected"));
+    this.rejectPendingCommands(new Error("WebSocket disconnected"));
     this.clearBinaryCommandState();
 
     if (this.ws) {
-      this.ws.close(1000, reason || 'client_disconnect');
+      this.ws.close(1000, reason || "client_disconnect");
       this.ws = null;
     }
 
-    this.setStatus('disconnected');
+    this.setStatus("disconnected");
   }
 
-  recoverConnection(trigger: 'visibility_resume' | 'network_online' | 'manual_retry' = 'manual_retry'): void {
+  recoverConnection(
+    trigger: "visibility_resume" | "network_online" | "manual_retry" = "manual_retry"
+  ): void {
     const status = this.getStatus();
-    if (status === 'connected' || status === 'connecting' || status === 'rejected') {
+    if (status === "connected" || status === "connecting" || status === "rejected") {
       return;
     }
 
@@ -272,14 +271,14 @@ export class WsClient {
     this.reconnectAttempts = 0;
     console.log(`[WsClient] Recovering connection after ${trigger}`);
     void this.connect().catch((err) => {
-      console.error('Recovery connect failed:', err);
+      console.error("Recovery connect failed:", err);
     });
   }
 
   async sendCommand<T>(op: string, args: unknown, options: SendCommandOptions = {}): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
+        reject(new Error("WebSocket not connected"));
         return;
       }
 
@@ -298,7 +297,7 @@ export class WsClient {
         timeoutId,
       });
 
-      const msg: ClientToServer = { kind: 'command', id, op, args };
+      const msg: ClientToServer = { kind: "command", id, op, args };
       this.ws.send(JSON.stringify(msg));
     });
   }
@@ -311,7 +310,7 @@ export class WsClient {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
+        reject(new Error("WebSocket not connected"));
         return;
       }
 
@@ -320,7 +319,7 @@ export class WsClient {
       const timeoutId = setTimeout(() => {
         this.cleanupTimedOutBinaryCommand(id);
         this.pendingCommands.delete(id);
-        reject(new Error('Command timeout: terminal.input'));
+        reject(new Error("Command timeout: terminal.input"));
       }, COMMAND_TIMEOUT_MS);
 
       this.pendingCommands.set(id, {
@@ -330,12 +329,12 @@ export class WsClient {
       });
 
       const msg: ClientToServer = {
-        kind: 'command',
+        kind: "command",
         id,
-        op: 'terminal.input',
+        op: "terminal.input",
         args: {
           terminalId,
-          transport: 'binary',
+          transport: "binary",
           streamId,
           size: bytes.byteLength,
           activity,
@@ -364,7 +363,7 @@ export class WsClient {
 
     // Send subscribe message
     if (newlyAddedTopics.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const msg: ClientToServer = { kind: 'subscribe', topics: newlyAddedTopics };
+      const msg: ClientToServer = { kind: "subscribe", topics: newlyAddedTopics };
       this.ws.send(JSON.stringify(msg));
     }
 
@@ -384,7 +383,7 @@ export class WsClient {
       }
 
       if (removedTopics.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const msg: ClientToServer = { kind: 'unsubscribe', topics: removedTopics };
+        const msg: ClientToServer = { kind: "unsubscribe", topics: removedTopics };
         this.ws.send(JSON.stringify(msg));
       }
     };
@@ -406,8 +405,8 @@ export class WsClient {
   }
 
   private handleMessage(msg: ServerToClient): void {
-    if (msg.kind === 'result') {
-        const pending = this.pendingCommands.get(msg.id);
+    if (msg.kind === "result") {
+      const pending = this.pendingCommands.get(msg.id);
       if (pending) {
         if (msg.ok && this.isTerminalBinaryCommandResult(msg.data)) {
           const expectedFrameType = this.getExpectedFrameType(msg.data);
@@ -425,7 +424,7 @@ export class WsClient {
               return;
             }
 
-            console.warn('Discarding terminal binary frame with unexpected type', {
+            console.warn("Discarding terminal binary frame with unexpected type", {
               streamId: msg.data.streamId,
               expectedFrameType,
               actualFrameType: orphan.frameType,
@@ -448,14 +447,14 @@ export class WsClient {
         } else {
           pending.reject(
             new CommandResultError({
-              code: msg.error?.code ?? 'command_failed',
-              message: msg.error?.message ?? 'Command failed',
+              code: msg.error?.code ?? "command_failed",
+              message: msg.error?.message ?? "Command failed",
               details: msg.error?.details,
-            }),
+            })
           );
         }
       }
-    } else if (msg.kind === 'event') {
+    } else if (msg.kind === "event") {
       this.lastSeenSeq.set(msg.topic, msg.seq);
       this.notifyEventListeners(msg.topic, msg.data, msg.seq);
     }
@@ -469,12 +468,12 @@ export class WsClient {
       this.notifyEventListeners(
         decoded.topic,
         {
-          transport: 'binary' as const,
+          transport: "binary" as const,
           streamId: decoded.streamId,
           size: decoded.payload.byteLength,
           bytes: decoded.payload,
         } satisfies TerminalBinaryPayload,
-        decoded.seq,
+        decoded.seq
       );
       return;
     }
@@ -498,7 +497,7 @@ export class WsClient {
     }
 
     if (header.type !== pendingInfo.expectedFrameType) {
-      console.warn('Discarding terminal binary frame with unexpected type', {
+      console.warn("Discarding terminal binary frame with unexpected type", {
         streamId: header.streamId,
         expectedFrameType: pendingInfo.expectedFrameType,
         actualFrameType: header.type,
@@ -538,19 +537,19 @@ export class WsClient {
 
   private isTerminalBinaryCommandResult(data: unknown): data is TerminalCommandBinaryResult {
     return (
-      typeof data === 'object' &&
+      typeof data === "object" &&
       data !== null &&
-      'status' in data &&
-      'transport' in data &&
-      'streamId' in data &&
-      'size' in data &&
-      (data as { status?: unknown }).status === 'ok' &&
-      (data as { transport?: unknown }).transport === 'binary'
+      "status" in data &&
+      "transport" in data &&
+      "streamId" in data &&
+      "size" in data &&
+      (data as { status?: unknown }).status === "ok" &&
+      (data as { transport?: unknown }).transport === "binary"
     );
   }
 
   private getExpectedFrameType(data: TerminalCommandBinaryResult): TerminalBinaryFrameType {
-    return 'source' in data ? TerminalBinaryFrameType.Snapshot : TerminalBinaryFrameType.Replay;
+    return "source" in data ? TerminalBinaryFrameType.Snapshot : TerminalBinaryFrameType.Replay;
   }
 
   private cleanupTimedOutBinaryCommand(commandId: string): void {
@@ -615,13 +614,13 @@ export class WsClient {
    */
   private handleClose(code: number, _reason: string): void {
     this.ws = null;
-    this.rejectPendingCommands(new Error('WebSocket disconnected'));
+    this.rejectPendingCommands(new Error("WebSocket disconnected"));
     this.clearBinaryCommandState();
 
     // Check for rejection codes
     if (code === 4001 || code === 4002) {
       // 4001: another_tab_active, 4002: takeover
-      this.setStatus('rejected');
+      this.setStatus("rejected");
       return;
     }
 
@@ -636,12 +635,12 @@ export class WsClient {
    */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.reconnectConfig.maxAttempts) {
-      console.error('Max reconnect attempts reached');
-      this.setStatus('disconnected');
+      console.error("Max reconnect attempts reached");
+      this.setStatus("disconnected");
       return;
     }
 
-    this.setStatus('reconnecting');
+    this.setStatus("reconnecting");
 
     const delay = Math.min(
       this.reconnectConfig.baseDelayMs * Math.pow(2, this.reconnectAttempts),
@@ -653,7 +652,7 @@ export class WsClient {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect().catch((err) => {
-        console.error('Reconnect failed:', err);
+        console.error("Reconnect failed:", err);
       });
     }, delay);
   }
@@ -666,7 +665,7 @@ export class WsClient {
     if (this.lastSeenSeq.size === 0) return;
 
     const msg: ClientToServer = {
-      kind: 'resync',
+      kind: "resync",
       lastSeen: Object.fromEntries(this.lastSeenSeq),
     };
     this.ws.send(JSON.stringify(msg));
@@ -681,7 +680,7 @@ export class WsClient {
       try {
         listener(status);
       } catch (err) {
-        console.error('Error in status listener:', err);
+        console.error("Error in status listener:", err);
       }
     }
   }
@@ -699,10 +698,10 @@ export function resolveWsUrl(): string {
 
   // Development and test environments connect directly to the backend, and
   // node-based tests may not provide a browser location object at all.
-  if (import.meta.env.DEV || import.meta.env.MODE === 'test' || typeof window === 'undefined') {
-    return 'ws://127.0.0.1:4173/ws';
+  if (import.meta.env.DEV || import.meta.env.MODE === "test" || typeof window === "undefined") {
+    return "ws://127.0.0.1:4173/ws";
   }
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
   return `${protocol}//${host}/ws`;
 }

@@ -3,19 +3,19 @@
  * Starts tsx watch for backend
  */
 
-import { runBackground } from './shared/process.js';
-import { SERVER_DIR, log, info, success, error } from './shared/index.js';
-import { resolve } from 'path';
+import { resolve } from "path";
+import { error, info, log, SERVER_DIR, success } from "./shared/index.js";
+import { runBackground } from "./shared/process.js";
 
 const SERVER_PORT = 4173;
-const SERVER_HOST = '127.0.0.1';
+const SERVER_HOST = "127.0.0.1";
 
 async function devServer(): Promise<void> {
-  info('Starting tsx watch for backend...');
+  info("Starting tsx watch for backend...");
 
-  const serverProcess = runBackground('pnpm', ['tsx', 'watch', 'src/server.ts'], {
+  const serverProcess = runBackground("pnpm", ["tsx", "watch", "src/server.ts"], {
     cwd: SERVER_DIR,
-    stdio: 'inherit',
+    stdio: "inherit",
     env: {
       ...process.env,
       HOST: SERVER_HOST,
@@ -23,7 +23,7 @@ async function devServer(): Promise<void> {
     },
   });
 
-  serverProcess.on('error', (err) => {
+  serverProcess.on("error", (err) => {
     error(`Server process failed: ${err.message}`);
     process.exit(1);
   });
@@ -31,14 +31,14 @@ async function devServer(): Promise<void> {
   success(`Backend dev server running at http://${SERVER_HOST}:${SERVER_PORT}`);
 
   // Handle process termination
-  process.on('SIGINT', () => {
-    info('\nStopping backend dev server...');
-    serverProcess.kill('SIGTERM');
+  process.on("SIGINT", () => {
+    info("\nStopping backend dev server...");
+    serverProcess.kill("SIGTERM");
     process.exit(0);
   });
 
-  process.on('SIGTERM', () => {
-    serverProcess.kill('SIGTERM');
+  process.on("SIGTERM", () => {
+    serverProcess.kill("SIGTERM");
     process.exit(0);
   });
 }

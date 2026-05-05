@@ -2,20 +2,20 @@
  * File IO operations with conflict detection.
  */
 
-import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rm, stat } from 'fs/promises';
-import { resolve, dirname } from 'path';
-import { createHash } from 'crypto';
-import { getImageTypeInfo } from './image.js';
+import { createHash } from "crypto";
+import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rm, stat } from "fs/promises";
+import { dirname, resolve } from "path";
+import { getImageTypeInfo } from "./image.js";
 
 export interface FileReadTextResult {
-  kind: 'text';
+  kind: "text";
   content: string;
   baseHash: string;
-  encoding: 'utf-8';
+  encoding: "utf-8";
 }
 
 export interface FileReadImageResult {
-  kind: 'image';
+  kind: "image";
   mime: string;
   /** URL the web client can drop into an <img src>. Relative so auth cookie applies. */
   url: string;
@@ -47,11 +47,11 @@ export async function createFile(rootPath: string, relPath: string): Promise<voi
   const existing = await statSafe(abs);
 
   if (existing) {
-    throw { code: 'already_exists', message: 'File already exists' };
+    throw { code: "already_exists", message: "File already exists" };
   }
 
   await mkdir(dirname(abs), { recursive: true });
-  await fsWriteFile(abs, '', 'utf-8');
+  await fsWriteFile(abs, "", "utf-8");
 }
 
 export async function createDirectory(rootPath: string, relPath: string): Promise<void> {
@@ -59,7 +59,7 @@ export async function createDirectory(rootPath: string, relPath: string): Promis
   const existing = await statSafe(abs);
 
   if (existing) {
-    throw { code: 'already_exists', message: 'Directory already exists' };
+    throw { code: "already_exists", message: "Directory already exists" };
   }
 
   await mkdir(abs, { recursive: true });
@@ -70,7 +70,7 @@ export async function deleteEntry(rootPath: string, relPath: string): Promise<vo
   const existing = await statSafe(abs);
 
   if (!existing) {
-    throw { code: 'not_found', message: 'Target not found' };
+    throw { code: "not_found", message: "Target not found" };
   }
 
   await rm(abs, { recursive: true });
@@ -89,8 +89,8 @@ export function resolveSafe(root: string, relPath: string): string {
   const abs = resolve(absRoot, relPath);
 
   // Prevent path escape: resolved path must be under root
-  if (!abs.startsWith(absRoot + '/') && abs !== absRoot) {
-    throw { code: 'path_escape', message: 'Path escapes workspace root' };
+  if (!abs.startsWith(absRoot + "/") && abs !== absRoot) {
+    throw { code: "path_escape", message: "Path escapes workspace root" };
   }
 
   return abs;
@@ -123,7 +123,7 @@ export async function readFile(
       path: relPath,
     });
     return {
-      kind: 'image',
+      kind: "image",
       mime: imageType.mime,
       url: `/api/file?${params.toString()}`,
       size: stats.size,
@@ -131,14 +131,14 @@ export async function readFile(
     };
   }
 
-  const content = await fsReadFile(abs, 'utf-8');
-  const baseHash = createHash('sha256').update(content).digest('hex');
+  const content = await fsReadFile(abs, "utf-8");
+  const baseHash = createHash("sha256").update(content).digest("hex");
 
   return {
-    kind: 'text',
+    kind: "text",
     content,
     baseHash,
-    encoding: 'utf-8',
+    encoding: "utf-8",
   };
 }
 
@@ -163,13 +163,13 @@ export async function writeFile(
 
   // Conflict check if baseHash provided
   if (baseHash) {
-    const current = await fsReadFile(abs, 'utf-8').catch(() => '');
-    const currentHash = createHash('sha256').update(current).digest('hex');
+    const current = await fsReadFile(abs, "utf-8").catch(() => "");
+    const currentHash = createHash("sha256").update(current).digest("hex");
 
     if (currentHash !== baseHash) {
       throw {
-        code: 'conflict',
-        message: 'File has been modified externally',
+        code: "conflict",
+        message: "File has been modified externally",
         details: {
           expectedHash: baseHash,
           actualHash: currentHash,
@@ -182,8 +182,8 @@ export async function writeFile(
   await mkdir(dirname(abs), { recursive: true });
 
   // Write new content
-  await fsWriteFile(abs, content, 'utf-8');
-  const newHash = createHash('sha256').update(content).digest('hex');
+  await fsWriteFile(abs, content, "utf-8");
+  const newHash = createHash("sha256").update(content).digest("hex");
 
   return { newHash };
 }

@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 export interface RuntimeConfig {
   host: string;
@@ -17,7 +17,7 @@ export function getRuntimeDir(): string {
     return override;
   }
 
-  return join(homedir(), '.coder-studio');
+  return join(homedir(), ".coder-studio");
 }
 
 export function getRuntimePath(): string {
@@ -26,7 +26,7 @@ export function getRuntimePath(): string {
     return pathOverride;
   }
 
-  return join(getRuntimeDir(), 'runtime.json');
+  return join(getRuntimeDir(), "runtime.json");
 }
 
 export function readRuntimeConfig(): RuntimeConfig | null {
@@ -36,19 +36,19 @@ export function readRuntimeConfig(): RuntimeConfig | null {
   }
 
   try {
-    const config = JSON.parse(readFileSync(runtimePath, 'utf-8')) as Partial<RuntimeConfig>;
+    const config = JSON.parse(readFileSync(runtimePath, "utf-8")) as Partial<RuntimeConfig>;
     if (
-      typeof config.port !== 'number' ||
-      typeof config.pid !== 'number' ||
-      typeof config.token !== 'string' ||
-      typeof config.serverInstanceId !== 'string' ||
-      typeof config.startedAt !== 'number'
+      typeof config.port !== "number" ||
+      typeof config.pid !== "number" ||
+      typeof config.token !== "string" ||
+      typeof config.serverInstanceId !== "string" ||
+      typeof config.startedAt !== "number"
     ) {
       return null;
     }
 
     return {
-      host: typeof config.host === 'string' ? config.host : 'localhost',
+      host: typeof config.host === "string" ? config.host : "localhost",
       port: config.port,
       pid: config.pid,
       token: config.token,
@@ -67,7 +67,7 @@ export function writeRuntimeConfig(config: RuntimeConfig): void {
     mkdirSync(runtimeDir, { recursive: true });
   }
 
-  writeFileSync(runtimePath, JSON.stringify(config, null, 2), 'utf-8');
+  writeFileSync(runtimePath, JSON.stringify(config, null, 2), "utf-8");
 }
 
 export function deleteRuntimeConfig(): void {

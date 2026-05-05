@@ -1,80 +1,86 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-describe('database schema baseline', () => {
+describe("database schema baseline", () => {
   let dbDir: string;
   let dbPath: string;
 
   beforeEach(() => {
-    dbDir = mkdtempSync(join(tmpdir(), 'coder-studio-test-'));
-    dbPath = join(dbDir, 'test.db');
+    dbDir = mkdtempSync(join(tmpdir(), "coder-studio-test-"));
+    dbPath = join(dbDir, "test.db");
   });
 
   afterEach(() => {
     rmSync(dbDir, { recursive: true, force: true });
   });
 
-  it('creates the current schema baseline without migration bookkeeping', async () => {
-    const { openDatabase, closeDatabase } = await import('./db');
+  it("creates the current schema baseline without migration bookkeeping", async () => {
+    const { openDatabase, closeDatabase } = await import("./db");
 
     const db = openDatabase(dbPath);
 
     const tableNames = (
-      db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{ name: string }>
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{
+        name: string;
+      }>
     ).map((row) => row.name);
 
     expect(tableNames).toEqual(
       expect.arrayContaining([
-        'auth_login_blocks',
-        'auth_login_failures',
-        'auth_sessions',
-        'provider_configs',
-        'sessions',
-        'supervisor_cycles',
-        'supervisors',
-        'terminals',
-        'user_settings',
-        'workspaces',
+        "auth_login_blocks",
+        "auth_login_failures",
+        "auth_sessions",
+        "provider_configs",
+        "sessions",
+        "supervisor_cycles",
+        "supervisors",
+        "terminals",
+        "user_settings",
+        "workspaces",
       ])
     );
-    expect(tableNames).not.toContain('_migrations');
-    expect(tableNames).not.toContain('hook_registrations');
+    expect(tableNames).not.toContain("_migrations");
+    expect(tableNames).not.toContain("hook_registrations");
 
-    const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
-    expect(sessionColumns.find((column) => column.name === 'resume_id')).toBeUndefined();
-    expect(sessionColumns.find((column) => column.name === 'transcript_path')).toBeUndefined();
-    expect(sessionColumns.find((column) => column.name === 'title')).toBeDefined();
+    const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
+      name: string;
+    }>;
+    expect(sessionColumns.find((column) => column.name === "resume_id")).toBeUndefined();
+    expect(sessionColumns.find((column) => column.name === "transcript_path")).toBeUndefined();
+    expect(sessionColumns.find((column) => column.name === "title")).toBeDefined();
 
     const indexNames = (
-      db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{ name: string }>
+      db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{
+        name: string;
+      }>
     ).map((row) => row.name);
 
     expect(indexNames).toEqual(
       expect.arrayContaining([
-        'idx_auth_login_blocks_blocked_until',
-        'idx_auth_login_failures_ip_failed_at',
-        'idx_auth_sessions_last_seen_at',
-        'idx_sessions_id_workspace',
-        'idx_sessions_terminal',
-        'idx_sessions_workspace',
-        'idx_supervisor_cycles_session',
-        'idx_supervisor_cycles_supervisor',
-        'idx_supervisors_id_session',
-        'idx_supervisors_session',
-        'idx_supervisors_workspace',
-        'idx_terminals_kind',
-        'idx_terminals_workspace',
+        "idx_auth_login_blocks_blocked_until",
+        "idx_auth_login_failures_ip_failed_at",
+        "idx_auth_sessions_last_seen_at",
+        "idx_sessions_id_workspace",
+        "idx_sessions_terminal",
+        "idx_sessions_workspace",
+        "idx_supervisor_cycles_session",
+        "idx_supervisor_cycles_supervisor",
+        "idx_supervisors_id_session",
+        "idx_supervisors_session",
+        "idx_supervisors_workspace",
+        "idx_terminals_kind",
+        "idx_terminals_workspace",
       ])
     );
 
     closeDatabase(db);
   });
 
-  it('rejects a legacy database schema that still contains resume_id', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a legacy database schema that still contains resume_id", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -99,8 +105,8 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
   });
 
-  it('rejects a legacy database schema that still contains hook_registrations', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a legacy database schema that still contains hook_registrations", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -114,8 +120,8 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
   });
 
-  it('rejects a legacy database schema that still contains transcript_path', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a legacy database schema that still contains transcript_path", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -140,8 +146,8 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
   });
 
-  it('rejects a legacy database schema that still contains _migrations', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a legacy database schema that still contains _migrations", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -156,8 +162,8 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
   });
 
-  it('rejects a non-empty database whose schema does not match the current baseline', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a non-empty database whose schema does not match the current baseline", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -212,18 +218,18 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Database schema mismatch detected/);
   });
 
-  it('rejects a database that only contains a user-defined view', async () => {
-    const { openDatabase } = await import('./db');
+  it("rejects a database that only contains a user-defined view", async () => {
+    const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
-    db.exec('CREATE VIEW orphan_view AS SELECT 1 AS value;');
+    db.exec("CREATE VIEW orphan_view AS SELECT 1 AS value;");
     db.close();
 
     expect(() => openDatabase(dbPath)).toThrow(/Database schema mismatch detected/);
   });
 
-  it('rejects a database with an extra user-defined trigger', async () => {
-    const { openDatabase, closeDatabase } = await import('./db');
+  it("rejects a database with an extra user-defined trigger", async () => {
+    const { openDatabase, closeDatabase } = await import("./db");
 
     const db = openDatabase(dbPath);
     db.exec(`
@@ -238,10 +244,10 @@ describe('database schema baseline', () => {
     expect(() => openDatabase(dbPath)).toThrow(/Database schema mismatch detected/);
   });
 
-  it('runMigrations rejects the same partial schema drift as openDatabase', async () => {
-    const { runMigrations } = await import('./db');
+  it("runMigrations rejects the same partial schema drift as openDatabase", async () => {
+    const { runMigrations } = await import("./db");
 
-    const db = new DatabaseSync(':memory:');
+    const db = new DatabaseSync(":memory:");
     db.exec(`
       CREATE TABLE workspaces (
         id TEXT PRIMARY KEY,
@@ -291,10 +297,10 @@ describe('database schema baseline', () => {
     db.close();
   });
 
-  it('closes the database handle when openDatabase fails schema validation', async () => {
-    const sqlite = await import('node:sqlite');
-    const dbModule = await import('./db');
-    const closeSpy = vi.spyOn(sqlite.DatabaseSync.prototype, 'close');
+  it("closes the database handle when openDatabase fails schema validation", async () => {
+    const sqlite = await import("node:sqlite");
+    const dbModule = await import("./db");
+    const closeSpy = vi.spyOn(sqlite.DatabaseSync.prototype, "close");
 
     const seed = new sqlite.DatabaseSync(dbPath);
     seed.exec(`

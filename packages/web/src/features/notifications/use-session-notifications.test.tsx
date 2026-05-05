@@ -1,47 +1,40 @@
-import { act, render, waitFor } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
-import { sessionsAtom } from '../../atoms/sessions';
+import type { SessionState, Workspace } from "@coder-studio/core";
+import { act, render, waitFor } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../atoms/app-ui";
+import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
+import { sessionsAtom } from "../../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
   workspacesLoadStateAtom,
-} from '../../atoms/workspaces';
-import {
-  pendingFocusSessionAtom,
-  visibleMobileSessionIdAtom,
-} from '../../atoms/app-ui';
-import type { SessionState, Workspace } from '@coder-studio/core';
-import {
-  notificationPreferencesAtom,
-  sessionOutputTailAtom,
-  toastsAtom,
-} from './atoms';
-import { useSessionNotifications } from './use-session-notifications';
+} from "../../atoms/workspaces";
+import { notificationPreferencesAtom, sessionOutputTailAtom, toastsAtom } from "./atoms";
+import { useSessionNotifications } from "./use-session-notifications";
 
 const viewportMocks = vi.hoisted(() => ({
-  viewport: 'desktop' as 'desktop' | 'mobile',
+  viewport: "desktop" as "desktop" | "mobile",
 }));
 
-vi.mock('../../hooks/use-viewport', () => ({
+vi.mock("../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 
 const NotificationMock = vi.fn().mockImplementation(function () {
   return {
-  close: vi.fn(),
-  onclick: null,
+    close: vi.fn(),
+    onclick: null,
   };
 });
-(Object.assign(NotificationMock, {
-  permission: 'granted',
+Object.assign(NotificationMock, {
+  permission: "granted",
   requestPermission: vi.fn(),
-}) as unknown);
+}) as unknown;
 
 class OscillatorMock {
-  type = 'sine';
+  type = "sine";
   frequency = { value: 0 };
   connect(target: unknown) {
     return target;
@@ -86,18 +79,18 @@ function Harness() {
   return null;
 }
 
-function createSession(id: string, state: SessionState, workspaceId = 'ws-1') {
+function createSession(id: string, state: SessionState, workspaceId = "ws-1") {
   const now = Date.now();
   return {
     id,
     workspaceId,
-    terminalId: 'term-1',
-    providerId: 'codex',
+    terminalId: "term-1",
+    providerId: "codex",
     state,
-    capability: 'full' as const,
+    capability: "full" as const,
     startedAt: now - 5_000,
     lastActiveAt: now - 1_000,
-    endedAt: state === 'ended' ? now : undefined,
+    endedAt: state === "ended" ? now : undefined,
   };
 }
 
@@ -114,10 +107,10 @@ function setDocumentHidden(value: boolean): void {
 function seedRunningSession(
   store: ReturnType<typeof createStore>,
   sessionId: string,
-  workspaceId = 'ws-1',
+  workspaceId = "ws-1"
 ): void {
   store.set(sessionsAtom, {
-    [sessionId]: createSession(sessionId, 'running', workspaceId),
+    [sessionId]: createSession(sessionId, "running", workspaceId),
   });
 }
 
@@ -126,14 +119,14 @@ function seedRunningSession(
 function seedWorkspace(
   store: ReturnType<typeof createStore>,
   id: string,
-  overrides: Partial<Workspace> = {},
+  overrides: Partial<Workspace> = {}
 ): void {
   const existing = store.get(workspacesAtom);
   const order = store.get(workspaceOrderAtom);
   const ws: Workspace = {
     id,
     path: `/tmp/${id}`,
-    targetRuntime: 'native',
+    targetRuntime: "native",
     openedAt: 0,
     lastActiveAt: 0,
     uiState: { leftPanelWidth: 280, bottomPanelHeight: 200, focusMode: false },
@@ -141,20 +134,20 @@ function seedWorkspace(
   };
   store.set(workspacesAtom, { ...existing, [id]: ws });
   store.set(workspaceOrderAtom, order.includes(id) ? order : [...order, id]);
-  store.set(workspacesLoadStateAtom, 'ready');
+  store.set(workspacesLoadStateAtom, "ready");
 }
 
-describe('useSessionNotifications', () => {
+describe("useSessionNotifications", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date('2026-04-23T00:00:00Z'));
-    vi.stubGlobal('Notification', NotificationMock);
-    vi.stubGlobal('Audio', AudioElementMock);
-    vi.stubGlobal('AudioContext', AudioContextMock);
-    viewportMocks.viewport = 'desktop';
+    vi.setSystemTime(new Date("2026-04-23T00:00:00Z"));
+    vi.stubGlobal("Notification", NotificationMock);
+    vi.stubGlobal("Audio", AudioElementMock);
+    vi.stubGlobal("AudioContext", AudioContextMock);
+    viewportMocks.viewport = "desktop";
     setDocumentHidden(false);
-    Object.defineProperty(document, 'hidden', {
+    Object.defineProperty(document, "hidden", {
       configurable: true,
       get: () => documentHidden,
     });
@@ -173,7 +166,7 @@ describe('useSessionNotifications', () => {
   function mountAndCompleteTurn(
     store: ReturnType<typeof createStore>,
     mutate: () => void,
-    elapsedMs = 5_000,
+    elapsedMs = 5_000
   ): void {
     render(
       <Provider store={store}>
@@ -186,21 +179,21 @@ describe('useSessionNotifications', () => {
     });
   }
 
-  it('fires an in-app toast on running → idle when the user is in another workspace and the page is visible', async () => {
+  it("fires an in-app toast on running → idle when the user is in another workspace and the page is visible", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
     store.set(wsClientAtom, {
       sendCommand: vi.fn(),
       subscribe: vi.fn(() => () => {}),
     } as never);
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
@@ -209,78 +202,78 @@ describe('useSessionNotifications', () => {
     });
 
     expect(store.get(toastsAtom)[0]).toMatchObject({
-      kind: 'success',
-      workspaceId: 'ws-1',
-      sessionId: 'sess-1',
+      kind: "success",
+      workspaceId: "ws-1",
+      sessionId: "sess-1",
     });
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('suppresses the notification when the user is already viewing the originating workspace', async () => {
+  it("suppresses the notification when the user is already viewing the originating workspace", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
-      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+      expect(store.get(sessionsAtom)["sess-1"]?.state).toBe("idle");
     });
 
     expect(store.get(toastsAtom)).toHaveLength(0);
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('keeps desktop behavior unchanged even when a different session is marked active in the same workspace', async () => {
+  it("keeps desktop behavior unchanged even when a different session is marked active in the same workspace", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1', {
+    seedWorkspace(store, "ws-1", {
       uiState: {
         leftPanelWidth: 280,
         bottomPanelHeight: 200,
         focusMode: false,
-        activeSessionId: 'sess-other',
+        activeSessionId: "sess-other",
       },
     });
-    store.set(activeWorkspaceIdAtom, 'ws-1');
-    store.set(visibleMobileSessionIdAtom, 'sess-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(visibleMobileSessionIdAtom, "sess-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
-      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+      expect(store.get(sessionsAtom)["sess-1"]?.state).toBe("idle");
     });
 
     expect(store.get(toastsAtom)).toHaveLength(0);
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('on mobile, visible-page completion in the same workspace still toasts when another session is currently visible', async () => {
-    viewportMocks.viewport = 'mobile';
+  it("on mobile, visible-page completion in the same workspace still toasts when another session is currently visible", async () => {
+    viewportMocks.viewport = "mobile";
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
-    store.set(visibleMobileSessionIdAtom, 'sess-visible');
-    seedRunningSession(store, 'sess-completed', 'ws-1');
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(visibleMobileSessionIdAtom, "sess-visible");
+    seedRunningSession(store, "sess-completed", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-completed': createSession('sess-completed', 'idle', 'ws-1'),
+        "sess-completed": createSession("sess-completed", "idle", "ws-1"),
       });
     });
 
@@ -289,49 +282,49 @@ describe('useSessionNotifications', () => {
     });
 
     expect(store.get(toastsAtom)[0]).toMatchObject({
-      kind: 'success',
-      workspaceId: 'ws-1',
-      sessionId: 'sess-completed',
+      kind: "success",
+      workspaceId: "ws-1",
+      sessionId: "sess-completed",
     });
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('on mobile, visible-page completion stays silent when the completed session is the currently visible one', async () => {
-    viewportMocks.viewport = 'mobile';
+  it("on mobile, visible-page completion stays silent when the completed session is the currently visible one", async () => {
+    viewportMocks.viewport = "mobile";
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
-    store.set(visibleMobileSessionIdAtom, 'sess-1');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(visibleMobileSessionIdAtom, "sess-1");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
-      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+      expect(store.get(sessionsAtom)["sess-1"]?.state).toBe("idle");
     });
 
     expect(store.get(toastsAtom)).toHaveLength(0);
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('uses a system push when the page is hidden, regardless of which workspace is active', async () => {
+  it("uses a system push when the page is hidden, regardless of which workspace is active", async () => {
     setDocumentHidden(true);
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1');
-    store.set(activeWorkspaceIdAtom, 'ws-1');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
@@ -342,20 +335,20 @@ describe('useSessionNotifications', () => {
     expect(store.get(toastsAtom)).toHaveLength(0);
   });
 
-  it('wires the system notification onclick to set pendingFocusSession and navigate to /workspace', async () => {
+  it("wires the system notification onclick to set pendingFocusSession and navigate to /workspace", async () => {
     setDocumentHidden(true);
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-current');
-    seedWorkspace(store, 'ws-target');
-    store.set(activeWorkspaceIdAtom, 'ws-current');
-    window.history.pushState({}, '', '/settings');
-    seedRunningSession(store, 'sess-target', 'ws-target');
+    seedWorkspace(store, "ws-current");
+    seedWorkspace(store, "ws-target");
+    store.set(activeWorkspaceIdAtom, "ws-current");
+    window.history.pushState({}, "", "/settings");
+    seedRunningSession(store, "sess-target", "ws-target");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-target': createSession('sess-target', 'idle', 'ws-target'),
+        "sess-target": createSession("sess-target", "idle", "ws-target"),
       });
     });
 
@@ -368,56 +361,56 @@ describe('useSessionNotifications', () => {
       onclick: (() => void) | null;
       close: () => void;
     };
-    expect(notification?.onclick).toBeTypeOf('function');
+    expect(notification?.onclick).toBeTypeOf("function");
 
     act(() => {
       notification.onclick?.();
     });
 
-    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-target');
-    expect(store.get(pendingFocusSessionAtom)).toBe('sess-target');
-    expect(window.location.pathname).toBe('/workspace');
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-target");
+    expect(store.get(pendingFocusSessionAtom)).toBe("sess-target");
+    expect(window.location.pathname).toBe("/workspace");
   });
 
-  it('suppresses the notification when the resolved active workspace matches even if the raw active id is stale', async () => {
+  it("suppresses the notification when the resolved active workspace matches even if the raw active id is stale", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-1');
-    store.set(activeWorkspaceIdAtom, 'ws-missing');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-missing");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
-      expect(store.get(sessionsAtom)['sess-1']?.state).toBe('idle');
+      expect(store.get(sessionsAtom)["sess-1"]?.state).toBe("idle");
     });
 
     expect(store.get(toastsAtom)).toHaveLength(0);
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('does not fire when the running → idle transition happens faster than the min-duration threshold', async () => {
+  it("does not fire when the running → idle transition happens faster than the min-duration threshold", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     // Only 500ms elapsed — well under the 4s threshold.
     mountAndCompleteTurn(
       store,
       () => {
         store.set(sessionsAtom, {
-          'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+          "sess-1": createSession("sess-1", "idle", "ws-1"),
         });
       },
-      500,
+      500
     );
 
     // Let any pending effects settle.
@@ -429,22 +422,22 @@ describe('useSessionNotifications', () => {
     expect(NotificationMock).not.toHaveBeenCalled();
   });
 
-  it('still fires on running → ended even if the duration is short (long task crash / forced stop)', async () => {
+  it("still fires on running → ended even if the duration is short (long task crash / forced stop)", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(
       store,
       () => {
         store.set(sessionsAtom, {
-          'sess-1': createSession('sess-1', 'ended', 'ws-1'),
+          "sess-1": createSession("sess-1", "ended", "ws-1"),
         });
       },
-      500,
+      500
     );
 
     await waitFor(() => {
@@ -452,13 +445,13 @@ describe('useSessionNotifications', () => {
     });
   });
 
-  it('fires once per turn (running → idle → running → idle yields two notifications)', async () => {
+  it("fires once per turn (running → idle → running → idle yields two notifications)", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     render(
       <Provider store={store}>
@@ -470,7 +463,7 @@ describe('useSessionNotifications', () => {
     act(() => {
       vi.advanceTimersByTime(5_000);
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
@@ -479,7 +472,7 @@ describe('useSessionNotifications', () => {
     // User submits → back to running
     act(() => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'running', 'ws-1'),
+        "sess-1": createSession("sess-1", "running", "ws-1"),
       });
     });
 
@@ -487,20 +480,20 @@ describe('useSessionNotifications', () => {
     act(() => {
       vi.advanceTimersByTime(5_000);
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => expect(store.get(toastsAtom)).toHaveLength(2));
   });
 
-  it('does not retroactively fire when the user re-enables notifications mid-turn', async () => {
+  it("does not retroactively fire when the user re-enables notifications mid-turn", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: false, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     render(
       <Provider store={store}>
@@ -512,7 +505,7 @@ describe('useSessionNotifications', () => {
     act(() => {
       vi.advanceTimersByTime(5_000);
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
@@ -528,80 +521,80 @@ describe('useSessionNotifications', () => {
     expect(store.get(toastsAtom)).toHaveLength(0);
   });
 
-  it('builds a structured body with provider · workspace · duration on the first line', async () => {
+  it("builds a structured body with provider · workspace · duration on the first line", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedWorkspace(store, 'ws-1', { name: 'demo-app' });
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedWorkspace(store, "ws-1", { name: "demo-app" });
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(
       store,
       () => {
         store.set(sessionsAtom, {
-          'sess-1': { ...createSession('sess-1', 'idle', 'ws-1'), providerId: 'claude' },
+          "sess-1": { ...createSession("sess-1", "idle", "ws-1"), providerId: "claude" },
         });
       },
-      65_000, // 1m 5s elapsed
+      65_000 // 1m 5s elapsed
     );
 
     await waitFor(() => {
       expect(store.get(toastsAtom)).toHaveLength(1);
     });
-    const body = store.get(toastsAtom)[0]?.body ?? '';
-    const [metaLine] = body.split('\n');
-    expect(metaLine).toBe('Claude · demo-app · 1m 5s');
+    const body = store.get(toastsAtom)[0]?.body ?? "";
+    const [metaLine] = body.split("\n");
+    expect(metaLine).toBe("Claude · demo-app · 1m 5s");
   });
 
-  it('appends a quoted summary line when the session has captured output', async () => {
+  it("appends a quoted summary line when the session has captured output", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedWorkspace(store, 'ws-1', { name: 'demo-app' });
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedWorkspace(store, "ws-1", { name: "demo-app" });
+    seedRunningSession(store, "sess-1", "ws-1");
 
     // Pre-seed the output tail buffer with raw terminal content; the
     // notification layer strips ANSI/control bytes when it assembles the
     // summary so split escape sequences cannot leak through.
     store.set(sessionOutputTailAtom, {
-      'sess-1': 'analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0m\n',
+      "sess-1": "analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0m\n",
     });
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
       expect(store.get(toastsAtom)).toHaveLength(1);
     });
-    const body = store.get(toastsAtom)[0]?.body ?? '';
-    const lines = body.split('\n');
+    const body = store.get(toastsAtom)[0]?.body ?? "";
+    const lines = body.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toBe('> All 12 tests passed.');
+    expect(lines[1]).toBe("> All 12 tests passed.");
   });
 
-  it('strips ANSI sequences that arrive split across terminal chunks before building the summary', async () => {
+  it("strips ANSI sequences that arrive split across terminal chunks before building the summary", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedWorkspace(store, 'ws-1', { name: 'demo-app' });
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedWorkspace(store, "ws-1", { name: "demo-app" });
+    seedRunningSession(store, "sess-1", "ws-1");
 
     store.set(sessionOutputTailAtom, {
-      'sess-1': 'analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0',
+      "sess-1": "analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0",
     });
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
@@ -609,48 +602,48 @@ describe('useSessionNotifications', () => {
       expect(store.get(toastsAtom)).toHaveLength(1);
     });
 
-    const body = store.get(toastsAtom)[0]?.body ?? '';
-    const lines = body.split('\n');
-    expect(lines[1]).toBe('> All 12 tests passed.');
+    const body = store.get(toastsAtom)[0]?.body ?? "";
+    const lines = body.split("\n");
+    expect(lines[1]).toBe("> All 12 tests passed.");
   });
 
-  it('falls back to the generic hint when no output has been captured for the session', async () => {
+  it("falls back to the generic hint when no output has been captured for the session", async () => {
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedWorkspace(store, 'ws-1', { name: 'demo-app' });
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedWorkspace(store, "ws-1", { name: "demo-app" });
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 
     await waitFor(() => {
       expect(store.get(toastsAtom)).toHaveLength(1);
     });
-    const body = store.get(toastsAtom)[0]?.body ?? '';
-    const lines = body.split('\n');
+    const body = store.get(toastsAtom)[0]?.body ?? "";
+    const lines = body.split("\n");
     // Two lines, but the second one is the i18n hint, not a quoted summary.
     expect(lines).toHaveLength(2);
-    expect(lines[1]?.startsWith('> ')).toBe(false);
+    expect(lines[1]?.startsWith("> ")).toBe(false);
   });
 
-  it('skips the chime when soundEnabled is false but still posts the toast', async () => {
-    const playSpy = vi.spyOn(AudioElementMock.prototype, 'play');
+  it("skips the chime when soundEnabled is false but still posts the toast", async () => {
+    const playSpy = vi.spyOn(AudioElementMock.prototype, "play");
     const store = createStore();
-    store.set(connectionStatusAtom, 'disconnected');
+    store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
-    seedWorkspace(store, 'ws-other');
-    store.set(activeWorkspaceIdAtom, 'ws-other');
-    seedRunningSession(store, 'sess-1', 'ws-1');
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
-        'sess-1': createSession('sess-1', 'idle', 'ws-1'),
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
       });
     });
 

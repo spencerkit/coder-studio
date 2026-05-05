@@ -7,8 +7,8 @@
  * HTTP endpoint so large images don't have to travel over the WS channel.
  */
 
-import type { FC } from 'react';
-import { useEffect, useState } from 'react';
+import type { FC } from "react";
+import { useEffect, useState } from "react";
 
 interface ImagePreviewProps {
   url: string;
@@ -25,8 +25,8 @@ function formatBytes(bytes: number): string {
 
 function mimeToLabel(mime: string): string {
   // "image/png" → "PNG", "image/svg+xml" → "SVG", "image/x-icon" → "ICO"
-  const sub = mime.split('/')[1] ?? mime;
-  const head = sub.split('+')[0].replace(/^x-/, '');
+  const sub = mime.split("/")[1] ?? mime;
+  const head = sub.split("+")[0].replace(/^x-/, "");
   return head.toUpperCase();
 }
 
@@ -48,8 +48,8 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, mime, sizeBytes, alt 
           <div className="git-diff-empty">
             <p className="git-diff-empty-title">Preview unavailable</p>
             <p className="git-diff-empty-body">
-              The image could not be loaded. The file may have been moved or
-              is larger than the browser allows.
+              The image could not be loaded. The file may have been moved or is larger than the
+              browser allows.
             </p>
           </div>
         ) : (

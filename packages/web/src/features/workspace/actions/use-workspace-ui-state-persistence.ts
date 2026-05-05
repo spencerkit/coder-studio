@@ -1,20 +1,20 @@
-import { useCallback } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import type { Workspace } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { workspacesAtom } from '../../../atoms/workspaces';
-import { bottomPanelHeightAtom, focusModeAtom, leftPanelWidthAtom } from '../atoms';
+import type { Workspace } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useCallback } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { workspacesAtom } from "../../../atoms/workspaces";
+import { bottomPanelHeightAtom, focusModeAtom, leftPanelWidthAtom } from "../atoms";
 
 function isWorkspace(value: unknown): value is Workspace {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return false;
   }
 
   const candidate = value as Partial<Workspace>;
   return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.path === 'string' &&
-    typeof candidate.uiState === 'object' &&
+    typeof candidate.id === "string" &&
+    typeof candidate.path === "string" &&
+    typeof candidate.uiState === "object" &&
     candidate.uiState !== null
   );
 }
@@ -25,8 +25,8 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const store = useStore();
 
   const persistUiState = useCallback(
-    async (patch: Partial<Workspace['uiState']>) => {
-      if (!workspaceId || workspaceId.startsWith('__workspace_')) {
+    async (patch: Partial<Workspace["uiState"]>) => {
+      if (!workspaceId || workspaceId.startsWith("__workspace_")) {
         return false;
       }
 
@@ -35,7 +35,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         return false;
       }
 
-      const nextUiState: Workspace['uiState'] = {
+      const nextUiState: Workspace["uiState"] = {
         ...workspace.uiState,
         leftPanelWidth: store.get(leftPanelWidthAtom),
         bottomPanelHeight: store.get(bottomPanelHeightAtom),
@@ -59,13 +59,13 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
       });
 
       try {
-        const result = await dispatch<Workspace>('workspace.uiState.set', {
+        const result = await dispatch<Workspace>("workspace.uiState.set", {
           workspaceId,
           uiState: nextUiState,
         });
 
         if (!result.ok) {
-          console.error('Failed to persist workspace ui state:', result.error?.message);
+          console.error("Failed to persist workspace ui state:", result.error?.message);
           return false;
         }
 
@@ -78,7 +78,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
 
         return true;
       } catch (error) {
-        console.error('Failed to persist workspace ui state:', error);
+        console.error("Failed to persist workspace ui state:", error);
         return false;
       }
     },

@@ -1,45 +1,68 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SupervisorManager } from './manager.js';
+import type { ProviderDefinition } from "@coder-studio/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SupervisorManager } from "./manager.js";
 
-describe('SupervisorManager', () => {
-  let deps: any;
+type MockSupervisorManagerDeps = {
+  eventBus: { on: ReturnType<typeof vi.fn>; emit: ReturnType<typeof vi.fn> };
+  broadcaster: { broadcast: ReturnType<typeof vi.fn> };
+  terminalMgr: { write: ReturnType<typeof vi.fn> };
+  workspaceMgr: { get: ReturnType<typeof vi.fn> };
+  sessionMgr: { get: ReturnType<typeof vi.fn> };
+  providerRegistry: ProviderDefinition[];
+  providerConfigRepo: { get: ReturnType<typeof vi.fn> };
+  supervisorRepo: {
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
+    getBySessionId: ReturnType<typeof vi.fn>;
+    listAll: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
+  cycleRepo: {
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    listRecentForSupervisor: ReturnType<typeof vi.fn>;
+    pruneOldest: ReturnType<typeof vi.fn>;
+  };
+};
+
+function createProvider(): ProviderDefinition {
+  return {
+    id: "claude",
+    capability: "full",
+    buildSupervisorEvalCommand: vi.fn(() => ({
+      argv: ["node", "-e", `process.stdout.write(${JSON.stringify("continue with the work")})`],
+      cwd: process.cwd(),
+      env: {},
+    })),
+  } as unknown as ProviderDefinition;
+}
+
+describe("SupervisorManager", () => {
+  let deps: MockSupervisorManagerDeps;
 
   beforeEach(() => {
     deps = {
       eventBus: { on: vi.fn(() => () => {}), emit: vi.fn() },
       broadcaster: { broadcast: vi.fn() },
       terminalMgr: { write: vi.fn() },
-      workspaceMgr: { get: vi.fn(() => ({ id: 'ws-1', path: '/workspace' })) },
+      workspaceMgr: { get: vi.fn(() => ({ id: "ws-1", path: "/workspace" })) },
       sessionMgr: {
         get: vi.fn(() => ({
-          id: 'sess-1',
-          terminalId: 'term-1',
-          workspaceId: 'ws-1',
-          providerId: 'claude',
-          state: 'running',
-          capability: 'full',
+          id: "sess-1",
+          terminalId: "term-1",
+          workspaceId: "ws-1",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
           startedAt: 1,
           lastActiveAt: 1,
         })),
       },
-      providerRegistry: [
-        {
-          id: 'claude',
-          capability: 'full',
-          buildSupervisorEvalCommand: vi.fn(() => ({
-            argv: [
-              'node',
-              '-e',
-              `process.stdout.write(${JSON.stringify('continue with the work')})`,
-            ],
-            cwd: process.cwd(),
-            env: {},
-          })),
-        },
-      ],
+      providerRegistry: [createProvider()],
       providerConfigRepo: {
         get: vi.fn(() => ({
-          model: 'claude-sonnet-4-6',
+          model: "claude-sonnet-4-6",
           additionalArgs: [],
           envVars: {},
         })),
@@ -48,11 +71,11 @@ describe('SupervisorManager', () => {
         create: vi.fn((value) => ({ ...value, cycles: [] })),
         update: vi.fn((id, patch) => ({
           id,
-          sessionId: 'sess-1',
-          workspaceId: 'ws-1',
-          state: patch.state ?? 'idle',
-          objective: patch.objective ?? 'Persist supervisors',
-          evaluatorProviderId: patch.evaluatorProviderId ?? 'claude',
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          state: patch.state ?? "idle",
+          objective: patch.objective ?? "Persist supervisors",
+          evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
           cycles: [],
           createdAt: 1,
           updatedAt: patch.updatedAt ?? 1,
@@ -67,13 +90,13 @@ describe('SupervisorManager', () => {
         create: vi.fn((cycle) => cycle),
         update: vi.fn((id, patch) => ({
           id,
-          supervisorId: 'sup-1',
-          sessionId: 'sess-1',
-          status: patch.status ?? 'completed',
-          trigger: 'manual',
-          evidenceSource: 'headless_snapshot',
-          objective: 'Persist supervisors',
-          evaluatorProviderId: 'claude',
+          supervisorId: "sup-1",
+          sessionId: "sess-1",
+          status: patch.status ?? "completed",
+          trigger: "manual",
+          evidenceSource: "headless_snapshot",
+          objective: "Persist supervisors",
+          evaluatorProviderId: "claude",
           createdAt: 1,
           completedAt: patch.completedAt ?? 1,
         })),
@@ -83,63 +106,67 @@ describe('SupervisorManager', () => {
     };
   });
 
-  it('recovers persisted evaluating supervisors back to idle on hydrate', async () => {
+  it("recovers persisted evaluating supervisors back to idle on hydrate", async () => {
     deps.supervisorRepo.listAll.mockReturnValue([
       {
-        id: 'sup-1',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
-        state: 'evaluating',
-        objective: 'Persist supervisors',
-        evaluatorProviderId: 'claude',
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        state: "evaluating",
+        objective: "Persist supervisors",
+        evaluatorProviderId: "claude",
         cycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
     ]);
 
-    const manager = new SupervisorManager(deps);
+    const manager = new SupervisorManager(
+      deps as unknown as ConstructorParameters<typeof SupervisorManager>[0]
+    );
     await manager.hydrate();
 
     expect(deps.supervisorRepo.update).toHaveBeenCalledWith(
-      'sup-1',
-      expect.objectContaining({ state: 'idle', errorReason: null })
+      "sup-1",
+      expect.objectContaining({ state: "idle", errorReason: null })
     );
   });
 
-  it('drops workspace supervisors from memory during workspace teardown', async () => {
+  it("drops workspace supervisors from memory during workspace teardown", async () => {
     deps.supervisorRepo.listAll.mockReturnValue([
       {
-        id: 'sup-1',
-        sessionId: 'sess-1',
-        workspaceId: 'ws-1',
-        state: 'idle',
-        objective: 'Persist supervisors',
-        evaluatorProviderId: 'claude',
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        state: "idle",
+        objective: "Persist supervisors",
+        evaluatorProviderId: "claude",
         cycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
       {
-        id: 'sup-2',
-        sessionId: 'sess-2',
-        workspaceId: 'ws-2',
-        state: 'idle',
-        objective: 'Leave this one alone',
-        evaluatorProviderId: 'claude',
+        id: "sup-2",
+        sessionId: "sess-2",
+        workspaceId: "ws-2",
+        state: "idle",
+        objective: "Leave this one alone",
+        evaluatorProviderId: "claude",
         cycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
     ]);
 
-    const manager = new SupervisorManager(deps);
+    const manager = new SupervisorManager(
+      deps as unknown as ConstructorParameters<typeof SupervisorManager>[0]
+    );
     await manager.hydrate();
 
-    await manager.deleteForWorkspace('ws-1');
+    await manager.deleteForWorkspace("ws-1");
 
-    expect(manager.get('sup-1')).toBeUndefined();
-    expect(manager.get('sup-2')).toBeDefined();
-    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith('sup-1');
+    expect(manager.get("sup-1")).toBeUndefined();
+    expect(manager.get("sup-2")).toBeDefined();
+    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith("sup-1");
   });
 });

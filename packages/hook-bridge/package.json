@@ -12,12 +12,7 @@
     "@types/node": "^25.6.0",
     "vitest": "^4.1.5"
   },
-  "keywords": [
-    "hook",
-    "bridge",
-    "coder-studio",
-    "provider"
-  ],
+  "keywords": ["hook", "bridge", "coder-studio", "provider"],
   "author": "",
   "license": "MIT"
 }

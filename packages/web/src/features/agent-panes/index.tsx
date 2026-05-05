@@ -5,18 +5,18 @@
  * Each panel contains a terminal showing agent output.
  */
 
-import type { FC } from 'react';
-import { useAtomValue } from 'jotai';
-import { activeWorkspaceAtom } from '../../atoms/workspaces';
-import { useWorkspaceSessions } from './actions/use-workspace-sessions';
-import { readPaneRatio, writePaneRatio, type PaneNode } from './atoms/pane-layout';
-import { useTranslation } from '../../lib/i18n';
-import { DraftLauncher } from './views/shared/draft-launcher';
-import { PaneLayout } from './views/shared/pane-layout';
-import { SessionCard } from './views/shared/session-card';
-import { usePaneActions } from './actions/use-pane-actions';
-import { useSessionActions } from './actions/use-session-actions';
-import { collectSessionIds } from './pane-layout-tree';
+import { useAtomValue } from "jotai";
+import type { FC } from "react";
+import { activeWorkspaceAtom } from "../../atoms/workspaces";
+import { useTranslation } from "../../lib/i18n";
+import { usePaneActions } from "./actions/use-pane-actions";
+import { useSessionActions } from "./actions/use-session-actions";
+import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
+import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
+import { collectSessionIds } from "./pane-layout-tree";
+import { DraftLauncher } from "./views/shared/draft-launcher";
+import { PaneLayout } from "./views/shared/pane-layout";
+import { SessionCard } from "./views/shared/session-card";
 
 /**
  * Agent Panes Container
@@ -42,12 +42,13 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
   const shouldShowStandaloneDraftLauncher =
     sessions.length === 0 &&
-    (hasLayoutSessions || (paneLayout.type === 'leaf' && !paneLayout.sessionId && paneLayout.id === 'root'));
+    (hasLayoutSessions ||
+      (paneLayout.type === "leaf" && !paneLayout.sessionId && paneLayout.id === "root"));
 
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
-        <p>{t('workspace.no_workspace')}</p>
+        <p>{t("workspace.no_workspace")}</p>
       </div>
     );
   }
@@ -88,8 +89,8 @@ interface PaneNodeRendererProps {
   onCloseSession: (sessionId: string) => void;
   onCloseSessionCommand: (sessionId: string) => Promise<void>;
   onReplaceWithSession: (sessionId: string) => void;
-  onSplitDraftPane: (paneId: string, direction: 'horizontal' | 'vertical') => void;
-  onSplitSession: (sessionId: string, direction: 'horizontal' | 'vertical') => void;
+  onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
+  onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
   onStopSession: (sessionId: string) => Promise<void>;
 }
 
@@ -108,7 +109,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   onSplitSession,
   onStopSession,
 }) => {
-  if (node.type === 'leaf') {
+  if (node.type === "leaf") {
     // Render session card or draft launcher
     if (node.sessionId) {
       return (
@@ -118,8 +119,8 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
             onCloseSession(node.sessionId!);
             await onCloseSessionCommand(node.sessionId!);
           }}
-          onSplitHorizontal={() => onSplitSession(node.sessionId!, 'horizontal')}
-          onSplitVertical={() => onSplitSession(node.sessionId!, 'vertical')}
+          onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
+          onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}
           onStop={() => onStopSession(node.sessionId!)}
         />
       );
@@ -143,7 +144,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   return (
     <PaneLayout
       splitId={node.id}
-      direction={node.direction || 'horizontal'}
+      direction={node.direction || "horizontal"}
       ratio={resolvedRatio}
       onRatioCommit={(ratio) => writePaneRatio(workspaceId, node.id, ratio)}
     >

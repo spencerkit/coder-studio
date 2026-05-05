@@ -1,5 +1,5 @@
-import { execFile as nodeExecFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFile as nodeExecFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const execFileAsync = promisify(nodeExecFile);
 
@@ -10,17 +10,16 @@ export interface CommandCheckDeps {
   execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 }
 
-export function getCommandLookupExecutable(platform: NodeJS.Platform): 'where' | 'which' {
-  return platform === 'win32' ? 'where' : 'which';
+export function getCommandLookupExecutable(platform: NodeJS.Platform): "where" | "which" {
+  return platform === "win32" ? "where" : "which";
 }
 
 export async function checkCommandAvailable(
   command: string,
-  deps: CommandCheckDeps = {},
+  deps: CommandCheckDeps = {}
 ): Promise<boolean> {
   const platform = deps.platform ?? process.platform;
-  const execFile =
-    deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
+  const execFile = deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
   const lookup = getCommandLookupExecutable(platform);
 
   try {

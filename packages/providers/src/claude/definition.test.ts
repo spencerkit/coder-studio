@@ -1,188 +1,187 @@
-import { describe, expect, it } from 'vitest';
-import { claudeDefinition, claudeInstallMetadata } from './definition.js';
-import type { ProviderConfig } from '@coder-studio/core';
+import type { ProviderConfig } from "@coder-studio/core";
+import { describe, expect, it } from "vitest";
+import { claudeDefinition, claudeInstallMetadata } from "./definition.js";
 
-describe('Claude Provider Definition', () => {
-  describe('metadata', () => {
-    it('should have correct id and displayName', () => {
-      expect(claudeDefinition.id).toBe('claude');
-      expect(claudeDefinition.displayName).toBe('Claude Code');
-      expect(claudeDefinition.badge).toBe('Claude');
+describe("Claude Provider Definition", () => {
+  describe("metadata", () => {
+    it("should have correct id and displayName", () => {
+      expect(claudeDefinition.id).toBe("claude");
+      expect(claudeDefinition.displayName).toBe("Claude Code");
+      expect(claudeDefinition.badge).toBe("Claude");
     });
 
-    it('should have full capability', () => {
-      expect(claudeDefinition.capability).toBe('full');
+    it("should have full capability", () => {
+      expect(claudeDefinition.capability).toBe("full");
     });
 
-    it('should require claude command', () => {
-      expect(claudeDefinition.requiredCommands).toEqual(['claude']);
+    it("should require claude command", () => {
+      expect(claudeDefinition.requiredCommands).toEqual(["claude"]);
     });
 
-    it('should expose install metadata', () => {
+    it("should expose install metadata", () => {
       expect(claudeDefinition.install).toBe(claudeInstallMetadata);
-      expect(claudeInstallMetadata.prerequisites).toEqual(['npm']);
+      expect(claudeInstallMetadata.prerequisites).toEqual(["npm"]);
       expect(claudeInstallMetadata.manualGuideKeys).toEqual([
-        'provider.install.nodejs.manual',
-        'provider.install.claude.manual',
+        "provider.install.nodejs.manual",
+        "provider.install.claude.manual",
       ]);
       expect(claudeInstallMetadata.docUrls).toEqual({
-        provider:
-          'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+        provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
         prerequisites: {
-          npm: 'https://nodejs.org/en/download',
+          npm: "https://nodejs.org/en/download",
         },
       });
       expect(claudeInstallMetadata.strategies.win32).toEqual([
         {
-          id: 'winget-nodejs-lts',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['winget'],
-          command: 'winget',
-          args: [
-            'install',
-            '--id',
-            'OpenJS.NodeJS.LTS',
-            '--exact',
-            '--silent',
-          ],
+          id: "winget-nodejs-lts",
+          kind: "prerequisite",
+          targetCommand: "npm",
+          requiresCommands: ["winget"],
+          command: "winget",
+          args: ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
         },
         {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
+          id: "npm-install-claude",
+          kind: "provider",
+          targetCommand: "claude",
+          requiresCommands: ["npm"],
+          command: "npm",
+          args: ["install", "-g", "@anthropic-ai/claude-code"],
         },
       ]);
       expect(claudeInstallMetadata.strategies.darwin).toEqual([
         {
-          id: 'brew-node',
-          kind: 'prerequisite',
-          targetCommand: 'npm',
-          requiresCommands: ['brew'],
-          command: 'brew',
-          args: ['install', 'node'],
+          id: "brew-node",
+          kind: "prerequisite",
+          targetCommand: "npm",
+          requiresCommands: ["brew"],
+          command: "brew",
+          args: ["install", "node"],
         },
         {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
+          id: "npm-install-claude",
+          kind: "provider",
+          targetCommand: "claude",
+          requiresCommands: ["npm"],
+          command: "npm",
+          args: ["install", "-g", "@anthropic-ai/claude-code"],
         },
       ]);
       expect(claudeInstallMetadata.strategies.linux).toEqual([
         {
-          id: 'npm-install-claude',
-          kind: 'provider',
-          targetCommand: 'claude',
-          requiresCommands: ['npm'],
-          command: 'npm',
-          args: ['install', '-g', '@anthropic-ai/claude-code'],
+          id: "npm-install-claude",
+          kind: "provider",
+          targetCommand: "claude",
+          requiresCommands: ["npm"],
+          command: "npm",
+          args: ["install", "-g", "@anthropic-ai/claude-code"],
         },
       ]);
     });
   });
 
-  describe('buildCommand', () => {
-    it('should build basic command without a model flag when no model is configured', () => {
+  describe("buildCommand", () => {
+    it("should build basic command without a model flag when no model is configured", () => {
       const config: ProviderConfig = {};
 
       const ctx = {
-        sessionId: 'session-123',
-        workspacePath: '/workspace',
+        sessionId: "session-123",
+        workspacePath: "/workspace",
       };
 
       const result = claudeDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toEqual(['claude']);
-      expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
-      expect(result.cwd).toBe('/workspace');
+      expect(result.argv).toEqual(["claude"]);
+      expect(result.env.CODER_STUDIO_SESSION_ID).toBe("session-123");
+      expect(result.cwd).toBe("/workspace");
     });
 
-    it('should include additional arguments', () => {
+    it("should include additional arguments", () => {
       const config: ProviderConfig = {
-        model: 'claude-sonnet-4-6',
+        model: "claude-sonnet-4-6",
         maxTurns: null,
-        additionalArgs: ['--verbose', '--debug'],
-        envVars: { API_KEY: 'test' },
+        additionalArgs: ["--verbose", "--debug"],
+        envVars: { API_KEY: "test" },
       };
 
       const ctx = {
-        sessionId: 'session-123',
-        workspacePath: '/workspace',
+        sessionId: "session-123",
+        workspacePath: "/workspace",
       };
 
       const result = claudeDefinition.buildCommand(config, ctx);
 
-      expect(result.argv).toEqual(['claude', '--model', 'claude-sonnet-4-6', '--verbose', '--debug']);
-      expect(result.env.API_KEY).toBe('test');
-      expect(result.env.CODER_STUDIO_SESSION_ID).toBe('session-123');
+      expect(result.argv).toEqual([
+        "claude",
+        "--model",
+        "claude-sonnet-4-6",
+        "--verbose",
+        "--debug",
+      ]);
+      expect(result.env.API_KEY).toBe("test");
+      expect(result.env.CODER_STUDIO_SESSION_ID).toBe("session-123");
     });
   });
 
-  describe('buildSupervisorEvalCommand', () => {
-    it('builds a supervisor eval command with claude -p --output-format json', () => {
+  describe("buildSupervisorEvalCommand", () => {
+    it("builds a supervisor eval command with claude -p --output-format json", () => {
       const result = claudeDefinition.buildSupervisorEvalCommand?.(
         {
-          model: 'claude-sonnet-4-6',
+          model: "claude-sonnet-4-6",
           maxTurns: null,
           additionalArgs: [],
-          envVars: { ANTHROPIC_API_KEY: 'sk-test' },
+          envVars: { ANTHROPIC_API_KEY: "sk-test" },
         },
         {
-          prompt: 'Return strict JSON',
-          sessionId: 'sess-1',
-          workspacePath: '/workspace',
+          prompt: "Return strict JSON",
+          sessionId: "sess-1",
+          workspacePath: "/workspace",
         }
       );
 
-      expect(result?.argv[0]).toBe('claude');
-      expect(result?.argv).toContain('-p');
+      expect(result?.argv[0]).toBe("claude");
+      expect(result?.argv).toContain("-p");
       // We rely on the `--output-format json` envelope to extract the model reply.
-      expect(result?.argv).toEqual(expect.arrayContaining(['--output-format', 'json']));
-      expect(result?.argv).toEqual(expect.arrayContaining(['--model', 'claude-sonnet-4-6']));
-      expect(result?.cwd).toBe('/workspace');
-      expect(result?.env?.ANTHROPIC_API_KEY).toBe('sk-test');
+      expect(result?.argv).toEqual(expect.arrayContaining(["--output-format", "json"]));
+      expect(result?.argv).toEqual(expect.arrayContaining(["--model", "claude-sonnet-4-6"]));
+      expect(result?.cwd).toBe("/workspace");
+      expect(result?.env?.ANTHROPIC_API_KEY).toBe("sk-test");
     });
 
-    it('omits the model flag for supervisor eval when no model is configured', () => {
+    it("omits the model flag for supervisor eval when no model is configured", () => {
       const result = claudeDefinition.buildSupervisorEvalCommand?.(
         {},
         {
-          prompt: 'Return strict JSON',
-          sessionId: 'sess-1',
-          workspacePath: '/workspace',
+          prompt: "Return strict JSON",
+          sessionId: "sess-1",
+          workspacePath: "/workspace",
         }
       );
 
-      expect(result?.argv[0]).toBe('claude');
-      expect(result?.argv).not.toContain('--model');
+      expect(result?.argv[0]).toBe("claude");
+      expect(result?.argv).not.toContain("--model");
     });
   });
 
-  describe('defaultConfig', () => {
-    it('should not inject Claude-specific defaults', () => {
+  describe("defaultConfig", () => {
+    it("should not inject Claude-specific defaults", () => {
       expect(claudeDefinition.defaultConfig).toBeDefined();
       expect(claudeDefinition.defaultConfig).toEqual({});
     });
   });
 
-  describe('idle heuristics', () => {
-    it('exposes conservative idle heuristics for PTY-driven state detection', () => {
+  describe("idle heuristics", () => {
+    it("exposes conservative idle heuristics for PTY-driven state detection", () => {
       expect(claudeDefinition.idleHeuristics).toBeDefined();
       expect(claudeDefinition.idleHeuristics?.idlePromptPatterns).toEqual([]);
       expect(claudeDefinition.idleHeuristics?.idleDebounceMs).toBe(4000);
     });
 
-    it('does not expose legacy hooks or transcript helpers', () => {
-      expect('hooks' in claudeDefinition).toBe(false);
-      expect('buildResumeCommand' in claudeDefinition).toBe(false);
-      expect('resolveTranscriptPath' in claudeDefinition).toBe(false);
-      expect('readTranscriptExcerpt' in claudeDefinition).toBe(false);
+    it("does not expose legacy hooks or transcript helpers", () => {
+      expect("hooks" in claudeDefinition).toBe(false);
+      expect("buildResumeCommand" in claudeDefinition).toBe(false);
+      expect("resolveTranscriptPath" in claudeDefinition).toBe(false);
+      expect("readTranscriptExcerpt" in claudeDefinition).toBe(false);
     });
   });
 });

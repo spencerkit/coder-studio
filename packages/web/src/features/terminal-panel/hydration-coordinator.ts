@@ -1,4 +1,4 @@
-export type HydrationTier = 'focused' | 'visible-active' | 'visible-other' | 'background';
+export type HydrationTier = "focused" | "visible-active" | "visible-other" | "background";
 
 export interface HydrationRequest {
   terminalId: string;
@@ -38,8 +38,8 @@ interface InternalRequest {
 const DEFAULT_CONCURRENCY = 2;
 const TIER_PRIORITY: Record<HydrationTier, number> = {
   focused: 0,
-  'visible-active': 1,
-  'visible-other': 2,
+  "visible-active": 1,
+  "visible-other": 2,
   background: 3,
 };
 
@@ -47,9 +47,9 @@ function compareTier(left: HydrationTier, right: HydrationTier) {
   return TIER_PRIORITY[left] - TIER_PRIORITY[right];
 }
 
-export function createHydrationCoordinator(
-  options?: { concurrency?: number }
-): HydrationCoordinator {
+export function createHydrationCoordinator(options?: {
+  concurrency?: number;
+}): HydrationCoordinator {
   const concurrency = Math.max(1, options?.concurrency ?? DEFAULT_CONCURRENCY);
   const running = new Map<string, InternalRequest>();
   const queued: InternalRequest[] = [];

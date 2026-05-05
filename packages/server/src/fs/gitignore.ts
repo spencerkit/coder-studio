@@ -2,9 +2,9 @@
  * .gitignore parser and filter using the 'ignore' library.
  */
 
-import ignore from 'ignore';
-import { existsSync, readFileSync } from 'fs';
-import { join, relative } from 'path';
+import { existsSync, readFileSync } from "fs";
+import ignore from "ignore";
+import { join, relative } from "path";
 
 const DEFAULT_WATCHER_IGNORED_PATTERNS: RegExp[] = [
   /(^|\/)node_modules(\/|$)/,
@@ -14,7 +14,7 @@ const DEFAULT_WATCHER_IGNORED_PATTERNS: RegExp[] = [
 ];
 
 function normalizePath(path: string): string {
-  return path.replace(/\\/g, '/');
+  return path.replace(/\\/g, "/");
 }
 
 function relativeToRoot(rootPath: string, path: string): string {
@@ -22,11 +22,11 @@ function relativeToRoot(rootPath: string, path: string): string {
 }
 
 function isDefaultTreeIgnored(name: string): boolean {
-  return name.startsWith('.') || name === 'node_modules' || name === '.git';
+  return name.startsWith(".") || name === "node_modules" || name === ".git";
 }
 
 function isIgnoredByGitignore(ig: ReturnType<typeof ignore>, path: string): boolean {
-  if (!path || path.startsWith('..')) {
+  if (!path || path.startsWith("..")) {
     return false;
   }
   return ig.ignores(path) || ig.ignores(`${path}/`);
@@ -44,14 +44,14 @@ export function createGitignoreFilter(
   rootPath: string,
   dirPath: string
 ): (name: string) => boolean {
-  const gitignorePath = join(rootPath, '.gitignore');
+  const gitignorePath = join(rootPath, ".gitignore");
 
   if (!existsSync(gitignorePath)) {
     // No .gitignore: default to skipping dotfiles, node_modules, .git
     return (name: string) => !isDefaultTreeIgnored(name);
   }
 
-  const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
+  const gitignoreContent = readFileSync(gitignorePath, "utf-8");
   const ig = ignore().add(gitignoreContent);
 
   return (name: string) => {
@@ -69,15 +69,16 @@ export function createGitignoreFilter(
  * Returns a function suitable for chokidar's `ignored` option.
  */
 export function createWatcherIgnoreFilter(rootPath: string): (path: string) => boolean {
-  const gitignorePath = join(rootPath, '.gitignore');
+  const gitignorePath = join(rootPath, ".gitignore");
 
   if (!existsSync(gitignorePath)) {
     // Default: ignore obvious noise, but keep .git metadata watched so git
     // operations can trigger refreshes.
-    return (path: string) => DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizePath(path)));
+    return (path: string) =>
+      DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizePath(path)));
   }
 
-  const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
+  const gitignoreContent = readFileSync(gitignorePath, "utf-8");
   const ig = ignore().add(gitignoreContent);
 
   return (path: string) => {

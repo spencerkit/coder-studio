@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import type { FileNode } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../atoms/connection';
+import type { FileNode } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
 import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   openFilesAtomFamily,
-} from '../atoms';
-import { useTranslation } from '../../../lib/i18n';
+} from "../atoms";
 
 export interface CreateRequest {
   id: number;
-  mode: 'file' | 'folder';
+  mode: "file" | "folder";
   baseDir: string | null;
 }
 
@@ -27,7 +27,7 @@ interface SearchFilesResult {
 }
 
 export interface CreateDialogState {
-  mode: 'file' | 'folder';
+  mode: "file" | "folder";
   draftPath: string;
   error: string | null;
 }
@@ -76,13 +76,13 @@ export function useFileActions({
     if (!workspaceId || isLoading) return false;
 
     setIsLoading(true);
-    const result = await dispatch<ReadTreeResult>('file.readTree', {
+    const result = await dispatch<ReadTreeResult>("file.readTree", {
       workspaceId,
     });
 
     if (result.ok && result.data) {
       const treeMap = new Map<string, FileNode[]>();
-      treeMap.set('.', result.data.children);
+      treeMap.set(".", result.data.children);
       setFileTree(treeMap);
       setLoadedDirs(new Set());
       setIsLoading(false);
@@ -90,7 +90,7 @@ export function useFileActions({
     }
 
     if (!result.ok) {
-      console.error('Failed to load file tree:', result.error?.message);
+      console.error("Failed to load file tree:", result.error?.message);
     }
 
     setIsLoading(false);
@@ -102,7 +102,7 @@ export function useFileActions({
       if (!workspaceId || isLoadingDir === dirPath || loadedDirs.has(dirPath)) return;
 
       setIsLoadingDir(dirPath);
-      const result = await dispatch<ReadTreeResult>('file.readTree', {
+      const result = await dispatch<ReadTreeResult>("file.readTree", {
         workspaceId,
         subPath: dirPath,
       });
@@ -128,7 +128,7 @@ export function useFileActions({
         return [];
       }
 
-      const result = await dispatch<SearchFilesResult>('file.search', {
+      const result = await dispatch<SearchFilesResult>("file.search", {
         workspaceId,
         query,
         limit: 10,
@@ -143,8 +143,8 @@ export function useFileActions({
     [dispatch, workspaceId]
   );
 
-  const openCreateDialog = useCallback((mode: 'file' | 'folder', baseDir: string | null) => {
-    const normalizedBaseDir = baseDir ? `${baseDir.replace(/\/+$/, '')}/` : '';
+  const openCreateDialog = useCallback((mode: "file" | "folder", baseDir: string | null) => {
+    const normalizedBaseDir = baseDir ? `${baseDir.replace(/\/+$/, "")}/` : "";
     setCreateDialog({
       mode,
       draftPath: normalizedBaseDir,
@@ -181,26 +181,26 @@ export function useFileActions({
         current
           ? {
               ...current,
-              error: t('file.path_required'),
+              error: t("file.path_required"),
             }
           : current
       );
       return;
     }
 
-    if (createDialog.mode === 'file' && path.endsWith('/')) {
+    if (createDialog.mode === "file" && path.endsWith("/")) {
       setCreateDialog((current) =>
         current
           ? {
               ...current,
-              error: t('file.invalid_file_path'),
+              error: t("file.invalid_file_path"),
             }
           : current
       );
       return;
     }
 
-    const op = createDialog.mode === 'file' ? 'file.create' : 'file.mkdir';
+    const op = createDialog.mode === "file" ? "file.create" : "file.mkdir";
     const result = await dispatch(op, {
       workspaceId,
       path,
@@ -211,7 +211,7 @@ export function useFileActions({
         current
           ? {
               ...current,
-              error: result.error?.message ?? t('file.create_failed'),
+              error: result.error?.message ?? t("file.create_failed"),
             }
           : current
       );
@@ -221,7 +221,7 @@ export function useFileActions({
     await loadFileTree();
     closeCreateDialog();
 
-    if (createDialog.mode === 'file') {
+    if (createDialog.mode === "file") {
       setActiveFilePath(path);
     }
   }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, setActiveFilePath, t]);
@@ -235,7 +235,7 @@ export function useFileActions({
       return;
     }
 
-    const result = await dispatch('file.delete', {
+    const result = await dispatch("file.delete", {
       workspaceId,
       path: pendingDelete.path,
     });
@@ -245,7 +245,7 @@ export function useFileActions({
         current
           ? {
               ...current,
-              error: result.error?.message ?? t('file.delete_failed'),
+              error: result.error?.message ?? t("file.delete_failed"),
             }
           : current
       );

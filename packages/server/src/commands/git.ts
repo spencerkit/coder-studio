@@ -2,22 +2,22 @@
  * Git Commands
  */
 
-import { z } from 'zod';
-import { registerCommand } from '../ws/dispatch.js';
-import type { CommandContext } from '../ws/dispatch.js';
+import { z } from "zod";
 import {
-  getGitStatus,
-  stageFiles,
-  unstageFiles,
-  discardChanges,
   commitChanges,
-  runGitPush,
-  runGitPull,
+  discardChanges,
+  getGitStatus,
   runGitCheckout,
   runGitCreateBranch,
   runGitListBranches,
-} from '../git/cli.js';
-import { getFileDiff } from '../git/diff.js';
+  runGitPull,
+  runGitPush,
+  stageFiles,
+  unstageFiles,
+} from "../git/cli.js";
+import { getFileDiff } from "../git/diff.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import { registerCommand } from "../ws/dispatch.js";
 
 function emitGitStateChanged(
   ctx: CommandContext,
@@ -29,7 +29,7 @@ function emitGitStateChanged(
   }
 ) {
   ctx.eventBus.emit({
-    type: 'git.state.changed',
+    type: "git.state.changed",
     workspaceId,
     treeChanged: options?.treeChanged,
     branchChanged: options?.branchChanged,
@@ -44,14 +44,14 @@ const gitHttpAuthSchema = z.object({
 
 // git.status
 registerCommand(
-  'git.status',
+  "git.status",
   z.object({
     workspaceId: z.string(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     return getGitStatus(workspace.path);
@@ -60,7 +60,7 @@ registerCommand(
 
 // git.stage
 registerCommand(
-  'git.stage',
+  "git.stage",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
@@ -68,7 +68,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     await stageFiles(workspace.path, args.paths);
@@ -79,7 +79,7 @@ registerCommand(
 
 // git.diff
 registerCommand(
-  'git.diff',
+  "git.diff",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
@@ -88,7 +88,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     return {
@@ -99,7 +99,7 @@ registerCommand(
 
 // git.unstage
 registerCommand(
-  'git.unstage',
+  "git.unstage",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
@@ -107,7 +107,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     await unstageFiles(workspace.path, args.paths);
@@ -118,7 +118,7 @@ registerCommand(
 
 // git.discard
 registerCommand(
-  'git.discard',
+  "git.discard",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
@@ -126,7 +126,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     await discardChanges(workspace.path, args.paths);
@@ -139,7 +139,7 @@ registerCommand(
 
 // git.commit
 registerCommand(
-  'git.commit',
+  "git.commit",
   z.object({
     workspaceId: z.string(),
     message: z.string(),
@@ -147,7 +147,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const result = await commitChanges(workspace.path, args.message);
@@ -161,7 +161,7 @@ registerCommand(
 
 // git.push
 registerCommand(
-  'git.push',
+  "git.push",
   z.object({
     workspaceId: z.string(),
     remote: z.string().optional(),
@@ -172,7 +172,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const result = await runGitPush(workspace.path, {
@@ -191,7 +191,7 @@ registerCommand(
 
 // git.pull
 registerCommand(
-  'git.pull',
+  "git.pull",
   z.object({
     workspaceId: z.string(),
     remote: z.string().optional(),
@@ -201,7 +201,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const result = await runGitPull(workspace.path, {
@@ -220,7 +220,7 @@ registerCommand(
 
 // git.checkout
 registerCommand(
-  'git.checkout',
+  "git.checkout",
   z.object({
     workspaceId: z.string(),
     ref: z.string(),
@@ -229,7 +229,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const result = await runGitCheckout(workspace.path, args.ref, {
@@ -248,7 +248,7 @@ registerCommand(
 
 // git.branch
 registerCommand(
-  'git.branch',
+  "git.branch",
   z.object({
     workspaceId: z.string(),
     name: z.string(),
@@ -257,7 +257,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const result = await runGitCreateBranch(workspace.path, args.name, {
@@ -273,14 +273,14 @@ registerCommand(
 
 // git.branches
 registerCommand(
-  'git.branches',
+  "git.branches",
   z.object({
     workspaceId: z.string(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     return runGitListBranches(workspace.path);

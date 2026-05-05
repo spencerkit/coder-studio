@@ -2,17 +2,17 @@
  * esbuild configuration and utilities
  */
 
-import { type BuildOptions } from 'esbuild';
-import { resolve } from 'path';
-import { PACKAGES_DIR, CLI_DIR, SERVER_DIR, CORE_DIR, PROVIDERS_DIR } from './paths.js';
+import { type BuildOptions } from "esbuild";
+import { resolve } from "path";
+import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR } from "./paths.js";
 
 /**
  * Get external dependencies from package.json
  */
 async function getExternalDeps(packageDir: string): Promise<string[]> {
   try {
-    const { default: pkg } = await import(resolve(packageDir, 'package.json'), {
-      assert: { type: 'json' },
+    const { default: pkg } = await import(resolve(packageDir, "package.json"), {
+      assert: { type: "json" },
     });
 
     const deps = Object.keys(pkg.dependencies || {});
@@ -28,9 +28,7 @@ async function getExternalDeps(packageDir: string): Promise<string[]> {
  * Create esbuild options for CLI bundle
  * Bundles all internal workspace packages, externalizes only third-party deps
  */
-export async function createCliBuildOptions(
-  format: 'esm' | 'cjs'
-): Promise<BuildOptions> {
+export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<BuildOptions> {
   const cliExternal = await getExternalDeps(CLI_DIR);
   const serverExternal = await getExternalDeps(SERVER_DIR);
   const coreExternal = await getExternalDeps(CORE_DIR);
@@ -45,44 +43,38 @@ export async function createCliBuildOptions(
   ]);
 
   // Only externalize third-party dependencies (not internal @coder-studio/* packages)
-  const external = Array.from(allDeps).filter(
-    (dep) => !dep.startsWith('@coder-studio/')
-  );
+  const external = Array.from(allDeps).filter((dep) => !dep.startsWith("@coder-studio/"));
 
   // pm2 is conditionally imported and not listed as a dep; externalize it
-  if (!external.includes('pm2')) {
-    external.push('pm2');
+  if (!external.includes("pm2")) {
+    external.push("pm2");
   }
 
-  const outdir = format === 'esm'
-    ? resolve(CLI_DIR, 'dist/esm')
-    : resolve(CLI_DIR, 'dist/cjs');
+  const outdir = format === "esm" ? resolve(CLI_DIR, "dist/esm") : resolve(CLI_DIR, "dist/cjs");
 
   return {
     entryPoints: [
-      resolve(CLI_DIR, 'src/bin.ts'),
-      resolve(CLI_DIR, 'src/index.ts'),
-      resolve(CLI_DIR, 'src/server-runner.ts'),
+      resolve(CLI_DIR, "src/bin.ts"),
+      resolve(CLI_DIR, "src/index.ts"),
+      resolve(CLI_DIR, "src/server-runner.ts"),
     ],
     bundle: true,
-    platform: 'node',
-    target: 'node24',
+    platform: "node",
+    target: "node24",
     format,
     outdir,
-    outExtension: { '.js': format === 'esm' ? '.mjs' : '.js' },
+    outExtension: { ".js": format === "esm" ? ".mjs" : ".js" },
     external,
     sourcemap: true,
     minify: false,
     // Resolve internal workspace packages to their source files
     alias: {
-      '@coder-studio/server': resolve(SERVER_DIR, 'src/index.ts'),
-      '@coder-studio/core/runtime': resolve(CORE_DIR, 'src/runtime.ts'),
-      '@coder-studio/core': resolve(CORE_DIR, 'src/index.ts'),
-      '@coder-studio/providers': resolve(PROVIDERS_DIR, 'src/index.ts'),
+      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
+      "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
+      "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
+      "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
     },
-    banner: format === 'esm'
-      ? { js: '// @spencer-kit/coder-studio - ESM bundle' }
-      : undefined,
+    banner: format === "esm" ? { js: "// @spencer-kit/coder-studio - ESM bundle" } : undefined,
   };
 }
 
@@ -103,7 +95,5 @@ export async function getProductionDeps(): Promise<string[]> {
     ...providersExternal,
   ]);
 
-  return Array.from(allDeps).filter(
-    (dep) => !dep.startsWith('@coder-studio/')
-  );
+  return Array.from(allDeps).filter((dep) => !dep.startsWith("@coder-studio/"));
 }

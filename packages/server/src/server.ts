@@ -4,53 +4,54 @@
  * Creates and assembles all server components.
  */
 
-import type { FastifyInstance } from 'fastify';
-import { execFile as nodeExecFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { EventBus } from './bus/event-bus.js';
-import { buildFastifyApp } from './app.js';
-import {
-  auditCodexConfigToml,
-  cleanupCodexConfigToml,
-  type CodexAuditFindingType,
-  type CodexCleanupResult,
-  type CodexConfigAudit,
-} from './config/codex-config-audit.js';
-import { parseServerConfig, ensureDataDir, type ServerConfig } from './config.js';
-import { ProviderInstallManager } from './provider-runtime/install-manager.js';
-import type { RuntimeStatusDeps } from './provider-runtime/runtime-status.js';
-import { SessionManager } from './session/manager.js';
-import { openDatabase } from './storage/db.js';
-import type { Database } from './storage/database.js';
-import { ProviderConfigRepo } from './storage/repositories/provider-config-repo.js';
-import { rowToSession, type SessionRow } from './storage/repositories/session-repo.js';
-import { SupervisorCycleRepo } from './storage/repositories/supervisor-cycle-repo.js';
-import { SupervisorRepo } from './storage/repositories/supervisor-repo.js';
-import { AuthLoginBlockRepo } from './storage/repositories/auth-login-block-repo.js';
-import { SupervisorManager } from './supervisor/manager.js';
-import { TerminalManager } from './terminal/manager.js';
-import { NodePtyHost } from './terminal/pty-host.js';
-import { WorkspaceManager } from './workspace/manager.js';
-import { FencingManager } from './ws/fencing.js';
-import { WsHub } from './ws/hub.js';
-import type { CommandContext } from './ws/dispatch.js';
-import { providerRegistry } from '@coder-studio/providers';
-import { AuthSessionRepo } from './storage/repositories/auth-session-repo.js';
+import { execFile as nodeExecFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
-  writeRuntimeConfig,
   type RuntimeConfig,
-} from '@coder-studio/core/runtime';
-import { deleteWorkspaceUploads, runStartupGc } from './uploads/cleanup.js';
-import { STARTUP_GC_DELAY_MS } from './uploads/constants.js';
+  writeRuntimeConfig,
+} from "@coder-studio/core/runtime";
+import { providerRegistry } from "@coder-studio/providers";
+import type { FastifyInstance } from "fastify";
+import { buildFastifyApp } from "./app.js";
+import { EventBus } from "./bus/event-bus.js";
+import {
+  auditCodexConfigToml,
+  type CodexAuditFindingType,
+  type CodexCleanupResult,
+  type CodexConfigAudit,
+  cleanupCodexConfigToml,
+} from "./config/codex-config-audit.js";
+import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
+import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
+import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
+import { SessionManager } from "./session/manager.js";
+import type { Database } from "./storage/database.js";
+import { openDatabase } from "./storage/db.js";
+import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
+import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
+import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
+import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-repo.js";
+import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
+import { SupervisorManager } from "./supervisor/manager.js";
+import { TerminalManager } from "./terminal/manager.js";
+import { NodePtyHost } from "./terminal/pty-host.js";
+import type { TerminalDatabase } from "./terminal/types.js";
+import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
+import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
+import { WorkspaceManager } from "./workspace/manager.js";
+import type { CommandContext } from "./ws/dispatch.js";
+import { FencingManager } from "./ws/fencing.js";
+import { WsHub } from "./ws/hub.js";
 
-import './commands/index.js';
+import "./commands/index.js";
 
 export interface Server {
   app: FastifyInstance;
   stop: () => Promise<void>;
-  __test__?: { sessionMgr: any; commandContext: any };
+  __test__?: { sessionMgr: SessionManager; commandContext: CommandContext };
 }
 
 export interface ServerRuntimeOptions {
@@ -77,7 +78,7 @@ export function createCodexConfigAuditApi(): CodexConfigAuditApi {
 }
 
 export async function logCodexConfigFindings(
-  auditApi: Pick<CodexConfigAuditApi, 'audit'>,
+  auditApi: Pick<CodexConfigAuditApi, "audit">,
   logger: ServerWarnLogger
 ): Promise<void> {
   try {
@@ -89,11 +90,11 @@ export async function logCodexConfigFindings(
           startLine: finding.startLine,
           findingMessage: finding.message,
         },
-        'Codex config finding'
+        "Codex config finding"
       );
     }
   } catch (err) {
-    logger.warn({ err }, 'Codex config audit failed (non-fatal)');
+    logger.warn({ err }, "Codex config audit failed (non-fatal)");
   }
 }
 
@@ -108,7 +109,7 @@ export async function createServer(
   const db = openDatabase(config.dataDir);
   const eventBus = new EventBus();
   const fencingMgr = new FencingManager();
-  const wsHub = new WsHub({ eventBus, commandContext: null as any, config, fencingMgr });
+  const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
 
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
@@ -141,7 +142,7 @@ export async function createServer(
     },
     onClose: (workspaceId) =>
       deleteWorkspaceUploads(config.uploadsDir, workspaceId).catch((err) =>
-        console.warn('[uploads] cascade cleanup failed', { wsId: workspaceId, err })
+        console.warn("[uploads] cascade cleanup failed", { wsId: workspaceId, err })
       ),
   });
 
@@ -158,12 +159,12 @@ export async function createServer(
     authSessionRepo,
     authLoginBlockRepo,
     logger: {
-      level: 'info',
+      level: "info",
       transport: {
-        target: 'pino-pretty',
+        target: "pino-pretty",
         options: {
-          translateTime: 'HH:MM:ss Z',
-          ignore: 'pid,hostname',
+          translateTime: "HH:MM:ss Z",
+          ignore: "pid,hostname",
         },
       },
     },
@@ -210,14 +211,14 @@ export async function createServer(
     codexConfigAudit,
   };
 
-  (wsHub as any).deps.commandContext = commandContext;
+  wsHub.setCommandContext(commandContext);
 
   await app.listen({
     host: config.host,
     port: config.port,
   });
 
-  if (configOverrides?.writeRuntimeConfig ?? process.env.NODE_ENV === 'production') {
+  if (configOverrides?.writeRuntimeConfig ?? process.env.NODE_ENV === "production") {
     const runtime: RuntimeConfig = {
       host: config.host,
       port: extractListenPort(app) ?? config.port,
@@ -232,7 +233,7 @@ export async function createServer(
 
   const gcTimer = setTimeout(() => {
     runStartupGc(config.uploadsDir, app.log).catch((err) =>
-      app.log.warn({ err }, 'startup GC failed')
+      app.log.warn({ err }, "startup GC failed")
     );
   }, STARTUP_GC_DELAY_MS);
   gcTimer.unref();
@@ -264,7 +265,7 @@ export async function createServer(
 
 function extractListenPort(app: FastifyInstance): number | undefined {
   const address = app.server.address();
-  if (address && typeof address === 'object' && typeof address.port === 'number') {
+  if (address && typeof address === "object" && typeof address.port === "number") {
     return address.port;
   }
   return undefined;
@@ -274,9 +275,9 @@ function createPtyHost() {
   return new NodePtyHost();
 }
 
-function createTerminalDatabase(db: Database) {
+function createTerminalDatabase(db: Database): TerminalDatabase {
   return {
-    insert: (terminal: any) => {
+    insert: (terminal) => {
       db.prepare(`
         INSERT INTO terminals (id, workspace_id, kind, title, cwd, argv, cols, rows, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -322,49 +323,53 @@ function createSessionDatabase(db: Database) {
       if (keys.length === 0) return;
 
       const allowedCols = new Set([
-        'terminal_id',
-        'state',
-        'started_at',
-        'ended_at',
-        'completion_percent',
-        'error_reason',
-        'last_active_at',
-        'title',
+        "terminal_id",
+        "state",
+        "started_at",
+        "ended_at",
+        "completion_percent",
+        "error_reason",
+        "last_active_at",
+        "title",
       ]);
 
       const setClauses: string[] = [];
       const values: unknown[] = [];
       for (const key of keys) {
-        const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+        const col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
         if (!allowedCols.has(col)) continue;
         setClauses.push(`${col} = ?`);
         values.push(patch[key]);
       }
       if (setClauses.length === 0) return;
 
-      db.prepare(`UPDATE sessions SET ${setClauses.join(', ')} WHERE id = ?`).run(
+      db.prepare(`UPDATE sessions SET ${setClauses.join(", ")} WHERE id = ?`).run(
         ...(values as Array<string | number | bigint | Uint8Array | null>),
         id
       );
     },
     findById: (id: string) => {
-      const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+      const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
+        | SessionRow
+        | undefined;
       return row ? rowToSession(row) : undefined;
     },
     findByWorkspaceId: (workspaceId: string) => {
       const rows = db
-        .prepare('SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC')
+        .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
         .all(workspaceId) as unknown as SessionRow[];
       return rows.map(rowToSession);
     },
     listHydratable: () => {
-      const rows = db.prepare(
-        'SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC'
-      ).all() as unknown as SessionRow[];
+      const rows = db
+        .prepare(
+          "SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC"
+        )
+        .all() as unknown as SessionRow[];
       return rows.map(rowToSession);
     },
     delete: (id: string) => {
-      db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+      db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
     },
   };
 }
@@ -372,14 +377,14 @@ function createSessionDatabase(db: Database) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = await createServer();
 
-  process.on('SIGINT', async () => {
-    console.log('\nShutting down...');
+  process.on("SIGINT", async () => {
+    console.log("\nShutting down...");
     await server.stop();
     process.exit(0);
   });
 
-  process.on('SIGTERM', async () => {
-    console.log('\nShutting down...');
+  process.on("SIGTERM", async () => {
+    console.log("\nShutting down...");
     await server.stop();
     process.exit(0);
   });

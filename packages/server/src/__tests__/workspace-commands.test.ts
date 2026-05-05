@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { dispatch } from '../ws/dispatch.js';
-import type { CommandContext } from '../ws/dispatch.js';
-import { openDatabase, runMigrations } from '../storage/db.js';
-import { WorkspaceManager } from '../workspace/manager.js';
-import { EventBus } from '../bus/event-bus.js';
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
+import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import { dispatch } from "../ws/dispatch.js";
 
 // Import command handlers to register them
-import '../commands/workspace.js';
+import "../commands/workspace.js";
 
-describe('Workspace Commands', () => {
+describe("Workspace Commands", () => {
   let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
@@ -19,7 +19,7 @@ describe('Workspace Commands', () => {
 
   beforeEach(() => {
     // Create in-memory database for testing
-    db = openDatabase(':memory:');
+    db = openDatabase(":memory:");
     runMigrations(db);
 
     // Create event bus
@@ -32,21 +32,21 @@ describe('Workspace Commands', () => {
     ctx = {
       db,
       workspaceMgr,
-      sessionMgr: {} as any,
-      terminalMgr: {} as any,
+      sessionMgr: {},
+      terminalMgr: {},
       eventBus,
-      broadcaster: { broadcast: () => {} } as any,
+      broadcaster: { broadcast: () => {} },
       providerRegistry: [],
-    };
+    } as unknown as CommandContext;
   });
 
-  describe('workspace.list', () => {
-    it('should return empty array when no workspaces exist', async () => {
+  describe("workspace.list", () => {
+    it("should return empty array when no workspaces exist", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-1',
-          op: 'workspace.list',
+          kind: "command",
+          id: "test-id-1",
+          op: "workspace.list",
           args: {},
         },
         ctx
@@ -57,15 +57,15 @@ describe('Workspace Commands', () => {
     });
   });
 
-  describe('workspace.open', () => {
-    it('should fail for non-existent path', async () => {
+  describe("workspace.open", () => {
+    it("should fail for non-existent path", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-3',
-          op: 'workspace.open',
+          kind: "command",
+          id: "test-id-3",
+          op: "workspace.open",
           args: {
-            path: '/non/existent/path/that/does/not/exist',
+            path: "/non/existent/path/that/does/not/exist",
           },
         },
         ctx
@@ -75,35 +75,35 @@ describe('Workspace Commands', () => {
     });
   });
 
-  describe('workspace.close', () => {
-    it('should error if workspace not found', async () => {
+  describe("workspace.close", () => {
+    it("should error if workspace not found", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-6',
-          op: 'workspace.close',
+          kind: "command",
+          id: "test-id-6",
+          op: "workspace.close",
           args: {
-            id: 'non-existent-id',
+            id: "non-existent-id",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('internal_error');
+      expect(result.error?.code).toBe("internal_error");
     });
   });
 
-  describe('workspace.uiState.set', () => {
-    it('persists pane layout into workspace ui state', async () => {
+  describe("workspace.uiState.set", () => {
+    it("persists pane layout into workspace ui state", async () => {
       const dir = join(tmpdir(), `workspace-command-test-${Date.now()}`);
       await mkdir(dir);
 
       const openResult = await dispatch(
         {
-          kind: 'command',
-          id: 'open-workspace',
-          op: 'workspace.open',
+          kind: "command",
+          id: "open-workspace",
+          op: "workspace.open",
           args: {
             path: dir,
           },
@@ -116,9 +116,9 @@ describe('Workspace Commands', () => {
       const workspaceId = (openResult.data as { id: string }).id;
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'set-ui-state',
-          op: 'workspace.uiState.set',
+          kind: "command",
+          id: "set-ui-state",
+          op: "workspace.uiState.set",
           args: {
             workspaceId,
             uiState: {
@@ -126,12 +126,12 @@ describe('Workspace Commands', () => {
               bottomPanelHeight: 210,
               focusMode: false,
               paneLayout: {
-                id: 'root',
-                type: 'split',
-                direction: 'horizontal',
+                id: "root",
+                type: "split",
+                direction: "horizontal",
                 children: [
-                  { id: 'left', type: 'leaf', sessionId: 'sess-left' },
-                  { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+                  { id: "left", type: "leaf", sessionId: "sess-left" },
+                  { id: "right", type: "leaf", sessionId: "sess-right" },
                 ],
               },
             },
@@ -142,12 +142,12 @@ describe('Workspace Commands', () => {
 
       expect(result.ok).toBe(true);
       expect((result.data as { uiState: { paneLayout: unknown } }).uiState.paneLayout).toEqual({
-        id: 'root',
-        type: 'split',
-        direction: 'horizontal',
+        id: "root",
+        type: "split",
+        direction: "horizontal",
         children: [
-          { id: 'left', type: 'leaf', sessionId: 'sess-left' },
-          { id: 'right', type: 'leaf', sessionId: 'sess-right' },
+          { id: "left", type: "leaf", sessionId: "sess-left" },
+          { id: "right", type: "leaf", sessionId: "sess-right" },
         ],
       });
     });

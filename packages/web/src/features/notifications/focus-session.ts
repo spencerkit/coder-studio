@@ -47,15 +47,9 @@ export interface FocusSessionOptions {
 }
 
 export function focusSession(opts: FocusSessionOptions): void {
-  const {
-    workspaceId,
-    sessionId,
-    setPendingFocus,
-    setActiveWorkspaceId,
-    navigate,
-  } = opts;
+  const { workspaceId, sessionId, setPendingFocus, setActiveWorkspaceId, navigate } = opts;
 
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
 
   // 1. Update the in-memory active workspace before navigation so the
   //    workspace shell can immediately resolve the correct target.
@@ -67,13 +61,13 @@ export function focusSession(opts: FocusSessionOptions): void {
   setPendingFocus(sessionId);
 
   // 3. Navigate to the workspace page only when we're outside it already.
-  const path = '/workspace';
+  const path = "/workspace";
   if (window.location.pathname === path) return;
 
   if (navigate) {
     navigate(path);
   } else {
-    window.history.pushState({}, '', path);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 }

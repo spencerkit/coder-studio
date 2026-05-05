@@ -2,22 +2,31 @@
  * Tests for EventBus
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { EventBus } from '../bus/event-bus.js';
-import type { DomainEvent } from '@coder-studio/core';
+import type { DomainEvent } from "@coder-studio/core";
+import { describe, expect, it, vi } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
 
-describe('EventBus', () => {
-  it('should emit and receive events', () => {
+type SupportedEventType = Extract<
+  DomainEvent["type"],
+  | "session.state.changed"
+  | "session.lifecycle"
+  | "workspace.meta.changed"
+  | "git.state.changed"
+  | "fs.dirty"
+>;
+
+describe("EventBus", () => {
+  it("should emit and receive events", () => {
     const bus = new EventBus();
     const handler = vi.fn();
 
-    bus.on('session.state.changed', handler);
+    bus.on("session.state.changed", handler);
 
     const event: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     bus.emit(event);
@@ -25,19 +34,19 @@ describe('EventBus', () => {
     expect(handler).toHaveBeenCalledWith(event);
   });
 
-  it('should support multiple handlers for same event', () => {
+  it("should support multiple handlers for same event", () => {
     const bus = new EventBus();
     const handler1 = vi.fn();
     const handler2 = vi.fn();
 
-    bus.on('session.state.changed', handler1);
-    bus.on('session.state.changed', handler2);
+    bus.on("session.state.changed", handler1);
+    bus.on("session.state.changed", handler2);
 
     const event: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     bus.emit(event);
@@ -46,18 +55,18 @@ describe('EventBus', () => {
     expect(handler2).toHaveBeenCalledWith(event);
   });
 
-  it('should unsubscribe correctly', () => {
+  it("should unsubscribe correctly", () => {
     const bus = new EventBus();
     const handler = vi.fn();
 
-    const unsub = bus.on('session.state.changed', handler);
+    const unsub = bus.on("session.state.changed", handler);
     unsub();
 
     const event: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     bus.emit(event);
@@ -65,34 +74,34 @@ describe('EventBus', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('should not break when emitting to no subscribers', () => {
+  it("should not break when emitting to no subscribers", () => {
     const bus = new EventBus();
 
     const event: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     expect(() => bus.emit(event)).not.toThrow();
   });
 
-  it('should continue calling handlers after error', () => {
+  it("should continue calling handlers after error", () => {
     const bus = new EventBus();
     const errorHandler = vi.fn(() => {
-      throw new Error('Handler error');
+      throw new Error("Handler error");
     });
     const goodHandler = vi.fn();
 
-    bus.on('session.state.changed', errorHandler);
-    bus.on('session.state.changed', goodHandler);
+    bus.on("session.state.changed", errorHandler);
+    bus.on("session.state.changed", goodHandler);
 
     const event: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     bus.emit(event);
@@ -101,27 +110,27 @@ describe('EventBus', () => {
     expect(goodHandler).toHaveBeenCalled();
   });
 
-  it('should clear all handlers', () => {
+  it("should clear all handlers", () => {
     const bus = new EventBus();
     const handler1 = vi.fn();
     const handler2 = vi.fn();
 
-    bus.on('session.state.changed', handler1);
-    bus.on('session.lifecycle', handler2);
+    bus.on("session.state.changed", handler1);
+    bus.on("session.lifecycle", handler2);
 
     bus.clear();
 
     const event1: DomainEvent = {
-      type: 'session.state.changed',
-      sessionId: 'session-1',
-      from: 'idle',
-      to: 'running',
+      type: "session.state.changed",
+      sessionId: "session-1",
+      from: "idle",
+      to: "running",
     };
 
     const event2: DomainEvent = {
-      type: 'session.lifecycle',
-      sessionId: 'session-1',
-      event: 'started',
+      type: "session.lifecycle",
+      sessionId: "session-1",
+      event: "started",
     };
 
     bus.emit(event1);
@@ -131,47 +140,47 @@ describe('EventBus', () => {
     expect(handler2).not.toHaveBeenCalled();
   });
 
-  it('should handle all event types', () => {
+  it("should handle all event types", () => {
     const bus = new EventBus();
-    const handlers = {
-      'session.state.changed': vi.fn(),
-      'session.lifecycle': vi.fn(),
-      'workspace.meta.changed': vi.fn(),
-      'git.state.changed': vi.fn(),
-      'fs.dirty': vi.fn(),
+    const handlers: Record<SupportedEventType, ReturnType<typeof vi.fn>> = {
+      "session.state.changed": vi.fn(),
+      "session.lifecycle": vi.fn(),
+      "workspace.meta.changed": vi.fn(),
+      "git.state.changed": vi.fn(),
+      "fs.dirty": vi.fn(),
     };
 
     // Subscribe to all event types
-    for (const [type, handler] of Object.entries(handlers)) {
-      bus.on(type as any, handler);
+    for (const type of Object.keys(handlers) as SupportedEventType[]) {
+      bus.on(type, handlers[type]);
     }
 
     // Emit each event type
     const events: DomainEvent[] = [
       {
-        type: 'session.state.changed',
-        sessionId: 's1',
-        from: 'idle',
-        to: 'running',
+        type: "session.state.changed",
+        sessionId: "s1",
+        from: "idle",
+        to: "running",
       },
       {
-        type: 'session.lifecycle',
-        sessionId: 's1',
-        event: 'started',
+        type: "session.lifecycle",
+        sessionId: "s1",
+        event: "started",
       },
       {
-        type: 'workspace.meta.changed',
-        workspaceId: 'w1',
-        patch: { name: 'test' },
+        type: "workspace.meta.changed",
+        workspaceId: "w1",
+        patch: { name: "test" },
       },
       {
-        type: 'git.state.changed',
-        workspaceId: 'w1',
+        type: "git.state.changed",
+        workspaceId: "w1",
       },
       {
-        type: 'fs.dirty',
-        workspaceId: 'w1',
-        reason: 'file saved',
+        type: "fs.dirty",
+        workspaceId: "w1",
+        reason: "file saved",
       },
     ];
 

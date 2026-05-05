@@ -1,4 +1,4 @@
-import { expect, Locator } from '@playwright/test';
+import { expect, Locator } from "@playwright/test";
 
 /**
  * Asserts that a locator matches a baseline screenshot.

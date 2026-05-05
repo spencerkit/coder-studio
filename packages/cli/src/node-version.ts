@@ -1,7 +1,7 @@
-export const MINIMUM_NODE_VERSION = '24.0.0';
+export const MINIMUM_NODE_VERSION = "24.0.0";
 
 function parseVersion(version: string): [number, number, number] {
-  const [major = '0', minor = '0', patch = '0'] = version.split('.');
+  const [major = "0", minor = "0", patch = "0"] = version.split(".");
   return [
     Number.parseInt(major, 10) || 0,
     Number.parseInt(minor, 10) || 0,

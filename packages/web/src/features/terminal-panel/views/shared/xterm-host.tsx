@@ -8,55 +8,54 @@
  * - Aurora Mint theme that follows the current UI mode
  */
 
-import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
-import { useAtomValue, useAtom } from 'jotai';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { wsClientAtom } from '../../../../atoms/connection';
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../../atoms';
-import { dispatchCommandAtom } from '../../../../atoms/connection';
-import { themeAtom } from '../../../../atoms/app-ui';
-import { useTranslation } from '../../../../lib/i18n';
-import { Topics, type TerminalInputActivity } from '@coder-studio/core';
-import type { OutputBuffer } from '../../atoms';
+import { type TerminalInputActivity, Topics } from "@coder-studio/core";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import { useAtom, useAtomValue } from "jotai";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { themeAtom } from "../../../../atoms/app-ui";
+import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
+import { useViewport } from "../../../../hooks/use-viewport";
+import { useTranslation } from "../../../../lib/i18n";
 import type {
   ConnectionStatus,
   TerminalBinaryPayload,
   TerminalReplayPayload,
   TerminalSnapshotPayload,
-} from '../../../../ws/client';
-import {
-  classifyReplayFailure,
-  TERMINAL_REPLAY_TIMEOUT_MS,
-  type TerminalReplayUiState,
-} from '../../replay-state';
-import { useViewport } from '../../../../hooks/use-viewport';
+} from "../../../../ws/client";
+import type { OutputBuffer } from "../../atoms";
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../../atoms";
 import {
   globalHydrationCoordinator,
   type HydrationRequestHandle,
   type HydrationTier,
-} from '../../hydration-coordinator';
-import { MobileTerminalInputBar } from '../../mobile/mobile-terminal-input-bar';
+} from "../../hydration-coordinator";
+import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
   applyCtrlModeToInput,
+  type CtrlMode,
   getSoftTerminalInputBytes,
   lockCtrlMode,
-  toggleCtrlMode,
-  type CtrlMode,
   type SoftTerminalKeyId,
-} from '../../mobile/virtual-terminal-keys';
-import { usePasteDropUpload } from '../../uploads/use-paste-drop-upload';
-import { XtermPlaceholder } from './xterm-placeholder';
+  toggleCtrlMode,
+} from "../../mobile/virtual-terminal-keys";
+import {
+  classifyReplayFailure,
+  TERMINAL_REPLAY_TIMEOUT_MS,
+  type TerminalReplayUiState,
+} from "../../replay-state";
+import { usePasteDropUpload } from "../../uploads/use-paste-drop-upload";
+import { XtermPlaceholder } from "./xterm-placeholder";
 
 const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
-const TERMINAL_FOCUS_REPORTING_BYTES = new Set(['\x1b[I', '\x1b[O']);
+const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 
 interface TerminalInputDraftState {
   nextDraft: string;
   submittedText?: string;
 }
 
-type TouchPointLike = Pick<Touch, 'identifier' | 'clientY'>;
+type TouchPointLike = Pick<Touch, "identifier" | "clientY">;
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
@@ -64,14 +63,14 @@ function isReplayGeneratedTerminalResponse(data: string): boolean {
 
 function classifyTerminalInput(data: string): TerminalInputActivity {
   if (TERMINAL_FOCUS_REPORTING_BYTES.has(data)) {
-    return 'system';
+    return "system";
   }
 
-  if (data.includes('\r') || data.includes('\n')) {
-    return 'submit';
+  if (data.includes("\r") || data.includes("\n")) {
+    return "submit";
   }
 
-  return 'typing';
+  return "typing";
 }
 
 function dropLastWordFromDraft(draft: string): string {
@@ -101,7 +100,7 @@ function consumeTerminalInputDraft(
   data: string,
   activity: TerminalInputActivity
 ): TerminalInputDraftState {
-  if (activity === 'system') {
+  if (activity === "system") {
     return { nextDraft: draft };
   }
 
@@ -111,7 +110,7 @@ function consumeTerminalInputDraft(
   for (let index = 0; index < data.length; index += 1) {
     const char = data[index]!;
 
-    if (char === '\x1b') {
+    if (char === "\x1b") {
       const remaining = data.slice(index);
       const escapeMatch = remaining.match(
         /^\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|[@-_])/
@@ -122,34 +121,34 @@ function consumeTerminalInputDraft(
       }
     }
 
-    if (char === '\u007f' || char === '\b') {
+    if (char === "\u007f" || char === "\b") {
       nextDraft = nextDraft.slice(0, -1);
       continue;
     }
 
-    if (char === '\u0015') {
-      nextDraft = '';
+    if (char === "\u0015") {
+      nextDraft = "";
       continue;
     }
 
-    if (char === '\u0017') {
+    if (char === "\u0017") {
       nextDraft = dropLastWordFromDraft(nextDraft);
       continue;
     }
 
-    if (char === '\u0003') {
-      nextDraft = '';
+    if (char === "\u0003") {
+      nextDraft = "";
       submittedText = undefined;
       continue;
     }
 
-    if (char === '\r' || char === '\n') {
+    if (char === "\r" || char === "\n") {
       submittedText = nextDraft.length > 0 ? nextDraft : submittedText;
-      nextDraft = '';
+      nextDraft = "";
       continue;
     }
 
-    if (char >= ' ') {
+    if (char >= " ") {
       nextDraft += char;
     }
   }
@@ -165,7 +164,7 @@ function getTouchAt(
     return null;
   }
 
-  if ('item' in list && typeof list.item === 'function') {
+  if ("item" in list && typeof list.item === "function") {
     return list.item(index);
   }
 
@@ -197,61 +196,61 @@ function findTouchByIdentifier(
  */
 const AURORA_MINT_THEMES = {
   dark: {
-    background: '#0b1218',
-    foreground: '#e5edf3',
-    cursor: '#78d7b2',
-    cursorAccent: '#0b1218',
-    selectionBackground: '#1e3040',
-    selectionForeground: '#e5edf3',
-    black: '#0a1014',
-    red: '#ff9eb0',
-    green: '#78d7b2',
-    yellow: '#f1b86a',
-    blue: '#6cb6ff',
-    magenta: '#c792ea',
-    cyan: '#78d7b2',
-    white: '#9fb0bc',
-    brightBlack: '#4a5b6a',
-    brightRed: '#ff9eb0',
-    brightGreen: '#78d7b2',
-    brightYellow: '#f1b86a',
-    brightBlue: '#6cb6ff',
-    brightMagenta: '#c792ea',
-    brightCyan: '#78d7b2',
-    brightWhite: '#e5edf3',
+    background: "#0b1218",
+    foreground: "#e5edf3",
+    cursor: "#78d7b2",
+    cursorAccent: "#0b1218",
+    selectionBackground: "#1e3040",
+    selectionForeground: "#e5edf3",
+    black: "#0a1014",
+    red: "#ff9eb0",
+    green: "#78d7b2",
+    yellow: "#f1b86a",
+    blue: "#6cb6ff",
+    magenta: "#c792ea",
+    cyan: "#78d7b2",
+    white: "#9fb0bc",
+    brightBlack: "#4a5b6a",
+    brightRed: "#ff9eb0",
+    brightGreen: "#78d7b2",
+    brightYellow: "#f1b86a",
+    brightBlue: "#6cb6ff",
+    brightMagenta: "#c792ea",
+    brightCyan: "#78d7b2",
+    brightWhite: "#e5edf3",
   },
   light: {
-    background: '#fafbfc',
-    foreground: '#1f2328',
-    cursor: '#0969da',
-    cursorAccent: '#fafbfc',
-    selectionBackground: '#dde4ea',
-    selectionForeground: '#1f2328',
-    black: '#24292f',
-    red: '#cf222e',
-    green: '#1a7f37',
-    yellow: '#9a6700',
-    blue: '#0969da',
-    magenta: '#8250df',
-    cyan: '#1b7c83',
-    white: '#57606a',
-    brightBlack: '#8b949e',
-    brightRed: '#cf222e',
-    brightGreen: '#1a7f37',
-    brightYellow: '#9a6700',
-    brightBlue: '#0969da',
-    brightMagenta: '#8250df',
-    brightCyan: '#1b7c83',
-    brightWhite: '#1f2328',
+    background: "#fafbfc",
+    foreground: "#1f2328",
+    cursor: "#0969da",
+    cursorAccent: "#fafbfc",
+    selectionBackground: "#dde4ea",
+    selectionForeground: "#1f2328",
+    black: "#24292f",
+    red: "#cf222e",
+    green: "#1a7f37",
+    yellow: "#9a6700",
+    blue: "#0969da",
+    magenta: "#8250df",
+    cyan: "#1b7c83",
+    white: "#57606a",
+    brightBlack: "#8b949e",
+    brightRed: "#cf222e",
+    brightGreen: "#1a7f37",
+    brightYellow: "#9a6700",
+    brightBlue: "#0969da",
+    brightMagenta: "#8250df",
+    brightCyan: "#1b7c83",
+    brightWhite: "#1f2328",
   },
 };
 
-function getTerminalTheme(theme: 'dark' | 'light') {
+function getTerminalTheme(theme: "dark" | "light") {
   return AURORA_MINT_THEMES[theme];
 }
 
 function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
-  if (event.type !== 'keydown') {
+  if (event.type !== "keydown") {
     return false;
   }
 
@@ -259,17 +258,17 @@ function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
     return false;
   }
 
-  const isPasteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v';
+  const isPasteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v";
   return isPasteShortcut;
 }
 
 const terminalInputEncoder = new TextEncoder();
-const terminalTraceDecoder = new TextDecoder('utf-8', { fatal: false });
-const TERMINAL_TRACE_STORAGE_KEY = 'coderStudio.terminalTrace';
+const terminalTraceDecoder = new TextDecoder("utf-8", { fatal: false });
+const TERMINAL_TRACE_STORAGE_KEY = "coderStudio.terminalTrace";
 
 function isTerminalTraceEnabled() {
   try {
-    return globalThis.localStorage?.getItem(TERMINAL_TRACE_STORAGE_KEY) === '1';
+    return globalThis.localStorage?.getItem(TERMINAL_TRACE_STORAGE_KEY) === "1";
   } catch {
     return false;
   }
@@ -280,18 +279,18 @@ function countOccurrences(text: string, needle: string): number {
 }
 
 function summarizeTerminalData(data: Uint8Array | string) {
-  const text = typeof data === 'string' ? data : terminalTraceDecoder.decode(data);
+  const text = typeof data === "string" ? data : terminalTraceDecoder.decode(data);
   return {
-    length: typeof data === 'string' ? data.length : data.byteLength,
-    syncStart: countOccurrences(text, '\x1b[?2026h'),
-    syncEnd: countOccurrences(text, '\x1b[?2026l'),
-    clearToEnd: countOccurrences(text, '\x1b[J'),
-    clearScreen: countOccurrences(text, '\x1b[2J'),
-    eraseLine: countOccurrences(text, '\x1b[K'),
-    cursorHome: countOccurrences(text, '\x1b[1;1H'),
-    dsr: countOccurrences(text, '\x1b[6n'),
-    da: countOccurrences(text, '\x1b[c'),
-    reverseIndex: countOccurrences(text, '\x1bM'),
+    length: typeof data === "string" ? data.length : data.byteLength,
+    syncStart: countOccurrences(text, "\x1b[?2026h"),
+    syncEnd: countOccurrences(text, "\x1b[?2026l"),
+    clearToEnd: countOccurrences(text, "\x1b[J"),
+    clearScreen: countOccurrences(text, "\x1b[2J"),
+    eraseLine: countOccurrences(text, "\x1b[K"),
+    cursorHome: countOccurrences(text, "\x1b[1;1H"),
+    dsr: countOccurrences(text, "\x1b[6n"),
+    da: countOccurrences(text, "\x1b[c"),
+    reverseIndex: countOccurrences(text, "\x1bM"),
     cursorMoves: text.match(/\x1b\[[0-9;]*[Hf]/g)?.length ?? 0,
     scrollRegions: text.match(/\x1b\[[0-9;]*r/g)?.slice(0, 6) ?? [],
   };
@@ -302,7 +301,7 @@ function traceTerminal(terminalId: string, event: string, details: Record<string
     return;
   }
 
-  console.debug('[terminal-trace]', {
+  console.debug("[terminal-trace]", {
     at: Math.round(performance.now() * 100) / 100,
     terminalId,
     event,
@@ -332,14 +331,14 @@ interface XtermHostProps {
   /** Marks the session prioritized by workspace UI state */
   isActiveSession?: boolean;
   /** Stable terminal kind for cold-start routing, with store metadata as fallback */
-  terminalKind?: 'agent' | 'shell';
+  terminalKind?: "agent" | "shell";
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
 }
 
 interface ReplayPayload {
-  status: 'ok' | 'too_old' | 'unknown';
-  transport?: 'binary';
+  status: "ok" | "too_old" | "unknown";
+  transport?: "binary";
   streamId?: number;
   size?: number;
   seq?: number;
@@ -353,14 +352,14 @@ interface ReplayCommandResult {
 }
 
 interface SnapshotPayload {
-  status: 'ok' | 'unsupported';
-  transport?: 'binary';
+  status: "ok" | "unsupported";
+  transport?: "binary";
   streamId?: number;
   size?: number;
   seq?: number;
   rows?: number;
   cols?: number;
-  source?: 'headless';
+  source?: "headless";
   bytes?: Uint8Array;
 }
 
@@ -392,7 +391,7 @@ export function XtermHost({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
-  const terminalKind = terminalKindProp ?? meta?.kind ?? 'shell';
+  const terminalKind = terminalKindProp ?? meta?.kind ?? "shell";
   const isInteractive = !readOnly && meta?.alive !== false;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -414,7 +413,7 @@ export function XtermHost({
   const pendingReplayChunksRef = useRef<Array<{ bytes: Uint8Array; seq: number }>>([]);
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
-  const coldStartStateRef = useRef<'idle' | 'in-flight' | 'done'>('idle');
+  const coldStartStateRef = useRef<"idle" | "in-flight" | "done">("idle");
   const latestRenderedSeqRef = useRef(0);
   const shouldRecoverOnNextConnectRef = useRef(false);
   // Tracks whether xterm is currently processing replay data. While > 0,
@@ -423,7 +422,7 @@ export function XtermHost({
   const replayWriteDepthRef = useRef(0);
   const replayWriteGenerationRef = useRef(0);
   const initialThemeRef = useRef(uiTheme);
-  const inputDraftRef = useRef('');
+  const inputDraftRef = useRef("");
   const inputRevisionRef = useRef(0);
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
   const hydrationReleasedRef = useRef(false);
@@ -438,18 +437,16 @@ export function XtermHost({
     carryPx: 0,
   });
 
-  const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: 'loading' });
+  const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: "loading" });
   const [hydrationState, setHydrationState] = useState<
-    | { kind: 'idle' }
-    | { kind: 'queued'; queuePosition: number }
-    | { kind: 'granted' }
-  >(viewport === 'mobile' ? { kind: 'granted' } : { kind: 'idle' });
+    { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
+  >(viewport === "mobile" ? { kind: "granted" } : { kind: "idle" });
   const [mobileInputExpanded, setMobileInputExpanded] = useState(false);
-  const [ctrlMode, setCtrlMode] = useState<CtrlMode>('off');
-  const ctrlModeRef = useRef<CtrlMode>('off');
+  const [ctrlMode, setCtrlMode] = useState<CtrlMode>("off");
+  const ctrlModeRef = useRef<CtrlMode>("off");
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
-    if (!wsClient || typeof wsClient.getStatus !== 'function') {
-      return 'disconnected';
+    if (!wsClient || typeof wsClient.getStatus !== "function") {
+      return "disconnected";
     }
 
     return wsClient.getStatus();
@@ -474,8 +471,8 @@ export function XtermHost({
   }, [uiTheme]);
 
   useLayoutEffect(() => {
-    if (viewport === 'mobile') {
-      setHydrationState({ kind: 'granted' });
+    if (viewport === "mobile") {
+      setHydrationState({ kind: "granted" });
       hydrationReleasedRef.current = true;
       hydrationHandleRef.current = null;
       return;
@@ -483,29 +480,25 @@ export function XtermHost({
 
     hydrationReleasedRef.current = false;
     const tier: HydrationTier =
-      meta?.alive === false
-        ? 'background'
-        : isActiveSession
-          ? 'visible-active'
-          : 'visible-other';
+      meta?.alive === false ? "background" : isActiveSession ? "visible-active" : "visible-other";
     const handle = globalHydrationCoordinator.request({
       terminalId,
       tier,
     });
     hydrationHandleRef.current = handle;
-    setHydrationState(handle.isGranted ? { kind: 'granted' } : { kind: 'idle' });
+    setHydrationState(handle.isGranted ? { kind: "granted" } : { kind: "idle" });
 
     let cancelled = false;
     const unsubscribe = handle.subscribePosition((queuePosition) => {
       if (!cancelled) {
-        setHydrationState({ kind: 'queued', queuePosition });
+        setHydrationState({ kind: "queued", queuePosition });
       }
     });
 
     if (!handle.isGranted) {
       void handle.granted.then(() => {
         if (!cancelled) {
-          setHydrationState({ kind: 'granted' });
+          setHydrationState({ kind: "granted" });
         }
       });
     }
@@ -522,16 +515,12 @@ export function XtermHost({
   }, [terminalId, viewport]);
 
   useEffect(() => {
-    if (viewport === 'mobile') {
+    if (viewport === "mobile") {
       return;
     }
 
     const tier: HydrationTier =
-      meta?.alive === false
-        ? 'background'
-        : isActiveSession
-          ? 'visible-active'
-          : 'visible-other';
+      meta?.alive === false ? "background" : isActiveSession ? "visible-active" : "visible-other";
     hydrationHandleRef.current?.promote(tier);
   }, [isActiveSession, meta?.alive, viewport]);
 
@@ -543,11 +532,11 @@ export function XtermHost({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    if (!container || typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
     }
 
-    if (!window.matchMedia('(pointer: coarse)').matches) {
+    if (!window.matchMedia("(pointer: coarse)").matches) {
       return;
     }
 
@@ -595,18 +584,20 @@ export function XtermHost({
       state.lastClientY = touch.clientY;
       state.carryPx += deltaY;
 
-      const scrollLines = state.carryPx > 0
-        ? Math.floor(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE)
-        : Math.ceil(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE);
+      const scrollLines =
+        state.carryPx > 0
+          ? Math.floor(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE)
+          : Math.ceil(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE);
 
       if (scrollLines === 0) {
         return;
       }
 
       const remainingScrollback = base - viewport;
-      const allowedScrollLines = scrollLines > 0
-        ? Math.min(scrollLines, remainingScrollback)
-        : Math.max(scrollLines, -viewport);
+      const allowedScrollLines =
+        scrollLines > 0
+          ? Math.min(scrollLines, remainingScrollback)
+          : Math.max(scrollLines, -viewport);
 
       if (allowedScrollLines === 0) {
         state.carryPx = 0;
@@ -628,16 +619,16 @@ export function XtermHost({
       resetTouchState();
     };
 
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    container.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd, { passive: true });
+    container.addEventListener("touchcancel", handleTouchCancel, { passive: true });
 
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchCancel);
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchCancel);
       resetTouchState();
     };
   }, []);
@@ -658,9 +649,9 @@ export function XtermHost({
         const after = terminalRef.current
           ? { cols: terminalRef.current.cols, rows: terminalRef.current.rows }
           : null;
-        traceTerminal(terminalId, 'fit', { before, after });
+        traceTerminal(terminalId, "fit", { before, after });
       } catch (error) {
-        console.error('Failed to fit xterm instance:', error);
+        console.error("Failed to fit xterm instance:", error);
       } finally {
         const resolvers = fitResolversRef.current;
         fitResolversRef.current = [];
@@ -691,11 +682,8 @@ export function XtermHost({
    */
   const handleInput = useCallback(
     async (data: string, activityOverride?: TerminalInputActivity) => {
-      if (
-        replayWriteDepthRef.current > 0 &&
-        isReplayGeneratedTerminalResponse(data)
-      ) {
-        traceTerminal(terminalId, 'input.suppressed-replay-response', {
+      if (replayWriteDepthRef.current > 0 && isReplayGeneratedTerminalResponse(data)) {
+        traceTerminal(terminalId, "input.suppressed-replay-response", {
           summary: summarizeTerminalData(data),
         });
         return;
@@ -706,7 +694,7 @@ export function XtermHost({
       }
 
       if (!wsClient) {
-        console.error('Cannot send terminal input: WebSocket not connected');
+        console.error("Cannot send terminal input: WebSocket not connected");
         return;
       }
 
@@ -728,7 +716,7 @@ export function XtermHost({
           updateCtrlMode(normalized.nextCtrlMode);
         }
 
-        traceTerminal(terminalId, 'input', {
+        traceTerminal(terminalId, "input", {
           activity,
           summary: summarizeTerminalData(normalized.data),
         });
@@ -750,7 +738,7 @@ export function XtermHost({
             updateCtrlMode(previousCtrlMode);
           }
         }
-        console.error('Failed to send terminal input:', error);
+        console.error("Failed to send terminal input:", error);
       }
     },
     [terminalId, updateCtrlMode, wsClient]
@@ -768,21 +756,21 @@ export function XtermHost({
       }
 
       lastReportedSizeRef.current = { cols, rows };
-      traceTerminal(terminalId, 'resize.dispatch', {
+      traceTerminal(terminalId, "resize.dispatch", {
         previousSize,
         nextSize: { cols, rows },
       });
 
-      const result = await dispatch('terminal.resize', {
+      const result = await dispatch("terminal.resize", {
         terminalId,
         cols,
         rows,
       });
 
       if (!result.ok) {
-        console.error('Failed to sync terminal size:', result.error);
+        console.error("Failed to sync terminal size:", result.error);
       }
-      traceTerminal(terminalId, 'resize.result', {
+      traceTerminal(terminalId, "resize.result", {
         nextSize: { cols, rows },
         ok: result.ok,
         error: result.ok ? undefined : result.error,
@@ -816,17 +804,17 @@ export function XtermHost({
 
   useEffect(() => {
     if (!wsClient) {
-      setConnectionStatus('disconnected');
+      setConnectionStatus("disconnected");
       return;
     }
 
-    if (typeof wsClient.getStatus === 'function') {
+    if (typeof wsClient.getStatus === "function") {
       setConnectionStatus(wsClient.getStatus());
     } else {
-      setConnectionStatus('connected');
+      setConnectionStatus("connected");
     }
 
-    if (typeof wsClient.onStatus !== 'function') {
+    if (typeof wsClient.onStatus !== "function") {
       return;
     }
 
@@ -837,8 +825,8 @@ export function XtermHost({
 
   useLayoutEffect(() => {
     setMobileInputExpanded(false);
-    updateCtrlMode('off');
-    inputDraftRef.current = '';
+    updateCtrlMode("off");
+    inputDraftRef.current = "";
     inputRevisionRef.current += 1;
   }, [terminalId, updateCtrlMode]);
 
@@ -862,7 +850,7 @@ export function XtermHost({
    * replay, which used to amplify "blank line" artifacts on benign renders.
    */
   useEffect(() => {
-    if (viewport !== 'mobile' && hydrationState.kind !== 'granted') {
+    if (viewport !== "mobile" && hydrationState.kind !== "granted") {
       return;
     }
 
@@ -879,10 +867,10 @@ export function XtermHost({
 
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
-    coldStartStateRef.current = 'idle';
+    coldStartStateRef.current = "idle";
     pendingReplayChunksRef.current = [];
     lastReportedSizeRef.current = null;
-    setReplayUiState({ kind: 'loading' });
+    setReplayUiState({ kind: "loading" });
 
     // Create Terminal instance.
     // lineHeight is left at xterm.js default (1.0) so that box-drawing
@@ -890,11 +878,11 @@ export function XtermHost({
     // with no gaps between rows.
     const terminal = new Terminal({
       theme: getTerminalTheme(initialThemeRef.current),
-      fontFamily: 'JetBrains Mono, Fira Code, SF Mono, monospace',
+      fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: 11,
       scrollback: 5000,
       cursorBlink: isInteractive && !uploadBusy,
-      cursorStyle: 'block',
+      cursorStyle: "block",
       disableStdin: !isInteractive || uploadBusy,
       allowProposedApi: true,
     });
@@ -911,7 +899,7 @@ export function XtermHost({
     terminal.attachCustomKeyEventHandler((event) => !shouldBypassPtyForKeyboardPaste(event));
 
     terminal.open(containerRef.current);
-    traceTerminal(terminalId, 'mount.open');
+    traceTerminal(terminalId, "mount.open");
     // Defer the first fit to the next frame so flex layout has settled;
     // calling fit() synchronously right after open() sometimes runs against a
     // zero- or partial-height container and produces an off-by-one row count
@@ -926,17 +914,17 @@ export function XtermHost({
         return;
       }
 
-      if (typeof wsClient.getStatus !== 'function' || typeof wsClient.onStatus !== 'function') {
+      if (typeof wsClient.getStatus !== "function" || typeof wsClient.onStatus !== "function") {
         return;
       }
 
-      if (wsClient.getStatus() === 'connected') {
+      if (wsClient.getStatus() === "connected") {
         return;
       }
 
       await new Promise<void>((resolve) => {
         unsubscribeStatus = wsClient.onStatus((status) => {
-          if (status === 'connected') {
+          if (status === "connected") {
             unsubscribeStatus?.();
             unsubscribeStatus = null;
             resolve();
@@ -996,7 +984,7 @@ export function XtermHost({
         }
 
         writeReplayBytes(entry.bytes);
-        traceTerminal(terminalId, 'write.pending-replay-chunk', {
+        traceTerminal(terminalId, "write.pending-replay-chunk", {
           seq: entry.seq,
           summary: summarizeTerminalData(entry.bytes),
         });
@@ -1009,7 +997,7 @@ export function XtermHost({
     const finishHistoricalLoad = (
       result: ReplayCommandResult | null,
       options: {
-        successStatus: 'ok';
+        successStatus: "ok";
         successBytes: Uint8Array | undefined;
         coveredSeq: number | undefined;
       }
@@ -1021,7 +1009,7 @@ export function XtermHost({
       let coveredSeq = replayedSeqRef.current;
       if (result.ok && result.data?.status === options.successStatus) {
         if (options.successBytes) {
-          traceTerminal(terminalId, 'write.historical', {
+          traceTerminal(terminalId, "write.historical", {
             seq: options.coveredSeq,
             size: options.successBytes.byteLength,
             summary: summarizeTerminalData(options.successBytes),
@@ -1029,66 +1017,68 @@ export function XtermHost({
           writeReplayBytes(options.successBytes);
         }
         coveredSeq = options.coveredSeq ?? coveredSeq;
-        setReplayUiState({ kind: 'ready' });
-        if (viewport !== 'mobile') {
+        setReplayUiState({ kind: "ready" });
+        if (viewport !== "mobile") {
           hydrationHandleRef.current?.release();
           hydrationReleasedRef.current = true;
         }
-      } else if (result.data?.status === 'too_old') {
+      } else if (result.data?.status === "too_old") {
         // Ring buffer overflow - show a message to the user
         if (terminalRef.current) {
-          terminalRef.current.writeln('\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m');
+          terminalRef.current.writeln(
+            "\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m"
+          );
         }
-        setReplayUiState({ kind: 'degraded', reason: 'truncated' });
-        if (viewport !== 'mobile') {
+        setReplayUiState({ kind: "degraded", reason: "truncated" });
+        if (viewport !== "mobile") {
           hydrationHandleRef.current?.release();
           hydrationReleasedRef.current = true;
         }
-      } else if (result.data?.status === 'unknown') {
-        setReplayUiState({ kind: 'degraded', reason: 'closed' });
-        if (viewport !== 'mobile') {
+      } else if (result.data?.status === "unknown") {
+        setReplayUiState({ kind: "degraded", reason: "closed" });
+        if (viewport !== "mobile") {
           hydrationHandleRef.current?.release();
           hydrationReleasedRef.current = true;
         }
       } else if (!result.ok) {
-        console.error('Failed to replay terminal output:', result.error);
-        setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(result.error) });
-        if (viewport !== 'mobile') {
+        console.error("Failed to replay terminal output:", result.error);
+        setReplayUiState({ kind: "degraded", reason: classifyReplayFailure(result.error) });
+        if (viewport !== "mobile") {
           hydrationHandleRef.current?.release();
           hydrationReleasedRef.current = true;
         }
       }
 
-        setOutputAtom((prev: OutputBuffer) => ({
-          ...prev,
-          chunks: [],
-          lastSeq: Math.max(prev.lastSeq, coveredSeq),
-        }));
+      setOutputAtom((prev: OutputBuffer) => ({
+        ...prev,
+        chunks: [],
+        lastSeq: Math.max(prev.lastSeq, coveredSeq),
+      }));
 
       replayedSeqRef.current = coveredSeq;
       latestRenderedSeqRef.current = coveredSeq;
       replayCompletedRef.current = true;
-      coldStartStateRef.current = 'done';
+      coldStartStateRef.current = "done";
       flushPendingReplayChunks(coveredSeq);
       reconnectRecoveryTriggerRef.current?.();
     };
 
     const finishReplay = (result: ReplayCommandResult | null) => {
       finishHistoricalLoad(result, {
-        successStatus: 'ok',
+        successStatus: "ok",
         successBytes: result?.data?.bytes,
         coveredSeq: result?.data?.seq,
       });
     };
 
     const failReplay = (error: unknown) => {
-      console.error('Failed to replay terminal output:', error);
+      console.error("Failed to replay terminal output:", error);
       if (!mountedRef.current || !terminalRef.current) {
         return;
       }
 
-      setReplayUiState({ kind: 'degraded', reason: classifyReplayFailure(error) });
-      if (viewport !== 'mobile') {
+      setReplayUiState({ kind: "degraded", reason: classifyReplayFailure(error) });
+      if (viewport !== "mobile") {
         hydrationHandleRef.current?.release();
         hydrationReleasedRef.current = true;
       }
@@ -1099,7 +1089,7 @@ export function XtermHost({
       }));
 
       replayCompletedRef.current = true;
-      coldStartStateRef.current = 'done';
+      coldStartStateRef.current = "done";
       flushPendingReplayChunks(replayedSeqRef.current);
       reconnectRecoveryTriggerRef.current?.();
     };
@@ -1108,18 +1098,22 @@ export function XtermHost({
       if (!wsClient) {
         return;
       }
-      coldStartStateRef.current = 'in-flight';
+      coldStartStateRef.current = "in-flight";
       replayCompletedRef.current = false;
       if (lastSeq === 0) {
-        setReplayUiState({ kind: 'loading' });
+        setReplayUiState({ kind: "loading" });
       }
-      traceTerminal(terminalId, 'replay.request', { lastSeq });
+      traceTerminal(terminalId, "replay.request", { lastSeq });
 
       const replayPromise: Promise<ReplayCommandResult> = wsClient
         ? wsClient
-            .sendCommand<ReplayPayload>('terminal.replay', { terminalId, lastSeq }, { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS })
+            .sendCommand<ReplayPayload>(
+              "terminal.replay",
+              { terminalId, lastSeq },
+              { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+            )
             .then((data) => ({ ok: true as const, data }))
-        : dispatch<ReplayPayload>('terminal.replay', { terminalId, lastSeq });
+        : dispatch<ReplayPayload>("terminal.replay", { terminalId, lastSeq });
 
       void replayPromise
         .then((result) => {
@@ -1130,27 +1124,27 @@ export function XtermHost({
         });
     };
 
-    const requestHistoricalRecovery = (mode: 'initial' | 'reconnect') => {
+    const requestHistoricalRecovery = (mode: "initial" | "reconnect") => {
       if (!wsClient) {
         return;
       }
 
-      coldStartStateRef.current = 'in-flight';
+      coldStartStateRef.current = "in-flight";
       replayCompletedRef.current = false;
 
-      if (terminalKind !== 'agent') {
-        if (mode === 'initial') {
-          setReplayUiState({ kind: 'loading' });
+      if (terminalKind !== "agent") {
+        if (mode === "initial") {
+          setReplayUiState({ kind: "loading" });
         }
-        requestReplay(mode === 'initial' ? 0 : latestRenderedSeqRef.current);
+        requestReplay(mode === "initial" ? 0 : latestRenderedSeqRef.current);
         return;
       }
 
-      setReplayUiState({ kind: 'loading' });
+      setReplayUiState({ kind: "loading" });
 
       const snapshotPromise: Promise<SnapshotCommandResult> = wsClient
         .sendCommand<TerminalSnapshotPayload>(
-          'terminal.snapshot',
+          "terminal.snapshot",
           { terminalId },
           { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
         )
@@ -1162,19 +1156,19 @@ export function XtermHost({
           return;
         }
 
-        if (result.ok && result.data?.status === 'ok') {
+        if (result.ok && result.data?.status === "ok") {
           finishHistoricalLoad(result, {
-            successStatus: 'ok',
+            successStatus: "ok",
             successBytes: result.data.bytes,
             coveredSeq: result.data.seq,
           });
           return;
         }
 
-        traceTerminal(terminalId, 'snapshot.fallback', {
-          reason: result.ok ? result.data?.status ?? 'unsupported' : String(result.error),
+        traceTerminal(terminalId, "snapshot.fallback", {
+          reason: result.ok ? (result.data?.status ?? "unsupported") : String(result.error),
         });
-        requestReplay(mode === 'initial' ? 0 : latestRenderedSeqRef.current);
+        requestReplay(mode === "initial" ? 0 : latestRenderedSeqRef.current);
       });
     };
 
@@ -1183,16 +1177,16 @@ export function XtermHost({
         return;
       }
 
-      if (typeof wsClient.getStatus === 'function' && wsClient.getStatus() !== 'connected') {
+      if (typeof wsClient.getStatus === "function" && wsClient.getStatus() !== "connected") {
         return;
       }
 
-      if (coldStartStateRef.current === 'in-flight') {
+      if (coldStartStateRef.current === "in-flight") {
         return;
       }
 
       shouldRecoverOnNextConnectRef.current = false;
-      requestHistoricalRecovery('reconnect');
+      requestHistoricalRecovery("reconnect");
     };
 
     if (wsClient) {
@@ -1201,7 +1195,7 @@ export function XtermHost({
         (topic, payload, _seq) => {
           if (topic === outputTopic) {
             const outputData = payload as TerminalBinaryPayload;
-            traceTerminal(terminalId, 'live.output', {
+            traceTerminal(terminalId, "live.output", {
               seq: _seq,
               replayCompleted: replayCompletedRef.current,
               replayedSeq: replayedSeqRef.current,
@@ -1218,7 +1212,7 @@ export function XtermHost({
             }
 
             if (_seq <= replayedSeqRef.current) {
-              traceTerminal(terminalId, 'live.drop-covered', {
+              traceTerminal(terminalId, "live.drop-covered", {
                 seq: _seq,
                 replayedSeq: replayedSeqRef.current,
               });
@@ -1227,7 +1221,7 @@ export function XtermHost({
 
             const chunkStartSeq = _seq - outputData.bytes.byteLength;
             if (chunkStartSeq > replayedSeqRef.current) {
-              traceTerminal(terminalId, 'live.gap', {
+              traceTerminal(terminalId, "live.gap", {
                 seq: _seq,
                 chunkStartSeq,
                 replayedSeq: replayedSeqRef.current,
@@ -1271,7 +1265,7 @@ export function XtermHost({
         return;
       }
 
-      requestHistoricalRecovery('initial');
+      requestHistoricalRecovery("initial");
     })().catch((error) => {
       failReplay(error);
     });
@@ -1300,7 +1294,7 @@ export function XtermHost({
         try {
           terminalRef.current.dispose();
         } catch (error) {
-          console.error('Failed to dispose xterm instance:', error);
+          console.error("Failed to dispose xterm instance:", error);
         }
         terminalRef.current = null;
         fitAddonRef.current = null;
@@ -1319,21 +1313,21 @@ export function XtermHost({
   ]);
 
   useEffect(() => {
-    if (!wsClient || typeof wsClient.onStatus !== 'function') {
+    if (!wsClient || typeof wsClient.onStatus !== "function") {
       return;
     }
 
     let shouldRecoverOnNextConnect = false;
     const unsubscribe = wsClient.onStatus((status) => {
-      if (status === 'disconnected' || status === 'reconnecting') {
-        if (coldStartStateRef.current !== 'idle') {
+      if (status === "disconnected" || status === "reconnecting") {
+        if (coldStartStateRef.current !== "idle") {
           shouldRecoverOnNextConnect = true;
           shouldRecoverOnNextConnectRef.current = true;
         }
         return;
       }
 
-      if (status !== 'connected' || !shouldRecoverOnNextConnect) {
+      if (status !== "connected" || !shouldRecoverOnNextConnect) {
         return;
       }
 
@@ -1367,7 +1361,7 @@ export function XtermHost({
         if (!chunk) continue;
         const chunkEndSeq = chunkEndSeqs[i] ?? outputAtom.lastSeq;
 
-        traceTerminal(terminalId, 'write.live-buffer', {
+        traceTerminal(terminalId, "write.live-buffer", {
           index: i,
           lastSeq: outputAtom.lastSeq,
           summary: summarizeTerminalData(chunk),
@@ -1391,7 +1385,7 @@ export function XtermHost({
     if (!container || !fitAddon) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      traceTerminal(terminalId, 'resize-observer', {
+      traceTerminal(terminalId, "resize-observer", {
         clientWidth: container.clientWidth,
         clientHeight: container.clientHeight,
       });
@@ -1424,22 +1418,22 @@ export function XtermHost({
     }
   }, [meta?.alive]);
 
-  const showMobileInputBar = viewport === 'mobile' && isInteractive;
-  const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== 'connected';
+  const showMobileInputBar = viewport === "mobile" && isInteractive;
+  const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
   const mobileInputLabels = {
-    expand: t('terminal.mobile_input.expand'),
-    collapse: t('terminal.mobile_input.collapse'),
-    shortcuts: t('terminal.mobile_input.shortcuts'),
-    ctrl: t('terminal.mobile_input.ctrl'),
-    ctrlArmed: t('terminal.mobile_input.ctrl_armed'),
-    ctrlLocked: t('terminal.mobile_input.ctrl_locked'),
-    escape: t('terminal.mobile_input.escape'),
-    tab: t('terminal.mobile_input.tab'),
-    enter: t('terminal.mobile_input.enter'),
-    up: t('terminal.mobile_input.up'),
-    down: t('terminal.mobile_input.down'),
-    left: t('terminal.mobile_input.left'),
-    right: t('terminal.mobile_input.right'),
+    expand: t("terminal.mobile_input.expand"),
+    collapse: t("terminal.mobile_input.collapse"),
+    shortcuts: t("terminal.mobile_input.shortcuts"),
+    ctrl: t("terminal.mobile_input.ctrl"),
+    ctrlArmed: t("terminal.mobile_input.ctrl_armed"),
+    ctrlLocked: t("terminal.mobile_input.ctrl_locked"),
+    escape: t("terminal.mobile_input.escape"),
+    tab: t("terminal.mobile_input.tab"),
+    enter: t("terminal.mobile_input.enter"),
+    up: t("terminal.mobile_input.up"),
+    down: t("terminal.mobile_input.down"),
+    left: t("terminal.mobile_input.left"),
+    right: t("terminal.mobile_input.right"),
   };
 
   const handleSoftKeyPress = useCallback(
@@ -1461,33 +1455,35 @@ export function XtermHost({
   }, [focusTerminal, updateCtrlMode]);
 
   const showReplayOverlay =
-    replayUiState.kind !== 'ready' && (viewport === 'mobile' || hydrationState.kind === 'granted');
+    replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");
 
-  let replayTitle = '';
-  let replayBody = '';
-  let replayClassName = 'xterm-replay-overlay';
+  let replayTitle = "";
+  let replayBody = "";
+  let replayClassName = "xterm-replay-overlay";
 
-  if (replayUiState.kind === 'loading') {
-    replayTitle = t('terminal.replay.loading_title');
-    replayBody = t('terminal.replay.loading_body');
+  if (replayUiState.kind === "loading") {
+    replayTitle = t("terminal.replay.loading_title");
+    replayBody = t("terminal.replay.loading_body");
   } else {
-    replayClassName += ' xterm-replay-overlay--degraded';
+    replayClassName += " xterm-replay-overlay--degraded";
     replayTitle =
-      replayUiState.reason === 'truncated'
-        ? t('terminal.replay.truncated_title')
-        : replayUiState.reason === 'closed'
-          ? t('terminal.replay.closed_title')
-        : t('terminal.replay.failed_title');
+      replayUiState.reason === "truncated"
+        ? t("terminal.replay.truncated_title")
+        : replayUiState.reason === "closed"
+          ? t("terminal.replay.closed_title")
+          : t("terminal.replay.failed_title");
     replayBody =
-      replayUiState.reason === 'truncated'
-        ? t('terminal.replay.truncated_body')
-        : replayUiState.reason === 'closed'
-          ? t('terminal.replay.closed_body')
-        : t('terminal.replay.failed_body');
+      replayUiState.reason === "truncated"
+        ? t("terminal.replay.truncated_body")
+        : replayUiState.reason === "closed"
+          ? t("terminal.replay.closed_body")
+          : t("terminal.replay.failed_body");
   }
 
   return (
-    <div className={`xterm-host-shell${showMobileInputBar ? ' xterm-host-shell--mobile-input' : ''}`}>
+    <div
+      className={`xterm-host-shell${showMobileInputBar ? " xterm-host-shell--mobile-input" : ""}`}
+    >
       {showMobileInputBar ? (
         <MobileTerminalInputBar
           expanded={mobileInputExpanded}
@@ -1509,18 +1505,18 @@ export function XtermHost({
         ref={containerRef}
         className="xterm-host"
         style={{
-          width: '100%',
+          width: "100%",
           minHeight: 0,
-          overflow: 'hidden',
+          overflow: "hidden",
         }}
         onFocusCapture={() => {
           if (isInteractive) {
-            hydrationHandleRef.current?.promote('focused');
+            hydrationHandleRef.current?.promote("focused");
           }
         }}
         onMouseDown={() => {
           if (isInteractive) {
-            hydrationHandleRef.current?.promote('focused');
+            hydrationHandleRef.current?.promote("focused");
           }
         }}
       />
@@ -1529,28 +1525,30 @@ export function XtermHost({
           role="status"
           aria-live="polite"
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(0,0,0,0.35)',
-            pointerEvents: 'none',
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            pointerEvents: "none",
             zIndex: 5,
             fontSize: 12,
-            color: 'var(--text-muted, #ddd)',
+            color: "var(--text-muted, #ddd)",
           }}
         >
           Uploading…
         </div>
       ) : null}
-      {viewport !== 'mobile' && hydrationState.kind === 'queued' ? (
+      {viewport !== "mobile" && hydrationState.kind === "queued" ? (
         <XtermPlaceholder state="queued" queuePosition={hydrationState.queuePosition} />
       ) : null}
       {showReplayOverlay ? (
         <div className={replayClassName} role="status" aria-live="polite">
           <div className="xterm-replay-overlay__card">
-            {replayUiState.kind === 'loading' ? <div className="xterm-replay-overlay__spinner" aria-hidden="true" /> : null}
+            {replayUiState.kind === "loading" ? (
+              <div className="xterm-replay-overlay__spinner" aria-hidden="true" />
+            ) : null}
             <div className="xterm-replay-overlay__title">{replayTitle}</div>
             {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
           </div>

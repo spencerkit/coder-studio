@@ -1,15 +1,8 @@
-import {
-  deleteRuntimeConfig,
-  readRuntimeConfig,
-} from '@coder-studio/core/runtime';
-import {
-  deleteManagedServer,
-  getLogPaths,
-  getManagedServerStatus,
-} from './pm2-control.js';
+import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runtime";
+import { deleteManagedServer, getLogPaths, getManagedServerStatus } from "./pm2-control.js";
 
 export interface ServerStatus {
-  status: 'running' | 'starting' | 'stopped' | 'errored';
+  status: "running" | "starting" | "stopped" | "errored";
   pid: number | null;
   host: string | null;
   port: number | null;
@@ -29,9 +22,7 @@ export async function stopRunningServer(): Promise<boolean> {
   return stopped;
 }
 
-export async function ensureSingleServer(
-  stop = () => stopRunningServer()
-): Promise<void> {
+export async function ensureSingleServer(stop = () => stopRunningServer()): Promise<void> {
   await stop();
 }
 
@@ -40,13 +31,13 @@ export async function getServerStatus(): Promise<ServerStatus> {
   const runtime = readRuntimeConfig();
   const { outFile, errFile } = getLogPaths();
 
-  if (managedStatus.status === 'stopped') {
+  if (managedStatus.status === "stopped") {
     if (runtime) {
       deleteRuntimeConfig();
     }
 
     return {
-      status: 'stopped',
+      status: "stopped",
       pid: null,
       host: null,
       port: null,
@@ -58,7 +49,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
   }
 
   return {
-    status: runtime ? managedStatus.status : 'starting',
+    status: runtime ? managedStatus.status : "starting",
     pid: runtime?.pid ?? managedStatus.pm2Pid,
     host: runtime?.host ?? null,
     port: runtime?.port ?? null,

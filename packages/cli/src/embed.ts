@@ -5,15 +5,15 @@
  * The actual serving is handled by Fastify static plugin
  */
 
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync } from "fs";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Path to embedded web assets (relative to dist/esm/index.mjs)
-const WEB_ASSETS_DIR = resolve(__dirname, '../web');
+const WEB_ASSETS_DIR = resolve(__dirname, "../web");
 
 /**
  * Get the static assets directory path
@@ -37,8 +37,6 @@ export function hasWebAssets(): boolean {
  */
 export async function embedWebAssets(): Promise<void> {
   if (!hasWebAssets()) {
-    console.warn(
-      'Warning: Web assets not found. Frontend will not be available.'
-    );
+    console.warn("Warning: Web assets not found. Frontend will not be available.");
   }
 }

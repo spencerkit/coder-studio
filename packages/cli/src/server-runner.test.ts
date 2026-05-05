@@ -1,87 +1,80 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-const {
-  createServer,
-  readCliConfig,
-  hasWebAssets,
-  getStaticAssetsDir,
-} = vi.hoisted(() => ({
+const { createServer, readCliConfig, hasWebAssets, getStaticAssetsDir } = vi.hoisted(() => ({
   createServer: vi.fn(),
   readCliConfig: vi.fn(),
   hasWebAssets: vi.fn(),
   getStaticAssetsDir: vi.fn(),
 }));
 
-vi.mock('@coder-studio/server', () => ({
+vi.mock("@coder-studio/server", () => ({
   createServer,
 }));
 
-vi.mock('./config-store.js', () => ({
+vi.mock("./config-store.js", () => ({
   readCliConfig,
 }));
 
-vi.mock('./embed.js', () => ({
+vi.mock("./embed.js", () => ({
   hasWebAssets,
   getStaticAssetsDir,
 }));
 
-import { buildServerConfig, runServerEntrypoint, startServer } from './server-runner';
+import { buildServerConfig, runServerEntrypoint, startServer } from "./server-runner";
 
-describe('server-runner', () => {
+describe("server-runner", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  it('ignores ephemeral port zero from saved cli config', () => {
+  it("ignores ephemeral port zero from saved cli config", () => {
     readCliConfig.mockReturnValue({
-      host: '127.0.0.1',
+      host: "127.0.0.1",
       port: 0,
-      dataDir: '/tmp/cs-data/coder-studio.db',
-      password: 'sekrit',
+      dataDir: "/tmp/cs-data/coder-studio.db",
+      password: "sekrit",
     });
     hasWebAssets.mockReturnValue(true);
-    getStaticAssetsDir.mockReturnValue('/tmp/web');
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
 
     expect(buildServerConfig()).toEqual({
-      host: '127.0.0.1',
-      dataDir: '/tmp/cs-data/coder-studio.db',
+      host: "127.0.0.1",
+      dataDir: "/tmp/cs-data/coder-studio.db",
       auth: {
         enabled: true,
-        password: 'sekrit',
+        password: "sekrit",
       },
-      webRoot: '/tmp/web',
+      webRoot: "/tmp/web",
     });
   });
 
-  it('starts the server and wires shutdown handlers', async () => {
+  it("starts the server and wires shutdown handlers", async () => {
     readCliConfig.mockReturnValue({
-      host: '127.0.0.1',
+      host: "127.0.0.1",
       port: 4173,
     });
     hasWebAssets.mockReturnValue(true);
-    getStaticAssetsDir.mockReturnValue('/tmp/web');
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
 
     const stop = vi.fn().mockResolvedValue(undefined);
     createServer.mockResolvedValue({ stop });
 
-    const processOnSpy = vi.spyOn(process, 'on');
-    const processExitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as never);
+    const processOnSpy = vi.spyOn(process, "on");
+    const processExitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
 
     const runningServer = await startServer();
 
     expect(createServer).toHaveBeenCalledWith({
-      host: '127.0.0.1',
+      host: "127.0.0.1",
       port: 4173,
-      webRoot: '/tmp/web',
+      webRoot: "/tmp/web",
     });
     expect(runningServer).toEqual({ stop: expect.any(Function) });
     expect(processOnSpy).toHaveBeenCalledTimes(2);
-    expect(processOnSpy).toHaveBeenNthCalledWith(1, 'SIGINT', expect.any(Function));
-    expect(processOnSpy).toHaveBeenNthCalledWith(2, 'SIGTERM', expect.any(Function));
+    expect(processOnSpy).toHaveBeenNthCalledWith(1, "SIGINT", expect.any(Function));
+    expect(processOnSpy).toHaveBeenNthCalledWith(2, "SIGTERM", expect.any(Function));
 
     const shutdown = processOnSpy.mock.calls[0]?.[1] as () => Promise<void>;
     await shutdown();
@@ -90,49 +83,48 @@ describe('server-runner', () => {
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('starts the server when executed as the entrypoint', async () => {
+  it("starts the server when executed as the entrypoint", async () => {
     readCliConfig.mockReturnValue(null);
     hasWebAssets.mockReturnValue(true);
-    getStaticAssetsDir.mockReturnValue('/tmp/web');
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
     const stop = vi.fn().mockResolvedValue(undefined);
     createServer.mockResolvedValue({ stop });
 
-    const processOnSpy = vi.spyOn(process, 'on');
-    const argvSpy = vi.spyOn(process, 'argv', 'get').mockReturnValue([
-      'node',
-      fileURLToPath(import.meta.url),
-    ]);
+    const processOnSpy = vi.spyOn(process, "on");
+    const argvSpy = vi
+      .spyOn(process, "argv", "get")
+      .mockReturnValue(["node", fileURLToPath(import.meta.url)]);
 
     try {
       await runServerEntrypoint(import.meta.url, fileURLToPath(import.meta.url));
       expect(createServer).toHaveBeenCalledTimes(1);
-      expect(processOnSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
-      expect(processOnSpy).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
+      expect(processOnSpy).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+      expect(processOnSpy).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
     } finally {
       argvSpy.mockRestore();
     }
   });
 
-  it('starts the server when pm2 runs the bundle through ProcessContainerFork', async () => {
+  it("starts the server when pm2 runs the bundle through ProcessContainerFork", async () => {
     readCliConfig.mockReturnValue(null);
     hasWebAssets.mockReturnValue(true);
-    getStaticAssetsDir.mockReturnValue('/tmp/web');
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
     const stop = vi.fn().mockResolvedValue(undefined);
     createServer.mockResolvedValue({ stop });
 
     await runServerEntrypoint(
       import.meta.url,
-      '/repo/node_modules/.pnpm/pm2@6.0.14/node_modules/pm2/lib/ProcessContainerFork.js'
+      "/repo/node_modules/.pnpm/pm2@6.0.14/node_modules/pm2/lib/ProcessContainerFork.js"
     );
 
     expect(createServer).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects unsupported Node.js versions before creating the server', async () => {
+  it("rejects unsupported Node.js versions before creating the server", async () => {
     const originalVersions = process.versions;
-    Object.defineProperty(process, 'versions', {
+    Object.defineProperty(process, "versions", {
       configurable: true,
-      value: { ...process.versions, node: '22.4.0' },
+      value: { ...process.versions, node: "22.4.0" },
     });
 
     try {
@@ -141,7 +133,7 @@ describe('server-runner', () => {
       ).rejects.toThrow(/requires Node\.js >=24\.0\.0/);
       expect(createServer).not.toHaveBeenCalled();
     } finally {
-      Object.defineProperty(process, 'versions', {
+      Object.defineProperty(process, "versions", {
         configurable: true,
         value: originalVersions,
       });

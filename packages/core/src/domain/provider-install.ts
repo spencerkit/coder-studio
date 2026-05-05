@@ -9,7 +9,7 @@ export interface ProviderRuntimeStatusEntry {
   missingCommands: string[];
   missingPrerequisites: string[];
   autoInstallSupported: boolean;
-  installReadiness: 'ready' | 'missing_prerequisite' | 'unsupported_platform';
+  installReadiness: "ready" | "missing_prerequisite" | "unsupported_platform";
   manualGuideKeys: string[];
   docUrls: ProviderInstallDocUrls;
 }
@@ -21,10 +21,10 @@ export interface ProviderRuntimeStatusResponse {
 export interface ProviderInstallStepSnapshot {
   id: string;
   titleKey: string;
-  kind: 'check' | 'install' | 'verify';
+  kind: "check" | "install" | "verify";
   command: string;
   args: string[];
-  status: 'pending' | 'running' | 'succeeded' | 'failed';
+  status: "pending" | "running" | "succeeded" | "failed";
   startedAt?: number;
   finishedAt?: number;
   exitCode?: number;
@@ -34,13 +34,13 @@ export interface ProviderInstallStepSnapshot {
 
 export interface ProviderInstallFailure {
   code:
-    | 'missing_prerequisite'
-    | 'unsupported_platform'
-    | 'permission_denied'
-    | 'command_not_found'
-    | 'command_failed'
-    | 'verification_failed'
-    | 'unknown_failure';
+    | "missing_prerequisite"
+    | "unsupported_platform"
+    | "permission_denied"
+    | "command_not_found"
+    | "command_failed"
+    | "verification_failed"
+    | "unknown_failure";
   providerId: string;
   failedStepId: string;
   message: string;
@@ -58,7 +58,7 @@ export interface ProviderInstallJobSnapshot {
   jobId: string;
   providerId: string;
   strategyIds: string[];
-  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  status: "queued" | "running" | "succeeded" | "failed";
   currentStepId?: string;
   steps: ProviderInstallStepSnapshot[];
   failure?: ProviderInstallFailure;

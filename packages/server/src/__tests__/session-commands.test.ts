@@ -1,21 +1,39 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { dispatch } from '../ws/dispatch.js';
-import type { CommandContext } from '../ws/dispatch.js';
-import { openDatabase, runMigrations } from '../storage/db.js';
-import { WorkspaceManager } from '../workspace/manager.js';
-import { SessionManager } from '../session/manager.js';
-import { EventBus } from '../bus/event-bus.js';
-import { ProviderConfigRepo } from '../storage/repositories/provider-config-repo.js';
-import { providerRegistry } from '@coder-studio/providers';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ProviderDefinition } from "@coder-studio/core";
+import { providerRegistry } from "@coder-studio/providers";
+import { beforeEach, describe, expect, it } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
+import { SessionManager } from "../session/manager.js";
+import type { SessionDatabase } from "../session/types.js";
+import { openDatabase, runMigrations } from "../storage/db.js";
+import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import { dispatch } from "../ws/dispatch.js";
+import type { Broadcaster } from "../ws/hub.js";
 
 // Import command handlers to register them
-import '../commands/workspace.js';
-import '../commands/session.js';
+import "../commands/workspace.js";
+import "../commands/session.js";
 
-describe('Session Commands', () => {
+describe("Session Commands", () => {
+  const broadcaster = { broadcast: () => {} } satisfies Broadcaster;
+  const providerConfigRepo = (db: ReturnType<typeof openDatabase>) =>
+    new ProviderConfigRepo(db) as Pick<ProviderConfigRepo, "get"> as ProviderConfigRepo;
+  const terminalMgrStub = {
+    create: () => ({ id: "terminal-1" }),
+    kill: async () => {},
+    close: async () => {},
+  } as unknown as TerminalManager;
+  const sessionDbStub = {
+    insert: () => {},
+    update: () => {},
+    delete: () => {},
+  } as unknown as SessionDatabase;
+
   let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
@@ -24,7 +42,7 @@ describe('Session Commands', () => {
 
   beforeEach(() => {
     // Create in-memory database for testing
-    db = openDatabase(':memory:');
+    db = openDatabase(":memory:");
     runMigrations(db);
 
     // Create event bus
@@ -33,20 +51,12 @@ describe('Session Commands', () => {
     // Create managers
     workspaceMgr = new WorkspaceManager({ db, eventBus });
     sessionMgr = new SessionManager({
-      terminalMgr: {
-        create: () => ({ id: 'terminal-1' }),
-        kill: async () => {},
-        close: async () => {},
-      } as any,
+      terminalMgr: terminalMgrStub,
       eventBus,
-      db: {
-        insert: () => {},
-        update: () => {},
-        delete: () => {},
-      } as any,
-      broadcaster: { broadcast: () => {} } as any,
+      db: sessionDbStub,
+      broadcaster,
       providerRegistry: [],
-      providerConfigRepo: new ProviderConfigRepo(db),
+      providerConfigRepo: providerConfigRepo(db),
     });
 
     // Create context with required dependencies
@@ -54,25 +64,25 @@ describe('Session Commands', () => {
       db,
       workspaceMgr,
       sessionMgr,
-      terminalMgr: {} as any,
+      terminalMgr: {},
       eventBus,
-      broadcaster: { broadcast: () => {} } as any,
+      broadcaster,
       providerRegistry: [],
-      fencingMgr: {} as any,
-      supervisorMgr: {} as any,
-    };
+      fencingMgr: {},
+      supervisorMgr: {},
+    } as unknown as CommandContext;
   });
 
-  describe('session.create', () => {
-    it('should error if workspace not found', async () => {
+  describe("session.create", () => {
+    it("should error if workspace not found", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-2',
-          op: 'session.create',
+          kind: "command",
+          id: "test-id-2",
+          op: "session.create",
           args: {
-            workspaceId: 'non-existent-id',
-            providerId: 'claude-code',
+            workspaceId: "non-existent-id",
+            providerId: "claude-code",
           },
         },
         ctx
@@ -81,22 +91,22 @@ describe('Session Commands', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('returns provider_cli_missing before terminal spawn when the CLI is absent', async () => {
+    it("returns provider_cli_missing before terminal spawn when the CLI is absent", async () => {
       const testDir = join(tmpdir(), `coder-studio-session-command-${Date.now()}`);
-      mkdirSync(join(testDir, '.git'), { recursive: true });
-      writeFileSync(join(testDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      mkdirSync(join(testDir, ".git"), { recursive: true });
+      writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
 
-      ctx.providerRegistry = providerRegistry as any;
+      ctx.providerRegistry = providerRegistry as ProviderDefinition[];
       ctx.providerRuntimeDeps = {
-        commandExists: async (command: string) => command !== 'claude',
+        commandExists: async (command: string) => command !== "claude",
       };
 
       try {
         const openResult = await dispatch(
           {
-            kind: 'command',
-            id: 'workspace-id',
-            op: 'workspace.open',
+            kind: "command",
+            id: "workspace-id",
+            op: "workspace.open",
             args: { path: testDir },
           },
           ctx
@@ -106,12 +116,12 @@ describe('Session Commands', () => {
 
         const result = await dispatch(
           {
-            kind: 'command',
-            id: 'session-id',
-            op: 'session.create',
+            kind: "command",
+            id: "session-id",
+            op: "session.create",
             args: {
               workspaceId: openResult.data!.id,
-              providerId: 'claude',
+              providerId: "claude",
             },
           },
           ctx
@@ -119,11 +129,11 @@ describe('Session Commands', () => {
 
         expect(result.ok).toBe(false);
         expect(result.error).toEqual({
-          code: 'provider_cli_missing',
-          message: 'Provider CLI is not installed',
+          code: "provider_cli_missing",
+          message: "Provider CLI is not installed",
           details: {
-            providerId: 'claude',
-            missingCommands: ['claude'],
+            providerId: "claude",
+            missingCommands: ["claude"],
           },
         });
       } finally {
@@ -132,15 +142,15 @@ describe('Session Commands', () => {
     });
   });
 
-  describe('session.stop', () => {
-    it('should error if session not found', async () => {
+  describe("session.stop", () => {
+    it("should error if session not found", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-5',
-          op: 'session.stop',
+          kind: "command",
+          id: "test-id-5",
+          op: "session.stop",
           args: {
-            sessionId: 'non-existent-id',
+            sessionId: "non-existent-id",
           },
         },
         ctx
@@ -150,15 +160,15 @@ describe('Session Commands', () => {
     });
   });
 
-  describe('session.remove', () => {
-    it('should error if session not found', async () => {
+  describe("session.remove", () => {
+    it("should error if session not found", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-6',
-          op: 'session.remove',
+          kind: "command",
+          id: "test-id-6",
+          op: "session.remove",
           args: {
-            sessionId: 'non-existent-id',
+            sessionId: "non-existent-id",
           },
         },
         ctx
@@ -168,22 +178,22 @@ describe('Session Commands', () => {
     });
   });
 
-  describe('session.resume', () => {
-    it('should return unknown_op because the command has been removed', async () => {
+  describe("session.resume", () => {
+    it("should return unknown_op because the command has been removed", async () => {
       const result = await dispatch(
         {
-          kind: 'command',
-          id: 'test-id-8',
-          op: 'session.resume',
+          kind: "command",
+          id: "test-id-8",
+          op: "session.resume",
           args: {
-            sessionId: 'non-existent-id',
+            sessionId: "non-existent-id",
           },
         },
         ctx
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe('unknown_op');
+      expect(result.error?.code).toBe("unknown_op");
     });
   });
 });

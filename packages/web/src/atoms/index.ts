@@ -2,8 +2,8 @@
  * Atom Barrel Export
  */
 
-export * from './app-ui';
-export * from './workspaces';
-export * from './sessions';
-export * from './fencing';
-export * from './connection';
+export * from "./app-ui";
+export * from "./connection";
+export * from "./fencing";
+export * from "./sessions";
+export * from "./workspaces";

@@ -1,5 +1,5 @@
-import type { Database } from '../database.js';
-import type { Workspace, UiState } from '@coder-studio/core';
+import type { UiState, Workspace } from "@coder-studio/core";
+import type { Database } from "../database.js";
 
 /**
  * Database row representation for Workspace table
@@ -7,7 +7,7 @@ import type { Workspace, UiState } from '@coder-studio/core';
 export interface WorkspaceRow {
   id: string;
   path: string;
-  target_runtime: 'native' | 'wsl';
+  target_runtime: "native" | "wsl";
   wsl_distro: string | null;
   opened_at: number;
   last_active_at: number;
@@ -20,7 +20,7 @@ export interface WorkspaceRow {
 export interface NewWorkspace {
   id: string;
   path: string;
-  targetRuntime: 'native' | 'wsl';
+  targetRuntime: "native" | "wsl";
   wslDistro?: string;
   openedAt: number;
   lastActiveAt: number;
@@ -37,15 +37,17 @@ export class WorkspaceRepo {
    * Lists all workspaces
    */
   list(): Workspace[] {
-    const rows = this.db.prepare('SELECT * FROM workspaces').all() as unknown as WorkspaceRow[];
-    return rows.map(row => this.rowToWorkspace(row));
+    const rows = this.db.prepare("SELECT * FROM workspaces").all() as unknown as WorkspaceRow[];
+    return rows.map((row) => this.rowToWorkspace(row));
   }
 
   /**
    * Finds a workspace by ID
    */
   findById(id: string): Workspace | undefined {
-    const row = this.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined;
+    const row = this.db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as
+      | WorkspaceRow
+      | undefined;
     return row ? this.rowToWorkspace(row) : undefined;
   }
 
@@ -53,7 +55,9 @@ export class WorkspaceRepo {
    * Finds a workspace by path
    */
   findByPath(path: string): Workspace | undefined {
-    const row = this.db.prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as WorkspaceRow | undefined;
+    const row = this.db.prepare("SELECT * FROM workspaces WHERE path = ?").get(path) as
+      | WorkspaceRow
+      | undefined;
     return row ? this.rowToWorkspace(row) : undefined;
   }
 
@@ -83,7 +87,7 @@ export class WorkspaceRepo {
    * Updates the UI state for a workspace
    */
   updateUiState(id: string, uiState: UiState): void {
-    const stmt = this.db.prepare('UPDATE workspaces SET ui_state = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE workspaces SET ui_state = ? WHERE id = ?");
     stmt.run(JSON.stringify(uiState), id);
   }
 
@@ -91,7 +95,7 @@ export class WorkspaceRepo {
    * Updates the last active timestamp for a workspace
    */
   updateLastActive(id: string, lastActiveAt: number): void {
-    const stmt = this.db.prepare('UPDATE workspaces SET last_active_at = ? WHERE id = ?');
+    const stmt = this.db.prepare("UPDATE workspaces SET last_active_at = ? WHERE id = ?");
     stmt.run(lastActiveAt, id);
   }
 
@@ -99,7 +103,7 @@ export class WorkspaceRepo {
    * Deletes a workspace by ID
    */
   delete(id: string): void {
-    const stmt = this.db.prepare('DELETE FROM workspaces WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM workspaces WHERE id = ?");
     stmt.run(id);
   }
 

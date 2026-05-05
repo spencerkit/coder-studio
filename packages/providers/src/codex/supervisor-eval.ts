@@ -1,5 +1,5 @@
-import type { ProviderConfig, SupervisorEvalCommandRequest } from '@coder-studio/core';
-import { codexConfigSchema } from './config-schema.js';
+import type { ProviderConfig, SupervisorEvalCommandRequest } from "@coder-studio/core";
+import { codexConfigSchema } from "./config-schema.js";
 
 /**
  * Build the argv Codex needs to act as a supervisor evaluator.
@@ -20,12 +20,12 @@ export function buildCodexSupervisorEvalCommand(
 
   return {
     argv: [
-      'codex',
-      'exec',
-      '--json',
-      '-s',
-      'read-only',
-      '--skip-git-repo-check',
+      "codex",
+      "exec",
+      "--json",
+      "-s",
+      "read-only",
+      "--skip-git-repo-check",
       ...cfg.additionalArgs,
       req.prompt,
     ],

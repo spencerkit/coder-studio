@@ -4,8 +4,8 @@
  * Helper components and functions for testing with Jotai.
  */
 
-import { ReactNode } from 'react';
-import { Provider } from 'jotai';
+import { Provider } from "jotai";
+import { ReactNode } from "react";
 
 /**
  * Jotai Provider for tests

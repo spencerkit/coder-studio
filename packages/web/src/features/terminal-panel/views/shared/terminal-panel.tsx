@@ -1,17 +1,17 @@
-import { Plus, X, ChevronDown, Terminal } from 'lucide-react';
-import { useState } from 'react';
-import { useStore } from 'jotai';
-import { useTranslation } from '../../../../lib/i18n';
-import { formatTerminalTitle } from '../../components/title-format';
-import { useTerminalActions } from '../../actions/use-terminal-actions';
-import { terminalMetaAtomFamily } from '../../atoms';
-import { MobileSelectSheet } from '../../../mobile-select';
-import { XtermHost } from './xterm-host';
-import { TerminalTab } from './terminal-tab';
-import { TerminalSelectorItem } from './terminal-selector-item';
+import { useStore } from "jotai";
+import { ChevronDown, Plus, Terminal, X } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { MobileSelectSheet } from "../../../mobile-select";
+import { useTerminalActions } from "../../actions/use-terminal-actions";
+import { terminalMetaAtomFamily } from "../../atoms";
+import { formatTerminalTitle } from "../../components/title-format";
+import { TerminalSelectorItem } from "./terminal-selector-item";
+import { TerminalTab } from "./terminal-tab";
+import { XtermHost } from "./xterm-host";
 
 interface TerminalPanelProps {
-  chrome?: 'default' | 'mobile-fullscreen';
+  chrome?: "default" | "mobile-fullscreen";
 }
 
 /**
@@ -24,7 +24,7 @@ interface TerminalPanelProps {
  *   - xterm.js rendering area
  *   - Empty state when no terminals
  */
-export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
+export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
   const t = useTranslation();
   const store = useStore();
   const [selectorSheetOpen, setSelectorSheetOpen] = useState(false);
@@ -42,19 +42,21 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
   const activeTerminalTitle = formatTerminalTitle(
     activeTerminalMeta,
     activeTerminalIndex >= 0 ? activeTerminalIndex : 0,
-    t('terminal.shell')
+    t("terminal.shell")
   );
-  const isMobileFullscreen = chrome === 'mobile-fullscreen';
+  const isMobileFullscreen = chrome === "mobile-fullscreen";
   const showSelector = hasTerminals && (!isMobileFullscreen || terminalIds.length > 1);
   const showTabs = terminalIds.length > 1 && !isMobileFullscreen;
 
   return (
-    <div className={`bottom-terminal${isMobileFullscreen ? ' bottom-terminal--mobile-fullscreen' : ''}`}>
+    <div
+      className={`bottom-terminal${isMobileFullscreen ? " bottom-terminal--mobile-fullscreen" : ""}`}
+    >
       <div className="terminal-toolbar">
         <div className="terminal-toolbar-left">
           {isMobileFullscreen ? null : (
             <div className="terminal-title-stack">
-              <span className="terminal-kicker">{t('terminal.kicker')}</span>
+              <span className="terminal-kicker">{t("terminal.kicker")}</span>
               {activeTerminalMeta ? (
                 <span className="terminal-title">{activeTerminalTitle}</span>
               ) : null}
@@ -69,7 +71,9 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                 <div className="terminal-selector">
                   <button
                     className="terminal-selector-btn"
-                    aria-label={isMobileFullscreen ? t('terminal.selector.switch') : activeTerminalTitle}
+                    aria-label={
+                      isMobileFullscreen ? t("terminal.selector.switch") : activeTerminalTitle
+                    }
                     aria-expanded={isMobileFullscreen ? selectorSheetOpen : undefined}
                     onClick={() => {
                       if (!isMobileFullscreen) {
@@ -86,17 +90,17 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                   {isMobileFullscreen ? (
                     selectorSheetOpen ? (
                       <MobileSelectSheet
-                        title={t('terminal.selector.title')}
+                        title={t("terminal.selector.title")}
                         sections={[
                           {
-                            kind: 'options',
-                            id: 'terminals',
+                            kind: "options",
+                            id: "terminals",
                             items: terminalIds.map((id, index) => {
                               const terminalMeta = store.get(terminalMetaAtomFamily(id));
                               const label = formatTerminalTitle(
                                 terminalMeta,
                                 index,
-                                t('terminal.shell')
+                                t("terminal.shell")
                               );
 
                               return {
@@ -104,8 +108,8 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                                 label,
                                 meta:
                                   id === activeTerminalId
-                                    ? t('terminal.selector.current')
-                                    : t('terminal.selector.indexed', { index: index + 1 }),
+                                    ? t("terminal.selector.current")
+                                    : t("terminal.selector.indexed", { index: index + 1 }),
                               };
                             }),
                           },
@@ -143,8 +147,8 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                     setSelectorSheetOpen(false);
                     void handleCloseTerminal(activeTerminalId);
                   }}
-                  aria-label={t('terminal.close_terminal')}
-                  title={t('action.close')}
+                  aria-label={t("terminal.close_terminal")}
+                  title={t("action.close")}
                 >
                   <X size={14} />
                 </button>
@@ -156,8 +160,8 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
             <button
               className="panel-toolbar-btn"
               onClick={handleCreateTerminal}
-              aria-label={t('terminal.new_terminal')}
-              title={t('action.open')}
+              aria-label={t("terminal.new_terminal")}
+              title={t("action.open")}
             >
               <Plus size={14} />
             </button>
@@ -169,13 +173,11 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
         {!hasTerminals ? (
           <div className="bottom-terminal-empty">
             <Terminal size={32} className="bottom-terminal-empty-icon" />
-            <p className="bottom-terminal-empty-text">{t('terminal.no_terminal')}</p>
-            <p className="bottom-terminal-empty-hint">
-              {t('terminal.empty_hint')}
-            </p>
+            <p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>
+            <p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>
             <button className="btn btn-primary btn-sm" onClick={handleCreateTerminal}>
               <Plus size={14} />
-              <span>{t('terminal.new_terminal')}</span>
+              <span>{t("terminal.new_terminal")}</span>
             </button>
           </div>
         ) : (
@@ -199,7 +201,7 @@ export function TerminalPanel({ chrome = 'default' }: TerminalPanelProps) {
                 <XtermHost
                   terminalId={activeTerminalMeta.id}
                   workspaceId={activeWorkspaceId}
-                  terminalKind={activeTerminalMeta.kind ?? 'shell'}
+                  terminalKind={activeTerminalMeta.kind ?? "shell"}
                 />
               </div>
             )}

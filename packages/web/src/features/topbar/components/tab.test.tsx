@@ -1,19 +1,22 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import type { Workspace } from '@coder-studio/core';
-import { wsClientAtom } from '../../../atoms/connection';
-import { localeAtom } from '../../../atoms/app-ui';
-import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { workspaceOrderAtom, workspacesAtom } from '../../../atoms/workspaces';
-import { WorkspaceTab } from './tab';
+import type { Workspace } from "@coder-studio/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
+import { wsClientAtom } from "../../../atoms/connection";
+import {
+  activeWorkspaceIdAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+} from "../../../atoms/workspaces";
+import { WorkspaceTab } from "./tab";
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
     useNavigate: () => routerMocks.navigate,
@@ -24,7 +27,7 @@ function createWorkspace(id: string, path: string): Workspace {
   return {
     id,
     path,
-    targetRuntime: 'native',
+    targetRuntime: "native",
     openedAt: 1,
     lastActiveAt: 1,
     uiState: {
@@ -35,15 +38,15 @@ function createWorkspace(id: string, path: string): Workspace {
   };
 }
 
-describe('WorkspaceTab', () => {
+describe("WorkspaceTab", () => {
   beforeEach(() => {
     routerMocks.navigate.mockReset();
   });
 
-  it('sets the active workspace without navigating when a tab is clicked', () => {
-    const workspace = createWorkspace('ws-2', '/tmp/two');
+  it("sets the active workspace without navigating when a tab is clicked", () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
     const store = createStore();
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
 
     render(
       <Provider store={store}>
@@ -51,26 +54,26 @@ describe('WorkspaceTab', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /two/i }));
+    fireEvent.click(screen.getByRole("button", { name: /two/i }));
 
-    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
-  it('closes the active workspace without route navigation and falls back to the next ordered workspace', async () => {
-    const firstWorkspace = createWorkspace('ws-1', '/tmp/one');
-    const secondWorkspace = createWorkspace('ws-2', '/tmp/two');
+  it("closes the active workspace without route navigation and falls back to the next ordered workspace", async () => {
+    const firstWorkspace = createWorkspace("ws-1", "/tmp/one");
+    const secondWorkspace = createWorkspace("ws-2", "/tmp/two");
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
 
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(workspacesAtom, {
-      'ws-1': firstWorkspace,
-      'ws-2': secondWorkspace,
+      "ws-1": firstWorkspace,
+      "ws-2": secondWorkspace,
     });
-    store.set(workspaceOrderAtom, ['ws-1', 'ws-2']);
-    store.set(activeWorkspaceIdAtom, 'ws-1');
+    store.set(workspaceOrderAtom, ["ws-1", "ws-2"]);
+    store.set(activeWorkspaceIdAtom, "ws-1");
 
     render(
       <Provider store={store}>
@@ -78,17 +81,21 @@ describe('WorkspaceTab', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close Workspace' }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Workspace" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.close', {
-        id: 'ws-1',
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.close",
+        {
+          id: "ws-1",
+        },
+        undefined
+      );
     });
 
-    expect(store.get(workspaceOrderAtom)).toEqual(['ws-2']);
-    expect(store.get(activeWorkspaceIdAtom)).toBe('ws-2');
-    expect(store.get(workspacesAtom)['ws-1']).toBeUndefined();
+    expect(store.get(workspaceOrderAtom)).toEqual(["ws-2"]);
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+    expect(store.get(workspacesAtom)["ws-1"]).toBeUndefined();
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 });

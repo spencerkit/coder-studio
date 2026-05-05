@@ -1,11 +1,11 @@
-import { useId } from 'react';
-import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from 'lucide-react';
-import { useTranslation } from '../../../../lib/i18n';
+import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from "lucide-react";
+import { useId } from "react";
+import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
-} from '../../actions/use-objective-dialog-state';
+} from "../../actions/use-objective-dialog-state";
 
 interface ObjectiveDialogContentProps {
   mode: ObjectiveDialogMode;
@@ -21,8 +21,8 @@ interface ObjectiveDialogContentProps {
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
-  if (mode === 'enable') return <Eye size={14} />;
-  if (mode === 'edit') return <Pencil size={14} />;
+  if (mode === "enable") return <Eye size={14} />;
+  if (mode === "edit") return <Pencil size={14} />;
   return <PowerOff size={14} />;
 }
 
@@ -43,24 +43,18 @@ export function ObjectiveDialogContent({
     OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.find((option) => option.id === draftEvaluatorProviderId)
       ?.label ?? draftEvaluatorProviderId;
 
-  if (mode === 'disable') {
+  if (mode === "disable") {
     return (
       <>
         <div className="supervisor-danger-callout" role="alert">
-          <AlertTriangle
-            size={16}
-            className="supervisor-danger-callout-icon"
-            aria-hidden="true"
-          />
+          <AlertTriangle size={16} className="supervisor-danger-callout-icon" aria-hidden="true" />
           <div className="supervisor-danger-callout-copy">
-            <strong>{t('supervisor.dialog.disable.warning_title')}</strong>
-            <small>
-              {t('supervisor.dialog.disable.warning_body')}
-            </small>
+            <strong>{t("supervisor.dialog.disable.warning_title")}</strong>
+            <small>{t("supervisor.dialog.disable.warning_body")}</small>
           </div>
         </div>
         <div className="form-group">
-          <label>{t('supervisor.field.current_objective')}</label>
+          <label>{t("supervisor.field.current_objective")}</label>
           <pre className="objective-preview">{disableObjective}</pre>
         </div>
       </>
@@ -70,27 +64,27 @@ export function ObjectiveDialogContent({
   return (
     <>
       <div className="form-group">
-        <label htmlFor="objective">{t('supervisor.field.objective')}</label>
+        <label htmlFor="objective">{t("supervisor.field.objective")}</label>
         <textarea
           id="objective"
           className="input textarea"
           rows={5}
           value={draftObjective}
           onChange={(event) => onDraftObjectiveChange(event.target.value)}
-          placeholder={t('supervisor.field.objective_placeholder')}
+          placeholder={t("supervisor.field.objective_placeholder")}
           autoFocus
         />
-        <span className="dialog-helper">
-          {t('supervisor.field.objective_helper')}
-        </span>
+        <span className="dialog-helper">{t("supervisor.field.objective_helper")}</span>
       </div>
 
       <div className="form-group">
         <label
           id={evaluatorLabelId}
-          htmlFor={mobileEvaluatorPicker?.isMobile ? 'evaluator-provider-trigger' : 'evaluator-provider'}
+          htmlFor={
+            mobileEvaluatorPicker?.isMobile ? "evaluator-provider-trigger" : "evaluator-provider"
+          }
         >
-          {t('supervisor.field.evaluator')}
+          {t("supervisor.field.evaluator")}
         </label>
         {mobileEvaluatorPicker?.isMobile ? (
           <>
@@ -106,11 +100,7 @@ export function ObjectiveDialogContent({
               <span id={evaluatorValueId} className="mobile-select-trigger__value">
                 {selectedEvaluatorLabel}
               </span>
-              <ChevronDown
-                size={16}
-                className="mobile-select-trigger__icon"
-                aria-hidden="true"
-              />
+              <ChevronDown size={16} className="mobile-select-trigger__icon" aria-hidden="true" />
             </button>
           </>
         ) : (
@@ -132,7 +122,7 @@ export function ObjectiveDialogContent({
           </select>
         )}
         <span id={evaluatorHelperId} className="dialog-helper">
-          {t('supervisor.field.evaluator_helper')}
+          {t("supervisor.field.evaluator_helper")}
         </span>
       </div>
     </>

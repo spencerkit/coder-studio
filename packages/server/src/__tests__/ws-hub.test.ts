@@ -2,85 +2,120 @@
  * Tests for WebSocket Hub
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Result, ServerToClient, Session, Workspace } from "@coder-studio/core";
 import {
-  Topics,
   decodeTerminalOutputFrame,
   TERMINAL_BINARY_HEADER_SIZE,
   TERMINAL_BINARY_OUTPUT_VERSION,
-} from '@coder-studio/core';
-import { WsHub } from '../ws/hub.js';
-import { EventBus } from '../bus/event-bus.js';
-import WebSocket from 'ws';
-import type { FastifyRequest } from 'fastify';
-import type { CommandContext } from '../ws/dispatch.js';
-import '../commands/terminal.js';
-import { clearPendingTerminalInput } from '../commands/terminal.js';
+  Topics,
+} from "@coder-studio/core";
+import type { FastifyRequest } from "fastify";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import WebSocket from "ws";
+import { EventBus } from "../bus/event-bus.js";
+import "../commands/terminal.js";
+import { clearPendingTerminalInput } from "../commands/terminal.js";
+import type { ServerConfig } from "../config.js";
+import type { SessionManager } from "../session/manager.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { WorkspaceManager } from "../workspace/manager.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import type { FencingManager } from "../ws/fencing.js";
+import { WsHub } from "../ws/hub.js";
 
-describe('WsHub', () => {
+type MockSocket = {
+  readyState: number;
+  send: ReturnType<typeof vi.fn>;
+  ping: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  bufferedAmount: number;
+};
+
+type MessageHandler = ((data: Buffer, isBinary?: boolean) => void) | undefined;
+
+type ResultMessage = Extract<ServerToClient, { kind: "result" }>;
+
+const TEST_CONFIG: Pick<ServerConfig, "auth"> = {
+  auth: { enabled: false },
+};
+
+const createMockSocket = (): MockSocket => ({
+  readyState: WebSocket.OPEN,
+  send: vi.fn(),
+  ping: vi.fn(),
+  close: vi.fn(),
+  on: vi.fn(),
+  bufferedAmount: 0,
+});
+
+const createMockRequest = (): FastifyRequest =>
+  ({
+    ip: "127.0.0.1",
+    headers: { "user-agent": "test-agent" },
+  }) as unknown as FastifyRequest;
+
+const createCommandContext = (eventBus: EventBus): CommandContext =>
+  ({
+    workspaceMgr: {},
+    sessionMgr: {},
+    terminalMgr: {},
+    eventBus,
+    broadcaster: {},
+    db: {},
+    providerRegistry: [],
+  }) as unknown as CommandContext;
+
+const createHub = (eventBus: EventBus, commandContext: CommandContext): WsHub =>
+  new WsHub({
+    eventBus,
+    commandContext,
+    config: TEST_CONFIG as ServerConfig,
+    fencingMgr: {} as FencingManager,
+  });
+
+const getMessageHandler = (socket: MockSocket): MessageHandler =>
+  socket.on.mock.calls.find((call: unknown[]) => call[0] === "message")?.[1] as
+    | MessageHandler
+    | undefined;
+
+const subscribeToAllTopics = (socket: MockSocket) => {
+  const messageHandler = getMessageHandler(socket);
+
+  messageHandler?.(Buffer.from(JSON.stringify({ kind: "subscribe", topics: ["*"] })));
+};
+
+const parseSentEvents = (socket: MockSocket): ServerToClient[] =>
+  socket.send.mock.calls
+    .filter(([payload]: [string | Buffer]) => typeof payload === "string")
+    .map(([payload]: [string]) => JSON.parse(payload) as ServerToClient);
+
+const getLastSentEvent = (socket: MockSocket) => {
+  const sentEvents = parseSentEvents(socket);
+  return sentEvents[sentEvents.length - 1];
+};
+
+const getLastSentBinary = (socket: MockSocket) => {
+  const binaryCalls = socket.send.mock.calls.filter(([payload]: [string | Buffer, unknown]) =>
+    Buffer.isBuffer(payload)
+  );
+  return binaryCalls[binaryCalls.length - 1]?.[0] as Buffer | undefined;
+};
+
+const findResultMessage = (socket: MockSocket, id: string): ResultMessage | undefined =>
+  parseSentEvents(socket).find(
+    (message): message is ResultMessage => message.kind === "result" && message.id === id
+  );
+
+describe("WsHub", () => {
   let hub: WsHub;
   let eventBus: EventBus;
   let mockCommandContext: CommandContext;
 
-  const createMockSocket = () => ({
-    readyState: WebSocket.OPEN,
-    send: vi.fn(),
-    ping: vi.fn(),
-    close: vi.fn(),
-    on: vi.fn(),
-    bufferedAmount: 0,
-  });
-
-  const createMockRequest = () =>
-    ({
-      ip: '127.0.0.1',
-      headers: { 'user-agent': 'test-agent' },
-    }) as unknown as FastifyRequest;
-
-  const subscribeToAllTopics = (socket: ReturnType<typeof createMockSocket>) => {
-    const messageHandler = socket.on.mock.calls.find(
-      (call: unknown[]) => call[0] === 'message'
-    )?.[1];
-
-    if (messageHandler) {
-      messageHandler(Buffer.from(JSON.stringify({ kind: 'subscribe', topics: ['*'] })));
-    }
-  };
-
-  const parseSentEvents = (socket: ReturnType<typeof createMockSocket>) =>
-    socket.send.mock.calls
-      .filter(([payload]: [string | Buffer]) => typeof payload === 'string')
-      .map(([payload]: [string]) => JSON.parse(payload));
-
-  const getLastSentEvent = (socket: ReturnType<typeof createMockSocket>) => {
-    const sentEvents = parseSentEvents(socket);
-    return sentEvents[sentEvents.length - 1];
-  };
-
-  const getLastSentBinary = (socket: ReturnType<typeof createMockSocket>) => {
-    const binaryCalls = socket.send.mock.calls.filter(
-      ([payload]: [string | Buffer, unknown]) => Buffer.isBuffer(payload)
-    );
-    return binaryCalls[binaryCalls.length - 1]?.[0] as Buffer | undefined;
-  };
-
   beforeEach(() => {
     eventBus = new EventBus();
-    mockCommandContext = {
-      workspaceMgr: {} as any,
-      sessionMgr: {} as any,
-      terminalMgr: {} as any,
-      eventBus,
-      broadcaster: {} as any,
-      db: {} as any,
-      providerRegistry: [],
-    };
-    hub = new WsHub({
-      eventBus,
-      commandContext: mockCommandContext,
-      config: { auth: { enabled: false } } as any,
-      fencingMgr: {} as any,
-    });
+    mockCommandContext = createCommandContext(eventBus);
+    hub = createHub(eventBus, mockCommandContext);
   });
 
   afterEach(() => {
@@ -88,31 +123,23 @@ describe('WsHub', () => {
     eventBus.clear();
   });
 
-  it('should accept first connection as writer', () => {
+  it("should accept first connection as writer", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
-    expect(socket.send).toHaveBeenCalledWith(
-      expect.stringContaining('connected')
-    );
+    expect(socket.send).toHaveBeenCalledWith(expect.stringContaining("connected"));
   });
 
-  it('should accept multiple connections (writer tracking moved to FencingManager)', () => {
+  it("should accept multiple connections (writer tracking moved to FencingManager)", () => {
     const socket1 = createMockSocket();
     const socket2 = createMockSocket();
 
-    hub.handleConnection(socket1, createMockRequest());
-    hub.handleConnection(socket2, createMockRequest());
+    hub.handleConnection(socket1 as never, createMockRequest());
+    hub.handleConnection(socket2 as never, createMockRequest());
 
-    // Both sockets should be accepted with connected status
-    expect(socket1.send).toHaveBeenCalledWith(
-      expect.stringContaining('connected')
-    );
-    expect(socket2.send).toHaveBeenCalledWith(
-      expect.stringContaining('connected')
-    );
+    expect(socket1.send).toHaveBeenCalledWith(expect.stringContaining("connected"));
+    expect(socket2.send).toHaveBeenCalledWith(expect.stringContaining("connected"));
 
-    // Each client should have unique IDs
     const send1Calls = socket1.send.mock.calls;
     const send2Calls = socket2.send.mock.calls;
     const clientId1 = JSON.parse(send1Calls[0][0]).data.clientId;
@@ -120,96 +147,81 @@ describe('WsHub', () => {
     expect(clientId1).not.toBe(clientId2);
   });
 
-  it('should broadcast to subscribed clients', () => {
+  it("should broadcast to subscribed clients", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
-    // Simulate subscribe message
-    const messageHandler = socket.on.mock.calls.find(
-      (call: any[]) => call[0] === 'message'
-    )?.[1];
+    const messageHandler = getMessageHandler(socket);
+    messageHandler?.(Buffer.from(JSON.stringify({ kind: "subscribe", topics: ["workspace.*"] })));
 
-    if (messageHandler) {
-      messageHandler(
-        Buffer.from(JSON.stringify({ kind: 'subscribe', topics: ['workspace.*'] }))
-      );
-    }
+    hub.broadcast("workspace.42.meta", { test: "data" });
 
-    hub.broadcast('workspace.42.meta', { test: 'data' });
-
-    expect(socket.send).toHaveBeenCalledWith(
-      expect.stringContaining('workspace.42.meta')
-    );
+    expect(socket.send).toHaveBeenCalledWith(expect.stringContaining("workspace.42.meta"));
   });
 
-  it('should not broadcast to unsubscribed clients', () => {
+  it("should not broadcast to unsubscribed clients", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
-    // No subscription
-    hub.broadcast('workspace.42.meta', { test: 'data' });
+    hub.broadcast("workspace.42.meta", { test: "data" });
 
-    // Should only have received the connection message
     expect(socket.send).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle domain events', () => {
+  it("should handle domain events", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
     subscribeToAllTopics(socket);
 
-    // Emit a domain event
     eventBus.emit({
-      type: 'session.state.changed',
-      workspaceId: 'workspace-42',
-      sessionId: 'sess-123',
-      from: 'starting',
-      to: 'running',
+      type: "session.state.changed",
+      workspaceId: "workspace-42",
+      sessionId: "sess-123",
+      from: "starting",
+      to: "running",
     });
 
-    expect(socket.send).toHaveBeenCalledWith(
-      expect.stringContaining('session.sess-123.state')
-    );
+    expect(socket.send).toHaveBeenCalledWith(expect.stringContaining("session.sess-123.state"));
   });
 
-  it('should translate terminal.created events to the terminal created topic and payload', () => {
+  it("should translate terminal.created events to the terminal created topic and payload", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
     subscribeToAllTopics(socket);
 
     eventBus.emit({
-      type: 'terminal.created',
-      workspaceId: 'workspace-42',
-      terminalId: 'term-123',
-      kind: 'shell',
-      title: 'Shell',
-      cwd: '/tmp/workspace',
+      type: "terminal.created",
+      workspaceId: "workspace-42",
+      terminalId: "term-123",
+      kind: "shell",
+      title: "Shell",
+      cwd: "/tmp/workspace",
     });
 
     expect(getLastSentEvent(socket)).toMatchObject({
-      kind: 'event',
-      topic: Topics.terminalCreated('workspace-42', 'term-123'),
+      kind: "event",
+      topic: Topics.terminalCreated("workspace-42", "term-123"),
       data: {
-        id: 'term-123',
-        kind: 'shell',
-        title: 'Shell',
-        cwd: '/tmp/workspace',
-        workspaceId: 'workspace-42',
+        id: "term-123",
+        kind: "shell",
+        title: "Shell",
+        cwd: "/tmp/workspace",
+        workspaceId: "workspace-42",
       },
     });
   });
 
-  it('should translate terminal.output events to a single v2 binary frame', () => {
+  it("should translate terminal.output events to a single v2 binary frame", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
     subscribeToAllTopics(socket);
     socket.send.mockClear();
 
-    const chunk = Buffer.from('hello terminal');
+    const chunk = Buffer.from("hello terminal");
     eventBus.emit({
-      type: 'terminal.output',
-      workspaceId: 'workspace-42',
-      terminalId: 'term-123',
+      type: "terminal.output",
+      workspaceId: "workspace-42",
+      terminalId: "term-123",
       chunk,
       seq: 7,
     });
@@ -220,30 +232,30 @@ describe('WsHub', () => {
     const binary = getLastSentBinary(socket);
     expect(binary).toBeDefined();
     expect(socket.send).toHaveBeenCalledTimes(1);
-    expect(binary![0]).toBe(TERMINAL_BINARY_OUTPUT_VERSION);
+    expect(binary?.[0]).toBe(TERMINAL_BINARY_OUTPUT_VERSION);
 
     const decoded = decodeTerminalOutputFrame(binary!);
-    expect(decoded.topic).toBe(Topics.terminalOutput('workspace-42', 'term-123'));
+    expect(decoded.topic).toBe(Topics.terminalOutput("workspace-42", "term-123"));
     expect(decoded.seq).toBe(7);
     expect(decoded.streamId).toEqual(expect.any(Number));
     expect(decoded.payload).toEqual(chunk);
-    expect(binary!.subarray(TERMINAL_BINARY_HEADER_SIZE + decoded.topic.length)).toEqual(chunk);
+    expect(binary?.subarray(TERMINAL_BINARY_HEADER_SIZE + decoded.topic.length)).toEqual(chunk);
   });
 
-  it('routes terminal.output broadcasts through the stream path', () => {
+  it("routes terminal.output broadcasts through the stream path", () => {
     vi.useFakeTimers();
     try {
       const socket = createMockSocket();
-      hub.handleConnection(socket, createMockRequest());
+      hub.handleConnection(socket as never, createMockRequest());
       subscribeToAllTopics(socket);
       socket.bufferedAmount = 1024 * 1024;
       socket.send.mockClear();
 
       eventBus.emit({
-        type: 'terminal.output',
-        workspaceId: 'workspace-42',
-        terminalId: 'term-123',
-        chunk: Buffer.from('hi'),
+        type: "terminal.output",
+        workspaceId: "workspace-42",
+        terminalId: "term-123",
+        chunk: Buffer.from("hi"),
         seq: 1,
       });
 
@@ -253,83 +265,97 @@ describe('WsHub', () => {
     }
   });
 
-  it('routes non-terminal-output events through the control path regardless of buffer', () => {
+  it("routes non-terminal-output events through the control path regardless of buffer", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
     subscribeToAllTopics(socket);
     socket.bufferedAmount = 8 * 1024 * 1024;
     socket.send.mockClear();
 
     eventBus.emit({
-      type: 'session.state.changed',
-      workspaceId: 'workspace-42',
-      sessionId: 'sess-123',
-      from: 'starting',
-      to: 'running',
+      type: "session.state.changed",
+      workspaceId: "workspace-42",
+      sessionId: "sess-123",
+      from: "starting",
+      to: "running",
     });
 
     expect(socket.send).toHaveBeenCalledTimes(1);
     expect(socket.send.mock.calls[0]?.[0]).toMatch(/session\.sess-123\.state/);
   });
 
-  it('should translate terminal.exited events to the terminal exit topic and payload', () => {
+  it("should translate terminal.exited events to the terminal exit topic and payload", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
     subscribeToAllTopics(socket);
 
     eventBus.emit({
-      type: 'terminal.exited',
-      workspaceId: 'workspace-42',
-      terminalId: 'term-123',
+      type: "terminal.exited",
+      workspaceId: "workspace-42",
+      terminalId: "term-123",
       exitCode: 137,
     });
 
     expect(getLastSentEvent(socket)).toMatchObject({
-      kind: 'event',
-      topic: Topics.terminalExit('workspace-42', 'term-123'),
+      kind: "event",
+      topic: Topics.terminalExit("workspace-42", "term-123"),
       data: {
         code: 137,
       },
     });
   });
 
-  it('re-emits current workspace meta and session state on resync for subscribed topics', () => {
+  it("re-emits current workspace meta and session state on resync for subscribed topics", () => {
     hub.destroy();
-    const workspace = { id: 'ws1', path: '/tmp/ws1' };
-    const session = { id: 's1', workspaceId: 'ws1', state: 'idle' };
-    hub = new WsHub({
-      eventBus,
-      commandContext: {
-        ...mockCommandContext,
-        workspaceMgr: { list: vi.fn().mockReturnValue([workspace]) } as any,
-        sessionMgr: { getForWorkspace: vi.fn().mockReturnValue([session]) } as any,
-      },
-      config: { auth: { enabled: false } } as any,
-      fencingMgr: {} as any,
-    });
+    const workspace: Workspace = {
+      id: "ws1",
+      path: "/tmp/ws1",
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 320, bottomPanelHeight: 240, focusMode: false },
+    };
+    const session: Session = {
+      id: "s1",
+      workspaceId: "ws1",
+      terminalId: "term-1",
+      providerId: "claude",
+      state: "idle",
+      capability: "full",
+      startedAt: 1,
+      lastActiveAt: 1,
+    };
+    const resyncContext = {
+      ...mockCommandContext,
+      workspaceMgr: {
+        list: vi.fn().mockReturnValue([workspace]),
+      } as unknown as WorkspaceManager,
+      sessionMgr: {
+        getForWorkspace: vi.fn().mockReturnValue([session]),
+      } as unknown as SessionManager,
+    } as CommandContext;
+    hub = createHub(eventBus, resyncContext);
 
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
-    const messageHandler = socket.on.mock.calls.find(
-      (call: any[]) => call[0] === 'message'
-    )?.[1];
+    hub.handleConnection(socket as never, createMockRequest());
+    const messageHandler = getMessageHandler(socket);
     socket.send.mockClear();
 
     messageHandler?.(
       Buffer.from(
         JSON.stringify({
-          kind: 'subscribe',
-          topics: ['workspace.ws1.meta', 'workspace.ws1.session.s1.state'],
+          kind: "subscribe",
+          topics: ["workspace.ws1.meta", "workspace.ws1.session.s1.state"],
         })
       )
     );
     messageHandler?.(
       Buffer.from(
         JSON.stringify({
-          kind: 'resync',
+          kind: "resync",
           lastSeen: {
-            'workspace.ws1.meta': 3,
-            'workspace.ws1.session.s1.state': 4,
+            "workspace.ws1.meta": 3,
+            "workspace.ws1.session.s1.state": 4,
           },
         })
       )
@@ -338,168 +364,147 @@ describe('WsHub', () => {
     const sentEvents = parseSentEvents(socket);
     expect(sentEvents).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: 'event', topic: 'workspace.ws1.meta', data: workspace }),
+        expect.objectContaining({ kind: "event", topic: "workspace.ws1.meta", data: workspace }),
         expect.objectContaining({
-          kind: 'event',
-          topic: 'workspace.ws1.session.s1.state',
+          kind: "event",
+          topic: "workspace.ws1.session.s1.state",
           data: session,
         }),
         expect.objectContaining({
-          kind: 'event',
-          topic: 'connection.status',
-          data: { status: 'resynced', topics: ['workspace.ws1.meta', 'workspace.ws1.session.s1.state'] },
+          kind: "event",
+          topic: "connection.status",
+          data: {
+            status: "resynced",
+            topics: ["workspace.ws1.meta", "workspace.ws1.session.s1.state"],
+          },
         }),
       ])
     );
   });
 
-  it('should close all connections on destroy', () => {
+  it("should close all connections on destroy", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
     hub.destroy();
 
     expect(socket.close).toHaveBeenCalled();
   });
 
-  it('should ping all clients', () => {
+  it("should ping all clients", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
     hub.pingAll();
 
     expect(socket.ping).toHaveBeenCalled();
   });
 
-  it('should return null for writer (deprecated - use FencingManager)', () => {
+  it("should return null for writer (deprecated - use FencingManager)", () => {
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
+    hub.handleConnection(socket as never, createMockRequest());
 
-    // getWriter() is deprecated and always returns null
-    // Writer tracking is now handled by FencingManager
-    const writer = hub.getWriter();
-    expect(writer).toBeNull();
-  });
-
-  it('should return null for writer when no connections', () => {
     expect(hub.getWriter()).toBeNull();
   });
 
-  it('defers terminal.input dispatch until the matching binary frame arrives', async () => {
-    // Stand up a fresh hub with a writeable terminal manager so the dispatched
-    // terminal.input can be observed. The handler reads the binary payload
-    // from a module-level map populated by the hub once the binary frame is
-    // delivered, so the test must verify both ordering and payload routing.
+  it("should return null for writer when no connections", () => {
+    expect(hub.getWriter()).toBeNull();
+  });
+
+  it("defers terminal.input dispatch until the matching binary frame arrives", async () => {
     hub.destroy();
     const write = vi.fn();
     const findSessionIdByTerminal = vi.fn().mockReturnValue(null);
-    hub = new WsHub({
-      eventBus,
-      commandContext: {
-        ...mockCommandContext,
-        terminalMgr: { write } as any,
-        sessionMgr: { findSessionIdByTerminal } as any,
-      },
-      config: { auth: { enabled: false } } as any,
-      fencingMgr: {} as any,
-    });
+    const inputContext = {
+      ...mockCommandContext,
+      terminalMgr: { write } as unknown as TerminalManager,
+      sessionMgr: { findSessionIdByTerminal } as unknown as SessionManager,
+    } as CommandContext;
+    hub = createHub(eventBus, inputContext);
 
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
-    const messageHandler = socket.on.mock.calls.find(
-      (call: any[]) => call[0] === 'message'
-    )?.[1];
+    hub.handleConnection(socket as never, createMockRequest());
+    const messageHandler = getMessageHandler(socket);
     socket.send.mockClear();
 
     const streamId = 1_000_001;
     const jsonCommand = Buffer.from(
       JSON.stringify({
-        kind: 'command',
-        id: 'cmd-input-1',
-        op: 'terminal.input',
+        kind: "command",
+        id: "cmd-input-1",
+        op: "terminal.input",
         args: {
-          terminalId: 'term-1',
-          transport: 'binary',
+          terminalId: "term-1",
+          transport: "binary",
           streamId,
           size: 5,
-          activity: 'typing',
+          activity: "typing",
         },
       })
     );
 
-    void messageHandler!(jsonCommand, false);
+    messageHandler?.(jsonCommand, false);
 
-    // Yield microtasks so the hub gets a chance to await the binary frame.
     await Promise.resolve();
     await Promise.resolve();
     expect(write).not.toHaveBeenCalled();
     const sentBeforeBinary = socket.send.mock.calls.filter(
-      ([payload]: [unknown]) => typeof payload === 'string'
+      ([payload]: [unknown]) => typeof payload === "string"
     );
     expect(sentBeforeBinary).toHaveLength(0);
 
-    const payload = Buffer.from('hello');
-    void messageHandler!(payload, true);
+    const payload = Buffer.from("hello");
+    messageHandler?.(payload, true);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(write).toHaveBeenCalledWith('term-1', payload);
-    const result = socket.send.mock.calls
-      .filter(([p]: [unknown]) => typeof p === 'string')
-      .map(([p]: [string]) => JSON.parse(p))
-      .find((m: any) => m.kind === 'result' && m.id === 'cmd-input-1');
+    expect(write).toHaveBeenCalledWith("term-1", payload);
+    const result = findResultMessage(socket, "cmd-input-1");
     expect(result?.ok).toBe(true);
   });
 
-  it('clears buffered binary terminal.input payloads when validation fails', async () => {
+  it("clears buffered binary terminal.input payloads when validation fails", async () => {
     hub.destroy();
-    hub = new WsHub({
-      eventBus,
-      commandContext: {
-        ...mockCommandContext,
-        terminalMgr: { write: vi.fn() } as any,
-        sessionMgr: { findSessionIdByTerminal: vi.fn().mockReturnValue(null) } as any,
-      },
-      config: { auth: { enabled: false } } as any,
-      fencingMgr: {} as any,
-    });
+    const invalidInputContext = {
+      ...mockCommandContext,
+      terminalMgr: { write: vi.fn() } as unknown as TerminalManager,
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue(null),
+      } as unknown as SessionManager,
+    } as CommandContext;
+    hub = createHub(eventBus, invalidInputContext);
 
     const socket = createMockSocket();
-    hub.handleConnection(socket, createMockRequest());
-    const messageHandler = socket.on.mock.calls.find(
-      (call: any[]) => call[0] === 'message'
-    )?.[1];
+    hub.handleConnection(socket as never, createMockRequest());
+    const messageHandler = getMessageHandler(socket);
     socket.send.mockClear();
 
     const streamId = 1_000_002;
     const jsonCommand = Buffer.from(
       JSON.stringify({
-        kind: 'command',
-        id: 'cmd-input-invalid-1',
-        op: 'terminal.input',
+        kind: "command",
+        id: "cmd-input-invalid-1",
+        op: "terminal.input",
         args: {
-          terminalId: 'term-1',
-          transport: 'binary',
+          terminalId: "term-1",
+          transport: "binary",
           streamId,
           size: 5,
-          activity: 'definitely_invalid',
+          activity: "definitely_invalid",
         },
       })
     );
 
-    void messageHandler!(jsonCommand, false);
+    messageHandler?.(jsonCommand, false);
     await Promise.resolve();
     await Promise.resolve();
 
-    void messageHandler!(Buffer.from('hello'), true);
+    messageHandler?.(Buffer.from("hello"), true);
     await new Promise((resolve) => setImmediate(resolve));
 
-    const result = socket.send.mock.calls
-      .filter(([p]: [unknown]) => typeof p === 'string')
-      .map(([p]: [string]) => JSON.parse(p))
-      .find((m: any) => m.kind === 'result' && m.id === 'cmd-input-invalid-1');
+    const result = findResultMessage(socket, "cmd-input-invalid-1");
 
     expect(result?.ok).toBe(false);
-    expect(result?.error?.code).toBe('validation_error');
+    expect(result?.error?.code).toBe("validation_error");
 
     clearPendingTerminalInput(streamId);
   });

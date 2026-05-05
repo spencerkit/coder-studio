@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
 import type {
   ProviderInstallFailure,
   ProviderInstallJobSnapshot,
   ProviderRuntimeStatusEntry,
   ProviderRuntimeStatusResponse,
   Session,
-} from '@coder-studio/core';
-import type { DispatchCommand } from '../../../atoms/connection';
+} from "@coder-studio/core";
+import { useEffect, useRef, useState } from "react";
+import type { DispatchCommand } from "../../../atoms/connection";
 
-export type ProviderId = 'claude' | 'codex';
+export type ProviderId = "claude" | "codex";
 
 export interface ProviderCardState {
   runtime?: ProviderRuntimeStatusEntry;
@@ -29,25 +29,25 @@ function createFallbackRuntimeEntry(providerId: ProviderId): ProviderRuntimeStat
     missingCommands: [],
     missingPrerequisites: [],
     autoInstallSupported: false,
-    installReadiness: 'ready',
+    installReadiness: "ready",
     manualGuideKeys: [],
     docUrls: {
-      provider: '',
+      provider: "",
       prerequisites: {},
     },
   };
 }
 
 function buildStateMap(
-  providers?: ProviderRuntimeStatusResponse['providers'],
+  providers?: ProviderRuntimeStatusResponse["providers"]
 ): Record<ProviderId, ProviderCardState> {
   return {
     claude: {
-      runtime: providers?.claude ?? createFallbackRuntimeEntry('claude'),
+      runtime: providers?.claude ?? createFallbackRuntimeEntry("claude"),
       loading: false,
     },
     codex: {
-      runtime: providers?.codex ?? createFallbackRuntimeEntry('codex'),
+      runtime: providers?.codex ?? createFallbackRuntimeEntry("codex"),
       loading: false,
     },
   };
@@ -56,7 +56,7 @@ function buildStateMap(
 export function useProviderLauncher(
   dispatch: DispatchCommand,
   workspaceId: string,
-  onSessionCreated: (session: Session, providerId: ProviderId) => void,
+  onSessionCreated: (session: Session, providerId: ProviderId) => void
 ): UseProviderLauncherResult {
   const [states, setStates] = useState<Record<ProviderId, ProviderCardState>>(buildStateMap());
   const pollingTimers = useRef<Partial<Record<ProviderId, number>>>({});
@@ -65,7 +65,7 @@ export function useProviderLauncher(
     let cancelled = false;
 
     const loadStatus = async () => {
-      const result = await dispatch<ProviderRuntimeStatusResponse>('provider.runtimeStatus', {});
+      const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
       if (cancelled) {
         return;
       }
@@ -95,7 +95,7 @@ export function useProviderLauncher(
     return () => {
       cancelled = true;
       for (const timer of Object.values(pollingTimers.current)) {
-        if (typeof timer === 'number') {
+        if (typeof timer === "number") {
           window.clearTimeout(timer);
         }
       }
@@ -103,7 +103,7 @@ export function useProviderLauncher(
   }, [dispatch]);
 
   const refreshStatus = async (): Promise<void> => {
-    const result = await dispatch<ProviderRuntimeStatusResponse>('provider.runtimeStatus', {});
+    const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
     if (!result.ok || !result.data) {
       return;
     }
@@ -125,7 +125,7 @@ export function useProviderLauncher(
   const updateFailureState = (
     providerId: ProviderId,
     failure: ProviderInstallFailure | undefined,
-    inlineError?: string,
+    inlineError?: string
   ) => {
     setStates((prev) => ({
       ...prev,
@@ -159,7 +159,7 @@ export function useProviderLauncher(
     }));
 
     if (runtime.available) {
-      const createResult = await dispatch<Session>('session.create', {
+      const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
       });
@@ -176,7 +176,7 @@ export function useProviderLauncher(
         return;
       }
 
-      if (createResult.error?.code === 'provider_cli_missing') {
+      if (createResult.error?.code === "provider_cli_missing") {
         await refreshStatus();
       }
 
@@ -197,13 +197,13 @@ export function useProviderLauncher(
         [providerId]: {
           ...prev[providerId],
           loading: false,
-          inlineError: 'manual',
+          inlineError: "manual",
         },
       }));
       return;
     }
 
-    const startResult = await dispatch<ProviderInstallJobSnapshot>('provider.install.start', {
+    const startResult = await dispatch<ProviderInstallJobSnapshot>("provider.install.start", {
       providerId,
     });
 
@@ -228,14 +228,14 @@ export function useProviderLauncher(
       },
     }));
 
-    if (startResult.data.status === 'failed') {
+    if (startResult.data.status === "failed") {
       updateFailureState(providerId, startResult.data.failure, startResult.data.failure?.message);
       return;
     }
 
-    if (startResult.data.status === 'succeeded') {
+    if (startResult.data.status === "succeeded") {
       await refreshStatus();
-      const createResult = await dispatch<Session>('session.create', {
+      const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
       });
@@ -247,7 +247,7 @@ export function useProviderLauncher(
     }
 
     const poll = async () => {
-      const jobResult = await dispatch<ProviderInstallJobSnapshot>('provider.install.get', {
+      const jobResult = await dispatch<ProviderInstallJobSnapshot>("provider.install.get", {
         jobId: startResult.data!.jobId,
       });
 
@@ -273,18 +273,18 @@ export function useProviderLauncher(
         },
       }));
 
-      if (jobResult.data.status === 'queued' || jobResult.data.status === 'running') {
+      if (jobResult.data.status === "queued" || jobResult.data.status === "running") {
         pollingTimers.current[providerId] = window.setTimeout(poll, 1500);
         return;
       }
 
-      if (jobResult.data.status === 'failed') {
+      if (jobResult.data.status === "failed") {
         updateFailureState(providerId, jobResult.data.failure, jobResult.data.failure?.message);
         return;
       }
 
       await refreshStatus();
-      const createResult = await dispatch<Session>('session.create', {
+      const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
       });

@@ -4,13 +4,14 @@
  * Concrete implementation of PtyHost using node-pty
  */
 
-import { chmodSync, existsSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import type { PtyHost, PtyProcess, PtySpawnOptions } from './types.js';
+import { chmodSync, existsSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import type * as NodePty from "node-pty";
+import type { PtyHost, PtyProcess, PtySpawnOptions } from "./types.js";
 
 const require = createRequire(import.meta.url);
-const NODE_PTY_PKG = 'node-pty/package.json';
+const NODE_PTY_PKG = "node-pty/package.json";
 
 /**
  * Options for kill escalation polling
@@ -36,10 +37,10 @@ export function ensureNodePtySpawnHelperExecutable(
     existsSync?: (path: string) => boolean;
     statSync?: (path: string) => { mode: number };
     chmodSync?: (path: string, mode: number) => void;
-  } = {},
+  } = {}
 ): void {
   const platform = deps.platform ?? process.platform;
-  if (platform !== 'darwin') {
+  if (platform !== "darwin") {
     return;
   }
   const arch = deps.arch ?? process.arch;
@@ -57,13 +58,12 @@ export function ensureNodePtySpawnHelperExecutable(
   }
 
   const packageDir = path.dirname(packageJsonPath);
-  const helperDir =
-    arch === 'arm64' ? 'darwin-arm64' : arch === 'x64' ? 'darwin-x64' : null;
+  const helperDir = arch === "arm64" ? "darwin-arm64" : arch === "x64" ? "darwin-x64" : null;
   if (!helperDir) {
     return;
   }
 
-  const helperPath = path.join(packageDir, 'prebuilds', helperDir, 'spawn-helper');
+  const helperPath = path.join(packageDir, "prebuilds", helperDir, "spawn-helper");
 
   try {
     if (!fileExists(helperPath)) {
@@ -149,12 +149,12 @@ export async function escalateKillWithPolling(
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   // For non-SIGTERM signals, just send directly without polling
-  if (signal !== 'SIGTERM') {
+  if (signal !== "SIGTERM") {
     return killProcessGroup(pid, signal);
   }
 
   // Send SIGTERM
-  const sent = killProcessGroup(pid, 'SIGTERM');
+  const sent = killProcessGroup(pid, "SIGTERM");
   if (!sent) {
     return false;
   }
@@ -179,7 +179,7 @@ export async function escalateKillWithPolling(
   }
 
   // Process survived timeout, escalate to SIGKILL
-  killProcessGroup(pid, 'SIGKILL');
+  killProcessGroup(pid, "SIGKILL");
   return true;
 }
 
@@ -192,9 +192,9 @@ export class NodePtyHost implements PtyHost {
     ensureNodePtySpawnHelperExecutable();
 
     // Lazy load node-pty to avoid native module loading errors
-    let pty: any;
+    let pty: typeof NodePty;
     try {
-      pty = require('node-pty');
+      pty = require("node-pty");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`node-pty native module not available. ${message}`);
@@ -218,7 +218,7 @@ export class NodePtyHost implements PtyHost {
       },
       write: (data) => {
         if (Buffer.isBuffer(data)) {
-          ptyProcess.write(data.toString('utf-8'));
+          ptyProcess.write(data.toString("utf-8"));
         } else {
           ptyProcess.write(data);
         }
@@ -226,7 +226,7 @@ export class NodePtyHost implements PtyHost {
       resize: (cols, rows) => {
         ptyProcess.resize(cols, rows);
       },
-      kill: async (signal: NodeJS.Signals = 'SIGTERM') => {
+      kill: async (signal: NodeJS.Signals = "SIGTERM") => {
         const pid = ptyProcess.pid;
 
         if (pid > 0) {

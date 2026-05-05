@@ -3,22 +3,22 @@
  * Starts Vite dev server for frontend
  */
 
-import { runBackground } from './shared/process.js';
-import { WEB_DIR, log, info, success, error } from './shared/index.js';
-import { resolve } from 'path';
+import { resolve } from "path";
+import { error, info, log, success, WEB_DIR } from "./shared/index.js";
+import { runBackground } from "./shared/process.js";
 
 const VITE_PORT = 5173;
-const VITE_HOST = 'localhost';
+const VITE_HOST = "localhost";
 
 async function devWeb(): Promise<void> {
-  info('Starting Vite dev server for frontend...');
+  info("Starting Vite dev server for frontend...");
 
-  const viteProcess = runBackground('pnpm', ['vite'], {
+  const viteProcess = runBackground("pnpm", ["vite"], {
     cwd: WEB_DIR,
-    stdio: 'inherit',
+    stdio: "inherit",
   });
 
-  viteProcess.on('error', (err) => {
+  viteProcess.on("error", (err) => {
     error(`Vite dev server failed: ${err.message}`);
     process.exit(1);
   });
@@ -26,14 +26,14 @@ async function devWeb(): Promise<void> {
   success(`Frontend dev server running at http://${VITE_HOST}:${VITE_PORT}`);
 
   // Handle process termination
-  process.on('SIGINT', () => {
-    info('\nStopping frontend dev server...');
-    viteProcess.kill('SIGTERM');
+  process.on("SIGINT", () => {
+    info("\nStopping frontend dev server...");
+    viteProcess.kill("SIGTERM");
     process.exit(0);
   });
 
-  process.on('SIGTERM', () => {
-    viteProcess.kill('SIGTERM');
+  process.on("SIGTERM", () => {
+    viteProcess.kill("SIGTERM");
     process.exit(0);
   });
 }

@@ -2,39 +2,35 @@
  * Worktree Commands (Phase 3)
  */
 
-import { z } from 'zod';
-import { registerCommand } from '../ws/dispatch.js';
+import { z } from "zod";
 import {
-  listWorktrees,
-  resolveWorktreePath,
-  getWorktreeStatus,
-  getWorktreeDiff,
-  getWorktreeTree,
   createWorktree,
+  getWorktreeDiff,
+  getWorktreeStatus,
+  getWorktreeTree,
+  listWorktrees,
   removeWorktree,
-} from '../git/worktree.js';
+  resolveWorktreePath,
+} from "../git/worktree.js";
+import { registerCommand } from "../ws/dispatch.js";
 
 // worktree.list
-registerCommand(
-  'worktree.list',
-  z.object({ workspaceId: z.string() }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
-    }
-    return { worktrees: await listWorktrees(workspace.path) };
+registerCommand("worktree.list", z.object({ workspaceId: z.string() }), async (args, ctx) => {
+  const workspace = ctx.workspaceMgr.get(args.workspaceId);
+  if (!workspace) {
+    throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
   }
-);
+  return { worktrees: await listWorktrees(workspace.path) };
+});
 
 // worktree.status
 registerCommand(
-  'worktree.status',
+  "worktree.status",
   z.object({ workspaceId: z.string(), worktreePath: z.string() }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
@@ -44,7 +40,7 @@ registerCommand(
 
 // worktree.diff
 registerCommand(
-  'worktree.diff',
+  "worktree.diff",
   z.object({
     workspaceId: z.string(),
     worktreePath: z.string(),
@@ -53,7 +49,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
@@ -63,12 +59,12 @@ registerCommand(
 
 // worktree.tree
 registerCommand(
-  'worktree.tree',
+  "worktree.tree",
   z.object({ workspaceId: z.string(), worktreePath: z.string() }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
@@ -78,7 +74,7 @@ registerCommand(
 
 // worktree.create
 registerCommand(
-  'worktree.create',
+  "worktree.create",
   z.object({
     workspaceId: z.string(),
     branch: z.string(),
@@ -87,7 +83,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
     return { worktree: await createWorktree(workspace.path, args.branch, args.path) };
   }
@@ -95,7 +91,7 @@ registerCommand(
 
 // worktree.remove
 registerCommand(
-  'worktree.remove',
+  "worktree.remove",
   z.object({
     workspaceId: z.string(),
     worktreePath: z.string(),
@@ -104,7 +100,7 @@ registerCommand(
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
-      throw { code: 'workspace_not_found', message: `Workspace not found: ${args.workspaceId}` };
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);

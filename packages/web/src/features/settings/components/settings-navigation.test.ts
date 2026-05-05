@@ -1,43 +1,43 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 import {
   resolveSettingsExitTarget,
   resolveSettingsExitTargetFromHistory,
-} from './settings-navigation';
+} from "./settings-navigation";
 
-describe('resolveSettingsExitTarget', () => {
-  it('returns history when the router history index is greater than zero', () => {
+describe("resolveSettingsExitTarget", () => {
+  it("returns history when the router history index is greater than zero", () => {
     expect(
       resolveSettingsExitTarget({
         historyIndex: 2,
         historyLength: 3,
         hasActiveWorkspace: true,
       })
-    ).toBe('history');
+    ).toBe("history");
   });
 
-  it('falls back to /workspace when no prior history exists but a workspace is active', () => {
+  it("falls back to /workspace when no prior history exists but a workspace is active", () => {
     expect(
       resolveSettingsExitTarget({
         historyIndex: 0,
         historyLength: 1,
         hasActiveWorkspace: true,
       })
-    ).toBe('/workspace');
+    ).toBe("/workspace");
   });
 
-  it('falls back to / when no prior history exists and no workspace is active', () => {
+  it("falls back to / when no prior history exists and no workspace is active", () => {
     expect(
       resolveSettingsExitTarget({
         historyIndex: 0,
         historyLength: 1,
         hasActiveWorkspace: false,
       })
-    ).toBe('/');
+    ).toBe("/");
   });
 });
 
-describe('resolveSettingsExitTargetFromHistory', () => {
-  it('prefers history when the browser state reports a prior router entry', () => {
+describe("resolveSettingsExitTargetFromHistory", () => {
+  it("prefers history when the browser state reports a prior router entry", () => {
     expect(
       resolveSettingsExitTargetFromHistory({
         history: {
@@ -46,10 +46,10 @@ describe('resolveSettingsExitTargetFromHistory', () => {
         },
         hasActiveWorkspace: false,
       })
-    ).toBe('history');
+    ).toBe("history");
   });
 
-  it('falls back to history length when the router state does not expose an index', () => {
+  it("falls back to history length when the router state does not expose an index", () => {
     expect(
       resolveSettingsExitTargetFromHistory({
         history: {
@@ -58,6 +58,6 @@ describe('resolveSettingsExitTargetFromHistory', () => {
         },
         hasActiveWorkspace: false,
       })
-    ).toBe('history');
+    ).toBe("history");
   });
 });

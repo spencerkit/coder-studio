@@ -1,15 +1,15 @@
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useEffect } from 'react';
-import type { Session, Supervisor } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../atoms/connection';
+import type { Session, Supervisor } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   supervisorCyclesAtom,
   supervisorDialogAtom,
   supervisorHydratedAtomFamily,
   supervisorsAtom,
-} from '../atoms';
+} from "../atoms";
 
-const EMPTY_SESSION_ID = '__supervisor-empty__';
+const EMPTY_SESSION_ID = "__supervisor-empty__";
 
 export function useSupervisor(session: Session | null | undefined) {
   const sessionId = session?.id ?? EMPTY_SESSION_ID;
@@ -27,16 +27,16 @@ export function useSupervisor(session: Session | null | undefined) {
 
     if (
       hydrated ||
-      session.capability !== 'full' ||
-      session.state === 'draft' ||
-      session.state === 'ended'
+      session.capability !== "full" ||
+      session.state === "draft" ||
+      session.state === "ended"
     ) {
       return;
     }
 
     let cancelled = false;
 
-    void dispatch<{ supervisor: Supervisor | null }>('supervisor.get', {
+    void dispatch<{ supervisor: Supervisor | null }>("supervisor.get", {
       sessionId: session.id,
     }).then((result) => {
       if (cancelled || !result.ok) {
@@ -73,14 +73,14 @@ export function useSupervisor(session: Session | null | undefined) {
   }, [dispatch, hydrated, session, setCycles, setHydrated, setSupervisors]);
 
   const openDialog = useCallback(
-    (mode: 'enable' | 'edit' | 'disable', supervisor?: Supervisor) => {
+    (mode: "enable" | "edit" | "disable", supervisor?: Supervisor) => {
       setDialog({
         open: true,
         sessionId,
         mode,
-        draftObjective: supervisor?.objective ?? '',
+        draftObjective: supervisor?.objective ?? "",
         draftEvaluatorProviderId:
-          (supervisor?.evaluatorProviderId as 'claude' | 'codex') ?? 'claude',
+          (supervisor?.evaluatorProviderId as "claude" | "codex") ?? "claude",
       });
     },
     [sessionId, setDialog]
